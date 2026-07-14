@@ -13,9 +13,9 @@ public sealed class WorldBuilder
     private readonly GameZ _gamez;
     private readonly SceneBuilder _scene;
 
-    // Non-scenery world content: 'horizon' is the original skydome (17 km sphere that
-    // would swallow the scene and shadow it — TODO render it as a real sky later),
-    // 'fvol1'..'fvol9' are flight-boundary volumes, 'dzpaths' are colored path ribbons.
+    // Non-scenery world content: 'horizon' is the original skydome (built separately via
+    // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'
+    // are flight-boundary volumes, 'dzpaths' are colored path ribbons.
     private static bool SkipWorldNode(GameZNode n) =>
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
@@ -81,5 +81,37 @@ public sealed class WorldBuilder
         var built = _scene.BuildSubtree(_gamez.Nodes[nodeIndex], SkipWorldNode, NoCollisionNode);
         if (built != null)
             root.AddChild(built);
+    }
+
+    /// <summary>
+    /// Builds the original skydome (the world's 'horizon' subtree) as a separate node the
+    /// caller anchors to the camera. The dome's verts are centered on the origin (~8.8 km
+    /// radius) while the world area is x,z ∈ [-12288, 0], so the original engine must have
+    /// translated it with the viewer — it is a backdrop, not scenery. Zones are day/night
+    /// variants: zone1 = sky2.tif haze dome with sunset vertex tints (day), zone2 = moon +
+    /// Sky1.tif night sky. Never collidable, never casts shadows.
+    /// </summary>
+    public Node3D? BuildHorizon(string zone = "zone1")
+    {
+        var horizon = _gamez.FindByName("horizon");
+        if (horizon == null)
+            return null;
+        bool SkipOtherZones(GameZNode n) =>
+            n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
+            && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
+        var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
+        if (built == null)
+            return null;
+        DisableShadows(built);
+        return built;
+    }
+
+    // The dome would otherwise shadow the entire world (it covers the whole sky).
+    private static void DisableShadows(Node node)
+    {
+        if (node is MeshInstance3D mi)
+            mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
+        foreach (var child in node.GetChildren())
+            DisableShadows(child);
     }
 }

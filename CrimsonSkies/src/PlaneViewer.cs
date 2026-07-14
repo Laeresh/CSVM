@@ -16,9 +16,10 @@ namespace CrimsonSkies;
 ///   --plane=player_bhawk         which aircraft root node to build
 ///   --world[=world1]             build a whole chapter world instead of one plane
 ///                                (default gamez becomes ../extracted/c1-gamez.zip)
-///   --fly                        free flight: chapter world + aircraft + arcade controls
-///                                (WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn;
-///                                gamepad: left stick, LB/RB rudder, RT/LT throttle, Y respawn)
+///   --fly                        free flight: chapter world + original skydome + aircraft +
+///                                arcade controls (WASD/arrows pitch+roll, Q/E rudder,
+///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
+///                                LB/RB rudder, RT/LT throttle, Y respawn)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip;
 ///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
@@ -35,6 +36,8 @@ namespace CrimsonSkies;
 /// </summary>
 public partial class PlaneViewer : Node3D
 {
+    private const float HorizonScale = 2.5f;
+
     private string _planeName = "player_bhawk";
     private string? _worldName;
     private bool _fly;
@@ -44,6 +47,7 @@ public partial class PlaneViewer : Node3D
     private int _screenshotFrames = 15;
 
     private Node3D? _plane;
+    private Node3D? _horizon;
     private Camera3D _camera = null!;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
@@ -105,6 +109,20 @@ public partial class PlaneViewer : Node3D
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build(_worldName);
+                if (_fly)
+                {
+                    // The original skydome, anchored to the camera each frame. Scaled up so
+                    // plain depth testing keeps it behind everything: a camera-centered dome
+                    // looks identical at any scale (zero parallax), and at 2.5× (~22 km
+                    // radius) it is beyond the farthest terrain (~17.4 km corner-to-corner)
+                    // while well inside the camera's 40 km far plane.
+                    _horizon = builder.BuildHorizon();
+                    if (_horizon != null)
+                    {
+                        _horizon.Scale = Vector3.One * HorizonScale;
+                        AddChild(_horizon);
+                    }
+                }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
                 what = $"world '{_worldName}'";
@@ -294,6 +312,12 @@ public partial class PlaneViewer : Node3D
 
     public override void _Process(double delta)
     {
+        // Keep the skydome centered on the camera in x/z. Its y stays at the world base:
+        // the dome's horizon band then stays near terrain height instead of climbing with
+        // the plane. (One-frame lag vs the flight camera is invisible at 22 km.)
+        if (_horizon != null)
+            _horizon.Position = new Vector3(_camera.Position.X, 0, _camera.Position.Z);
+
         if (_screenshotPath == null || _plane == null)
             return;
         if (--_screenshotFrames > 0)
