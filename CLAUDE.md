@@ -49,10 +49,12 @@ tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CrimsonSkies res
 
 (First time only: run with `--headless --import` once before running scenes.)
 
-- `src/Mech3/GameZ.cs` — loads a mech3ax GameZ extraction (ZIP or unpacked dir): nodes.json / meshes.json / materials.json into plain C# objects.
+- `src/Mech3/GameZ.cs` — loads a mech3ax GameZ extraction (ZIP or unpacked dir): nodes.json / meshes.json / materials.json into plain C# objects. Parses World partition refs and per-corner vertex colors.
 - `src/Mech3/TextureArchive.cs` — texture lookup over an unzbd texture ZIP (PNGs), handles the two name quirks below.
-- `src/Mech3/PlaneBuilder.cs` — builds a Node3D/MeshInstance3D tree for one aircraft; one ArrayMesh surface per material; skips cockpit/destroyed/damage/shadow subtrees and non-nearest LODs.
-- `src/PlaneViewer.cs` — Main.tscn root script: orbit camera, lighting. User args (after `--`): `--plane=`, `--gamez=`, `--textures=`, `--yaw=`, `--pitch=`, `--screenshot=<path>` (render a few frames, save PNG, quit — used for automated visual verification).
+- `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → Node3D/MeshInstance3D builder: n-gon triangulation, material+mesh caches, keeps only nearest LOD, takes a skip predicate. `fullbright: true` renders unshaded (texture × baked vertex color — the original engine's world look).
+- `src/Mech3/PlaneBuilder.cs` — thin wrapper: builds one aircraft, skips cockpit/destroyed/damage/shadow/prop-animation subtrees. Shaded (dynamic lighting).
+- `src/Mech3/WorldBuilder.cs` — builds a whole chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon` (17 km skydome — TODO render as real sky), `fvol*` (flight-boundary volumes), `dzpaths` (path ribbons).
+- `src/PlaneViewer.cs` — Main.tscn root script: orbit camera, lighting. User args (after `--`): `--plane=`, `--world[=world1]` (render a chapter world; default gamez becomes c1-gamez.zip), `--gamez=`, `--textures=`, `--yaw=`, `--pitch=`, `--campos=x,y,z` / `--lookat=x,y,z` (manual camera placement), `--screenshot=<path>` (render a few frames, save PNG, quit — used for automated visual verification).
 
 ### GameZ format facts (validated on this install, planes.zbd)
 
@@ -64,6 +66,15 @@ tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CrimsonSkies res
 - Materials are `Colored` (RGB 0-255 + alpha) or `Textured` (texture referenced **by name**). Two name quirks: fixed-width 20-char truncation (`blo_fusalagebottom.t` → prefix-match) and mech3ax duplicate renames (`bldhwk_cowling.-12.tif` → strip `.-N` suffix).
 - Plane skin pixel data is NOT in planes.zbd — it's in each chapter's `texture.zbd` (C1's contains all player-plane skins).
 - Aircraft tree shape: `player_*` → `geometry` → `healthy` → LOD nodes (`nearest` = range.min 0 is highest detail) + `markers` (firepoints/pylons/camera), plus `cockpit1` (separate interior model), `destroyed`, `shadow`, `dontmove` (props: `staticprop1` static; `prop1`/`prop1b`/`prop2*`/`nitroprop1` are spin-animation frames).
+- Polygons carry per-corner `vertex_colors` (RGB 0-255, ~30% non-white) = **baked lighting**. The original engine renders world geometry fullbright: texture × vertex color, no dynamic lights. Rendering the world shaded instead comes out murky-dark — use unshaded + vertex colors.
+- Node kinds beyond Object3d/Lod: World, Display, Window, Camera, Light. Display has no `name`/`children`; Window/Camera/Light have no `children` — parse tolerantly.
+
+### World structure (chapter gamez.zbd, validated on C1)
+
+- World content lives in TWO places: the `world1` World node's `children` (66 in C1: horizon, cloud groups, zeppelins, trains, fvol volumes…) **and** ~350 top-level parentless subtrees referenced only via the World's `partitions` (12×12 spatial grid over `area` x,z ∈ [-12288, 0]; each cell lists node indices; the union of distinct refs = placed terrain tiles + buildings + vehicles).
+- The remaining ~160 parentless roots (bulletholes, firetrails, muzzle flashes, projectiles…) are runtime-spawned effect prototypes — not world scenery.
+- Terrain = ~1 km tiles (`terpat*`/`water1` textures), no transform (verts already in world space), under `Lod` nodes (range 0–2000 = nearest). Cloud deck sits at y≈1160–1350 (`cloudparent` groups, cloud1.tif); terrain y≈100–160; `litehouse` at (-6932, 128, -3042), town/airbase cluster around (-5000..-6600, 128, -5900..-6700).
+- `horizon` subtree = original skydome (sky1/sky2.tif, 17 km) — skip or it swallows the scene.
 
 ## Format support status (validated against THIS install with mech3ax v0.6.1, 2026-07-14)
 
@@ -85,4 +96,4 @@ Extracted plane data confirmed usable: `nodes.json` has 3,317 nodes including fu
 
 **Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats.
 
-**Milestone 2 in progress (2026-07-14): plane rendering works.** The Godot project renders textured aircraft from the player's own extracted data — verified via screenshots for `player_bhawk`, `player_kestrel`, `player_autogyro` (correct skins, decals upright, geometry not mirrored). **Next steps:** C1 terrain/world rendering from `c1-gamez.zip`, then arcade flight controls (zrdr plane stats), then sound.
+**Milestone 2 in progress (2026-07-14): plane rendering works, C1 world rendering works.** The Godot project renders textured aircraft (verified: `player_bhawk`, `player_kestrel`, `player_autogyro`) and the full C1 Sea Haven world from `c1-gamez.zip` — island terrain with baked-light shoreline gradients, lighthouse, harbor + ships, zeppelin hangars, town, cloud deck (verified via `--world --screenshot` renders). Known gaps: original skydome not used (procedural sky instead), clouds are alpha-scissor cutouts (original alpha-blends), prop/vehicle animations static. **Next steps:** arcade flight controls (zrdr plane stats), then sound.

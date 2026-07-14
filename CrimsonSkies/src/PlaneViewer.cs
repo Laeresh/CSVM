@@ -12,13 +12,19 @@ namespace CrimsonSkies;
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
-///   --gamez=path                 planes GameZ zip/dir (default: ../extracted/planes-gamez.zip)
+///   --world[=world1]             build a whole chapter world instead of one plane
+///                                (default gamez becomes ../extracted/c1-gamez.zip)
+///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
+///   --campos=x,y,z               place the camera here instead of auto-framing
+///   --lookat=x,y,z               orbit/look target (default: model AABB center)
 ///   --screenshot=path            render a few frames, save a PNG, then quit
 /// </summary>
 public partial class PlaneViewer : Node3D
 {
     private string _planeName = "player_bhawk";
+    private string? _worldName;
+    private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
 
@@ -36,18 +42,26 @@ public partial class PlaneViewer : Node3D
         var gamezPath = Path.Combine(repoRoot, "extracted", "planes-gamez.zip");
         var texturesPath = Path.Combine(repoRoot, "extracted", "c1-texture.zip");
 
+        bool gamezOverridden = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
-            else if (arg.StartsWith("--gamez=")) gamezPath = arg["--gamez=".Length..];
+            else if (arg == "--world") _worldName = "world1";
+            else if (arg.StartsWith("--world=")) _worldName = arg["--world=".Length..];
+            else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) texturesPath = arg["--textures=".Length..];
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
             else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--pitch=")) _pitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg.StartsWith("--campos=")) _camPos = ParseVec3(arg["--campos=".Length..]);
+            else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
 
+        if (_worldName != null && !gamezOverridden)
+            gamezPath = Path.Combine(repoRoot, "extracted", "c1-gamez.zip");
+
         SetupLighting();
-        _camera = new Camera3D { Fov = 50 };
+        _camera = new Camera3D { Fov = 50, Far = 40000f };
         AddChild(_camera);
 
         try
@@ -55,11 +69,25 @@ public partial class PlaneViewer : Node3D
             var sw = Stopwatch.StartNew();
             var gamez = GameZ.Load(gamezPath);
             using var textures = new TextureArchive(texturesPath);
-            var builder = new PlaneBuilder(gamez, textures);
-            _plane = builder.Build(_planeName);
+            int meshInstances;
+            string what;
+            if (_worldName != null)
+            {
+                var builder = new WorldBuilder(gamez, textures);
+                _plane = builder.Build(_worldName);
+                meshInstances = builder.MeshInstanceCount;
+                what = $"world '{_worldName}'";
+            }
+            else
+            {
+                var builder = new PlaneBuilder(gamez, textures);
+                _plane = builder.Build(_planeName);
+                meshInstances = builder.MeshInstanceCount;
+                what = $"'{_planeName}'";
+            }
             AddChild(_plane);
-            GD.Print($"loaded '{_planeName}': {gamez.Nodes.Count} gamez nodes, " +
-                     $"{builder.MeshInstanceCount} mesh instances, {sw.ElapsedMilliseconds} ms");
+            GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
+                     $"{meshInstances} mesh instances, {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception e)
         {
@@ -95,11 +123,32 @@ public partial class PlaneViewer : Node3D
     private void FrameCamera()
     {
         var aabb = ComputeAabb(_plane!);
-        _orbitCenter = aabb.GetCenter();
-        var radius = aabb.Size.Length() * 0.5f;
-        if (radius < 0.01f) radius = 5f;
-        _orbitDistance = radius / Mathf.Sin(Mathf.DegToRad(_camera.Fov) * 0.5f) * 0.8f;
+        _orbitCenter = _lookAt ?? aabb.GetCenter();
+        if (_camPos is { } pos)
+        {
+            var offset = pos - _orbitCenter;
+            _orbitDistance = offset.Length();
+            if (_orbitDistance < 0.01f) { _orbitDistance = 1f; offset = Vector3.Back; }
+            var dir = offset / _orbitDistance;
+            _pitch = Mathf.Asin(Mathf.Clamp(dir.Y, -1f, 1f));
+            _yaw = Mathf.Atan2(dir.X, dir.Z);
+        }
+        else
+        {
+            var radius = aabb.Size.Length() * 0.5f;
+            if (radius < 0.01f) radius = 5f;
+            _orbitDistance = radius / Mathf.Sin(Mathf.DegToRad(_camera.Fov) * 0.5f) * 0.8f;
+        }
         UpdateCamera();
+    }
+
+    private static Vector3 ParseVec3(string s)
+    {
+        var parts = s.Split(',');
+        return new Vector3(
+            float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
+            float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
     }
 
     private static Aabb ComputeAabb(Node3D root)

@@ -59,16 +59,34 @@ public sealed class GameZ
             // Each node is an enum wrapper: {"Object3d": {...}} or {"Lod": {...}}
             var prop = FirstProperty(wrapper);
             var body = prop.Value;
+            // Not every kind has every field: Display lacks name+children,
+            // Window/Camera/Light lack children.
             var node = new GameZNode
             {
                 Kind = prop.Name,
-                Name = body.GetProperty("name").GetString() ?? "",
+                Name = body.TryGetProperty("name", out var nm) ? nm.GetString() ?? "" : "",
                 MeshIndex = body.TryGetProperty("mesh_index", out var mi) ? mi.GetInt32() : -1,
             };
-            foreach (var c in body.GetProperty("children").EnumerateArray())
-                node.Children.Add(c.GetInt32());
+            if (body.TryGetProperty("children", out var kids) && kids.ValueKind == JsonValueKind.Array)
+                foreach (var c in kids.EnumerateArray())
+                    node.Children.Add(c.GetInt32());
             if (node.Kind == "Lod")
                 node.LodRangeMin = body.GetProperty("range").GetProperty("min").GetSingle();
+            if (node.Kind == "World" && body.TryGetProperty("partitions", out var parts))
+            {
+                // The world's spatial grid references top-level (parentless) subtrees that
+                // are placed in the world but are NOT in the world's children list.
+                node.PartitionNodes = new List<int>();
+                var seen = new HashSet<int>();
+                foreach (var row in parts.EnumerateArray())
+                    foreach (var cell in row.EnumerateArray())
+                        foreach (var nref in cell.GetProperty("nodes").EnumerateArray())
+                        {
+                            int idx = nref.GetProperty("index").GetInt32();
+                            if (seen.Add(idx))
+                                node.PartitionNodes.Add(idx);
+                        }
+            }
             if (body.TryGetProperty("transformation", out var tf) && tf.ValueKind == JsonValueKind.Object)
                 node.Local = ParseTransform(tf);
             Nodes.Add(node);
@@ -123,6 +141,17 @@ public sealed class GameZ
                         poly.NormalIndices.Add(x.GetInt32());
                 }
                 poly.TriangleStrip = p.GetProperty("flags").TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                if (p.TryGetProperty("vertex_colors", out var vcs) && vcs.ValueKind == JsonValueKind.Array)
+                {
+                    // Baked per-corner lighting (RGB 0-255); the original engine renders
+                    // texture × vertex color with no dynamic world lighting.
+                    poly.VertexColors = new List<Color>();
+                    foreach (var vc in vcs.EnumerateArray())
+                        poly.VertexColors.Add(new Color(
+                            vc.GetProperty("r").GetSingle() / 255f,
+                            vc.GetProperty("g").GetSingle() / 255f,
+                            vc.GetProperty("b").GetSingle() / 255f));
+                }
                 if (p.TryGetProperty("materials", out var pms) && pms.GetArrayLength() > 0)
                 {
                     var pm = pms[0];
@@ -187,12 +216,13 @@ public sealed class GameZ
 
 public sealed class GameZNode
 {
-    public string Kind = "";   // "Object3d" or "Lod"
+    public string Kind = "";   // "Object3d", "Lod", "World", "Display", "Window", "Camera", "Light"
     public string Name = "";
     public int MeshIndex = -1;
     public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
     public Transform3D? Local;
     public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
+    public List<int>? PartitionNodes; // World nodes only: distinct subtree roots placed via the spatial grid
 }
 
 public sealed class GameZMesh
@@ -207,6 +237,7 @@ public sealed class GameZPolygon
     public List<int> VertexIndices { get; } = new();
     public List<int>? NormalIndices;
     public List<Vector2>? UvCoords;
+    public List<Color>? VertexColors; // baked per-corner lighting, parallel to VertexIndices
     public int MaterialIndex = -1;
     public bool TriangleStrip;
 }

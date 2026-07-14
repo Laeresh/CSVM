@@ -19,3 +19,6 @@
 - VR Support
 ## Player
 - Control via Mouse-Keyboard, Gamepad, Joystick and HOTAS/HOSAS
+## Free Floating Ideas
+- Additional Weapons/Equipment like YAML Mod for Mechwarrior 5: Mercenaries
+- Dynamic Weapons on the models.
