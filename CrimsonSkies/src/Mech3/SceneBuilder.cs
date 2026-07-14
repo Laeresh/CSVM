@@ -15,28 +15,45 @@ public sealed class SceneBuilder
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
+    private readonly bool _generateCollision;
     private readonly Dictionary<int, StandardMaterial3D> _materialCache = new();
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
+    private readonly Dictionary<int, ConcavePolygonShape3D?> _shapeCache = new();
 
     public int MeshInstanceCount { get; private set; }
+    public int ColliderCount { get; private set; }
 
     /// <param name="fullbright">Render unshaded, like the original engine's world pass:
     /// texture × baked vertex color, ignoring scene lights. Used for world geometry.</param>
-    public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false)
+    /// <param name="generateCollision">Attach a static trimesh collider to each mesh, so
+    /// the flight loop can raycast against it (used for the flyable world; a per-subtree
+    /// predicate can still exempt non-solid geometry like clouds).</param>
+    public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false, bool generateCollision = false)
     {
         _gamez = gamez;
         _textures = textures;
         _fullbright = fullbright;
+        _generateCollision = generateCollision;
     }
 
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.</summary>
-    public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null)
+    /// <param name="skip">Subtrees to drop entirely (not rendered, no collision).</param>
+    /// <param name="collisionSkip">Subtrees to render but exempt from collision (e.g. clouds);
+    /// the exemption applies to the node and all its descendants.</param>
+    public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
+        Predicate<GameZNode>? collisionSkip = null) =>
+        BuildSubtree(node, skip, collisionSkip, _generateCollision);
+
+    private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
+        Predicate<GameZNode>? collisionSkip, bool collidable)
     {
         if (skip != null && skip(node))
             return null;
         // Of each LOD group, keep only the highest-detail level (range starts at 0).
         if (node.Kind == "Lod" && node.LodRangeMin != 0f)
             return null;
+        if (collidable && collisionSkip != null && collisionSkip(node))
+            collidable = false;
 
         var n3d = new Node3D { Name = Sanitize(node.Name) };
         if (node.Local is { } local)
@@ -49,6 +66,8 @@ public sealed class SceneBuilder
             {
                 n3d.AddChild(new MeshInstance3D { Mesh = mesh, Name = "mesh" });
                 MeshInstanceCount++;
+                if (collidable)
+                    AttachCollision(n3d, node.MeshIndex, mesh);
             }
         }
 
@@ -56,11 +75,33 @@ public sealed class SceneBuilder
         {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
-            var child = BuildSubtree(_gamez.Nodes[childIndex], skip);
+            var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable);
             if (child != null)
                 n3d.AddChild(child);
         }
         return n3d;
+    }
+
+    // A static trimesh body in the mesh's own space; the parent node carries the world
+    // transform, so the collider lines up with the rendered surface. The concave shape
+    // is cached per mesh and shared across instances (shapes are resources).
+    private void AttachCollision(Node3D parent, int meshIndex, ArrayMesh mesh)
+    {
+        if (!_shapeCache.TryGetValue(meshIndex, out var shape))
+        {
+            shape = mesh.CreateTrimeshShape();
+            // The source winding is inconsistent (why rendering culls nothing), so make the
+            // trimesh solid from both sides — otherwise raycasts pass through down-wound faces.
+            if (shape != null)
+                shape.BackfaceCollision = true;
+            _shapeCache[meshIndex] = shape;
+        }
+        if (shape == null)
+            return;
+        var body = new StaticBody3D { Name = "col" };
+        body.AddChild(new CollisionShape3D { Shape = shape });
+        parent.AddChild(body);
+        ColliderCount++;
     }
 
     private ArrayMesh? GetMesh(int meshIndex)

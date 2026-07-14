@@ -24,7 +24,9 @@ namespace CrimsonSkies;
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
 ///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
 ///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
-///   --mute                       skip flight audio (engine loop, overspeed whine, rattle)
+///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
+///   --debug-collision            draw the plane's collision probe (the swept ray of the
+///                                crash test; green, red on impact)
 ///   --hold=pitch,roll,yaw,thr    constant flight input instead of the keyboard (automated runs)
 ///   --frames=N                   frames to render before --screenshot fires (default 15)
 ///   --campos=x,y,z               place the camera here instead of auto-framing
@@ -58,6 +60,7 @@ public partial class PlaneViewer : Node3D
         var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
         var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
         bool mute = false;
+        bool debugCollision = false;
 
         bool gamezOverridden = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
@@ -71,6 +74,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--zrdr=")) zrdrPath = arg["--zrdr=".Length..];
             else if (arg.StartsWith("--sounds=")) soundsPath = arg["--sounds=".Length..];
             else if (arg == "--mute") mute = true;
+            else if (arg == "--debug-collision") debugCollision = true;
             else if (arg.StartsWith("--hold=")) _holdInput = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
@@ -95,12 +99,14 @@ public partial class PlaneViewer : Node3D
             var gamez = GameZ.Load(gamezPath);
             using var textures = new TextureArchive(texturesPath);
             int meshInstances;
+            int colliders = 0;
             string what;
             if (_worldName != null)
             {
-                var builder = new WorldBuilder(gamez, textures);
+                var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build(_worldName);
                 meshInstances = builder.MeshInstanceCount;
+                colliders = builder.ColliderCount;
                 what = $"world '{_worldName}'";
             }
             else
@@ -124,7 +130,12 @@ public partial class PlaneViewer : Node3D
                          $"weight={stats.VehWeight} engine={stats.EnginePower:0.00} " +
                          $"torques=({stats.PitchTorque},{stats.RollTorque},{stats.RudderTorque})");
 
-                var controller = new FlightController { HoldInput = _holdInput };
+                var controller = new FlightController
+                {
+                    HoldInput = _holdInput,
+                    DebugCollision = debugCollision,
+                    PlaneModel = planeModel,
+                };
                 controller.AddChild(planeModel);
                 if (!mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath)))
                 {
@@ -149,7 +160,7 @@ public partial class PlaneViewer : Node3D
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
-                     $"{meshInstances} mesh instances, {sw.ElapsedMilliseconds} ms");
+                     $"{meshInstances} mesh instances, {colliders} colliders, {sw.ElapsedMilliseconds} ms");
         }
         catch (Exception e)
         {

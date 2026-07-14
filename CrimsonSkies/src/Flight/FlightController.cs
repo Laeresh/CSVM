@@ -11,14 +11,25 @@ namespace CrimsonSkies.Flight;
 /// Shift/Ctrl throttle, R respawn.
 /// Gamepad: left stick pitch/roll (back = nose up), LB/RB rudder, RT/LT throttle
 /// up/down, Y respawn.
+///
+/// Hitting terrain or a building crashes the plane: explosion sound, airframe
+/// hidden, frozen at the impact point until R (or gamepad Y/A) respawns.
 /// </summary>
 public partial class FlightController : Node3D
 {
-    /// <summary>When set, replaces keyboard input — used by automated screenshot runs.</summary>
+    /// <summary>When set, replaces keyboard input — used by automated screenshot runs.
+    /// Such runs are unattended, so a crash auto-respawns after a short pause.</summary>
     public FlightInput? HoldInput;
 
     /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
     public FlightAudio? Audio;
+
+    /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
+    public Node3D? PlaneModel;
+
+    /// <summary>Draw the collision probe — the swept ray the crash test casts each
+    /// physics frame — as a debug line (green; red on the impact frame).</summary>
+    public bool DebugCollision;
 
     private FlightModel _model = null!;
     private Camera3D _camera = null!;
@@ -27,11 +38,16 @@ public partial class FlightController : Node3D
     private Basis _spawnAttitude;
     private float _throttle;
     private double _sinceTelemetry;
+    private bool _crashed;                       // frozen at the impact point, waiting for respawn
+    private float _autoRespawnIn;                // s until auto-respawn (HoldInput runs only)
+    private ImmediateMesh? _probe;               // debug collision-probe line
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s
     private const float UnderMapY = 60f;        // C1 terrain sits at y≈100+; below this we're lost
+    private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
+    private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -52,11 +68,30 @@ public partial class FlightController : Node3D
         _hud.AddThemeConstantOverride("shadow_offset_y", 2);
         canvas.AddChild(_hud);
         AddChild(canvas);
+        if (DebugCollision)
+        {
+            _probe = new ImmediateMesh();
+            AddChild(new MeshInstance3D
+            {
+                Mesh = _probe,
+                TopLevel = true, // vertices are in world space
+                Name = "collision_probe",
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    VertexColorUseAsAlbedo = true,
+                    NoDepthTest = true, // stays visible against/through terrain
+                },
+            });
+        }
         SnapCamera();
     }
 
     private void Respawn()
     {
+        _crashed = false;
+        if (PlaneModel != null)
+            PlaneModel.Visible = true;
         _throttle = 0.8f;
         _model.Reset(_spawnPos, _spawnAttitude, 0.8f * _model.Stats.FdSpeed, _throttle);
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
@@ -64,14 +99,70 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
+    /// <summary>True if the segment crosses any static world collider.</summary>
+    private bool HitWorld(Vector3 from, Vector3 to)
+    {
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to)).Count > 0;
+    }
+
+    private void Crash()
+    {
+        _crashed = true;
+        _autoRespawnIn = AutoRespawnDelay;
+        if (PlaneModel != null)
+            PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
+        Audio?.OnCrash();
+        GD.Print($"CRASH at ({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
+                 $"spd={_model.Speed:0} m/s — waiting for respawn");
+    }
+
+    private static bool RespawnPressed()
+    {
+        if (Input.IsKeyPressed(Key.R))
+            return true;
+        var pads = Input.GetConnectedJoypads();
+        return pads.Count > 0 && (Input.IsJoyButtonPressed(pads[0], JoyButton.Y)
+                                  || Input.IsJoyButtonPressed(pads[0], JoyButton.A));
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = (float)delta;
+        if (_crashed)
+        {
+            // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
+            // unattended HoldInput runs respawn on a timer instead
+            if (RespawnPressed() || (HoldInput != null && (_autoRespawnIn -= dt) <= 0f))
+                Respawn();
+            return;
+        }
+
+        var prev = _model.Position;          // committed position from last frame
         var input = HoldInput ?? ReadKeyboard(dt);
         _model.Step(input, dt);
+
+        // Crash when the frame's flight path runs into solid world geometry (terrain,
+        // buildings). Sweeping prev→next avoids tunnelling through terrain in a fast
+        // dive; the extra margin keeps the nose (not the plane's center) off the wall.
+        var to = _model.Position;
+        var step = to - prev;
+        float len = step.Length();
+        var probeEnd = len > 1e-4f ? to + step / len * CollisionMargin : to;
+        bool hit = HitWorld(prev, probeEnd);
+        if (_probe != null)
+            DrawProbe(prev, probeEnd, hit);
+        if (hit)
+        {
+            Crash();
+            return;
+        }
+
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
 
-        if (_model.Position.Y < UnderMapY)
+        if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
             Respawn();
 
         _sinceTelemetry += delta;
@@ -127,6 +218,26 @@ public partial class FlightController : Node3D
         };
     }
 
+    /// <summary>Debug view of the swept collision ray: a line along this frame's flight
+    /// path (plus the nose margin) with a cross at the probe tip. Freezes red at the
+    /// impact point while crashed.</summary>
+    private void DrawProbe(Vector3 from, Vector3 end, bool hit)
+    {
+        var color = hit ? new Color(1f, 0.15f, 0.1f) : new Color(0.2f, 1f, 0.3f);
+        _probe!.ClearSurfaces();
+        _probe.SurfaceBegin(Mesh.PrimitiveType.Lines);
+        _probe.SurfaceSetColor(color);
+        _probe.SurfaceAddVertex(from);
+        _probe.SurfaceAddVertex(end);
+        const float s = 1.5f;
+        foreach (var axis in stackalloc[] { Vector3.Right, Vector3.Up, Vector3.Back })
+        {
+            _probe.SurfaceAddVertex(end - axis * s);
+            _probe.SurfaceAddVertex(end + axis * s);
+        }
+        _probe.SurfaceEnd();
+    }
+
     /// <summary>Deadzone + squared response for fine control around center.</summary>
     private static float StickCurve(float v)
     {
@@ -147,8 +258,10 @@ public partial class FlightController : Node3D
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
-
-        Audio?.Update(_model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+        if (_crashed)
+            _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
+        else
+            Audio?.Update(_model.Throttle, _model.Speed / _model.Stats.FdSpeed);
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)
