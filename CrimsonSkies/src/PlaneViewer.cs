@@ -1,6 +1,7 @@
 using System;
 using System.Diagnostics;
 using System.IO;
+using CrimsonSkies.Flight;
 using CrimsonSkies.Mech3;
 using Godot;
 
@@ -8,14 +9,21 @@ namespace CrimsonSkies;
 
 /// <summary>
 /// Milestone 2 vertical-slice viewer: loads one aircraft from the player's own
-/// extracted game data and renders it with orbit controls.
+/// extracted game data and renders it with orbit controls — or, with --fly,
+/// free flight over the chapter world with arcade controls.
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
 ///   --world[=world1]             build a whole chapter world instead of one plane
 ///                                (default gamez becomes ../extracted/c1-gamez.zip)
-///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip)
+///   --fly                        free flight: chapter world + aircraft + arcade controls
+///                                (WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn)
+///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip;
+///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
+///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
+///   --hold=pitch,roll,yaw,thr    constant flight input instead of the keyboard (automated runs)
+///   --frames=N                   frames to render before --screenshot fires (default 15)
 ///   --campos=x,y,z               place the camera here instead of auto-framing
 ///   --lookat=x,y,z               orbit/look target (default: model AABB center)
 ///   --screenshot=path            render a few frames, save a PNG, then quit
@@ -24,6 +32,8 @@ public partial class PlaneViewer : Node3D
 {
     private string _planeName = "player_bhawk";
     private string? _worldName;
+    private bool _fly;
+    private FlightInput? _holdInput;
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
@@ -40,7 +50,9 @@ public partial class PlaneViewer : Node3D
         var projectDir = ProjectSettings.GlobalizePath("res://");
         var repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
         var gamezPath = Path.Combine(repoRoot, "extracted", "planes-gamez.zip");
+        var planesGamezPath = gamezPath;
         var texturesPath = Path.Combine(repoRoot, "extracted", "c1-texture.zip");
+        var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
 
         bool gamezOverridden = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
@@ -48,8 +60,12 @@ public partial class PlaneViewer : Node3D
             if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
             else if (arg == "--world") _worldName = "world1";
             else if (arg.StartsWith("--world=")) _worldName = arg["--world=".Length..];
+            else if (arg == "--fly") _fly = true;
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) texturesPath = arg["--textures=".Length..];
+            else if (arg.StartsWith("--zrdr=")) zrdrPath = arg["--zrdr=".Length..];
+            else if (arg.StartsWith("--hold=")) _holdInput = ParseHold(arg["--hold=".Length..]);
+            else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
             else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--pitch=")) _pitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
@@ -57,11 +73,13 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
 
+        if (_fly)
+            _worldName ??= "world1";
         if (_worldName != null && !gamezOverridden)
             gamezPath = Path.Combine(repoRoot, "extracted", "c1-gamez.zip");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = 50, Far = 40000f };
+        _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
         AddChild(_camera);
 
         try
@@ -86,6 +104,29 @@ public partial class PlaneViewer : Node3D
                 what = $"'{_planeName}'";
             }
             AddChild(_plane);
+
+            if (_fly)
+            {
+                var planesGamez = GameZ.Load(planesGamezPath);
+                var planeBuilder = new PlaneBuilder(planesGamez, textures);
+                var planeModel = planeBuilder.Build(_planeName);
+                meshInstances += planeBuilder.MeshInstanceCount;
+
+                var stats = PlaneStats.Load(zrdrPath, _planeName);
+                GD.Print($"flight stats [{stats.DefName}]: fd_speed={stats.FdSpeed} m/s " +
+                         $"weight={stats.VehWeight} engine={stats.EnginePower:0.00} " +
+                         $"torques=({stats.PitchTorque},{stats.RollTorque},{stats.RudderTorque})");
+
+                var controller = new FlightController { HoldInput = _holdInput };
+                controller.AddChild(planeModel);
+                // spawn between the lighthouse and the town, heading for the town
+                controller.Setup(new FlightModel(stats), _camera,
+                    spawnPos: new Vector3(-6200, 500, -3300),
+                    spawnLookAt: new Vector3(-5700, 350, -6300));
+                AddChild(controller);
+                what += $" + '{_planeName}' flying";
+            }
+
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
                      $"{meshInstances} mesh instances, {sw.ElapsedMilliseconds} ms");
         }
@@ -97,7 +138,15 @@ public partial class PlaneViewer : Node3D
             return;
         }
 
-        FrameCamera();
+        if (!_fly)
+            FrameCamera();
+    }
+
+    private static FlightInput ParseHold(string s)
+    {
+        var p = s.Split(',');
+        float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
+        return new FlightInput { Pitch = F(0), Roll = F(1), Yaw = F(2), Throttle = F(3) };
     }
 
     private void SetupLighting()
@@ -183,6 +232,13 @@ public partial class PlaneViewer : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        {
+            GetTree().Quit();
+            return;
+        }
+        if (_fly)
+            return; // the FlightController owns the camera; no orbit controls
         switch (@event)
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
@@ -200,9 +256,6 @@ public partial class PlaneViewer : Node3D
                 _yaw -= motion.Relative.X * 0.008f;
                 _pitch += motion.Relative.Y * 0.008f;
                 UpdateCamera();
-                break;
-            case InputEventKey { Pressed: true, Keycode: Key.Escape }:
-                GetTree().Quit();
                 break;
         }
     }
