@@ -37,18 +37,22 @@ Public open-source project under the **XWVM legal model**: the repo ships **code
 - `extracted/` — extraction output workdir (git-ignored).
 - `tools/` — downloaded binaries, e.g. mech3ax releases (git-ignored).
 
-## Format support status (mech3ax, verified 2026-07-14)
+## Format support status (validated against THIS install with mech3ax v0.6.1, 2026-07-14)
+
+mech3ax's README support matrix is outdated — actual v0.6.1 support for CS is far better. All validation ran on this install (`unzbd cs …`, round-trip via `rezbd cs …` + sha256):
 
 | Format | Status |
 |---|---|
-| `texture.zbd` / `rtexture*.zbd` | ✅ supported |
-| `soundsh.zbd` / `soundsl.zbd` | ✅ supported |
-| `zrdr.zbd` (reader/mission config) | ✅ supported |
-| `interp.zbd` | ✅ supported |
-| `planes.zbd` (aircraft models) | ❌ to be reverse engineered (MW3 `mechlib.zbd` is the documented sibling) |
-| `gamez.zbd` (world geometry) | ❌ to be reverse engineered (MW3 `gamez.zbd` is documented) |
-| `cam_anim.zbd` / `mis_anim.zbd` | ❌ deferred — not needed for free flight |
+| `texture.zbd` / `rtexture*.zbd` / `rimage.zbd` | ✅ extracts to PNGs; round-trip **byte-identical** (C1 verified) |
+| `soundsh.zbd` / `soundsl.zbd` | ✅ extracts to WAVs |
+| `zrdr.zbd` (reader/mission config) | ✅ extracts to JSON (ai, engines, Briefing, …) |
+| `interp.zbd` | ✅ extracts to JSON (engine boot scripts) |
+| `gamez.zbd` (world geometry) | ✅ extracts (metadata/textures/materials/meshes/nodes JSON); round-trip **byte-identical** (C1 + C5 verified) |
+| `planes.zbd` (aircraft models) | ✅ extracts — it's a GameZ-format file (the boot script loads it via `GameZReadZBDFile`). Round-trip differs by only 72 bytes / 6 MB: swapped `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically lossless; upstream fix candidate. |
+| `cam_anim.zbd` / `mis_anim.zbd` | ❌ genuinely unsupported — deferred, not needed for free flight |
+
+Extracted plane data confirmed usable: `nodes.json` has 3,317 nodes including full hierarchies for `player_bhawk`, `player_peacemaker`, `player_kestrel`, `player_autogyro`, `player_avenger`, `player_balmoral`, `player_fury` with control surfaces (ailerons/elevators), props, gear, firepoints, cockpits.
 
 ## Current status / next step
 
-Repo just initialized; no code yet. **Next agreed step:** validate mech3ax prebuilt release binaries against this install's four supported formats, then take a first structured look at `planes.zbd` to size up the RE work.
+**Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats. **Next step: Milestone 2** — Godot 4 .NET project skeleton + importer that reads unzbd output (ZIP/JSON/PNG) from the player's install, starting with one plane mesh + C1 terrain rendered.
