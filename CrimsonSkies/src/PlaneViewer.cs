@@ -23,6 +23,8 @@ namespace CrimsonSkies;
 ///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
 ///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
+///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
+///   --mute                       skip flight audio (engine loop, overspeed whine, rattle)
 ///   --hold=pitch,roll,yaw,thr    constant flight input instead of the keyboard (automated runs)
 ///   --frames=N                   frames to render before --screenshot fires (default 15)
 ///   --campos=x,y,z               place the camera here instead of auto-framing
@@ -54,6 +56,8 @@ public partial class PlaneViewer : Node3D
         var planesGamezPath = gamezPath;
         var texturesPath = Path.Combine(repoRoot, "extracted", "c1-texture.zip");
         var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
+        var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
+        bool mute = false;
 
         bool gamezOverridden = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
@@ -65,6 +69,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) texturesPath = arg["--textures=".Length..];
             else if (arg.StartsWith("--zrdr=")) zrdrPath = arg["--zrdr=".Length..];
+            else if (arg.StartsWith("--sounds=")) soundsPath = arg["--sounds=".Length..];
+            else if (arg == "--mute") mute = true;
             else if (arg.StartsWith("--hold=")) _holdInput = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
@@ -120,6 +126,20 @@ public partial class PlaneViewer : Node3D
 
                 var controller = new FlightController { HoldInput = _holdInput };
                 controller.AddChild(planeModel);
+                if (!mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath)))
+                {
+                    // streams decode fully into memory, so the archive can close right after
+                    using var sounds = new SoundArchive(soundsPath);
+                    var audio = new FlightAudio();
+                    audio.Setup(sounds, SoundDefs.Load(zrdrPath), stats);
+                    controller.Audio = audio;
+                    controller.AddChild(audio);
+                    GD.Print($"audio: engine={stats.EngineSound} whine={stats.WhineSound} rattle={stats.RattleSound}");
+                }
+                else if (!mute)
+                {
+                    GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
+                }
                 // spawn between the lighthouse and the town, heading for the town
                 controller.Setup(new FlightModel(stats), _camera,
                     spawnPos: new Vector3(-6200, 500, -3300),

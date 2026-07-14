@@ -17,6 +17,9 @@ public partial class FlightController : Node3D
     /// <summary>When set, replaces keyboard input — used by automated screenshot runs.</summary>
     public FlightInput? HoldInput;
 
+    /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
+    public FlightAudio? Audio;
+
     private FlightModel _model = null!;
     private Camera3D _camera = null!;
     private Label _hud = null!;
@@ -144,6 +147,8 @@ public partial class FlightController : Node3D
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
+
+        Audio?.Update(_model.Throttle, _model.Speed / _model.Stats.FdSpeed);
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)

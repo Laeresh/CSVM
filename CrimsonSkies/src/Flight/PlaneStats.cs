@@ -5,6 +5,20 @@ using Godot;
 
 namespace CrimsonSkies.Flight;
 
+/// <summary>Clamped linear ramp between two (x, y) control points — the shape of
+/// every throttle/speed→volume/pitch sound curve in player.json.</summary>
+public readonly struct SoundCurve
+{
+    public readonly float MinX, MinY, MaxX, MaxY;
+
+    public SoundCurve(float minX, float minY, float maxX, float maxY) =>
+        (MinX, MinY, MaxX, MaxY) = (minX, minY, maxX, maxY);
+
+    public float Eval(float x) => MaxX <= MinX
+        ? MaxY
+        : MinY + (MaxY - MinY) * Mathf.Clamp((x - MinX) / (MaxX - MinX), 0f, 1f);
+}
+
 /// <summary>
 /// Flight parameters for one player aircraft, pulled from the zrdr extraction:
 /// vehicle.json (per-plane 'dynamics' block, resolved through the 'kind_of'
@@ -36,6 +50,18 @@ public sealed class PlaneStats
     // player.json globals
     public float Gravity = 20f;          // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
+
+    // sound (vehicle.json 'engine_sound' name + player.json curve blocks).
+    // Engine curves run on throttle [0..1]; whine (the 'prop_sound' block — only
+    // audible past fd_speed, i.e. a dive) and rattle run on speed/fd_speed.
+    public string EngineSound = "snd_devastatorengine"; // basic_airplane default
+    public SoundCurve EngineVolume = new(0.1f, 1f, 1f, 1f);
+    public SoundCurve EnginePitch = new(0.1f, 0.6f, 1f, 1f);
+    public string WhineSound = "snd_enginewhine"; // not named in the readers; the only pitch-shiftable candidate
+    public SoundCurve WhineVolume = new(1f, 0f, 1.1f, 0.5f);
+    public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
+    public string RattleSound = "snd_planeshake";
+    public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
 
     public static PlaneStats Load(string zrdrPath, string planeNodeName)
     {
@@ -104,6 +130,13 @@ public sealed class PlaneStats
                     return f;
             return fallback;
         }
+        string PropStr(string key, string fallback)
+        {
+            foreach (var d in chain)
+                if (d.Str(key) is { } s)
+                    return s;
+            return fallback;
+        }
 
         var stats = new PlaneStats
         {
@@ -124,6 +157,7 @@ public sealed class PlaneStats
             RefArea = Dyn("ref_area", 335f),
             FlightCeiling = Prop("flight_ceiling", 2500f),
         };
+        stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
 
         // stock engine power factor: 'engine' prop → engines.json row [id, name, power]
         int engineId = (int)Prop("engine", 0f);
@@ -131,12 +165,38 @@ public sealed class PlaneStats
             if (row is List<object?> { Count: >= 3 } r && r[0] is float id && (int)id == engineId && r[2] is float power)
                 stats.EnginePower = power;
 
-        // global flight constants
+        // global flight constants + sound curves
         if (Zrdr.LoadFile(zrdrPath, "player.json")[0] is List<object?> playerList)
         {
             var player = ZrdrDict.FromAlternating(playerList);
             stats.Gravity = player.Float("nom_gravity", stats.Gravity);
             stats.StallMag = player.Float("stall_mag", stats.StallMag);
+
+            // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
+            static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>
+                d.Has(minKey) && d.Has(maxKey)
+                    ? new SoundCurve(d.Float(minKey, fb.MinX), d.Float(minKey, fb.MinY, 1),
+                                     d.Float(maxKey, fb.MaxX), d.Float(maxKey, fb.MaxY, 1))
+                    : fb;
+            if (player.Dict("engine_sound") is { } eng)
+            {
+                stats.EngineVolume = Curve(eng, "min_throttle_volume", "max_throttle_volume", stats.EngineVolume);
+                stats.EnginePitch = Curve(eng, "min_throttle_pitch", "max_throttle_pitch", stats.EnginePitch);
+            }
+            if (player.Dict("prop_sound") is { } prop)
+            {
+                stats.WhineVolume = Curve(prop, "min_speed_volume", "max_speed_volume", stats.WhineVolume);
+                stats.WhinePitch = Curve(prop, "min_speed_pitch", "max_speed_pitch", stats.WhinePitch);
+            }
+            if (player.Dict("rattle") is { } rattle)
+            {
+                stats.RattleSound = rattle.Str("sound") ?? stats.RattleSound;
+                stats.RattleVolume = new SoundCurve(
+                    rattle.Float("speed_range", stats.RattleVolume.MinX),
+                    rattle.Float("volume_range", stats.RattleVolume.MinY),
+                    rattle.Float("speed_range", stats.RattleVolume.MaxX, 1),
+                    rattle.Float("volume_range", stats.RattleVolume.MaxY, 1));
+            }
         }
         return stats;
     }
