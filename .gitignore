@@ -1,0 +1,11 @@
+# HARD RULE (XWVM legal model): the game install and anything derived from it
+# must NEVER be committed. Code and format documentation only.
+/CrimsonSkiesGame/
+/extracted/
+/tools/
+
+# OS / editor cruft
+Thumbs.db
+Desktop.ini
+.DS_Store
+*.swp
