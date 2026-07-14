@@ -1,0 +1,218 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.IO.Compression;
+using System.Text.Json;
+using Godot;
+
+namespace CrimsonSkies.Mech3;
+
+/// <summary>
+/// In-memory model of a mech3ax GameZ extraction (planes.zbd / gamez.zbd → ZIP of
+/// nodes.json / meshes.json / materials.json). Only the fields the renderer needs.
+/// </summary>
+public sealed class GameZ
+{
+    public List<GameZNode> Nodes { get; } = new();
+    public List<GameZMesh> Meshes { get; } = new();
+    public List<GameZMaterial> Materials { get; } = new();
+
+    /// <summary>Loads from a mech3ax output ZIP, or from a directory of the same JSON files.</summary>
+    public static GameZ Load(string path)
+    {
+        var gz = new GameZ();
+        if (Directory.Exists(path))
+        {
+            using var nodes = File.OpenRead(Path.Combine(path, "nodes.json"));
+            gz.ParseNodes(nodes);
+            using var meshes = File.OpenRead(Path.Combine(path, "meshes.json"));
+            gz.ParseMeshes(meshes);
+            using var mats = File.OpenRead(Path.Combine(path, "materials.json"));
+            gz.ParseMaterials(mats);
+        }
+        else
+        {
+            using var zip = ZipFile.OpenRead(path);
+            using (var s = OpenEntry(zip, "nodes.json")) gz.ParseNodes(s);
+            using (var s = OpenEntry(zip, "meshes.json")) gz.ParseMeshes(s);
+            using (var s = OpenEntry(zip, "materials.json")) gz.ParseMaterials(s);
+        }
+        return gz;
+    }
+
+    private static Stream OpenEntry(ZipArchive zip, string name) =>
+        (zip.GetEntry(name) ?? throw new FileNotFoundException($"'{name}' missing from archive")).Open();
+
+    public GameZNode? FindByName(string name)
+    {
+        foreach (var n in Nodes)
+            if (string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase))
+                return n;
+        return null;
+    }
+
+    private void ParseNodes(Stream stream)
+    {
+        using var doc = JsonDocument.Parse(BufferAll(stream));
+        foreach (var wrapper in doc.RootElement.EnumerateArray())
+        {
+            // Each node is an enum wrapper: {"Object3d": {...}} or {"Lod": {...}}
+            var prop = FirstProperty(wrapper);
+            var body = prop.Value;
+            var node = new GameZNode
+            {
+                Kind = prop.Name,
+                Name = body.GetProperty("name").GetString() ?? "",
+                MeshIndex = body.TryGetProperty("mesh_index", out var mi) ? mi.GetInt32() : -1,
+            };
+            foreach (var c in body.GetProperty("children").EnumerateArray())
+                node.Children.Add(c.GetInt32());
+            if (node.Kind == "Lod")
+                node.LodRangeMin = body.GetProperty("range").GetProperty("min").GetSingle();
+            if (body.TryGetProperty("transformation", out var tf) && tf.ValueKind == JsonValueKind.Object)
+                node.Local = ParseTransform(tf);
+            Nodes.Add(node);
+        }
+    }
+
+    private static Transform3D ParseTransform(JsonElement tf)
+    {
+        var tr = ParseVec3(tf.GetProperty("translation"));
+        Basis basis;
+        if (tf.TryGetProperty("matrix", out var m) && m.ValueKind == JsonValueKind.Object)
+        {
+            // Stored transposed: the actual rotation matrix has columns (a,b,c), (d,e,f), (g,h,i).
+            basis = new Basis(
+                new Vector3(m.GetProperty("a").GetSingle(), m.GetProperty("b").GetSingle(), m.GetProperty("c").GetSingle()),
+                new Vector3(m.GetProperty("d").GetSingle(), m.GetProperty("e").GetSingle(), m.GetProperty("f").GetSingle()),
+                new Vector3(m.GetProperty("g").GetSingle(), m.GetProperty("h").GetSingle(), m.GetProperty("i").GetSingle()));
+        }
+        else
+        {
+            // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z) — Godot's YXZ order
+            // (verified numerically against the 221 nodes that carry both forms).
+            basis = Basis.FromEuler(ParseVec3(tf.GetProperty("rotation")), EulerOrder.Yxz);
+        }
+        return new Transform3D(basis, tr);
+    }
+
+    private void ParseMeshes(Stream stream)
+    {
+        using var doc = JsonDocument.Parse(BufferAll(stream));
+        foreach (var m in doc.RootElement.EnumerateArray())
+        {
+            var mesh = new GameZMesh();
+            if (m.ValueKind != JsonValueKind.Object)
+            {
+                Meshes.Add(mesh); // null slot — keep it so mesh_index stays aligned
+                continue;
+            }
+            foreach (var v in m.GetProperty("vertices").EnumerateArray())
+                mesh.Vertices.Add(ParseVec3(v));
+            foreach (var n in m.GetProperty("normals").EnumerateArray())
+                mesh.Normals.Add(ParseVec3(n));
+            foreach (var p in m.GetProperty("polygons").EnumerateArray())
+            {
+                var poly = new GameZPolygon();
+                foreach (var vi in p.GetProperty("vertex_indices").EnumerateArray())
+                    poly.VertexIndices.Add(vi.GetInt32());
+                if (p.TryGetProperty("normal_indices", out var ni) && ni.ValueKind == JsonValueKind.Array)
+                {
+                    poly.NormalIndices = new List<int>();
+                    foreach (var x in ni.EnumerateArray())
+                        poly.NormalIndices.Add(x.GetInt32());
+                }
+                poly.TriangleStrip = p.GetProperty("flags").TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                if (p.TryGetProperty("materials", out var pms) && pms.GetArrayLength() > 0)
+                {
+                    var pm = pms[0];
+                    poly.MaterialIndex = pm.GetProperty("material_index").GetInt32();
+                    if (pm.TryGetProperty("uv_coords", out var uvs) && uvs.ValueKind == JsonValueKind.Array)
+                    {
+                        poly.UvCoords = new List<Vector2>();
+                        foreach (var uv in uvs.EnumerateArray())
+                            poly.UvCoords.Add(new Vector2(uv.GetProperty("u").GetSingle(), uv.GetProperty("v").GetSingle()));
+                    }
+                }
+                mesh.Polygons.Add(poly);
+            }
+            Meshes.Add(mesh);
+        }
+    }
+
+    private void ParseMaterials(Stream stream)
+    {
+        using var doc = JsonDocument.Parse(BufferAll(stream));
+        foreach (var wrapper in doc.RootElement.EnumerateArray())
+        {
+            var prop = FirstProperty(wrapper);
+            var body = prop.Value;
+            var mat = new GameZMaterial();
+            if (prop.Name == "Textured")
+            {
+                mat.TextureName = body.GetProperty("texture").GetString();
+            }
+            else // Colored
+            {
+                var c = body.GetProperty("color");
+                mat.Color = new Color(
+                    c.GetProperty("r").GetSingle() / 255f,
+                    c.GetProperty("g").GetSingle() / 255f,
+                    c.GetProperty("b").GetSingle() / 255f,
+                    body.GetProperty("alpha").GetSingle() / 255f);
+            }
+            Materials.Add(mat);
+        }
+    }
+
+    private static JsonProperty FirstProperty(JsonElement e)
+    {
+        foreach (var p in e.EnumerateObject())
+            return p;
+        throw new InvalidDataException("empty enum wrapper object");
+    }
+
+    private static Vector3 ParseVec3(JsonElement e) => new(
+        e.GetProperty("x").GetSingle(),
+        e.GetProperty("y").GetSingle(),
+        e.GetProperty("z").GetSingle());
+
+    private static byte[] BufferAll(Stream s)
+    {
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
+    }
+}
+
+public sealed class GameZNode
+{
+    public string Kind = "";   // "Object3d" or "Lod"
+    public string Name = "";
+    public int MeshIndex = -1;
+    public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
+    public Transform3D? Local;
+    public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
+}
+
+public sealed class GameZMesh
+{
+    public List<Vector3> Vertices { get; } = new();
+    public List<Vector3> Normals { get; } = new();
+    public List<GameZPolygon> Polygons { get; } = new();
+}
+
+public sealed class GameZPolygon
+{
+    public List<int> VertexIndices { get; } = new();
+    public List<int>? NormalIndices;
+    public List<Vector2>? UvCoords;
+    public int MaterialIndex = -1;
+    public bool TriangleStrip;
+}
+
+public sealed class GameZMaterial
+{
+    public string? TextureName; // set for Textured materials (e.g. "bldhwk_cowling.tif", may be truncated to 20 chars)
+    public Color Color = Colors.White; // set for Colored materials
+}

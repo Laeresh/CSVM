@@ -4,6 +4,12 @@
 /extracted/
 /tools/
 
+# Godot / .NET build artifacts
+/CrimsonSkies/.godot/
+/CrimsonSkies/bin/
+/CrimsonSkies/obj/
+*.screenshot.png
+
 # OS / editor cruft
 Thumbs.db
 Desktop.ini

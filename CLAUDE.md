@@ -33,9 +33,37 @@ Public open-source project under the **XWVM legal model**: the repo ships **code
 
 ## Repo layout
 
+- `CrimsonSkies/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CrimsonSkiesGame/` — the user's retail game install (git-ignored). ZBD archives in `CrimsonSkiesGame/ZBD/` organized as campaign chapters `C1`–`C5`, each with instant action (`IA1`), story missions (`M0x`), multiplayer maps (`MP1`–`3`). Cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
-- `extracted/` — extraction output workdir (git-ignored).
-- `tools/` — downloaded binaries, e.g. mech3ax releases (git-ignored).
+- `extracted/` — extraction output workdir (git-ignored). Notably `planes-gamez.zip` (unzbd of planes.zbd) and `c1-texture.zip` (unzbd of C1/texture.zbd), which the viewer reads.
+- `tools/` — downloaded binaries (git-ignored): mech3ax v0.6.1, Godot 4.7 .NET editor at `tools/godot/Godot_v4.7-stable_mono_win64/` (`*_console.exe` for CLI use).
+
+## Godot project (`CrimsonSkies/`)
+
+Godot 4.7 .NET, C# / net8.0. Build & run:
+
+```
+dotnet build CrimsonSkies/CrimsonSkies.sln
+tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CrimsonSkies res://scenes/Main.tscn -- --plane=player_bhawk
+```
+
+(First time only: run with `--headless --import` once before running scenes.)
+
+- `src/Mech3/GameZ.cs` — loads a mech3ax GameZ extraction (ZIP or unpacked dir): nodes.json / meshes.json / materials.json into plain C# objects.
+- `src/Mech3/TextureArchive.cs` — texture lookup over an unzbd texture ZIP (PNGs), handles the two name quirks below.
+- `src/Mech3/PlaneBuilder.cs` — builds a Node3D/MeshInstance3D tree for one aircraft; one ArrayMesh surface per material; skips cockpit/destroyed/damage/shadow subtrees and non-nearest LODs.
+- `src/PlaneViewer.cs` — Main.tscn root script: orbit camera, lighting. User args (after `--`): `--plane=`, `--gamez=`, `--textures=`, `--yaw=`, `--pitch=`, `--screenshot=<path>` (render a few frames, save PNG, quit — used for automated visual verification).
+
+### GameZ format facts (validated on this install, planes.zbd)
+
+- `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
+- Euler `transformation.rotation` composes **R = Ry(y)·Rx(x)·Rz(z)** = Godot's `EulerOrder.Yxz` (fit numerically, zero error, against the 221 nodes that also carry a matrix). When `matrix` is present, use it instead; it is stored transposed — real columns are (a,b,c),(d,e,f),(g,h,i).
+- Coordinates are right-handed Y-up with the nose at **-Z** — Godot's frame exactly; no mirroring, no UV V-flip.
+- `meshes.json` has `null` entries (empty slots) — keep them to preserve `mesh_index` alignment.
+- Polygons are n-gons (3..35 verts): triangulate as fan, or as strip when `flags.triangle_strip`; `normal_indices`/`uv_coords` may be null (272 polys have no normals → flat-shade fallback).
+- Materials are `Colored` (RGB 0-255 + alpha) or `Textured` (texture referenced **by name**). Two name quirks: fixed-width 20-char truncation (`blo_fusalagebottom.t` → prefix-match) and mech3ax duplicate renames (`bldhwk_cowling.-12.tif` → strip `.-N` suffix).
+- Plane skin pixel data is NOT in planes.zbd — it's in each chapter's `texture.zbd` (C1's contains all player-plane skins).
+- Aircraft tree shape: `player_*` → `geometry` → `healthy` → LOD nodes (`nearest` = range.min 0 is highest detail) + `markers` (firepoints/pylons/camera), plus `cockpit1` (separate interior model), `destroyed`, `shadow`, `dontmove` (props: `staticprop1` static; `prop1`/`prop1b`/`prop2*`/`nitroprop1` are spin-animation frames).
 
 ## Format support status (validated against THIS install with mech3ax v0.6.1, 2026-07-14)
 
@@ -55,4 +83,6 @@ Extracted plane data confirmed usable: `nodes.json` has 3,317 nodes including fu
 
 ## Current status / next step
 
-**Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats. **Next step: Milestone 2** — Godot 4 .NET project skeleton + importer that reads unzbd output (ZIP/JSON/PNG) from the player's install, starting with one plane mesh + C1 terrain rendered.
+**Milestone 1 (extraction) is essentially already delivered by mech3ax v0.6.1** — the planned RE work is reduced to (a) the cosmetic planes.zbd padding nit (upstream PR candidate) and (b) the deferred anim formats.
+
+**Milestone 2 in progress (2026-07-14): plane rendering works.** The Godot project renders textured aircraft from the player's own extracted data — verified via screenshots for `player_bhawk`, `player_kestrel`, `player_autogyro` (correct skins, decals upright, geometry not mirrored). **Next steps:** C1 terrain/world rendering from `c1-gamez.zip`, then arcade flight controls (zrdr plane stats), then sound.
