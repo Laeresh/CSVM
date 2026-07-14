@@ -3,12 +3,14 @@ using Godot;
 namespace CrimsonSkies.Flight;
 
 /// <summary>
-/// The flying aircraft: polls the keyboard into a <see cref="FlightModel"/>, applies
-/// the result to this node's transform (the plane model is a child), and drives the
-/// chase camera plus a minimal text HUD.
+/// The flying aircraft: polls keyboard + gamepad into a <see cref="FlightModel"/>,
+/// applies the result to this node's transform (the plane model is a child), and
+/// drives the chase camera plus a minimal text HUD.
 ///
-/// Controls: W/S or Up/Down pitch (W = push), A/D or Left/Right roll, Q/E rudder,
+/// Keyboard: W/S or Up/Down pitch (W = push), A/D or Left/Right roll, Q/E rudder,
 /// Shift/Ctrl throttle, R respawn.
+/// Gamepad: left stick pitch/roll (back = nose up), LB/RB rudder, RT/LT throttle
+/// up/down, Y respawn.
 /// </summary>
 public partial class FlightController : Node3D
 {
@@ -84,20 +86,53 @@ public partial class FlightController : Node3D
         static float Axis(Key positive, Key negative) =>
             (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
+        // first connected gamepad, if any
+        int pad = -1;
+        var pads = Input.GetConnectedJoypads();
+        if (pads.Count > 0)
+            pad = pads[0];
+        static float Btn(int device, JoyButton positive, JoyButton negative) =>
+            (Input.IsJoyButtonPressed(device, positive) ? 1f : 0f)
+            - (Input.IsJoyButtonPressed(device, negative) ? 1f : 0f);
+
+        float padPitch = 0f, padRoll = 0f, padYaw = 0f, padThrottle = 0f;
+        if (pad >= 0)
+        {
+            // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
+            padPitch = StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftY));
+            padRoll = -StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftX));
+            padYaw = Btn(pad, JoyButton.LeftShoulder, JoyButton.RightShoulder);
+            padThrottle = Input.GetJoyAxis(pad, JoyAxis.TriggerRight)
+                        - Input.GetJoyAxis(pad, JoyAxis.TriggerLeft);
+            if (Input.IsJoyButtonPressed(pad, JoyButton.Y))
+                Respawn();
+        }
+
         if (Input.IsKeyPressed(Key.R))
             Respawn();
 
         _throttle = Mathf.Clamp(
-            _throttle + Axis(Key.Shift, Key.Ctrl) * ThrottleRate * dt, 0f, 1f);
+            _throttle + (Axis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
         return new FlightInput
         {
             // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
-            Pitch = Mathf.Clamp(Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up), -1f, 1f),
-            Roll = Mathf.Clamp(Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right), -1f, 1f),
-            Yaw = Axis(Key.Q, Key.E),
+            Pitch = Mathf.Clamp(Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up) + padPitch, -1f, 1f),
+            Roll = Mathf.Clamp(Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right) + padRoll, -1f, 1f),
+            Yaw = Mathf.Clamp(Axis(Key.Q, Key.E) + padYaw, -1f, 1f),
             Throttle = _throttle,
         };
+    }
+
+    /// <summary>Deadzone + squared response for fine control around center.</summary>
+    private static float StickCurve(float v)
+    {
+        const float deadzone = 0.15f;
+        float a = Mathf.Abs(v);
+        if (a < deadzone)
+            return 0f;
+        float t = Mathf.Min(1f, (a - deadzone) / (1f - deadzone));
+        return Mathf.Sign(v) * t * t;
     }
 
     public override void _Process(double delta)

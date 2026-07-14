@@ -17,7 +17,8 @@ namespace CrimsonSkies;
 ///   --world[=world1]             build a whole chapter world instead of one plane
 ///                                (default gamez becomes ../extracted/c1-gamez.zip)
 ///   --fly                        free flight: chapter world + aircraft + arcade controls
-///                                (WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn)
+///                                (WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn;
+///                                gamepad: left stick, LB/RB rudder, RT/LT throttle, Y respawn)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip;
 ///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
