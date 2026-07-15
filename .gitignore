@@ -9,6 +9,8 @@
 /CrimsonSkies/bin/
 /CrimsonSkies/obj/
 *.screenshot.png
+# F12 in-game screenshots (rendered game frames = game-derived, must not be committed)
+/Screenshots/
 
 # OS / editor cruft
 Thumbs.db

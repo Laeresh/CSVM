@@ -12,6 +12,9 @@ namespace CrimsonSkies;
 /// extracted game data and renders it with orbit controls — or, with --fly,
 /// free flight over the chapter world with arcade controls.
 ///
+/// F12 (any mode) saves the current frame to a timestamped PNG under the repo's
+/// git-ignored Screenshots/ folder.
+///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
@@ -389,6 +392,12 @@ public partial class PlaneViewer : Node3D
             GetTree().Quit();
             return;
         }
+        // F12 anywhere (orbit view or free flight): grab the current frame to a file.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
+        {
+            SaveScreenshot();
+            return;
+        }
         if (_fly)
             return; // the FlightController owns the camera; no orbit controls
         switch (@event)
@@ -431,5 +440,22 @@ public partial class PlaneViewer : Node3D
         GD.Print($"screenshot saved: {_screenshotPath}");
         _screenshotPath = null;
         GetTree().Quit();
+    }
+
+    /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
+    /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
+    /// orbit viewer and free flight; the full viewport is captured, HUD overlay included.</summary>
+    private void SaveScreenshot()
+    {
+        var projectDir = ProjectSettings.GlobalizePath("res://");
+        var dir = Path.GetFullPath(Path.Combine(projectDir, "..", "Screenshots"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"crimsonskies_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
+        var img = GetViewport().GetTexture().GetImage();
+        var err = img.SavePng(path);
+        if (err == Error.Ok)
+            GD.Print($"screenshot saved: {path}");
+        else
+            GD.PrintErr($"screenshot failed ({err}): {path}");
     }
 }

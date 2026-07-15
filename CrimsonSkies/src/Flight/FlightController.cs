@@ -9,12 +9,18 @@ namespace CrimsonSkies.Flight;
 /// drives the chase camera plus a minimal text HUD.
 ///
 /// Keyboard: W/S or Up/Down pitch (W = push), A/D or Left/Right roll, Q/E rudder,
-/// Shift/Ctrl throttle, R respawn.
+/// Shift/Ctrl throttle, R respawn, P pause.
 /// Gamepad: left stick pitch/roll (back = nose up), LB/RB rudder, RT/LT throttle
-/// up/down, Y respawn.
+/// up/down, Y respawn, Start pause.
 ///
 /// Hitting terrain or a building crashes the plane: explosion sound, airframe
 /// hidden, frozen at the impact point until R (or gamepad Y/A) respawns.
+///
+/// P (gamepad Start) is a debug freeze: the whole simulation halts in place —
+/// physics, input, audio and props all hold — so screenshots can be taken from a
+/// fixed position across frames. While paused the chase camera is replaced by a
+/// free orbit around the frozen plane (WASD/arrows orbit, Shift/Ctrl zoom, or the
+/// gamepad left stick + triggers) so you can circle it and shoot any angle.
 /// </summary>
 public partial class FlightController : Node3D
 {
@@ -49,6 +55,9 @@ public partial class FlightController : Node3D
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
     private float _autoRespawnIn;                // s until auto-respawn (HoldInput runs only)
+    private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
+    private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
+    private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private ImmediateMesh? _probe;               // debug collision-probe line
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
@@ -62,6 +71,9 @@ public partial class FlightController : Node3D
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
+    private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
+    private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
+    private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -150,9 +162,33 @@ public partial class FlightController : Node3D
                                   || Input.IsJoyButtonPressed(pads[0], JoyButton.A));
     }
 
+    /// <summary>P (or gamepad Start), edge-detected so one press toggles once.</summary>
+    private static bool PauseTogglePressed()
+    {
+        if (Input.IsKeyPressed(Key.P))
+            return true;
+        var pads = Input.GetConnectedJoypads();
+        return pads.Count > 0 && Input.IsJoyButtonPressed(pads[0], JoyButton.Start);
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = (float)delta;
+
+        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole
+        // simulation in place (physics, input, collision, audio, props) so successive
+        // screenshots frame the plane from the same spot. Checked even while crashed.
+        bool pausePressed = PauseTogglePressed();
+        if (pausePressed && !_pausePrev)
+        {
+            _paused = !_paused;
+            if (_paused)
+                SeedOrbit(); // start the orbit where the chase camera left off (no jump)
+        }
+        _pausePrev = pausePressed;
+        if (_paused)
+            return;
+
         if (_crashed)
         {
             // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
@@ -273,21 +309,32 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
-        float t = 1f - Mathf.Exp(-CamSmooth * (float)delta);
-        _camera.Position = _camera.Position.Lerp(DesiredCamPos(out var camUp), t);
-        _camera.LookAt(_model.Position - _model.Attitude.Z * CamLookAhead, camUp);
+        if (_paused)
+        {
+            // free orbit around the frozen plane for framing screenshots
+            UpdateOrbitCamera((float)delta);
+        }
+        else
+        {
+            float t = 1f - Mathf.Exp(-CamSmooth * (float)delta);
+            _camera.Position = _camera.Position.Lerp(DesiredCamPos(out var camUp), t);
+            _camera.LookAt(_model.Position - _model.Attitude.Z * CamLookAhead, camUp);
+        }
 
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
-        if (_crashed)
+        if (_paused)
+            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";
+        else if (_crashed)
             _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
         else
             Audio?.Update((float)delta, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
-        // and speed up with throttle. Frozen while crashed (the airframe is hidden anyway).
-        Props?.Advance(delta, _crashed ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
+        // and speed up with throttle. Frozen while crashed or paused (a still disc reads
+        // the same at any angle, and freezing it keeps screenshots deterministic).
+        Props?.Advance(delta, _crashed || _paused ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)
@@ -296,6 +343,55 @@ public partial class FlightController : Node3D
         var nose = -_model.Attitude.Z;
         camUp = Vector3.Up.Lerp(_model.Attitude.Y, 0.45f).Normalized();
         return _model.Position - nose * CamBack + camUp * CamUp;
+    }
+
+    /// <summary>On entering the paused screenshot freeze, initialise the orbit angles
+    /// and distance from the current camera position so it starts where the chase
+    /// camera left off (no jump).</summary>
+    private void SeedOrbit()
+    {
+        var v = _camera.Position - _model.Position;
+        _orbitDist = Mathf.Clamp(v.Length(), OrbitMinDist, OrbitMaxDist);
+        _orbitYaw = Mathf.Atan2(v.X, v.Z);
+        _orbitPitch = _orbitDist > 1e-3f ? Mathf.Asin(Mathf.Clamp(v.Y / _orbitDist, -1f, 1f)) : 0f;
+    }
+
+    /// <summary>Free orbit camera used only while paused: WASD/arrows (or the gamepad
+    /// left stick) swing the camera around the frozen plane, Shift/Ctrl (or the
+    /// triggers) dolly in/out. The plane stays put, so every angle frames the same
+    /// pose for side-by-side screenshots.</summary>
+    private void UpdateOrbitCamera(float dt)
+    {
+        static float Axis(Key positive, Key negative) =>
+            (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
+
+        float padYaw = 0f, padPitch = 0f, padZoom = 0f;
+        var pads = Input.GetConnectedJoypads();
+        if (pads.Count > 0)
+        {
+            int pad = pads[0];
+            padYaw = StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftX));
+            padPitch = -StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftY)); // stick up = camera up
+            padZoom = Input.GetJoyAxis(pad, JoyAxis.TriggerRight)
+                    - Input.GetJoyAxis(pad, JoyAxis.TriggerLeft);         // RT out, LT in
+        }
+
+        float yawIn = Axis(Key.D, Key.A) + Axis(Key.Right, Key.Left) + padYaw;
+        float pitchIn = Axis(Key.W, Key.S) + Axis(Key.Up, Key.Down) + padPitch;
+        float zoomIn = Axis(Key.Ctrl, Key.Shift) + padZoom; // Ctrl/RT out, Shift/LT in
+
+        float rate = Mathf.DegToRad(OrbitRateDeg);
+        _orbitYaw += rate * yawIn * dt;
+        _orbitPitch = Mathf.Clamp(_orbitPitch + rate * pitchIn * dt,
+                                  Mathf.DegToRad(-85f), Mathf.DegToRad(85f));
+        _orbitDist = Mathf.Clamp(_orbitDist * Mathf.Exp(OrbitZoomRate * zoomIn * dt),
+                                 OrbitMinDist, OrbitMaxDist);
+
+        var focus = _model.Position;
+        float cp = Mathf.Cos(_orbitPitch);
+        var dir = new Vector3(cp * Mathf.Sin(_orbitYaw), Mathf.Sin(_orbitPitch), cp * Mathf.Cos(_orbitYaw));
+        _camera.Position = focus + dir * _orbitDist;
+        _camera.LookAt(focus, Vector3.Up);
     }
 
     private void SnapCamera()
