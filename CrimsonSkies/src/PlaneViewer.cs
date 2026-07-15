@@ -22,8 +22,9 @@ namespace CrimsonSkies;
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
 ///                                LB/RB rudder, RT/LT throttle, Y respawn).
 ///                                Combine with --chapter= to fly a different chapter (default C1)
-///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action);
-///                                reads ../extracted/<chapter>/<mission>/zrdr/ia.json
+///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
+///                                ia.json spawn_points); story missions (M0x) fall back to
+///                                objectives.json PLAYER_INIT. Pair with --chapter= to match the world
 ///   --scenario=zeppelin_run      which instant-action scenario's spawn list to spawn from
 ///                                (zeppelin_run, dogfight_ace, dogfight_squadron, stunt_flying, …)
 ///   --spawn=N                    force spawn index N in that list (default: random pick, like the
@@ -266,25 +267,36 @@ public partial class PlaneViewer : Node3D
         return new FlightInput { Pitch = F(0), Roll = F(1), Yaw = F(2), Throttle = F(3) };
     }
 
-    /// <summary>Picks the flight spawn from the mission's instant-action scenario list
-    /// (ia.json → spawn_points → scenario): a world position + a look-at point one unit
-    /// ahead along the spawn heading. Randomly chosen per launch, like the original,
-    /// unless --spawn=N forces one. Falls back to a fixed C1 spawn if the data is absent.</summary>
+    /// <summary>Picks the flight spawn for the current mission: a world position + a look-at
+    /// point one unit ahead along the spawn heading. Instant-action missions (IA1) draw from
+    /// ia.json's scenario spawn list — random per launch like the original, or forced by
+    /// --spawn=N. Story missions (M0x, no ia.json) fall back to objectives.json PLAYER_INIT.
+    /// A fixed C1 spawn is the last resort if neither is present.</summary>
     private (Vector3 pos, Vector3 lookAt) ChooseSpawn(string missionZrdrPath)
     {
         var spawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
-        if (spawns == null)
+        if (spawns != null)
         {
-            GD.PushWarning($"no '{_scenario}' spawns in {_chapter}/{_mission}/ia.json — using fallback spawn");
-            return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
+            int i = _spawnIndex >= 0
+                ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
+                : (int)(GD.Randi() % (uint)spawns.Count);
+            return LogSpawn($"{_scenario} #{i} of {spawns.Count}", spawns[i]);
         }
-        int i = _spawnIndex >= 0
-            ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
-            : (int)(GD.Randi() % (uint)spawns.Count);
-        var s = spawns[i];
-        // heading is yaw about the up axis; the nose (-Z) rotated by it gives the facing
+        // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
+        // spawn from objectives.json PLAYER_INIT (position + heading).
+        if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
+            return LogSpawn("PLAYER_INIT", init);
+
+        GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_chapter}/{_mission} — using fallback spawn");
+        return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
+    }
+
+    /// <summary>Turns a spawn (position + heading) into a (position, look-at) pair — the nose
+    /// (-Z) rotated by the heading (yaw about up) — and logs it for cross-checking the data.</summary>
+    private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
+    {
         var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;
-        GD.Print($"spawn [{_chapter}/{_mission} {_scenario} #{i} of {spawns.Count}]: " +
+        GD.Print($"spawn [{_chapter}/{_mission} {label}]: " +
                  $"pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
         return (s.Position, s.Position + forward);
     }
