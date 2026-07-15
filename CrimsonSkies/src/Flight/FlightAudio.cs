@@ -54,7 +54,7 @@ public partial class FlightAudio : Node
         var stream = archive.Find(def.WavName, def.Looped);
         if (stream == null)
             return null;
-        baseVolume = def.Volume;
+        baseVolume = def.Volume*0.2f; //Temporary fix for volume
         var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
         AddChild(player);
         return player;
