@@ -8,9 +8,14 @@ assets**: it reads the player's own legally-owned install at runtime, via
 
 - Godot 4.7 (.NET edition)
 - .NET SDK 8+
-- mech3ax `unzbd` extraction output from your own Crimson Skies install:
-  - `unzbd cs gamez <install>/ZBD/planes.zbd extracted/planes-gamez.zip`
-  - `unzbd cs textures <install>/ZBD/C1/texture.zbd extracted/c1-texture.zip`
+- mech3ax `unzbd` extraction output from your own Crimson Skies install. The easiest
+  way is the repo-root `ExtractAssets.ps1` script, which extracts every ZBD into
+  `extracted/`, mirroring the game's folder structure (`extracted/C1/gamez.zip`,
+  `extracted/C1/texture.zip`, `extracted/planes.zip`, …):
+  - `.\ExtractAssets.ps1`
+  - or manually, the two the viewer needs by default:
+    - `unzbd cs gamez <install>/ZBD/planes.zbd extracted/planes.zip`
+    - `unzbd cs textures <install>/ZBD/C1/texture.zbd extracted/C1/texture.zip`
 
 By default the viewer looks for the `extracted/` directory next to (one level above)
 this project directory; override with `--gamez=` / `--textures=`.

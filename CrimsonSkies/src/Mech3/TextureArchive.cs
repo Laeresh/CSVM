@@ -7,24 +7,34 @@ using Godot;
 namespace CrimsonSkies.Mech3;
 
 /// <summary>
-/// Texture lookup over a mech3ax texture extraction ZIP (texture.zbd → PNGs).
+/// Texture lookup over a mech3ax texture extraction — a ZIP (texture.zbd → PNGs) or a
+/// directory of those same PNGs (e.g. from ExtractAssets.ps1 -Unzip).
 /// Material texture names come from fixed-width 20-char fields in planes.zbd, so
 /// "blo_fusalagebottom.t" must still find "blo_fusalagebottom.png" — hence the
 /// prefix fallback.
 /// </summary>
 public sealed class TextureArchive : IDisposable
 {
-    private readonly ZipArchive _zip;
-    private readonly Dictionary<string, ZipArchiveEntry> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
+    private readonly ZipArchive? _zip;
+    private readonly string? _dir;
+    // baseName (no extension) -> the PNG's retrieval name (a zip entry's FullName, or a file name under _dir).
+    private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public TextureArchive(string zipPath)
+    public TextureArchive(string path)
     {
-        _zip = ZipFile.OpenRead(zipPath);
-        foreach (var entry in _zip.Entries)
+        if (Directory.Exists(path))
         {
-            if (entry.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
-                _byBaseName[Path.GetFileNameWithoutExtension(entry.Name)] = entry;
+            _dir = path;
+            foreach (var file in Directory.EnumerateFiles(path, "*.png"))
+                _byBaseName[Path.GetFileNameWithoutExtension(file)] = Path.GetFileName(file);
+        }
+        else
+        {
+            _zip = ZipFile.OpenRead(path);
+            foreach (var entry in _zip.Entries)
+                if (entry.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
+                    _byBaseName[Path.GetFileNameWithoutExtension(entry.Name)] = entry.FullName;
         }
     }
 
@@ -42,15 +52,13 @@ public sealed class TextureArchive : IDisposable
             return cached;
         }
 
-        var entry = Resolve(baseName);
+        var name = Resolve(baseName);
+        var bytes = name != null ? ReadBytes(name) : null;
         ImageTexture? tex = null;
-        if (entry != null)
+        if (bytes != null)
         {
-            using var stream = entry.Open();
-            using var ms = new MemoryStream();
-            stream.CopyTo(ms);
             var img = new Image();
-            if (img.LoadPngFromBuffer(ms.ToArray()) == Error.Ok)
+            if (img.LoadPngFromBuffer(bytes) == Error.Ok)
             {
                 img.GenerateMipmaps();
                 tex = ImageTexture.CreateFromImage(img);
@@ -66,7 +74,7 @@ public sealed class TextureArchive : IDisposable
         return tex;
     }
 
-    private ZipArchiveEntry? Resolve(string baseName)
+    private string? Resolve(string baseName)
     {
         if (_byBaseName.TryGetValue(baseName, out var exact))
             return exact;
@@ -76,21 +84,37 @@ public sealed class TextureArchive : IDisposable
         if (m.Success && _byBaseName.TryGetValue(m.Groups[1].Value, out var renamed))
             return renamed;
         // fixed-width truncation fallback: unique prefix match
-        ZipArchiveEntry? match = null;
-        foreach (var (name, entry) in _byBaseName)
+        string? match = null;
+        foreach (var (name, retrieval) in _byBaseName)
         {
             if (name.StartsWith(baseName, StringComparison.OrdinalIgnoreCase))
             {
                 if (match != null)
                     return null; // ambiguous
-                match = entry;
+                match = retrieval;
             }
         }
         return match;
     }
 
+    private byte[]? ReadBytes(string retrievalName)
+    {
+        if (_dir != null)
+        {
+            var p = Path.Combine(_dir, retrievalName);
+            return File.Exists(p) ? File.ReadAllBytes(p) : null;
+        }
+        var entry = _zip!.GetEntry(retrievalName);
+        if (entry == null)
+            return null;
+        using var s = entry.Open();
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
+    }
+
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
 
-    public void Dispose() => _zip.Dispose();
+    public void Dispose() => _zip?.Dispose();
 }

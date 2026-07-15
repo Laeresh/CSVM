@@ -15,7 +15,7 @@ namespace CrimsonSkies;
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
 ///   --world[=world1]             build a whole chapter world instead of one plane
-///                                (default gamez becomes ../extracted/c1-gamez.zip)
+///                                (default gamez becomes ../extracted/C1/gamez.zip)
 ///   --fly                        free flight: chapter world + original skydome + aircraft +
 ///                                arcade controls (WASD/arrows pitch+roll, Q/E rudder,
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
@@ -25,9 +25,9 @@ namespace CrimsonSkies;
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
 ///                                If given in static --world mode, the skydome renders there
 ///                                too (put the camera inside the map via --campos)
-///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip;
-///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
-///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
+///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes.zip;
+///                                in --world/--fly modes: the world's gamez, default C1/gamez.zip)
+///   --textures=path              texture zip (default: ../extracted/C1/texture.zip)
 ///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
 ///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
@@ -66,15 +66,15 @@ public partial class PlaneViewer : Node3D
        
         var projectDir = ProjectSettings.GlobalizePath("res://");
         var repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
-        var gamezPath = Path.Combine(repoRoot, "extracted", "planes-gamez.zip");
+        var gamezPath = Path.Combine(repoRoot, "extracted", "planes.zip");
         var planesGamezPath = gamezPath;
-        var texturesPath = Path.Combine(repoRoot, "extracted", "c1-texture.zip");
+        var texturesPath = Path.Combine(repoRoot, "extracted", "C1", "texture.zip");
         var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
         var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
         bool mute = false;
         bool debugCollision = false;
 
-        bool gamezOverridden = false;
+        bool gamezOverridden = false, texturesOverridden = false, zrdrOverridden = false, soundsOverridden = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
@@ -83,9 +83,9 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--fly") _fly = true;
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
-            else if (arg.StartsWith("--textures=")) texturesPath = arg["--textures=".Length..];
-            else if (arg.StartsWith("--zrdr=")) zrdrPath = arg["--zrdr=".Length..];
-            else if (arg.StartsWith("--sounds=")) soundsPath = arg["--sounds=".Length..];
+            else if (arg.StartsWith("--textures=")) { texturesPath = arg["--textures=".Length..]; texturesOverridden = true; }
+            else if (arg.StartsWith("--zrdr=")) { zrdrPath = arg["--zrdr=".Length..]; zrdrOverridden = true; }
+            else if (arg.StartsWith("--sounds=")) { soundsPath = arg["--sounds=".Length..]; soundsOverridden = true; }
             else if (arg == "--mute") mute = true;
             else if (arg == "--debug-collision") debugCollision = true;
             else if (arg.StartsWith("--hold=")) _holdInput = ParseHold(arg["--hold=".Length..]);
@@ -100,7 +100,21 @@ public partial class PlaneViewer : Node3D
         if (_fly)
             _worldName ??= "world1";
         if (_worldName != null && !gamezOverridden)
-            gamezPath = Path.Combine(repoRoot, "extracted", "c1-gamez.zip");
+            gamezPath = Path.Combine(repoRoot, "extracted", "C1", "gamez.zip");
+
+        // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
+        // (loose JSON/PNG/WAV: no zip decompression at load, and greppable in the editor);
+        // fall back to the .zip. Skip paths the user set explicitly via --gamez=/etc.
+        static string PreferUnzipped(string zipPath)
+        {
+            var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
+            return Directory.Exists(dir) ? dir : zipPath;
+        }
+        planesGamezPath = PreferUnzipped(planesGamezPath);
+        if (!gamezOverridden) gamezPath = PreferUnzipped(gamezPath);
+        if (!texturesOverridden) texturesPath = PreferUnzipped(texturesPath);
+        if (!zrdrOverridden) zrdrPath = PreferUnzipped(zrdrPath);
+        if (!soundsOverridden) soundsPath = PreferUnzipped(soundsPath);
 
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
