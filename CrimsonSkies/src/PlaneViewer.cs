@@ -20,6 +20,11 @@ namespace CrimsonSkies;
 ///                                arcade controls (WASD/arrows pitch+roll, Q/E rudder,
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
 ///                                LB/RB rudder, RT/LT throttle, Y respawn)
+///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
+///                                (moon/stars, what the original shows at the C1 airfield),
+///                                zone1 = day haze (likely test-only, unfinished gray cap).
+///                                If given in static --world mode, the skydome renders there
+///                                too (put the camera inside the map via --campos)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes-gamez.zip;
 ///                                in --world/--fly modes: the world's gamez, default c1-gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/c1-texture.zip)
@@ -39,6 +44,8 @@ public partial class PlaneViewer : Node3D
     private const float HorizonScale = 2.5f;
 
     private string _planeName = "player_bhawk";
+    private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
+    private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --world mode
     private string? _worldName;
     private bool _fly;
     private FlightInput? _holdInput;
@@ -56,6 +63,7 @@ public partial class PlaneViewer : Node3D
 
     public override void _Ready()
     {
+       
         var projectDir = ProjectSettings.GlobalizePath("res://");
         var repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
         var gamezPath = Path.Combine(repoRoot, "extracted", "planes-gamez.zip");
@@ -73,6 +81,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--world") _worldName = "world1";
             else if (arg.StartsWith("--world=")) _worldName = arg["--world=".Length..];
             else if (arg == "--fly") _fly = true;
+            else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) texturesPath = arg["--textures=".Length..];
             else if (arg.StartsWith("--zrdr=")) zrdrPath = arg["--zrdr=".Length..];
@@ -109,14 +118,16 @@ public partial class PlaneViewer : Node3D
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build(_worldName);
-                if (_fly)
+                if (_fly || _skyZoneExplicit)
                 {
                     // The original skydome, anchored to the camera each frame. Scaled up so
                     // plain depth testing keeps it behind everything: a camera-centered dome
                     // looks identical at any scale (zero parallax), and at 2.5× (~22 km
                     // radius) it is beyond the farthest terrain (~17.4 km corner-to-corner)
-                    // while well inside the camera's 40 km far plane.
-                    _horizon = builder.BuildHorizon();
+                    // while well inside the camera's 40 km far plane. In static --world mode
+                    // only an explicit --sky-zone adds it (an outside orbit view is better
+                    // without the enclosing dome; with --campos inside the map it works).
+                    _horizon = builder.BuildHorizon(_skyZone);
                     if (_horizon != null)
                     {
                         _horizon.Scale = Vector3.One * HorizonScale;
@@ -312,11 +323,13 @@ public partial class PlaneViewer : Node3D
 
     public override void _Process(double delta)
     {
-        // Keep the skydome centered on the camera in x/z. Its y stays at the world base:
-        // the dome's horizon band then stays near terrain height instead of climbing with
-        // the plane. (One-frame lag vs the flight camera is invisible at 22 km.)
+        // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
+        // backdrop, like the original): the moon then stays at its designed 28° elevation
+        // against the dark dome cap — whose color its painted background matches — instead
+        // of sliding down into the bright horizon band as the plane climbs.
+        // (One-frame lag vs the flight camera is invisible at 22 km.)
         if (_horizon != null)
-            _horizon.Position = new Vector3(_camera.Position.X, 0, _camera.Position.Z);
+            _horizon.Position = _camera.Position;
 
         if (_screenshotPath == null || _plane == null)
             return;

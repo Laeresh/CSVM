@@ -165,6 +165,25 @@ public sealed class GameZ
                 }
                 mesh.Polygons.Add(poly);
             }
+            // Point lights rendered as glowing sprites by the original engine: the night
+            // sky's stars (64 on the horizon 'stars' mesh) and nav/tower beacons.
+            if (m.TryGetProperty("lights", out var lights) && lights.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var l in lights.EnumerateArray())
+                {
+                    if (!l.TryGetProperty("extra", out var extra) || extra.GetArrayLength() == 0)
+                        continue;
+                    var c = l.GetProperty("color");
+                    mesh.Lights.Add(new GameZLight
+                    {
+                        Position = ParseVec3(extra[0]),
+                        Color = new Color(
+                            c.GetProperty("r").GetSingle() / 255f,
+                            c.GetProperty("g").GetSingle() / 255f,
+                            c.GetProperty("b").GetSingle() / 255f),
+                    });
+                }
+            }
             Meshes.Add(mesh);
         }
     }
@@ -230,6 +249,13 @@ public sealed class GameZMesh
     public List<Vector3> Vertices { get; } = new();
     public List<Vector3> Normals { get; } = new();
     public List<GameZPolygon> Polygons { get; } = new();
+    public List<GameZLight> Lights { get; } = new(); // point-sprite lights (stars, nav beacons)
+}
+
+public struct GameZLight
+{
+    public Vector3 Position;
+    public Color Color;
 }
 
 public sealed class GameZPolygon

@@ -11,6 +11,7 @@ namespace CrimsonSkies.Mech3;
 public sealed class WorldBuilder
 {
     private readonly GameZ _gamez;
+    private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
 
     // Non-scenery world content: 'horizon' is the original skydome (built separately via
@@ -49,6 +50,7 @@ public sealed class WorldBuilder
     public WorldBuilder(GameZ gamez, TextureArchive textures, bool collision = false)
     {
         _gamez = gamez;
+        _textures = textures;
         _scene = new SceneBuilder(gamez, textures, fullbright: true, generateCollision: collision);
     }
 
@@ -88,10 +90,12 @@ public sealed class WorldBuilder
     /// caller anchors to the camera. The dome's verts are centered on the origin (~8.8 km
     /// radius) while the world area is x,z ∈ [-12288, 0], so the original engine must have
     /// translated it with the viewer — it is a backdrop, not scenery. Zones are day/night
-    /// variants: zone1 = sky2.tif haze dome with sunset vertex tints (day), zone2 = moon +
-    /// Sky1.tif night sky. Never collidable, never casts shadows.
+    /// variants: zone2 = moon + stars + Sky1.tif dusk-gradient night sky (what the original
+    /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze
+    /// dome with an unfinished flat-gray cap, likely never player-visible.
+    /// Never collidable, never casts shadows.
     /// </summary>
-    public Node3D? BuildHorizon(string zone = "zone1")
+    public Node3D? BuildHorizon(string zone = "zone2")
     {
         var horizon = _gamez.FindByName("horizon");
         if (horizon == null)
@@ -103,7 +107,92 @@ public sealed class WorldBuilder
         if (built == null)
             return null;
         DisableShadows(built);
+        BillboardMoon(built);
         return built;
+    }
+
+    // The source moon is an axis-aligned quad (constant z), which looks tilted and
+    // foreshortened from most headings — but original-game screenshots show a round,
+    // upright moon from any direction, so the engine must billboard it. Replace the
+    // static quad with a camera-facing one of the same position and size.
+    // Blending (from original screenshots): the moon shows crater detail (not additive)
+    // with sky right up to its soft halo and no quad edge (not opaque) — so the engine
+    // color-keys the uniform background (66,73,99) away; we reproduce that with an
+    // alpha ramp on distance from the background color.
+    private void BillboardMoon(Node3D built)
+    {
+        var moonNode = FindChildByName(built, "moon");
+        var gzMoon = _gamez.FindByName("moon");
+        if (moonNode == null || gzMoon == null
+            || gzMoon.MeshIndex < 0 || gzMoon.MeshIndex >= _gamez.Meshes.Count)
+            return;
+        var verts = _gamez.Meshes[gzMoon.MeshIndex].Vertices;
+        if (verts.Count == 0)
+            return;
+        Vector3 min = verts[0], max = verts[0];
+        foreach (var v in verts)
+        {
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        var size = max - min;
+        float side = Mathf.Max(size.X, Mathf.Max(size.Y, size.Z));
+
+        foreach (var child in moonNode.GetChildren())
+            if (child is MeshInstance3D)
+                child.QueueFree();
+
+        var tex = _textures.Find("moon1.tif");
+        if (tex == null)
+            return;
+        var mat = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+            BillboardKeepScale = true, // billboards ignore inherited scale (the 2.5× dome anchor) without this
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            AlbedoTexture = ColorKeyed(tex),
+        };
+        moonNode.AddChild(new MeshInstance3D
+        {
+            Mesh = new QuadMesh { Size = new Vector2(side, side), Material = mat },
+            Position = (min + max) * 0.5f,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Name = "mesh",
+        });
+    }
+
+    // Alpha from distance to the background color (sampled at a corner): background → 0,
+    // the painted glow halo → partial, the moon disc → 1. Reproduces the original's
+    // color-key so the sky shows through right up to the halo, with no hard quad edge.
+    private static ImageTexture ColorKeyed(ImageTexture tex)
+    {
+        var img = tex.GetImage();
+        img.ClearMipmaps();
+        img.Convert(Image.Format.Rgba8);
+        var bg = img.GetPixel(0, 0);
+        const float ramp = 0.25f; // channels this far from the background are fully opaque
+        for (int y = 0; y < img.GetHeight(); y++)
+            for (int x = 0; x < img.GetWidth(); x++)
+            {
+                var c = img.GetPixel(x, y);
+                float d = Mathf.Max(Mathf.Abs(c.R - bg.R),
+                    Mathf.Max(Mathf.Abs(c.G - bg.G), Mathf.Abs(c.B - bg.B)));
+                c.A = Mathf.Clamp(d / ramp, 0f, 1f);
+                img.SetPixel(x, y, c);
+            }
+        img.GenerateMipmaps();
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    private static Node3D? FindChildByName(Node3D root, string name)
+    {
+        if (root.Name.ToString().Equals(name, StringComparison.OrdinalIgnoreCase))
+            return root;
+        foreach (var child in root.GetChildren())
+            if (child is Node3D n3d && FindChildByName(n3d, name) is { } found)
+                return found;
+        return null;
     }
 
     // The dome would otherwise shadow the entire world (it covers the whole sky).

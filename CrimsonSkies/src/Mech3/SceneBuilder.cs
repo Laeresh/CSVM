@@ -18,7 +18,9 @@ public sealed class SceneBuilder
     private readonly bool _generateCollision;
     private readonly Dictionary<int, StandardMaterial3D> _materialCache = new();
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
+    private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, ConcavePolygonShape3D?> _shapeCache = new();
+    private StandardMaterial3D? _lightPointMaterial;
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
@@ -69,6 +71,18 @@ public sealed class SceneBuilder
                 if (collidable)
                     AttachCollision(n3d, node.MeshIndex, mesh);
             }
+            // Point-sprite lights (night-sky stars, nav/tower beacons): rendered by the
+            // original engine as small glowing dots. Never collidable, never shadowed.
+            if (_gamez.Meshes[node.MeshIndex].Lights.Count > 0)
+            {
+                n3d.AddChild(new MeshInstance3D
+                {
+                    Mesh = GetLightPoints(node.MeshIndex),
+                    Name = "lights",
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                });
+                MeshInstanceCount++;
+            }
         }
 
         foreach (var childIndex in node.Children)
@@ -102,6 +116,42 @@ public sealed class SceneBuilder
         body.AddChild(new CollisionShape3D { Shape = shape });
         parent.AddChild(body);
         ColliderCount++;
+    }
+
+    // One POINTS-primitive surface per mesh; fixed screen-size dots, additive blend so
+    // they glow over whatever is behind them (and pure-black lights become invisible).
+    private ArrayMesh GetLightPoints(int meshIndex)
+    {
+        if (_lightMeshCache.TryGetValue(meshIndex, out var cached))
+            return cached;
+
+        var lights = _gamez.Meshes[meshIndex].Lights;
+        var points = new Vector3[lights.Count];
+        var colors = new Color[lights.Count];
+        for (int i = 0; i < lights.Count; i++)
+        {
+            points[i] = lights[i].Position;
+            colors[i] = lights[i].Color;
+        }
+        var arrays = new Godot.Collections.Array();
+        arrays.Resize((int)Mesh.ArrayType.Max);
+        arrays[(int)Mesh.ArrayType.Vertex] = points;
+        arrays[(int)Mesh.ArrayType.Color] = colors;
+
+        var mesh = new ArrayMesh();
+        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Points, arrays);
+        _lightPointMaterial ??= new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            VertexColorUseAsAlbedo = true,
+            UsePointSize = true,
+            PointSize = 3f, // TUNE: source size params (0.17/30/4000/6000) not yet decoded
+            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha, // transparent pass: no depth write
+        };
+        mesh.SurfaceSetMaterial(0, _lightPointMaterial);
+        _lightMeshCache[meshIndex] = mesh;
+        return mesh;
     }
 
     private ArrayMesh? GetMesh(int meshIndex)
