@@ -150,7 +150,7 @@ public partial class PlaneViewer : Node3D
             if (_fly)
             {
                 var planesGamez = GameZ.Load(planesGamezPath);
-                var planeBuilder = new PlaneBuilder(planesGamez, textures);
+                var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
                 var planeModel = planeBuilder.Build(_planeName);
                 meshInstances += planeBuilder.MeshInstanceCount;
 
@@ -164,8 +164,11 @@ public partial class PlaneViewer : Node3D
                     HoldInput = _holdInput,
                     DebugCollision = debugCollision,
                     PlaneModel = planeModel,
+                    Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
                 };
                 controller.AddChild(planeModel);
+                if (controller.Props != null)
+                    GD.Print($"props: {controller.Props.Count} spinning blur nodes");
 
                 // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
                 // its flipbook frames from the same texture archive. Built here while the

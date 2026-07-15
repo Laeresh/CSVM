@@ -32,6 +32,10 @@ public partial class FlightController : Node3D
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
 
+    /// <summary>Spins the plane's propeller/rotor blur discs; advanced each frame,
+    /// throttle-scaled. Null if the model has no propeller nodes.</summary>
+    public PropAnimator? Props;
+
     /// <summary>Draw the collision probe — the swept ray the crash test casts each
     /// physics frame — as a debug line (green; red on the impact frame).</summary>
     public bool DebugCollision;
@@ -53,6 +57,7 @@ public partial class FlightController : Node3D
     private const float UnderMapY = 60f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
+    private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -275,6 +280,10 @@ public partial class FlightController : Node3D
             _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
         else
             Audio?.Update(_model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+
+        // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
+        // and speed up with throttle. Frozen while crashed (the airframe is hidden anyway).
+        Props?.Advance(delta, _crashed ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)
