@@ -279,7 +279,7 @@ public partial class FlightController : Node3D
         if (_crashed)
             _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
         else
-            Audio?.Update(_model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+            Audio?.Update((float)delta, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
         // and speed up with throttle. Frozen while crashed (the airframe is hidden anyway).
