@@ -22,10 +22,23 @@ public sealed class WorldBuilder
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || n.Name.StartsWith("fvol", StringComparison.OrdinalIgnoreCase);
 
+    // A cloud- or sky-textured surface. Node names are unreliable for spotting these
+    // (cloud layers turn up under generic names like 'g27517'), so we classify by texture.
+    // Two callers share this rule: the collision exemption (below) and the cloud alpha-blend
+    // (passed to SceneBuilder) — clouds are neither solid nor hard-edged cutouts.
+    private static bool IsCloudOrSkyTexture(string tex) =>
+        tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
+        || tex.StartsWith("sky", StringComparison.OrdinalIgnoreCase);
+
+    // The cloud SPRITES only: cloud1/cloud2 are soft vertical cards (2D billboards), while
+    // 'cloudlayer' is the flat horizontal deck sheet — which must stay flat, not billboard.
+    // These face the camera; SceneBuilder recenters their quads so they pivot correctly.
+    private static bool IsCloudSpriteTexture(string tex) =>
+        tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
+        && !tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase);
+
     // Rendered but not solid: the plane should fly through cloud/sky geometry, not crash
-    // into it. Node names are unreliable for this (cloud layers turn up under generic
-    // names like 'g27517'), so classify by texture — anything skinned with a cloud*/sky*
-    // texture is non-solid. Terrain, water, buildings, zeppelins, trains stay solid.
+    // into it. Terrain, water, buildings, zeppelins, trains stay solid.
     private bool NoCollisionNode(GameZNode n)
     {
         if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
@@ -35,8 +48,7 @@ public sealed class WorldBuilder
             if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
                 continue;
             var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            if (tex != null && (tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
-                                || tex.StartsWith("sky", StringComparison.OrdinalIgnoreCase)))
+            if (tex != null && IsCloudOrSkyTexture(tex))
                 return true;
         }
         return false;
@@ -51,7 +63,12 @@ public sealed class WorldBuilder
     {
         _gamez = gamez;
         _textures = textures;
-        _scene = new SceneBuilder(gamez, textures, fullbright: true, generateCollision: collision);
+        // Clouds are the only cloud*/sky* surfaces with an alpha channel, so this blend rule
+        // touches only them; the opaque Sky1.tif skydome walls and cloudlayer deck are unaffected.
+        // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
+        _scene = new SceneBuilder(gamez, textures, fullbright: true,
+            generateCollision: collision, blendTexture: IsCloudOrSkyTexture,
+            billboardTexture: IsCloudSpriteTexture);
     }
 
     public Node3D Build(string worldName = "world1")
