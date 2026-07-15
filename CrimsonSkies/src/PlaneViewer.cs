@@ -14,20 +14,22 @@ namespace CrimsonSkies;
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
-///   --world[=world1]             build a whole chapter world instead of one plane
-///                                (default gamez becomes ../extracted/C1/gamez.zip)
+///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
+///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
+///                                default gamez + textures to ../extracted/<chapter>/…
 ///   --fly                        free flight: chapter world + original skydome + aircraft +
 ///                                arcade controls (WASD/arrows pitch+roll, Q/E rudder,
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
-///                                LB/RB rudder, RT/LT throttle, Y respawn)
+///                                LB/RB rudder, RT/LT throttle, Y respawn).
+///                                Combine with --chapter= to fly a different chapter (default C1)
 ///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
 ///                                (moon/stars, what the original shows at the C1 airfield),
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
-///                                If given in static --world mode, the skydome renders there
+///                                If given in static --chapter mode, the skydome renders there
 ///                                too (put the camera inside the map via --campos)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes.zip;
-///                                in --world/--fly modes: the world's gamez, default C1/gamez.zip)
-///   --textures=path              texture zip (default: ../extracted/C1/texture.zip)
+///                                in --chapter/--fly modes: the chapter's gamez, default C1/gamez.zip)
+///   --textures=path              texture zip (default: ../extracted/<chapter>/texture.zip, chapter=C1)
 ///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
 ///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
@@ -45,8 +47,9 @@ public partial class PlaneViewer : Node3D
 
     private string _planeName = "player_bhawk";
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
-    private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --world mode
-    private string? _worldName;
+    private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
+    private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
+    private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
     private FlightInput? _holdInput;
     private Vector3? _camPos, _lookAt;
@@ -78,8 +81,8 @@ public partial class PlaneViewer : Node3D
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
-            else if (arg == "--world") _worldName = "world1";
-            else if (arg.StartsWith("--world=")) _worldName = arg["--world=".Length..];
+            else if (arg == "--chapter") _worldMode = true;
+            else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; }
             else if (arg == "--fly") _fly = true;
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
@@ -98,9 +101,14 @@ public partial class PlaneViewer : Node3D
         }
 
         if (_fly)
-            _worldName ??= "world1";
-        if (_worldName != null && !gamezOverridden)
-            gamezPath = Path.Combine(repoRoot, "extracted", "C1", "gamez.zip");
+            _worldMode = true;
+        // The chapter drives both the world's gamez and its texture archive. (The static
+        // plane viewer keeps textures at C1: C1's texture.zbd also carries every player-plane
+        // skin, so it is the right default even when not building a world.)
+        if (!texturesOverridden)
+            texturesPath = Path.Combine(repoRoot, "extracted", _chapter, "texture.zip");
+        if (_worldMode && !gamezOverridden)
+            gamezPath = Path.Combine(repoRoot, "extracted", _chapter, "gamez.zip");
 
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
         // (loose JSON/PNG/WAV: no zip decompression at load, and greppable in the editor);
@@ -128,17 +136,17 @@ public partial class PlaneViewer : Node3D
             int meshInstances;
             int colliders = 0;
             string what;
-            if (_worldName != null)
+            if (_worldMode)
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
-                _plane = builder.Build(_worldName);
+                _plane = builder.Build("world1"); // every chapter has exactly one world node
                 if (_fly || _skyZoneExplicit)
                 {
                     // The original skydome, anchored to the camera each frame. Scaled up so
                     // plain depth testing keeps it behind everything: a camera-centered dome
                     // looks identical at any scale (zero parallax), and at 2.5× (~22 km
                     // radius) it is beyond the farthest terrain (~17.4 km corner-to-corner)
-                    // while well inside the camera's 40 km far plane. In static --world mode
+                    // while well inside the camera's 40 km far plane. In static --chapter mode
                     // only an explicit --sky-zone adds it (an outside orbit view is better
                     // without the enclosing dome; with --campos inside the map it works).
                     _horizon = builder.BuildHorizon(_skyZone);
@@ -150,7 +158,7 @@ public partial class PlaneViewer : Node3D
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
-                what = $"world '{_worldName}'";
+                what = $"chapter {_chapter} world";
             }
             else
             {
