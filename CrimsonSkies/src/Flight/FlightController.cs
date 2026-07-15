@@ -52,8 +52,9 @@ public partial class FlightController : Node3D
     private ImmediateMesh? _probe;               // debug collision-probe line
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
-    private const float SpawnThrottle = 0.5f;   // the original's spawn throttle (user-observed)
-    private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph, the original's spawn speed; the
+    private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
+    private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
+                                                // plane-dependent (TODO — kept fixed for now per user); the
                                                 // plane accelerates from here toward its cruise
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s
