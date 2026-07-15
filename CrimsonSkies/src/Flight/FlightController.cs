@@ -1,3 +1,4 @@
+using CrimsonSkies.Effects;
 using Godot;
 
 namespace CrimsonSkies.Flight;
@@ -23,6 +24,10 @@ public partial class FlightController : Node3D
 
     /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
     public FlightAudio? Audio;
+
+    /// <summary>The crash fireball, if its data/textures loaded (add as a child too).
+    /// Fired at the impact point on a crash; cleared at respawn.</summary>
+    public Puffer? CrashEffect;
 
     /// <summary>The visible aircraft model (a child of this node); hidden while crashed.</summary>
     public Node3D? PlaneModel;
@@ -90,6 +95,7 @@ public partial class FlightController : Node3D
     private void Respawn()
     {
         _crashed = false;
+        CrashEffect?.Clear();
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = 0.8f;
@@ -99,22 +105,29 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
-    /// <summary>True if the segment crosses any static world collider.</summary>
-    private bool HitWorld(Vector3 from, Vector3 to)
+    /// <summary>True if the segment crosses any static world collider; on a hit,
+    /// <paramref name="point"/> is the impact position (else the segment end).</summary>
+    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point)
     {
+        point = to;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
-        return space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to)).Count > 0;
+        var hit = space.IntersectRay(PhysicsRayQueryParameters3D.Create(from, to));
+        if (hit.Count == 0)
+            return false;
+        point = (Vector3)hit["position"];
+        return true;
     }
 
-    private void Crash()
+    private void Crash(Vector3 impact)
     {
         _crashed = true;
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
         Audio?.OnCrash();
+        CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
         GD.Print($"CRASH at ({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
@@ -151,12 +164,12 @@ public partial class FlightController : Node3D
         var step = to - prev;
         float len = step.Length();
         var probeEnd = len > 1e-4f ? to + step / len * CollisionMargin : to;
-        bool hit = HitWorld(prev, probeEnd);
+        bool hit = HitWorld(prev, probeEnd, out var impact);
         if (_probe != null)
             DrawProbe(prev, probeEnd, hit);
         if (hit)
         {
-            Crash();
+            Crash(impact);
             return;
         }
 

@@ -166,6 +166,23 @@ public partial class PlaneViewer : Node3D
                     PlaneModel = planeModel,
                 };
                 controller.AddChild(planeModel);
+
+                // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
+                // its flipbook frames from the same texture archive. Built here while the
+                // archive is open; the FlightController fires it at the impact point.
+                var pufferState = Effects.PufferState.Load(zrdrPath, "flame_ball.json", "fierypuffer");
+                if (pufferState != null && Effects.Puffer.Create(pufferState, textures) is { } fireball)
+                {
+                    controller.CrashEffect = fireball;
+                    controller.AddChild(fireball);
+                    GD.Print($"crash effect: {pufferState.Name} ({pufferState.Number} sprites, " +
+                             $"{pufferState.TextureSequence.Count} frames)");
+                }
+                else
+                {
+                    GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
+                }
+
                 if (!mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath)))
                 {
                     // streams decode fully into memory, so the archive can close right after
