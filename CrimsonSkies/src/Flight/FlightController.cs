@@ -52,6 +52,9 @@ public partial class FlightController : Node3D
     private ImmediateMesh? _probe;               // debug collision-probe line
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
+    private const float SpawnThrottle = 0.5f;   // the original's spawn throttle (user-observed)
+    private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph, the original's spawn speed; the
+                                                // plane accelerates from here toward its cruise
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s
     private const float UnderMapY = 60f;        // C1 terrain sits at y≈100+; below this we're lost
@@ -103,8 +106,8 @@ public partial class FlightController : Node3D
         CrashEffect?.Clear();
         if (PlaneModel != null)
             PlaneModel.Visible = true;
-        _throttle = 0.8f;
-        _model.Reset(_spawnPos, _spawnAttitude, 0.8f * _model.Stats.FdSpeed, _throttle);
+        _throttle = SpawnThrottle;
+        _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
         if (_camera != null && IsInsideTree())
             SnapCamera();

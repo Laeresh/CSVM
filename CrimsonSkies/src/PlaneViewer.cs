@@ -22,6 +22,12 @@ namespace CrimsonSkies;
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
 ///                                LB/RB rudder, RT/LT throttle, Y respawn).
 ///                                Combine with --chapter= to fly a different chapter (default C1)
+///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action);
+///                                reads ../extracted/<chapter>/<mission>/zrdr/ia.json
+///   --scenario=zeppelin_run      which instant-action scenario's spawn list to spawn from
+///                                (zeppelin_run, dogfight_ace, dogfight_squadron, stunt_flying, …)
+///   --spawn=N                    force spawn index N in that list (default: random pick, like the
+///                                original — relaunch to sample the others; the pick is logged)
 ///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
 ///                                (moon/stars, what the original shows at the C1 airfield),
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
@@ -51,6 +57,9 @@ public partial class PlaneViewer : Node3D
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
     private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
+    private string _mission = "IA1";   // which mission's spawns to fly from (--mission=): IA1, M01, …
+    private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
+    private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private FlightInput? _holdInput;
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
@@ -84,6 +93,9 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--chapter") _worldMode = true;
             else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; }
             else if (arg == "--fly") _fly = true;
+            else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
+            else if (arg.StartsWith("--scenario=")) _scenario = arg["--scenario=".Length..];
+            else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) { texturesPath = arg["--textures=".Length..]; texturesOverridden = true; }
@@ -109,6 +121,9 @@ public partial class PlaneViewer : Node3D
             texturesPath = Path.Combine(repoRoot, "extracted", _chapter, "texture.zip");
         if (_worldMode && !gamezOverridden)
             gamezPath = Path.Combine(repoRoot, "extracted", _chapter, "gamez.zip");
+        // Instant-action spawns come from the mission's own zrdr (ia.json), a different
+        // archive than --zrdr (which holds the shared vehicle/player/engine/sound defs).
+        var missionZrdrPath = Path.Combine(repoRoot, "extracted", _chapter, _mission, "zrdr.zip");
 
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
         // (loose JSON/PNG/WAV: no zip decompression at load, and greppable in the editor);
@@ -123,6 +138,7 @@ public partial class PlaneViewer : Node3D
         if (!texturesOverridden) texturesPath = PreferUnzipped(texturesPath);
         if (!zrdrOverridden) zrdrPath = PreferUnzipped(zrdrPath);
         if (!soundsOverridden) soundsPath = PreferUnzipped(soundsPath);
+        missionZrdrPath = PreferUnzipped(missionZrdrPath);
 
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
@@ -222,10 +238,8 @@ public partial class PlaneViewer : Node3D
                 {
                     GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
                 }
-                // spawn between the lighthouse and the town, heading for the town
-                controller.Setup(new FlightModel(stats), _camera,
-                    spawnPos: new Vector3(-6200, 500, -3300),
-                    spawnLookAt: new Vector3(-5700, 350, -6300));
+                var (spawnPos, spawnLookAt) = ChooseSpawn(missionZrdrPath);
+                controller.Setup(new FlightModel(stats), _camera, spawnPos, spawnLookAt);
                 AddChild(controller);
                 what += $" + '{_planeName}' flying";
             }
@@ -250,6 +264,29 @@ public partial class PlaneViewer : Node3D
         var p = s.Split(',');
         float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
         return new FlightInput { Pitch = F(0), Roll = F(1), Yaw = F(2), Throttle = F(3) };
+    }
+
+    /// <summary>Picks the flight spawn from the mission's instant-action scenario list
+    /// (ia.json → spawn_points → scenario): a world position + a look-at point one unit
+    /// ahead along the spawn heading. Randomly chosen per launch, like the original,
+    /// unless --spawn=N forces one. Falls back to a fixed C1 spawn if the data is absent.</summary>
+    private (Vector3 pos, Vector3 lookAt) ChooseSpawn(string missionZrdrPath)
+    {
+        var spawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+        if (spawns == null)
+        {
+            GD.PushWarning($"no '{_scenario}' spawns in {_chapter}/{_mission}/ia.json — using fallback spawn");
+            return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
+        }
+        int i = _spawnIndex >= 0
+            ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
+            : (int)(GD.Randi() % (uint)spawns.Count);
+        var s = spawns[i];
+        // heading is yaw about the up axis; the nose (-Z) rotated by it gives the facing
+        var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;
+        GD.Print($"spawn [{_chapter}/{_mission} {_scenario} #{i} of {spawns.Count}]: " +
+                 $"pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
+        return (s.Position, s.Position + forward);
     }
 
     private void SetupLighting()
