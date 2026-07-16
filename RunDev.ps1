@@ -4,20 +4,39 @@
 
 .DESCRIPTION
     Runs `dotnet build` on the Godot .NET project, then launches the game via the
-    Godot console executable. Defaults to `--fly` (free flight over the C1 world --
-    the milestone 2 vertical slice). If launched with no arguments, prompts you to
-    pick a plane from a numbered list before flying it. Any arguments passed to
-    this script are forwarded as user args instead, skipping the prompt (see
-    CrimsonSkies/src/PlaneViewer.cs for the full list: --plane=, --chapter=,
-    --sky-zone=, --debug-collision, etc).
+    Godot console executable. The default action is free flight (--fly) over a
+    chapter world -- the milestone 2 vertical slice.
+
+    Interactive selection: whenever you do NOT pass --plane, the script prompts you
+    to pick a plane; whenever you do NOT pass --chapter, it prompts you to pick a
+    chapter (map). Both prompts run in the "fly flow" -- i.e. any invocation that
+    isn't an explicit static view (a bare --plane orbit view, or a bare --chapter
+    world view). So you can run it with no args (prompts both, then flies) or with
+    extra flight flags (e.g. --debug-collision) and still get the prompts.
+
+    Explicit static views are passed through verbatim, no prompts:
+      * --plane=<node>         orbit-view one aircraft
+      * --chapter[=<code>]     static world view
+
+    Any other CrimsonSkies user args are forwarded as-is (see
+    CrimsonSkies/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
+    --spawn=, --sky-zone=, --mute, --debug-collision, --hold=, etc).
 
 .EXAMPLE
     .\RunDev.ps1
-    Build, pick a plane from the menu, then free flight over Sea Haven (C1).
+    Build, pick a plane + chapter from the menus, then free flight.
+
+.EXAMPLE
+    .\RunDev.ps1 --debug-collision
+    Build, pick a plane + chapter, then fly with the collision probe drawn.
+
+.EXAMPLE
+    .\RunDev.ps1 --fly --plane=player_kestrel
+    Build, fly the Kestrel; plane prompt skipped, chapter prompt still shown.
 
 .EXAMPLE
     .\RunDev.ps1 --plane=player_kestrel
-    Build, then orbit-view the Kestrel instead of flying (prompt skipped).
+    Build, then orbit-view the Kestrel (static view -- no prompts, no flight).
 #>
 
 $ErrorActionPreference = "Stop"
@@ -27,17 +46,58 @@ $ProjectDir = Join-Path $RepoRoot "CrimsonSkies"
 $Sln        = Join-Path $ProjectDir "CrimsonSkies.sln"
 $GodotExe   = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
 
-# The confirmed-flyable player planes (CLAUDE.md: full hierarchies incl. control
-# surfaces, props, gear, firepoints, cockpits).
+# Every player-flyable aircraft: the vehicle.json defs with kind_of=player_airplane,
+# in the game's roster order. Name = the def's MSG_VEH_ title; Node = its `nodename`
+# (the root node in planes.zbd passed to --plane). Note the two non-obvious ones:
+# the Devastator's node is player_pfighter, and player_avenger's title is Hellhound.
 $Planes = @(
-    [pscustomobject]@{ Name = "Autogyro";   Node = "player_autogyro" }
+    [pscustomobject]@{ Name = "Devastator"; Node = "player_pfighter" }
     [pscustomobject]@{ Name = "Bloodhawk";  Node = "player_bhawk" }
-    [pscustomobject]@{ Name = "Peacemaker"; Node = "player_peacemaker" }
-    [pscustomobject]@{ Name = "Kestrel";    Node = "player_kestrel" }
-    [pscustomobject]@{ Name = "Avenger";    Node = "player_avenger" }
-    [pscustomobject]@{ Name = "Balmoral";   Node = "player_balmoral" }
+    [pscustomobject]@{ Name = "Firebrand";  Node = "player_fbrand" }
+    [pscustomobject]@{ Name = "Brigand";    Node = "player_brigand" }
     [pscustomobject]@{ Name = "Fury";       Node = "player_fury" }
+    [pscustomobject]@{ Name = "Autogyro";   Node = "player_autogyro" }
+    [pscustomobject]@{ Name = "Hellhound";  Node = "player_avenger" }
+    [pscustomobject]@{ Name = "Kestrel";    Node = "player_kestrel" }
+    [pscustomobject]@{ Name = "Peacemaker"; Node = "player_peacemaker" }
+    [pscustomobject]@{ Name = "Balmoral";   Node = "player_balmoral" }
+    [pscustomobject]@{ Name = "Warhawk";    Node = "player_warhawk" }
 )
+$DefaultPlane = "player_bhawk"   # Bloodhawk: the primary test aircraft
+
+# The chapter worlds (--chapter=). Code is the extracted folder; Name is the map
+# (region labels per CLAUDE.md; C1/C1B/C1C are day/night/weather variants of Sea Haven).
+$Chapters = @(
+    [pscustomobject]@{ Name = "Sea Haven (Northwest) - night"; Code = "C1" }
+    [pscustomobject]@{ Name = "Sea Haven - variant B";         Code = "C1B" }
+    [pscustomobject]@{ Name = "Sea Haven - variant C";         Code = "C1C" }
+    [pscustomobject]@{ Name = "Hollywood";                     Code = "C2" }
+    [pscustomobject]@{ Name = "Hollywood - variant B";         Code = "C2B" }
+    [pscustomobject]@{ Name = "Hawaii (islands)";              Code = "C3" }
+    [pscustomobject]@{ Name = "Rocky Mountains";               Code = "C4" }
+    [pscustomobject]@{ Name = "New York";                      Code = "C5" }
+)
+$DefaultChapter = "C1"
+
+function Select-Item {
+    param(
+        [string]$Title,
+        [array] $Items,          # objects with a .Name property
+        [int]   $DefaultIndex = 0
+    )
+    Write-Host ""
+    Write-Host $Title -ForegroundColor Cyan
+    for ($i = 0; $i -lt $Items.Count; $i++) {
+        $marker = ""
+        if ($i -eq $DefaultIndex) { $marker = "  (default)" }
+        Write-Host ("  {0,2}. {1}{2}" -f ($i + 1), $Items[$i].Name, $marker)
+    }
+    $choice = Read-Host ("Enter number (default {0})" -f ($DefaultIndex + 1))
+    if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $Items.Count) {
+        return $Items[[int]$choice - 1]
+    }
+    return $Items[$DefaultIndex]
+}
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -52,23 +112,32 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet build failed (exit $LASTEXITCODE)."
 }
 
-if ($args.Count -gt 0) {
-    $UserArgs = $args
-}
-else {
-    Write-Host ""
-    Write-Host "Select a plane:" -ForegroundColor Cyan
-    for ($i = 0; $i -lt $Planes.Count; $i++) {
-        Write-Host ("  {0}. {1}" -f ($i + 1), $Planes[$i].Name)
+$UserArgs = @()
+if ($args.Count -gt 0) { $UserArgs += $args }
+
+$hasPlane   = @($UserArgs | Where-Object { $_ -like '--plane=*' }).Count -gt 0
+$hasChapter = @($UserArgs | Where-Object { $_ -like '--chapter=*' -or $_ -eq '--chapter' }).Count -gt 0
+$hasFly     = $UserArgs -contains '--fly'
+
+# Fly flow = anything that isn't an explicit static view. A bare --plane (orbit view)
+# or a bare --chapter (static world view) is passed through verbatim; everything else
+# (no args, --fly, or extra flight flags) prompts for whatever wasn't specified.
+$flyFlow = $hasFly -or (-not $hasPlane -and -not $hasChapter)
+
+if ($flyFlow) {
+    if (-not $hasPlane) {
+        $defIdx = [Math]::Max(0, [array]::IndexOf(($Planes | ForEach-Object { $_.Node }), $DefaultPlane))
+        $plane  = Select-Item -Title "Select a plane:" -Items $Planes -DefaultIndex $defIdx
+        Write-Host "Plane:   $($plane.Name) ($($plane.Node))" -ForegroundColor Green
+        $UserArgs += "--plane=$($plane.Node)"
     }
-    $choice = Read-Host "Enter number (default 1)"
-    $index = 0
-    if ($choice -match '^\d+$' -and [int]$choice -ge 1 -and [int]$choice -le $Planes.Count) {
-        $index = [int]$choice - 1
+    if (-not $hasChapter) {
+        $defIdx  = [Math]::Max(0, [array]::IndexOf(($Chapters | ForEach-Object { $_.Code }), $DefaultChapter))
+        $chapter = Select-Item -Title "Select a chapter (map):" -Items $Chapters -DefaultIndex $defIdx
+        Write-Host "Chapter: $($chapter.Name) ($($chapter.Code))" -ForegroundColor Green
+        $UserArgs += "--chapter=$($chapter.Code)"
     }
-    $plane = $Planes[$index]
-    Write-Host "Flying $($plane.Name)..." -ForegroundColor Cyan
-    $UserArgs = @("--fly", "--plane=$($plane.Node)")
+    if (-not $hasFly) { $UserArgs += "--fly" }
 }
 
 Write-Host "Launching Godot: $($UserArgs -join ' ')" -ForegroundColor Cyan
