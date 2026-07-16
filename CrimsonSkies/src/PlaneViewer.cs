@@ -311,7 +311,9 @@ public partial class PlaneViewer : Node3D
         var fog = _weather.Fog(_skyZone);
         RenderingServer.GlobalShaderParameterSet("csky_fog_color",
             new Vector3(fog.FogColor.R, fog.FogColor.G, fog.FogColor.B));
-        RenderingServer.GlobalShaderParameterSet("csky_fog_range", new Vector2(fog.FogNear, fog.FogFar));
+        //Range is halved because this does not seem to be radius but diameter. See Screenshot C1 IA1 Fog Range.png vs Screenshots\Fog Range.png
+        float fogRangeFactor = 2.0f;
+        RenderingServer.GlobalShaderParameterSet("csky_fog_range", new Vector2(fog.FogNear, fog.FogFar)/fogRangeFactor);
         GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 

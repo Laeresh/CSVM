@@ -62,11 +62,14 @@ public sealed class FlightModel
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
         // Control surfaces bite proportionally to airspeed; return_rate adds extra
         // centering on an axis while its stick is released.
-        float eff = Mathf.Clamp(Speed / s.FdSpeed, MinControlEff, MaxControlEff);
+        // Inverted eff. Turns faster the slower the plane is. Still not same as original
+        float eff = 1.4f-Mathf.Clamp(Speed / s.FdSpeed, MinControlEff, MaxControlEff);
+        float rotationTune = 2.0f;
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X,
-            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z) * eff;
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X*rotationTune,
+            //eff only works on Yaw like the original
+            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y*rotationTune * eff,
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z*rotationTune);
         var damp = new Vector3(
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),
@@ -75,7 +78,7 @@ public sealed class FlightModel
 
         // stall: below stall speed the nose drops until airspeed recovers
         float stallSpeed = StallSpeedFrac * s.FdSpeed;
-        if (Speed < stallSpeed)
+        if (isStalled())
             BodyRates.X -= s.StallMag * 2f * (1f - Speed / stallSpeed) * dt;
 
         var omegaWorld = Attitude * BodyRates;
@@ -108,5 +111,11 @@ public sealed class FlightModel
         }
 
         Position += VelocityDir * Speed * dt;
+    }
+
+    public bool isStalled()
+    {
+        float stallSpeed = StallSpeedFrac * Stats.FdSpeed;
+        return Speed < stallSpeed;
     }
 }

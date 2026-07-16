@@ -29,13 +29,13 @@ public sealed class WeatherState
     /// <see cref="ClipFar"/> is the original's hard far clip (informational — our far plane is
     /// much larger; the fog is what hides distant terrain, matching the original's short view
     /// distance).</summary>
-    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float ClipFar);
+    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar,float FogLow, float FogHigh, float ClipFar);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
 
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world.
-    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e9f);
+    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f,1e8f,1e9f, 1e9f);
 
     /// <summary>The whiteout cloud band, metres of altitude. <see cref="CloudBottom"/>/<see
     /// cref="CloudTop"/> are where sight is clear; the fully-opaque core is <see
@@ -115,8 +115,12 @@ public sealed class WeatherState
                     && fr[0] is float n && fr[1] is float f
                         ? (n, f)
                         : (NoFog.FogNear, NoFog.FogFar);
+                (float low, float high) = z.List("FOG_ALTITUDE") is { Count: >= 2 } fa
+                    && fa[0] is float l && fa[1] is float h
+                        ? (l, h)
+                        : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
-                w._zones[zone] = new ZoneFog(color, near, far, clip);
+                w._zones[zone] = new ZoneFog(color, near, far,low, high, clip);
             }
         return w;
     }

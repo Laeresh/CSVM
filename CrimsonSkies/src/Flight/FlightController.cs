@@ -329,6 +329,8 @@ public partial class FlightController : Node3D
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
+        if(_model.isStalled())
+            _hud.Text += "\n⚠ STALLED - SPEED UP";
         if (_paused)
             _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";
         else if (_crashed)
