@@ -160,14 +160,15 @@ eyeball sign-off.
 
 - **Cloud deck follows the player (2026-07-16):** WorldBuilder splits the `cloudlayer` deck
   (144 tiles at y=960 covering the map) into a `CloudDeck` node; PlaneViewer re-anchors it each
-  frame centred on the camera x/z at a fixed vertical gap that flips sides at the band midpoint
-  (`DeckGapAbove` 660 m above below the band, `DeckGapBelow` 200 m below once above — the
-  "infinite cloud layer" model the user confirmed: hovers a constant distance and re-appears on
-  the far side after you punch through, flip hidden by the whiteout core). cloud1/cloud2 sprites
-  stay world-fixed. Verified: `--fly` at ~325 m shows an overcast ceiling above the plane (matches
-  `OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`); above the band the deck flips to a floor
-  below; static orbit viewing unchanged. Gap values (and whether the deck should close in on a
-  climb, per the user's "1 minute later" shot) are TUNE for playtest.
+  frame centred on the camera x/z and pinned to a fixed altitude at the **whiteout-band centre**.
+  You climb toward it as a fixed overcast ceiling, pass through it exactly where the whiteout is
+  fully opaque (the ceiling→floor transition is hidden), and it becomes a floor once above the
+  band. cloud1/cloud2 sprites stay world-fixed. Model chosen by user playtest: a fixed-gap-
+  follows-you variant and this band-centre anchor were prototyped behind a `--deck-ceiling`
+  toggle; the user picked the band-centre anchor, so the fixed-gap model + toggle were dropped.
+  Verified: low camera / `--fly` shows an overcast ceiling above the plane (matches
+  `OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`); above the band it flips to a floor below;
+  static orbit viewing unchanged.
 
 **Remaining sub-item (next turn):** ambient puffs (☐) — detailed below. The loader already
 exposes the wind the puffs need.

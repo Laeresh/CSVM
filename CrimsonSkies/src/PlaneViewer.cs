@@ -62,14 +62,6 @@ public partial class PlaneViewer : Node3D
     // (0 at the band edges → 1 at the opaque core) comes from WeatherState.WhiteoutAmount.
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
 
-    // Cloud-deck follow (TUNE, pending playtest): the opaque cloudlayer overcast tracks the
-    // camera x/z and holds a fixed vertical gap — hovering above you while you're below the
-    // cloud band, then snapping below you once you climb up through the whiteout (the flip is
-    // hidden by the band's fully-opaque core). DeckGapAbove ≈ its data altitude (960 m) at a
-    // ~300 m cruise, so low-altitude flight sees it as a high overcast ceiling as in the original.
-    private const float DeckGapAbove = 660f;
-    private const float DeckGapBelow = 200f;
-
     private string _planeName = "player_bhawk";
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
@@ -517,16 +509,16 @@ public partial class PlaneViewer : Node3D
             _whiteout.Color = c;
         }
 
-        // Cloud deck follows the player (centered on the camera x/z, fixed vertical gap that
-        // flips above/below at the band midpoint — the flip is hidden by the opaque whiteout core).
+        // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
+        // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
+        // once above) and pass through it exactly where the whiteout is fully opaque, so the
+        // ceiling→floor transition is hidden.
         if (_deck != null && _weather is { HasCloudBand: true })
         {
-            float camY = _camera.Position.Y;
             float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
-            float targetY = camY < mid ? camY + DeckGapAbove : camY - DeckGapBelow;
             _deck.Position = new Vector3(
                 _camera.Position.X - _deckCenter.X,
-                targetY - _deckCenter.Y,
+                mid - _deckCenter.Y,
                 _camera.Position.Z - _deckCenter.Z);
         }
 
