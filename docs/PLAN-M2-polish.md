@@ -14,7 +14,7 @@ landed item.
 1. ☑ Wing-light blink
 2. ☑ Chase camera rolls with the plane
 3. ☑ Moon size — no change needed (user re-checked in-game 2026-07-16: already matches)
-4. ◐ Weather: distance fog ☑, cloud-band whiteout ☑, cloud deck anchoring ☐, ambient puffs ☐
+4. ◐ Weather: distance fog ☑, cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☐
 5. ☐ Forest trees missing from forest-textured terrain
 6. ☐ Flight model: stall toward ground, knife-edge lift, climb speed retention
 7. ☐ Control-surface animation (ailerons/elevators/rudders)
@@ -158,8 +158,19 @@ eyeball sign-off.
   `--sky-zone` is given (same rule that already shows the dome there), so `--campos` at any
   altitude gives deterministic fog/whiteout shots.
 
-**Remaining sub-items (next turn):** cloud deck follows the player (☐), ambient puffs (☐) —
-detailed below. The loader already exposes the cloud band + wind they need.
+- **Cloud deck follows the player (2026-07-16):** WorldBuilder splits the `cloudlayer` deck
+  (144 tiles at y=960 covering the map) into a `CloudDeck` node; PlaneViewer re-anchors it each
+  frame centred on the camera x/z at a fixed vertical gap that flips sides at the band midpoint
+  (`DeckGapAbove` 660 m above below the band, `DeckGapBelow` 200 m below once above — the
+  "infinite cloud layer" model the user confirmed: hovers a constant distance and re-appears on
+  the far side after you punch through, flip hidden by the whiteout core). cloud1/cloud2 sprites
+  stay world-fixed. Verified: `--fly` at ~325 m shows an overcast ceiling above the plane (matches
+  `OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`); above the band the deck flips to a floor
+  below; static orbit viewing unchanged. Gap values (and whether the deck should close in on a
+  climb, per the user's "1 minute later" shot) are TUNE for playtest.
+
+**Remaining sub-item (next turn):** ambient puffs (☐) — detailed below. The loader already
+exposes the wind the puffs need.
 
 **Goal:** Replicate the original's weather rendering, all user-observed in C1 IA1:
 distant terrain fades into fog; climbing into the cloud band whites out the screen

@@ -62,6 +62,14 @@ public partial class PlaneViewer : Node3D
     // (0 at the band edges → 1 at the opaque core) comes from WeatherState.WhiteoutAmount.
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
 
+    // Cloud-deck follow (TUNE, pending playtest): the opaque cloudlayer overcast tracks the
+    // camera x/z and holds a fixed vertical gap — hovering above you while you're below the
+    // cloud band, then snapping below you once you climb up through the whiteout (the flip is
+    // hidden by the band's fully-opaque core). DeckGapAbove ≈ its data altitude (960 m) at a
+    // ~300 m cruise, so low-altitude flight sees it as a high overcast ceiling as in the original.
+    private const float DeckGapAbove = 660f;
+    private const float DeckGapBelow = 200f;
+
     private string _planeName = "player_bhawk";
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
@@ -78,6 +86,8 @@ public partial class PlaneViewer : Node3D
 
     private Node3D? _plane;
     private Node3D? _horizon;
+    private Node3D? _deck;             // the cloudlayer deck, moved to follow the player
+    private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
     private ColorRect? _whiteout;      // full-screen cloud-band whiteout overlay
     private Camera3D _camera = null!;
@@ -177,6 +187,7 @@ public partial class PlaneViewer : Node3D
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
+                _deck = builder.CloudDeck;         // the cloudlayer overcast, moved to follow the player
                 if (_fly || _skyZoneExplicit)
                 {
                     // The original skydome, anchored to the camera each frame. Scaled up so
@@ -210,6 +221,10 @@ public partial class PlaneViewer : Node3D
                 what = $"'{_planeName}'";
             }
             AddChild(_plane);
+            // The deck is now in the tree at its original position; remember its centre so
+            // _Process can re-anchor it under the player each frame (see UpdateCloudDeck).
+            if (_deck != null)
+                _deckCenter = ComputeAabb(_deck).GetCenter();
 
             if (_fly)
             {
@@ -500,6 +515,19 @@ public partial class PlaneViewer : Node3D
             var c = _whiteout.Color;
             c.A = _weather.WhiteoutAmount(_camera.Position.Y);
             _whiteout.Color = c;
+        }
+
+        // Cloud deck follows the player (centered on the camera x/z, fixed vertical gap that
+        // flips above/below at the band midpoint — the flip is hidden by the opaque whiteout core).
+        if (_deck != null && _weather is { HasCloudBand: true })
+        {
+            float camY = _camera.Position.Y;
+            float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
+            float targetY = camY < mid ? camY + DeckGapAbove : camY - DeckGapBelow;
+            _deck.Position = new Vector3(
+                _camera.Position.X - _deckCenter.X,
+                targetY - _deckCenter.Y,
+                _camera.Position.Z - _deckCenter.Z);
         }
 
         if (_screenshotPath == null || _plane == null)

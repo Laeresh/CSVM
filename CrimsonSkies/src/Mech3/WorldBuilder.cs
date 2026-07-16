@@ -39,7 +39,17 @@ public sealed class WorldBuilder
 
     // Rendered but not solid: the plane should fly through cloud/sky geometry, not crash
     // into it. Terrain, water, buildings, zeppelins, trains stay solid.
-    private bool NoCollisionNode(GameZNode n)
+    private bool NoCollisionNode(GameZNode n) => MeshUsesTexture(n, IsCloudOrSkyTexture);
+
+    // The horizontal 'cloudlayer' deck (the opaque overcast ceiling/floor) as opposed to the
+    // cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so PlaneViewer can
+    // make it follow the player. In C1 it is 144 top-level 1024-unit tiles at y=960 covering
+    // the whole map (each a partition-referenced Object3d leaf).
+    private bool IsCloudLayerDeckNode(GameZNode n) => MeshUsesTexture(n,
+        tex => tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase));
+
+    // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
+    private bool MeshUsesTexture(GameZNode n, Func<string, bool> match)
     {
         if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
             return false;
@@ -48,7 +58,7 @@ public sealed class WorldBuilder
             if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
                 continue;
             var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            if (tex != null && IsCloudOrSkyTexture(tex))
+            if (tex != null && match(tex))
                 return true;
         }
         return false;
@@ -56,6 +66,12 @@ public sealed class WorldBuilder
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;
     public int ColliderCount => _scene.ColliderCount;
+
+    /// <summary>The cloudlayer deck as a separate node so the caller can make it follow the
+    /// player (see PlaneViewer): the opaque overcast sheet tracks the plane and flips
+    /// above/below at the cloud band, as in the original. A child of the world root at its
+    /// original altitude; null if the world has no cloudlayer geometry.</summary>
+    public Node3D? CloudDeck { get; private set; }
 
     /// <param name="collision">Attach static colliders to solid geometry so the flight
     /// loop can raycast against terrain and buildings. Off for static viewing.</param>
@@ -84,22 +100,33 @@ public sealed class WorldBuilder
             throw new ArgumentException($"world node '{worldName}' not found in GameZ data");
 
         var root = new Node3D { Name = worldName };
+        // The cloudlayer deck is collected into its own node (kept a child of the world root at
+        // identity, so its world-space tile geometry stays put) that PlaneViewer moves to follow
+        // the player; everything else goes into the static world root.
+        var deck = new Node3D { Name = "cloud_deck" };
 
         foreach (var childIndex in world.Children)
-            Add(root, childIndex);
+            Add(root, deck, childIndex);
         if (world.PartitionNodes != null)
             foreach (var idx in world.PartitionNodes)
-                Add(root, idx);
+                Add(root, deck, idx);
+
+        if (deck.GetChildCount() > 0)
+        {
+            root.AddChild(deck);
+            CloudDeck = deck;
+        }
         return root;
     }
 
-    private void Add(Node3D root, int nodeIndex)
+    private void Add(Node3D root, Node3D deck, int nodeIndex)
     {
         if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
             return;
-        var built = _scene.BuildSubtree(_gamez.Nodes[nodeIndex], SkipWorldNode, NoCollisionNode);
+        var node = _gamez.Nodes[nodeIndex];
+        var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode);
         if (built != null)
-            root.AddChild(built);
+            (IsCloudLayerDeckNode(node) ? deck : root).AddChild(built);
     }
 
     /// <summary>
