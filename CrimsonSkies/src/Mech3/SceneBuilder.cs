@@ -445,6 +445,13 @@ public sealed class SceneBuilder
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         sb.AppendLine("instance uniform float node_bias = 0.0;"); // per-node draw-order tie-break
+        // Distance fog (weather.json FOG_COLOR/FOG_RANGES): globals set once per flight so all
+        // world + aircraft surfaces share them without per-material updates; no-op range when
+        // not flying. The camera-anchored skydome opts out per instance (csky_fog_on = 0) — at
+        // ~22 km it is past FOG_FAR and would otherwise fog the whole sky solid gray.
+        sb.AppendLine("global uniform vec3 csky_fog_color;");
+        sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog)
+        sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
         if (textured)
             sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;");
         else
@@ -469,6 +476,10 @@ void fragment() {");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.5;");
         }
+        // Distance fog: VERTEX is the view-space position here (set in vertex() under
+        // skip_vertex_transform), so length(VERTEX) is the distance from the camera. The
+        // aircraft is always within the near range at chase distance, so this is a no-op on it.
+        sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * smoothstep(csky_fog_range.x, csky_fog_range.y, length(VERTEX)));");
         if (blend || scissor)
             sb.AppendLine("    ALPHA = col.a;");
         if (scissor)

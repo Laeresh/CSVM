@@ -125,6 +125,7 @@ public sealed class WorldBuilder
             return null;
         DisableShadows(built);
         BillboardMoon(built);
+        DisableFog(built);
         return built;
     }
 
@@ -219,5 +220,16 @@ public sealed class WorldBuilder
             mi.CastShadow = GeometryInstance3D.ShadowCastingSetting.Off;
         foreach (var child in node.GetChildren())
             DisableShadows(child);
+    }
+
+    // Opt the skydome out of distance fog (SceneBuilder's csky_fog_on instance uniform): it
+    // is a camera-anchored backdrop ~22 km out, far past FOG_FAR, so fog would paint the whole
+    // sky solid FOG_COLOR. Harmless on the moon/stars (StandardMaterial3D — they ignore it).
+    private static void DisableFog(Node node)
+    {
+        if (node is MeshInstance3D mi)
+            mi.SetInstanceShaderParameter("csky_fog_on", 0f);
+        foreach (var child in node.GetChildren())
+            DisableFog(child);
     }
 }

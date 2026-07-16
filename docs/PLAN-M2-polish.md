@@ -13,8 +13,8 @@ landed item.
 
 1. ☑ Wing-light blink
 2. ☑ Chase camera rolls with the plane
-3. ☐ Moon size
-4. ☐ Weather: distance fog, cloud-band whiteout, cloud deck anchoring, ambient puffs
+3. ☑ Moon size — no change needed (user re-checked in-game 2026-07-16: already matches)
+4. ◐ Weather: distance fog ☑, cloud-band whiteout ☑, cloud deck anchoring ☐, ambient puffs ☐
 5. ☐ Forest trees missing from forest-textured terrain
 6. ☐ Flight model: stall toward ground, knife-edge lift, climb speed retention
 7. ☐ Control-surface animation (ailerons/elevators/rudders)
@@ -105,7 +105,17 @@ read dynamic instead of glued.
 **Verify:** scripted `--hold` full roll + loop with screenshots (horizon must rotate
 through 360°, no camera flip/snap at ±90°); user playtest.
 
-## 3. Moon size
+## 3. Moon size — ☑ DONE (2026-07-16), no code change
+
+**Resolution:** The user re-checked in-game and the remake's moon is already the same
+size as the original — the earlier "visible mismatch" did not reproduce. Closed with no
+change. (Analysis done before the recheck, kept for reference: the reference shot
+`OriginalScreenshots/C1 IA1 Cloud Puffs and Moon.png` has the moon disc ~209 px across ≈
+14 % of the 1483 px frame height. Our moon is a `BillboardKeepScale` quad of the mesh's
+native 422.8-unit side at horizon-local center (−1624.6, 1426.1, −2154.9), dist 3052 from
+the dome origin — elevation 27.9°, matching the designed ~28° — sitting 7630 units from
+the camera after the 2.5× dome scale. If a future recheck disagrees, the knob is the
+`QuadMesh.Size` in `WorldBuilder.BillboardMoon`.)
 
 **Goal:** The moon's apparent size matches the original (user reports a visible mismatch).
 
@@ -121,7 +131,35 @@ eyeball sign-off.
 
 **Verify:** side-by-side screenshots at matching heading/pitch.
 
-## 4. Weather: fog, whiteout, cloud deck, ambient puffs
+## 4. Weather: fog, whiteout, cloud deck, ambient puffs — ◐ IN PROGRESS
+
+**Landed so far (2026-07-16): the `WeatherState` loader + distance fog + cloud-band whiteout.**
+- `src/Flight/Weather.cs` (`WeatherState`) parses the flown mission's `weather.json` (same
+  archive as the spawn readers) — per-zone `FOG_COLOR`/`FOG_RANGES`/`CLIP_RANGES`, the
+  `CLOUD_COVER` band, and `WIND` (parsed now for the future puffs). CLOUD_COVER/WIND pair keys
+  with bare scalars, so they're walked as raw pairs rather than through `ZrdrDict`.
+- **Distance fog:** SceneBuilder's generated world/aircraft shader gains a fog term — global
+  shader params `csky_fog_color`/`csky_fog_range` (registered + set once per flight in
+  PlaneViewer, no-op range otherwise), mixed per-pixel toward the fog color over view distance
+  (`length(VERTEX)`, view-space under skip_vertex_transform). The camera-anchored skydome opts
+  out via a per-instance `csky_fog_on = 0` (WorldBuilder.DisableFog) — at ~22 km it would
+  otherwise fog the whole sky solid gray. The aircraft is a no-op (always within the near range
+  at chase distance). Verified A/B: C1/IA1 zone2 fog 1000→4000 m fades distant terrain to 0.69
+  gray while near terrain and the plane stay crisp; the dome/sky is unchanged vs a no-fog run.
+- **Whiteout:** a full-screen `ColorRect` overlay (PlaneViewer, layer below the HUD) whose
+  opacity follows `WeatherState.WhiteoutAmount(cameraY)` — a symmetric trapezoid the user worked
+  out from the original: clear sight at the `CLOUD_COVER` band edges (970/1124 m in C1/IA1),
+  ramping to a fully-opaque near-white core (plane no longer visible) that is THICKNESS deep and
+  centred on the midpoint (total only in 1032–1062). So `THICKNESS` (30) is the opaque-core
+  depth, not an edge transition. `WhiteoutColor` near-white (TUNE, not the 0.69 fog gray) matches
+  `OriginalScreenshots/C1 IA1 whiteout at height.png`. Verified via `--campos` at 965/1000/1047/
+  1100 m: clear below 970, partial on the ramps, uniform total whiteout at the 1047 core.
+- **Static verification path:** fog + whiteout now also apply in static `--chapter` mode when
+  `--sky-zone` is given (same rule that already shows the dome there), so `--campos` at any
+  altitude gives deterministic fog/whiteout shots.
+
+**Remaining sub-items (next turn):** cloud deck follows the player (☐), ambient puffs (☐) —
+detailed below. The loader already exposes the cloud band + wind they need.
 
 **Goal:** Replicate the original's weather rendering, all user-observed in C1 IA1:
 distant terrain fades into fog; climbing into the cloud band whites out the screen

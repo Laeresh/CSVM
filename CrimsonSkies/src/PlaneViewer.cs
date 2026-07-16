@@ -35,8 +35,10 @@ namespace CrimsonSkies;
 ///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
 ///                                (moon/stars, what the original shows at the C1 airfield),
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
-///                                If given in static --chapter mode, the skydome renders there
-///                                too (put the camera inside the map via --campos)
+///                                Also selects which zone's distance fog (weather.json) applies.
+///                                If given in static --chapter mode, the skydome + fog + cloud-
+///                                band whiteout render there too (put the camera inside the map
+///                                via --campos — deterministic fog/whiteout verification shots)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes.zip;
 ///                                in --chapter/--fly modes: the chapter's gamez, default C1/gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/<chapter>/texture.zip, chapter=C1)
@@ -55,6 +57,11 @@ public partial class PlaneViewer : Node3D
 {
     private const float HorizonScale = 2.5f;
 
+    // Cloud-band whiteout color: inside a cloud reads near-white (see OriginalScreenshots/
+    // "C1 IA1 whiteout at height.png"), not the 0.69 gray of distance fog. TUNE. The opacity
+    // (0 at the band edges → 1 at the opaque core) comes from WeatherState.WhiteoutAmount.
+    private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
+
     private string _planeName = "player_bhawk";
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
@@ -71,6 +78,8 @@ public partial class PlaneViewer : Node3D
 
     private Node3D? _plane;
     private Node3D? _horizon;
+    private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
+    private ColorRect? _whiteout;      // full-screen cloud-band whiteout overlay
     private Camera3D _camera = null!;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
@@ -144,6 +153,14 @@ public partial class PlaneViewer : Node3D
         if (!soundsOverridden) soundsPath = PreferUnzipped(soundsPath);
         missionZrdrPath = PreferUnzipped(missionZrdrPath);
 
+        // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
+        // shader references, before any material using it is built. Default range is a no-op
+        // (nothing fades) — only --fly overrides it from the mission's weather.json below.
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
+            RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
         AddChild(_camera);
@@ -175,6 +192,11 @@ public partial class PlaneViewer : Node3D
                         _horizon.Scale = Vector3.One * HorizonScale;
                         AddChild(_horizon);
                     }
+                    // Weather (the flown mission's weather.json): distance fog for the rendered
+                    // zone + the cloud-band whiteout. Applied whenever the world+dome are shown —
+                    // in --fly, and in static --chapter when --sky-zone is given (deterministic
+                    // fog/whiteout verification with --campos, same as the sky-verification path).
+                    SetupWeather(missionZrdrPath);
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
@@ -271,6 +293,42 @@ public partial class PlaneViewer : Node3D
         var p = s.Split(',');
         float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
         return new FlightInput { Pitch = F(0), Roll = F(1), Yaw = F(2), Throttle = F(3) };
+    }
+
+    /// <summary>Loads the flown mission's weather.json and applies it: sets the distance-fog
+    /// global shader parameters for the rendered sky zone (all world + aircraft surfaces pick
+    /// them up), and builds the full-screen cloud-band whiteout overlay (its opacity is driven
+    /// each frame from the camera altitude in <see cref="_Process"/>). No-op if the mission has
+    /// no weather.json — the fog globals keep their registered no-op range.</summary>
+    private void SetupWeather(string missionZrdrPath)
+    {
+        _weather = WeatherState.Load(missionZrdrPath);
+        if (_weather == null)
+        {
+            GD.PushWarning($"no weather.json for {_chapter}/{_mission} — flying without fog / whiteout");
+            return;
+        }
+        var fog = _weather.Fog(_skyZone);
+        RenderingServer.GlobalShaderParameterSet("csky_fog_color",
+            new Vector3(fog.FogColor.R, fog.FogColor.G, fog.FogColor.B));
+        RenderingServer.GlobalShaderParameterSet("csky_fog_range", new Vector2(fog.FogNear, fog.FogFar));
+        GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m; " +
+                 $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
+
+        if (_weather.HasCloudBand)
+        {
+            // A full-screen overlay so the whiteout swallows everything (terrain, plane, clouds)
+            // uniformly, like the original. Layer 0 keeps it behind the flight HUD (layer 1).
+            var canvas = new CanvasLayer { Layer = 0 };
+            _whiteout = new ColorRect
+            {
+                Color = new Color(WhiteoutColor, 0f),
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            _whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+            canvas.AddChild(_whiteout);
+            AddChild(canvas);
+        }
     }
 
     /// <summary>Picks the flight spawn for the current mission: a world position + a look-at
@@ -433,6 +491,14 @@ public partial class PlaneViewer : Node3D
         // (One-frame lag vs the flight camera is invisible at 22 km.)
         if (_horizon != null)
             _horizon.Position = _camera.Position;
+
+        // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
+        if (_whiteout != null && _weather != null)
+        {
+            var c = _whiteout.Color;
+            c.A = _weather.WhiteoutAmount(_camera.Position.Y);
+            _whiteout.Color = c;
+        }
 
         if (_screenshotPath == null || _plane == null)
             return;
