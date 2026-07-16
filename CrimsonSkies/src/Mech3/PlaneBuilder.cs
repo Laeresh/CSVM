@@ -23,7 +23,7 @@ public sealed class PlaneBuilder
     // one of the two groups (its vehicle-damage detail toggle); we model "damage on".
     private static readonly HashSet<string> SkipNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_off", "blood_hook",
+        "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_off",
     };
 
     private readonly GameZ _gamez;
@@ -78,6 +78,11 @@ public sealed class PlaneBuilder
     private bool Skip(GameZNode node)
     {
         if (SkipNames.Contains(node.Name) || IsDamagePanel(node.Name))
+            return true;
+        // Skyhook arms (zeppelin docking): every plane has a *_hook subtree (blood_hook,
+        // kest_hook, gyro_hook, …) whose *_hook.json anim RESET_STATE deactivates the
+        // group + its arm/door nodes — retracted by default, extended only on call.
+        if (node.Name.EndsWith("_hook", StringComparison.OrdinalIgnoreCase))
             return true;
         var kind = PropParts.Classify(node.Name);
         // Flight shows ONLY the spinning blur discs; the exterior viewer shows ONLY the static
