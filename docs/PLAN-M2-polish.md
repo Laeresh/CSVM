@@ -12,7 +12,7 @@ landed item.
 ## Checklist
 
 1. ☑ Wing-light blink
-2. ☐ Chase camera rolls with the plane
+2. ☑ Chase camera rolls with the plane
 3. ☐ Moon size
 4. ☐ Weather: distance fog, cloud-band whiteout, cloud deck anchoring, ambient puffs
 5. ☐ Forest trees missing from forest-textured terrain
@@ -73,7 +73,22 @@ flare quads render always — exactly the "sprites visible from behind the plane
 **Verify:** night `--fly` run on Kestrel/Fury: blink interval 1.5 s (log), flash visible
 from front and behind; static `--plane` viewer shows no flares. Side-by-side with original.
 
-## 2. Chase camera rolls with the plane
+## 2. Chase camera rolls with the plane — ☑ DONE (2026-07-16)
+
+**Landed as:** `FlightController.UpdateChaseCamera` (replacing the inline `_Process` camera
+block). `DesiredCamPos` now offsets the camera behind-and-above in the plane's own frame
+(`camUp = _model.Attitude.Y`, full bank-follow — was `Vector3.Up.Lerp(up, 0.45)`, which
+went degenerate inverted). The orientation is no longer a hard per-frame LookAt from a
+near-world up; instead the camera *basis* is slerped toward `Basis.LookingAt(lookTarget −
+camPos, planeUp)` at `CamRotSmooth` 7 /s (TUNE — a touch of rotational lag so fast rolls
+read dynamic), with the existing position smoothing kept at `CamSmooth` 8 /s. A dot-product
+guard falls back to world-up if the view direction ever runs parallel to the plane's up
+(practically never — the plane's up is ⟂ to its nose). `SnapCamera` (spawn/respawn) still
+sets the orientation instantly via LookAt, so there's no slerp transient on (re)spawn.
+Verified: scripted pure-roll `--hold=0,1,0,0.7` flight, screenshots at successive roll
+phases — the horizon rotates smoothly 0°→90°→180°→270° with the world fully inverted at
+180° (sky at the bottom, ground at the top) and no camera flip/snap/degeneracy through
+±90° or inverted. Pending user playtest to fine-tune `CamRotSmooth`.
 
 **Goal:** Flying inverted shows the world upside down, as in the original; the camera
 follows the plane's roll fully instead of staying near world-up.

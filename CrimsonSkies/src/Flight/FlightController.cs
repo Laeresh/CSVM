@@ -70,8 +70,10 @@ public partial class FlightController : Node3D
                                                 // plane-dependent (TODO — kept fixed for now per user); the
                                                 // plane accelerates from here toward its cruise
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
-    private const float CamSmooth = 8f;         // 1/s
-    private const float UnderMapY = 60f;        // C1 terrain sits at y≈100+; below this we're lost
+    private const float CamSmooth = 8f;         // 1/s — position catch-up
+    private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
+                                                // lag on fast rolls so they read dynamic (TUNE)
+    private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
@@ -321,9 +323,7 @@ public partial class FlightController : Node3D
         }
         else
         {
-            float t = 1f - Mathf.Exp(-CamSmooth * (float)delta);
-            _camera.Position = _camera.Position.Lerp(DesiredCamPos(out var camUp), t);
-            _camera.LookAt(_model.Position - _model.Attitude.Z * CamLookAhead, camUp);
+            UpdateChaseCamera((float)delta);
         }
 
         float mph = _model.Speed * 2.23694f;
@@ -349,10 +349,38 @@ public partial class FlightController : Node3D
 
     private Vector3 DesiredCamPos(out Vector3 camUp)
     {
-        // chase from behind the nose, banking partway with the plane
+        // chase from behind and above the nose in the plane's own frame, so the offset (and
+        // the camera) roll fully with the plane — inverted flight shows the world upside down
         var nose = -_model.Attitude.Z;
-        camUp = Vector3.Up.Lerp(_model.Attitude.Y, 0.45f).Normalized();
+        camUp = _model.Attitude.Y;
         return _model.Position - nose * CamBack + camUp * CamUp;
+    }
+
+    /// <summary>Chase camera: smooth the position toward the rigid behind-and-above offset
+    /// (expressed in the plane's frame, so it banks with the plane) and slerp the orientation
+    /// toward a look-at of the point ahead of the nose with the plane's own up. Smoothing the
+    /// basis — rather than re-deriving a hard LookAt each frame from a near-world up — lets the
+    /// horizon roll fully through inverted flight, while the rotational lag keeps fast rolls
+    /// reading dynamic instead of glued.</summary>
+    private void UpdateChaseCamera(float dt)
+    {
+        float tPos = 1f - Mathf.Exp(-CamSmooth * dt);
+        _camera.Position = _camera.Position.Lerp(DesiredCamPos(out var camUp), tPos);
+
+        var toTarget = _model.Position - _model.Attitude.Z * CamLookAhead - _camera.Position;
+        if (toTarget.LengthSquared() < 1e-6f)
+            return; // camera sitting on the look target (degenerate) — keep last orientation
+        // Basis.LookingAt needs the up not parallel to the view direction; the plane's up is ⟂
+        // to its nose so this practically never trips, but guard against extreme catch-up poses.
+        var up = Mathf.Abs(toTarget.Normalized().Dot(camUp)) > 0.999f ? Vector3.Up : camUp;
+        var desired = Basis.LookingAt(toTarget, up);
+        float tRot = 1f - Mathf.Exp(-CamRotSmooth * dt);
+        // Slerp via GetRotationQuaternion (which re-orthonormalizes each side) rather than
+        // Basis.Slerp: the latter feeds the raw basis straight into Quaternion(), and the tiny
+        // orthonormality drift that accumulates when the result is fed back frame after frame
+        // eventually trips its "not normalized" assert. Re-orthonormalizing here can't compound.
+        var current = _camera.Basis.GetRotationQuaternion();
+        _camera.Basis = new Basis(current.Slerp(desired.GetRotationQuaternion(), tRot));
     }
 
     /// <summary>On entering the paused screenshot freeze, initialise the orbit angles
