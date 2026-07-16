@@ -21,9 +21,10 @@ public sealed class SceneBuilder
     private readonly TextureArchive _textures;
     private readonly bool _fullbright;
     private readonly bool _generateCollision;
+    private readonly bool _cullBackfaces;
     private readonly Func<string, bool>? _blendTexture;
     private readonly Func<string, bool>? _billboardTexture;
-    private readonly Dictionary<(int Material, int Priority, int Rank), Material> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
@@ -49,9 +50,13 @@ public sealed class SceneBuilder
     /// Such a mesh is recentered on its own quad center so the billboard pivots there, not at
     /// the node origin (the source quads sit offset from it). Use only for genuinely 2D,
     /// origin-local sprites; NOT for the horizontal cloudlayer deck, which must stay flat.</param>
+    /// <param name="cullBackfaces">Backface-cull polygons not flagged SHOW_BACKFACE
+    /// ("unk2"), like the original engine — hides inward-facing interior structure (the
+    /// autogyro's frame lattice behind its fuselage openings). Used for aircraft; the
+    /// world keeps rendering double-sided until validated the same way.</param>
     public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false,
         bool generateCollision = false, Func<string, bool>? blendTexture = null,
-        Func<string, bool>? billboardTexture = null)
+        Func<string, bool>? billboardTexture = null, bool cullBackfaces = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -59,6 +64,7 @@ public sealed class SceneBuilder
         _generateCollision = generateCollision;
         _blendTexture = blendTexture;
         _billboardTexture = billboardTexture;
+        _cullBackfaces = cullBackfaces;
     }
 
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.</summary>
@@ -212,20 +218,23 @@ public sealed class SceneBuilder
             _meshPivotCache[meshIndex] = offset;
         }
 
-        // One Godot surface per (material, draw priority): polygons of different priority
-        // need different materials (the priority becomes a depth bias — see GetMaterial).
-        // Groups are kept in first-occurrence order = the original's within-mesh draw
-        // order; the group's rank is the equal-priority tie-break (later polygons drew
-        // over earlier ones — e.g. the gyro's canopy lattice over its fuselage skin).
-        var groups = new List<(int Material, int Priority, List<GameZPolygon> Polys)>();
-        var groupIndex = new Dictionary<(int, int), int>();
+        // One Godot surface per (material, draw priority, sidedness): polygons of
+        // different priority need different materials (the priority becomes a depth
+        // bias — see GetMaterial), and SHOW_BACKFACE polygons need a different cull
+        // mode when backface culling is on. Groups are kept in first-occurrence order
+        // = the original's within-mesh draw order; the group's rank is the
+        // equal-priority tie-break (later polygons drew over earlier ones — e.g. the
+        // tile meshes' roads and shoreline blends over their base grass).
+        var groups = new List<(int Material, int Priority, bool DoubleSided, List<GameZPolygon> Polys)>();
+        var groupIndex = new Dictionary<(int, int, bool), int>();
         foreach (var poly in mesh.Polygons)
         {
-            var key = (poly.MaterialIndex, poly.Priority);
+            bool doubleSided = !_cullBackfaces || poly.ShowBackface;
+            var key = (poly.MaterialIndex, poly.Priority, doubleSided);
             if (!groupIndex.TryGetValue(key, out int gi))
             {
                 groupIndex[key] = gi = groups.Count;
-                groups.Add((poly.MaterialIndex, poly.Priority, new List<GameZPolygon>()));
+                groups.Add((poly.MaterialIndex, poly.Priority, doubleSided, new List<GameZPolygon>()));
             }
             groups[gi].Polys.Add(poly);
         }
@@ -233,12 +242,12 @@ public sealed class SceneBuilder
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
-            var (materialIndex, priority, polys) = groups[rank];
+            var (materialIndex, priority, doubleSided, polys) = groups[rank];
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset);
-            st.SetMaterial(GetMaterial(materialIndex, priority, rank));
+            st.SetMaterial(GetMaterial(materialIndex, priority, rank, doubleSided));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -319,8 +328,8 @@ public sealed class SceneBuilder
     // Equal-priority tie-breaks, reproducing the original's draw order (drawn later =
     // on top). Both strictly subordinate to one priority level:
     // — within a mesh, by surface rank (first-occurrence order of the (material,
-    //   priority) group in the polygon list): the gyro canopy lattice over its fuselage;
-    //   contribution capped so it stays below typical cross-node steps.
+    //   priority) group in the polygon list): tile roads/shoreline blends over the
+    //   tile's base grass; contribution capped so it stays below cross-node steps.
     // — across nodes, by the node's flat index (nodes.json is a DFS serialization =
     //   draw order), applied as a per-instance shader parameter: the airfield's apron
     //   detail over its base tile, road decals over rail decals.
@@ -328,18 +337,18 @@ public sealed class SceneBuilder
     private const int SurfaceRankCap = 5;
     public const float NodeOrderBias = 5e-8f;
 
-    private Material GetMaterial(int materialIndex, int priority, int rank)
+    private Material GetMaterial(int materialIndex, int priority, int rank, bool doubleSided)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank);
+        var key = (materialIndex, priority, rank, doubleSided);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank);
+        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided);
         _materialCache[key] = mat;
         return mat;
     }
 
-    private Material BuildMaterial(int materialIndex, int priority, int rank)
+    private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -373,18 +382,19 @@ public sealed class SceneBuilder
                 mat.BillboardKeepScale = true;
                 return mat;
             }
-            return BiasMaterial(priority, rank, tex, null, blend, scissor);
+            return BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
         }
 
         var color = src?.Color ?? Colors.White;
-        return BiasMaterial(priority, rank, null, color, blend: color.A < 1f, scissor: false);
+        return BiasMaterial(priority, rank, doubleSided, null, color, blend: color.A < 1f, scissor: false);
     }
 
     private StandardMaterial3D NewStandard(Color? albedoColor = null)
     {
         var mat = new StandardMaterial3D
         {
-            // source winding/handedness not yet verified against Godot's — render both sides
+            // Only used for billboards (cloud sprites) and the missing-texture fallback,
+            // which should render from both sides regardless of source sidedness.
             CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             Roughness = 0.85f,
             Metallic = 0.0f,
@@ -400,11 +410,11 @@ public sealed class SceneBuilder
     // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
-    private ShaderMaterial BiasMaterial(int priority, int rank, ImageTexture? tex, Color? color, bool blend, bool scissor)
+    private ShaderMaterial BiasMaterial(int priority, int rank, bool doubleSided, ImageTexture? tex, Color? color, bool blend, bool scissor)
     {
         var mat = new ShaderMaterial
         {
-            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor),
+            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         mat.SetShaderParameter("depth_bias", bias);
@@ -415,15 +425,21 @@ public sealed class SceneBuilder
         return mat;
     }
 
-    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor)
+    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided)
     {
-        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0);
+        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
         var sb = new System.Text.StringBuilder();
         sb.AppendLine("shader_type spatial;");
-        sb.Append("render_mode skip_vertex_transform, cull_disabled");
+        // Sidedness: the source's visible side is where its vertex loop runs counter-
+        // clockwise (right-handed winding, verified on the autogyro's outward deck skin
+        // vs inward frame lattice); Godot front faces are clockwise, so single-sided
+        // source polygons keep Godot's BACK face — cull_front.
+        sb.Append(doubleSided
+            ? "render_mode skip_vertex_transform, cull_disabled"
+            : "render_mode skip_vertex_transform, cull_front");
         if (!shaded)
             sb.Append(", unshaded");
         sb.AppendLine(";");

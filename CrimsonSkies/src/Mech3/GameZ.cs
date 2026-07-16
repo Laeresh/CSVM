@@ -142,7 +142,12 @@ public sealed class GameZ
                     foreach (var x in ni.EnumerateArray())
                         poly.NormalIndices.Add(x.GetInt32());
                 }
-                poly.TriangleStrip = p.GetProperty("flags").TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                var pf = p.GetProperty("flags");
+                poly.TriangleStrip = pf.TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                // Double-sided flag. mech3ax v0.6.1 emits it as "unk2"; upstream has since
+                // identified it as SHOW_BACKFACE — accept both spellings.
+                poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
+                    && bf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
                 // since identified and renamed it to "priority" — accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
@@ -276,6 +281,10 @@ public sealed class GameZPolygon
     public List<Color>? VertexColors; // baked per-corner lighting, parallel to VertexIndices
     public int MaterialIndex = -1;
     public bool TriangleStrip;
+    // SHOW_BACKFACE ("unk2" in v0.6.1): render double-sided. Polygons without it are
+    // backface-culled by the original engine — e.g. the autogyro's interior frame
+    // lattice, which faces inward and must vanish from an outside camera.
+    public bool ShowBackface;
     // Draw-priority layer for coplanar geometry: 0 = base surface, >0 drawn on top
     // (terrain-transition patches, road/shadow decals, plane logos, cockpit gauge
     // needles up to 49), <0 drawn behind (skydome walls -49, zeppelin gasbags -10).

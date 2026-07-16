@@ -18,9 +18,12 @@ public sealed class PlaneBuilder
 {
     // Non-prop subtrees that make no sense in an exterior view: cockpit interiors are
     // separate (differently-scaled) models; damage/destroyed are alternate states.
+    // player_damage_off holds the intact duplicates (pdpNi) of the panels that
+    // player_damage_on already provides as pdpN_h — the original engine shows exactly
+    // one of the two groups (its vehicle-damage detail toggle); we model "damage on".
     private static readonly HashSet<string> SkipNames = new(StringComparer.OrdinalIgnoreCase)
     {
-        "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_on", "blood_hook",
+        "cockpit1", "cockpit2", "destroyed", "shadow", "player_damage_off", "blood_hook",
     };
 
     private readonly GameZ _gamez;
@@ -38,12 +41,31 @@ public sealed class PlaneBuilder
         // The propeller/rotor blur discs (rotorblur/zeprotorblur) are soft sprites — their
         // alpha peaks at ~26%, so the default 1-bit AlphaScissor cutout erases them entirely.
         // Alpha-BLEND them instead (as with the clouds) so the translucent disc shows.
-        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture);
+        // cullBackfaces: aircraft interior structure (the gyro's frame lattice) faces
+        // inward and must be culled from outside, as the original engine does.
+        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true);
         _spinningProps = spinningProps;
     }
 
     private static bool IsPropBlurTexture(string tex) =>
         tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
+
+    // Damage-state panels pdp1..8 (exterior) / pcdpN (cockpit) start INACTIVE in the
+    // original: its player_destruct_reset "plane_reset" anim deactivates them and
+    // re-activates the healthy pdpN_h panels, which are real airframe sections (the
+    // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
+    // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
+    private static bool IsDamagePanel(string name)
+    {
+        int start = name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase) ? 3
+            : name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase) ? 4 : -1;
+        if (start < 0 || start == name.Length)
+            return false;
+        for (int i = start; i < name.Length; i++)
+            if (!char.IsDigit(name[i]))
+                return false;
+        return true;
+    }
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
@@ -55,7 +77,7 @@ public sealed class PlaneBuilder
 
     private bool Skip(GameZNode node)
     {
-        if (SkipNames.Contains(node.Name))
+        if (SkipNames.Contains(node.Name) || IsDamagePanel(node.Name))
             return true;
         var kind = PropParts.Classify(node.Name);
         // Flight shows ONLY the spinning blur discs; the exterior viewer shows ONLY the static

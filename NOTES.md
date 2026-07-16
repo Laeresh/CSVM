@@ -35,18 +35,22 @@ https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
 - Maps have different states (Hangars open/closed, Zeppelin present, Cloud layer, Night Day)
 ## Milestone 2 Polishing
 - World Select -> Done
+- A lot of Z-Fighting -> Better but not Perfect (Z-Fighting is in the original too. Roof of airfield buildings still an issue)-> Done
 
-- A lot of Z-Fighting
-- Plane Models are damaged
-- Animation of PlaneModels (Ailerons, Ruder, Elevator) (Prop is already in)
-- Lights on Planes visible with texture?
+
+- Planes
+    - Plane Models are damaged -> Done (damage panels pdp1-8 now hidden, healthy pdpN_h panels restored — Bloodhawk wingtips, Kestrel outer wings; gyro interior lattice backface-culled like the original)
+    - Animation of PlaneModels (Ailerons, Ruder, Elevator) (Prop is already in)
+    - Lights on Planes visible with texture?
 - Mesh Collision for Planes 
     - collision in the original is a lot finer. Tip of wing collides with objects. Need real collider instead of rays
 - FlightModel
-    - Stalling when too low airspeed
-    - if plane is turned 90 degree it should not have lift -> nose going down
+    - Stalling when too low airspeed is in but not as prominent and should not go relative to plane but to ground. If too slow the plane should go into dive to the ground no matter the position.
+    - if plane is turned 90 degree it should have less lift -> nose going down
     - original flight model does not slow speed as much during ascend
 - Environment
     - moonSize ?
     - trees on forest texture
 - sky clouds move with plane
+- Camera
+    - Should flip with the plane (upside down)
