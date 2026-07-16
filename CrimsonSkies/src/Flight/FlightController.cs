@@ -42,6 +42,10 @@ public partial class FlightController : Node3D
     /// throttle-scaled. Null if the model has no propeller nodes.</summary>
     public PropAnimator? Props;
 
+    /// <summary>Flashes the plane's wingtip flares on the original's 1.5 s cycle; advanced
+    /// each frame. Null if the model has no wing-flare nodes.</summary>
+    public WingLightBlinker? WingLights;
+
     /// <summary>Draw the collision probe — the swept ray the crash test casts each
     /// physics frame — as a debug line (green; red on the impact frame).</summary>
     public bool DebugCollision;
@@ -117,6 +121,7 @@ public partial class FlightController : Node3D
     {
         _crashed = false;
         CrashEffect?.Clear();
+        WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
@@ -335,6 +340,11 @@ public partial class FlightController : Node3D
         // and speed up with throttle. Frozen while crashed or paused (a still disc reads
         // the same at any angle, and freezing it keeps screenshots deterministic).
         Props?.Advance(delta, _crashed || _paused ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
+
+        // Blink the wingtip flares on the data's 1.5 s cycle. Frozen while paused (so a
+        // screenshot catches a fixed state) and while crashed (the airframe is hidden anyway).
+        if (!_crashed && !_paused)
+            WingLights?.Advance(delta);
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)

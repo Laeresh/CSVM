@@ -11,7 +11,7 @@ landed item.
 
 ## Checklist
 
-1. ☐ Wing-light blink
+1. ☑ Wing-light blink
 2. ☐ Chase camera rolls with the plane
 3. ☐ Moon size
 4. ☐ Weather: distance fog, cloud-band whiteout, cloud deck anchoring, ambient puffs
@@ -22,7 +22,23 @@ landed item.
 
 ---
 
-## 1. Wing-light blink
+## 1. Wing-light blink — ☑ DONE (2026-07-16)
+
+**Landed as:** `WingLights` (Mech3, classifier + data constants) + `WingLightBlinker`
+(Flight, PropAnimator-style toggler). PlaneBuilder now builds the `wing_flare1/2` nodes
+hidden (reset state) and re-skins each glow quad (`oil_liteflare.tif`) as an additive,
+camera-facing billboard tinted the data's warm amber (LIGHT_STATE COLOR 0.88/0.78/0.36) —
+so the flare reads from any angle, not just from behind (the source quads are one-sided).
+In `--fly`, FlightController advances the blinker (frozen while paused/crashed, reset on
+respawn), flashing the flares for a short window (`FlashDuration` 0.08 s, TUNE — the data
+flash is one frame) every `WingLights.BlinkPeriod` 1.5 s. The additive-billboard treatment
+is scoped to the flare nodes by name (not the texture — `oil_liteflare` is also used by a
+few airframe meshes, which must not be recentered/billboarded). Verified: blink interval
+logged at 1.528/3.003/4.505 s (≈1.5 s); force-on screenshot shows both wingtips glowing
+amber from a banked chase view; static `--plane` viewer shows no flares; Bloodhawk/autogyro
+(no `wing_flare` nodes in the data) get no blinker and fly clean. The 1.25 m point lights
+the anim also toggles are skipped (negligible at chase distance). Remaining as-designed:
+`FlashDuration` is a first-approximation TUNE pending user playtest against the original.
 
 **Goal:** Planes' wingtip lights flash yellow every 1.5 s like the original (user-verified
 on Kestrel and Fury); today the flare sprites render permanently and are only visible

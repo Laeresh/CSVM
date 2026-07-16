@@ -27,10 +27,18 @@ public sealed class PlaneBuilder
     };
 
     private readonly GameZ _gamez;
+    private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
     private readonly bool _spinningProps;
+    private readonly List<Node3D> _wingFlares = new();
+    private StandardMaterial3D? _flareMaterial;
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;
+
+    /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned as
+    /// additive billboards. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
+    /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
+    public IReadOnlyList<Node3D> WingFlares => _wingFlares;
 
     /// <param name="spinningProps">Free-flight build: hide the static propeller disc and
     /// keep the spinning blur layers (a PropAnimator drives them). Default (exterior view)
@@ -38,6 +46,7 @@ public sealed class PlaneBuilder
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false)
     {
         _gamez = gamez;
+        _textures = textures;
         // The propeller/rotor blur discs (rotorblur/zeprotorblur) are soft sprites — their
         // alpha peaks at ~26%, so the default 1-bit AlphaScissor cutout erases them entirely.
         // Alpha-BLEND them instead (as with the clouds) so the translucent disc shows.
@@ -72,8 +81,46 @@ public sealed class PlaneBuilder
     {
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
-        return _scene.BuildSubtree(root, Skip)!;
+        var built = _scene.BuildSubtree(root, Skip)!;
+        CollectWingFlares(built);
+        return built;
     }
+
+    /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
+    /// the original starts them off and flashes them via wing_light.json's blink anim), and
+    /// re-skins each glow quad as an additive camera-facing billboard so it reads from any
+    /// angle — the source quads are one-sided (only showed from behind). See <see cref="WingLights"/>.</summary>
+    private void CollectWingFlares(Node node)
+    {
+        if (node is Node3D n3d && WingLights.IsFlare(n3d.Name))
+        {
+            n3d.Visible = false;
+            foreach (var child in n3d.GetChildren())
+                if (child is MeshInstance3D mi && mi.Name.ToString() == "mesh")
+                    mi.MaterialOverride = FlareMaterial();
+            _wingFlares.Add(n3d);
+        }
+        foreach (var child in node.GetChildren())
+            CollectWingFlares(child);
+    }
+
+    // Additive glow shared by every flare quad: unshaded, camera-facing, no depth write,
+    // tinted the original's warm amber (wing_light.json LIGHT_STATE COLOR). The soft
+    // oil_liteflare sprite (white core → transparent black) blends additively so its edges
+    // add nothing and the core glows — same treatment as the point-sprite lights.
+    private StandardMaterial3D FlareMaterial() => _flareMaterial ??= new StandardMaterial3D
+    {
+        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+        AlbedoTexture = _textures.Find(WingLights.FlareTexture),
+        AlbedoColor = WingLights.FlareColor,
+        VertexColorUseAsAlbedo = true,
+        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+        BlendMode = BaseMaterial3D.BlendModeEnum.Add,
+        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+        BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled,
+        BillboardKeepScale = true,
+    };
 
     private bool Skip(GameZNode node)
     {

@@ -207,10 +207,13 @@ public partial class PlaneViewer : Node3D
                     DebugCollision = debugCollision,
                     PlaneModel = planeModel,
                     Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
+                    WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
                 };
                 controller.AddChild(planeModel);
                 if (controller.Props != null)
                     GD.Print($"props: {controller.Props.Count} spinning blur nodes");
+                if (controller.WingLights != null)
+                    GD.Print($"wing lights: {controller.WingLights.Count} blinking flares");
 
                 // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
                 // its flipbook frames from the same texture archive. Built here while the
