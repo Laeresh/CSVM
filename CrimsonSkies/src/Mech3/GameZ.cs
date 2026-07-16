@@ -54,6 +54,7 @@ public sealed class GameZ
     private void ParseNodes(Stream stream)
     {
         using var doc = JsonDocument.Parse(BufferAll(stream));
+        int index = 0;
         foreach (var wrapper in doc.RootElement.EnumerateArray())
         {
             // Each node is an enum wrapper: {"Object3d": {...}} or {"Lod": {...}}
@@ -66,6 +67,7 @@ public sealed class GameZ
                 Kind = prop.Name,
                 Name = body.TryGetProperty("name", out var nm) ? nm.GetString() ?? "" : "",
                 MeshIndex = body.TryGetProperty("mesh_index", out var mi) ? mi.GetInt32() : -1,
+                Index = index++,
             };
             if (body.TryGetProperty("children", out var kids) && kids.ValueKind == JsonValueKind.Array)
                 foreach (var c in kids.EnumerateArray())
@@ -141,6 +143,10 @@ public sealed class GameZ
                         poly.NormalIndices.Add(x.GetInt32());
                 }
                 poly.TriangleStrip = p.GetProperty("flags").TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
+                // since identified and renamed it to "priority" — accept both spellings.
+                if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
+                    poly.Priority = pr.GetInt32();
                 if (p.TryGetProperty("vertex_colors", out var vcs) && vcs.ValueKind == JsonValueKind.Array)
                 {
                     // Baked per-corner lighting (RGB 0-255); the original engine renders
@@ -238,6 +244,10 @@ public sealed class GameZNode
     public string Kind = "";   // "Object3d", "Lod", "World", "Display", "Window", "Camera", "Light"
     public string Name = "";
     public int MeshIndex = -1;
+    // Flat position in nodes.json. The file is a depth-first serialization of the tree,
+    // so this is the original engine's draw order — the cross-node tie-break for
+    // coplanar surfaces of equal polygon priority (later node draws on top).
+    public int Index;
     public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
     public Transform3D? Local;
     public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
@@ -266,6 +276,10 @@ public sealed class GameZPolygon
     public List<Color>? VertexColors; // baked per-corner lighting, parallel to VertexIndices
     public int MaterialIndex = -1;
     public bool TriangleStrip;
+    // Draw-priority layer for coplanar geometry: 0 = base surface, >0 drawn on top
+    // (terrain-transition patches, road/shadow decals, plane logos, cockpit gauge
+    // needles up to 49), <0 drawn behind (skydome walls -49, zeppelin gasbags -10).
+    public int Priority;
 }
 
 public sealed class GameZMaterial

@@ -29,18 +29,24 @@ https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
 
 
 ## Issues
+- Dive sound not as present in the game
+- color grading for the skybox
+- wrap around on maps or endless sea?
+- Maps have different states (Hangars open/closed, Zeppelin present, Cloud layer, Night Day)
+## Milestone 2 Polishing
+- World Select -> Done
+
 - A lot of Z-Fighting
 - Plane Models are damaged
-- Animation of PlaneModels (Prop is already in)
-- Stalling when too low airspeed
-- Dive sound not as present in the game
-- if plane is turned 90 degree it should not have lift -> nose going down
-- collision in the original is a lot finer. Tip of wing collides with objects. Need real collider instead of rays
-- Maps have different states (Hangars open/closed, Zeppelin present, Cloud layer, Night Day)
-- original flight model does not slow speed as much during ascend
-- color grading for the skybox
-- moonSize ?
-- trees on forest texture
-- wrap around on maps or endless sea?
+- Animation of PlaneModels (Ailerons, Ruder, Elevator) (Prop is already in)
+- Lights on Planes visible with texture?
+- Mesh Collision for Planes 
+    - collision in the original is a lot finer. Tip of wing collides with objects. Need real collider instead of rays
+- FlightModel
+    - Stalling when too low airspeed
+    - if plane is turned 90 degree it should not have lift -> nose going down
+    - original flight model does not slow speed as much during ascend
+- Environment
+    - moonSize ?
+    - trees on forest texture
 - sky clouds move with plane
-

@@ -9,6 +9,11 @@ namespace CrimsonSkies.Mech3;
 /// node hierarchy, n-gon triangulation, and a shared material cache. Callers
 /// (PlaneBuilder, WorldBuilder) supply what to skip; the LOD rule (keep only the
 /// nearest level of each LOD group) is common and lives here.
+/// Polygons carry a draw priority (GameZPolygon.Priority) the original engine uses to
+/// layer coplanar geometry (terrain-transition patches, road/shadow decals, plane
+/// logos over the fuselage, skydome behind everything); non-zero priorities become a
+/// per-surface depth bias — a view-space pull toward the eye — so those layers
+/// resolve without z-fighting at any viewing distance.
 /// </summary>
 public sealed class SceneBuilder
 {
@@ -18,7 +23,8 @@ public sealed class SceneBuilder
     private readonly bool _generateCollision;
     private readonly Func<string, bool>? _blendTexture;
     private readonly Func<string, bool>? _billboardTexture;
-    private readonly Dictionary<int, StandardMaterial3D> _materialCache = new();
+    private readonly Dictionary<(int Material, int Priority, int Rank), Material> _materialCache = new();
+    private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
@@ -84,6 +90,9 @@ public sealed class SceneBuilder
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
+                // Cross-node draw-order tie-break for equal-priority coplanar surfaces:
+                // the node's flat index is the original's draw order (later = on top).
+                mi.SetInstanceShaderParameter("node_bias", node.Index * NodeOrderBias);
                 // Billboard meshes were recentered on their quad center; put the instance
                 // there so the material's billboard pivots at the center, not the node origin.
                 if (_meshPivotCache.TryGetValue(node.MeshIndex, out var pivot))
@@ -203,23 +212,33 @@ public sealed class SceneBuilder
             _meshPivotCache[meshIndex] = offset;
         }
 
-        // one Godot surface per material
-        var byMaterial = new Dictionary<int, List<GameZPolygon>>();
+        // One Godot surface per (material, draw priority): polygons of different priority
+        // need different materials (the priority becomes a depth bias — see GetMaterial).
+        // Groups are kept in first-occurrence order = the original's within-mesh draw
+        // order; the group's rank is the equal-priority tie-break (later polygons drew
+        // over earlier ones — e.g. the gyro's canopy lattice over its fuselage skin).
+        var groups = new List<(int Material, int Priority, List<GameZPolygon> Polys)>();
+        var groupIndex = new Dictionary<(int, int), int>();
         foreach (var poly in mesh.Polygons)
         {
-            if (!byMaterial.TryGetValue(poly.MaterialIndex, out var list))
-                byMaterial[poly.MaterialIndex] = list = new List<GameZPolygon>();
-            list.Add(poly);
+            var key = (poly.MaterialIndex, poly.Priority);
+            if (!groupIndex.TryGetValue(key, out int gi))
+            {
+                groupIndex[key] = gi = groups.Count;
+                groups.Add((poly.MaterialIndex, poly.Priority, new List<GameZPolygon>()));
+            }
+            groups[gi].Polys.Add(poly);
         }
 
         var arrayMesh = new ArrayMesh();
-        foreach (var (materialIndex, polys) in byMaterial)
+        for (int rank = 0; rank < groups.Count; rank++)
         {
+            var (materialIndex, priority, polys) = groups[rank];
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset);
-            st.SetMaterial(GetMaterial(materialIndex));
+            st.SetMaterial(GetMaterial(materialIndex, priority, rank));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -290,11 +309,79 @@ public sealed class SceneBuilder
         }
     }
 
-    private StandardMaterial3D GetMaterial(int materialIndex)
-    {
-        if (_materialCache.TryGetValue(materialIndex, out var cached))
-            return cached;
+    // Depth-bias fraction per priority level. Polygons are pulled toward the eye by
+    // priority × this fraction of their view distance — same projected position, nearer
+    // depth — replicating the original's coplanar-decal layering (terrain patches,
+    // road/shadow decals, plane logos) without z-fighting at any range.
+    // TUNE: big enough to beat coplanar interpolation noise at 10 km, small enough that
+    // the ±49 extremes (cockpit gauges, skydome) stay well under 1% of view distance.
+    private const float DepthBiasPerLevel = 2e-4f;
+    // Equal-priority tie-breaks, reproducing the original's draw order (drawn later =
+    // on top). Both strictly subordinate to one priority level:
+    // — within a mesh, by surface rank (first-occurrence order of the (material,
+    //   priority) group in the polygon list): the gyro canopy lattice over its fuselage;
+    //   contribution capped so it stays below typical cross-node steps.
+    // — across nodes, by the node's flat index (nodes.json is a DFS serialization =
+    //   draw order), applied as a per-instance shader parameter: the airfield's apron
+    //   detail over its base tile, road decals over rail decals.
+    private const float SurfaceRankBias = 2e-6f;
+    private const int SurfaceRankCap = 5;
+    public const float NodeOrderBias = 5e-8f;
 
+    private Material GetMaterial(int materialIndex, int priority, int rank)
+    {
+        rank = Math.Min(rank, SurfaceRankCap);
+        var key = (materialIndex, priority, rank);
+        if (_materialCache.TryGetValue(key, out var cached))
+            return cached;
+        var mat = BuildMaterial(materialIndex, priority, rank);
+        _materialCache[key] = mat;
+        return mat;
+    }
+
+    private Material BuildMaterial(int materialIndex, int priority, int rank)
+    {
+        var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
+            ? _gamez.Materials[materialIndex]
+            : null;
+
+        if (src?.TextureName is { } texName)
+        {
+            var tex = _textures.Find(texName);
+            if (tex == null)
+                return NewStandard(albedoColor: Colors.Magenta); // make missing textures obvious
+
+            // Soft-alpha textures (baked shadow decals, clouds, prop blur, waterfalls,
+            // smoke — detected from the pixels, see TextureArchive.LastAlphaIsSoft) and
+            // the caller's explicit blend list alpha-blend; every other alpha texture
+            // scissors (hard cutout — right for fences, trees, railings).
+            bool blend = _textures.LastHadAlpha
+                && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
+            bool scissor = _textures.LastHadAlpha && !blend;
+            // Cloud sprites face the camera (their meshes are recentered to match). They
+            // keep StandardMaterial3D: the bias shader has no billboard support, and
+            // free-floating sprites have nothing to z-fight with.
+            if (_billboardTexture != null && _billboardTexture(texName))
+            {
+                var mat = NewStandard();
+                mat.AlbedoTexture = tex;
+                if (blend)
+                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
+                else if (scissor)
+                    mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
+                mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
+                mat.BillboardKeepScale = true;
+                return mat;
+            }
+            return BiasMaterial(priority, rank, tex, null, blend, scissor);
+        }
+
+        var color = src?.Color ?? Colors.White;
+        return BiasMaterial(priority, rank, null, color, blend: color.A < 1f, scissor: false);
+    }
+
+    private StandardMaterial3D NewStandard(Color? albedoColor = null)
+    {
         var mat = new StandardMaterial3D
         {
             // source winding/handedness not yet verified against Godot's — render both sides
@@ -305,41 +392,76 @@ public sealed class SceneBuilder
         };
         if (_fullbright)
             mat.ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded;
-        if (materialIndex >= 0 && materialIndex < _gamez.Materials.Count)
-        {
-            var src = _gamez.Materials[materialIndex];
-            if (src.TextureName != null)
-            {
-                var tex = _textures.Find(src.TextureName);
-                if (tex != null)
-                {
-                    mat.AlbedoTexture = tex;
-                    if (_textures.LastHadAlpha)
-                        // Clouds alpha-blend (soft); everything else scissors (hard cutout).
-                        mat.Transparency = _blendTexture != null && _blendTexture(src.TextureName)
-                            ? BaseMaterial3D.TransparencyEnum.Alpha
-                            : BaseMaterial3D.TransparencyEnum.AlphaScissor;
-                    // Cloud sprites face the camera (their meshes are recentered to match).
-                    if (_billboardTexture != null && _billboardTexture(src.TextureName))
-                    {
-                        mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-                        mat.BillboardKeepScale = true;
-                    }
-                }
-                else
-                {
-                    mat.AlbedoColor = Colors.Magenta; // make missing textures obvious
-                }
-            }
-            else
-            {
-                mat.AlbedoColor = src.Color;
-                if (src.Color.A < 1f)
-                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-            }
-        }
-        _materialCache[materialIndex] = mat;
+        if (albedoColor is { } c)
+            mat.AlbedoColor = c;
         return mat;
+    }
+
+    // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
+    // eye (or pushes it away, negative priority) by a fraction of its view distance.
+    // The per-node draw-order term is added at instance level (see BuildSubtree).
+    private ShaderMaterial BiasMaterial(int priority, int rank, ImageTexture? tex, Color? color, bool blend, bool scissor)
+    {
+        var mat = new ShaderMaterial
+        {
+            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor),
+        };
+        float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
+        mat.SetShaderParameter("depth_bias", bias);
+        if (tex != null)
+            mat.SetShaderParameter("albedo_tex", tex);
+        if (color is { } c)
+            mat.SetShaderParameter("albedo_color", c);
+        return mat;
+    }
+
+    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor)
+    {
+        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0);
+        if (_biasShaderCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("shader_type spatial;");
+        sb.Append("render_mode skip_vertex_transform, cull_disabled");
+        if (!shaded)
+            sb.Append(", unshaded");
+        sb.AppendLine(";");
+        sb.AppendLine("uniform float depth_bias = 0.0;");
+        sb.AppendLine("instance uniform float node_bias = 0.0;"); // per-node draw-order tie-break
+        if (textured)
+            sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;");
+        else
+            sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
+        sb.AppendLine(@"
+void vertex() {
+    VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    NORMAL = normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
+    // Scale toward the eye (the view-space origin): identical projected position,
+    // depth nudged nearer by bias × distance — a scale-invariant polygon offset.
+    VERTEX *= 1.0 - (depth_bias + node_bias);
+}
+
+void fragment() {");
+        sb.AppendLine(textured
+            ? "    vec4 col = COLOR * texture(albedo_tex, UV);"
+            : "    vec4 col = COLOR * albedo_color;");
+        sb.AppendLine("    ALBEDO = col.rgb;");
+        if (shaded)
+        {
+            sb.AppendLine("    ROUGHNESS = 0.85;");
+            sb.AppendLine("    METALLIC = 0.0;");
+            sb.AppendLine("    SPECULAR = 0.5;");
+        }
+        if (blend || scissor)
+            sb.AppendLine("    ALPHA = col.a;");
+        if (scissor)
+            sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        sb.AppendLine("}");
+
+        var shader = new Shader { Code = sb.ToString() };
+        _biasShaderCache[key] = shader;
+        return shader;
     }
 
     private static string Sanitize(string name)
