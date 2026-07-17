@@ -4,6 +4,7 @@
 - First Render -> Done
 - First Area -> Done
 - Free Flight -> in Progress
+- Plane paints and decals
 - Player Controller with shooting
 - Flight AI
 - First Enemy with behaviour
@@ -26,33 +27,34 @@
 - Nitro (Special Look, Smoke, Wobble, Speed Boost)
 ## Resouces
 https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
-
+https://github.com/bethington/ghidra-mcp
 
 ## Issues
 - Dive sound not as present in the game
 - color grading for the skybox
-- wrap around on maps or endless sea?
-- Maps have different states (Hangars open/closed, Zeppelin present, Cloud layer, Night Day)
-- Environment
-    - What are the for params for?
 - FlightModel
     - Turn rates, especially rolling is a lot faster in original -> Added a factor
-    - Should loose height on stalling
-## Milestone 2 Polishing
-- World Select -> Done
-- A lot of Z-Fighting -> Better but not Perfect (Z-Fighting is in the original too. Roof of airfield buildings still an issue)-> Done
-
-
-- Planes
-    - Plane Models are damaged -> Done (damage panels pdp1-8 now hidden, healthy pdpN_h panels restored — Bloodhawk wingtips, Kestrel outer wings; gyro interior lattice backface-culled like the original)
-    - Animation of PlaneModels (Ailerons, Ruder, Elevator) (Prop is already in)
-    - Lights on Planes visible with texture?
-- Mesh Collision for Planes 
-    - collision in the original is a lot finer. Tip of wing collides with objects. Need real collider instead of rays
-- FlightModel
-    - Stalling when too low airspeed is in but not as prominent and should not go relative to plane but to ground. If too slow the plane should go into dive to the ground no matter the position.
-    - if plane is turned 90 degree it should have less lift -> nose going down
-    - original flight model does not slow speed as much during ascend
+    - Should loose height on stalling -> Done
+## Milestone 2 Polishing Run 2
+- Remove warning at start for pir_spinner.tif. the image is not in the source files and the stack traces eats tokens.
 - Environment
-    - trees on forest texture
-- sky clouds move with plane
+    - Maps have different states (Hangars open/closed, Zeppelin present) depending on Mission and scenario. Need to analyze mission files.
+    - Maps have animated objects like cars and trains (with steam clouds)
+    - Maps have desctructable objects that are loaded together with the non-damaged ones that leads to flickering (oil-tanks on airport, hangars)
+    - The game seems to have some kind of wraparound. In the original the terrain or water does not seem to end. Not sure how this works (Water should be easy by repeating but the terrain does not have any gaps). Perhaps procedually generated.
+    - wrap around on maps or endless sea?
+    - Cosmetics:
+        - Clouds render through fog
+        - clouddeck to bright
+    - Errors thrown in New York and Rocky Mountains areas
+    - Fog in Rocky Mountains not correct (bright white, hard cut off)
+    - Rocky Mountains IA1 has rain weather effect
+    - Documentation for .json parameters
+- DMG Model
+    - Collider too large on some planes (Tail of BloodHawk, a lot of empty space)
+    - HP for components (vehicle.json)
+    - Plains lose parts (damaged models) when getting shot or lightly crashing into things
+    - Collision are not always crashes, depends on which part is hit and speed, sometimes only damages the plane
+    - There are hints on damage animation in the vehicle.json
+    - On Crash there is not only a explosion but the plane breaks apart and the parts are lying on the ground
+
