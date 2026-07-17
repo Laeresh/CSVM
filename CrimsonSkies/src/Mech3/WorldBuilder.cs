@@ -17,7 +17,8 @@ public sealed class WorldBuilder
     // Non-scenery world content: 'horizon' is the original skydome (built separately via
     // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'
     // are flight-boundary volumes, 'dzpaths' are colored path ribbons.
-    private static bool SkipWorldNode(GameZNode n) =>
+    // Internal: ClutterBuilder walks the same placed world with the same exclusions.
+    internal static bool SkipWorldNode(GameZNode n) =>
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || n.Name.StartsWith("fvol", StringComparison.OrdinalIgnoreCase);

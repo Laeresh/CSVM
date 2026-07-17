@@ -15,7 +15,7 @@ landed item.
 2. ☑ Chase camera rolls with the plane
 3. ☑ Moon size — no change needed (user re-checked in-game 2026-07-16: already matches)
 4. ☑ Weather: distance fog ☑ (remodeled 2026-07-17: cylinder + FOG_ALTITUDE + sRGB gray), cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☑
-5. ☐ Forest trees missing from forest-textured terrain
+5. ☑ Forest trees — clutter-template system (2026-07-17); tree crashes user-confirmed
 6. ☐ Flight model: stall toward ground, knife-edge lift, climb speed retention
 7. ☐ Control-surface animation (ailerons/elevators/rudders)
 8. ☐ Finer plane collision (real swept shapes instead of one ray)
@@ -248,7 +248,30 @@ drift past the plane (`C1 IA1 Cloud Puffs and Moon.png`).
 clears above; distant terrain fades at 1000–4000 m (screenshot vs original); deck stays
 overhead in level flight across the map; puffs drift past at altitude. User playtest.
 
-## 5. Forest trees
+## 5. Forest trees — ☑ DONE (2026-07-17)
+
+**Landed as:** `src/Mech3/Clutter.cs` (`ClutterBuilder`). The diagnosis overturned the
+"placed subtrees" assumption: all 28 tree nodes hang under `terpat02`, a parentless,
+UNREFERENCED root — one of the original's **clutter templates**. The chapter boot script
+(interp.json → `support\c1\adjust.gw`) registers them (`AddClutterTemplates terpat02` /
+`river1` / `river2`); a template is a ground quad whose texture names the terrain texture
+it decorates (terpat02.tif = the forest texture) and whose size (512 m) is the tiling
+period, with decoration sprites (single one-sided quads: firs 17.8–22.5 m, bushes) at
+local positions on the patch. `ClutterBuilder.TemplateNames` reads the chapter's list;
+`Build` stamps each template across every placed world polygon textured with its ground
+texture on a fixed world-space grid of the period (the original's exact alignment is
+undecoded; world UV tiling is too non-uniform — 256–1280 m/repeat — to follow), planting
+each sprite at the polygon's barycentric surface height, skipping >75° slopes, deduping
+decal-layered coplanar polys. C1: 9,303 sprites (≈9k firs + 311 river bushes). Rendered
+as one Y-axis-billboard MultiMesh per kind — upright, fullbright, scissor cutout, same
+cylindrical fog as the world shader. Collision (flight only): one crossed-quad trimesh
+(`clutter_col`, 37k tris), and the FlightController crash log now names the hit collider.
+Only flat sprite cards billboard — C2's filmblock 3D buildings are detected and skipped
+(future). Verified: firs render exactly on forest-textured slopes (bare valleys bare),
+close-ups upright and planted; level scripted flight through the forest valley clean;
+crash-name logging proven (`CRASH into g314/col`); **user-confirmed in-game
+(2026-07-17): crashing into trees works.** Remaining TUNE: density/size eyeball vs the
+original during normal playtests.
 
 **Goal:** Forest-textured hillsides show standing trees as in the original (user-confirmed
 fidelity gap).

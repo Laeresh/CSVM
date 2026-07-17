@@ -134,10 +134,13 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>True if the segment crosses any static world collider; on a hit,
-    /// <paramref name="point"/> is the impact position (else the segment end).</summary>
-    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point)
+    /// <paramref name="point"/> is the impact position (else the segment end) and
+    /// <paramref name="hitName"/> names the collider (parent/body — e.g. a terrain
+    /// tile's "g27889/col", or the tree field's "world1/clutter_col").</summary>
+    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName)
     {
         point = to;
+        hitName = "";
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
@@ -145,10 +148,12 @@ public partial class FlightController : Node3D
         if (hit.Count == 0)
             return false;
         point = (Vector3)hit["position"];
+        if (hit["collider"].Obj is Node body)
+            hitName = $"{body.GetParent()?.Name}/{body.Name}";
         return true;
     }
 
-    private void Crash(Vector3 impact)
+    private void Crash(Vector3 impact, string hitName)
     {
         _crashed = true;
         _autoRespawnIn = AutoRespawnDelay;
@@ -156,7 +161,7 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
         Audio?.OnCrash();
         CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
-        GD.Print($"CRASH at ({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
+        GD.Print($"CRASH into {hitName} at ({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
 
@@ -216,12 +221,12 @@ public partial class FlightController : Node3D
         var step = to - prev;
         float len = step.Length();
         var probeEnd = len > 1e-4f ? to + step / len * CollisionMargin : to;
-        bool hit = HitWorld(prev, probeEnd, out var impact);
+        bool hit = HitWorld(prev, probeEnd, out var impact, out var hitName);
         if (_probe != null)
             DrawProbe(prev, probeEnd, hit);
         if (hit)
         {
-            Crash(impact);
+            Crash(impact, hitName);
             return;
         }
 

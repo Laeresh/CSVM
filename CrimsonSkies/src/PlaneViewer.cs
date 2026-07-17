@@ -43,6 +43,9 @@ namespace CrimsonSkies;
 ///                                in --chapter/--fly modes: the chapter's gamez, default C1/gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/<chapter>/texture.zip, chapter=C1)
 ///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
+///   --interp=path                interp.zbd extraction (default: ../extracted/interp.json) — the
+///                                boot scripts naming each chapter's clutter templates (forest
+///                                trees, river bushes) placed onto matching-textured terrain
 ///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
@@ -99,6 +102,7 @@ public partial class PlaneViewer : Node3D
         var texturesPath = Path.Combine(repoRoot, "extracted", "C1", "texture.zip");
         var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
         var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
+        var interpPath = Path.Combine(repoRoot, "extracted", "interp.json");
         bool mute = false;
         bool debugCollision = false;
 
@@ -116,6 +120,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) { texturesPath = arg["--textures=".Length..]; texturesOverridden = true; }
             else if (arg.StartsWith("--zrdr=")) { zrdrPath = arg["--zrdr=".Length..]; zrdrOverridden = true; }
+            else if (arg.StartsWith("--interp=")) interpPath = arg["--interp=".Length..];
             else if (arg.StartsWith("--sounds=")) { soundsPath = arg["--sounds=".Length..]; soundsOverridden = true; }
             else if (arg == "--mute") mute = true;
             else if (arg == "--debug-collision") debugCollision = true;
@@ -183,6 +188,25 @@ public partial class PlaneViewer : Node3D
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
                 _deck = builder.CloudDeck;         // the cloudlayer overcast, moved to follow the player
+
+                // Clutter: forest trees / river bushes. The chapter's boot script names the
+                // templates; ClutterBuilder stamps them onto every matching-textured world
+                // polygon (see Clutter.cs). Solid in flight, like the original.
+                var clutterNames = ClutterBuilder.TemplateNames(interpPath, _chapter);
+                if (clutterNames.Count > 0)
+                {
+                    var clutterBuilder = new ClutterBuilder(gamez, textures);
+                    if (clutterBuilder.Build(clutterNames, collision: _fly) is { } clutter)
+                    {
+                        _plane.AddChild(clutter);
+                        GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites ({clutterBuilder.Summary})" +
+                                 (_fly ? $", {clutterBuilder.ColliderTriangles} collision tris" : ""));
+                    }
+                }
+                else
+                {
+                    GD.Print($"clutter: no templates for {_chapter} ({interpPath})");
+                }
                 if (_fly || _skyZoneExplicit)
                 {
                     // The original skydome, anchored to the camera each frame. Scaled up so
