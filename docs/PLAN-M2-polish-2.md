@@ -14,7 +14,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 
 ## Checklist
 
-1. ☐ Log hygiene — missing-texture + clutter warnings: once, without stack traces
+1. ☑ Log hygiene — missing-texture + clutter warnings: once, without stack traces **(DONE 2026-07-17)**
 2. ☐ C4/C5 shader instance-uniform errors (buffer size; + C5 `rtexture*` check)
 3. ☐ C4 white fog — FOG_COLOR integer-RGB schema fix
 4. ☐ Clouds render through fog — fog term for cloud sprites + puffs
@@ -56,6 +56,19 @@ times — the noise eats Claude-session tokens and buries real errors.
 
 **Verify:** C1/C4/C5 build logs: each missing texture exactly one line, `cblock1` ≤ one line
 per decoration kind, zero stack traces from these paths.
+
+**DONE (2026-07-17):** `TextureArchive` now reports each unresolved name once via `GD.Print`
+(a `_reportedMissing` HashSet; no more `GD.PushWarning` managed stack trace), exposes
+`MissingTextures` for the one-line end-of-build summary PlaneViewer prints, and a small
+`KnownAbsentFromGameData` set (`pir_spinner`, `barngrill` — verified absent from every
+extracted chapter) that `IsKnownAbsent` reports as a data gap; SceneBuilder renders those as
+neutral gray (0.5) instead of the debug magenta, keeping magenta only for genuine
+lookup-resolution failures. `Clutter.ParseTemplate` collapses the per-decoration "not a sprite
+quad" spam into one summary line per template (distinct example names + true count) and drops
+the stack traces on its other two warnings. Verified via windowed `--fly --screenshot` runs on
+C1/C4/C5: C5 went from ~169 stack-trace warnings (7 cblock templates) to 7 one-line summaries;
+each of `pir_spinner`/`barngrill` is one line + the summary line; grep for stack-trace frames
+across each full log = 0; C1's 9,303-sprite clutter and normal load are unchanged.
 
 ## 2. C4/C5 "too many shader instance variables" errors
 

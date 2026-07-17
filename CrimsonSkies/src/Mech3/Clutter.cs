@@ -137,25 +137,28 @@ public sealed class ClutterBuilder
         var root = FindTemplateRoot(name);
         if (root == null)
         {
-            GD.PushWarning($"clutter template '{name}' not found in gamez");
+            GD.Print($"clutter: template '{name}' not found in gamez");
             return null;
         }
         var ground = FirstWithMesh(root);
         if (ground == null || GroundInfo(ground) is not { } info)
         {
-            GD.PushWarning($"clutter template '{name}' has no textured ground quad");
+            GD.Print($"clutter: template '{name}' has no textured ground quad");
             return null;
         }
         var template = new Template { GroundTexture = info.Texture, Period = info.Period };
 
         var kinds = new Dictionary<int, Kind>();
+        // A template like C5's cblock1 has dozens of non-sprite (3D building) decorations;
+        // collect them and log ONE summary line rather than a warning per decoration.
+        List<string>? skipped = null;
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
             var sprite = FirstWithMesh(deco, includeSelf: false);
             if (sprite == null || SpriteInfo(sprite.MeshIndex) is not { } s)
             {
-                GD.PushWarning($"clutter template '{name}': decoration '{deco.Name}' is not a sprite quad — skipped");
+                (skipped ??= new List<string>()).Add(deco.Name);
                 continue;
             }
             if (!kinds.TryGetValue(sprite.MeshIndex, out var kind))
@@ -171,6 +174,19 @@ public sealed class ClutterBuilder
             }
             var pos = deco.Local?.Origin ?? Vector3.Zero;
             kind.CellOffsets.Add(new Vector2(pos.X - info.Min.X, pos.Z - info.Min.Y));
+        }
+        if (skipped != null)
+        {
+            // Distinct example names (many decorations share a name — repeats would read
+            // like a bug); the count stays the true number of skipped decoration nodes.
+            var distinct = new List<string>();
+            foreach (var s2 in skipped)
+                if (!distinct.Contains(s2))
+                    distinct.Add(s2);
+            var shown = distinct.Count > 5
+                ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
+                : string.Join(", ", distinct);
+            GD.Print($"clutter: template '{name}' skipped {skipped.Count} non-sprite decoration(s) ({shown})");
         }
         return template.Kinds.Count > 0 ? template : null;
     }

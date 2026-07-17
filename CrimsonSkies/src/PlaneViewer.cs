@@ -322,6 +322,9 @@ public partial class PlaneViewer : Node3D
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
                      $"{meshInstances} mesh instances, {colliders} colliders, {sw.ElapsedMilliseconds} ms");
+            if (textures.MissingTextures.Count > 0)
+                GD.Print($"[textures] {textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
+                         string.Join(", ", textures.MissingTextures));
         }
         catch (Exception e)
         {

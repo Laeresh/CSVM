@@ -21,6 +21,29 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, string> _byBaseName = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, (bool HasAlpha, bool Soft)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
+    // Distinct texture names this archive failed to resolve, each already logged once.
+    private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
+
+    // Texture names referenced by gamez meshes that ship in NO archive of a retail
+    // install — verified absent across all extracted chapters (2026-07-17). The
+    // original engine tolerates them (renders neutral), so we do too: a quiet gray
+    // fallback instead of the debug magenta, and a one-line data-gap note instead of
+    // a lookup-failure warning. Anything NOT on this list that goes missing is likely
+    // our own name-resolution failing and stays loud (magenta + the "not found" line).
+    private static readonly HashSet<string> KnownAbsentFromGameData = new(StringComparer.OrdinalIgnoreCase)
+    {
+        "pir_spinner", // referenced by every chapter's gamez (a pirate-zeppelin spinner disc)
+        "barngrill",   // C5 only
+    };
+
+    /// <summary>True if the name is a texture the retail game data itself lacks (see
+    /// KnownAbsentFromGameData) — callers render a neutral fallback, not the debug magenta.</summary>
+    public static bool IsKnownAbsent(string materialTextureName) =>
+        KnownAbsentFromGameData.Contains(Path.GetFileNameWithoutExtension(materialTextureName));
+
+    /// <summary>Distinct texture names this archive could not resolve, for an end-of-build
+    /// summary line. Each was already reported once (one line, no stack trace) by Find.</summary>
+    public IReadOnlyCollection<string> MissingTextures => _reportedMissing;
 
     public TextureArchive(string path)
     {
@@ -78,9 +101,13 @@ public sealed class TextureArchive : IDisposable
                 tex = ImageTexture.CreateFromImage(img);
             }
         }
-        else
+        else if (_reportedMissing.Add(baseName))
         {
-            GD.PushWarning($"texture not found in archive: {materialTextureName}");
+            // Report each distinct miss once as a plain line. GD.PushWarning would print
+            // a full managed stack trace per call in Godot .NET, which buries real errors.
+            GD.Print(IsKnownAbsent(materialTextureName)
+                ? $"[textures] {materialTextureName}: absent from game data — gray fallback"
+                : $"[textures] not found in archive: {materialTextureName}");
         }
         _cache[baseName] = tex;
         _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft);

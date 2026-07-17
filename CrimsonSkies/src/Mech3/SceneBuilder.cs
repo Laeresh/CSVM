@@ -358,7 +358,12 @@ public sealed class SceneBuilder
         {
             var tex = _textures.Find(texName);
             if (tex == null)
-                return NewStandard(albedoColor: Colors.Magenta); // make missing textures obvious
+                // Genuine game-data gaps (pir_spinner, barngrill) get a neutral gray, like
+                // the original engine; anything else is likely our lookup failing and stays
+                // debug-magenta so it's obvious.
+                return NewStandard(albedoColor: TextureArchive.IsKnownAbsent(texName)
+                    ? new Color(0.5f, 0.5f, 0.5f)
+                    : Colors.Magenta);
 
             // Soft-alpha textures (baked shadow decals, clouds, prop blur, waterfalls,
             // smoke — detected from the pixels, see TextureArchive.LastAlphaIsSoft) and
