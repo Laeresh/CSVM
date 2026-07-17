@@ -1,3 +1,4 @@
+using System;
 using CrimsonSkies.Effects;
 using Godot;
 
@@ -52,8 +53,13 @@ public partial class FlightController : Node3D
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
 
-    /// <summary>Draw the collision probe — the swept ray the crash test casts each
-    /// physics frame — as a debug line (green; red on the impact frame).</summary>
+    /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
+    /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
+    /// back to the old center-ray-only test.</summary>
+    public PlaneCollider? Collider;
+
+    /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
+    /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
 
     private FlightModel _model = null!;
@@ -164,7 +170,7 @@ public partial class FlightController : Node3D
         return true;
     }
 
-    private void Crash(Vector3 impact, string hitName)
+    private void Crash(Vector3 impact, string hitName, string part)
     {
         _crashed = true;
         _autoRespawnIn = AutoRespawnDelay;
@@ -172,7 +178,8 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
         Audio?.OnCrash();
         CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
-        GD.Print($"CRASH into {hitName} at ({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
+        GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
+                 $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
 
@@ -227,18 +234,28 @@ public partial class FlightController : Node3D
         _model.Step(input, dt);
 
         // Crash when the frame's flight path runs into solid world geometry (terrain,
-        // buildings). Sweeping prev→next avoids tunnelling through terrain in a fast
-        // dive; the extra margin keeps the nose (not the plane's center) off the wall.
+        // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
+        // the frame's motion so a wingtip or tail fin collides, not just the center
+        // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
+        // fallback keeps the old nose margin on the ray — with real boxes it would fire
+        // ~6 m before the fuselage box reaches the wall.
         var to = _model.Position;
         var step = to - prev;
         float len = step.Length();
-        var probeEnd = len > 1e-4f ? to + step / len * CollisionMargin : to;
-        bool hit = HitWorld(prev, probeEnd, out var impact, out var hitName);
+        float margin = Collider == null ? CollisionMargin : 0f;
+        var probeEnd = len > 1e-4f ? to + step / len * margin : to;
+        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part, out float stopFrac);
+        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName))
+        {
+            hit = true;
+            part = "center";
+            stopFrac = 1f;
+        }
         if (_probe != null)
-            DrawProbe(prev, probeEnd, hit);
+            DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
         if (hit)
         {
-            Crash(impact, hitName);
+            Crash(impact, hitName, part);
             return;
         }
 
@@ -322,10 +339,64 @@ public partial class FlightController : Node3D
         };
     }
 
-    /// <summary>Debug view of the swept collision ray: a line along this frame's flight
-    /// path (plus the nose margin) with a cross at the probe tip. Freezes red at the
-    /// impact point while crashed.</summary>
-    private void DrawProbe(Vector3 from, Vector3 end, bool hit)
+    /// <summary>Sweeps each airframe box along this frame's motion against the static
+    /// world colliders. On a hit, reports the earliest one: contact point (from rest
+    /// info at the just-touching pose), collider name, which part struck, and the
+    /// motion fraction where it stopped (for the debug draw). False when no collider
+    /// was built or nothing is in the way.</summary>
+    private bool SweepAirframe(Vector3 from, Vector3 motion, out Vector3 impact,
+        out string hitName, out string part, out float stopFrac)
+    {
+        impact = _model.Position;
+        hitName = "";
+        part = "";
+        stopFrac = 1f;
+        if (Collider == null)
+            return false;
+        var space = GetWorld3D()?.DirectSpaceState;
+        if (space == null)
+            return false;
+        var baseXf = new Transform3D(_model.Attitude, from);
+        bool hit = false;
+        foreach (var p in Collider.Parts)
+        {
+            var query = new PhysicsShapeQueryParameters3D
+            {
+                Shape = p.Shape,
+                Transform = baseXf * p.Local,
+                Motion = motion,
+            };
+            var cast = space.CastMotion(query); // [safe, unsafe] fractions; [1,1] = clear
+            if (cast[0] >= 1f || cast[0] >= stopFrac)
+                continue;
+            hit = true;
+            stopFrac = cast[0];
+            part = p.Name;
+            // Contact details at the first-overlap pose; the box's swept center is the
+            // fallback if the rest query finds nothing (numerical edge).
+            query.Transform = query.Transform.Translated(motion * cast[1]);
+            query.Motion = Vector3.Zero;
+            var rest = space.GetRestInfo(query);
+            if (rest.Count > 0)
+            {
+                impact = (Vector3)rest["point"];
+                hitName = GodotObject.InstanceFromId((ulong)rest["collider_id"]) is Node body
+                    ? $"{body.GetParent()?.Name}/{body.Name}"
+                    : "world";
+            }
+            else
+            {
+                impact = (baseXf * p.Local).Origin + motion * cast[1];
+                hitName = "world";
+            }
+        }
+        return hit;
+    }
+
+    /// <summary>Debug view of the collision test: the swept center ray with a cross at
+    /// its tip, plus the airframe boxes drawn at where this frame's sweep stopped.
+    /// Freezes red at the impact pose while crashed.</summary>
+    private void DrawProbe(Vector3 from, Vector3 end, Vector3 shapePos, bool hit)
     {
         var color = hit ? new Color(1f, 0.15f, 0.1f) : new Color(0.2f, 1f, 0.3f);
         _probe!.ClearSurfaces();
@@ -339,7 +410,34 @@ public partial class FlightController : Node3D
             _probe.SurfaceAddVertex(end - axis * s);
             _probe.SurfaceAddVertex(end + axis * s);
         }
+        if (Collider != null)
+        {
+            var baseXf = new Transform3D(_model.Attitude, shapePos);
+            foreach (var p in Collider.Parts)
+                AddBoxEdges(baseXf * p.Local, p.Shape.Size * 0.5f);
+        }
         _probe.SurfaceEnd();
+    }
+
+    /// <summary>Adds the 12 wireframe edges of a box (half-extents h) to the probe mesh.</summary>
+    private void AddBoxEdges(Transform3D xf, Vector3 h)
+    {
+        Span<Vector3> c = stackalloc Vector3[8];
+        for (int i = 0; i < 8; i++)
+            c[i] = xf * new Vector3((i & 1) == 0 ? -h.X : h.X,
+                                    (i & 2) == 0 ? -h.Y : h.Y,
+                                    (i & 4) == 0 ? -h.Z : h.Z);
+        ReadOnlySpan<int> edges = stackalloc int[]
+        {
+            0, 1, 2, 3, 4, 5, 6, 7, // along X
+            0, 2, 1, 3, 4, 6, 5, 7, // along Y
+            0, 4, 1, 5, 2, 6, 3, 7, // along Z
+        };
+        for (int i = 0; i < edges.Length; i += 2)
+        {
+            _probe!.SurfaceAddVertex(c[edges[i]]);
+            _probe.SurfaceAddVertex(c[edges[i + 1]]);
+        }
     }
 
     /// <summary>Deadzone + squared response for fine control around center.</summary>

@@ -18,7 +18,7 @@ landed item.
 5. ☑ Forest trees — clutter-template system (2026-07-17); tree crashes user-confirmed
 6. ☑ Flight model — velocity-vector rework (2026-07-17): real lift (no 0-mph hover), stall toward ground, knife-edge sink, climb retention; TUNE pending playtest
 7. ☑ Control-surface animation (2026-07-17) — name-classified hinge nodes, deflection from stick input; angles/slew TUNE pending playtest
-8. ☐ Finer plane collision (real swept shapes instead of one ray)
+8. ☑ Finer plane collision (2026-07-17) — swept airframe boxes (fuselage/wing/tail) via CastMotion; wingtip-first ground contact verified
 
 ---
 
@@ -415,7 +415,34 @@ Flight mode only.
 verified planes (Bloodhawk, Kestrel, autogyro — rotor planes may have no ailerons; the
 classifier must tolerate absences); screenshots vs original chase-cam footage.
 
-## 8. Finer plane collision
+## 8. Finer plane collision — ☑ DONE (2026-07-17)
+
+**Landed as:** `src/Flight/PlaneCollider.cs` + the swept-shape crash test in
+`FlightController._PhysicsProcess`. `PlaneCollider.Build(planeModel)` derives 3–4
+plane-frame boxes from the built model's actual mesh triangles (PropAnimator-style walk;
+hidden wing flares excluded, nose propeller blur discs excluded — translucent air whose
+disc height would sink the fuselage box's belly line; the autogyro's overhead rotor discs
+stay in, the rotor being that plane's wing). Classification is geometric, no per-plane
+data: verts outboard of 0.35 × half-span are wing (split at the widest chord gap should
+they cluster fore/aft), the aft 30 % is tail (fins/stabilizers/twin booms), a narrow
+central band ahead of the tail is fuselage; all thresholds TUNE. Measured boxes:
+Bloodhawk fuselage 1.7×1.5×7.2 / tail 11.6×2.4×3.1 / wing 11.6×0.3×2.7 m; Kestrel wing
+slab 14.7 m span + 4.0 m twin-boom tail; autogyro "wing" = its 8.8×8.3 m rotor disc.
+Each physics frame the boxes are swept along prev→next motion via
+`PhysicsDirectSpaceState3D.CastMotion`; the earliest hit crashes with the contact point
+from `GetRestInfo` (fireball at the true touch point) and the struck part named in the
+crash log (`CRASH into g28007/col (wing) impact=…`). The old center ray stays as an
+anti-tunnelling backstop (its 6 m nose margin now applies only in the shapeless
+fallback). `--debug-collision` draws the boxes as wireframes at the swept pose (green;
+frozen red at impact). Accepted limit (measured): the Bloodhawk's 1.63 m-span nose
+canards sit inboard of the 2.03 m wing band, so an ~0.8 m canard-tip sliver per side is
+uncovered — catching it would give the wingtips ~2.4 m of phantom chord (false crashes
+are worse). Verified: near-vertical dive crashes at the terrain surface, part=fuselage,
+impact 5 m ahead of center (regression intact, auto-respawn cycles); knife-edge sink
+(wv 0.22 held ~18 s) crashes part=**wing** with the impact 5 m *below* the still-airborne
+center line — the low wingtip catches the terrain the old ray flew past; 5 s + 20 s
+cruise/sink runs show no false crash; debug wireframes track the plane through roll and
+freeze red at the impact pose. Pending user playtest vs the original (building corners).
 
 **Goal:** Wingtips (and tail) collide with obstacles as in the original — today a single
 swept ray along the flight path means a wing can pass through a building corner.
