@@ -17,7 +17,7 @@ landed item.
 4. ☑ Weather: distance fog ☑ (remodeled 2026-07-17: cylinder + FOG_ALTITUDE + sRGB gray), cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☑
 5. ☑ Forest trees — clutter-template system (2026-07-17); tree crashes user-confirmed
 6. ☑ Flight model — velocity-vector rework (2026-07-17): real lift (no 0-mph hover), stall toward ground, knife-edge sink, climb retention; TUNE pending playtest
-7. ☐ Control-surface animation (ailerons/elevators/rudders)
+7. ☑ Control-surface animation (2026-07-17) — name-classified hinge nodes, deflection from stick input; angles/slew TUNE pending playtest
 8. ☐ Finer plane collision (real swept shapes instead of one ray)
 
 ---
@@ -368,7 +368,32 @@ Pending user playtest to tune `StallNoseRate` / `KnifeAlignFloor` / `ClimbGravit
 knife-edge flight sinks; climb speed decay within ~10 % of the original's measured curve.
 User playtest for feel.
 
-## 7. Control-surface animation
+## 7. Control-surface animation — ☑ DONE (2026-07-17)
+
+**Landed as:** `src/Mech3/ControlSurfaces.cs` (name classifier + hinge axes) +
+`src/Flight/ControlSurfaceAnimator.cs` (PropAnimator-style deflector). The classifier
+matches only the deflecting *mesh* nodes (`l/r_aileronN`, `l/r_elevatorN`, `l/r_rudderN`,
+`l/r_rudder_rotate`) — their hinge parent groups (`lailerN`, `lft_elev`, `lrudder1`,
+bare `l_rudder`, the Peacemaker's `r_rudder1b`, …) deliberately don't match, or the
+deflection would double. Hinge axes corroborated against mesh geometry: ailerons/
+elevators are spanwise slabs hinging about local X, rudders vertical fins about local Y;
+the hinge line passes through the node origin (parent group carries the hinge transform,
+e.g. the Bloodhawk's 12°-tilted rudder hinge). The animator poses each surface
+absolutely (`Basis = base · Rot(axis, angle)`), slewing three channels toward the stick
+at `SlewPerSec` 3 /s (TUNE), max ±20° per kind (TUNE). Signs bake the stick convention
+(ailerons opposite per side, elevator/rudder TE against the commanded rotation), a
+**canard flip** (hinge z < −1 m ⇒ nose-mounted: the Bloodhawk's canard elevators deflect
+TE-*down* on pull, the lift-raising direction), and a **frame flip** from the accumulated
+hinge-axis direction in plane space (the same canard groups are mounted yaw-π). Wired in
+FlightController (advanced each `_Process` with the physics frame's input, frozen while
+paused — the paused orbit camera can inspect a held deflection — and crashed, reset to
+neutral on respawn) and PlaneViewer (`--fly` only; logs "control surfaces: N"). Verified:
+counts Bloodhawk 5 / Kestrel 6 / autogyro 2 (ailerons only — absent kinds tolerated);
+A/B screenshots at a near-identical viewpoint (1 s neutral, then input, shot 0.25 s
+later) show roll-left = right aileron TE down + left TE up, pull = Kestrel tail
+elevators TE up (conventional) and Bloodhawk canards TE down; dive-crash → auto-respawn
+cycles clean. Remaining as-designed: max angles + slew rate are first-approximation
+TUNE pending user playtest vs original footage.
 
 **Goal:** Ailerons, elevators, and rudders visibly deflect with stick input (props already
 spin).

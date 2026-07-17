@@ -48,6 +48,10 @@ public partial class FlightController : Node3D
     /// each frame. Null if the model has no wing-flare nodes.</summary>
     public WingLightBlinker? WingLights;
 
+    /// <summary>Deflects the plane's ailerons/elevators/rudders with stick input;
+    /// advanced each frame. Null if the model has no control-surface nodes.</summary>
+    public ControlSurfaceAnimator? Surfaces;
+
     /// <summary>Draw the collision probe — the swept ray the crash test casts each
     /// physics frame — as a debug line (green; red on the impact frame).</summary>
     public bool DebugCollision;
@@ -60,6 +64,7 @@ public partial class FlightController : Node3D
     private float _throttle;
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
+    private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
     private float _holdElapsed;                  // sim time into the HoldSegments sequence
     private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
@@ -126,8 +131,10 @@ public partial class FlightController : Node3D
     {
         _crashed = false;
         _holdElapsed = 0f; // scripted hold sequences restart from the spawn
+        _lastInput = default;
         CrashEffect?.Clear();
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
+        Surfaces?.Reset();   // control surfaces back to neutral
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
@@ -216,6 +223,7 @@ public partial class FlightController : Node3D
 
         var prev = _model.Position;          // committed position from last frame
         var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
+        _lastInput = input;
         _model.Step(input, dt);
 
         // Crash when the frame's flight path runs into solid world geometry (terrain,
@@ -374,10 +382,15 @@ public partial class FlightController : Node3D
         // the same at any angle, and freezing it keeps screenshots deterministic).
         Props?.Advance(delta, _crashed || _paused ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
 
-        // Blink the wingtip flares on the data's 1.5 s cycle. Frozen while paused (so a
-        // screenshot catches a fixed state) and while crashed (the airframe is hidden anyway).
+        // Blink the wingtip flares on the data's 1.5 s cycle, and track the stick with
+        // the control surfaces. Frozen while paused (so a screenshot catches a fixed
+        // state — the paused orbit camera can inspect the held deflection) and while
+        // crashed (the airframe is hidden anyway).
         if (!_crashed && !_paused)
+        {
             WingLights?.Advance(delta);
+            Surfaces?.Advance(delta, _lastInput);
+        }
     }
 
     private Vector3 DesiredCamPos(out Vector3 camUp)
