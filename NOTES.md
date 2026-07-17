@@ -33,6 +33,11 @@ https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
 - color grading for the skybox
 - wrap around on maps or endless sea?
 - Maps have different states (Hangars open/closed, Zeppelin present, Cloud layer, Night Day)
+- Environment
+    - What are the for params for?
+- FlightModel
+    - Turn rates, especially rolling is a lot faster in original -> Added a factor
+    - Should loose height on stalling
 ## Milestone 2 Polishing
 - World Select -> Done
 - A lot of Z-Fighting -> Better but not Perfect (Z-Fighting is in the original too. Roof of airfield buildings still an issue)-> Done
@@ -49,8 +54,5 @@ https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
     - if plane is turned 90 degree it should have less lift -> nose going down
     - original flight model does not slow speed as much during ascend
 - Environment
-    - moonSize ?
     - trees on forest texture
 - sky clouds move with plane
-- Camera
-    - Should flip with the plane (upside down)

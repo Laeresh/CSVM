@@ -14,7 +14,7 @@ landed item.
 1. ☑ Wing-light blink
 2. ☑ Chase camera rolls with the plane
 3. ☑ Moon size — no change needed (user re-checked in-game 2026-07-16: already matches)
-4. ◐ Weather: distance fog ☑, cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☐
+4. ☑ Weather: distance fog ☑ (remodeled 2026-07-17: cylinder + FOG_ALTITUDE + sRGB gray), cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☑
 5. ☐ Forest trees missing from forest-textured terrain
 6. ☐ Flight model: stall toward ground, knife-edge lift, climb speed retention
 7. ☐ Control-surface animation (ailerons/elevators/rudders)
@@ -131,7 +131,7 @@ eyeball sign-off.
 
 **Verify:** side-by-side screenshots at matching heading/pitch.
 
-## 4. Weather: fog, whiteout, cloud deck, ambient puffs — ◐ IN PROGRESS
+## 4. Weather: fog, whiteout, cloud deck, ambient puffs — ☑ DONE (2026-07-17)
 
 **Landed so far (2026-07-16): the `WeatherState` loader + distance fog + cloud-band whiteout.**
 - `src/Flight/Weather.cs` (`WeatherState`) parses the flown mission's `weather.json` (same
@@ -170,8 +170,42 @@ eyeball sign-off.
   `OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`); above the band it flips to a floor below;
   static orbit viewing unchanged.
 
-**Remaining sub-item (next turn):** ambient puffs (☐) — detailed below. The loader already
-exposes the wind the puffs need.
+- **Fog remodeled (2026-07-17, user-diagnosed):** the fog volume is a vertical **cylinder**,
+  not a sphere — horizontal (x/z) distance only, scaled by a `FOG_ALTITUDE` fade (full fog
+  below low, none above high; zone1's 970→1047 = cloud-band bottom → whiteout-band centre,
+  zone2's 4000→5000 > flight ceiling). This un-grays the overcast deck overhead. Plus a
+  measured colorspace fix: `FOG_COLOR` 0.69 is an sRGB framebuffer value (the original's
+  saturated fog = exactly 176 gray) — now converted sRGB→linear at the set-site; raw 0.69 in
+  the linear pipeline had rendered a washed-out 216. Verified against `C1 IA1 Cloudcoverage
+  1.png` (deck textured overhead, converging byte-exact to 176 at its horizon) and `C1 IA1
+  Fog Range.png` (terrain wall + ghosted zeppelin). TUNE left open: the `fogRangeFactor` 2
+  halving predates the color fix — fresh in-game A/B recommended (factor 1 keeps deck texture
+  visible further down); the original's overcast tone (~165–175) is also darker than our
+  rendered deck texture (~206) — a deck-tint question separate from fog.
+
+- **Ambient cloud puffs (2026-07-17):** `src/Effects/CloudPuffs.cs` — a hand-tuned ambient
+  field of soft `cloud1`/`cloud2` billboard sprites (one `MultiMeshInstance3D`, a spatial
+  shader billboarding + rolling + alpha-blending each quad) that the plane flies through at
+  altitude. **Why a synthetic field and not the world's own sprites:** C1 *does* place ~600
+  `cloud1`/`cloud2` sprite quads, but they are **clustered near the airfield** (verified: two
+  far map corners at band altitude render bare) and world-fixed, so most of the map has no
+  clouds at altitude. No zrdr defines an ambient emitter (only the crash-style PUFFER_STATE
+  readers exist), so — per this item's own "failing that" fallback — the field is hand-built
+  from the data we do have: the `CLOUD_COVER` band anchors the layer's altitude and the
+  weather `WIND` drives a slow drift. Model: a pool of world-anchored sprites in a cylindrical
+  shell around the camera, **anchored in Y to the cloud band** (you climb up into it, then out
+  over it, like a real layer) while following the plane in X/Z; a puff the plane flies past
+  horizontally recycles to the leading edge (endless field), and alpha fades at the shell edge
+  (recycled puffs fade in, never pop) and by vertical distance from the camera (clear well
+  below/above the layer — no clouds at low altitude). PlaneViewer builds it in `SetupWeather`
+  (when the mission has a `CLOUD_COVER` band) and advances it each `_Process` from the camera
+  pose. Constants are TUNE (`Count` 12, `Radius` 620 m, `BaseAlpha` 0.06–0.13 — the cloud
+  textures are fairly opaque, mean α≈0.43, so overlaps saturate fast; kept faint so they read
+  as translucent veils). Verified via `--campos` at 850/1120/1250/1500 m: absent below the
+  band, a soft layer around/through it, cloud-tops below once above it (moon + stars showing
+  through), and present at both airfield-adjacent and far-corner locations (the field follows
+  the plane); `--fly` smoke test clean (no regression; puffs correctly absent at the ~325 m
+  spawn). Pending user playtest to fine-tune the opacity/density against the real in-flight sky.
 
 **Goal:** Replicate the original's weather rendering, all user-observed in C1 IA1:
 distant terrain fades into fog; climbing into the cloud band whites out the screen

@@ -82,6 +82,7 @@ public partial class PlaneViewer : Node3D
     private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
     private ColorRect? _whiteout;      // full-screen cloud-band whiteout overlay
+    private Effects.CloudPuffs? _puffs; // ambient drifting cloud sprites at altitude
     private Camera3D _camera = null!;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
@@ -156,11 +157,13 @@ public partial class PlaneViewer : Node3D
         missionZrdrPath = PreferUnzipped(missionZrdrPath);
 
         // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
-        // shader references, before any material using it is built. Default range is a no-op
-        // (nothing fades) — only --fly overrides it from the mission's weather.json below.
+        // shader references, before any material using it is built. Defaults are a no-op
+        // (nothing fades) — only --fly overrides them from the mission's weather.json below.
         RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
             RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
 
         SetupLighting();
@@ -196,10 +199,11 @@ public partial class PlaneViewer : Node3D
                         AddChild(_horizon);
                     }
                     // Weather (the flown mission's weather.json): distance fog for the rendered
-                    // zone + the cloud-band whiteout. Applied whenever the world+dome are shown —
-                    // in --fly, and in static --chapter when --sky-zone is given (deterministic
-                    // fog/whiteout verification with --campos, same as the sky-verification path).
-                    SetupWeather(missionZrdrPath);
+                    // zone + the cloud-band whiteout + the ambient cloud puffs. Applied whenever
+                    // the world+dome are shown — in --fly, and in static --chapter when --sky-zone
+                    // is given (deterministic fog/whiteout/puff verification with --campos, same as
+                    // the sky-verification path).
+                    SetupWeather(missionZrdrPath, textures);
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
@@ -307,7 +311,7 @@ public partial class PlaneViewer : Node3D
     /// them up), and builds the full-screen cloud-band whiteout overlay (its opacity is driven
     /// each frame from the camera altitude in <see cref="_Process"/>). No-op if the mission has
     /// no weather.json — the fog globals keep their registered no-op range.</summary>
-    private void SetupWeather(string missionZrdrPath)
+    private void SetupWeather(string missionZrdrPath, TextureArchive textures)
     {
         _weather = WeatherState.Load(missionZrdrPath);
         if (_weather == null)
@@ -316,12 +320,25 @@ public partial class PlaneViewer : Node3D
             return;
         }
         var fog = _weather.Fog(_skyZone);
+        // FOG_COLOR is a DX7-era framebuffer (sRGB) value: the original's fully-fogged pixels
+        // are exactly 0.69·255 = 176 gray (measured in OriginalScreenshots/"C1 IA1 Cloudcoverage
+        // 1.png", flat regions std 0). The shader mixes ALBEDO in linear space, so convert —
+        // feeding 0.69 in raw made saturated fog render as 216, a washed-out near-white.
+        var fogLinear = fog.FogColor.SrgbToLinear();
         RenderingServer.GlobalShaderParameterSet("csky_fog_color",
-            new Vector3(fog.FogColor.R, fog.FogColor.G, fog.FogColor.B));
+            new Vector3(fogLinear.R, fogLinear.G, fogLinear.B));
         //Range is halved because this does not seem to be radius but diameter. See Screenshot C1 IA1 Fog Range.png vs Screenshots\Fog Range.png
+        // NOTE: that calibration predates the fog-color sRGB fix below (the old washed-out
+        // near-white read weaker than true 176 gray) — worth a fresh in-game A/B; factor 1
+        // makes the overcast deck's texture persist further down toward the horizon.
         float fogRangeFactor = 2.0f;
         RenderingServer.GlobalShaderParameterSet("csky_fog_range", new Vector2(fog.FogNear, fog.FogFar)/fogRangeFactor);
-        GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m; " +
+        // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
+        // none at FogHigh (fragment altitude; see SceneBuilder's fog shader block). Absolute
+        // altitudes, so the range factor doesn't apply.
+        RenderingServer.GlobalShaderParameterSet("csky_fog_alt", new Vector2(fog.FogLow, fog.FogHigh));
+        GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
+                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 
         if (_weather.HasCloudBand)
@@ -337,6 +354,19 @@ public partial class PlaneViewer : Node3D
             _whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             canvas.AddChild(_whiteout);
             AddChild(canvas);
+
+            // Ambient cloud puffs: the soft wisps that drift past the plane at altitude
+            // (OriginalScreenshots/"C1 IA1 Cloud Puffs and Moon.png"). A hand-tuned field
+            // gated to the cloud band and drifting with the weather WIND; _Process advances it
+            // each frame from the camera. Added at world identity (its instance positions are
+            // absolute world coords).
+            _puffs = Effects.CloudPuffs.Create(textures, _weather.WindStatic,
+                _weather.CloudBottom, _weather.CloudTop);
+            if (_puffs != null)
+            {
+                AddChild(_puffs);
+                GD.Print("cloud puffs: ambient field active over the cloud band");
+            }
         }
     }
 
@@ -521,6 +551,11 @@ public partial class PlaneViewer : Node3D
                 mid - _deckCenter.Y,
                 _camera.Position.Z - _deckCenter.Z);
         }
+
+        // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
+        // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
+        // so fresh puffs spawn ahead and the plane flies into them.
+        _puffs?.Update((float)delta, _camera.Position, -_camera.GlobalTransform.Basis.Z);
 
         if (_screenshotPath == null || _plane == null)
             return;

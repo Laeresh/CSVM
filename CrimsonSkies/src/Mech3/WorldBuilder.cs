@@ -254,6 +254,7 @@ public sealed class WorldBuilder
     // sky solid FOG_COLOR. Harmless on the moon/stars (StandardMaterial3D — they ignore it).
     private static void DisableFog(Node node)
     {
+        return;
         if (node is MeshInstance3D mi)
             mi.SetInstanceShaderParameter("csky_fog_on", 0f);
         foreach (var child in node.GetChildren())

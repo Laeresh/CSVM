@@ -445,12 +445,19 @@ public sealed class SceneBuilder
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
         sb.AppendLine("instance uniform float node_bias = 0.0;"); // per-node draw-order tie-break
-        // Distance fog (weather.json FOG_COLOR/FOG_RANGES): globals set once per flight so all
-        // world + aircraft surfaces share them without per-material updates; no-op range when
-        // not flying. The camera-anchored skydome opts out per instance (csky_fog_on = 0) — at
-        // ~22 km it is past FOG_FAR and would otherwise fog the whole sky solid gray.
+        // Distance fog (weather.json FOG_COLOR/FOG_RANGES/FOG_ALTITUDE): globals set once per
+        // flight so all world + aircraft surfaces share them without per-material updates; no-op
+        // ranges when not flying. The original's fog volume is a vertical CYLINDER around the
+        // camera, not a sphere: only horizontal (x/z) distance fogs, scaled by an altitude
+        // fade-out — full fog below FOG_ALTITUDE.x, none above FOG_ALTITUDE.y — so the overcast
+        // deck / anything at sky altitude overhead stays clear instead of graying out
+        // (user-diagnosed; corroborated by zone1's altitudes 970→1047 = exactly cloud-band
+        // bottom → whiteout-band centre). The camera-anchored skydome still opts out per
+        // instance (csky_fog_on = 0) — its below-horizon skirt sits at low altitude ~22 km out
+        // and would otherwise fog solid gray.
         sb.AppendLine("global uniform vec3 csky_fog_color;");
-        sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog)
+        sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog), horizontal metres
+        sb.AppendLine("global uniform vec2 csky_fog_alt;");   // fragment altitude: full fog below x, fades to none at y
         sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
         if (textured)
             sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;");
@@ -476,10 +483,14 @@ void fragment() {");
             sb.AppendLine("    METALLIC = 0.0;");
             sb.AppendLine("    SPECULAR = 0.5;");
         }
-        // Distance fog: VERTEX is the view-space position here (set in vertex() under
-        // skip_vertex_transform), so length(VERTEX) is the distance from the camera. The
-        // aircraft is always within the near range at chase distance, so this is a no-op on it.
-        sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * smoothstep(csky_fog_range.x, csky_fog_range.y, length(VERTEX)));");
+        // Distance fog, cylindrical (see the uniform block above): VERTEX is the view-space
+        // position here (set in vertex() under skip_vertex_transform); INV_VIEW_MATRIX lifts it
+        // back to world space for the horizontal camera distance + the fragment-altitude fade.
+        // The aircraft is always within the near range at chase distance, so this is a no-op on it.
+        sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+        sb.AppendLine("    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))");
+        sb.AppendLine("        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+        sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         if (blend || scissor)
             sb.AppendLine("    ALPHA = col.a;");
         if (scissor)
