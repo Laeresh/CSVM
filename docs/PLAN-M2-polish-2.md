@@ -15,7 +15,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 ## Checklist
 
 1. ☑ Log hygiene — missing-texture + clutter warnings: once, without stack traces **(DONE 2026-07-17)**
-2. ☐ C4/C5 shader instance-uniform errors (buffer size; + C5 `rtexture*` check)
+2. ☑ C4/C5 shader instance-uniform errors (buffer size; + C5 `rtexture*` check) **(DONE 2026-07-17)**
 3. ☐ C4 white fog — FOG_COLOR integer-RGB schema fix
 4. ☐ Clouds render through fog — fog term for cloud sprites + puffs
 5. ☐ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block
@@ -98,6 +98,32 @@ lookup chain.
 
 **Verify:** C4 + C5 `--fly` runs log-clean; A/B screenshot of a C5 decal area (unchanged or
 improved layering); if rtexture gets wired: C5 ground sharpness A/B vs the original.
+
+**DONE (2026-07-17):** Root cause confirmed exactly — Godot allocates `MAX_INSTANCE_UNIFORM_INDICES`
+(16 vec4 slots) per instance that carries any instance uniform, so the default 65536-slot
+global-shader-variable buffer caps at ~4096 mesh instances. Measured counts: C1 3481 (fit, why
+it was clean), **C4 4234**, **C5 4746** — both overflow, giving 143 (C4) / 600 (C5) "Too many
+instances" errors AND dropping `node_bias` on the overflow. Set
+`rendering/limits/global_shader_variables/buffer_size=262144` in `project.godot` (~16384
+instance slots, a 4 MB GPU buffer — headroom for the largest chapter plus item-7 border tiles).
+Re-verified: C4/C5 `--fly` now log **zero** instance-uniform errors (0 "Too many instances",
+0 total ERROR lines); C1 regression clean; C4/C5 worlds render with decal layering intact
+(NY skyline/bridge/piers, RM terrain — screenshots).
+
+*rtexture/rimage investigation (negative — nothing to wire):* the per-chapter
+`rtexture2/4/6/8/14.zip` are **downscaled quality tiers** of the same 896 world textures, not
+hi-res replacements — measured across all 896 C5 textures: base `texture` == `rtexture14`
+(both max-res, e.g. cblock 256²), while `rtexture2` = ¼ (64²) and `rtexture4/6/8` = ½ (128²);
+**zero** rtexture file exceeds its base. `rimage.zip` is the UI/HUD image set (crosshairs,
+buttons, cursor, menu splash, briefing thumbs), no world textures. So the viewer already loads
+the max-res set. The reported C5 "blurry city ground" is a **grazing-angle mipmap** artifact,
+not source resolution (proof: the same C1 terrain is sharp viewed straight down, blurry at a
+grazing angle). Fix without new assets: the SceneBuilder world shader now samples albedo with
+`filter_linear_mipmap_anisotropic` and `project.godot` sets
+`textures/default_filters/anisotropic_filtering_level=4` (16×). Before/after A/B on the exact
+C5 Manhattan street grid: isotropic smears the receding grid to gray mush mid-distance,
+anisotropic keeps the street lines crisp and legible much further out; C1 grass shows a
+subtler-but-real gain. (Look change — pending user's fidelity sign-off; trivially reverted.)
 
 ## 3. C4 white fog — FOG_COLOR integer-RGB schema
 

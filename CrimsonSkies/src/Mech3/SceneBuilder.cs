@@ -465,7 +465,12 @@ public sealed class SceneBuilder
         sb.AppendLine("global uniform vec2 csky_fog_alt;");   // fragment altitude: full fog below x, fades to none at y
         sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
         if (textured)
-            sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap, repeat_enable;");
+            // Anisotropic mipmap filtering: the world is viewed at grazing angles from the
+            // air, where plain isotropic mipmap selection blurs the ground to mush (the C5
+            // "blurry city ground" report — and it is NOT a missing hi-res archive: the base
+            // texture set is already max-res, rtexture2/4/6/8 are downscaled quality tiers and
+            // rtexture14 == base). Anisotropic sharpens the receding ground without new assets.
+            sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
         else
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
         sb.AppendLine(@"
