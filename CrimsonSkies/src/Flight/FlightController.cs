@@ -25,8 +25,10 @@ namespace CrimsonSkies.Flight;
 public partial class FlightController : Node3D
 {
     /// <summary>When set, replaces keyboard input — used by automated screenshot runs.
+    /// Each segment holds its input for its duration (seconds of sim time); the last
+    /// segment holds forever, and a respawn restarts the sequence (deterministic runs).
     /// Such runs are unattended, so a crash auto-respawns after a short pause.</summary>
-    public FlightInput? HoldInput;
+    public (FlightInput Input, float Duration)[]? HoldSegments;
 
     /// <summary>Own-plane sound, if the sound archive was found (add as a child too).</summary>
     public FlightAudio? Audio;
@@ -58,7 +60,8 @@ public partial class FlightController : Node3D
     private float _throttle;
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
-    private float _autoRespawnIn;                // s until auto-respawn (HoldInput runs only)
+    private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
+    private float _holdElapsed;                  // sim time into the HoldSegments sequence
     private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
@@ -122,6 +125,7 @@ public partial class FlightController : Node3D
     private void Respawn()
     {
         _crashed = false;
+        _holdElapsed = 0f; // scripted hold sequences restart from the spawn
         CrashEffect?.Clear();
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         if (PlaneModel != null)
@@ -204,14 +208,14 @@ public partial class FlightController : Node3D
         if (_crashed)
         {
             // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
-            // unattended HoldInput runs respawn on a timer instead
-            if (RespawnPressed() || (HoldInput != null && (_autoRespawnIn -= dt) <= 0f))
+            // unattended HoldSegments runs respawn on a timer instead
+            if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
                 Respawn();
             return;
         }
 
         var prev = _model.Position;          // committed position from last frame
-        var input = HoldInput ?? ReadKeyboard(dt);
+        var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
         _model.Step(input, dt);
 
         // Crash when the frame's flight path runs into solid world geometry (terrain,
@@ -240,9 +244,31 @@ public partial class FlightController : Node3D
         {
             _sinceTelemetry = 0;
             var p = _model.Position;
+            // path = climb/dive angle of the flight path; nose = the attitude's pitch;
+            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the lift factor
             GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
-                     $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00})");
+                     $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
+                     $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
+                     $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
+                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}");
         }
+    }
+
+    /// <summary>Advance the scripted hold sequence by this frame and return the active
+    /// segment's input. Segments run for their duration in order; the last one (or a
+    /// duration ≤ 0) holds until respawn.</summary>
+    private FlightInput NextHoldInput(float dt)
+    {
+        var segments = HoldSegments!;
+        _holdElapsed += dt;
+        float t = _holdElapsed;
+        for (int i = 0; i < segments.Length - 1; i++)
+        {
+            if (segments[i].Duration <= 0f || t < segments[i].Duration)
+                return segments[i].Input;
+            t -= segments[i].Duration;
+        }
+        return segments[^1].Input;
     }
 
     private FlightInput ReadKeyboard(float dt)

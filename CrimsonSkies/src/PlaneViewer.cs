@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
 using CrimsonSkies.Flight;
@@ -50,7 +51,10 @@ namespace CrimsonSkies;
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
 ///                                crash test; green, red on impact)
-///   --hold=pitch,roll,yaw,thr    constant flight input instead of the keyboard (automated runs)
+///   --hold=pitch,roll,yaw,thr    scripted flight input instead of the keyboard (automated runs);
+///                                ';'-separated segments with '@seconds' durations sequence inputs
+///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
+///                                last segment holds forever, respawn restarts the sequence
 ///   --frames=N                   frames to render before --screenshot fires (default 15)
 ///   --campos=x,y,z               place the camera here instead of auto-framing
 ///   --lookat=x,y,z               orbit/look target (default: model AABB center)
@@ -74,7 +78,7 @@ public partial class PlaneViewer : Node3D
     private string _mission = "IA1";   // which mission's spawns to fly from (--mission=): IA1, M01, …
     private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
-    private FlightInput? _holdInput;
+    private (FlightInput, float)[]? _holdSegments;
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
@@ -124,7 +128,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--sounds=")) { soundsPath = arg["--sounds=".Length..]; soundsOverridden = true; }
             else if (arg == "--mute") mute = true;
             else if (arg == "--debug-collision") debugCollision = true;
-            else if (arg.StartsWith("--hold=")) _holdInput = ParseHold(arg["--hold=".Length..]);
+            else if (arg.StartsWith("--hold=")) _holdSegments = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
             else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
@@ -260,7 +264,7 @@ public partial class PlaneViewer : Node3D
 
                 var controller = new FlightController
                 {
-                    HoldInput = _holdInput,
+                    HoldSegments = _holdSegments,
                     DebugCollision = debugCollision,
                     PlaneModel = planeModel,
                     Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
@@ -323,11 +327,22 @@ public partial class PlaneViewer : Node3D
             FrameCamera();
     }
 
-    private static FlightInput ParseHold(string s)
+    /// <summary>Parse a scripted hold sequence: segments separated by ';', each
+    /// "pitch,roll,yaw,throttle" with an optional "@seconds" duration. The last
+    /// segment (or one without a duration) holds forever — so the plain single
+    /// "--hold=p,r,y,thr" form keeps its old constant-input meaning.</summary>
+    private static (FlightInput, float)[] ParseHold(string s)
     {
-        var p = s.Split(',');
-        float F(int i) => float.Parse(p[i], System.Globalization.CultureInfo.InvariantCulture);
-        return new FlightInput { Pitch = F(0), Roll = F(1), Yaw = F(2), Throttle = F(3) };
+        static float F(string v) => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
+        var segments = new List<(FlightInput, float)>();
+        foreach (var seg in s.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var at = seg.Split('@');
+            var p = at[0].Split(',');
+            segments.Add((new FlightInput { Pitch = F(p[0]), Roll = F(p[1]), Yaw = F(p[2]), Throttle = F(p[3]) },
+                          at.Length > 1 ? F(at[1]) : 0f));
+        }
+        return segments.ToArray();
     }
 
     /// <summary>Loads the flown mission's weather.json and applies it: sets the distance-fog

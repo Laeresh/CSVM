@@ -16,7 +16,7 @@ landed item.
 3. ☑ Moon size — no change needed (user re-checked in-game 2026-07-16: already matches)
 4. ☑ Weather: distance fog ☑ (remodeled 2026-07-17: cylinder + FOG_ALTITUDE + sRGB gray), cloud-band whiteout ☑, cloud deck anchoring ☑, ambient puffs ☑
 5. ☑ Forest trees — clutter-template system (2026-07-17); tree crashes user-confirmed
-6. ☐ Flight model: stall toward ground, knife-edge lift, climb speed retention
+6. ☑ Flight model — velocity-vector rework (2026-07-17): real lift (no 0-mph hover), stall toward ground, knife-edge sink, climb retention; TUNE pending playtest
 7. ☐ Control-surface animation (ailerons/elevators/rudders)
 8. ☐ Finer plane collision (real swept shapes instead of one ray)
 
@@ -293,7 +293,56 @@ destruction itself is dogfight-milestone work).
 **Verify:** build log tree count > 0; screenshot of a forested hillside vs original;
 scripted flight into a tree crashes.
 
-## 6. Flight model: stall, knife-edge lift, climb speed
+## 6. Flight model: stall, knife-edge lift, climb speed — ☑ DONE (2026-07-17)
+
+**Landed as:** a rework of `FlightModel.Step` into the standard simple velocity-vector
+decomposition (researched: brihernandez's ArcadeJetFlightExample, Vazgriz's Unity flight
+sim — gravity always acts on the velocity vector; lift ⊥ velocity ∝ v², dies at stall and
+with bank; arcade handling = the velocity chasing the nose), plus the user's added report:
+**the plane had no lift at all — it could slow to 0 mph and hang in the air** (the old
+code snapped the path to the nose and skipped all gravity effects below 1 m/s, freezing a
+0-speed plane in place). The pieces: lift fraction = `min(1,(v/v_lift)²) × |up·Y|`
+(wingVert: 1 level or inverted — arcade carry — 0 knife-edge); the lift **deficit** bends
+the flight path toward the ground every frame (`g·(1−lift)/max(v,10)`), so slow flight
+sinks and ~0 airspeed falls; the nose-chase alignment scales with airspeed AND wingVert
+(`KnifeAlignFloor` 0.35 TUNE — knife-edge path settles ~10° below the nose); stall (< 0.3
+fd_speed) pulls the nose toward **world-down** via a great-circle rotation (attitude-
+independent, works inverted, out-muscles full elevator at depth — `StallNoseRate` 1.0 ×
+`stall_mag` × depth, TUNE); thrust along the path × `max(0, nose·dir)` (a nose-high
+falling plane must not rocket downward); gravity's along-path speed bleed × 0.6 climbing
+(`ClimbGravityScale` TUNE), full diving. **Follow-up (same day, user-observed original
+rule): while stalled the nose cannot be raised over the horizon at any bank angle** —
+after the frame's rotations its world elevation is capped at `max(horizon, frame-start
+elevation)`: pulled up from below it parks at the horizon, caught nose-high it only
+descends. Verified: stall-into-dive-then-full-pull run shows no stalled sample raised
+above 0°; a full-pull zero-throttle hold no longer loops endlessly — it zooms, breaks
+at the top, dives, recovers (porpoise), like the original's stall.
+
+**Follow-ups (same day, both user-reported on first playtest):** (1) *no air
+resistance* — idle level flight barely slowed, because pure-v² drag dies off below
+cruise → drag is now a quadratic + linear blend (`LowSpeedDragBlend` 0.35 TUNE),
+normalized so drag(fd_speed) = max thrust (the full-throttle equilibrium stays exactly
+fd_speed for any blend value); idle 120 mph now bleeds to the ~89 mph stall in ~9 s and
+settles into a natural nose-dropped glide. (2) *plane stops mid-air with mph creeping
+back up* — the scalar `Speed` was clamped at 0, so a zoom climb that ran out froze in
+place and then re-integrated speed along a stale upward path; the translation block now
+integrates thrust/drag/gravity on the velocity **vector** (`v = dir·speed`), so speed
+passes through zero and a spent zoom tail-slides out downward immediately. This also
+deleted two hacks the vector sum makes redundant (the `max(0, nose·dir)` thrust scale
+and the sag-divisor speed floor). Re-verified after both: zero-throttle zoom descends
+through the apex with no hang; knife-edge sink and cruise equilibrium unchanged. New
+known artifact: at full throttle a steep (~53°) climb is a stable equilibrium (thrust ≈
+0.6-scaled gravity) and the data's 2500 m flight_ceiling is not modeled — backlog. Verification needed input *sequences*, so
+`--hold` gained `;`-separated segments with `@seconds` durations (FlightController
+`HoldSegments`; respawn restarts the sequence) and the telemetry line grew `path`/`nose`
+climb angles + `wv` wing verticality. Verified: zoom-climb run bleeds 48→12 m/s at nose
++88°, noses over to −67° and recovers in the dive — no hover, deterministic across
+respawns; knife-edge (wv 0.06) sinks at path −10°, −174 m in 15 s; 11° full-throttle
+climb holds 122.5 m/s; level cruise regression exactly unchanged (wingVert 1 → every new
+factor is 1). Known accepted artifact: the climb/dive asymmetry pumps energy in sustained
+loops (zero-throttle full-pull loops slowly gain speed) — revisit only if playtest minds.
+Pending user playtest to tune `StallNoseRate` / `KnifeAlignFloor` / `ClimbGravityScale`
+(the latter against a measured original climb-speed-decay curve).
 
 **Goal (three user-specified deviations from the original):**
 1. Stall should be more prominent and pull the nose toward the **ground**, regardless of
