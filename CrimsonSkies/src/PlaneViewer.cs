@@ -14,7 +14,8 @@ namespace CrimsonSkies;
 /// free flight over the chapter world with arcade controls.
 ///
 /// F12 (any mode) saves the current frame to a timestamped PNG under the repo's
-/// git-ignored Screenshots/ folder.
+/// git-ignored Screenshots/ folder. F11 (any mode) prints the current camera pose as
+/// ready-to-paste --campos=/--lookat= args for reproducing a view.
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
@@ -237,6 +238,15 @@ public partial class PlaneViewer : Node3D
                 {
                     GD.Print($"clutter: no templates for {_chapter} ({interpPath})");
                 }
+
+                // Mission start states (anim-state engine part 1): replay the mission's
+                // animation base/start states onto the built world — hides the destroyed
+                // building variants (coplanar flicker), the zeppelins/trains this mission
+                // deactivates (zepstate.json), and poses the startanims end states
+                // (hangar doors open). Uses the same three zrdr scopes the original
+                // compiles into mis_anim.zbd: shared + chapter + mission.
+                var chapterZrdrPath = PreferUnzipped(Path.Combine(repoRoot, "extracted", _chapter, "zrdr.zip"));
+                MissionState.Apply(_plane, zrdrPath, chapterZrdrPath, missionZrdrPath);
 
                 // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
                 // chapter's clutter) that follows the plane past the map boundary, so the world
@@ -613,6 +623,14 @@ public partial class PlaneViewer : Node3D
             SaveScreenshot();
             return;
         }
+        // F11 anywhere: print the current camera pose as ready-to-paste --campos=/--lookat=
+        // args, so a hand-framed orbit (or in-flight) view can be reproduced for a
+        // deterministic --screenshot run.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
+        {
+            PrintCameraPose();
+            return;
+        }
         if (_fly)
             return; // the FlightController owns the camera; no orbit controls
         switch (@event)
@@ -734,6 +752,25 @@ public partial class PlaneViewer : Node3D
         var ext = Path.GetExtension(path);
         return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
     }
+
+    /// <summary>Print the camera's current world pose as ready-to-paste --campos=/--lookat=
+    /// arguments (F11, any mode). Reproducing a hand-framed orbit or in-flight vantage for a
+    /// deterministic --screenshot run is otherwise fiddly; this prints exactly what
+    /// FrameCamera consumes. In orbit mode the look-at is the framed point (_orbitCenter); in
+    /// --fly it is a point one unit ahead along the view ray — either reproduces the same
+    /// framing (FrameCamera reconstructs pitch/yaw from the pos→look-at direction).</summary>
+    private void PrintCameraPose()
+    {
+        var pos = _camera.GlobalPosition;
+        var lookAt = _fly ? pos - _camera.GlobalTransform.Basis.Z : _orbitCenter;
+        GD.Print($"camera pose: --campos={Vec3Arg(pos)} --lookat={Vec3Arg(lookAt)}");
+    }
+
+    /// <summary>Format a vector as the "x,y,z" argument value --campos=/--lookat= parse
+    /// (invariant culture, matching ParseVec3; trimmed to 3 decimals).</summary>
+    private static string Vec3Arg(Vector3 v) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
 
     /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
     /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the

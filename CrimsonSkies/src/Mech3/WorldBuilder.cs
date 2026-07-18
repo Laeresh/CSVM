@@ -41,9 +41,26 @@ public sealed class WorldBuilder
         tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
         && !tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase);
 
-    // Rendered but not solid: the plane should fly through cloud/sky geometry, not crash
-    // into it. Terrain, water, buildings, zeppelins, trains stay solid.
-    private bool NoCollisionNode(GameZNode n) => MeshUsesTexture(n, IsCloudOrSkyTexture);
+    // Light-source flare sprites (validated in C1, user-reported 2026-07-18): single flat
+    // quads the original renders camera-billboarded — `refinery_flare` 16 m + the 4 m
+    // `gen_flare_yellow` lamps (oil_liteflare.tif), `docklight_flare` 9.6 m blue pier lights
+    // (dock_liteflare.tif), the 19.2 m lighthouse `litehsflare` (poleflare.tif), `bflare`
+    // (beflare5.tif). World-fixed they show edge-on/skewed — the user's "lamps not oriented
+    // to the camera". Classified by texture like the clouds; also never solid, never dimmed.
+    internal static bool IsFlareTexture(string tex) =>
+        tex.Contains("flare", StringComparison.OrdinalIgnoreCase);
+
+    // Rendered but not solid: the plane should fly through cloud/sky geometry and lamp
+    // flare sprites, not crash into them. Terrain, water, buildings, zeppelins, trains
+    // stay solid. The flare exemption mirrors SceneBuilder.IsGlowSpriteMesh (single-poly
+    // sprite quads only) — geometry that merely CONTAINS a flare poly stays collidable.
+    private bool NoCollisionNode(GameZNode n) =>
+        MeshUsesTexture(n, IsCloudOrSkyTexture) || IsFlareSpriteNode(n);
+
+    private bool IsFlareSpriteNode(GameZNode n) =>
+        n.MeshIndex >= 0 && n.MeshIndex < _gamez.Meshes.Count
+        && _gamez.Meshes[n.MeshIndex].Polygons.Count == 1
+        && MeshUsesTexture(n, IsFlareTexture);
 
     // The horizontal 'cloudlayer' deck (the opaque overcast ceiling/floor) as opposed to the
     // cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so PlaneViewer can
@@ -89,7 +106,7 @@ public sealed class WorldBuilder
         // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
         _scene = new SceneBuilder(gamez, textures, fullbright: true,
             generateCollision: collision, blendTexture: IsCloudOrSkyTexture,
-            billboardTexture: IsCloudSpriteTexture);
+            billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture);
     }
 
     public Node3D Build(string worldName = "world1")
@@ -174,8 +191,20 @@ public sealed class WorldBuilder
             return null;
         DisableShadows(built);
         BillboardMoon(built);
+        DisableLightRangeFade(built);
        // DisableFog(built);
         return built;
+    }
+
+    // The dome's star point-lights sit ~22 km out (camera-anchored, 2.5× scaled) — far past
+    // their data visibility range (4000 m), which is meant for in-world beacons. Opt them
+    // out of the light shader's distance fade or the night sky goes starless.
+    private static void DisableLightRangeFade(Node node)
+    {
+        if (node is MeshInstance3D mi && mi.Name == "lights")
+            mi.SetInstanceShaderParameter("csky_light_fade", 0f);
+        foreach (var child in node.GetChildren())
+            DisableLightRangeFade(child);
     }
 
     // The source moon is an axis-aligned quad (constant z), which looks tilted and

@@ -204,6 +204,16 @@ public sealed class GameZ
                     if (!l.TryGetProperty("extra", out var extra) || extra.GetArrayLength() == 0)
                         continue;
                     var c = l.GetProperty("color");
+                    // Per-light params (field meanings inferred from the C1 value survey,
+                    // 2026-07-18): unk08 = size scale (0 default / 1 / 2 / 5 — the
+                    // lighthouse), unk64 = max sprite size in px (30 everywhere it's set),
+                    // unk52/unk68 = visibility range in m (1500 / 2500 / 4000).
+                    float F(string name) =>
+                        l.TryGetProperty(name, out var v) && v.ValueKind == JsonValueKind.Number
+                            ? v.GetSingle() : 0f;
+                    float range = F("unk68");
+                    if (range <= 0f)
+                        range = F("unk52");
                     mesh.Lights.Add(new GameZLight
                     {
                         Position = ParseVec3(extra[0]),
@@ -211,6 +221,9 @@ public sealed class GameZ
                             c.GetProperty("r").GetSingle() / 255f,
                             c.GetProperty("g").GetSingle() / 255f,
                             c.GetProperty("b").GetSingle() / 255f),
+                        SizeScale = F("unk08"),
+                        MaxSizePx = F("unk64"),
+                        Range = range,
                     });
                 }
             }
@@ -296,6 +309,9 @@ public struct GameZLight
 {
     public Vector3 Position;
     public Color Color;
+    public float SizeScale;  // source unk08: 0 (default) / 1 / 2 / 5 — relative sprite size
+    public float MaxSizePx;  // source unk64: max sprite size in pixels (30 where set)
+    public float Range;      // source unk68 (else unk52): visibility range in metres, 0 = unset
 }
 
 public sealed class GameZPolygon

@@ -21,7 +21,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 5. ☑ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block **(DONE 2026-07-18)**
 6. ☑ Night brightness calibration — deck + sky vs original **(DONE 2026-07-18)**
 7. ☑ Map edge continuation — rolling window of repeated border tiles + clutter **(DONE 2026-07-18)**
-8. ☐ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker
+8. ☑ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker **(DONE 2026-07-18)**
 9. ☐ Animated vehicles (pt 2) — train/car path motion + steam puffers
 10. ☐ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup
 11. ☐ Dive sound — tune down (ours reads louder than the original)
@@ -376,7 +376,8 @@ airport-reappearance spot (no airport, row-matched border tiles) and 8 km NE of 
 (rolling forest + trees); C4/C5 smoke clean, no instance-buffer errors. *Known nit
 (pre-existing, out of scope):* in-map beacon point-lights (`rc2_h`/`g1245`) punch through
 the fog as bright dots from far outside — the additive point-sprite path carries no fog
-term (backlog). *Open fidelity question (user, post-landing):* the alternating reflection
+term (backlog; **resolved 2026-07-18** by the point-light sprite rework — the lights' own
+data range now fades them out, see HISTORY). *Open fidelity question (user, post-landing):* the alternating reflection
 is our seam-free construction — the original likely does NOT mirror (NOTES.md: plain
 repetition, possibly sharing the map-edge vertex row); settle by in-game A/B of an
 asymmetric border feature (one-line swap in `MirrorAxis`). User in-flight A/B of the
@@ -414,9 +415,38 @@ NEW_GAME_START anim (doors whose anim is a timed motion get their final pose in 
 motion itself is item 9). Safety net: any `destroyed`-named subtree that no anim covers gets a
 name-based hide + log line. Analyze + document the scenario→state path as part of this item.
 
-**Verify:** C1 IA1: oil tanks/hangars stop flickering (A/B screenshots, using --frames and --shots params); zeppelin/train
+**Verify:** C1 IA1: oil tanks/hangars stop flickering (A/B screenshots, using --frames and --shots); zeppelin/train
 presence matches the original per scenario (user in-game check); nothing legitimate vanishes
 on a full fly-over; all chapters still build clean.
+
+**DONE (2026-07-18):** `src/Mech3/AnimDefs.cs` (generic ANIMATION_DEFINITION loader — raw-list
+walk since ZrdrDict collapses the meaningful duplicate keys; parses the four state op kinds,
+records + skips playback ops) + `src/Mech3/MissionState.cs` (applier, run in every world
+build): anchored RESET_STATEs → ON_STARTUP sequences (zepstate) → startanims NEW_GAME_START
+end-states in list order → a logged safety net for uncovered `destroyed` subtrees (C1: 53,
+all per-object defs that are part-2 scope). INACTIVE = hidden + colliders disabled.
+Same-day fix (user-reported): the net's initial `*_dest` suffix rule hid `ref_tank_dest`
+— the parent GROUP of the five healthy harbor `refuel*` tanks ("destructible", not
+"destroyed"), its only match — wiping the visible tanks; net is now `*destroyed*`-only,
+tanks verified back (screenshot vs `OriginalScreenshots/C1 IA1 Harbour zeppelin-run.png`).
+Anchoring: wildcard NAME (`*`/`**`/`#`, `.flt` suffix optional) or ANIMATION_ROOT_NAME→parent
+lift **capped at 16 root matches** — the uncapped first pass anchored ~50 empty-NAME (NAME1
+multi-target) zeppelin-part defs onto all 217 bare `healthy` nodes and applied 1.58 M ops;
+capped = 3,937 ops, world load 1.4 s. Resolution uses original gamez names via a new
+SceneBuilder `cs_name` meta (Godot mangles duplicate sibling names — 9 `lifeballoon`s).
+Verified by stash-based A/B screenshots: the airfield building's dark crumpled destroyed
+overlay is gone, the white `dliner1` zeppelin no longer pokes out of its shed (empty as the
+original's IA1), hangar-3 front doors closed→open (an odd right-side roof slab proved
+pre-existing gamez geometry — identical in the before shot); C1/C4/C5/C1C/C2 fly-smokes
+clean, zero errors. `train_on_track` analysis: it animates the *passenger* train
+(`passenger_trengine` — sound + steam puffer + SI-script motion, all part-2 playback), so
+`cargotrain` correctly stays INACTIVE and no train renders parked in part 1. Scenario
+analysis (closes the open question): **negative** — scenario names appear only in `ia.json`
+spawn lists; world state is per-mission, identical across scenarios (`zeppelins.json` is
+gameplay config for the always-present IA zeppelin). Schema + scopes + the mis_anim.zbd
+substitution documented in `docs/formats/anim-definitions.md` (the item-13 page). **User
+in-game A/B pending** (zeppelin/train roster per mission + a full fly-over for anything
+legitimately missing). Part 2 owns motion playback + the per-object (NAME1/generic-root) defs.
 
 ## 9. Animated vehicles — anim-state engine part 2
 

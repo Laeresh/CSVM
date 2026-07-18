@@ -37,6 +37,53 @@ public static class Zrdr
             ?? throw new InvalidDataException($"'{fileName}' is not a reader list");
     }
 
+    /// <summary>
+    /// Enumerates every reader file in a zrdr ZIP or directory whose raw JSON contains
+    /// <paramref name="contentFilter"/> (a cheap pre-parse sniff — reader archives hold
+    /// hundreds of files and most callers want one family, e.g. "ANIMATION_DEFINITIONS"),
+    /// yielding (fileName, parsed root list). Unparseable files are skipped.
+    /// </summary>
+    public static IEnumerable<(string Name, List<object?> Root)> LoadMatchingFiles(
+        string zrdrPath, string contentFilter)
+    {
+        static (string, List<object?>)? TryParse(string name, byte[] bytes, string filter)
+        {
+            // UTF-8 substring sniff: the filter keys are plain ASCII JSON strings.
+            if (System.Text.Encoding.UTF8.GetString(bytes).IndexOf(filter, StringComparison.Ordinal) < 0)
+                return null;
+            try
+            {
+                using var doc = JsonDocument.Parse(bytes);
+                return Convert(doc.RootElement) is List<object?> root ? (name, root) : null;
+            }
+            catch (JsonException)
+            {
+                return null;
+            }
+        }
+
+        if (Directory.Exists(zrdrPath))
+        {
+            foreach (var file in Directory.EnumerateFiles(zrdrPath, "*.json"))
+                if (TryParse(Path.GetFileName(file), File.ReadAllBytes(file), contentFilter) is { } hit)
+                    yield return hit;
+        }
+        else if (File.Exists(zrdrPath))
+        {
+            using var zip = ZipFile.OpenRead(zrdrPath);
+            foreach (var entry in zip.Entries)
+            {
+                if (!entry.Name.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+                    continue;
+                using var s = entry.Open();
+                using var ms = new MemoryStream();
+                s.CopyTo(ms);
+                if (TryParse(entry.Name, ms.ToArray(), contentFilter) is { } hit)
+                    yield return hit;
+            }
+        }
+    }
+
     private static object? Convert(JsonElement e) => e.ValueKind switch
     {
         JsonValueKind.Array => ConvertList(e),

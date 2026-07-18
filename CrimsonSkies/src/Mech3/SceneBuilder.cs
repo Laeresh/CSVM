@@ -24,6 +24,7 @@ public sealed class SceneBuilder
     private readonly bool _cullBackfaces;
     private readonly Func<string, bool>? _blendTexture;
     private readonly Func<string, bool>? _billboardTexture;
+    private readonly Func<string, bool>? _glowTexture;
     private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
@@ -31,7 +32,8 @@ public sealed class SceneBuilder
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, ConcavePolygonShape3D?> _shapeCache = new();
-    private StandardMaterial3D? _lightPointMaterial;
+    private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
+    private Shader? _lightShader;
 
     // sRGB EOTF (Godot's exact texture-linearization curve) for the DX7 gamma-space vertex
     // modulate on the fullbright world/cloud shaders — see the usage in GetBiasShader. Also
@@ -66,9 +68,14 @@ vec3 csky_srgb_to_linear(vec3 c) {
     /// ("unk2"), like the original engine — hides inward-facing interior structure (the
     /// autogyro's frame lattice behind its fuselage openings). Used for aircraft; the
     /// world keeps rendering double-sided until validated the same way.</param>
+    /// <param name="glowTexture">Given a material's texture name, true for light-source flare
+    /// sprites (lamp/beacon glow quads, `*flare*` textures): billboarded like the cloud
+    /// sprites, always alpha-blended, and exempt from the `csky_world_light` night dimming —
+    /// a lamp emits light, it doesn't get darker at night.</param>
     public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false,
         bool generateCollision = false, Func<string, bool>? blendTexture = null,
-        Func<string, bool>? billboardTexture = null, bool cullBackfaces = false)
+        Func<string, bool>? billboardTexture = null, bool cullBackfaces = false,
+        Func<string, bool>? glowTexture = null)
     {
         _gamez = gamez;
         _textures = textures;
@@ -77,6 +84,7 @@ vec3 csky_srgb_to_linear(vec3 c) {
         _blendTexture = blendTexture;
         _billboardTexture = billboardTexture;
         _cullBackfaces = cullBackfaces;
+        _glowTexture = glowTexture;
     }
 
     /// <summary>Builds the subtree rooted at <paramref name="node"/>; null if skipped entirely.</summary>
@@ -99,6 +107,9 @@ vec3 csky_srgb_to_linear(vec3 c) {
             collidable = false;
 
         var n3d = new Node3D { Name = Sanitize(node.Name) };
+        // The ORIGINAL gamez name, for name-based resolution (MissionState): Godot both
+        // sanitizes ('.'→'_') and auto-renames duplicate siblings, so Name is unreliable.
+        n3d.SetMeta(MissionState.NameMeta, node.Name);
         if (node.Local is { } local)
             n3d.Transform = local;
 
@@ -167,38 +178,82 @@ vec3 csky_srgb_to_linear(vec3 c) {
         ColliderCount++;
     }
 
-    // One POINTS-primitive surface per mesh; fixed screen-size dots, additive blend so
-    // they glow over whatever is behind them (and pure-black lights become invisible).
+    // Point-sprite lights: camera-facing soft radial glows, additive blend so they shine
+    // over whatever is behind them (and pure-black lights become invisible). The original
+    // renders these as distance-sized sprites — user-verified look (2026-07-18): soft
+    // star-like falloff (no hard cutoff) and clearly brighter than plain fixed dots; the
+    // yellow tarmac lamps, blue pier lights and the lighthouse all take this path.
+    // Per-light data drives size and reach: SizeScale (unk08) scales the sprite,
+    // MaxSizePx (unk64 = 30) caps it on approach, Range (unk68/unk52 = 1500–4000 m)
+    // fades it out with distance — which also stops in-map beacons punching through the
+    // fog from kilometres outside (the item-7 nit). One POINTS surface per (size, range)
+    // group per mesh (uniform per mesh in practice); materials cached per param set. The
+    // camera-anchored skydome's stars sit past any data range, so BuildHorizon exempts
+    // them via the csky_light_fade instance uniform.
+    private const string LightShaderCode = @"
+shader_type spatial;
+render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
+uniform float size_scale = 1.0;   // data unk08 (0 -> 1)
+uniform float max_size_px = 30.0; // data unk64
+uniform float range_far = 0.0;    // data unk68/unk52; 0 = no distance fade
+instance uniform float csky_light_fade = 1.0; // 0 = skydome stars (no range fade)
+void vertex() {
+    float dist = max(length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz), 1.0);
+    // A fixed world diameter projected to pixels, clamped: far lights stay visible
+    // star-sized dots, near lights cap at the data's max sprite size. TUNE: 6 m glow.
+    float px = 6.0 * size_scale * PROJECTION_MATRIX[1][1] * VIEWPORT_SIZE.y / (2.0 * dist);
+    POINT_SIZE = clamp(px, 3.0, max_size_px);
+    float fade = (range_far > 0.0)
+        ? 1.0 - smoothstep(0.6 * range_far, range_far, dist) : 1.0;
+    COLOR.a = mix(1.0, fade, csky_light_fade);
+}
+void fragment() {
+    float r = length(POINT_COORD - vec2(0.5)) * 2.0;
+    // Soft star-like glow: hot gaussian core, no hard edge.
+    float glow = exp(-r * r * 5.0) * smoothstep(1.0, 0.6, r);
+    ALBEDO = COLOR.rgb * 1.6; // brightness gain, TUNE
+    ALPHA = glow * COLOR.a;
+}";
+
     private ArrayMesh GetLightPoints(int meshIndex)
     {
         if (_lightMeshCache.TryGetValue(meshIndex, out var cached))
             return cached;
 
-        var lights = _gamez.Meshes[meshIndex].Lights;
-        var points = new Vector3[lights.Count];
-        var colors = new Color[lights.Count];
-        for (int i = 0; i < lights.Count; i++)
+        // Group the mesh's lights by their size/range params → one POINTS surface +
+        // shared material per group (a mesh's lights are uniform in practice).
+        var groups = new Dictionary<(float Size, float MaxPx, float Range), (List<Vector3> P, List<Color> C)>();
+        foreach (var l in _gamez.Meshes[meshIndex].Lights)
         {
-            points[i] = lights[i].Position;
-            colors[i] = lights[i].Color;
+            var key = (l.SizeScale <= 0f ? 1f : l.SizeScale,
+                       l.MaxSizePx <= 0f ? 30f : l.MaxSizePx,
+                       l.Range);
+            if (!groups.TryGetValue(key, out var g))
+                groups[key] = g = (new List<Vector3>(), new List<Color>());
+            g.P.Add(l.Position);
+            g.C.Add(l.Color);
         }
-        var arrays = new Godot.Collections.Array();
-        arrays.Resize((int)Mesh.ArrayType.Max);
-        arrays[(int)Mesh.ArrayType.Vertex] = points;
-        arrays[(int)Mesh.ArrayType.Color] = colors;
 
         var mesh = new ArrayMesh();
-        mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Points, arrays);
-        _lightPointMaterial ??= new StandardMaterial3D
+        foreach (var (key, g) in groups)
         {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            VertexColorUseAsAlbedo = true,
-            UsePointSize = true,
-            PointSize = 3f, // TUNE: source size params (0.17/30/4000/6000) not yet decoded
-            BlendMode = BaseMaterial3D.BlendModeEnum.Add,
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha, // transparent pass: no depth write
-        };
-        mesh.SurfaceSetMaterial(0, _lightPointMaterial);
+            var arrays = new Godot.Collections.Array();
+            arrays.Resize((int)Mesh.ArrayType.Max);
+            arrays[(int)Mesh.ArrayType.Vertex] = g.P.ToArray();
+            arrays[(int)Mesh.ArrayType.Color] = g.C.ToArray();
+            mesh.AddSurfaceFromArrays(Mesh.PrimitiveType.Points, arrays);
+
+            if (!_lightMaterialCache.TryGetValue(key, out var mat))
+            {
+                _lightShader ??= new Shader { Code = LightShaderCode };
+                mat = new ShaderMaterial { Shader = _lightShader };
+                mat.SetShaderParameter("size_scale", key.Size);
+                mat.SetShaderParameter("max_size_px", key.MaxPx);
+                mat.SetShaderParameter("range_far", key.Range);
+                _lightMaterialCache[key] = mat;
+            }
+            mesh.SurfaceSetMaterial(mesh.GetSurfaceCount() - 1, mat);
+        }
         _lightMeshCache[meshIndex] = mesh;
         return mesh;
     }
@@ -221,8 +276,9 @@ vec3 csky_srgb_to_linear(vec3 c) {
         // billboards around the mesh origin, but the source quads sit offset from it, so
         // without this they would swing around the node as the camera turns. The offset is
         // stored per mesh; every instance re-applies it as its local position.
+        bool glowSprite = IsGlowSpriteMesh(mesh);
         var offset = Vector3.Zero;
-        if (UsesBillboardTexture(mesh) && mesh.Vertices.Count > 0)
+        if ((UsesBillboardTexture(mesh) || glowSprite) && mesh.Vertices.Count > 0)
         {
             foreach (var v in mesh.Vertices)
                 offset += v;
@@ -259,7 +315,9 @@ vec3 csky_srgb_to_linear(vec3 c) {
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset);
-            st.SetMaterial(GetMaterial(materialIndex, priority, rank, doubleSided));
+            st.SetMaterial(glowSprite
+                ? GetGlowMaterial(materialIndex)
+                : GetMaterial(materialIndex, priority, rank, doubleSided));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -279,6 +337,42 @@ vec3 csky_srgb_to_linear(vec3 c) {
                 return true;
         }
         return false;
+    }
+
+    // A glow flare SPRITE: a single-polygon mesh entirely skinned with a glow (flare)
+    // texture — the lamp/beacon light quads (refinery_flare 16 m, gen_flare_yellow 4 m,
+    // docklight_flare, litehsflare, …). Only these billboard: the same flare textures also
+    // appear on polys INSIDE regular geometry (C4 world Brigand wing meshes carry an
+    // oil_liteflare poly; the shared effects-atlas mesh has flare polys) where recentering/
+    // billboarding would distort the mesh, and multi-poly flare STRINGS (11× 6-poly
+    // flare_green rows, 22–72 m long) would swing around a common centroid if billboarded
+    // whole — those keep static rendering (per-poly pivots would be the faithful upgrade).
+    private bool IsGlowSpriteMesh(GameZMesh mesh)
+    {
+        if (_glowTexture == null || mesh.Polygons.Count != 1)
+            return false;
+        var poly = mesh.Polygons[0];
+        if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
+            return false;
+        var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
+        return tex != null && _glowTexture(tex);
+    }
+
+    // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
+    // must never scissor into a hard star cutout), no night dimming (it's a light source).
+    private readonly Dictionary<int, Material> _glowMaterialCache = new();
+
+    private Material GetGlowMaterial(int materialIndex)
+    {
+        if (_glowMaterialCache.TryGetValue(materialIndex, out var cached))
+            return cached;
+        var texName = _gamez.Materials[materialIndex].TextureName;
+        var tex = texName != null ? _textures.Find(texName) : null;
+        Material mat = tex != null
+            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true)
+            : GetMaterial(materialIndex, 0, 0, true);
+        _glowMaterialCache[materialIndex] = mat;
+        return mat;
     }
 
     private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset)
@@ -388,7 +482,9 @@ vec3 csky_srgb_to_linear(vec3 c) {
             // a billboard ShaderMaterial rather than the bias shader — no depth bias (free-
             // floating sprites have nothing coplanar to fight) but the SAME cylindrical distance
             // fog, so distant sprites fade into the fog wall like the terrain they float over
-            // (Run-2 item 4) instead of punching through as crisp white.
+            // (Run-2 item 4) instead of punching through as crisp white. (Glow flares don't
+            // branch here — their billboard treatment is per-MESH, see BuildMesh: the same
+            // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor);
             return BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
@@ -538,16 +634,16 @@ void fragment() {");
     // nothing coplanar to fight) but carries the identical cylindrical distance-fog term, so
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
     // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
-    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor)
+    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow = false)
     {
-        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor) };
+        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow) };
         mat.SetShaderParameter("albedo_tex", tex);
         return mat;
     }
 
-    private Shader GetBillboardShader(bool blend, bool scissor)
+    private Shader GetBillboardShader(bool blend, bool scissor, bool glow = false)
     {
-        int key = (blend ? 1 : 0) | (scissor ? 2 : 0);
+        int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0);
         if (_billboardShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -584,14 +680,17 @@ void vertex() {
 
 void fragment() {
     vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
-    ALBEDO = col.rgb * csky_world_light;
     // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
     // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
     // distance + the fragment-altitude fade.
     vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
-        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));
-    ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt);");
+        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+        // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
+        // darker at night — it's what lights the scene). Clouds ride the world brightness.
+        sb.AppendLine(glow
+            ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
+            : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
         if (blend || scissor)
             sb.AppendLine("    ALPHA = col.a;");
         if (scissor)

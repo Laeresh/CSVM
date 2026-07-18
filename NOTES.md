@@ -39,6 +39,7 @@ https://github.com/bethington/ghidra-mcp
 - Environment
     - Map extension not exactily the same as in original
     - C4 Cloud deck texture not following plane
+    - generic way to find billboard sprites (flames on refinery?)
 ## Milestone 2 Polishing Run 2
 
 ### Work for me
