@@ -52,6 +52,13 @@ public sealed class WeatherState
     public float CloudThickness { get; private set; }
     public bool HasCloudBand => CloudTop > CloudBottom;
 
+    /// <summary>The cloud deck's face tints from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
+    /// when the mission carries them (integer-RGB in the data — normalized by
+    /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Decoded now for the
+    /// night-brightness deck-tint calibration; unused this milestone.</summary>
+    public Color? CloudTopColor { get; private set; }
+    public Color? CloudBottomColor { get; private set; }
+
     /// <summary>Steady wind (m/s) plus the random-gust bounds — the drift source for the
     /// future ambient cloud puffs (parsed now so the loader is complete; unused this milestone).</summary>
     public Vector3 WindStatic { get; private set; }
@@ -103,6 +110,8 @@ public sealed class WeatherState
             w.CloudTop = ScalarAfter(cc, "TOP");
             w.CloudBottom = ScalarAfter(cc, "BOTTOM");
             w.CloudThickness = ScalarAfter(cc, "THICKNESS");
+            w.CloudTopColor = ParseColor(ListAfter(cc, "TOP_COLOR"));
+            w.CloudBottomColor = ParseColor(ListAfter(cc, "BOTTOM_COLOR"));
         }
         if (dict.List("WIND") is { } wind)
         {
@@ -113,10 +122,7 @@ public sealed class WeatherState
         foreach (var zone in new[] { "ZONE1", "ZONE2" })
             if (dict.Dict(zone) is { } z)
             {
-                var color = z.List("FOG_COLOR") is { Count: >= 3 } fc
-                    && fc[0] is float r && fc[1] is float g && fc[2] is float b
-                        ? new Color(r, g, b)
-                        : NoFog.FogColor;
+                var color = ParseColor(z.List("FOG_COLOR")) ?? NoFog.FogColor;
                 (float near, float far) = z.List("FOG_RANGES") is { Count: >= 2 } fr
                     && fr[0] is float n && fr[1] is float f
                         ? (n, f)
@@ -151,5 +157,30 @@ public sealed class WeatherState
                 && v[0] is float x && v[1] is float y && v[2] is float z)
                 return new Vector3(x, y, z);
         return Vector3.Zero;
+    }
+
+    // key → the immediately following list value in a flat alternating block
+    // (CLOUD_COVER: "TOP_COLOR", [192, 192, 192], …). Null if the key is absent.
+    private static List<object?>? ListAfter(List<object?> list, string key)
+    {
+        for (int i = 0; i + 1 < list.Count; i++)
+            if (list[i] is string s && s.Equals(key, StringComparison.OrdinalIgnoreCase)
+                && list[i + 1] is List<object?> v)
+                return v;
+        return null;
+    }
+
+    // A weather.json colour triple, normalized to 0..1. Two encodings coexist: normalized
+    // floats (C1 FOG_COLOR 0.69) and integer RGB (C4 FOG_COLOR [192,192,192]; every
+    // TOP_COLOR/BOTTOM_COLOR). Any component strictly > 1 means the whole triple is 0–255 and
+    // is divided by 255 — verified unambiguous across all weather.json (the only 1.0-bearing
+    // colour is a float sky-fog [0.80,0.84,1.0], whose max is exactly 1, so it stays a float).
+    // These are DX7 sRGB framebuffer values; PlaneViewer converts them to linear for the shader.
+    private static Color? ParseColor(List<object?>? list)
+    {
+        if (list is not { Count: >= 3 } || list[0] is not float r || list[1] is not float g || list[2] is not float b)
+            return null;
+        float scale = r > 1f || g > 1f || b > 1f ? 1f / 255f : 1f;
+        return new Color(r * scale, g * scale, b * scale);
     }
 }

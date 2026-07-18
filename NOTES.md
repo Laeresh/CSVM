@@ -30,6 +30,7 @@ https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
 https://github.com/bethington/ghidra-mcp
 
 ## Issues
+- Extract rof file zlib 1.3.1 
 - Dive sound not as present in the game
 - color grading for the skybox
 - FlightModel
@@ -57,4 +58,11 @@ https://github.com/bethington/ghidra-mcp
     - Collision are not always crashes, depends on which part is hit and speed, sometimes only damages the plane
     - There are hints on damage animation in the vehicle.json
     - On Crash there is not only a explosion but the plane breaks apart and the parts are lying on the ground
+### Work for me
+Your side of the run, collected from the grill answers:
 
+Original-game research: does part damage degrade handling/power before a critical part dies, or is it cosmetic until the explosion? (Decides a future run's scope.)
+Measurements for item 12: time a full 360° roll and a sustained pitch maneuver in the original (Bloodhawk, cruise speed).
+Reference screenshots for item 6: original night shots of the deck underside, sky gradient, and lit terrain at spots we can reproduce with --campos.
+
+Wrap around, repeats parts of the mesh. Are there vertex that repeat, have vectors that have the same yz or xz coordinates as the edge of the map
