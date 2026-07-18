@@ -16,8 +16,8 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 
 1. ☑ Log hygiene — missing-texture + clutter warnings: once, without stack traces **(DONE 2026-07-17)**
 2. ☑ C4/C5 shader instance-uniform errors (buffer size; + C5 `rtexture*` check) **(DONE 2026-07-17)**
-3. ☐ C4 white fog — FOG_COLOR integer-RGB schema fix
-4. ☐ Clouds render through fog — fog term for cloud sprites + puffs
+3. ☑ C4 white fog — FOG_COLOR integer-RGB schema fix **(DONE 2026-07-18)**
+4. ☑ Clouds render through fog — fog term for cloud sprites + puffs **(DONE 2026-07-18)**
 5. ☐ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block
 6. ☐ Night brightness calibration — deck + sky vs original
 7. ☐ Map edge continuation — border tiles extend outward (terrain→terrain, sea→sea)
@@ -146,6 +146,22 @@ semantics (full fog at every flyable altitude — a pure cylinder with no vertic
 **Verify:** C4 A/B screenshot (fog converges to 192-gray, soft distance ramp); C1 regression
 (0.69-float path renders byte-identical); user in-game check vs the original's RM haze.
 
+**DONE (2026-07-18):** `Weather.ParseColor` normalizes every weather.json colour triple —
+divide by 255 iff any component is strictly > 1 — proven unambiguous by scanning all
+weather.json (only `1.0`-bearing colour is a float sky-fog `[0.80,0.84,1.0]`, max exactly 1
+→ stays float; no integer colour is all-{0,1}). FOG_COLOR now flows through it; C4's
+`[192,192,192]` → 0.753 sRGB → PlaneViewer's existing sRGB→linear, unchanged. Verified by
+`--chapter --sky-zone --campos` shots: **C4** fully-fogged region measures exactly
+`(192,192,192)` with a soft mountain→fog ramp (was blown white with a hard cut); **C1**
+zone1 fog measures `(176,176,176)` = 0.69·255, byte-identical (the float path is untouched
+by construction — `≤1` triples aren't scaled; log still prints `fog 0.69 gray`). The C4
+"hard horizon cut" was entirely the blown colour — no FOG_ALTITUDE follow-up needed (its
+`[10000,11000]` is a correct pure-cylinder full-fog-at-all-altitudes for RM). Also decoded +
+parsed `CLOUD_COVER`'s `TOP_COLOR`/`BOTTOM_COLOR` (integer RGB, into
+`CloudTopColor`/`CloudBottomColor`, unused this milestone — feeds item 6). New
+`docs/formats/weather.md` seeds the public reference (schema + the dual-encoding rule); item
+13 grows it. User in-game A/B vs the original RM haze still pending playtest.
+
 ## 4. Clouds render through fog
 
 **Goal:** Distant cloud sprites and ambient puffs fade into the fog like the terrain they
@@ -165,6 +181,35 @@ billboards are untouched (dome fog behavior is by design since the 2026-07-17 re
 
 **Verify:** `--campos` shots near the fog wall: cloud sprites fade in step with adjacent
 terrain; puffs at shell edge fog correctly while near puffs are unchanged; C1 zone2 + C4.
+
+**DONE (2026-07-18):** Both cloud renderers now carry SceneBuilder's cylindrical fog term
+(identical formula + `csky_fog_*` globals). (a) The cloud-sprite billboard path was
+`StandardMaterial3D` (no generated shader ⇒ fog-immune); replaced with a billboard
+**`ShaderMaterial`** — same hand-rolled keep-scale billboard as CloudPuffs, `COLOR × albedo`,
+`blend_mix`/`depth_draw_never` for the soft-alpha clouds, and the fog `mix` — cached per
+blend/scissor in a new `_billboardShaderCache`. It carries **no** `csky_fog_on` instance
+uniform (clouds always fog, and omitting it keeps the sprites off the item-2 instance-uniform
+buffer). (b) `CloudPuffs`' shader got the three fog globals + the same `mix` (its `fog_disabled`
+render mode stays — that only turns off Godot's *built-in* fog; ours is custom). **Verified**
+via deterministic stash-based A/B at a camera above the puff layer (so the random-seeded near
+puffs don't confound), C1/IA1 zone2 + C4/IA1 zone2, pixel-measured by distance band:
+
+- **C1** far sprites (≳2 km) `196.6→176.0` gray = *exactly* FOG_COLOR (0.69·255), crisp-white
+  px `35%→0%` — fully absorbed into the fog wall; mid `204→178`; **near** sprites stay bright
+  `208→195` (24 % still white). Smooth near-bright→far-fog gradient matching the terrain.
+- **C4** far sprites `→192.0` = *exactly* its FOG_COLOR (192), `0%` white; near `→200` (20 %
+  white). Same mechanism, C4's colour.
+- Both shaders compile + render with **zero** errors (`--fly` C1 smoke clean: spawn/world/2670
+  colliders intact). No-weather `--chapter` (fog globals at their no-op default) renders clouds
+  **crisp** (max 239, 27 % white) — the billboard shader doesn't fog when weather is absent.
+
+*Honest scope note:* CloudPuffs' **visible** fog is negligible in the flyable zones — the 620 m
+puff shell sits almost entirely inside the fog's clear near-range (`FOG_RANGES.x`/2 = 500 m in
+both C1/C4 zone2), so shell-edge puffs fog only ~2 % and near puffs are unchanged (measured
+`203.4→203.1` same-camera). It is a correct, minimal *consistency* fix (removes the fog
+immunity; future-proof if fog ranges tighten). The dominant "crisp white shapes against the fog
+wall" were always the world **sprites**, now fixed. Moon/skydome untouched (dome fog is by
+design). User in-flight A/B still nice-to-have.
 
 ## 5. Precipitation — rain and snow
 

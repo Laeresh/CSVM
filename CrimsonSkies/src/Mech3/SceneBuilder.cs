@@ -26,6 +26,7 @@ public sealed class SceneBuilder
     private readonly Func<string, bool>? _billboardTexture;
     private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
+    private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
@@ -372,21 +373,13 @@ public sealed class SceneBuilder
             bool blend = _textures.LastHadAlpha
                 && (_textures.LastAlphaIsSoft || (_blendTexture != null && _blendTexture(texName)));
             bool scissor = _textures.LastHadAlpha && !blend;
-            // Cloud sprites face the camera (their meshes are recentered to match). They
-            // keep StandardMaterial3D: the bias shader has no billboard support, and
-            // free-floating sprites have nothing to z-fight with.
+            // Cloud sprites face the camera (their meshes are recentered to match). They take
+            // a billboard ShaderMaterial rather than the bias shader — no depth bias (free-
+            // floating sprites have nothing coplanar to fight) but the SAME cylindrical distance
+            // fog, so distant sprites fade into the fog wall like the terrain they float over
+            // (Run-2 item 4) instead of punching through as crisp white.
             if (_billboardTexture != null && _billboardTexture(texName))
-            {
-                var mat = NewStandard();
-                mat.AlbedoTexture = tex;
-                if (blend)
-                    mat.Transparency = BaseMaterial3D.TransparencyEnum.Alpha;
-                else if (scissor)
-                    mat.Transparency = BaseMaterial3D.TransparencyEnum.AlphaScissor;
-                mat.BillboardMode = BaseMaterial3D.BillboardModeEnum.Enabled;
-                mat.BillboardKeepScale = true;
-                return mat;
-            }
+                return BillboardMaterial(tex, blend, scissor);
             return BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
         }
 
@@ -509,6 +502,74 @@ void fragment() {");
 
         var shader = new Shader { Code = sb.ToString() };
         _biasShaderCache[key] = shader;
+        return shader;
+    }
+
+    // A camera-facing billboard material for the cloud sprites (cloud1/cloud2 — flat 2D cards
+    // in the source). Unlike the bias shader it does no depth bias (free-floating sprites have
+    // nothing coplanar to fight) but carries the identical cylindrical distance-fog term, so
+    // distant sprites fade into the fog wall in step with the terrain they float over. blend /
+    // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
+    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor)
+    {
+        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor) };
+        mat.SetShaderParameter("albedo_tex", tex);
+        return mat;
+    }
+
+    private Shader GetBillboardShader(bool blend, bool scissor)
+    {
+        int key = (blend ? 1 : 0) | (scissor ? 2 : 0);
+        if (_billboardShaderCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("shader_type spatial;");
+        // Fullbright like the rest of the world, double-sided, no shadows. fog_disabled turns
+        // OFF Godot's built-in fog (we roll our own csky_fog_* below); blend clouds render in
+        // the transparent pass writing no depth (matches the old StandardMaterial3D), scissor/
+        // opaque render normally.
+        sb.Append("render_mode unshaded, cull_disabled, shadows_disabled, fog_disabled");
+        if (blend)
+            sb.Append(", blend_mix, depth_draw_never");
+        sb.AppendLine(";");
+        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
+        // Same global distance-fog params as GetBiasShader's world shader. No csky_fog_on
+        // instance uniform — clouds always fog, and omitting it keeps the sprites off the
+        // instance-uniform buffer (see the Run-2 item-2 buffer note).
+        sb.AppendLine("global uniform vec3 csky_fog_color;");
+        sb.AppendLine("global uniform vec2 csky_fog_range;");
+        sb.AppendLine("global uniform vec2 csky_fog_alt;");
+        sb.AppendLine(@"
+void vertex() {
+    // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
+    // hand — the bias shader can't billboard, like CloudPuffs). The mesh was recentered on its
+    // quad centre and the instance placed there, so the quad pivots at its centre.
+    MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
+        INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
+    MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
+    MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
+    MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
+}
+
+void fragment() {
+    vec4 col = COLOR * texture(albedo_tex, UV);
+    ALBEDO = col.rgb;
+    // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
+    // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
+    // distance + the fragment-altitude fade.
+    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
+        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));
+    ALBEDO = mix(ALBEDO, csky_fog_color, fog_amt);");
+        if (blend || scissor)
+            sb.AppendLine("    ALPHA = col.a;");
+        if (scissor)
+            sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        sb.AppendLine("}");
+
+        var shader = new Shader { Code = sb.ToString() };
+        _billboardShaderCache[key] = shader;
         return shader;
     }
 

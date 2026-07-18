@@ -78,6 +78,13 @@ public sealed partial class CloudPuffs : Node3D
         uniform sampler2D atlas : source_color, filter_linear;
         uniform float frame_count = 2.0;
 
+        // Same global distance-fog params as SceneBuilder's world shader (registered by
+        // PlaneViewer; no-op ranges when not flying). Puffs near the fog shell fade into the
+        // fog wall like the terrain below them (Run-2 item 4), replacing the old fog immunity.
+        global uniform vec3 csky_fog_color;
+        global uniform vec2 csky_fog_range;
+        global uniform vec2 csky_fog_alt;
+
         varying flat float v_frame;
         varying flat float v_alpha;
 
@@ -101,7 +108,13 @@ public sealed partial class CloudPuffs : Node3D
             float col = floor(v_frame + 0.5);
             vec2 uv = vec2((UV.x + col) / frame_count, UV.y);
             vec4 t = texture(atlas, uv);
-            ALBEDO = t.rgb;
+            // Cylindrical distance fog, identical to the world shader: a puff near the shell
+            // edge fades into the fog wall like the terrain below it. VERTEX is view-space in
+            // fragment; INV_VIEW_MATRIX lifts it to world for the distance + altitude fade.
+            vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+            float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
+                * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));
+            ALBEDO = mix(t.rgb, csky_fog_color, fog_amt);
             ALPHA = t.a * v_alpha;
         }
         """;
