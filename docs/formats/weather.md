@@ -91,9 +91,41 @@ Bare-scalar block: `STATIC_VELOCITY [x,y,z]` (steady wind m/s) + `RANDOM_MAX_SPE
 `RANDOM_ACCEL` (random-gust bounds). Parsed in full; drives the ambient cloud-puff drift
 (see `CloudPuffs.cs`).
 
-## Precipitation *(item 5 — not yet decoded here)*
+## Precipitation (the item-5 decode, 2026-07-18)
 
-Several missions carry a bare-scalar precipitation block after `SHADOW_ANGLES`
-(`TYPE SNOW|RAIN`, `COLOR`, `WIND_DIR`, `WIND_VEL`, `GRAVITY`, `ALPHA_GRADIENT`;
-RAIN adds `PARTICLES`). C4 (SNOW), C1C/C2B (RAIN); C1/C5 IA1 have none. Documented when
-item 5 lands.
+Some missions end with a precipitation block — the last thing in the root dict, **after
+`SHADOW_ANGLES`**, as bare-scalar top-level siblings (not nested under a key, and not a
+sub-dict). Decoded fully on this install:
+
+| Key | Type | Meaning |
+|---|---|---|
+| `TYPE` | string | `SNOW` or `RAIN` (its presence is what gates the whole block) |
+| `PARTICLES` | int | **RAIN only** — density hint (all RAIN missions: `100`). SNOW omits it |
+| `COLOR` | int-RGB triple | particle tint — every mission seen is `[128, 128, 128]` (mid-gray) |
+| `WIND_DIR` | float | drift heading, degrees (all seen: `0.0`) — the precipitation's *own* wind, separate from the cloud `WIND` block |
+| `WIND_VEL` | float | drift speed, data units (all seen: `0.8`) |
+| `GRAVITY` | float | fall-rate multiplier, data units — **SNOW `1.0`, RAIN `3.0`** (rain falls ~3× faster) |
+| `ALPHA_GRADIENT` | float pair | `[0.5, 0.0]` everywhere — `[0]` is the peak opacity (the field is quite translucent) |
+
+Observed values (this install): **SNOW** — C4/IA1 + C4/M01. **RAIN** — C1C/IA1 + C2B/IA1
+(byte-identical to each other). C1/C5 IA1 carry **no** block. (The user recalled "rain" in
+the Rocky Mountains while the data says SNOW — at flight speed gray streaking flakes read
+either way; the data drives it, the A/B confirms.)
+
+**Parsing gotcha** — same as `CLOUD_COVER`/`WIND`: these keys pair with *bare* scalars
+(`"TYPE", "SNOW"`, `"WIND_DIR", 0.0`), so `ZrdrDict.FromAlternating` (which needs list
+values) can't read them — it treats a bare-scalar key as a valueless flag and drops the
+value. `Weather.cs` walks the raw `inner` list instead (`StringAfter`/`ScalarAfter`/
+`ListAfter`/`Vec2After`). The keys are unique at `inner`'s top level (the zone sub-lists'
+`FOG_COLOR`/`SUNLIGHT_*` are nested one level down, which the flat walkers never descend
+into), so first-match is always the right one. Note all numbers arrive as `float` via
+mech3ax's `GetSingle()`, so `PARTICLES 100` is `100.0f` — read with `ScalarAfter` and cast.
+
+`COLOR` is dual-encoded like the other colour triples (here always the integer form) and
+normalized by `ParseColor`; it's a DX7 sRGB framebuffer value, so the renderer converts it
+sRGB→linear (same as `FOG_COLOR`).
+
+Rendered by `CrimsonSkies/src/Effects/Precipitation.cs` as one camera-following MultiMesh
+field the plane flies through (SNOW = billboarded flakes, RAIN = fall-aligned streak quads);
+the data→look scale factors (fall m/s, particle count, box size, streak length) are marked
+`TUNE` there.

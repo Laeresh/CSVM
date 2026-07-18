@@ -102,6 +102,7 @@ public partial class PlaneViewer : Node3D
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
     private ColorRect? _whiteout;      // full-screen cloud-band whiteout overlay
     private Effects.CloudPuffs? _puffs; // ambient drifting cloud sprites at altitude
+    private Effects.Precipitation? _precip; // rain/snow field (self-animating; no _Process driving)
     private Camera3D _camera = null!;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
@@ -436,6 +437,14 @@ public partial class PlaneViewer : Node3D
                 GD.Print("cloud puffs: ambient field active over the cloud band");
             }
         }
+
+        // Precipitation (rain/snow) — only the missions whose weather.json carries a TYPE block
+        // get a field (C4 snow, C1C/C2B rain). It shows only below the CLOUD_COVER band (the
+        // rain falls from the cloud base — none above the overcast). Self-animating from the
+        // shader's TIME + camera built-ins, so it needs no _Process driving.
+        _precip = Effects.Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
+        if (_precip != null)
+            AddChild(_precip);
     }
 
     /// <summary>Picks the flight spawn for the current mission: a world position + a look-at

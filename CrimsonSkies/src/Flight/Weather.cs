@@ -65,6 +65,31 @@ public sealed class WeatherState
     public float WindRandomMaxSpeed { get; private set; }
     public float WindRandomAccel { get; private set; }
 
+    public enum PrecipKind { Rain, Snow }
+
+    /// <summary>The mission's precipitation, from the bare-scalar block at the end of
+    /// weather.json (after <c>SHADOW_ANGLES</c>). Only some missions carry one — C4 (SNOW),
+    /// C1C/C2B (RAIN); C1/C5 IA1 have none. Consumed by <see cref="Effects.Precipitation"/>.
+    /// <list type="bullet">
+    /// <item><see cref="Color"/> — the particle tint (integer-RGB in the data, e.g.
+    /// <c>[128,128,128]</c> → mid-gray; normalized by <see cref="ParseColor"/>).</item>
+    /// <item><see cref="WindDir"/> (degrees) / <see cref="WindVel"/> — the precipitation's own
+    /// horizontal drift (separate from the cloud <c>WIND</c> block above).</item>
+    /// <item><see cref="Gravity"/> — the fall-rate multiplier in the data's own units (SNOW 1,
+    /// RAIN 3 — rain falls faster); mapped to a metres/second fall speed by the renderer's TUNE
+    /// scale.</item>
+    /// <item><see cref="Particles"/> — a density hint (RAIN carries <c>PARTICLES 100</c>; SNOW
+    /// omits it → 0, the renderer substitutes a default).</item>
+    /// <item><see cref="AlphaGradient"/> — the <c>[0.5, 0.0]</c> pair; <c>.X</c> is the peak
+    /// opacity (the field is quite translucent).</item>
+    /// </list></summary>
+    public readonly record struct PrecipData(
+        PrecipKind Kind, Color Color, float WindDir, float WindVel,
+        float Gravity, int Particles, Vector2 AlphaGradient);
+
+    /// <summary>The mission's precipitation, or null when the weather.json has no TYPE block.</summary>
+    public PrecipData? Precip { get; private set; }
+
     /// <summary>Fog for a zone ("zone1"/"zone2"); a no-op fog if the zone is absent.</summary>
     public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
 
@@ -134,7 +159,31 @@ public sealed class WeatherState
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
                 w._zones[zone] = new ZoneFog(color, near, far,low, high, clip);
             }
+        w.ParsePrecip(inner);
         return w;
+    }
+
+    // The precipitation block (TYPE SNOW|RAIN, COLOR, WIND_DIR, WIND_VEL, GRAVITY, [PARTICLES],
+    // ALPHA_GRADIENT) sits at the END of the root dict, after SHADOW_ANGLES, as bare-scalar
+    // top-level siblings — so it's walked raw from `inner` (like CLOUD_COVER/WIND), not via the
+    // dict (which drops a key's value when it's a bare scalar rather than a list). The keys are
+    // unique at inner's top level (FOG_COLOR/SUNLIGHT_* live inside the nested zone sub-lists,
+    // which the flat walkers never descend into), so each first-match is the right one.
+    private void ParsePrecip(List<object?> inner)
+    {
+        string? type = StringAfter(inner, "TYPE");
+        PrecipKind kind;
+        if (string.Equals(type, "RAIN", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Rain;
+        else if (string.Equals(type, "SNOW", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Snow;
+        else return; // no TYPE (most missions) or an unknown type → no precipitation
+        Precip = new PrecipData(
+            kind,
+            ParseColor(ListAfter(inner, "COLOR")) ?? new Color(0.5f, 0.5f, 0.5f),
+            WindDir: ScalarAfter(inner, "WIND_DIR"),
+            WindVel: ScalarAfter(inner, "WIND_VEL"),
+            Gravity: ScalarAfter(inner, "GRAVITY"),
+            Particles: (int)ScalarAfter(inner, "PARTICLES"), // absent (SNOW) → 0
+            AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
     }
 
     // key → the immediately following scalar in a flat alternating list
@@ -146,6 +195,27 @@ public sealed class WeatherState
                 && list[i + 1] is float f)
                 return f;
         return 0f;
+    }
+
+    // key → the immediately following string (precipitation: "TYPE", "SNOW", …). Null if absent.
+    private static string? StringAfter(List<object?> list, string key)
+    {
+        for (int i = 0; i + 1 < list.Count; i++)
+            if (list[i] is string s && s.Equals(key, StringComparison.OrdinalIgnoreCase)
+                && list[i + 1] is string v)
+                return v;
+        return null;
+    }
+
+    // key → the immediately following 2-vector (precipitation: "ALPHA_GRADIENT", [0.5, 0.0]).
+    private static Vector2 Vec2After(List<object?> list, string key)
+    {
+        for (int i = 0; i + 1 < list.Count; i++)
+            if (list[i] is string s && s.Equals(key, StringComparison.OrdinalIgnoreCase)
+                && list[i + 1] is List<object?> v && v.Count >= 2
+                && v[0] is float x && v[1] is float y)
+                return new Vector2(x, y);
+        return Vector2.Zero;
     }
 
     // key → the immediately following 3-vector (WIND: "STATIC_VELOCITY", [0, 2, 0], …).

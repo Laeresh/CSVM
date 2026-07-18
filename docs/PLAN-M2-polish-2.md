@@ -18,7 +18,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 2. ☑ C4/C5 shader instance-uniform errors (buffer size; + C5 `rtexture*` check) **(DONE 2026-07-17)**
 3. ☑ C4 white fog — FOG_COLOR integer-RGB schema fix **(DONE 2026-07-18)**
 4. ☑ Clouds render through fog — fog term for cloud sprites + puffs **(DONE 2026-07-18)**
-5. ☐ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block
+5. ☑ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block **(DONE 2026-07-18)**
 6. ☐ Night brightness calibration — deck + sky vs original
 7. ☐ Map edge continuation — border tiles extend outward (terrain→terrain, sea→sea)
 8. ☐ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker
@@ -234,6 +234,25 @@ scaled by PARTICLES. Feel constants TUNE.
 
 **Verify:** C4 IA1 fly shows falling snow matching the original (user A/B); C1C IA1 shows
 rain; C1 IA1 unchanged (no block → no field); one MultiMesh, no measurable frame cost.
+
+**DONE (2026-07-18):** Both schemas decoded (`docs/formats/weather.md`): the block is a
+bare-scalar top-level sibling after `SHADOW_ANGLES` — `TYPE SNOW|RAIN`, `COLOR [128,128,128]`,
+`WIND_DIR 0`, `WIND_VEL 0.8`, `GRAVITY` (SNOW 1 / RAIN 3), `ALPHA_GRADIENT [0.5,0]`, RAIN adds
+`PARTICLES 100`. `WeatherState.Precip` (`PrecipData`) walks it raw (new `StringAfter`/`Vec2After`
++ the existing scalar/list walkers — the dict drops bare-scalar values). `src/Effects/Precipitation.cs`
+renders it as **one camera-following MultiMesh the plane flies through, fully GPU-driven**: each
+instance carries a fixed random seed, a spatial shader positions it from `TIME` + `CAMERA_POSITION_WORLD`
+(fall+drift, wrapped into a camera-centred box) — **self-animating, zero per-frame CPU**; a
+world-sized custom AABB avoids frustum-culling. SNOW = billboard flakes with per-instance flutter;
+RAIN = fall-aligned streak quads (length ∝ fall speed). A near-fade kills the on-lens blob for the
+chase cam, and a **cloud-band gate** (user-requested) shows precip only *below* the CLOUD_COVER band
+(it falls from the cloud base — none above the overcast). Procedural sprites (soft dot/streak — the
+original used untextured line primitives, asset-free here). All data→look scales are TUNE.
+**Verified** via `--fly` + static `--chapter/--sky-zone` screenshots: C4 snow (dense, visible, on-lens
+blob fixed), C1C rain (streaks below the deck over the sea; **gone above the overcast** after the
+gate), C1 clean (no field), a jitter-off `--shots=4` burst whose frames all differ (animation from
+`TIME`); one draw call, no errors. **User in-game A/B still pending** (the TUNE feel + the
+data-vs-observed SNOW/rain question). Wired independent of the whiteout/puff cloud-band block.
 
 ## 6. Night brightness calibration — deck + sky
 
