@@ -13,6 +13,8 @@ public sealed class WorldBuilder
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
+    private readonly bool _collision;
+    private GameZNode? _builtWorld; // the World node of the last Build (for CreateEdgeExtender)
 
     // Non-scenery world content: 'horizon' is the original skydome (built separately via
     // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'
@@ -25,9 +27,10 @@ public sealed class WorldBuilder
 
     // A cloud- or sky-textured surface. Node names are unreliable for spotting these
     // (cloud layers turn up under generic names like 'g27517'), so we classify by texture.
-    // Two callers share this rule: the collision exemption (below) and the cloud alpha-blend
-    // (passed to SceneBuilder) — clouds are neither solid nor hard-edged cutouts.
-    private static bool IsCloudOrSkyTexture(string tex) =>
+    // Three callers share this rule: the collision exemption (below), the cloud alpha-blend
+    // (passed to SceneBuilder) — clouds are neither solid nor hard-edged cutouts — and
+    // MapEdgeExtender's ground-tile classifier (cloudlayer deck tiles are cell-sized too).
+    internal static bool IsCloudOrSkyTexture(string tex) =>
         tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
         || tex.StartsWith("sky", StringComparison.OrdinalIgnoreCase);
 
@@ -80,6 +83,7 @@ public sealed class WorldBuilder
     {
         _gamez = gamez;
         _textures = textures;
+        _collision = collision;
         // Clouds are the only cloud*/sky* surfaces with an alpha channel, so this blend rule
         // touches only them; the opaque Sky1.tif skydome walls and cloudlayer deck are unaffected.
         // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
@@ -117,8 +121,25 @@ public sealed class WorldBuilder
             root.AddChild(deck);
             CloudDeck = deck;
         }
+
+        _builtWorld = world;
         return root;
     }
+
+    /// <summary>
+    /// Map-edge continuation (Run-2 item 7): a rolling window of mirrored terrain tiles
+    /// following the plane past the map boundary, so the world continues indefinitely under
+    /// the fog like the original's tile-reload grid (see MapEdgeExtender for the model and
+    /// the video evidence). Call after Build (and after the chapter's clutter build, so the
+    /// extension grows the same trees); add the returned node to the world root and drive
+    /// its Update(cameraPos) each frame. Null when the world carries no area/partition grid
+    /// or no recognizable ground tiles. Extension ground + clutter are collidable exactly
+    /// when the WorldBuilder was created with collision.
+    /// </summary>
+    public MapEdgeExtender? CreateEdgeExtender(ClutterBuilder? clutter = null) =>
+        _builtWorld == null ? null
+            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, _collision, clutter);
+
 
     private void Add(Node3D root, Node3D deck, int nodeIndex)
     {
@@ -153,7 +174,7 @@ public sealed class WorldBuilder
             return null;
         DisableShadows(built);
         BillboardMoon(built);
-        DisableFog(built);
+       // DisableFog(built);
         return built;
     }
 
@@ -255,7 +276,6 @@ public sealed class WorldBuilder
     // sky solid FOG_COLOR. Harmless on the moon/stars (StandardMaterial3D — they ignore it).
     private static void DisableFog(Node node)
     {
-        return;
         if (node is MeshInstance3D mi)
             mi.SetInstanceShaderParameter("csky_fog_on", 0f);
         foreach (var child in node.GetChildren())

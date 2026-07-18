@@ -20,7 +20,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 4. ☑ Clouds render through fog — fog term for cloud sprites + puffs **(DONE 2026-07-18)**
 5. ☑ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block **(DONE 2026-07-18)**
 6. ☑ Night brightness calibration — deck + sky vs original **(DONE 2026-07-18)**
-7. ☐ Map edge continuation — border tiles extend outward (terrain→terrain, sea→sea)
+7. ☑ Map edge continuation — rolling window of repeated border tiles + clutter **(DONE 2026-07-18)**
 8. ☐ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker
 9. ☐ Animated vehicles (pt 2) — train/car path motion + steam puffers
 10. ☐ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup
@@ -343,6 +343,44 @@ fly-through). Skipped in plain static orbit viewing to keep the data view honest
 **Verify:** fly past a terrain edge and a sea edge in C1 at low + high altitude: continuous
 ground to the fog in every direction, no void, no cliff seams; crash on extended terrain
 works; landlocked C4 edges continue as mountains.
+
+**DONE (2026-07-18, two passes):** *Pass 1* landed a static 4-ring mirrored skirt around the
+map. The user then flew the original for 10+ minutes past the edge and filmed it
+(`OriginalScreenshots/C1 IA1 Tile Loading.mp4`): the original **reloads a tile grid around
+the plane indefinitely** — the fog wall creeps in for ~10 s, then the loaded grid re-centers
+and the visible radius jumps back out — with **clutter trees on the continued terrain**; and
+a user in-game test of pass 1 showed our whole-map mirror brought **the airport back** every
+~12 km, which the original never does ("always the same tiles as in the 10-second interval"
+— one loop = one tile crossing). *Pass 2 (final)* replaced the skirt with
+**`src/Mech3/MapEdgeExtender.cs`: a rolling window of repeated border tiles** following the
+camera indefinitely: each axis outside the map **clamps to the local border cell**, repeated
+forever and **alternately reflected** so every seam is a shared mirror plane (heights match
+exactly; the map interior is never referenced → no airport; sea edge → sea forever, forest →
+forest — the user's original grill observation). Window = all cells within `Rings`=5 (TUNE,
+covers raw fog-far 4000 m + a margin ring so the original's creep-pop never shows) of the
+camera cell, minus in-map cells; re-diffed only on cell crossings (~a dozen cells built/freed
+per 1024 m). Cells are bare ground leaves (shared mesh/shape caches, no child subtrees ⇒ no
+buildings) **plus the source cell's clutter sprites at mirrored positions** (ClutterBuilder
+now exports per-kind mesh/material/planted positions; billboards re-face by shader so
+mirroring = mirroring the planted point) with crossed-quad colliders — ground and trees
+collide exactly when the real world does. Data prerequisites verified by recursive scan: all
+144 C1 cells have ground tiles (147 tiles; airfield cells sit one level down under group
+nodes), zero rotated/translated ancestors. `GameZ` parses the World `area` + grid dims.
+PlaneViewer creates it in `--fly` and static `--sky-zone` modes (plain orbit stays honest)
+and re-centers it per frame from the camera. **Verified:** 120 s and 110 s full-throttle
+flights crossing the **NE corner diagonal** (the double-flip case) — terrain + trees
+continuous to the fog 3–5 km out, zero errors, zero unwanted crashes; a scripted dive at
++3 km **crashes into extension terrain** (`CRASH into g822/col at (1138,433,-12905)` —
+outside both boundaries — extension colliders work); static shots at the old
+airport-reappearance spot (no airport, row-matched border tiles) and 8 km NE of the corner
+(rolling forest + trees); C4/C5 smoke clean, no instance-buffer errors. *Known nit
+(pre-existing, out of scope):* in-map beacon point-lights (`rc2_h`/`g1245`) punch through
+the fog as bright dots from far outside — the additive point-sprite path carries no fog
+term (backlog). *Open fidelity question (user, post-landing):* the alternating reflection
+is our seam-free construction — the original likely does NOT mirror (NOTES.md: plain
+repetition, possibly sharing the map-edge vertex row); settle by in-game A/B of an
+asymmetric border feature (one-line swap in `MirrorAxis`). User in-flight A/B of the
+crossing feel still pending.
 
 ## 8. Mission states — anim-state engine part 1 (+ destroyed-variant flicker)
 

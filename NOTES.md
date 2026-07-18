@@ -66,3 +66,6 @@ Measurements for item 12: time a full 360° roll and a sustained pitch maneuver 
 Reference screenshots for item 6: original night shots of the deck underside, sky gradient, and lit terrain at spots we can reproduce with --campos.
 
 Wrap around, repeats parts of the mesh. Are there vertex that repeat, have vectors that have the same yz or xz coordinates as the edge of the map
+
+Lighting
+One open thread: SunIncidence = 0.46 is fit to that single overcast reference. The night/day self-scaling is a principled prediction — a matched C1B-night and a bright-day original would let me confirm or nudge that one constant. Cheap to grab whenever you're in-game.

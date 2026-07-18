@@ -97,6 +97,7 @@ public partial class PlaneViewer : Node3D
 
     private Node3D? _plane;
     private Node3D? _horizon;
+    private Mech3.MapEdgeExtender? _edgeExtender; // rolling mirrored-tile window past the map edge
     private Node3D? _deck;             // the cloudlayer deck, moved to follow the player
     private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
@@ -220,10 +221,11 @@ public partial class PlaneViewer : Node3D
                 // Clutter: forest trees / river bushes. The chapter's boot script names the
                 // templates; ClutterBuilder stamps them onto every matching-textured world
                 // polygon (see Clutter.cs). Solid in flight, like the original.
+                ClutterBuilder? clutterBuilder = null;
                 var clutterNames = ClutterBuilder.TemplateNames(interpPath, _chapter);
                 if (clutterNames.Count > 0)
                 {
-                    var clutterBuilder = new ClutterBuilder(gamez, textures);
+                    clutterBuilder = new ClutterBuilder(gamez, textures);
                     if (clutterBuilder.Build(clutterNames, collision: _fly) is { } clutter)
                     {
                         _plane.AddChild(clutter);
@@ -234,6 +236,21 @@ public partial class PlaneViewer : Node3D
                 else
                 {
                     GD.Print($"clutter: no templates for {_chapter} ({interpPath})");
+                }
+
+                // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
+                // chapter's clutter) that follows the plane past the map boundary, so the world
+                // continues indefinitely under the fog like the original's tile-reload grid
+                // (see MapEdgeExtender). On in --fly and in static weathered views (--sky-zone,
+                // for edge-verification shots); off for plain orbit viewing (honest data view).
+                if (_fly || _skyZoneExplicit)
+                {
+                    _edgeExtender = builder.CreateEdgeExtender(clutterBuilder);
+                    if (_edgeExtender != null)
+                    {
+                        _plane.AddChild(_edgeExtender);
+                        GD.Print("map edge: rolling mirrored-tile window active");
+                    }
                 }
                 if (_fly || _skyZoneExplicit)
                 {
@@ -648,6 +665,10 @@ public partial class PlaneViewer : Node3D
         // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
         // so fresh puffs spawn ahead and the plane flies into them.
         _puffs?.Update((float)delta, _camera.Position, -_camera.GlobalTransform.Basis.Z);
+
+        // Map-edge continuation: re-center the mirrored-tile window on the camera. Cheap
+        // no-op until a cell boundary (1024 m) is crossed, then ~a window row rebuilds.
+        _edgeExtender?.Update(_camera.Position);
 
         if (_screenshotPath == null || _plane == null)
             return;

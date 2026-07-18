@@ -74,20 +74,39 @@ public sealed class GameZ
                     node.Children.Add(c.GetInt32());
             if (node.Kind == "Lod")
                 node.LodRangeMin = body.GetProperty("range").GetProperty("min").GetSingle();
-            if (node.Kind == "World" && body.TryGetProperty("partitions", out var parts))
+            if (node.Kind == "World")
             {
-                // The world's spatial grid references top-level (parentless) subtrees that
-                // are placed in the world but are NOT in the world's children list.
-                node.PartitionNodes = new List<int>();
-                var seen = new HashSet<int>();
-                foreach (var row in parts.EnumerateArray())
-                    foreach (var cell in row.EnumerateArray())
-                        foreach (var nref in cell.GetProperty("nodes").EnumerateArray())
-                        {
-                            int idx = nref.GetProperty("index").GetInt32();
-                            if (seen.Add(idx))
-                                node.PartitionNodes.Add(idx);
-                        }
+                // The map's ground-plane bounds: area = {left=xMin, right=xMax, top=zMin,
+                // bottom=zMax} in Godot world coords. WorldBuilder mirrors the border terrain
+                // outward across these edges (map-edge continuation).
+                if (body.TryGetProperty("area", out var area) && area.ValueKind == JsonValueKind.Object)
+                {
+                    node.HasArea = true;
+                    node.AreaLeft = area.GetProperty("left").GetSingle();
+                    node.AreaTop = area.GetProperty("top").GetSingle();
+                    node.AreaRight = area.GetProperty("right").GetSingle();
+                    node.AreaBottom = area.GetProperty("bottom").GetSingle();
+                }
+                if (body.TryGetProperty("partitions", out var parts) && parts.ValueKind == JsonValueKind.Array)
+                {
+                    // The world's spatial grid references top-level (parentless) subtrees that
+                    // are placed in the world but are NOT in the world's children list. Its
+                    // dimensions (rows × cols of one-cell partitions) also give the tile size.
+                    node.PartitionNodes = new List<int>();
+                    node.PartitionRows = parts.GetArrayLength();
+                    var seen = new HashSet<int>();
+                    foreach (var row in parts.EnumerateArray())
+                    {
+                        node.PartitionCols = row.GetArrayLength();
+                        foreach (var cell in row.EnumerateArray())
+                            foreach (var nref in cell.GetProperty("nodes").EnumerateArray())
+                            {
+                                int idx = nref.GetProperty("index").GetInt32();
+                                if (seen.Add(idx))
+                                    node.PartitionNodes.Add(idx);
+                            }
+                    }
+                }
             }
             if (body.TryGetProperty("transformation", out var tf) && tf.ValueKind == JsonValueKind.Object)
                 node.Local = ParseTransform(tf);
@@ -257,6 +276,12 @@ public sealed class GameZNode
     public Transform3D? Local;
     public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
     public List<int>? PartitionNodes; // World nodes only: distinct subtree roots placed via the spatial grid
+    // World nodes only: the map's ground-plane bounds (area = {left=xMin, right=xMax,
+    // top=zMin, bottom=zMax}, Godot world coords) and its partition grid size. WorldBuilder
+    // uses these to mirror the outermost border terrain outward past the map edge.
+    public bool HasArea;
+    public float AreaLeft, AreaTop, AreaRight, AreaBottom;
+    public int PartitionCols, PartitionRows;
 }
 
 public sealed class GameZMesh

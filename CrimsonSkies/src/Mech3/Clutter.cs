@@ -44,6 +44,23 @@ public sealed class ClutterBuilder
     /// <summary>Per-kind counts of the last Build, e.g. "firtree1.tif ×4980".</summary>
     public string Summary { get; private set; } = "";
 
+    /// <summary>One decoration kind of the last Build, exported for the map-edge
+    /// extension (see MapEdgeExtender): the shared sprite mesh + billboard material
+    /// (safe to reuse across MultiMesh instances), the quad extents for the crossed-quad
+    /// collision, and every planted world position. The extender mirrors these positions
+    /// past the map edge so the forest continues out there, as in the original.</summary>
+    public sealed class KindExport
+    {
+        public string Texture = "";
+        public ArrayMesh Mesh = null!;
+        public Material Material = null!;
+        public float Width, Height;
+        public IReadOnlyList<Vector3> Positions = null!;
+    }
+
+    /// <summary>The decoration kinds of the last Build (null until Build placed something).</summary>
+    public IReadOnlyList<KindExport>? ExportedKinds { get; private set; }
+
     public ClutterBuilder(GameZ gamez, TextureArchive textures)
     {
         _gamez = gamez;
@@ -111,17 +128,29 @@ public sealed class ClutterBuilder
 
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
+        var exported = new List<KindExport>();
         InstanceCount = 0;
         foreach (var template in templates.Values)
             foreach (var kind in template.Kinds)
             {
                 if (kind.Instances.Count == 0)
                     continue;
-                root.AddChild(BuildKindInstance(kind));
+                var mmi = BuildKindInstance(kind);
+                root.AddChild(mmi);
+                exported.Add(new KindExport
+                {
+                    Texture = kind.Texture,
+                    Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
+                    Material = mmi.MaterialOverride!,
+                    Width = kind.Width,
+                    Height = kind.Height,
+                    Positions = kind.Instances,
+                });
                 InstanceCount += kind.Instances.Count;
                 parts.Add($"{kind.Texture} ×{kind.Instances.Count}");
             }
         Summary = string.Join(", ", parts);
+        ExportedKinds = exported.Count > 0 ? exported : null;
         if (InstanceCount == 0)
             return null;
         if (collision)
