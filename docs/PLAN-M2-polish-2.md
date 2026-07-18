@@ -414,7 +414,7 @@ NEW_GAME_START anim (doors whose anim is a timed motion get their final pose in 
 motion itself is item 9). Safety net: any `destroyed`-named subtree that no anim covers gets a
 name-based hide + log line. Analyze + document the scenario→state path as part of this item.
 
-**Verify:** C1 IA1: oil tanks/hangars stop flickering (A/B screenshots); zeppelin/train
+**Verify:** C1 IA1: oil tanks/hangars stop flickering (A/B screenshots, using --frames and --shots params); zeppelin/train
 presence matches the original per scenario (user in-game check); nothing legitimate vanishes
 on a full fly-over; all chapters still build clean.
 

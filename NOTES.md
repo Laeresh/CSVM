@@ -36,36 +36,21 @@ https://github.com/bethington/ghidra-mcp
 - FlightModel
     - Turn rates, especially rolling is a lot faster in original -> Added a factor
     - Should loose height on stalling -> Done
-## Milestone 2 Polishing Run 2
-- Remove warning at start for pir_spinner.tif. the image is not in the source files and the stack traces eats tokens.
 - Environment
-    - Maps have different states (Hangars open/closed, Zeppelin present) depending on Mission and scenario. Need to analyze mission files.
-    - Maps have animated objects like cars and trains (with steam clouds)
-    - Maps have desctructable objects that are loaded together with the non-damaged ones that leads to flickering (oil-tanks on airport, hangars)
-    - The game seems to have some kind of wraparound. In the original the terrain or water does not seem to end. Not sure how this works (Water should be easy by repeating but the terrain does not have any gaps). Perhaps procedually generated.
-    - wrap around on maps or endless sea?
-    - Cosmetics:
-        - Clouds render through fog
-        - clouddeck to bright
-    - Errors thrown in New York and Rocky Mountains areas
-    - Fog in Rocky Mountains not correct (bright white, hard cut off)
-    - Rocky Mountains IA1 has rain weather effect
-    - Documentation for .json parameters
-- DMG Model
-    - Collider too large on some planes (Tail of BloodHawk, a lot of empty space)
-    - HP for components (vehicle.json)
-    - Plains lose parts (damaged models) when getting shot or lightly crashing into things
-    - Collision are not always crashes, depends on which part is hit and speed, sometimes only damages the plane
-    - There are hints on damage animation in the vehicle.json
-    - On Crash there is not only a explosion but the plane breaks apart and the parts are lying on the ground
+    - Map extension not exactily the same as in original
+    - C4 Cloud deck texture not following plane
+## Milestone 2 Polishing Run 2
+
 ### Work for me
 Your side of the run, collected from the grill answers:
 
 Original-game research: does part damage degrade handling/power before a critical part dies, or is it cosmetic until the explosion? (Decides a future run's scope.)
+ - Yes decreases turn rate depending on which part is damaged (elevator, ruder) Dmg Motor has decreased performance.
+ - Probably depending on dmg state green, yellow red
 Measurements for item 12: time a full 360° roll and a sustained pitch maneuver in the original (Bloodhawk, cruise speed).
+1.0-1.2 seconds
 Reference screenshots for item 6: original night shots of the deck underside, sky gradient, and lit terrain at spots we can reproduce with --campos.
 
-Wrap around, repeats parts of the mesh. Are there vertex that repeat, have vectors that have the same yz or xz coordinates as the edge of the map
 
 Lighting
 One open thread: SunIncidence = 0.46 is fit to that single overcast reference. The night/day self-scaling is a principled prediction — a matched C1B-night and a bright-day original would let me confirm or nudge that one constant. Cheap to grab whenever you're in-game.
