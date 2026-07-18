@@ -410,6 +410,12 @@ pages for what CLAUDE.md already knows: `spawns.md` (ia/objectives), `sounds.md`
 player curves), `clutter.md` (interp templates). Rule going forward: new decodes land with
 their docs page in the same change.
 
+*Progress note (2026-07-18): the CLAUDE.md token-diet split seeded `docs/formats/` early with
+three coarse migration pages — `gamez.md`, `world-structure.md`, `zrdr.md` (moved verbatim
+from CLAUDE.md's format sections). Item 13 still owes the README.md index/conventions page,
+the new-decode pages (weather/anim-definitions/vehicle), and optionally splitting the coarse
+zrdr page into the per-family pages listed above.*
+
 **Verify:** pages exist and cross-link; a fresh reader can implement a weather parser from
 `weather.md` alone; no game-asset bulk data anywhere in `docs/`.
 
