@@ -101,3 +101,62 @@ world state: the IA world state is per-mission (`zepstate` + `startanims`), iden
 across scenarios; `zeppelins.json` is the gameplay config of the always-present IA
 zeppelin (`multiplayer1zep`), not a state selector. Scenario selection evidently drives
 spawns/objectives/AI at engine level, not the world build.
+
+## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (surveyed 2026-07-18, extraction deferred)
+
+The binary archives mech3ax does not support for CS. Surveyed while scoping the
+anim-playback engine (Run-2 item 9); **playback is deferred until the data is extractable
+via a mech3ax extension** (decided 2026-07-18 — note: upstream mech3ax HEAD has since
+dropped its CS gamez support, so the future fork must account for that). Everything below
+was validated by direct binary analysis of this install's C1 archives; the partial decode
+is recorded so that work can resume where this left off.
+
+**Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
+spline scripts that exist **nowhere as loose files** — they are compiled only into these
+archives. Everything else about the anims (schema, sequences, timing, puffers) is already
+in the zrdr readers; the `.zan` frame data is the *only* missing piece for the train.
+
+- **Scope split (verified by strings):** a mission's `mis_anim.zbd` compiles only the defs
+  its `mis_anim.json` lists (C1/IA1: the 8 zeppelin `ANIMATION_DEFINITION_FILE`s + its own
+  file — no train, no vehicles). The **chapter's `cam_anim.zbd`** is not camera-only: it is
+  the chapter-scope compiled anim archive, holding chapter + shared defs **including all
+  vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
+  `cpilot_eject` body parts — 48 scripts total).
+- **Container** (same family as MW3 `anim.zbd`, which mech3ax fully supports — the natural
+  implementation template): header `{signature u32 = 0x08170616` (identical to MW3),
+  `version u32 = 53` (MW3 = 39), `nBase u32 = 2, nAnimFiles u32}`; then 2 ×
+  `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the archive was built against),
+  then nAnimFiles × `{path char[80], mtime u32}` (the `.zrd`/`.zan` sources; mtimes are
+  year-2000 Unix timestamps). Then an anim-info block (~0x6c bytes: gravity −9.8 f32,
+  counts, runtime pointers), then the AnimDef records (fixed C struct + inline sequence
+  data, first record a `reserved_anim_0` placeholder — **internals not decoded**), then the
+  SI-script pool, which runs byte-exactly to EOF.
+- **SI-script pool** (the part item 9 needs): back-to-back records of
+  `{source path\0, object name\0, frames…}`. Frame = `{flags u32: 1=translate, 2=rotate,
+  4=scale; start f32, end f32}` + one **19-float block per set flag**. Translate block
+  (verified): `base Vec3` + 4 floats `(0, avgVel x,y,z)` + per-axis `{value, c1, c2, c3}`
+  where `component(t) = value + c1·t + c2·t² + c3·t³`, `t` seconds since frame start —
+  verified exact against each next frame's base value and C1-continuous (next frame's `c1`
+  = previous frame's exit derivative). Rotate block: starts with a unit quaternion
+  `(w,x,y,z)`; remaining 15 floats presumed the same avg+cubic scheme — **not decoded**.
+- **Validation state:** a flags-driven frame walker parses **24 of C1's 48 scripts
+  byte-exactly** to the next record — including all four train scripts and both
+  fueltrucks (every vehicle motion) — with contiguous monotonic times; the failures are
+  confined to camera/`cpilot_eject` scripts (an undecoded variant: they stop early on
+  padding or run slightly past — likely an extra sub-record). Train data: 4 scripts
+  (`tr_passengine1/tankercar1/boxcar1/caboose1.zan`) × 90 frames × ~3.64 s (= 40 ticks at
+  `SCRIPT_FRAME_RATE` 11), total ~327 s per loop, starting at the parked consist position
+  `(−6943…−6961, 128, −5456…−5412)` and covering a ~3.9 × 2.2 km track loop — all
+  consistent with the C1 gamez node positions and the reader's frame rate.
+- **What playback could already use without the binaries:** the C1 road vehicles
+  (`cars_moving.json` `mafia_move1`/`police_chase`/`car_go_home_start`/`car_loop1_start`,
+  `trucks_moving.json` `truck1_start` — all `ON_STARTUP`) move via `OBJECT_MOTION_FROM_TO`
+  chains (`TRANSLATE_FROM/TO` + `ROTATE_FROM/TO` + `RUN_TIME` + `START_TIME` + `LOOP` +
+  `CALL_SEQUENCE`/`STOP_SEQUENCE`) fully present in the extracted readers, as are the
+  hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
+  (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
+  are `ON_CALL` only (mission-event driven — nothing calls them in free flight).
+- One plan-evidence correction: the `ANIMATION_PATH` key in `mis_anim.json` is the
+  **directory** the engine resolves anim sources from (`..\data\c1\ia1\zrdr\zeps`), not a
+  waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is
+  SI scripts.

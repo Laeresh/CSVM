@@ -22,7 +22,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 6. ☑ Night brightness calibration — deck + sky vs original **(DONE 2026-07-18)**
 7. ☑ Map edge continuation — rolling window of repeated border tiles + clutter **(DONE 2026-07-18)**
 8. ☑ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker **(DONE 2026-07-18)**
-9. ☐ Animated vehicles (pt 2) — train/car path motion + steam puffers
+9. ⏸ Animated vehicles (pt 2) — train/car path motion + steam puffers **(DEFERRED 2026-07-18 — needs a mech3ax cam_anim.zbd extension; survey findings recorded)**
 10. ☐ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup
 11. ☐ Dive sound — tune down (ours reads louder than the original)
 12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original
@@ -472,6 +472,22 @@ drive the train; implement what the data actually defines, no invented traffic.
 **Verify:** C1 IA1 side-by-side with the original: train circulates its track with steam;
 debug pause (P) freezes it with everything else; frame cost negligible; missions without
 vehicle anims are unchanged.
+
+**DEFERRED (2026-07-18, user decision):** the survey (documented in
+`docs/formats/anim-definitions.md` § "Compiled anim archives") found the train's motion is
+`OBJECT_MOTION_SI_SCRIPT` whose `.zan` spline scripts exist **only compiled inside the
+chapter's `cam_anim.zbd`** — an archive mech3ax does not extract for CS (and the plan's
+"ANIMATION_PATH definition" evidence was a misread: that key is a source *directory*, not
+a waypoint list). Per the project's data-driven rule the item waits for a **mech3ax
+extension** (the format is the MW3 `anim.zbd` family — same signature, version 53 vs 39 —
+so mech3ax's MW3 anim support is the template; note upstream HEAD has meanwhile dropped
+CS gamez support, which the future fork must handle). The binary survey already validated
+the container layout and the SI frame format's translate cubics (24/48 C1 scripts parse
+byte-exactly, including all four train cars + both fueltrucks); the undecoded remainder is
+the rotate block semantics + AnimDef record internals. When resumed, the readers alone
+already carry everything else: C1 road-vehicle `OBJECT_MOTION_FROM_TO` chains
+(`cars_moving`/`trucks_moving`, ON_STARTUP), the hangar-door motions, and the train's
+inline steam `PUFFER_STATE`.
 
 ## 10. Collision damage model
 
