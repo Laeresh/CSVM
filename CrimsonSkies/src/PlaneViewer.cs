@@ -56,6 +56,13 @@ namespace CrimsonSkies;
 ///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
 ///                                last segment holds forever, respawn restarts the sequence
 ///   --frames=N                   frames to render before --screenshot fires (default 15)
+///   --shots=N                    capture N consecutive frames (default 1); for z-fighting
+///                                debugging — flicker is only visible across frames. N>1 writes
+///                                indexed files (foo.png -> foo_00.png, foo_01.png, …)
+///   --jitter=deg                 per-frame camera dither for --shots bursts (default 0.15°
+///                                when N>1, else 0). Micro-orbits the eye around the framed
+///                                point so a still camera doesn't render bit-identical frames;
+///                                0 disables. Only applies in static (non-fly) mode.
 ///   --campos=x,y,z               place the camera here instead of auto-framing
 ///   --lookat=x,y,z               orbit/look target (default: model AABB center)
 ///   --screenshot=path            render a few frames, save a PNG, then quit
@@ -82,6 +89,11 @@ public partial class PlaneViewer : Node3D
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
+    private int _screenshotShots = 1;  // --shots=N: consecutive frames to capture (z-fight debug)
+    private int _shotIndex;            // 0-based index of the shot being written
+    private float _jitterDeg = -1f;    // --jitter=<deg> burst camera dither; <0 = auto per --shots
+    private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
+    private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
 
     private Node3D? _plane;
     private Node3D? _horizon;
@@ -130,6 +142,8 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--debug-collision") debugCollision = true;
             else if (arg.StartsWith("--hold=")) _holdSegments = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
+            else if (arg.StartsWith("--shots=")) _screenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..]));
+            else if (arg.StartsWith("--jitter=")) _jitterDeg = float.Parse(arg["--jitter=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
             else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--pitch=")) _pitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
@@ -139,6 +153,10 @@ public partial class PlaneViewer : Node3D
 
         if (_fly)
             _worldMode = true;
+        // Burst captures dither the camera by default so z-fighting flickers across frames;
+        // a single shot never jitters. --jitter=<deg> overrides (0 disables).
+        if (_jitterDeg < 0f)
+            _jitterDeg = _screenshotShots > 1 ? 0.15f : 0f;
         // The chapter drives both the world's gamez and its texture archive. (The static
         // plane viewer keeps textures at C1: C1's texture.zbd also carries every player-plane
         // skin, so it is the right default even when not building a world.)
@@ -609,13 +627,61 @@ public partial class PlaneViewer : Node3D
 
         if (_screenshotPath == null || _plane == null)
             return;
-        if (--_screenshotFrames > 0)
+        if (--_screenshotFrames > 0)      // still counting down the warm-up delay
             return;
+        // Delay elapsed: grab one frame per _Process call for _screenshotShots frames,
+        // then quit. A single shot keeps the original path verbatim; a burst (for z-fight
+        // debugging, where flicker only shows across frames) writes indexed files. The
+        // captured image is the PREVIOUS frame's render, so file _00 is the un-jittered
+        // baseline and _01.. carry the dither applied below — all distinct, which is all
+        // the flip-through needs.
         var img = GetViewport().GetTexture().GetImage();
-        img.SavePng(_screenshotPath);
-        GD.Print($"screenshot saved: {_screenshotPath}");
-        _screenshotPath = null;
-        GetTree().Quit();
+        var path = _screenshotShots > 1 ? IndexedShotPath(_screenshotPath, _shotIndex) : _screenshotPath;
+        img.SavePng(path);
+        GD.Print($"screenshot saved: {path}");
+        if (++_shotIndex >= _screenshotShots)
+        {
+            _screenshotPath = null;
+            GetTree().Quit();
+            return;
+        }
+        if (_jitterDeg > 0f && !_fly)
+            ApplyShotJitter();
+    }
+
+    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
+    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
+    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
+    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
+    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
+    /// frame (and the plane's own motion already surfaces the fight).</summary>
+    private void ApplyShotJitter()
+    {
+        if (_shotBaseXform is not { } baseX)
+        {
+            baseX = _camera.GlobalTransform;
+            _shotBaseXform = baseX;
+            _shotPivot = _orbitCenter;   // the point UpdateCamera aims at
+        }
+        // Golden-angle spread so consecutive frames differ maximally.
+        float mag = Mathf.DegToRad(_jitterDeg);
+        float phase = _shotIndex * 2.399963f;
+        var rot = new Basis(Vector3.Up, mag * Mathf.Cos(phase))
+                * new Basis(baseX.Basis.X.Normalized(), mag * Mathf.Sin(phase));
+        // Rigidly rotate the whole camera about the pivot: rotating both the eye offset and
+        // the basis by the same rotation preserves the aim exactly, so framing is kept.
+        var origin = _shotPivot + rot * (baseX.Origin - _shotPivot);
+        _camera.GlobalTransform = new Transform3D(rot * baseX.Basis, origin);
+    }
+
+    /// <summary>Insert a zero-padded frame index before the extension:
+    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
+    private static string IndexedShotPath(string path, int index)
+    {
+        var dir = Path.GetDirectoryName(path) ?? "";
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
     }
 
     /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/

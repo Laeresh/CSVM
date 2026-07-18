@@ -105,7 +105,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 `--campos=x,y,z` / `--lookat=x,y,z` (manual camera placement), 
 `--screenshot=<path>` (render a few frames, save PNG, quit — used for automated visual verification).
 `--frames=N` (delay before screenshot), 
-`--shots=N` (after the `--frames` warm-up, capture N **consecutive** frames — one per `_Process` — then quit; default 1 = the single-shot behavior at the verbatim path; N>1 writes zero-padded indexed files `foo.png`→`foo_00.png`/`foo_01.png`/… via `IndexedShotPath`, for **z-fighting debugging** since the flicker is only visible across frames), 
+`--shots=N` (after the `--frames` warm-up, capture N **consecutive** frames — one per `_Process` — then quit; default 1 = the single-shot behavior at the verbatim path; N>1 writes zero-padded indexed files `foo.png`→`foo_00.png`/`foo_01.png`/… via `IndexedShotPath`, for **z-fighting debugging** since the flicker is only visible across frames), `--jitter=<deg>` (per-frame camera dither during a `--shots` burst — micro-orbits the eye around the framed point (`_orbitCenter`) so a dead-still camera doesn't render bit-identical frames; default 0.15° when `--shots>1` else 0, `0` disables; static mode only — in `--fly` the FlightController owns the camera and the plane's motion already surfaces the fight; file `_00` is the un-jittered baseline), 
 
 ### Format gotchas (the ones that bite constantly)
 
