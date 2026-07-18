@@ -193,6 +193,11 @@ public partial class PlaneViewer : Node3D
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+        // The fullbright world's per-mission brightness from the weather's SUNLIGHT (item 6):
+        // 1.0 = fullbright (no darkening) for static views / missions without weather; --fly
+        // overrides it from WeatherState.WorldLight below.
+        RenderingServer.GlobalShaderParameterAdd("csky_world_light",
+            RenderingServer.GlobalShaderParameterType.Float, 1.0f);
 
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
@@ -406,8 +411,18 @@ public partial class PlaneViewer : Node3D
         // none at FogHigh (fragment altitude; see SceneBuilder's fog shader block). Absolute
         // altitudes, so the range factor doesn't apply.
         RenderingServer.GlobalShaderParameterSet("csky_fog_alt", new Vector2(fog.FogLow, fog.FogHigh));
+        // World brightness from the zone's SUNLIGHT (see WeatherState.WorldLight): the original
+        // dims the baked-vertex world by the mission's ambient+diffuse; we apply it as a scalar
+        // on the fullbright world/deck/dome (the fog color, set above, is unaffected — it mixes
+        // in after). 1.0 for bright/day missions, < 1 for overcast/night. (item 6.)
+        // Apply the dimming in GAMMA space (the DX7 chain texel×vtx×light is all sRGB-space),
+        // consistent with the gamma-space vertex modulate: the shader multiplies LINEAR ALBEDO,
+        // so feed the linearised factor — linear_ALBEDO · srgbToLinear(f) == gamma-space · f.
+        // (Applied in linear space, 0.80 only reaches 210→190; gamma-space lands the deck 210→169.)
+        float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
+        RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
         GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
-                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; " +
+                 $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 
         if (_weather.HasCloudBand)

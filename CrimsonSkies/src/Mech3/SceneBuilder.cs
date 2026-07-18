@@ -33,6 +33,17 @@ public sealed class SceneBuilder
     private readonly Dictionary<int, ConcavePolygonShape3D?> _shapeCache = new();
     private StandardMaterial3D? _lightPointMaterial;
 
+    // sRGB EOTF (Godot's exact texture-linearization curve) for the DX7 gamma-space vertex
+    // modulate on the fullbright world/cloud shaders — see the usage in GetBiasShader. Also
+    // duplicated verbatim in Clutter's shader (trees share the world's baked-lighting model).
+    internal const string SrgbToLinearFn = @"
+vec3 csky_srgb_to_linear(vec3 c) {
+    vec3 higher = pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
+    vec3 lower = c * (1.0 / 12.92);
+    // per component: c <= 0.04045 -> linear toe, else the power curve
+    return mix(higher, lower, step(c, vec3(0.04045)));
+}";
+
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
 
@@ -457,6 +468,11 @@ public sealed class SceneBuilder
         sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog), horizontal metres
         sb.AppendLine("global uniform vec2 csky_fog_alt;");   // fragment altitude: full fog below x, fades to none at y
         sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
+        // Per-mission world brightness from the weather's SUNLIGHT (item 6): the fullbright world
+        // is dimmed by this scalar before fog, matching the original's ambient+diffuse lighting of
+        // the baked-vertex world. Fullbright only — shaded (plane) surfaces are lit for real.
+        if (!shaded)
+            sb.AppendLine("global uniform float csky_world_light = 1.0;");
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the
             // air, where plain isotropic mipmap selection blurs the ground to mush (the C5
@@ -466,6 +482,13 @@ public sealed class SceneBuilder
             sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
         else
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
+        // Fullbright world only: the DX7 fixed-function pipeline multiplied texture × baked
+        // vertex colour (D3DTOP_MODULATE) in GAMMA (sRGB) space; we render in linear space, so
+        // our multiply comes out too bright / desaturated wherever the baked colour is < 1
+        // (shadows/AO — 30% of the C1 world's corners). Linearising the vertex colour before
+        // the (already-linear) texture multiply reproduces the gamma-space product. (item 6.)
+        if (!shaded)
+            sb.AppendLine(SrgbToLinearFn);
         sb.AppendLine(@"
 void vertex() {
     VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
@@ -476,10 +499,15 @@ void vertex() {
 }
 
 void fragment() {");
+        // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
+        // the gamma-space vertex modulate (see SrgbToLinearFn above).
+        string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
         sb.AppendLine(textured
-            ? "    vec4 col = COLOR * texture(albedo_tex, UV);"
-            : "    vec4 col = COLOR * albedo_color;");
+            ? $"    vec4 col = {vcol} * texture(albedo_tex, UV);"
+            : $"    vec4 col = {vcol} * albedo_color;");
         sb.AppendLine("    ALBEDO = col.rgb;");
+        if (!shaded)
+            sb.AppendLine("    ALBEDO *= csky_world_light;"); // per-mission SUNLIGHT dimming (world/deck/dome)
         if (shaded)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
@@ -540,6 +568,8 @@ void fragment() {");
         sb.AppendLine("global uniform vec3 csky_fog_color;");
         sb.AppendLine("global uniform vec2 csky_fog_range;");
         sb.AppendLine("global uniform vec2 csky_fog_alt;");
+        sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        sb.AppendLine(SrgbToLinearFn); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(@"
 void vertex() {
     // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
@@ -553,8 +583,8 @@ void vertex() {
 }
 
 void fragment() {
-    vec4 col = COLOR * texture(albedo_tex, UV);
-    ALBEDO = col.rgb;
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+    ALBEDO = col.rgb * csky_world_light;
     // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
     // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
     // distance + the fragment-altitude fade.

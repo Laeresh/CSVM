@@ -35,13 +35,32 @@ public sealed class WeatherState
     /// flyable altitude). <see cref="ClipFar"/> is the original's hard far clip (informational —
     /// our far plane is much larger; the fog is what hides distant terrain, matching the
     /// original's short view distance).</summary>
-    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar);
+    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
 
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
-    // that smoothstep is 0 across the whole world.
-    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f,1e8f,1e9f, 1e9f);
+    // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
+    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f,1e8f,1e9f, 1e9f, 1f);
+
+    // The original lights the baked-vertex world by the mission's SUNLIGHT (weather.json's
+    // per-zone SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE·(N·L_sun)); we render the world fullbright,
+    // so we're missing it. Averaged over the predominantly up-facing world (ground + cloud
+    // deck) that directional term collapses to a single per-mission brightness scalar
+    // AMBIENT + DIFFUSE·<incidence>. SunIncidence is that average up-facing sun incidence — one
+    // TUNE calibrated to the C1/IA1 reference (A=0.25,D=1.2 → 0.80, matching the original's
+    // deck 210→169 and terrain →~57). It then self-scales the scene from the data: C1B night
+    // (0.15,0.6)→0.42, C1C day (0.6,2.0)→clamp 1.0. MinWorldLight floors it off pure black.
+    // (M2-polish-2 item 6 — the data-driven half; the gamma-space modulate is the other half.)
+    private const float SunIncidence = 0.46f;
+    private const float MinWorldLight = 0.15f;
+
+    private static float WorldLightFactor(ZrdrDict zone)
+    {
+        float diffuse = zone.List("SUNLIGHT_DIFFUSE") is { Count: >= 1 } sd && sd[0] is float dv ? dv : 1f;
+        float ambient = zone.List("SUNLIGHT_AMBIENT") is { Count: >= 1 } sa && sa[0] is float av ? av : 0f;
+        return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
+    }
 
     /// <summary>The whiteout cloud band, metres of altitude. <see cref="CloudBottom"/>/<see
     /// cref="CloudTop"/> are where sight is clear; the fully-opaque core is <see
@@ -157,7 +176,7 @@ public sealed class WeatherState
                         ? (l, h)
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
-                w._zones[zone] = new ZoneFog(color, near, far,low, high, clip);
+                w._zones[zone] = new ZoneFog(color, near, far,low, high, clip, WorldLightFactor(z));
             }
         w.ParsePrecip(inner);
         return w;

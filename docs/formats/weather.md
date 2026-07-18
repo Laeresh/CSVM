@@ -5,8 +5,9 @@ Part of the project's format documentation (see also `zrdr.md`, `world-structure
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
 `CrimsonSkies/src/Flight/Weather.cs` (`WeatherState`) + `PlaneViewer.SetupWeather`.
 
-Seeded 2026-07-18 with the item-3 fog-colour decode; precipitation (item 5) and the
-night-brightness deck tints (item 6) grow it as those land.
+Seeded 2026-07-18 with the item-3 fog-colour decode; grown the same day with precipitation
+(item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
+calibration).
 
 ## Location & shape
 
@@ -74,6 +75,42 @@ C1/IA1 corroborates the altitude semantics: `zone1` 970→1047 is exactly cloud-
 → whiteout-centre (fog hands over to the whiteout while climbing into the overcast);
 `zone2` 4000→5000 sits above the 2500 m flight ceiling (night fog at every flyable
 altitude).
+
+## World lighting (`SUNLIGHT_*`, the item-6 decode, 2026-07-18)
+
+Each zone also carries a `SUNLIGHT_*` block — the directional light the original uses to
+light the baked-vertex world. List-valued keys:
+
+| Key | Meaning |
+|---|---|
+| `SUNLIGHT_ACTIVE` | `[1]`/`[0]` |
+| `SUNLIGHT_ORIENTATION` | `[pitch, yaw, roll]°` sun direction |
+| `SUNLIGHT_DIFFUSE` | directional intensity (`[0.4]`…`[2.0]` across the install) |
+| `SUNLIGHT_AMBIENT` | ambient floor (`[0.15]`…`[0.6]`) |
+| `SUNLIGHT_COLOR_DIFFUSE` / `SUNLIGHT_COLOR_AMBIENT` | light colours (usually white) |
+| `SUNLIGHT_STATIC` / `SUNLIGHT_BICOLORED` | flags |
+
+`DIFFUSE`/`AMBIENT` **vary per mission and track the scene**: C1B night `0.6 / 0.15`
+(dim), C1/IA1 overcast `1.2 / 0.25`, C1C day missions `2.0 / 0.6` (bright). This is the
+data source for the remake's **world-brightness calibration** (item 6): the remake renders
+the world fullbright (texture × baked vertex colour), which is *brighter* than the original
+because the original also modulates by this SUNLIGHT. The original's directional term,
+averaged over the predominantly up-facing world (ground + cloud deck), collapses to a
+per-mission scalar `WorldLight = clamp(AMBIENT + DIFFUSE·k, 0.15, 1)`, with `k ≈ 0.46` the
+average up-facing sun incidence — **one TUNE constant** calibrated to the C1/IA1 reference
+(`OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`: overcast deck 210→169, terrain
+→~57). It then self-scales from the data: C1/IA1 → 0.80, C1B night → 0.43, C1C day →
+clamp 1.0. `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); PlaneViewer sets
+the global shader scalar `csky_world_light` — **linearised** first, so the shader's
+linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
+texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space
+lands 210→169). Applied before the fog mix, so `FOG_COLOR` is unaffected. Paired with the
+**gamma-space vertex modulate** (the other item-6 half — see `SceneBuilder.cs`), which fixes
+the terrain's washed-yellow → saturated-green hue independent of brightness.
+
+*Caveat:* `k` rests on the single C1 overcast reference; the night/day self-scaling is a
+principled prediction pending a matched C1B-night and a bright-day original to confirm/refine
+the constant.
 
 ## Cloud cover (`CLOUD_COVER`)
 

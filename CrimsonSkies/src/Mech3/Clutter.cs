@@ -395,6 +395,15 @@ public sealed class ClutterBuilder
         global uniform vec2 csky_fog_range;
         global uniform vec2 csky_fog_alt;
         instance uniform float csky_fog_on = 1.0;
+        global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (item 6)
+
+        // DX7 gamma-space vertex modulate — see SceneBuilder.SrgbToLinearFn (trees share the
+        // world's baked-lighting model; kept inline so this shader stays self-contained).
+        vec3 csky_srgb_to_linear(vec3 c) {
+            vec3 higher = pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
+            vec3 lower = c * (1.0 / 12.92);
+            return mix(higher, lower, step(c, vec3(0.04045)));
+        }
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
@@ -409,8 +418,8 @@ public sealed class ClutterBuilder
         }
 
         void fragment() {
-            vec4 col = COLOR * texture(albedo_tex, UV);
-            ALBEDO = col.rgb;
+            vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+            ALBEDO = col.rgb * csky_world_light;
             vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
             float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
                 * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));

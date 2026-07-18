@@ -19,7 +19,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 3. ☑ C4 white fog — FOG_COLOR integer-RGB schema fix **(DONE 2026-07-18)**
 4. ☑ Clouds render through fog — fog term for cloud sprites + puffs **(DONE 2026-07-18)**
 5. ☑ Precipitation — RAIN (C1C/C2B) + SNOW (C4) from the weather TYPE block **(DONE 2026-07-18)**
-6. ☐ Night brightness calibration — deck + sky vs original
+6. ☑ Night brightness calibration — deck + sky vs original **(DONE 2026-07-18)**
 7. ☐ Map edge continuation — border tiles extend outward (terrain→terrain, sea→sea)
 8. ☐ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker
 9. ☐ Animated vehicles (pt 2) — train/car path motion + steam puffers
@@ -280,6 +280,44 @@ data-less deck to the ~165–175 target. Prefer data-driven over a hand global g
 
 **Verify:** pixel-measured deck tone within ~10 units of the original's; side-by-side night
 sky screenshots; a day-zone chapter (C1B zone1 or C4) unharmed.
+
+**DONE (2026-07-18):** Landed **two coupled, data-driven fixes**, validated pixel-for-pixel
+against the user's matched reference `OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`.
+
+*Audit first (ruled out the wrong leads):* the render pipeline is clean — world/deck/dome are
+all `Unshaded`, albedo sampled `source_color`, the `Environment` uses the default `Linear`
+tonemap with no exposure/adjustment, so a white-vertex texel round-trips exactly (the deck's
+206 *is* faithful reproduction of the 210-gray `cloudlayer.tif`, not a bug). The plan's
+`TOP_COLOR`/`BOTTOM_COLOR` lead is **absent** in C1/IA1, and its `SUNLIGHT_DIFFUSE 1.2` (> 1)
+can't be a naive darkening multiplier — both dead for C1.
+
+*Fix 1 — DX7 gamma-space vertex modulate.* The original is a fixed-function engine whose
+`D3DTOP_MODULATE` multiplied texture × baked vertex colour in **gamma (sRGB)** space; we
+multiply in **linear** space, rendering the baked-dark corners (30% of the C1 world, the
+farm-field furrows/forest) too bright and desaturated. The three fullbright world shaders
+(SceneBuilder bias `!shaded` + cloud-billboard, Clutter) now linearise the vertex COLOR before
+the multiply (`csky_srgb_to_linear`). Result: terrain greenness G−R **+3.6 → +16.9** (orig
++18…+23) — washed-yellow → saturated-green. Planes (shaded) keep raw COLOR.
+
+*Fix 2 — data-driven SUNLIGHT world-brightness.* The residual (deck/sky/terrain all ~1.3×
+too bright) traces to the mission's **`SUNLIGHT`** (weather.json), which we ignore by rendering
+fullbright. `SUNLIGHT_DIFFUSE`/`AMBIENT` **vary per mission and track the scene** (C1B night
+0.6/0.15, C1 overcast 1.2/0.25, C1C day 2.0/0.6 — the gamez metadata has no global light, so
+SUNLIGHT is the source). Averaged over the up-facing world it collapses to a scalar
+`WorldLight = clamp(AMBIENT + DIFFUSE·0.46, 0.15, 1)` — one TUNE (`SunIncidence 0.46`, the
+average up-facing sun incidence) calibrated to the C1 reference. `PlaneViewer` sets the global
+`csky_world_light` (linearised, so the linear-space `ALBEDO ×` lands the dim in **gamma**
+space — a raw linear ×0.80 reaches only 210→190; gamma-space lands the deck 210→169), applied
+before the fog mix so `FOG_COLOR` is untouched.
+
+*Match (ours vs original):* deck/sky **168 vs 169**, terrain field mean **59 vs ~57**, fog
+band **170 vs 176** (exempt). **Self-scales** from the data (verified by log + render): C1/IA1
+→ 0.80, C1B night → 0.43, C1C day → clamp 1.0; no shader errors on either chapter/zone.
+Documented in `docs/formats/weather.md` (`SUNLIGHT_*` decode) + the architecture bullets.
+*Open:* `SunIncidence 0.46` rests on the single overcast reference — a C1B-night and a
+bright-day original would confirm/refine the constant (the self-scaling is a principled
+prediction). The near-field brightest patch runs a touch hot (86 vs 75); the dark-plane
+silhouette is a pre-existing lighting issue, unrelated.
 
 ## 7. Map edge continuation
 
