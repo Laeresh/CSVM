@@ -325,6 +325,12 @@ public partial class PlaneViewer : Node3D
                 else
                     GD.PushWarning("no airframe collision boxes — falling back to the center ray");
 
+                // The original's heading tape, rebuilt from the chapter's own HUD
+                // textures (compassticks2/compasstxt ship in every chapter's archive).
+                controller.Compass = CompassTape.Build(textures);
+                if (controller.Compass != null)
+                    GD.Print("compass: heading tape from compassticks2/compasstxt");
+
                 // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
                 // its flipbook frames from the same texture archive. Built here while the
                 // archive is open; the FlightController fires it at the impact point.

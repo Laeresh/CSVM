@@ -53,6 +53,11 @@ public partial class FlightController : Node3D
     /// advanced each frame. Null if the model has no control-surface nodes.</summary>
     public ControlSurfaceAnimator? Surfaces;
 
+    /// <summary>The original's heading tape at the top of the screen (added to the
+    /// HUD canvas, fed the heading each frame). Null if the chapter's texture
+    /// archive lacks the compass textures.</summary>
+    public CompassTape? Compass;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -113,6 +118,8 @@ public partial class FlightController : Node3D
         _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
         _hud.AddThemeConstantOverride("shadow_offset_y", 2);
         canvas.AddChild(_hud);
+        if (Compass != null)
+            canvas.AddChild(Compass);
         AddChild(canvas);
         if (DebugCollision)
         {
@@ -465,6 +472,12 @@ public partial class FlightController : Node3D
 
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
+        if (Compass != null)
+        {
+            // heading of the nose: 0 = north (−Z), 90 = east (+X)
+            var nose = -_model.Attitude.Z;
+            Compass.HeadingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+        }
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
         if(_model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
