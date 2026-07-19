@@ -14,11 +14,13 @@ namespace CrimsonSkies.UI;
 /// chapter/plane/mode and PlaneViewer builds the world through the normal arg-driven pipeline (the
 /// menu just fills in the same selections the CLI would).
 ///
-/// Navigation is polled every frame (uniform across keyboard, d-pad and left stick) with edge
-/// detection + auto-repeat, so no Godot input map / focus wiring is needed: ↑↓ / W,S / d-pad / stick
-/// move the highlight, Enter/Space/A accept, Esc/B go back (Back on the Mode screen quits via
-/// <see cref="Quit"/>). It is a plain Godot-UI overlay (opaque panel + labels) on its own high
-/// CanvasLayer, distinct from the hand-drawn flight HUD.
+/// Navigation is polled every frame (uniform across keyboard and EVERY connected gamepad's
+/// d-pad/left stick — any-pad, never pads[0], so hot-plugged pads and machines with phantom
+/// joypad devices work, and the footer shows the live roster) with edge detection + auto-repeat,
+/// so no Godot input map / focus wiring is needed: ↑↓ / W,S / d-pad / stick move the highlight,
+/// Enter/Space/A accept, Esc/B go back (Back on the Mode screen quits via <see cref="Quit"/>).
+/// It is a plain Godot-UI overlay (opaque panel + labels) on its own high CanvasLayer, distinct
+/// from the hand-drawn flight HUD.
 ///
 /// Re-entrant: PlaneViewer tears the world down and calls <see cref="ShowMenu"/> again on
 /// Esc-from-flight, so this always resets to the Mode screen and re-primes its input edges (a held
@@ -113,6 +115,9 @@ public sealed partial class LaunchMenu : CanvasLayer
     private int _vDirPrev;
     private float _repeatTimer;
 
+    // Footer gamepad line as last drawn — _Process redraws when the live roster changes (hotplug).
+    private string _padStatus = "";
+
     private VBoxContainer _body = null!;
 
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
@@ -175,10 +180,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     {
         if (!Visible)
             return;
-        int pad = FirstPad();
         float dt = (float)delta;
 
-        int vDir = RawVDir(pad);
+        // Live hotplug: redraw when the pad roster changes so the footer line stays truthful.
+        if (GamepadStatus() != _padStatus)
+            Rebuild();
+
+        int vDir = RawVDir();
         if (vDir != 0)
         {
             if (vDir != _vDirPrev)
@@ -194,49 +202,65 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
         _vDirPrev = vDir;
 
-        bool accept = RawAccept(pad);
+        bool accept = RawAccept();
         if (accept && !_acceptPrev)
             OnAccept();
         _acceptPrev = accept;
 
-        bool back = RawBack(pad);
+        bool back = RawBack();
         if (back && !_backPrev)
             OnBack();
         _backPrev = back;
     }
 
     // --- input reads (shared by _Process and PrimeInput) ---
+    // Every read spans ALL connected gamepads, never pads[0]: phantom joypad devices (wireless
+    // dongles enumerating with the pad asleep, non-pad HID) can occupy the early slots, and a pad
+    // connected after launch lands in a later one. Idle devices read as zero, so any-pad is safe.
 
-    private static int FirstPad()
+    private static bool AnyPadPressed(JoyButton button)
     {
-        var pads = Input.GetConnectedJoypads();
-        return pads.Count > 0 ? pads[0] : -1;
+        foreach (int pad in Input.GetConnectedJoypads())
+            if (Input.IsJoyButtonPressed(pad, button))
+                return true;
+        return false;
     }
 
-    private static int RawVDir(int pad)
+    /// <summary>The largest-magnitude value of the axis across all connected gamepads (0 when none).</summary>
+    private static float AnyPadAxis(JoyAxis axis)
     {
+        float v = 0f;
+        foreach (int pad in Input.GetConnectedJoypads())
+        {
+            float a = Input.GetJoyAxis(pad, axis);
+            if (Mathf.Abs(a) > Mathf.Abs(v))
+                v = a;
+        }
+        return v;
+    }
+
+    private static int RawVDir()
+    {
+        float stickY = AnyPadAxis(JoyAxis.LeftY);
         bool up = Input.IsKeyPressed(Key.Up) || Input.IsKeyPressed(Key.W)
-            || (pad >= 0 && (Input.IsJoyButtonPressed(pad, JoyButton.DpadUp)
-                             || Input.GetJoyAxis(pad, JoyAxis.LeftY) < -StickDeadzone));
+            || AnyPadPressed(JoyButton.DpadUp) || stickY < -StickDeadzone;
         bool down = Input.IsKeyPressed(Key.Down) || Input.IsKeyPressed(Key.S)
-            || (pad >= 0 && (Input.IsJoyButtonPressed(pad, JoyButton.DpadDown)
-                             || Input.GetJoyAxis(pad, JoyAxis.LeftY) > StickDeadzone));
+            || AnyPadPressed(JoyButton.DpadDown) || stickY > StickDeadzone;
         return up ? -1 : down ? 1 : 0;
     }
 
-    private static bool RawAccept(int pad) =>
+    private static bool RawAccept() =>
         Input.IsKeyPressed(Key.Enter) || Input.IsKeyPressed(Key.KpEnter) || Input.IsKeyPressed(Key.Space)
-        || (pad >= 0 && Input.IsJoyButtonPressed(pad, JoyButton.A));
+        || AnyPadPressed(JoyButton.A);
 
-    private static bool RawBack(int pad) =>
-        Input.IsKeyPressed(Key.Escape) || (pad >= 0 && Input.IsJoyButtonPressed(pad, JoyButton.B));
+    private static bool RawBack() =>
+        Input.IsKeyPressed(Key.Escape) || AnyPadPressed(JoyButton.B);
 
     private void PrimeInput()
     {
-        int pad = FirstPad();
-        _acceptPrev = RawAccept(pad);
-        _backPrev = RawBack(pad);
-        _vDirPrev = RawVDir(pad);
+        _acceptPrev = RawAccept();
+        _backPrev = RawBack();
+        _vDirPrev = RawVDir();
         _repeatTimer = RepeatInitial;
     }
 
@@ -361,6 +385,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
         _body.AddChild(Label($"↑↓  Navigate       Enter / A  Select       {back}",
             (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+
+        _padStatus = GamepadStatus();
+        _body.AddChild(Spacer((int)(4 * s)));
+        _body.AddChild(Label(_padStatus, (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+    }
+
+    private static string GamepadStatus()
+    {
+        var pads = Input.GetConnectedJoypads();
+        return pads.Count == 0 ? "No gamepad — keyboard controls"
+            : pads.Count == 1 ? $"Gamepad: {Input.GetJoyName(pads[0])}"
+            : $"Gamepads: {pads.Count} connected — all active";
     }
 
     private string Breadcrumb()

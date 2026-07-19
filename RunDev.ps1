@@ -134,6 +134,11 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet build failed (exit $LASTEXITCODE)."
 }
 
+# Freeze workaround (same as RunGame.ps1, see the comment there): the bundled SDL's
+# DirectInput backend hangs the engine when a >255-button phantom device disconnects
+# (8BitDo Ultimate 2 dongle). XInput/HIDAPI pads are unaffected by disabling it.
+if (-not $env:SDL_JOYSTICK_DIRECTINPUT) { $env:SDL_JOYSTICK_DIRECTINPUT = "0" }
+
 $UserArgs = @()
 if ($args.Count -gt 0) { $UserArgs += $args }
 

@@ -261,6 +261,20 @@ public partial class PlaneViewer : Node3D
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
 
+        // Gamepad hotplug: every input read polls Input.GetConnectedJoypads() fresh, so a pad
+        // plugged in mid-game works the moment the engine reports it. Log the roster at launch
+        // and every connect/disconnect so a silent pad is diagnosable from the console.
+        Input.Singleton.JoyConnectionChanged += (device, connected) =>
+            GD.Print(connected
+                ? $"gamepad connected: device {device} \"{Input.GetJoyName((int)device)}\" guid={Input.GetJoyGuid((int)device)}"
+                : $"gamepad disconnected: device {device}");
+        var padsAtLaunch = Input.GetConnectedJoypads();
+        if (padsAtLaunch.Count == 0)
+            GD.Print("gamepad: none at launch (hotplug live — connect any time)");
+        else
+            foreach (int p in padsAtLaunch)
+                GD.Print($"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
+
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
         AddChild(_camera);

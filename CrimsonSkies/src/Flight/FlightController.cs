@@ -280,33 +280,43 @@ public partial class FlightController : Node3D
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
 
-    private static bool RespawnPressed()
+    /// <summary>True when the button is down on ANY connected gamepad. Until splitscreen assigns
+    /// devices, every pad flies the one plane — never `pads[0]`: phantom joypad devices (wireless
+    /// dongles enumerating with the pad asleep, non-pad HID like Razer boards) can occupy the
+    /// early slots, which made a pad connected after launch (= a later slot) dead.</summary>
+    private static bool AnyPadPressed(JoyButton button)
     {
-        if (Input.IsKeyPressed(Key.R))
-            return true;
-        var pads = Input.GetConnectedJoypads();
-        return pads.Count > 0 && (Input.IsJoyButtonPressed(pads[0], JoyButton.Y)
-                                  || Input.IsJoyButtonPressed(pads[0], JoyButton.A));
+        foreach (int pad in Input.GetConnectedJoypads())
+            if (Input.IsJoyButtonPressed(pad, button))
+                return true;
+        return false;
     }
 
-    /// <summary>P (or gamepad Start), edge-detected so one press toggles once.</summary>
-    private static bool PauseTogglePressed()
+    /// <summary>The largest-magnitude value of the axis across all connected gamepads (0 when
+    /// none) — idle phantom devices read ~0 and never mask the real stick.</summary>
+    private static float AnyPadAxis(JoyAxis axis)
     {
-        if (Input.IsKeyPressed(Key.P))
-            return true;
-        var pads = Input.GetConnectedJoypads();
-        return pads.Count > 0 && Input.IsJoyButtonPressed(pads[0], JoyButton.Start);
+        float v = 0f;
+        foreach (int pad in Input.GetConnectedJoypads())
+        {
+            float a = Input.GetJoyAxis(pad, axis);
+            if (Mathf.Abs(a) > Mathf.Abs(v))
+                v = a;
+        }
+        return v;
     }
+
+    private static bool RespawnPressed() =>
+        Input.IsKeyPressed(Key.R) || AnyPadPressed(JoyButton.Y) || AnyPadPressed(JoyButton.A);
+
+    /// <summary>P (or gamepad Start), edge-detected so one press toggles once.</summary>
+    private static bool PauseTogglePressed() =>
+        Input.IsKeyPressed(Key.P) || AnyPadPressed(JoyButton.Start);
 
     /// <summary>Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     /// The plan suggested gamepad Y, but Y is the respawn button, so X (a free face button) instead.</summary>
-    private static bool CycleTargetPressed()
-    {
-        if (Input.IsKeyPressed(Key.Tab))
-            return true;
-        var pads = Input.GetConnectedJoypads();
-        return pads.Count > 0 && Input.IsJoyButtonPressed(pads[0], JoyButton.X);
-    }
+    private static bool CycleTargetPressed() =>
+        Input.IsKeyPressed(Key.Tab) || AnyPadPressed(JoyButton.X);
 
     public override void _PhysicsProcess(double delta)
     {
@@ -447,27 +457,16 @@ public partial class FlightController : Node3D
         static float Axis(Key positive, Key negative) =>
             (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
-        // first connected gamepad, if any
-        int pad = -1;
-        var pads = Input.GetConnectedJoypads();
-        if (pads.Count > 0)
-            pad = pads[0];
-        static float Btn(int device, JoyButton positive, JoyButton negative) =>
-            (Input.IsJoyButtonPressed(device, positive) ? 1f : 0f)
-            - (Input.IsJoyButtonPressed(device, negative) ? 1f : 0f);
-
-        float padPitch = 0f, padRoll = 0f, padYaw = 0f, padThrottle = 0f;
-        if (pad >= 0)
-        {
-            // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
-            padPitch = StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftY));
-            padRoll = -StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftX));
-            padYaw = Btn(pad, JoyButton.LeftShoulder, JoyButton.RightShoulder);
-            padThrottle = Input.GetJoyAxis(pad, JoyAxis.TriggerRight)
-                        - Input.GetJoyAxis(pad, JoyAxis.TriggerLeft);
-            if (Input.IsJoyButtonPressed(pad, JoyButton.Y))
-                Respawn();
-        }
+        // any connected gamepad flies the plane (see AnyPadPressed/AnyPadAxis);
+        // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
+        float padPitch = StickCurve(AnyPadAxis(JoyAxis.LeftY));
+        float padRoll = -StickCurve(AnyPadAxis(JoyAxis.LeftX));
+        float padYaw = (AnyPadPressed(JoyButton.LeftShoulder) ? 1f : 0f)
+                     - (AnyPadPressed(JoyButton.RightShoulder) ? 1f : 0f);
+        float padThrottle = AnyPadAxis(JoyAxis.TriggerRight)
+                          - AnyPadAxis(JoyAxis.TriggerLeft);
+        if (AnyPadPressed(JoyButton.Y))
+            Respawn();
 
         if (Input.IsKeyPressed(Key.R))
             Respawn();
@@ -854,16 +853,10 @@ public partial class FlightController : Node3D
         static float Axis(Key positive, Key negative) =>
             (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
 
-        float padYaw = 0f, padPitch = 0f, padZoom = 0f;
-        var pads = Input.GetConnectedJoypads();
-        if (pads.Count > 0)
-        {
-            int pad = pads[0];
-            padYaw = StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftX));
-            padPitch = -StickCurve(Input.GetJoyAxis(pad, JoyAxis.LeftY)); // stick up = camera up
-            padZoom = Input.GetJoyAxis(pad, JoyAxis.TriggerRight)
-                    - Input.GetJoyAxis(pad, JoyAxis.TriggerLeft);         // RT out, LT in
-        }
+        float padYaw = StickCurve(AnyPadAxis(JoyAxis.LeftX));
+        float padPitch = -StickCurve(AnyPadAxis(JoyAxis.LeftY)); // stick up = camera up
+        float padZoom = AnyPadAxis(JoyAxis.TriggerRight)
+                      - AnyPadAxis(JoyAxis.TriggerLeft);         // RT out, LT in
 
         float yawIn = Axis(Key.D, Key.A) + Axis(Key.Right, Key.Left) + padYaw;
         float pitchIn = Axis(Key.W, Key.S) + Axis(Key.Up, Key.Down) + padPitch;

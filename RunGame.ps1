@@ -43,6 +43,14 @@ if ($LASTEXITCODE -ne 0) {
     throw "dotnet build failed (exit $LASTEXITCODE)."
 }
 
+# Freeze workaround: Godot 4.5+ bundles an SDL whose DirectInput backend counts HID buttons
+# uncapped, and on disconnect SDL spins forever in a Uint8 loop when a device claims >255
+# buttons (the 8BitDo Ultimate 2 dongle does) -- a hard engine hang the moment the pad sleeps
+# (godot#115667 / SDL#14961; fixed upstream in SDL 3.4.4, not yet bundled). Disabling the
+# DirectInput backend removes those phantom device views; real pads still work via XInput.
+# Drop this (both Run scripts) once tools/godot ships an SDL >= 3.4.4.
+if (-not $env:SDL_JOYSTICK_DIRECTINPUT) { $env:SDL_JOYSTICK_DIRECTINPUT = "0" }
+
 # Forward any args as-is (none = the launchscreen; an explicit content arg bypasses it).
 $UserArgs = @()
 if ($args.Count -gt 0) { $UserArgs += $args }
