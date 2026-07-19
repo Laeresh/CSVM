@@ -34,6 +34,11 @@ namespace CrimsonSkies;
 ///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
 ///                                LB/RB rudder, RT/LT throttle, Y respawn).
 ///                                Combine with --chapter= to fly a different chapter (default C1)
+///   --stunt                      stunt-flying mode: --fly + the mission's danger zones (ia.json
+///                                dzones) as fly-through objectives, spawning from the stunt_flying
+///                                spawn list. Completion shows in the text HUD (marker HUD is item 2)
+///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
+///                                world skips — AI/route data the original never renders); debug only
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
 ///                                ia.json spawn_points); story missions (M0x) fall back to
 ///                                objectives.json PLAYER_INIT. Pair with --chapter= to match the world
@@ -41,6 +46,9 @@ namespace CrimsonSkies;
 ///                                (zeppelin_run, dogfight_ace, dogfight_squadron, stunt_flying, …)
 ///   --spawn=N                    force spawn index N in that list (default: random pick, like the
 ///                                original — relaunch to sample the others; the pick is logged)
+///   --spawn-at=x,y,z             debug: override the spawn position (bypasses the mission spawn
+///                                list) — e.g. start just short of a target for a deterministic run
+///   --spawn-dir=x,y,z            debug: nose direction at --spawn-at (world space; default -Z)
 ///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
 ///                                (moon/stars, what the original shows at the C1 airfield),
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
@@ -56,6 +64,8 @@ namespace CrimsonSkies;
 ///                                boot scripts naming each chapter's clutter templates (forest
 ///                                trees, river bushes) placed onto matching-textured terrain
 ///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
+///   --messages=path              message string table (default: ../extracted/messages.json) —
+///                                resolves targets.json MSG_* keys for the stunt marker text
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
 ///                                crash test; green, red on impact)
@@ -94,7 +104,12 @@ public partial class PlaneViewer : Node3D
     private bool _fly;
     private string _mission = "IA1";   // which mission's spawns to fly from (--mission=): IA1, M01, …
     private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
+    private bool _scenarioExplicit;    // --scenario= given (so --stunt doesn't override it)
+    private bool _stunt;               // --stunt: stunt-flying mode (= --fly + stunt_flying spawns + StuntMission)
+    private bool _debugDzPaths;        // --debug-dzpaths: build the dzpaths route ribbons (debug-only geometry)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
+    private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
+    private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
     private (FlightInput, float)[]? _holdSegments;
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
@@ -131,6 +146,7 @@ public partial class PlaneViewer : Node3D
         var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
         var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
         var interpPath = Path.Combine(repoRoot, "extracted", "interp.json");
+        var messagesPath = Path.Combine(repoRoot, "extracted", "messages.json");
         bool mute = false;
         bool debugCollision = false;
 
@@ -143,15 +159,20 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--chapter") _worldMode = true;
             else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; }
             else if (arg == "--fly") _fly = true;
+            else if (arg == "--stunt") _stunt = true;
+            else if (arg == "--debug-dzpaths") _debugDzPaths = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
-            else if (arg.StartsWith("--scenario=")) _scenario = arg["--scenario=".Length..];
+            else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
+            else if (arg.StartsWith("--spawn-at=")) _spawnAt = ParseVec3(arg["--spawn-at=".Length..]);
+            else if (arg.StartsWith("--spawn-dir=")) _spawnDir = ParseVec3(arg["--spawn-dir=".Length..]);
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) { texturesPath = arg["--textures=".Length..]; texturesOverridden = true; }
             else if (arg.StartsWith("--zrdr=")) { zrdrPath = arg["--zrdr=".Length..]; zrdrOverridden = true; }
             else if (arg.StartsWith("--interp=")) interpPath = arg["--interp=".Length..];
             else if (arg.StartsWith("--sounds=")) { soundsPath = arg["--sounds=".Length..]; soundsOverridden = true; }
+            else if (arg.StartsWith("--messages=")) messagesPath = arg["--messages=".Length..];
             else if (arg == "--mute") mute = true;
             else if (arg == "--debug-collision") debugCollision = true;
             else if (arg.StartsWith("--hold=")) _holdSegments = ParseHold(arg["--hold=".Length..]);
@@ -165,6 +186,14 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
 
+        // --stunt is free flight over the mission's danger zones: force the flight path and the
+        // stunt_flying spawn list (unless the tester pinned another scenario for a specific spawn).
+        if (_stunt)
+        {
+            _fly = true;
+            if (!_scenarioExplicit)
+                _scenario = "stunt_flying";
+        }
         if (_fly)
             _worldMode = true;
         if (_damageLab && _worldMode)
@@ -234,6 +263,14 @@ public partial class PlaneViewer : Node3D
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
                 _deck = builder.CloudDeck;         // the cloudlayer overcast, moved to follow the player
+
+                // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips
+                // them — AI/route data the original never renders). Debug inspection only.
+                if (_debugDzPaths && builder.BuildDzPaths() is { } dzpaths)
+                {
+                    _plane.AddChild(dzpaths);
+                    GD.Print("debug: dzpaths route ribbons built");
+                }
 
                 // Clutter: forest trees / river bushes. The chapter's boot script names the
                 // templates; ClutterBuilder stamps them onto every matching-textured world
@@ -472,6 +509,18 @@ public partial class PlaneViewer : Node3D
                 {
                     GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
                 }
+                // Stunt run (M2.5 item 1): the mission's danger-zone objectives from ia.json
+                // dzones, positions resolved against this chapter world's gamez, display
+                // strings from targets.json → messages.json. --stunt only.
+                if (_stunt)
+                {
+                    controller.Stunt = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
+                    if (controller.Stunt == null)
+                        GD.PushWarning($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
+                    else
+                        what += $" [stunt: {controller.Stunt.TotalCount} zones]";
+                }
+
                 var (spawnPos, spawnLookAt) = ChooseSpawn(missionZrdrPath);
                 controller.Setup(new FlightModel(stats), _camera, spawnPos, spawnLookAt);
                 AddChild(controller);
@@ -634,6 +683,19 @@ public partial class PlaneViewer : Node3D
     /// A fixed C1 spawn is the last resort if neither is present.</summary>
     private (Vector3 pos, Vector3 lookAt) ChooseSpawn(string missionZrdrPath)
     {
+        // Debug/testing override: place the plane exactly (position + nose direction), bypassing
+        // the mission spawn list — lets a scripted run start just short of a target pointed at it,
+        // so a neutral --hold flies a straight, deterministic path (no complex maneuvering).
+        if (_spawnAt is { } at)
+        {
+            var dir = _spawnDir ?? Vector3.Forward;
+            if (dir.LengthSquared() < 1e-6f)
+                dir = Vector3.Forward;
+            GD.Print($"spawn [override]: pos=({at.X:0},{at.Y:0},{at.Z:0}) " +
+                     $"dir=({dir.X:0.00},{dir.Y:0.00},{dir.Z:0.00})");
+            return (at, at + dir.Normalized());
+        }
+
         var spawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
         if (spawns != null)
         {

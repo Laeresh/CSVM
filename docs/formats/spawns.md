@@ -19,6 +19,9 @@ Scenario names appear **only** in `ia.json` (spawn lists + `disallow_missions`);
 reader carries scenario-conditional world state — the world build is per-mission,
 identical across scenarios (analysis in [anim-definitions.md](anim-definitions.md)).
 
+`ia.json` also carries the stunt-mode `dzones` (fly-through Danger Zone) list — see
+[missions.md](missions.md).
+
 ## Story missions — `objectives.json` `PLAYER_INIT`
 
 ```

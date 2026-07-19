@@ -16,7 +16,7 @@ land with their `docs/formats/` page in the same change (targets/messages → a 
 
 ## Checklist
 
-1. ☐ Stunt mission core — dzones/targets/messages loaders, dz resolution, sphere detection, `--stunt` mode
+1. ☑ Stunt mission core — dzones/targets/messages loaders, dz resolution, sphere detection, `--stunt` mode *(done 2026-07-19; scripted verification + user-confirmed full 5/5 `AllComplete` run)*
 2. ☐ Marker HUD — original-format text + distance + clock position, edge arrow, target cycling, run status line
 3. ☐ Scoring — timer + splits, end scoreboard, best-time persistence, restart flow
 4. ☐ Launchscreen — Mode → Chapter → Plane, keyboard/controller navigation, no-args default

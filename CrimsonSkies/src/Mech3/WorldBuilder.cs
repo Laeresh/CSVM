@@ -291,6 +291,17 @@ public sealed class WorldBuilder
         return null;
     }
 
+    /// <summary>Builds the mission's danger-zone route ribbons — the 'dzpaths' subtree the
+    /// world build skips (see <see cref="SkipWorldNode"/>). This is AI/route guide data the
+    /// original never renders (the dzN completion points sit on these polylines); exposed only
+    /// for --debug-dzpaths inspection. Never collidable. Null when the world has no dzpaths.</summary>
+    public Node3D? BuildDzPaths()
+    {
+        var dzpaths = _gamez.FindByName("dzpaths");
+        return dzpaths == null ? null
+            : _scene.BuildSubtree(dzpaths, collisionSkip: _ => true);
+    }
+
     // The dome would otherwise shadow the entire world (it covers the whole sky).
     private static void DisableShadows(Node node)
     {

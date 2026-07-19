@@ -17,6 +17,8 @@ public sealed class GameZ
     public List<GameZMesh> Meshes { get; } = new();
     public List<GameZMaterial> Materials { get; } = new();
 
+    private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
+
     /// <summary>Loads from a mech3ax output ZIP, or from a directory of the same JSON files.</summary>
     public static GameZ Load(string path)
     {
@@ -49,6 +51,38 @@ public sealed class GameZ
             if (string.Equals(n.Name, name, StringComparison.OrdinalIgnoreCase))
                 return n;
         return null;
+    }
+
+    /// <summary>The world-space transform of a node, accumulated up its parent chain (the
+    /// nodes.json children lists — parent is a flat list position, so we invert those).
+    /// Nodes without a transformation contribute identity. Robust to nesting, though most
+    /// world markers (dz points, route ribbons) sit directly under the identity World root,
+    /// so their stored translation is already world-space. Used to resolve objective-marker
+    /// positions without building the (skipped) marker nodes into the scene.</summary>
+    public Transform3D WorldTransformOf(GameZNode node)
+    {
+        EnsureParentMap();
+        var xf = Transform3D.Identity;
+        for (GameZNode? n = node; n != null;)
+        {
+            xf = (n.Local ?? Transform3D.Identity) * xf;
+            int p = _parent![n.Index];
+            n = p >= 0 ? Nodes[p] : null;
+        }
+        return xf;
+    }
+
+    private void EnsureParentMap()
+    {
+        if (_parent != null)
+            return;
+        var parent = new int[Nodes.Count];
+        Array.Fill(parent, -1);
+        foreach (var n in Nodes)
+            foreach (var c in n.Children)
+                if (c >= 0 && c < parent.Length)
+                    parent[c] = n.Index;
+        _parent = parent;
     }
 
     private void ParseNodes(Stream stream)

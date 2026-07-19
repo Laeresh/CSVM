@@ -81,6 +81,12 @@ public partial class FlightController : Node3D
     /// scatter at the impact and the wreck burns until respawn. Optional.</summary>
     public CrashBreakup? Breakup;
 
+    /// <summary>The stunt run (M2.5 item 1), when flying --stunt: danger-zone sphere
+    /// detection, tested against the plane each physics frame. Deliberately NOT reset on
+    /// respawn — a mid-run crash keeps completed zones (the clock keeps running, item 3).
+    /// Null in free flight.</summary>
+    public StuntMission? Stunt;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -326,6 +332,9 @@ public partial class FlightController : Node3D
         }
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+
+        // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
+        Stunt?.Update(_model.Position);
 
         // height over ground for the altimeter's LOW ALT warning: one ray straight
         // down per physics frame (world + map-edge extension colliders)
@@ -687,6 +696,9 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
+        // Stunt run status (item 1 placeholder — the projected marker HUD is item 2).
+        if (Stunt != null)
+            _hud.Text += $"\n{Stunt.StatusLine()}";
         if (_paused)
             _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";
         else if (_crashed)

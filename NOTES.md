@@ -73,3 +73,20 @@ Reference screenshots for item 6: original night shots of the deck underside, sk
 
 Lighting
 One open thread: SunIncidence = 0.46 is fit to that single overcast reference. The night/day self-scaling is a principled prediction — a matched C1B-night and a bright-day original would let me confirm or nudge that one constant. Cheap to grab whenever you're in-game.
+
+
+First Prototype:
+ - Stunt Mission flyable
+    - A stunt mission goal is to fly through dangerous positions (under bridges, through hangars and tunnels). Each mission has a set number of objectives which need to be flown through or reach a minimum distance. Objectives can be completed in any order. The objective switches to the next if it is completed
+    - Correct target nodes -> Objectives are named dzpaths<x>, dz<x>, dzones in ia.json
+    - Mission Marker to Nodes -> Arrow with text if not in sight pointing to the Marker (shortest angle), else only  text on position of Marker. Button to switch to next Marker
+    - Checks if objective was flown through
+    - Keep list of fulfilled objectives
+    - Scoring when all objectives are met (timed)
+- Simple launchscreen -> Select Chapter -> Select Plane
+    - Controllable by keyboard and Controller. Mouse select would be a bonus but not necessary.
+- Splitscreen 2/4 Player (Nice to have for testing with friends, does not need complete features like plane to plane collision and 3d Sound)
+    - add new player if additional controller presses start in launchscreen
+    - P1 selects chapter
+    - Then Player can select their planes
+    - 2 Player horizontal, 4 player grid

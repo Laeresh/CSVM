@@ -18,6 +18,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |
 | [vehicle.md](vehicle.md) | `vehicle.json` aircraft defs: `kind_of` inheritance, dynamics, engines, `destroyable_parts` damage model, collision points |
 | [spawns.md](spawns.md) | Player spawns: `ia.json` `spawn_points`, `objectives.json` `PLAYER_INIT`, the campaign mission ↔ folder map |
+| [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones, `targets.json` node→string keys, the `messages.json` string table |
 | [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
