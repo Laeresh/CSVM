@@ -6,31 +6,47 @@ using Godot;
 namespace CrimsonSkies.UI;
 
 /// <summary>
-/// The in-game launchscreen (Milestone 2.5 item 4): a keyboard/controller-driven menu shown when
-/// the viewer is launched with no content-selecting CLI arg (a bare launch, e.g. RunGame.ps1).
-/// Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying) → <b>Chapter</b> (the eight
-/// chapter worlds) → <b>Plane</b> (the player roster, with a couple of stats from
-/// <see cref="PlaneStats"/>) — after which <see cref="Launch"/> fires with the chosen
-/// chapter/plane/mode and PlaneViewer builds the world through the normal arg-driven pipeline (the
-/// menu just fills in the same selections the CLI would).
+/// The in-game launchscreen (Milestone 2.5 items 4 + 6): a keyboard/controller-driven menu shown
+/// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
+/// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying) →
+/// <b>Chapter</b> (the eight chapter worlds) → <b>Plane</b> (the player roster, with a couple of
+/// stats from <see cref="PlaneStats"/>) — after which <see cref="Launch"/> fires with the chosen
+/// chapter, the per-player plane + pad, and the mode; PlaneViewer builds the world through the
+/// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
 ///
-/// Navigation is polled every frame (uniform across keyboard and EVERY connected gamepad's
-/// d-pad/left stick — any-pad, never pads[0], so hot-plugged pads and machines with phantom
-/// joypad devices work, and the footer shows the live roster) with edge detection + auto-repeat,
-/// so no Godot input map / focus wiring is needed: ↑↓ / W,S / d-pad / stick move the highlight,
-/// Enter/Space/A accept, Esc/B go back (Back on the Mode screen quits via <see cref="Quit"/>).
-/// It is a plain Godot-UI overlay (opaque panel + labels) on its own high CanvasLayer, distinct
-/// from the hand-drawn flight HUD.
+/// <para><b>Join flow (item 6).</b> Player 1 is the keyboard plus every pad no other player has
+/// claimed. Any such pad joins as its own player by pressing Start, up to
+/// <see cref="SplitScreen.MaxPlayers"/> — including a pad player 1 is currently reading, which is
+/// deliberate: splitting the only controller off as player 2 and leaving player 1 on the keyboard
+/// is the one way to reach the keyboard-vs-one-controller two-player setup. The join strip under
+/// the breadcrumb shows who is in on every screen. Player 1 alone picks the mode
+/// and the chapter (the others can only leave, with B); on the <b>Plane</b> screen every joined
+/// player moves their <i>own</i> cursor through the same list and locks their pick with A —
+/// duplicates allowed — and the flight starts when everyone is locked. B unlocks; B while
+/// unlocked leaves the session (player 1 goes back to the chapter screen instead, which unlocks
+/// everyone). A pad that disconnects drops its player (player 1 just loses its pad and keeps the
+/// keyboard).</para>
 ///
-/// Re-entrant: PlaneViewer tears the world down and calls <see cref="ShowMenu"/> again on
-/// Esc-from-flight, so this always resets to the Mode screen and re-primes its input edges (a held
-/// Esc that returned here must not immediately re-trigger Back).
+/// <para><b>Input</b> is polled per player every frame through <see cref="MenuInput"/> rather
+/// than Godot's input map / focus system: it needs no project-settings wiring, behaves identically
+/// for keyboard and pad, and — the reason the join flow needs it — reads a <i>named device</i>,
+/// which actions cannot. Edge detection + auto-repeat live in MenuInput.</para>
+///
+/// <para>Re-entrant: PlaneViewer tears the world down and calls <see cref="ShowMenu"/> again on
+/// Esc-from-flight, so this resets to the Mode screen, clears the plane locks (joined players
+/// stay joined) and re-primes every input edge — a held Esc that returned here must not
+/// immediately re-trigger Back, and a held Start must not re-join anyone.</para>
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
-    /// <summary>Fired when the player confirms a plane: (chapter code, plane node name, stunt mode).
-    /// The host hides the menu and builds the session.</summary>
-    public Action<string, string, bool>? Launch;
+    /// <summary>One player's confirmed selection: the plane node to build and the gamepad(s) that
+    /// fly it. A joined player has exactly one; player 1 (who also has the keyboard) carries every
+    /// pad nobody claimed, so a lone controller still flies it and phantom devices stay harmless.</summary>
+    public readonly record struct PlayerChoice(string PlaneNode, int[] Pads);
+
+    /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
+    /// player in player order, stunt mode). The host hides the menu and builds the session.</summary>
+    public Action<string, IReadOnlyList<PlayerChoice>, bool>? Launch;
 
     /// <summary>Fired when the player backs out of the Mode screen — the host quits.</summary>
     public Action? Quit;
@@ -38,6 +54,15 @@ public sealed partial class LaunchMenu : CanvasLayer
     private enum Screen { Mode, Chapter, Plane }
 
     private readonly record struct Choice(string Label, string Detail);
+
+    /// <summary>One joined player: their device binding, their cursor in the plane list, and
+    /// whether they have locked their pick.</summary>
+    private sealed class Slot
+    {
+        public readonly MenuInput Input = new();
+        public int PlaneIndex;
+        public bool Locked;
+    }
 
     // The two flight modes. Index 1 (Stunt Flying) sets stunt mode.
     private static readonly Choice[] Modes =
@@ -79,11 +104,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         ("Warhawk", "player_warhawk"),
     };
 
-    // Input timing (TUNE): auto-repeat while a direction is held.
-    private const float RepeatInitial = 0.42f;   // s before the first repeat
-    private const float RepeatInterval = 0.12f;  // s between repeats after that
-    private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
-
     // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
     private const int TitleFont = 40;
     private const int HeadingFont = 20;
@@ -92,6 +112,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int DetailFont = 16;
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
+    // Multi-player plane rows are [tag gutter][name][matching spacer] so the list does not shift
+    // sideways as cursors appear and disappear. Reference widths at 720p (TUNE).
+    private const int TagGutter = 92;
+    private const int NameWidth = 190;
 
     private static readonly Color TitleColor = new(0.96f, 0.80f, 0.35f);
     private static readonly Color CrumbColor = new(0.55f, 0.68f, 0.86f);
@@ -106,17 +130,18 @@ public sealed partial class LaunchMenu : CanvasLayer
     private readonly Dictionary<string, PlaneStats?> _stats = new();
 
     private Screen _screen = Screen.Mode;
-    private int _modeIndex, _chapterIndex, _planeIndex;
+    private int _modeIndex, _chapterIndex;
     private bool _stunt;
     private string _error = "";
 
-    // Input edge/repeat state.
-    private bool _acceptPrev, _backPrev;
-    private int _vDirPrev;
-    private float _repeatTimer;
+    // The joined players, player 1 first. Never empty once ShowMenu has run.
+    private readonly List<Slot> _slots = new();
+    // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
+    // pads that have no player (and therefore no MenuInput) yet.
+    private readonly Dictionary<int, bool> _joinPrev = new();
 
-    // Footer gamepad line as last drawn — _Process redraws when the live roster changes (hotplug).
-    private string _padStatus = "";
+    // The join strip as last drawn — _Process redraws when the live roster changes (hotplug).
+    private string _stripText = "";
 
     private VBoxContainer _body = null!;
 
@@ -147,10 +172,11 @@ public sealed partial class LaunchMenu : CanvasLayer
         return menu;
     }
 
-    /// <summary>Show the menu (normally from the Mode screen) and prime the input edges so a key
-    /// still held from the transition here (e.g. the Esc that left a flight) does not fire
-    /// immediately. <paramref name="startScreen"/> ("chapter"/"plane") opens on a later screen —
-    /// a screenshot/verification aid (--menu=plane); anything else starts at Mode.</summary>
+    /// <summary>Show the menu (normally from the Mode screen) and prime every input edge so a
+    /// button still held from the transition here (the Esc that left a flight, the Start that
+    /// joined a player) does not fire immediately. Joined players survive a return from flight;
+    /// their plane locks do not. <paramref name="startScreen"/> ("chapter"/"plane") opens on a
+    /// later screen — a screenshot/verification aid (--menu=plane).</summary>
     public void ShowMenu(string startScreen = "")
     {
         _screen = startScreen switch
@@ -161,7 +187,15 @@ public sealed partial class LaunchMenu : CanvasLayer
         };
         _error = "";
         Visible = true;
-        PrimeInput();
+        if (_slots.Count == 0)
+            _slots.Add(new Slot { Input = { Keyboard = true } });
+        foreach (var slot in _slots)
+        {
+            slot.Locked = false;
+            slot.Input.Prime();
+        }
+        SyncDevices();
+        PrimeJoins();
         Rebuild();
     }
 
@@ -176,162 +210,246 @@ public sealed partial class LaunchMenu : CanvasLayer
             Rebuild();
     }
 
+    /// <summary>Debug/verification aid (--debug-join=N): add N device-less players so the
+    /// multi-cursor plane screen can be screenshot on a machine with one controller. They can
+    /// never act (no keyboard, no pad), so the shot is deterministic.</summary>
+    public void DebugJoin(int extraPlayers)
+    {
+        for (int i = 0; i < extraPlayers && _slots.Count < SplitScreen.MaxPlayers; i++)
+            _slots.Add(new Slot { PlaneIndex = (i + 1) % Planes.Length });
+        GD.Print($"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
+        if (Visible)
+            Rebuild();
+    }
+
     public override void _Process(double delta)
     {
         if (!Visible)
             return;
-        float dt = (float)delta;
 
-        // Live hotplug: redraw when the pad roster changes so the footer line stays truthful.
-        if (GamepadStatus() != _padStatus)
-            Rebuild();
+        // Device bookkeeping first: a pad that vanished must not still be driving a cursor, and a
+        // pad that appeared should be joinable (or become P1's, if P1 has none).
+        bool dirty = SyncDevices();
+        dirty |= ScanJoins();
 
-        int vDir = RawVDir();
-        if (vDir != 0)
+        foreach (var slot in _slots)
+            slot.Input.Poll((float)delta);
+        dirty |= HandleInput();
+
+        // Live hotplug: redraw when the join strip's text changes even if nothing was pressed.
+        if (dirty || JoinStripText() != _stripText)
         {
-            if (vDir != _vDirPrev)
-            {
-                Move(vDir);
-                _repeatTimer = RepeatInitial;
-            }
-            else if ((_repeatTimer -= dt) <= 0f)
-            {
-                Move(vDir);
-                _repeatTimer = RepeatInterval;
-            }
+            if (Visible) // a launch during HandleInput hides us; don't rebuild a dead menu
+                Rebuild();
         }
-        _vDirPrev = vDir;
-
-        bool accept = RawAccept();
-        if (accept && !_acceptPrev)
-            OnAccept();
-        _acceptPrev = accept;
-
-        bool back = RawBack();
-        if (back && !_backPrev)
-            OnBack();
-        _backPrev = back;
     }
 
-    // --- input reads (shared by _Process and PrimeInput) ---
-    // Every read spans ALL connected gamepads, never pads[0]: phantom joypad devices (wireless
-    // dongles enumerating with the pad asleep, non-pad HID) can occupy the early slots, and a pad
-    // connected after launch lands in a later one. Idle devices read as zero, so any-pad is safe.
+    // --- players / devices ---
 
-    private static bool AnyPadPressed(JoyButton button)
+    /// <summary>Whether a pad belongs to a joined player 2–4. Player 1's pads are deliberately NOT
+    /// claims — it holds whatever is left over, so any of them can still join as its own player.</summary>
+    private bool IsClaimed(int pad)
     {
-        foreach (int pad in Input.GetConnectedJoypads())
-            if (Input.IsJoyButtonPressed(pad, button))
+        for (int i = 1; i < _slots.Count; i++)
+            if (_slots[i].Input.Pad == pad)
                 return true;
         return false;
     }
 
-    /// <summary>The largest-magnitude value of the axis across all connected gamepads (0 when none).</summary>
-    private static float AnyPadAxis(JoyAxis axis)
+    /// <summary>Reconciles the joined players with the live pad roster: drops a player whose pad
+    /// disconnected, then hands player 1 <b>every unclaimed pad</b>. That last part is the
+    /// important one — player 1 reading the whole leftover roster rather than <c>pads[0]</c> is
+    /// what keeps the 2026-07-19 phantom-device fix alive (see <see cref="MenuInput.Pads"/>), and
+    /// it falls out for free that a pad joining as its own player leaves player 1's set and
+    /// rejoins it on un-join. Returns true when anything changed (the strip needs redrawing).</summary>
+    private bool SyncDevices()
     {
-        float v = 0f;
+        var connected = Input.GetConnectedJoypads();
+        bool dirty = false;
+        for (int i = _slots.Count - 1; i >= 1; i--)
+        {
+            int pad = _slots[i].Input.Pad;
+            if (pad >= 0 && !connected.Contains(pad))
+            {
+                GD.Print($"launchscreen: P{i + 1}'s pad {pad} disconnected — player left");
+                _slots.RemoveAt(i);
+                dirty = true;
+            }
+        }
+        var free = new List<int>(connected.Count);
+        foreach (int pad in connected)
+            if (!IsClaimed(pad))
+                free.Add(pad);
+        var p1 = _slots[0].Input;
+        if (free.Count != p1.Pads.Length)
+        {
+            p1.Pads = free.ToArray();
+            p1.Prime(); // a button still held on a pad that just changed hands is not a press
+            dirty = true;
+        }
+        else
+        {
+            for (int i = 0; i < free.Count; i++)
+                if (free[i] != p1.Pads[i])
+                {
+                    p1.Pads = free.ToArray();
+                    p1.Prime();
+                    dirty = true;
+                    break;
+                }
+        }
+        return dirty;
+    }
+
+    /// <summary>Seeds the per-pad join edges from the current state, so a Start held while the
+    /// menu appears does not immediately join a player.</summary>
+    private void PrimeJoins()
+    {
+        _joinPrev.Clear();
+        foreach (int pad in Input.GetConnectedJoypads())
+            _joinPrev[pad] = MenuInput.JoinPressed(pad);
+    }
+
+    /// <summary>Start on an unclaimed pad joins a new player (up to the splitscreen rig's
+    /// capacity). Allowed on every screen — a late joiner on the plane screen simply gets a
+    /// cursor and the launch waits for their lock.</summary>
+    private bool ScanJoins()
+    {
+        bool dirty = false;
         foreach (int pad in Input.GetConnectedJoypads())
         {
-            float a = Input.GetJoyAxis(pad, axis);
-            if (Mathf.Abs(a) > Mathf.Abs(v))
-                v = a;
+            bool pressed = MenuInput.JoinPressed(pad);
+            _joinPrev.TryGetValue(pad, out bool prev);
+            _joinPrev[pad] = pressed;
+            if (!pressed || prev || IsClaimed(pad) || _slots.Count >= SplitScreen.MaxPlayers)
+                continue;
+            var slot = new Slot();
+            slot.Input.Pads = new[] { pad };
+            slot.Input.Prime();
+            _slots.Add(slot);
+            GD.Print($"launchscreen: P{_slots.Count} joined on pad {pad} \"{Input.GetJoyName(pad)}\"");
+            dirty = true;
         }
-        return v;
+        return dirty;
     }
 
-    private static int RawVDir()
+    private void Unjoin(int index)
     {
-        float stickY = AnyPadAxis(JoyAxis.LeftY);
-        bool up = Input.IsKeyPressed(Key.Up) || Input.IsKeyPressed(Key.W)
-            || AnyPadPressed(JoyButton.DpadUp) || stickY < -StickDeadzone;
-        bool down = Input.IsKeyPressed(Key.Down) || Input.IsKeyPressed(Key.S)
-            || AnyPadPressed(JoyButton.DpadDown) || stickY > StickDeadzone;
-        return up ? -1 : down ? 1 : 0;
-    }
-
-    private static bool RawAccept() =>
-        Input.IsKeyPressed(Key.Enter) || Input.IsKeyPressed(Key.KpEnter) || Input.IsKeyPressed(Key.Space)
-        || AnyPadPressed(JoyButton.A);
-
-    private static bool RawBack() =>
-        Input.IsKeyPressed(Key.Escape) || AnyPadPressed(JoyButton.B);
-
-    private void PrimeInput()
-    {
-        _acceptPrev = RawAccept();
-        _backPrev = RawBack();
-        _vDirPrev = RawVDir();
-        _repeatTimer = RepeatInitial;
+        GD.Print($"launchscreen: P{index + 1} left (pad {_slots[index].Input.Pad})");
+        _slots.RemoveAt(index);
     }
 
     // --- navigation ---
 
-    private int CurrentCount() => _screen switch
+    /// <summary>Reads this frame's polled intents and applies them. Mode/Chapter are player 1's
+    /// alone (the others can only leave); the Plane screen runs every player's cursor at once and
+    /// fires <see cref="Launch"/> when they are all locked. Returns true if the view changed.</summary>
+    private bool HandleInput()
     {
-        Screen.Mode => Modes.Length,
-        Screen.Chapter => Chapters.Length,
-        _ => Planes.Length,
-    };
-
-    private int CurrentIndex => _screen switch
-    {
-        Screen.Mode => _modeIndex,
-        Screen.Chapter => _chapterIndex,
-        _ => _planeIndex,
-    };
-
-    private void Move(int dir)
-    {
-        int n = CurrentCount();
-        int next = ((CurrentIndex + dir) % n + n) % n;
-        switch (_screen)
+        bool dirty = false;
+        if (_screen != Screen.Plane)
         {
-            case Screen.Mode: _modeIndex = next; break;
-            case Screen.Chapter: _chapterIndex = next; break;
-            default: _planeIndex = next; break;
+            var p1 = _slots[0].Input;
+            if (p1.Move != 0)
+            {
+                int n = _screen == Screen.Mode ? Modes.Length : Chapters.Length;
+                if (_screen == Screen.Mode)
+                    _modeIndex = Wrap(_modeIndex + p1.Move, n);
+                else
+                    _chapterIndex = Wrap(_chapterIndex + p1.Move, n);
+                dirty = true;
+            }
+            if (p1.Accept)
+            {
+                _error = "";
+                _screen = _screen == Screen.Mode ? Screen.Chapter : Screen.Plane;
+                if (_screen == Screen.Chapter)
+                    _stunt = _modeIndex == 1;
+                dirty = true;
+            }
+            else if (p1.Back)
+            {
+                if (_screen == Screen.Mode)
+                    Quit?.Invoke();
+                else
+                    _screen = Screen.Mode;
+                dirty = true;
+            }
+            // Everyone else can only drop out from here.
+            for (int i = _slots.Count - 1; i >= 1; i--)
+            {
+                if (!_slots[i].Input.Back)
+                    continue;
+                Unjoin(i);
+                dirty = true;
+            }
+            return dirty;
         }
-        Rebuild();
+
+        // Plane screen: all joined players pick simultaneously, each with their own cursor.
+        for (int i = _slots.Count - 1; i >= 0; i--)
+        {
+            var slot = _slots[i];
+            var input = slot.Input;
+            if (input.Move != 0 && !slot.Locked)
+            {
+                slot.PlaneIndex = Wrap(slot.PlaneIndex + input.Move, Planes.Length);
+                dirty = true;
+            }
+            if (input.Accept && !slot.Locked)
+            {
+                slot.Locked = true;
+                _error = "";
+                dirty = true;
+            }
+            else if (input.Back)
+            {
+                if (slot.Locked)
+                {
+                    slot.Locked = false;
+                }
+                else if (i == 0)
+                {
+                    // Player 1 backing out returns everyone to the chapter screen.
+                    _screen = Screen.Chapter;
+                    foreach (var s in _slots)
+                        s.Locked = false;
+                    return true;
+                }
+                else
+                {
+                    Unjoin(i);
+                }
+                dirty = true;
+            }
+        }
+
+        if (AllLocked())
+        {
+            FireLaunch();
+            return false; // the host has hidden us and is building
+        }
+        return dirty;
     }
 
-    private void OnAccept()
+    private bool AllLocked()
     {
-        _error = "";
-        switch (_screen)
-        {
-            case Screen.Mode:
-                _stunt = _modeIndex == 1;
-                _screen = Screen.Chapter;
-                Rebuild();
-                break;
-            case Screen.Chapter:
-                _screen = Screen.Plane;
-                Rebuild();
-                break;
-            case Screen.Plane:
-                // The host hides the menu and builds; leave our state as-is so a failed build can
-                // send us back with ShowMenu (which resets to Mode).
-                Launch?.Invoke(Chapters[_chapterIndex].Code, Planes[_planeIndex].Node, _stunt);
-                break;
-        }
+        foreach (var slot in _slots)
+            if (!slot.Locked)
+                return false;
+        return _slots.Count > 0;
     }
 
-    private void OnBack()
+    private void FireLaunch()
     {
-        switch (_screen)
-        {
-            case Screen.Mode:
-                Quit?.Invoke();
-                break;
-            case Screen.Chapter:
-                _screen = Screen.Mode;
-                Rebuild();
-                break;
-            case Screen.Plane:
-                _screen = Screen.Chapter;
-                Rebuild();
-                break;
-        }
+        var choices = new List<PlayerChoice>(_slots.Count);
+        foreach (var slot in _slots)
+            choices.Add(new PlayerChoice(Planes[slot.PlaneIndex].Node, slot.Input.Pads));
+        // Leave our state as-is so a failed build can send us back with ShowMenu.
+        Launch?.Invoke(Chapters[_chapterIndex].Code, choices, _stunt);
     }
+
+    private static int Wrap(int index, int count) => ((index % count) + count) % count;
 
     // --- rendering ---
 
@@ -340,40 +458,30 @@ public sealed partial class LaunchMenu : CanvasLayer
         foreach (var c in _body.GetChildren())
             c.QueueFree();
 
-        // CanvasLayer is a Node (not a CanvasItem), so read the size off the Viewport directly.
-        float s = Mathf.Max(1f, GetViewport().GetVisibleRect().Size.Y / 720f);
+        float s = LayoutScale();
         _body.CustomMinimumSize = new Vector2(560f * s, 0f);
 
         _body.AddChild(Label("CRIMSON SKIES", (int)(TitleFont * s), TitleColor, HorizontalAlignment.Center));
         _body.AddChild(Label(Breadcrumb(), (int)(CrumbFont * s), CrumbColor, HorizontalAlignment.Center));
-        _body.AddChild(Spacer((int)(10 * s)));
+        _body.AddChild(Spacer((int)(8 * s)));
+        _body.AddChild(JoinStrip(s));
+        _body.AddChild(Spacer((int)(8 * s)));
 
         string heading = _screen switch
         {
             Screen.Mode => "SELECT MODE",
             Screen.Chapter => "SELECT MAP",
-            _ => "SELECT AIRCRAFT",
+            _ => _slots.Count > 1 ? "SELECT AIRCRAFT — ALL PLAYERS" : "SELECT AIRCRAFT",
         };
         _body.AddChild(Label(heading, (int)(HeadingFont * s), HeadingColor, HorizontalAlignment.Center));
         _body.AddChild(Spacer((int)(6 * s)));
 
         int count = CurrentCount();
-        int focus = CurrentIndex;
         for (int i = 0; i < count; i++)
-        {
-            string text = _screen switch
-            {
-                Screen.Mode => Modes[i].Label,
-                Screen.Chapter => Chapters[i].Name,
-                _ => Planes[i].Name,
-            };
-            bool sel = i == focus;
-            _body.AddChild(Label((sel ? "▶  " : "     ") + text, (int)(RowFont * s),
-                sel ? RowFocusColor : RowColor, HorizontalAlignment.Center));
-        }
+            _body.AddChild(Row(i, s));
 
         _body.AddChild(Spacer((int)(10 * s)));
-        _body.AddChild(Label(Detail(focus), (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center));
+        _body.AddChild(DetailBlock(s));
 
         if (_error.Length > 0)
         {
@@ -382,21 +490,183 @@ public sealed partial class LaunchMenu : CanvasLayer
         }
 
         _body.AddChild(Spacer((int)(16 * s)));
-        string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
-        _body.AddChild(Label($"↑↓  Navigate       Enter / A  Select       {back}",
-            (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
-
-        _padStatus = GamepadStatus();
-        _body.AddChild(Spacer((int)(4 * s)));
-        _body.AddChild(Label(_padStatus, (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+        _body.AddChild(Label(Footer(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
     }
 
-    private static string GamepadStatus()
+    /// <summary>How large to draw this screen: the item-4 rule (720p metrics, scaled up on taller
+    /// viewports) capped so the screen's actual content still fits the viewport. The cap matters
+    /// because the screens are not all the same height — a four-player plane select adds a cursor
+    /// row per player to the tallest list there is, and without it the footer fell off a 720p
+    /// window. The estimate uses the real font line heights, and rounds generously (the spacers
+    /// are absolute pixels but counted as reference units), so it errs toward a small margin
+    /// rather than an overflow. Single-player screens fit at the uncapped scale, so their layout
+    /// is unchanged.</summary>
+    private float LayoutScale()
     {
-        var pads = Input.GetConnectedJoypads();
-        return pads.Count == 0 ? "No gamepad — keyboard controls"
-            : pads.Count == 1 ? $"Gamepad: {Input.GetJoyName(pads[0])}"
-            : $"Gamepads: {pads.Count} connected — all active";
+        // CanvasLayer is a Node (not a CanvasItem), so read the size off the Viewport directly.
+        float viewH = GetViewport().GetVisibleRect().Size.Y;
+        float s = Mathf.Max(1f, viewH / 720f);
+        var font = _body.GetThemeDefaultFont();
+        if (font == null)
+            return s;
+        int rows = CurrentCount();
+        float refH =
+            font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
+            font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
+            DetailLineCount() * font.GetHeight(DetailFont) +
+            FooterLineCount() * font.GetHeight(FooterFont) +
+            (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
+            8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
+            6 * (10 + rows);               // the body VBox's separation between children
+        return Mathf.Min(s, viewH / refH);
+    }
+
+    private int DetailLineCount() =>
+        _screen == Screen.Plane && _slots.Count > 1 ? _slots.Count : 1;
+
+    private int FooterLineCount() =>
+        _screen == Screen.Plane && _slots.Count > 1 ? 2 : 1;
+
+    private int CurrentCount() => _screen switch
+    {
+        Screen.Mode => Modes.Length,
+        Screen.Chapter => Chapters.Length,
+        _ => Planes.Length,
+    };
+
+    /// <summary>The single-player cursor position on the current screen (the plane screen reads
+    /// player 1's cursor).</summary>
+    private int CurrentIndex => _screen switch
+    {
+        Screen.Mode => _modeIndex,
+        Screen.Chapter => _chapterIndex,
+        _ => _slots[0].PlaneIndex,
+    };
+
+    /// <summary>One list row. With a single player this is exactly the item-4 layout (a centred
+    /// label with a ▶ cursor); with several it becomes [tag gutter][name][matching spacer] so the
+    /// list never shifts sideways as cursors move, with each player's tag in their own colour.</summary>
+    private Control Row(int index, float s)
+    {
+        string text = _screen switch
+        {
+            Screen.Mode => Modes[index].Label,
+            Screen.Chapter => Chapters[index].Name,
+            _ => Planes[index].Name,
+        };
+        if (_screen != Screen.Plane || _slots.Count == 1)
+        {
+            bool sel = index == CurrentIndex;
+            return Label((sel ? "▶  " : "     ") + text, (int)(RowFont * s),
+                sel ? RowFocusColor : RowColor, HorizontalAlignment.Center);
+        }
+
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        row.AddThemeConstantOverride("separation", (int)(8 * s));
+
+        var tags = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
+        tags.AddThemeConstantOverride("separation", (int)(6 * s));
+        tags.CustomMinimumSize = new Vector2(TagGutter * s, 0f);
+        int here = 0;
+        int only = -1;
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            if (_slots[i].PlaneIndex != index)
+                continue;
+            here++;
+            only = i;
+            var tag = Label(SplitScreen.PlayerTag(i) + (_slots[i].Locked ? " ✓" : ""),
+                (int)(RowFont * s * 0.72f), SplitScreen.PlayerColor(i), HorizontalAlignment.Right);
+            tag.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
+            tags.AddChild(tag);
+        }
+        row.AddChild(tags);
+
+        var name = Label(text, (int)(RowFont * s),
+            here == 0 ? RowColor : here == 1 ? SplitScreen.PlayerColor(only) : RowFocusColor,
+            HorizontalAlignment.Center);
+        name.SizeFlagsHorizontal = Control.SizeFlags.Fill; // must not expand — it would eat the row
+        name.CustomMinimumSize = new Vector2(NameWidth * s, 0f);
+        row.AddChild(name);
+
+        // Mirror of the tag gutter, so the name column stays centred on screen.
+        row.AddChild(new Control { CustomMinimumSize = new Vector2(TagGutter * s, 0f) });
+        return row;
+    }
+
+    /// <summary>The detail area: one stats line for the focused entry, or — on a multi-player
+    /// plane screen — one line per player showing their current pick and lock state.</summary>
+    private Control DetailBlock(float s)
+    {
+        if (_screen != Screen.Plane || _slots.Count == 1)
+            return Label(Detail(CurrentIndex), (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center);
+
+        var box = new VBoxContainer();
+        box.AddThemeConstantOverride("separation", (int)(2 * s));
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var slot = _slots[i];
+            string line = $"{SplitScreen.PlayerTag(i)}   {Planes[slot.PlaneIndex].Name}   ·   " +
+                          $"{PlaneSpeed(Planes[slot.PlaneIndex].Node)}   " +
+                          (slot.Locked ? "· LOCKED" : "· choosing…");
+            box.AddChild(Label(line, (int)(DetailFont * s), SplitScreen.PlayerColor(i),
+                HorizontalAlignment.Center));
+        }
+        return box;
+    }
+
+    /// <summary>The join strip shown under the breadcrumb on every screen: who is in, on what
+    /// device, plus the hint that free pads can join with Start.</summary>
+    private Control JoinStrip(float s)
+    {
+        _stripText = JoinStripText();
+        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
+        row.AddThemeConstantOverride("separation", (int)(14 * s));
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var label = Label($"{SplitScreen.PlayerTag(i)}  {_slots[i].Input.DeviceLabel}",
+                (int)(FooterFont * s), SplitScreen.PlayerColor(i), HorizontalAlignment.Center);
+            label.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+            row.AddChild(label);
+        }
+        var hint = Label(JoinHint(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center);
+        hint.SizeFlagsHorizontal = Control.SizeFlags.ShrinkCenter;
+        row.AddChild(hint);
+        return row;
+    }
+
+    /// <summary>The strip as plain text — compared each frame so a hotplug (or a join) redraws
+    /// even when nothing was pressed.</summary>
+    private string JoinStripText()
+    {
+        var parts = new List<string>(_slots.Count + 1);
+        for (int i = 0; i < _slots.Count; i++)
+            parts.Add($"{SplitScreen.PlayerTag(i)} {_slots[i].Input.DeviceLabel}");
+        parts.Add(JoinHint());
+        return string.Join(" | ", parts);
+    }
+
+    /// <summary>The hint beside the join strip. Note it says "on a pad", not "on a free pad":
+    /// player 1's leftover pads are joinable too, and that is deliberate — pressing Start on the
+    /// only controller splits it off as player 2 and leaves player 1 on the keyboard, which is the
+    /// one way to reach the keyboard-vs-one-controller two-player setup. B un-joins.</summary>
+    private string JoinHint()
+    {
+        if (_slots.Count >= SplitScreen.MaxPlayers)
+            return $"({SplitScreen.MaxPlayers}-player maximum)";
+        return Input.GetConnectedJoypads().Count > 0
+            ? "(press START on a pad to join)"
+            : "(connect a pad and press START to join)";
+    }
+
+    private string Footer()
+    {
+        if (_screen == Screen.Plane && _slots.Count > 1)
+            return "↑↓  Choose       Enter / A  Lock in       Esc / B  Unlock  ·  leave" +
+                   "\nFlight starts when every player is locked in";
+        string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
+        string who = _slots.Count > 1 && _screen != Screen.Plane ? "       (P1 chooses)" : "";
+        return $"↑↓  Navigate       Enter / A  Select       {back}{who}";
     }
 
     private string Breadcrumb()
@@ -422,16 +692,30 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// validated top-speed figure (see PlaneStats).</summary>
     private string PlaneStat(string node)
     {
+        var s = StatsFor(node);
+        if (s == null)
+            return "(stats unavailable)";
+        return $"Top Speed  {Mph(s)} mph        Weight  {s.VehWeight:0}";
+    }
+
+    /// <summary>Just the top speed — the compact form used in the per-player pick lines.</summary>
+    private string PlaneSpeed(string node)
+    {
+        var s = StatsFor(node);
+        return s == null ? "stats n/a" : $"{Mph(s)} mph";
+    }
+
+    private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
+
+    private PlaneStats? StatsFor(string node)
+    {
         if (!_stats.TryGetValue(node, out var s))
         {
             try { s = PlaneStats.Load(_zrdrPath, node); }
             catch (Exception e) { GD.Print($"launchscreen: no stats for {node}: {e.Message}"); s = null; }
             _stats[node] = s;
         }
-        if (s == null)
-            return "(stats unavailable)";
-        int mph = Mathf.RoundToInt(s.FdSpeed * 2.23694f);
-        return $"Top Speed  {mph} mph        Weight  {s.VehWeight:0}";
+        return s;
     }
 
     private static Label Label(string text, int fontSize, Color color, HorizontalAlignment align)

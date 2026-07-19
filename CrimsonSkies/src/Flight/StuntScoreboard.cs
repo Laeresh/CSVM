@@ -113,7 +113,10 @@ public sealed partial class StuntScoreboard : Control
 
     private void Populate(float total, float? prevBest, bool newBest)
     {
-        float s = Mathf.Max(1f, GetViewportRect().Size.Y / 720f);
+        // 720p-referenced metrics, damped by the pane share so the panel still fits inside a
+        // splitscreen pane (HudMetrics; identical to the old Max(1, h/720) at any full-screen
+        // view 720p or taller, which is every real window).
+        float s = Mathf.Max(0.5f, HudMetrics.Scale(this, 720f));
 
         if (_panel != null)
         {

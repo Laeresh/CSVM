@@ -95,7 +95,7 @@ public sealed partial class CompassTape : Control
         // Track the viewport each frame (resizable window) and repaint at the current
         // heading; the tape is a dozen quads, so the unconditional redraw is negligible.
         var vp = GetViewportRect().Size;
-        float s = vp.Y / 1440f;
+        float s = HudMetrics.Scale(this);
         Position = new Vector2((vp.X - RefBarWidth * s) / 2f, RefTopMargin * s);
         Size = new Vector2(RefBarWidth * s, RefBarHeight * s);
         QueueRedraw();
@@ -105,12 +105,12 @@ public sealed partial class CompassTape : Control
     /// <summary>Screen x of a mark Δ° off the current heading — the drum projection;
     /// increasing headings run leftward (whiskey card).</summary>
     private float DrumX(float deltaDeg) =>
-        Size.X / 2f - RefDrumRadius * (GetViewportRect().Size.Y / 1440f)
+        Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
                     * Mathf.Sin(Mathf.DegToRad(deltaDeg));
 
     public override void _Draw()
     {
-        float s = GetViewportRect().Size.Y / 1440f;
+        float s = HudMetrics.Scale(this);
         float w = Size.X, h = Size.Y;
 
         DrawRect(new Rect2(0, 0, w, h), Colors.Black);
@@ -151,7 +151,8 @@ public sealed partial class CompassTape : Control
         public override void _Draw()
         {
             var t = Tape;
-            float scale = RefLabelHeight / 32f * (GetViewportRect().Size.Y / 1440f);
+            float s = HudMetrics.Scale(this);
+            float scale = RefLabelHeight / 32f * s;
             float firstLabel = Mathf.Ceil((t.HeadingDeg - 90f) / 45f) * 45f;
             for (float a = firstLabel; a <= t.HeadingDeg + 90f; a += 45f)
             {
@@ -161,7 +162,7 @@ public sealed partial class CompassTape : Control
                 float fade = Mathf.Cos(Mathf.DegToRad(d));
                 var src = LabelSrc[(int)Mathf.PosMod(a / 45f, 8f)];
                 var dest = new Rect2(t.DrumX(d) - src.Size.X * scale / 2f,
-                                     RefLabelTop * (GetViewportRect().Size.Y / 1440f),
+                                     RefLabelTop * s,
                                      src.Size.X * scale, src.Size.Y * scale);
                 DrawTextureRectRegion(t._labels, dest, src, new Color(fade, fade, fade));
             }

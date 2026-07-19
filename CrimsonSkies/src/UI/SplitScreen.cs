@@ -52,6 +52,25 @@ public sealed partial class SplitScreen : CanvasLayer
     /// camera-anchored copies (skydome / cloud deck / cloud puffs) on it.</summary>
     public static uint PlayerVisualLayer(int index) => 1u << (PlayerLayerBit0 + index);
 
+    // Per-player identity colours (M2.5 item 6): the launchscreen's join strip and plane-select
+    // cursors, and later the race HUD/scoreboard rows (item 7), all key off these so a player
+    // recognises "their" colour from the menu through to the results. P1 keeps the launchscreen's
+    // existing gold focus colour so a single-player menu looks exactly as it did. TUNE.
+    private static readonly Color[] Colors4 =
+    {
+        new(1f, 0.86f, 0.38f),   // P1 gold
+        new(0.45f, 0.83f, 1f),   // P2 sky blue
+        new(0.55f, 0.95f, 0.55f),// P3 green
+        new(1f, 0.60f, 0.85f),   // P4 pink
+    };
+
+    /// <summary>Player <paramref name="index"/>'s identity colour (menu cursor, HUD tags).</summary>
+    public static Color PlayerColor(int index) => Colors4[Mathf.PosMod(index, Colors4.Length)];
+
+    /// <summary>Player <paramref name="index"/>'s short tag ("P1"), used wherever several players
+    /// share one list or scoreboard.</summary>
+    public static string PlayerTag(int index) => $"P{index + 1}";
+
     /// <summary>Cull mask for player <paramref name="index"/>'s camera: everything outside the
     /// reserved per-player band (the shared world, all aircraft) plus only this player's own bit.</summary>
     public static uint PlayerCullMask(int index) => (AllLayers & ~PlayerBand) | PlayerVisualLayer(index);

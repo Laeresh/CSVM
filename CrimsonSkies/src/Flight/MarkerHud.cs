@@ -90,7 +90,9 @@ public sealed partial class MarkerHud : Control
         // A draw can land before _Process has sized us to the viewport (and, in splitscreen,
         // before a pane has been laid out): every derived metric would be 0 and Godot's font
         // cache errors out on a zero size. Nothing to draw at zero height anyway.
-        float s = Size.Y / 1440f;
+        // The marker scales like the rest of the HUD: window height against the 1440p reference,
+        // damped by this pane's share of it so a 4P quarter-pane marker stays readable (HudMetrics).
+        float s = Size.Y <= 0f ? 0f : HudMetrics.Scale(this);
         if (s <= 0f)
             return;
         var font = GetThemeDefaultFont();
@@ -246,7 +248,7 @@ public sealed partial class MarkerHud : Control
         float maxW = 0f;
         foreach (var line in lines)
             maxW = Mathf.Max(maxW, font.GetStringSize(line, HorizontalAlignment.Left, -1f, fontSize).X);
-        float m = RefEdgeMargin * (Size.Y / 1440f);
+        float m = RefEdgeMargin * HudMetrics.Scale(this);
         center.X = Mathf.Clamp(center.X, m + maxW / 2f, Size.X - m - maxW / 2f);
         center.Y = Mathf.Clamp(center.Y, m + totalH / 2f, Size.Y - m - totalH / 2f);
         DrawLines(font, center, lines, fontSize, color);

@@ -359,13 +359,21 @@ public sealed partial class GaugeCluster : Control
     private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
     private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
+    /// <summary>The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
+    /// they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
+    /// Measuring from the bottom is identical to <c>refY · s</c> whenever s is the plain
+    /// height ratio (single player), and is what keeps them on screen when a splitscreen pane
+    /// draws them at a damped, larger-than-proportional scale (see <see cref="HudMetrics"/>).</summary>
+    private static float FromBottom(float refY, float s, float viewportH) =>
+        viewportH - (HudMetrics.ReferenceHeight - refY) * s;
+
     public override void _Draw()
     {
         var vp = GetViewportRect().Size;
-        float s = vp.Y / 1440f;
+        float s = HudMetrics.Scale(this);
 
         // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
-        var altC = new Vector2(AltCenter.X * s, AltCenter.Y * s);
+        var altC = new Vector2(AltCenter.X * s, FromBottom(AltCenter.Y, s, vp.Y));
         float altR = AltRadius * s;
         foreach (var p in _altFace)
             DrawGaugePoly(p, altC, altR);
@@ -379,7 +387,7 @@ public sealed partial class GaugeCluster : Control
             DrawGaugePoly(_altHundreds, altC, altR, ft % 1000f / 1000f * 360f);
 
         // speedometer: ~0.72°/mph (the face's 100-mph labels sit ~71.5° apart)
-        var spdC = new Vector2(vp.X - SpdCenterFromRight * s, SpdCenterY * s);
+        var spdC = new Vector2(vp.X - SpdCenterFromRight * s, FromBottom(SpdCenterY, s, vp.Y));
         float spdR = SpdRadius * s;
         foreach (var p in _spdFace)
             DrawGaugePoly(p, spdC, spdR);
@@ -391,7 +399,7 @@ public sealed partial class GaugeCluster : Control
 
         // damage display: face silhouette, then each zone's border bar + hatch fill
         // in its color; a freshly hit zone blinks (fill + border) for a few seconds
-        var dmgC = new Vector2(DmgCenter.X * s, DmgCenter.Y * s);
+        var dmgC = new Vector2(DmgCenter.X * s, FromBottom(DmgCenter.Y, s, vp.Y));
         float dmgR = DmgRadius * s;
         foreach (var p in _dmgFace)
             DrawGaugePoly(p, dmgC, dmgR);

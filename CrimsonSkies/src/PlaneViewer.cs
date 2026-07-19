@@ -24,7 +24,9 @@ namespace CrimsonSkies;
 /// ready-to-paste --campos=/--lookat= args for reproducing a view.
 ///
 /// User args (after "--" on the command line):
-///   --plane=player_bhawk         which aircraft root node to build
+///   --plane=player_bhawk         which aircraft root node to build. A comma-separated list gives
+///                                one plane per splitscreen player (--plane=player_bhawk,player_fury)
+///                                and implies --players= that count unless --players says otherwise
 ///   --damage[=part:frac,…]       (static --plane mode) damage lab: one HP slider per
 ///                                destroyable part drives the item-10c damage visuals on
 ///                                the parked plane — torn-skin panel flips, panel fires
@@ -79,7 +81,11 @@ namespace CrimsonSkies;
 ///                                world, each in its own pane with its own camera, sky, HUD and
 ///                                input device. 2P = stacked top/bottom, 3–4P = 2×2 grid. P1 =
 ///                                keyboard + the first pad, P2–P4 = the next pads in order.
-///                                Requires --fly/--stunt; N=1 is the normal single-player path
+///                                Requires --fly/--stunt; N=1 is the normal single-player path.
+///                                Launched from the menu instead, the join flow binds the pads
+///   --debug-join=N               (launchscreen only) add N device-less players to the join strip
+///                                so the multi-cursor plane screen can be screenshot without N
+///                                controllers; they can never act, so the shot is deterministic
 ///   --hold=pitch,roll,yaw,thr    scripted flight input instead of the keyboard (automated runs);
 ///                                ';'-separated segments with '@seconds' durations sequence inputs
 ///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
@@ -115,6 +121,13 @@ public partial class PlaneViewer : Node3D
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
 
     private string _planeName = "player_bhawk";
+    // Splitscreen (M2.5 item 6): one plane per player, from the launchscreen's simultaneous pick
+    // or a comma-separated --plane= list. Empty = everyone flies _planeName (the 1P/CLI default).
+    private readonly List<string> _planeNames = new();
+    // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
+    // connected roster in AssignPads, which is what every CLI launch does).
+    private int[][]? _menuPads;
+    private int _debugJoin;            // --debug-join=N: extra device-less menu players (screenshot aid)
     private bool _damageLab;           // --damage: per-part HP sliders driving the 10c visuals (static --plane mode)
     private List<(string, float)>? _damagePreset; // --damage=part:frac,… preset fractions
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
@@ -196,9 +209,10 @@ public partial class PlaneViewer : Node3D
         // A content-selecting arg (--plane/--chapter/--fly/--stunt/--damage/--screenshot) builds
         // directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
         bool hasContentArg = false;
+        bool playersExplicit = false; // --players= given (else a --plane= list implies the count)
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
-            if (arg.StartsWith("--plane=")) { _planeName = arg["--plane=".Length..]; hasContentArg = true; }
+            if (arg.StartsWith("--plane=")) { ParsePlanes(arg["--plane=".Length..]); hasContentArg = true; }
             else if (arg == "--damage") { _damageLab = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage=")) { _damageLab = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); hasContentArg = true; }
             else if (arg == "--chapter") { _worldMode = true; hasContentArg = true; }
@@ -208,6 +222,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
             else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
             else if (arg == "--debug-dzpaths") _debugDzPaths = true;
+            else if (arg.StartsWith("--debug-join=")) _debugJoin = int.Parse(arg["--debug-join=".Length..]);
             else if (arg == "--debug-scoreboard") _debugScoreboard = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
@@ -223,7 +238,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
-            else if (arg.StartsWith("--players=")) _players = int.Parse(arg["--players=".Length..]);
+            else if (arg.StartsWith("--players=")) { _players = int.Parse(arg["--players=".Length..]); playersExplicit = true; }
             else if (arg.StartsWith("--hold=")) _holdSets = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--shots=")) _screenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..]));
@@ -245,6 +260,11 @@ public partial class PlaneViewer : Node3D
         }
         if (_fly)
             _worldMode = true;
+        // A --plane= list of several aircraft states the player count on its own (item 6's
+        // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
+        // different planes); an explicit --players= still wins.
+        if (!playersExplicit && _planeNames.Count > 1)
+            _players = _planeNames.Count;
         // Splitscreen (item 5) is a flight mode: it needs planes to fly. Clamp to the rig's
         // capacity and fall back to single player for any static/orbit view.
         _players = Mathf.Clamp(_players, 1, UI.SplitScreen.MaxPlayers);
@@ -495,10 +515,20 @@ public partial class PlaneViewer : Node3D
                 // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
                 // and the per-plane state below are per player.
                 var planesGamez = GameZ.Load(planesGamezPath);
-                var stats = PlaneStats.Load(zrdrPath, _planeName);
-                GD.Print($"flight stats [{stats.DefName}]: fd_speed={stats.FdSpeed} m/s " +
-                         $"weight={stats.VehWeight} engine={stats.EnginePower:0.00} " +
-                         $"torques=({stats.PitchTorque},{stats.RollTorque},{stats.RudderTorque})");
+                // Stats are per plane, not per player (item 6: splitscreen players can pick
+                // different aircraft) — load each distinct one once, logging it as it appears.
+                var statsCache = new Dictionary<string, PlaneStats>();
+                PlaneStats StatsFor(string plane)
+                {
+                    if (statsCache.TryGetValue(plane, out var cached))
+                        return cached;
+                    var loaded = PlaneStats.Load(zrdrPath, plane);
+                    statsCache[plane] = loaded;
+                    GD.Print($"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s " +
+                             $"weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} " +
+                             $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
+                    return loaded;
+                }
                 bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
                 using var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
                 var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
@@ -506,7 +536,11 @@ public partial class PlaneViewer : Node3D
                     GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
                 // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
                 float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
-                var padAssignment = AssignPads(_rigs.Count);
+                // The launchscreen's join flow binds the pads (item 6); a CLI launch derives them
+                // from the connected roster instead.
+                var padAssignment = _menuPads ?? AssignPads(_rigs.Count);
+                if (_menuPads != null)
+                    LogPads(_menuPads);
                 // One spawn list for the session; each player takes the next index (wrapping).
                 var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
@@ -516,9 +550,13 @@ public partial class PlaneViewer : Node3D
                     var rig = _rigs[pi];
                     bool verbose = pi == 0; // the per-plane detail lines are identical for every player
                     string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
+                    // Each player flies their own pick (launchscreen item 6 / a --plane= list);
+                    // with one name given, that is the same plane for everyone as before.
+                    string planeName = PlaneFor(pi);
+                    var stats = StatsFor(planeName);
 
                     var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
-                    var planeModel = planeBuilder.Build(_planeName);
+                    var planeModel = planeBuilder.Build(planeName);
                     meshInstances += planeBuilder.MeshInstanceCount;
 
                     var controller = new FlightController
@@ -575,7 +613,7 @@ public partial class PlaneViewer : Node3D
                     // The cockpit dials (altimeter / speedometer / damage display), rebuilt
                     // from the plane's own gauges subtree in planes.zbd + the chapter's
                     // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-                    controller.Gauges = GaugeCluster.Build(planesGamez, _planeName, textures,
+                    controller.Gauges = GaugeCluster.Build(planesGamez, planeName, textures,
                         stats.DestroyableParts);
                     if (controller.Gauges != null)
                     {
@@ -628,7 +666,7 @@ public partial class PlaneViewer : Node3D
                     var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
                     var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
                     controller.Breakup = CrashBreakup.Create(
-                        planeBuilder.BuildDestroyed(_planeName), wreckFire, wreckSmoke);
+                        planeBuilder.BuildDestroyed(planeName), wreckFire, wreckSmoke);
                     if (controller.Breakup != null)
                     {
                         controller.AddChild(controller.Breakup.WreckRoot);
@@ -666,7 +704,7 @@ public partial class PlaneViewer : Node3D
                             GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
                             // The end-of-run scoreboard (item 3): per-zone splits + total + persisted
                             // best time, keyed chapter/mission/plane in user://stunt_scores.json.
-                            var scoreKey = $"{_chapter}/{_mission}/{_planeName}";
+                            var scoreKey = $"{_chapter}/{_mission}/{planeName}";
                             controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
                                 PlaneDisplayName(stats), $"{_chapter}   ·   {Humanize(_scenario)}",
                                 ScoreStore.Load(), scoreKey);
@@ -687,9 +725,17 @@ public partial class PlaneViewer : Node3D
                     rig.Controller = controller;
                     _worldRoot!.AddChild(controller);
                 }
-                what += _rigs.Count > 1
-                    ? $" + {_rigs.Count}× '{_planeName}' flying splitscreen"
-                    : $" + '{_planeName}' flying";
+                if (_rigs.Count > 1)
+                {
+                    var flown = new List<string>(_rigs.Count);
+                    for (int pi = 0; pi < _rigs.Count; pi++)
+                        flown.Add($"P{pi + 1} '{PlaneFor(pi)}'");
+                    what += $" + splitscreen {string.Join(", ", flown)}";
+                }
+                else
+                {
+                    what += $" + '{_planeName}' flying";
+                }
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
@@ -817,12 +863,24 @@ public partial class PlaneViewer : Node3D
         var assignment = new int[players][];
         for (int i = 0; i < players; i++)
             assignment[i] = i < pads.Count ? new[] { pads[i] } : Array.Empty<int>();
-        for (int i = 0; i < players; i++)
-            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
-                     (assignment[i].Length > 0
-                         ? $"{(i == 0 ? " + " : "")}pad {assignment[i][0]} \"{Input.GetJoyName(assignment[i][0])}\""
-                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+        LogPads(assignment);
         return assignment;
+    }
+
+    /// <summary>Log who flies what, for either source of the binding (the roster split above or
+    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.</summary>
+    private static void LogPads(int[][] assignment)
+    {
+        for (int i = 0; i < assignment.Length; i++)
+        {
+            var pads = new List<string>(assignment[i].Length);
+            foreach (int pad in assignment[i])
+                pads.Add($"pad {pad} \"{Input.GetJoyName(pad)}\"");
+            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
+                     (pads.Count > 0
+                         ? $"{(i == 0 ? " + " : "")}{string.Join(" + ", pads)}"
+                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+        }
     }
 
     /// <summary>Shows the launchscreen (building it on first use) and wiring its Launch/Quit
@@ -837,15 +895,37 @@ public partial class PlaneViewer : Node3D
             AddChild(_menu);
         }
         _menu.ShowMenu(_menuStartScreen);
+        // --debug-join=N: synthesize N extra device-less players so the multi-cursor plane screen
+        // can be screenshot on a one-controller machine (they can never act — deterministic).
+        if (_debugJoin > 0)
+        {
+            _menu.DebugJoin(_debugJoin);
+            _debugJoin = 0; // one-shot: a return to the menu keeps whoever really joined
+        }
     }
 
-    /// <summary>The launchscreen picked a mode/chapter/plane: fill the build fields and start the
-    /// session. On a build failure, return to the menu with a note rather than leave a blank
-    /// screen.</summary>
-    private void StartSessionFromMenu(string chapter, string plane, bool stunt)
+    /// <summary>The launchscreen's players locked their picks: fill the build fields — chapter,
+    /// one plane per player, each player's pad — and start the session. On a build failure,
+    /// return to the menu with a note rather than leave a blank screen.</summary>
+    private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
+        bool stunt)
     {
         _chapter = chapter;
-        _planeName = plane;
+        _planeNames.Clear();
+        foreach (var p in players)
+            _planeNames.Add(p.PlaneNode);
+        _planeName = _planeNames.Count > 0 ? _planeNames[0] : _planeName;
+        _players = Mathf.Clamp(players.Count, 1, UI.SplitScreen.MaxPlayers);
+        // Honour the join flow's device binding rather than re-deriving it from the roster: the
+        // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
+        // any-pad policy (null), so every connected pad flies the one plane, as before.
+        _menuPads = null;
+        if (_players > 1)
+        {
+            _menuPads = new int[_players][];
+            for (int i = 0; i < _players; i++)
+                _menuPads[i] = players[i].Pads;
+        }
         _stunt = stunt;
         _fly = true;
         _worldMode = true;
@@ -857,7 +937,7 @@ public partial class PlaneViewer : Node3D
         if (!StartSession())
         {
             ReturnToMenu();
-            _menu.ShowError($"Could not load {chapter} / {plane} — see the log.");
+            _menu.ShowError($"Could not load {chapter} / {string.Join(", ", _planeNames)} — see the log.");
         }
     }
 
@@ -910,6 +990,24 @@ public partial class PlaneViewer : Node3D
         }
         return players.ToArray();
     }
+
+    /// <summary>Parse --plane=: one node name, or a comma-separated list — one plane per player
+    /// for splitscreen (item 6; the launchscreen's simultaneous pick produces the same list). The
+    /// first entry stays <see cref="_planeName"/>, which every single-plane code path uses.</summary>
+    private void ParsePlanes(string value)
+    {
+        _planeNames.Clear();
+        foreach (var name in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+            _planeNames.Add(name.Trim());
+        if (_planeNames.Count > 0)
+            _planeName = _planeNames[0];
+    }
+
+    /// <summary>The plane player <paramref name="index"/> flies: their own pick when the
+    /// launchscreen (or a --plane= list) gave one, else the last one named — so a single
+    /// --plane= puts everybody in the same aircraft, exactly as before item 6.</summary>
+    private string PlaneFor(int index) =>
+        _planeNames.Count == 0 ? _planeName : _planeNames[Math.Min(index, _planeNames.Count - 1)];
 
     /// <summary>Parse --damage= presets: "nose:0.25,leftwing:40" — part:fraction pairs,
     /// values > 1 read as percent. Malformed pairs are skipped with a note.</summary>

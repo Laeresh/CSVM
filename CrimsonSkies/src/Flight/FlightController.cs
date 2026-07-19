@@ -129,6 +129,7 @@ public partial class FlightController : Node3D
     private FlightModel _model = null!;
     private Camera3D _camera = null!;
     private Label _hud = null!;
+    private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
     private Vector3 _spawnPos;
     private Basis _spawnAttitude;
     private float _throttle;
@@ -179,6 +180,8 @@ public partial class FlightController : Node3D
                                                  // a stopped plane sat there collecting 0-dmg kisses)
     private const float EmbedPushOut = 0.3f;     // m per un-embed attempt after a graze
     private const int EmbedTries = 3;            // attempts before giving up ⇒ explode, never tunnel
+    private const int HudFontSize = 22;         // text HUD, full-screen (shrunk per splitscreen pane)
+    private static readonly Vector2 HudMargin = new(16, 10);
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
     private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
@@ -196,8 +199,8 @@ public partial class FlightController : Node3D
     public override void _Ready()
     {
         var canvas = new CanvasLayer();
-        _hud = new Label { Position = new Vector2(16, 10) };
-        _hud.AddThemeFontSizeOverride("font_size", 22);
+        _hud = new Label { Position = HudMargin };
+        _hud.AddThemeFontSizeOverride("font_size", HudFontSize);
         _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
         _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
         _hud.AddThemeConstantOverride("shadow_offset_y", 2);
@@ -787,7 +790,22 @@ public partial class FlightController : Node3D
             Gauges.AltitudeFt = ft;
             Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
         }
-        _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
+        // Splitscreen: the text block shrinks with the pane, like every other HUD element
+        // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
+        // (16,10) is untouched there; re-applied only when the factor actually changes.
+        float paneFactor = HudMetrics.PaneFactor(_hud);
+        if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
+        {
+            _hudPaneFactor = paneFactor;
+            _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
+            _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
+        }
+        // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
+        // line still ran into the top-centre compass tape in a 4P quarter pane — break the
+        // throttle onto its own line there. Full screen keeps the original one-liner.
+        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
+        string throttle = $"THR {_model.Throttle * 100,3:0}%";
+        _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
         if(_model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
         if (!_paused && !_crashed && _damageFlash > 0f)
