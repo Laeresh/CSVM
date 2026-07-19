@@ -32,6 +32,11 @@ public partial class FlightAudio : Node
     // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
     private const float WhineMixGain = 0.12f;
 
+    /// <summary>Overall gain for this plane's own-ship mix (M2.5 item 5). 1 for single player;
+    /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
+    /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
+    public float MixGain = 1f;
+
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats)
     {
         _stats = stats;
@@ -118,11 +123,11 @@ public partial class FlightAudio : Node
                 StartEngine(); // respawn after a crash: propstart + fresh volume ramp-in
             _engine.PitchScale = Mathf.Max(0.01f, _stats.EnginePitch.Eval(throttle));
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(
-                SilenceThreshold, _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp));
+                SilenceThreshold, _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp * MixGain));
         }
-        UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol * WhineMixGain,
+        UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol * WhineMixGain * MixGain,
             _stats.WhinePitch.Eval(speedFrac));
-        UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol, 1f);
+        UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
     }
 
     /// <summary>Kills the flight loops (dead engine) and fires one of the game's

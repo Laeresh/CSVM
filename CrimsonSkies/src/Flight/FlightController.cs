@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using CrimsonSkies.Effects;
 using Godot;
 
@@ -102,6 +103,24 @@ public partial class FlightController : Node3D
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
 
+    /// <summary>The gamepad devices that fly THIS plane (M2.5 item 5, splitscreen). Null — the
+    /// single-player default — means every connected pad flies it (see <see cref="PadPressed"/>).
+    /// In splitscreen each player is bound to its own device so P2's stick never moves P1.</summary>
+    public int[]? PadDevices;
+
+    /// <summary>Whether the keyboard flies this plane. Single player and splitscreen P1: true;
+    /// P2–P4 are pad-only (there is one keyboard).</summary>
+    public bool UseKeyboard = true;
+
+    /// <summary>Where the HUD <see cref="CanvasLayer"/> is parented. Null (single player) keeps it
+    /// a child of this node, i.e. the main viewport; splitscreen sets the player's SubViewport so
+    /// the dials/compass draw in that player's pane only.</summary>
+    public Node? HudParent;
+
+    /// <summary>Whether P / gamepad-Start toggles the debug screenshot freeze. Off in splitscreen:
+    /// the freeze halts the shared simulation, so it is not one player's to press.</summary>
+    public bool AllowPause = true;
+
     /// <summary>Debug/testing (--debug-scoreboard): force-complete the stunt run on the first
     /// physics frame so the results scoreboard renders deterministically for a screenshot. No
     /// effect without a stunt run.</summary>
@@ -182,6 +201,7 @@ public partial class FlightController : Node3D
         _hud.AddThemeColorOverride("font_color", new Color(1f, 0.85f, 0.4f));
         _hud.AddThemeColorOverride("font_shadow_color", new Color(0, 0, 0, 0.7f));
         _hud.AddThemeConstantOverride("shadow_offset_y", 2);
+        canvas.Name = "hud";
         canvas.AddChild(_hud);
         if (Compass != null)
             canvas.AddChild(Compass);
@@ -191,7 +211,9 @@ public partial class FlightController : Node3D
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         if (Scoreboard != null)
             canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
-        AddChild(canvas);
+        // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
+        // only (and scales off the pane's height); single player keeps it on this node.
+        (HudParent ?? this).AddChild(canvas);
         if (DebugCollision)
         {
             _probe = new ImmediateMesh();
@@ -280,24 +302,25 @@ public partial class FlightController : Node3D
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
 
-    /// <summary>True when the button is down on ANY connected gamepad. Until splitscreen assigns
-    /// devices, every pad flies the one plane — never `pads[0]`: phantom joypad devices (wireless
-    /// dongles enumerating with the pad asleep, non-pad HID like Razer boards) can occupy the
-    /// early slots, which made a pad connected after launch (= a later slot) dead.</summary>
-    private static bool AnyPadPressed(JoyButton button)
+    /// <summary>True when the button is down on one of THIS player's gamepads. With
+    /// <see cref="PadDevices"/> null (single player) that is every connected pad — never `pads[0]`:
+    /// phantom joypad devices (wireless dongles enumerating with the pad asleep, non-pad HID like
+    /// Razer boards) can occupy the early slots, which made a pad connected after launch (= a later
+    /// slot) dead. Splitscreen binds each player to its own device list instead.</summary>
+    private bool PadPressed(JoyButton button)
     {
-        foreach (int pad in Input.GetConnectedJoypads())
+        foreach (int pad in PadDevices ?? (IEnumerable<int>)Input.GetConnectedJoypads())
             if (Input.IsJoyButtonPressed(pad, button))
                 return true;
         return false;
     }
 
-    /// <summary>The largest-magnitude value of the axis across all connected gamepads (0 when
+    /// <summary>The largest-magnitude value of the axis across this player's gamepads (0 when
     /// none) — idle phantom devices read ~0 and never mask the real stick.</summary>
-    private static float AnyPadAxis(JoyAxis axis)
+    private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
-        foreach (int pad in Input.GetConnectedJoypads())
+        foreach (int pad in PadDevices ?? (IEnumerable<int>)Input.GetConnectedJoypads())
         {
             float a = Input.GetJoyAxis(pad, axis);
             if (Mathf.Abs(a) > Mathf.Abs(v))
@@ -306,17 +329,25 @@ public partial class FlightController : Node3D
         return v;
     }
 
-    private static bool RespawnPressed() =>
-        Input.IsKeyPressed(Key.R) || AnyPadPressed(JoyButton.Y) || AnyPadPressed(JoyButton.A);
+    /// <summary>A key, but only for a player the keyboard flies (splitscreen P2–P4 are pad-only).</summary>
+    private bool KeyDown(Key key) => UseKeyboard && Input.IsKeyPressed(key);
 
-    /// <summary>P (or gamepad Start), edge-detected so one press toggles once.</summary>
-    private static bool PauseTogglePressed() =>
-        Input.IsKeyPressed(Key.P) || AnyPadPressed(JoyButton.Start);
+    /// <summary>A +/- key pair as an axis, honoring <see cref="UseKeyboard"/>.</summary>
+    private float KeyAxis(Key positive, Key negative) =>
+        (KeyDown(positive) ? 1f : 0f) - (KeyDown(negative) ? 1f : 0f);
+
+    private bool RespawnPressed() =>
+        KeyDown(Key.R) || PadPressed(JoyButton.Y) || PadPressed(JoyButton.A);
+
+    /// <summary>P (or gamepad Start), edge-detected so one press toggles once. Splitscreen
+    /// disables it (<see cref="AllowPause"/>): the freeze halts the shared world.</summary>
+    private bool PauseTogglePressed() =>
+        AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
 
     /// <summary>Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
     /// The plan suggested gamepad Y, but Y is the respawn button, so X (a free face button) instead.</summary>
-    private static bool CycleTargetPressed() =>
-        Input.IsKeyPressed(Key.Tab) || AnyPadPressed(JoyButton.X);
+    private bool CycleTargetPressed() =>
+        KeyDown(Key.Tab) || PadPressed(JoyButton.X);
 
     public override void _PhysicsProcess(double delta)
     {
@@ -454,32 +485,29 @@ public partial class FlightController : Node3D
 
     private FlightInput ReadKeyboard(float dt)
     {
-        static float Axis(Key positive, Key negative) =>
-            (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
-
-        // any connected gamepad flies the plane (see AnyPadPressed/AnyPadAxis);
+        // this player's gamepad(s) fly the plane (see PadPressed/PadAxis);
         // arcade-flight standard: stick back (+Y) = nose up, stick right = bank right
-        float padPitch = StickCurve(AnyPadAxis(JoyAxis.LeftY));
-        float padRoll = -StickCurve(AnyPadAxis(JoyAxis.LeftX));
-        float padYaw = (AnyPadPressed(JoyButton.LeftShoulder) ? 1f : 0f)
-                     - (AnyPadPressed(JoyButton.RightShoulder) ? 1f : 0f);
-        float padThrottle = AnyPadAxis(JoyAxis.TriggerRight)
-                          - AnyPadAxis(JoyAxis.TriggerLeft);
-        if (AnyPadPressed(JoyButton.Y))
+        float padPitch = StickCurve(PadAxis(JoyAxis.LeftY));
+        float padRoll = -StickCurve(PadAxis(JoyAxis.LeftX));
+        float padYaw = (PadPressed(JoyButton.LeftShoulder) ? 1f : 0f)
+                     - (PadPressed(JoyButton.RightShoulder) ? 1f : 0f);
+        float padThrottle = PadAxis(JoyAxis.TriggerRight)
+                          - PadAxis(JoyAxis.TriggerLeft);
+        if (PadPressed(JoyButton.Y))
             Respawn();
 
-        if (Input.IsKeyPressed(Key.R))
+        if (KeyDown(Key.R))
             Respawn();
 
         _throttle = Mathf.Clamp(
-            _throttle + (Axis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
+            _throttle + (KeyAxis(Key.Shift, Key.Ctrl) + padThrottle) * ThrottleRate * dt, 0f, 1f);
 
         return new FlightInput
         {
             // pull = S/Down, push = W/Up; bank/yaw left = A/Left/Q
-            Pitch = Mathf.Clamp(Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up) + padPitch, -1f, 1f),
-            Roll = Mathf.Clamp(Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right) + padRoll, -1f, 1f),
-            Yaw = Mathf.Clamp(Axis(Key.Q, Key.E) + padYaw, -1f, 1f),
+            Pitch = Mathf.Clamp(KeyAxis(Key.S, Key.W) + KeyAxis(Key.Down, Key.Up) + padPitch, -1f, 1f),
+            Roll = Mathf.Clamp(KeyAxis(Key.A, Key.D) + KeyAxis(Key.Left, Key.Right) + padRoll, -1f, 1f),
+            Yaw = Mathf.Clamp(KeyAxis(Key.Q, Key.E) + padYaw, -1f, 1f),
             Throttle = _throttle,
         };
     }
@@ -850,17 +878,14 @@ public partial class FlightController : Node3D
     /// pose for side-by-side screenshots.</summary>
     private void UpdateOrbitCamera(float dt)
     {
-        static float Axis(Key positive, Key negative) =>
-            (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
+        float padYaw = StickCurve(PadAxis(JoyAxis.LeftX));
+        float padPitch = -StickCurve(PadAxis(JoyAxis.LeftY)); // stick up = camera up
+        float padZoom = PadAxis(JoyAxis.TriggerRight)
+                      - PadAxis(JoyAxis.TriggerLeft);         // RT out, LT in
 
-        float padYaw = StickCurve(AnyPadAxis(JoyAxis.LeftX));
-        float padPitch = -StickCurve(AnyPadAxis(JoyAxis.LeftY)); // stick up = camera up
-        float padZoom = AnyPadAxis(JoyAxis.TriggerRight)
-                      - AnyPadAxis(JoyAxis.TriggerLeft);         // RT out, LT in
-
-        float yawIn = Axis(Key.D, Key.A) + Axis(Key.Right, Key.Left) + padYaw;
-        float pitchIn = Axis(Key.W, Key.S) + Axis(Key.Up, Key.Down) + padPitch;
-        float zoomIn = Axis(Key.Ctrl, Key.Shift) + padZoom; // Ctrl/RT out, Shift/LT in
+        float yawIn = KeyAxis(Key.D, Key.A) + KeyAxis(Key.Right, Key.Left) + padYaw;
+        float pitchIn = KeyAxis(Key.W, Key.S) + KeyAxis(Key.Up, Key.Down) + padPitch;
+        float zoomIn = KeyAxis(Key.Ctrl, Key.Shift) + padZoom; // Ctrl/RT out, Shift/LT in
 
         float rate = Mathf.DegToRad(OrbitRateDeg);
         _orbitYaw += rate * yawIn * dt;

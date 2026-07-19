@@ -75,10 +75,17 @@ namespace CrimsonSkies;
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
 ///                                crash test; green, red on impact)
+///   --players=N                  splitscreen (M2.5 item 5): fly N planes (1–4) in one shared
+///                                world, each in its own pane with its own camera, sky, HUD and
+///                                input device. 2P = stacked top/bottom, 3–4P = 2×2 grid. P1 =
+///                                keyboard + the first pad, P2–P4 = the next pads in order.
+///                                Requires --fly/--stunt; N=1 is the normal single-player path
 ///   --hold=pitch,roll,yaw,thr    scripted flight input instead of the keyboard (automated runs);
 ///                                ';'-separated segments with '@seconds' durations sequence inputs
 ///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
-///                                last segment holds forever, respawn restarts the sequence
+///                                last segment holds forever, respawn restarts the sequence.
+///                                '|' separates PER-PLAYER sequences for --players (the last one
+///                                covers any remaining players)
 ///   --frames=N                   frames to render before --screenshot fires (default 15)
 ///   --shots=N                    capture N consecutive frames (default 1); for z-fighting
 ///                                debugging — flicker is only visible across frames. N>1 writes
@@ -97,6 +104,10 @@ namespace CrimsonSkies;
 public partial class PlaneViewer : Node3D
 {
     private const float HorizonScale = 2.5f;
+
+    // Splitscreen with a --spawn-at override: lateral offset between players so they don't spawn
+    // inside each other (the mission spawn lists already place players apart). TUNE.
+    private const float SpawnAbreast = 60f;
 
     // Cloud-band whiteout color: inside a cloud reads near-white (see OriginalScreenshots/
     // "C1 IA1 whiteout at height.png"), not the 0.69 gray of distance fog. TUNE. The opacity
@@ -120,7 +131,8 @@ public partial class PlaneViewer : Node3D
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
-    private (FlightInput, float)[]? _holdSegments;
+    private int _players = 1;          // --players=N: splitscreen panes/planes (M2.5 item 5); 1 = single player
+    private (FlightInput, float)[][]? _holdSets; // --hold: one scripted sequence per player ('|'-separated)
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
@@ -131,14 +143,16 @@ public partial class PlaneViewer : Node3D
     private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
 
     private Node3D? _plane;
-    private Node3D? _horizon;
     private Mech3.MapEdgeExtender? _edgeExtender; // rolling mirrored-tile window past the map edge
-    private Node3D? _deck;             // the cloudlayer deck, moved to follow the player
     private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
-    private ColorRect? _whiteout;      // full-screen cloud-band whiteout overlay
-    private Effects.CloudPuffs? _puffs; // ambient drifting cloud sprites at altitude
-    private Effects.Precipitation? _precip; // rain/snow field (self-animating; no _Process driving)
+    private Effects.Precipitation? _precip; // rain/snow field (self-animating, per-view for free)
+    // One rig per rendered view (M2.5 item 5): its camera plus the camera-anchored copies only it
+    // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
+    // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
+    private readonly List<PlayerRig> _rigs = new();
+    private readonly List<Vector3> _focusPoints = new(); // scratch: rig camera positions for the edge extender
+    private UI.SplitScreen? _split;    // the splitscreen pane rig (null in single player)
     private Camera3D _camera = null!;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
@@ -209,7 +223,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
-            else if (arg.StartsWith("--hold=")) _holdSegments = ParseHold(arg["--hold=".Length..]);
+            else if (arg.StartsWith("--players=")) _players = int.Parse(arg["--players=".Length..]);
+            else if (arg.StartsWith("--hold=")) _holdSets = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--shots=")) _screenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..]));
             else if (arg.StartsWith("--jitter=")) _jitterDeg = float.Parse(arg["--jitter=".Length..], System.Globalization.CultureInfo.InvariantCulture);
@@ -230,6 +245,14 @@ public partial class PlaneViewer : Node3D
         }
         if (_fly)
             _worldMode = true;
+        // Splitscreen (item 5) is a flight mode: it needs planes to fly. Clamp to the rig's
+        // capacity and fall back to single player for any static/orbit view.
+        _players = Mathf.Clamp(_players, 1, UI.SplitScreen.MaxPlayers);
+        if (_players > 1 && !_fly)
+        {
+            GD.Print($"--players={_players} needs --fly/--stunt (nothing to fly in a static view); using 1");
+            _players = 1;
+        }
         if (_damageLab && _worldMode)
         {
             GD.Print("--damage is the static plane viewer's lab (use --plane without --chapter/--fly); ignoring");
@@ -302,6 +325,9 @@ public partial class PlaneViewer : Node3D
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
         _camera.Fov = _fly ? 62 : 50;
+        // One rig per rendered view, before anything camera-anchored is built (the skydome and
+        // weather visuals below are per-rig). Single player reuses the main-viewport camera.
+        BuildRigs(_fly ? _players : 1);
 
         // The build body reads the base paths as plain locals (unchanged from when this was inline
         // in _Ready); the chapter-dependent paths are recomputed here so a new launchscreen chapter
@@ -325,11 +351,12 @@ public partial class PlaneViewer : Node3D
             int meshInstances;
             int colliders = 0;
             string what;
+            Node3D? cloudDeck = null; // the world's cloudlayer overcast (copied per player below)
             if (_worldMode)
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
-                _deck = builder.CloudDeck;         // the cloudlayer overcast, moved to follow the player
+                cloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
 
                 // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips
                 // them — AI/route data the original never renders). Debug inspection only.
@@ -391,11 +418,18 @@ public partial class PlaneViewer : Node3D
                     // while well inside the camera's 40 km far plane. In static --chapter mode
                     // only an explicit --sky-zone adds it (an outside orbit view is better
                     // without the enclosing dome; with --campos inside the map it works).
-                    _horizon = builder.BuildHorizon(_skyZone);
-                    if (_horizon != null)
+                    // One dome per rig: it follows *a* camera, so each splitscreen pane needs
+                    // its own on that player's visual layer (item 5).
+                    foreach (var rig in _rigs)
                     {
-                        _horizon.Scale = Vector3.One * HorizonScale;
-                        _worldRoot!.AddChild(_horizon);
+                        var dome = builder.BuildHorizon(_skyZone);
+                        if (dome == null)
+                            break;
+                        dome.Scale = Vector3.One * HorizonScale;
+                        if (rig.VisualLayer != 0)
+                            UI.SplitScreen.SetVisualLayer(dome, rig.VisualLayer);
+                        _worldRoot!.AddChild(dome);
+                        rig.Horizon = dome;
                     }
                     // Weather (the flown mission's weather.json): distance fog for the rendered
                     // zone + the cloud-band whiteout + the ambient cloud puffs. Applied whenever
@@ -447,169 +481,226 @@ public partial class PlaneViewer : Node3D
             }
             _worldRoot!.AddChild(_plane);
             // The deck is now in the tree at its original position; remember its centre so
-            // _Process can re-anchor it under the player each frame (see UpdateCloudDeck).
-            if (_deck != null)
-                _deckCenter = ComputeAabb(_deck).GetCenter();
+            // _Process can re-anchor it under each player every frame, and give every rig past
+            // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
+            if (cloudDeck != null)
+            {
+                _deckCenter = ComputeAabb(cloudDeck).GetCenter();
+                AssignCloudDecks(cloudDeck);
+            }
 
             if (_fly)
             {
+                // Session-wide flight data, loaded once and shared by every player: the aircraft
+                // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
+                // and the per-plane state below are per player.
                 var planesGamez = GameZ.Load(planesGamezPath);
-                var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
-                var planeModel = planeBuilder.Build(_planeName);
-                meshInstances += planeBuilder.MeshInstanceCount;
-
                 var stats = PlaneStats.Load(zrdrPath, _planeName);
                 GD.Print($"flight stats [{stats.DefName}]: fd_speed={stats.FdSpeed} m/s " +
                          $"weight={stats.VehWeight} engine={stats.EnginePower:0.00} " +
                          $"torques=({stats.PitchTorque},{stats.RollTorque},{stats.RudderTorque})");
-
-                var controller = new FlightController
-                {
-                    HoldSegments = _holdSegments,
-                    DebugCollision = debugCollision,
-                    PlaneModel = planeModel,
-                    Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
-                    WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
-                    Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
-                    Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
-                    // per-part HP from destroyable_parts (item 10b) — collisions below
-                    // the crash threshold damage the struck part instead of crashing
-                    Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
-                };
-                controller.AddChild(planeModel);
-                if (controller.Props != null)
-                    GD.Print($"props: {controller.Props.Count} spinning blur nodes");
-                if (controller.WingLights != null)
-                    GD.Print($"wing lights: {controller.WingLights.Count} blinking flares");
-                if (controller.Surfaces != null)
-                    GD.Print($"control surfaces: {controller.Surfaces.Count} deflecting nodes");
-                if (controller.Collider != null)
-                    GD.Print($"plane collider: {controller.Collider.Summary}");
-                else
-                    GD.PushWarning("no airframe collision boxes — falling back to the center ray");
-                if (controller.Damage != null)
-                {
-                    var partDescs = new List<string>();
-                    foreach (var p in stats.DestroyableParts)
-                        partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
-                    GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
-                }
-
-                // The original's heading tape, rebuilt from the chapter's own HUD
-                // textures (compassticks2/compasstxt ship in every chapter's archive).
-                controller.Compass = CompassTape.Build(textures);
-                if (controller.Compass != null)
-                    GD.Print("compass: heading tape from compassticks2/compasstxt");
-
-                // The cockpit dials (altimeter / speedometer / damage display), rebuilt
-                // from the plane's own gauges subtree in planes.zbd + the chapter's
-                // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-                controller.Gauges = GaugeCluster.Build(planesGamez, _planeName, textures,
-                    stats.DestroyableParts);
-                if (controller.Gauges != null)
-                {
-                    var damage = controller.Damage;
-                    if (damage != null)
-                        controller.Gauges.PartFraction = name =>
-                            damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
-                    GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
-                }
-
-                // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
-                // its flipbook frames from the same texture archive. Built here while the
-                // archive is open; the FlightController fires it at the impact point.
-                var pufferState = Effects.PufferState.Load(zrdrPath, "flame_ball.json", "fierypuffer");
-                if (pufferState != null && Effects.Puffer.Create(pufferState, textures) is { } fireball)
-                {
-                    controller.CrashEffect = fireball;
-                    controller.AddChild(fireball);
-                    GD.Print($"crash effect: {pufferState.Name} ({pufferState.Number} sprites, " +
-                             $"{pufferState.TextureSequence.Count} frames)");
-                }
-                else
-                {
-                    GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
-                }
-
-                // Visible damage (item 10c): torn-skin panel flips + the low-HP smoke/fire
-                // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
-                if (controller.Damage != null)
-                {
-                    var smoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
-                    var fire = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
-                    // per-panel fire trails (the original streams one from every damaged
-                    // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
-                    var panelTrails = new List<Effects.Puffer>();
-                    for (int i = 0; i < 4; i++)
-                        if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
-                            panelTrails.Add(pt);
-                    controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
-                    GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
-                             $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
-                             $"{panelTrails.Count} panel fire trails");
-                }
-
-                // Crash breakup (item 10d): the plane's destroyed-subtree wreck pieces +
-                // the player_plane_destruct wreck fire and a rising black-smoke column.
-                var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
-                var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
-                controller.Breakup = CrashBreakup.Create(
-                    planeBuilder.BuildDestroyed(_planeName), wreckFire, wreckSmoke);
-                if (controller.Breakup != null)
-                {
-                    controller.AddChild(controller.Breakup.WreckRoot);
-                    GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
-                             $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
-                }
-
-                if (!mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath)))
-                {
-                    // streams decode fully into memory, so the archive can close right after
-                    using var sounds = new SoundArchive(soundsPath);
-                    var audio = new FlightAudio();
-                    audio.Setup(sounds, SoundDefs.Load(zrdrPath), stats);
-                    controller.Audio = audio;
-                    controller.AddChild(audio);
-                    GD.Print($"audio: engine={stats.EngineSound} whine={stats.WhineSound} rattle={stats.RattleSound}");
-                }
-                else if (!mute)
-                {
+                bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
+                using var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+                var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
+                if (!mute && !haveSounds)
                     GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
-                }
-                // Stunt run (M2.5 item 1): the mission's danger-zone objectives from ia.json
-                // dzones, positions resolved against this chapter world's gamez, display
-                // strings from targets.json → messages.json. --stunt only.
-                if (_stunt)
+                // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
+                float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
+                var padAssignment = AssignPads(_rigs.Count);
+                // One spawn list for the session; each player takes the next index (wrapping).
+                var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                int spawnBase = ChooseSpawnBase(spawnList);
+
+                for (int pi = 0; pi < _rigs.Count; pi++)
                 {
-                    controller.Stunt = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
-                    if (controller.Stunt == null)
-                        GD.PushWarning($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
+                    var rig = _rigs[pi];
+                    bool verbose = pi == 0; // the per-plane detail lines are identical for every player
+                    string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
+
+                    var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true);
+                    var planeModel = planeBuilder.Build(_planeName);
+                    meshInstances += planeBuilder.MeshInstanceCount;
+
+                    var controller = new FlightController
+                    {
+                        // one scripted sequence per player ('|'-separated); the last covers the rest
+                        HoldSegments = _holdSets == null ? null
+                            : _holdSets[Math.Min(pi, _holdSets.Length - 1)],
+                        DebugCollision = debugCollision,
+                        PlaneModel = planeModel,
+                        Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
+                        WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
+                        Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
+                        Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
+                        // per-part HP from destroyable_parts (item 10b) — collisions below
+                        // the crash threshold damage the struck part instead of crashing
+                        Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
+                        // splitscreen (item 5): this player's own device(s), own pane for the HUD,
+                        // and no debug freeze (it would halt the shared world for everyone)
+                        PadDevices = padAssignment?[pi],
+                        UseKeyboard = pi == 0,
+                        HudParent = rig.Viewport,
+                        AllowPause = _rigs.Count == 1,
+                    };
+                    controller.AddChild(planeModel);
+                    if (verbose && controller.Props != null)
+                        GD.Print($"props: {controller.Props.Count} spinning blur nodes");
+                    if (verbose && controller.WingLights != null)
+                        GD.Print($"wing lights: {controller.WingLights.Count} blinking flares");
+                    if (verbose && controller.Surfaces != null)
+                        GD.Print($"control surfaces: {controller.Surfaces.Count} deflecting nodes");
+                    if (controller.Collider != null)
+                    {
+                        if (verbose)
+                            GD.Print($"plane collider: {controller.Collider.Summary}");
+                    }
                     else
                     {
-                        // The objective marker HUD (item 2): projects the active danger zone through
-                        // the flight camera, draws the edge arrow + clock bearing + run status.
-                        controller.Marker = MarkerHud.Build(controller.Stunt, _camera);
-                        GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
-                        // The end-of-run scoreboard (item 3): per-zone splits + total + persisted
-                        // best time, keyed chapter/mission/plane in user://stunt_scores.json.
-                        var scoreKey = $"{_chapter}/{_mission}/{_planeName}";
-                        controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
-                            PlaneDisplayName(stats), $"{_chapter}   ·   {Humanize(_scenario)}",
-                            ScoreStore.Load(), scoreKey);
-                        GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
-                        controller.DebugCompleteStunt = _debugScoreboard;
-                        what += $" [stunt: {controller.Stunt.TotalCount} zones]";
+                        GD.PushWarning("no airframe collision boxes — falling back to the center ray");
                     }
-                }
+                    if (verbose && controller.Damage != null)
+                    {
+                        var partDescs = new List<string>();
+                        foreach (var p in stats.DestroyableParts)
+                            partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
+                        GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
+                    }
 
-                var (spawnPos, spawnLookAt) = ChooseSpawn(missionZrdrPath);
-                controller.Setup(new FlightModel(stats), _camera, spawnPos, spawnLookAt);
-                _worldRoot!.AddChild(controller);
-                what += $" + '{_planeName}' flying";
+                    // The original's heading tape, rebuilt from the chapter's own HUD
+                    // textures (compassticks2/compasstxt ship in every chapter's archive).
+                    controller.Compass = CompassTape.Build(textures);
+                    if (verbose && controller.Compass != null)
+                        GD.Print("compass: heading tape from compassticks2/compasstxt");
+
+                    // The cockpit dials (altimeter / speedometer / damage display), rebuilt
+                    // from the plane's own gauges subtree in planes.zbd + the chapter's
+                    // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
+                    controller.Gauges = GaugeCluster.Build(planesGamez, _planeName, textures,
+                        stats.DestroyableParts);
+                    if (controller.Gauges != null)
+                    {
+                        var damage = controller.Damage;
+                        if (damage != null)
+                            controller.Gauges.PartFraction = name =>
+                                damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
+                        if (verbose)
+                            GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
+                    }
+
+                    // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
+                    // its flipbook frames from the same texture archive. Built here while the
+                    // archive is open; the FlightController fires it at the impact point.
+                    var pufferState = Effects.PufferState.Load(zrdrPath, "flame_ball.json", "fierypuffer");
+                    if (pufferState != null && Effects.Puffer.Create(pufferState, textures) is { } fireball)
+                    {
+                        controller.CrashEffect = fireball;
+                        controller.AddChild(fireball);
+                        if (verbose)
+                            GD.Print($"crash effect: {pufferState.Name} ({pufferState.Number} sprites, " +
+                                     $"{pufferState.TextureSequence.Count} frames)");
+                    }
+                    else
+                    {
+                        GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
+                    }
+
+                    // Visible damage (item 10c): torn-skin panel flips + the low-HP smoke/fire
+                    // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
+                    if (controller.Damage != null)
+                    {
+                        var smoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
+                        var fire = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
+                        // per-panel fire trails (the original streams one from every damaged
+                        // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
+                        var panelTrails = new List<Effects.Puffer>();
+                        for (int i = 0; i < 4; i++)
+                            if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
+                                panelTrails.Add(pt);
+                        controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
+                        if (verbose)
+                            GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
+                                     $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
+                                     $"{panelTrails.Count} panel fire trails");
+                    }
+
+                    // Crash breakup (item 10d): the plane's destroyed-subtree wreck pieces +
+                    // the player_plane_destruct wreck fire and a rising black-smoke column.
+                    var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
+                    var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
+                    controller.Breakup = CrashBreakup.Create(
+                        planeBuilder.BuildDestroyed(_planeName), wreckFire, wreckSmoke);
+                    if (controller.Breakup != null)
+                    {
+                        controller.AddChild(controller.Breakup.WreckRoot);
+                        if (verbose)
+                            GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
+                                     $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
+                    }
+
+                    if (sounds != null && soundDefs != null)
+                    {
+                        var audio = new FlightAudio { MixGain = mixGain };
+                        audio.Setup(sounds, soundDefs, stats);
+                        controller.Audio = audio;
+                        controller.AddChild(audio);
+                        if (verbose)
+                            GD.Print($"audio: engine={stats.EngineSound} whine={stats.WhineSound} " +
+                                     $"rattle={stats.RattleSound}" +
+                                     (mixGain < 1f ? $" (per-player mix gain {mixGain:0.00})" : ""));
+                    }
+                    // Stunt run (M2.5 item 1): the mission's danger-zone objectives from ia.json
+                    // dzones, positions resolved against this chapter world's gamez, display
+                    // strings from targets.json → messages.json. --stunt only. Splitscreen stunt
+                    // RACING (per-player progress + a shared ranked scoreboard) is item 7, so for
+                    // now only player 1 runs the objectives; the rest fly free alongside.
+                    if (_stunt && pi == 0)
+                    {
+                        controller.Stunt = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
+                        if (controller.Stunt == null)
+                            GD.PushWarning($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
+                        else
+                        {
+                            // The objective marker HUD (item 2): projects the active danger zone through
+                            // the flight camera, draws the edge arrow + clock bearing + run status.
+                            controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
+                            GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
+                            // The end-of-run scoreboard (item 3): per-zone splits + total + persisted
+                            // best time, keyed chapter/mission/plane in user://stunt_scores.json.
+                            var scoreKey = $"{_chapter}/{_mission}/{_planeName}";
+                            controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
+                                PlaneDisplayName(stats), $"{_chapter}   ·   {Humanize(_scenario)}",
+                                ScoreStore.Load(), scoreKey);
+                            GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
+                            controller.DebugCompleteStunt = _debugScoreboard;
+                            what += $" [stunt: {controller.Stunt.TotalCount} zones]";
+                        }
+                    }
+                    else if (_stunt && pi == 1)
+                    {
+                        GD.Print("--stunt with --players: danger zones are player 1's for now " +
+                                 "(splitscreen stunt racing is M2.5 item 7); others fly free");
+                    }
+
+                    var (spawnPos, spawnLookAt) = ChooseSpawn(spawnList, missionZrdrPath, spawnBase, pi, tag);
+                    controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
+                    controller.Name = $"player{pi + 1}";
+                    rig.Controller = controller;
+                    _worldRoot!.AddChild(controller);
+                }
+                what += _rigs.Count > 1
+                    ? $" + {_rigs.Count}× '{_planeName}' flying splitscreen"
+                    : $" + '{_planeName}' flying";
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
                      $"{meshInstances} mesh instances, {colliders} colliders, {sw.ElapsedMilliseconds} ms");
+            if (_rigs.Count > 1)
+                foreach (var rig in _rigs)
+                    GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
+                             $"cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} " +
+                             $"deck={(rig.Deck != null ? "own" : "none")} " +
+                             $"puffs={(rig.Puffs != null ? "own" : "none")} " +
+                             $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
             if (textures.MissingTextures.Count > 0)
                 GD.Print($"[textures] {textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
                          string.Join(", ", textures.MissingTextures));
@@ -626,6 +717,112 @@ public partial class PlaneViewer : Node3D
             FrameCamera();
         _inSession = true;
         return true;
+    }
+
+    /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view (M2.5
+    /// item 5). One player keeps PlaneViewer's own main-viewport camera and the default visual
+    /// layers, so the single-player render path is byte-for-byte what it was. Two or more build
+    /// the <see cref="SplitScreen"/> pane rig: the main camera stands down (the panes cover the
+    /// screen) and each pane gets its own camera, culling every other player's private
+    /// sky/deck/puff layer.</summary>
+    private void BuildRigs(int count)
+    {
+        _rigs.Clear();
+        _split = null;
+        if (count <= 1)
+        {
+            _camera.Current = true;
+            _rigs.Add(new PlayerRig { Index = 0, Camera = _camera, HudParent = _worldRoot!, VisualLayer = 0 });
+            return;
+        }
+
+        _camera.Current = false; // the panes render the world now; nothing draws the main viewport's 3D
+        _split = SplitScreen.Build(count, GetViewport());
+        _worldRoot!.AddChild(_split);
+        for (int i = 0; i < count; i++)
+        {
+            var view = _split.Views[i];
+            var camera = new Camera3D
+            {
+                Name = $"camera{i + 1}",
+                Fov = 62,
+                Far = _camera.Far,
+                CullMask = SplitScreen.PlayerCullMask(i),
+                Current = true,
+            };
+            view.AddChild(camera);
+            _rigs.Add(new PlayerRig
+            {
+                Index = i,
+                Camera = camera,
+                Viewport = view,
+                HudParent = view,
+                VisualLayer = SplitScreen.PlayerVisualLayer(i),
+            });
+        }
+        GD.Print($"splitscreen: {count} panes sharing one world " +
+                 $"({(count == 2 ? "stacked top/bottom" : "2×2 grid")})");
+    }
+
+    /// <summary>Gives every rig a cloudlayer deck to anchor under its own camera: rig 0 takes the
+    /// world's own deck, the rest get copies alongside it, each moved onto its player's visual
+    /// layer. Duplicating drops the SceneBuilder instance uniforms (they are RenderingServer
+    /// instance state, not plain properties), so they are re-applied from the source.</summary>
+    private void AssignCloudDecks(Node3D deck)
+    {
+        _rigs[0].Deck = deck;
+        if (_rigs[0].VisualLayer != 0)
+            SplitScreen.SetVisualLayer(deck, _rigs[0].VisualLayer);
+        var parent = deck.GetParent();
+        for (int i = 1; i < _rigs.Count; i++)
+        {
+            var copy = (Node3D)deck.Duplicate();
+            copy.Name = $"cloud_deck{i + 1}";
+            CopyInstanceShaderParams(deck, copy);
+            SplitScreen.SetVisualLayer(copy, _rigs[i].VisualLayer);
+            parent.AddChild(copy);
+            _rigs[i].Deck = copy;
+        }
+    }
+
+    // Node.Duplicate() copies plain properties but not per-instance shader parameters, which
+    // SceneBuilder relies on for the coplanar draw order (node_bias) and the fog opt-outs. Walk
+    // both trees in lockstep (Duplicate preserves child order) and re-apply them.
+    private static readonly string[] InstanceShaderParams = { "node_bias", "csky_fog_on", "csky_light_fade" };
+
+    private static void CopyInstanceShaderParams(Node source, Node copy)
+    {
+        if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
+            foreach (var name in InstanceShaderParams)
+            {
+                var value = from.GetInstanceShaderParameter(name);
+                if (value.VariantType != Variant.Type.Nil)
+                    to.SetInstanceShaderParameter(name, value);
+            }
+        int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
+        for (int i = 0; i < n; i++)
+            CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
+    }
+
+    /// <summary>Splits the connected gamepads across the players (M2.5 item 5): P1 gets the first
+    /// pad (plus the keyboard, wired separately), P2–P4 the next ones in roster order. Null for a
+    /// single player — that keeps the any-pad reads, so every pad flies the one plane. A player
+    /// with no pad left gets an empty list and simply sits still (logged) — P1 still has the
+    /// keyboard, so a 2P session with no controller at all is still half-flyable.</summary>
+    private static int[][]? AssignPads(int players)
+    {
+        if (players <= 1)
+            return null;
+        var pads = Input.GetConnectedJoypads();
+        var assignment = new int[players][];
+        for (int i = 0; i < players; i++)
+            assignment[i] = i < pads.Count ? new[] { pads[i] } : Array.Empty<int>();
+        for (int i = 0; i < players; i++)
+            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
+                     (assignment[i].Length > 0
+                         ? $"{(i == 0 ? " + " : "")}pad {assignment[i][0]} \"{Input.GetJoyName(assignment[i][0])}\""
+                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+        return assignment;
     }
 
     /// <summary>Shows the launchscreen (building it on first use) and wiring its Launch/Quit
@@ -676,35 +873,42 @@ public partial class PlaneViewer : Node3D
             _worldRoot = null;
         }
         // Drop the cached session references so _Process (which may run once more before the
-        // deferred QueueFree lands) skips them via its null guards.
+        // deferred QueueFree lands) skips them via its null guards. The rigs go with the session
+        // (their cameras live in the freed SubViewports); the main-viewport camera is ours and
+        // comes back on for whatever the next session builds.
         _plane = null;
-        _horizon = null;
-        _deck = null;
-        _whiteout = null;
-        _puffs = null;
         _precip = null;
         _edgeExtender = null;
         _weather = null;
+        _rigs.Clear();
+        _split = null;
+        _camera.Current = true;
         _inSession = false;
         ShowLaunchMenu();
     }
 
-    /// <summary>Parse a scripted hold sequence: segments separated by ';', each
-    /// "pitch,roll,yaw,throttle" with an optional "@seconds" duration. The last
-    /// segment (or one without a duration) holds forever — so the plain single
-    /// "--hold=p,r,y,thr" form keeps its old constant-input meaning.</summary>
-    private static (FlightInput, float)[] ParseHold(string s)
+    /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (item 5 —
+    /// the last one covers any remaining players, so the old single-sequence form still drives
+    /// everyone), ';' separates that sequence's segments, each "pitch,roll,yaw,throttle" with an
+    /// optional "@seconds" duration. The last segment (or one without a duration) holds forever —
+    /// so the plain "--hold=p,r,y,thr" form keeps its old constant-input meaning.</summary>
+    private static (FlightInput, float)[][] ParseHold(string s)
     {
         static float F(string v) => float.Parse(v, System.Globalization.CultureInfo.InvariantCulture);
-        var segments = new List<(FlightInput, float)>();
-        foreach (var seg in s.Split(';', StringSplitOptions.RemoveEmptyEntries))
+        var players = new List<(FlightInput, float)[]>();
+        foreach (var perPlayer in s.Split('|', StringSplitOptions.RemoveEmptyEntries))
         {
-            var at = seg.Split('@');
-            var p = at[0].Split(',');
-            segments.Add((new FlightInput { Pitch = F(p[0]), Roll = F(p[1]), Yaw = F(p[2]), Throttle = F(p[3]) },
-                          at.Length > 1 ? F(at[1]) : 0f));
+            var segments = new List<(FlightInput, float)>();
+            foreach (var seg in perPlayer.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var at = seg.Split('@');
+                var p = at[0].Split(',');
+                segments.Add((new FlightInput { Pitch = F(p[0]), Roll = F(p[1]), Yaw = F(p[2]), Throttle = F(p[3]) },
+                              at.Length > 1 ? F(at[1]) : 0f));
+            }
+            players.Add(segments.ToArray());
         }
-        return segments.ToArray();
+        return players.ToArray();
     }
 
     /// <summary>Parse --damage= presets: "nose:0.25,leftwing:40" — part:fraction pairs,
@@ -807,29 +1011,37 @@ public partial class PlaneViewer : Node3D
 
         if (_weather.HasCloudBand)
         {
-            // A full-screen overlay so the whiteout swallows everything (terrain, plane, clouds)
-            // uniformly, like the original. Layer 0 keeps it behind the flight HUD (layer 1).
-            var canvas = new CanvasLayer { Layer = 0 };
-            _whiteout = new ColorRect
+            // Both of these follow *a* camera, so each rig gets its own (item 5): in splitscreen
+            // the overlay must dim only the pane whose player is inside the cloud, and the puff
+            // field must sit around that player.
+            foreach (var rig in _rigs)
             {
-                Color = new Color(WhiteoutColor, 0f),
-                MouseFilter = Control.MouseFilterEnum.Ignore,
-            };
-            _whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-            canvas.AddChild(_whiteout);
-            _worldRoot!.AddChild(canvas);
+                // A pane-filling overlay so the whiteout swallows everything (terrain, plane,
+                // clouds) uniformly, like the original. Layer 0 keeps it behind the HUD (layer 1).
+                var canvas = new CanvasLayer { Layer = 0, Name = "whiteout" };
+                rig.Whiteout = new ColorRect
+                {
+                    Color = new Color(WhiteoutColor, 0f),
+                    MouseFilter = Control.MouseFilterEnum.Ignore,
+                };
+                rig.Whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+                canvas.AddChild(rig.Whiteout);
+                rig.HudParent.AddChild(canvas);
 
-            // Ambient cloud puffs: the soft wisps that drift past the plane at altitude
-            // (OriginalScreenshots/"C1 IA1 Cloud Puffs and Moon.png"). A hand-tuned field
-            // gated to the cloud band and drifting with the weather WIND; _Process advances it
-            // each frame from the camera. Added at world identity (its instance positions are
-            // absolute world coords).
-            _puffs = Effects.CloudPuffs.Create(textures, _weather.WindStatic,
-                _weather.CloudBottom, _weather.CloudTop);
-            if (_puffs != null)
-            {
-                _worldRoot!.AddChild(_puffs);
-                GD.Print("cloud puffs: ambient field active over the cloud band");
+                // Ambient cloud puffs: the soft wisps that drift past the plane at altitude
+                // (OriginalScreenshots/"C1 IA1 Cloud Puffs and Moon.png"). A hand-tuned field
+                // gated to the cloud band and drifting with the weather WIND; _Process advances it
+                // each frame from the camera. Added at world identity (its instance positions are
+                // absolute world coords).
+                rig.Puffs = Effects.CloudPuffs.Create(textures, _weather.WindStatic,
+                    _weather.CloudBottom, _weather.CloudTop);
+                if (rig.Puffs == null)
+                    continue;
+                if (rig.VisualLayer != 0)
+                    SplitScreen.SetVisualLayer(rig.Puffs, rig.VisualLayer);
+                _worldRoot!.AddChild(rig.Puffs);
+                if (rig.Index == 0)
+                    GD.Print("cloud puffs: ambient field active over the cloud band");
             }
         }
 
@@ -842,12 +1054,25 @@ public partial class PlaneViewer : Node3D
             _worldRoot!.AddChild(_precip);
     }
 
-    /// <summary>Picks the flight spawn for the current mission: a world position + a look-at
-    /// point one unit ahead along the spawn heading. Instant-action missions (IA1) draw from
-    /// ia.json's scenario spawn list — random per launch like the original, or forced by
-    /// --spawn=N. Story missions (M0x, no ia.json) fall back to objectives.json PLAYER_INIT.
-    /// A fixed C1 spawn is the last resort if neither is present.</summary>
-    private (Vector3 pos, Vector3 lookAt) ChooseSpawn(string missionZrdrPath)
+    /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
+    /// launch like the original. Each further player takes the next index in list order (wrapping),
+    /// so splitscreen players never share a spawn point.</summary>
+    private int ChooseSpawnBase(IReadOnlyList<SpawnPoint>? spawns)
+    {
+        if (spawns == null || spawns.Count == 0)
+            return 0;
+        return _spawnIndex >= 0
+            ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
+            : (int)(GD.Randi() % (uint)spawns.Count);
+    }
+
+    /// <summary>Picks one player's flight spawn: a world position + a look-at point one unit
+    /// ahead along the spawn heading. Instant-action missions (IA1) draw from ia.json's scenario
+    /// spawn list at <paramref name="spawnBase"/> + the player index (wrapping). Story missions
+    /// (M0x, no ia.json) fall back to objectives.json PLAYER_INIT. A fixed C1 spawn is the last
+    /// resort if neither is present.</summary>
+    private (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
+        string missionZrdrPath, int spawnBase, int playerIndex, string tag)
     {
         // Debug/testing override: place the plane exactly (position + nose direction), bypassing
         // the mission spawn list — lets a scripted run start just short of a target pointed at it,
@@ -857,18 +1082,18 @@ public partial class PlaneViewer : Node3D
             var dir = _spawnDir ?? Vector3.Forward;
             if (dir.LengthSquared() < 1e-6f)
                 dir = Vector3.Forward;
-            GD.Print($"spawn [override]: pos=({at.X:0},{at.Y:0},{at.Z:0}) " +
+            dir = dir.Normalized();
+            // Splitscreen: fan the players out abreast so they don't spawn inside each other.
+            at += dir.Cross(Vector3.Up).Normalized() * (playerIndex * SpawnAbreast);
+            GD.Print($"spawn [{tag}override]: pos=({at.X:0},{at.Y:0},{at.Z:0}) " +
                      $"dir=({dir.X:0.00},{dir.Y:0.00},{dir.Z:0.00})");
-            return (at, at + dir.Normalized());
+            return (at, at + dir);
         }
 
-        var spawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
-        if (spawns != null)
+        if (spawns is { Count: > 0 })
         {
-            int i = _spawnIndex >= 0
-                ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
-                : (int)(GD.Randi() % (uint)spawns.Count);
-            return LogSpawn($"{_scenario} #{i} of {spawns.Count}", spawns[i]);
+            int i = (spawnBase + playerIndex) % spawns.Count;
+            return LogSpawn($"{tag}{_scenario} #{i} of {spawns.Count}", spawns[i]);
         }
         // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
         // spawn from objectives.json PLAYER_INIT (position + heading).
@@ -1034,43 +1259,58 @@ public partial class PlaneViewer : Node3D
 
     public override void _Process(double delta)
     {
-        // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
-        // backdrop, like the original): the moon then stays at its designed 28° elevation
-        // against the dark dome cap — whose color its painted background matches — instead
-        // of sliding down into the bright horizon band as the plane climbs.
-        // (One-frame lag vs the flight camera is invisible at 22 km.)
-        if (_horizon != null)
-            _horizon.Position = _camera.Position;
-
-        // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
-        if (_whiteout != null && _weather != null)
+        // Everything below is anchored to *a* camera, so it runs once per rig — one in single
+        // player, one per pane in splitscreen (each on that player's own visual layer).
+        foreach (var rig in _rigs)
         {
-            var c = _whiteout.Color;
-            c.A = _weather.WhiteoutAmount(_camera.Position.Y);
-            _whiteout.Color = c;
+            var camPos = rig.Camera.Position;
+
+            // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
+            // backdrop, like the original): the moon then stays at its designed 28° elevation
+            // against the dark dome cap — whose color its painted background matches — instead
+            // of sliding down into the bright horizon band as the plane climbs.
+            // (One-frame lag vs the flight camera is invisible at 22 km.)
+            if (rig.Horizon != null)
+                rig.Horizon.Position = camPos;
+
+            // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
+            if (rig.Whiteout != null && _weather != null)
+            {
+                var c = rig.Whiteout.Color;
+                c.A = _weather.WhiteoutAmount(camPos.Y);
+                rig.Whiteout.Color = c;
+            }
+
+            // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
+            // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
+            // once above) and pass through it exactly where the whiteout is fully opaque, so the
+            // ceiling→floor transition is hidden.
+            if (rig.Deck != null && _weather is { HasCloudBand: true })
+            {
+                float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
+                rig.Deck.Position = new Vector3(
+                    camPos.X - _deckCenter.X,
+                    mid - _deckCenter.Y,
+                    camPos.Z - _deckCenter.Z);
+            }
+
+            // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
+            // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
+            // so fresh puffs spawn ahead and the plane flies into them.
+            rig.Puffs?.Update((float)delta, camPos, -rig.Camera.GlobalTransform.Basis.Z);
         }
 
-        // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
-        // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
-        // once above) and pass through it exactly where the whiteout is fully opaque, so the
-        // ceiling→floor transition is hidden.
-        if (_deck != null && _weather is { HasCloudBand: true })
+        // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
+        // serves every pane (the union of the rings around each player), so two players at
+        // opposite edges both get continued terrain. Cheap no-op until one of them crosses a cell
+        // boundary (1024 m), then ~a window row rebuilds.
+        if (_edgeExtender != null)
         {
-            float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
-            _deck.Position = new Vector3(
-                _camera.Position.X - _deckCenter.X,
-                mid - _deckCenter.Y,
-                _camera.Position.Z - _deckCenter.Z);
+            _focusPoints.Clear();
+            foreach (var rig in _rigs)
+                _focusPoints.Add(rig.Camera.Position);
+            _edgeExtender.Update(_focusPoints);
         }
-
-        // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
-        // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
-        // so fresh puffs spawn ahead and the plane flies into them.
-        _puffs?.Update((float)delta, _camera.Position, -_camera.GlobalTransform.Basis.Z);
-
-        // Map-edge continuation: re-center the mirrored-tile window on the camera. Cheap
-        // no-op until a cell boundary (1024 m) is crossed, then ~a window row rebuilds.
-        _edgeExtender?.Update(_camera.Position);
 
         if (_screenshotPath == null)
             return;

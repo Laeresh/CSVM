@@ -197,8 +197,20 @@ public sealed class FlightModel
         // swing the path around within a few frames anyway.)
         float align = AlignRate * Mathf.Clamp(Speed / liftSpeed, 0f, 1f)
                       * (KnifeAlignFloor + (1f - KnifeAlignFloor) * wingVert);
-        if (align > 0f && nose.Dot(VelocityDir) > -0.999f)
-            VelocityDir = VelocityDir.Slerp(nose, 1f - Mathf.Exp(-align * dt)).Normalized();
+        // Near-parallel is the normal cruise state, and there Slerp is unusable: it builds its
+        // rotation axis from the cross product, whose float error swamps a sub-degree angle, and
+        // Godot then throws "Argument is not normalized" — which aborts the whole physics frame,
+        // so a plane holding straight and level simply stopped flying (found 2026-07-19 while
+        // verifying splitscreen; it bit single player exactly the same). Under ~2.5° a normalized
+        // lerp is the same rotation to well under a thousandth of a degree, and needs no axis.
+        float pathDot = nose.Dot(VelocityDir);
+        if (align > 0f && pathDot > -0.999f)
+        {
+            float t = 1f - Mathf.Exp(-align * dt);
+            VelocityDir = (pathDot > 0.999f
+                ? VelocityDir + (nose - VelocityDir) * t
+                : VelocityDir.Slerp(nose, t)).Normalized();
+        }
 
         Position += VelocityDir * Speed * dt;
     }

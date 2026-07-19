@@ -87,11 +87,17 @@ public sealed partial class MarkerHud : Control
 
     public override void _Draw()
     {
+        // A draw can land before _Process has sized us to the viewport (and, in splitscreen,
+        // before a pane has been laid out): every derived metric would be 0 and Godot's font
+        // cache errors out on a zero size. Nothing to draw at zero height anyway.
         float s = Size.Y / 1440f;
+        if (s <= 0f)
+            return;
         var font = GetThemeDefaultFont();
-        int markerFont = Mathf.RoundToInt(RefMarkerFont * s);
-        int statusFont = Mathf.RoundToInt(RefStatusFont * s);
-        int bannerFont = Mathf.RoundToInt(RefBannerFont * s);
+        // Never round a scaled font down to 0 — a quarter-height 4P pane scales hard.
+        int markerFont = Mathf.Max(1, Mathf.RoundToInt(RefMarkerFont * s));
+        int statusFont = Mathf.Max(1, Mathf.RoundToInt(RefStatusFont * s));
+        int bannerFont = Mathf.Max(1, Mathf.RoundToInt(RefBannerFont * s));
         float cx = Size.X / 2f;
 
         // Run-status: elapsed time + zones done, top-centre under the compass tape.

@@ -53,7 +53,9 @@ public sealed partial class MapEdgeExtender : Node3D
     private readonly IReadOnlyList<ClutterBuilder.KindExport>? _clutter;
 
     private readonly Dictionary<(int, int), Node3D> _live = new();
-    private (int, int)? _centerCell;
+    // The focus cells the current window was built around — one per player (splitscreen serves
+    // every pane from one window). Empty until the first Update.
+    private readonly List<(int, int)> _centerCells = new();
 
     /// <summary>Extension cells currently instantiated (diagnostics).</summary>
     public int LiveCellCount => _live.Count;
@@ -92,27 +94,38 @@ public sealed partial class MapEdgeExtender : Node3D
         return ext;
     }
 
-    /// <summary>Re-centers the window on the focus (the camera / plane). Cheap no-op until
-    /// the focus crosses into another cell; then freed/built cells diff by ~one window row.
-    /// Call once per frame.</summary>
-    public void Update(Vector3 focus)
+    /// <summary>Single-focus convenience overload (the single-player flight camera).</summary>
+    public void Update(Vector3 focus) => Update(new[] { focus });
+
+    /// <summary>Re-centers the window on the focus points (one per player camera — splitscreen
+    /// serves every pane from this one window, so the wanted set is the union of the rings around
+    /// each). Cheap no-op until one of them crosses into another cell; then freed/built cells diff
+    /// by ~one window row. Call once per frame.</summary>
+    public void Update(IReadOnlyList<Vector3> focuses)
     {
-        int cx = Mathf.FloorToInt((focus.X - _x0) / _tileX);
-        int cz = Mathf.FloorToInt((focus.Z - _z0) / _tileZ);
-        if (_centerCell == (cx, cz))
+        if (focuses.Count == 0)
             return;
-        _centerCell = (cx, cz);
+        // No-op unless some focus changed cell (the common case, every frame).
+        bool moved = focuses.Count != _centerCells.Count;
+        for (int i = 0; !moved && i < focuses.Count; i++)
+            moved = CellOf(focuses[i]) != _centerCells[i];
+        if (!moved)
+            return;
+        _centerCells.Clear();
+        foreach (var f in focuses)
+            _centerCells.Add(CellOf(f));
 
         var wanted = new HashSet<(int, int)>();
-        for (int dx = -Rings; dx <= Rings; dx++)
-            for (int dz = -Rings; dz <= Rings; dz++)
-            {
-                var c = (cx + dx, cz + dz);
-                // In-map cells are the real world's — never duplicated by the extension.
-                if (c.Item1 >= 0 && c.Item1 < _cols && c.Item2 >= 0 && c.Item2 < _rows)
-                    continue;
-                wanted.Add(c);
-            }
+        foreach (var (fx, fz) in _centerCells)
+            for (int dx = -Rings; dx <= Rings; dx++)
+                for (int dz = -Rings; dz <= Rings; dz++)
+                {
+                    var c = (fx + dx, fz + dz);
+                    // In-map cells are the real world's — never duplicated by the extension.
+                    if (c.Item1 >= 0 && c.Item1 < _cols && c.Item2 >= 0 && c.Item2 < _rows)
+                        continue;
+                    wanted.Add(c);
+                }
 
         List<(int, int)>? drop = null;
         foreach (var (cell, node) in _live)
@@ -133,6 +146,12 @@ public sealed partial class MapEdgeExtender : Node3D
                 _live[cell] = node;
             }
     }
+
+    // The partition-grid cell a world position falls in (may be outside the map — that is the
+    // whole point; negative/oversize indices address extension cells).
+    private (int, int) CellOf(Vector3 p) => (
+        Mathf.FloorToInt((p.X - _x0) / _tileX),
+        Mathf.FloorToInt((p.Z - _z0) / _tileZ));
 
     // ---------------------------------------------------------------- mirror mapping
 
