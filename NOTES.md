@@ -14,6 +14,10 @@
 - Campaign
 - Multiplayer
 - VR Support
+- GameModes
+    - Stunt Flying
+        - Objectives are named dzpaths<x>, dz<x>
+        - dzones in ia.json
 ## Player
 - Control via Mouse-Keyboard, Gamepad, Joystick and HOTAS/HOSAS
 ## Free Floating Ideas
