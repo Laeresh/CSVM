@@ -30,6 +30,17 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 
 ## Feature backlog
 
+- **Aircraft paint schemes + decals** (decoded 2026-07-19, not implemented — user-reported:
+  our Bloodhawk is blue, the original's is red). Shipped skin textures are unpainted shading
+  maps whose palette holds contiguous per-region colour ramps; the engine writes the scheme's
+  colours in at load time. Scheme data is already in hand: `vehicle.json` `paint_pattern` +
+  `paint_color1..3` (RGB 0–255) + `paint_decal1..3`, `ia.json` `ace_*` for IA aces, and a
+  gapless numbered decal set 00–49 in every chapter's `texture.zbd` indexed directly by
+  `paint_decalN` (00–20 squadron logos, 21–49 nose art) that swaps onto each plane's
+  `*_noselogo`/`*_taillogo`/`*_winglogo` placeholder slots. Full decode + the four
+  implementation steps: `docs/formats/paint.md`. Open before building it: the per-texture
+  palette ramp ranges, and where the `paint_pattern` table itself lives (engine-side — it is
+  in no zrdr and no plaintext string in the exe/dlls/resources).
 - **Full `player_plane_destruct` crash choreography**: surface variants
   (`player_crash_default/_dirt/_water`), sparks, black smokeball, `plane_destroy_sg` sound,
   crash trails. Current state = fireball + breakup pieces + 10 s wreck fire (item 10d).
