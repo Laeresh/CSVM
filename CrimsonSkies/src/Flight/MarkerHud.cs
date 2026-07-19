@@ -30,6 +30,16 @@ public sealed partial class MarkerHud : Control
     /// <summary>The plane nose heading, 0 = north (−Z), 90 = east (+X) — for the clock bearing.</summary>
     public float HeadingDeg { get; set; }
 
+    /// <summary>The splitscreen race this pilot is flying in (M2.5 item 7), or null in a solo run.
+    /// Set, the all-zones-cleared banner becomes their placing + finish time and says who they are
+    /// still waiting on; the shared ranked board (<see cref="StuntRaceBoard"/>) takes over from
+    /// there. Paired with <see cref="PlayerIndex"/>.</summary>
+    public StuntRace? Race;
+
+    /// <summary>Which player's pane this HUD draws in (0-based) — picks their row out of
+    /// <see cref="Race"/>.</summary>
+    public int PlayerIndex;
+
     private StuntMission _mission = null!;
     private Camera3D _camera = null!;
     private float _flash;         // s left on the zone-cleared flash
@@ -122,8 +132,7 @@ public sealed partial class MarkerHud : Control
 
         if (_mission.AllComplete)
         {
-            DrawLines(font, new Vector2(cx, Size.Y * 0.26f),
-                new[] { "ALL DANGER ZONES CLEARED", StuntMission.FormatTime(_mission.Elapsed) }, bannerFont, HudGreen);
+            DrawLines(font, new Vector2(cx, Size.Y * 0.26f), CompleteBanner(), bannerFont, HudGreen);
             return;
         }
 
@@ -165,6 +174,27 @@ public sealed partial class MarkerHud : Control
             DrawArrow(edge, dir, RefArrowLen * s, RefArrowHalf * s, s);
             DrawLinesClamped(font, edge - dir * (RefArrowLen + RefTextGap) * s, lines.ToArray(), markerFont, HudBlue);
         }
+    }
+
+    /// <summary>The banner shown in this player's pane once they have cleared every zone. Solo: the
+    /// run is simply over (the results board is coming up in the same pane). In a race (item 7):
+    /// their placing + finish time, held while the rest of the field still flies — the shared
+    /// ranked board only appears when the last pilot is in.</summary>
+    private string[] CompleteBanner()
+    {
+        if (Race?.Of(PlayerIndex) is not { } me)
+            return new[] { "ALL DANGER ZONES CLEARED", StuntMission.FormatTime(_mission.Elapsed) };
+        var lines = new List<string>(3)
+        {
+            $"FINISHED — {StuntRace.Ordinal(me.Rank)}",
+            StuntMission.FormatTime(me.FinishTime),
+        };
+        if (!Race.AllFinished)
+        {
+            int waiting = Race.Racers.Count - Race.FinishedCount;
+            lines.Add(waiting == 1 ? "waiting for 1 pilot…" : $"waiting for {waiting} pilots…");
+        }
+        return lines.ToArray();
     }
 
     /// <summary>"Danger Zone [Fly Through] -" — the category/action prefix (the description goes on

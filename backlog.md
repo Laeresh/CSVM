@@ -59,6 +59,17 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 - **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
 
+- **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
+  every zone freezes at the finish showing their placing while the field flies on. It matches
+  the solo run's freeze and makes the placing unmissable, but it parks a player with nothing
+  to do for as long as the slowest pilot takes. The alternative — keep flying freely with the
+  timer stopped — is a small change (drop the AllComplete early-return when `Race != null` and
+  gate only the objective/marker updates). Decide from the two-controller playtest.
+- **Race spawn fairness**: each player takes the next entry in the mission's `stunt_flying`
+  spawn list, so pilots start at genuinely different distances from the first zone. Fine for
+  a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
+  `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
+
 ## Open fidelity questions (answerable by testing the original)
 
 - **Map-edge continuation**: ours alternately *reflects* the border tiles (seam-free by

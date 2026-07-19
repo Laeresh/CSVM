@@ -546,6 +546,24 @@ public partial class PlaneViewer : Node3D
                 var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
 
+                // Stunt run (M2.5 items 1 + 7): the mission's danger-zone objectives from ia.json
+                // dzones, positions resolved against this chapter world's gamez, display strings
+                // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
+                // every player then races an independent copy of the same zone list, so the
+                // archives are read once no matter how many pilots are in.
+                StuntMission? stuntZones = null;
+                StuntRace? race = null;
+                if (_stunt)
+                {
+                    stuntZones = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
+                    if (stuntZones == null)
+                        // Expected for the chapters whose IA1 has no dzones (C1C, C2B) — a data
+                        // fact, not a fault, so a plain line (log hygiene: no stack traces).
+                        GD.Print($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
+                    else if (_rigs.Count > 1)
+                        race = new StuntRace(); // splitscreen: a race, ranked on the shared board
+                }
+
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
                     var rig = _rigs[pi];
@@ -687,37 +705,44 @@ public partial class PlaneViewer : Node3D
                                      $"rattle={stats.RattleSound}" +
                                      (mixGain < 1f ? $" (per-player mix gain {mixGain:0.00})" : ""));
                     }
-                    // Stunt run (M2.5 item 1): the mission's danger-zone objectives from ia.json
-                    // dzones, positions resolved against this chapter world's gamez, display
-                    // strings from targets.json → messages.json. --stunt only. Splitscreen stunt
-                    // RACING (per-player progress + a shared ranked scoreboard) is item 7, so for
-                    // now only player 1 runs the objectives; the rest fly free alongside.
-                    if (_stunt && pi == 0)
+                    // This player's stunt run: player 1 flies the loaded instance, everyone else an
+                    // independent copy of the same zones (item 7 — own progress, own clock).
+                    if (stuntZones != null)
                     {
-                        controller.Stunt = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
-                        if (controller.Stunt == null)
-                            GD.PushWarning($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
+                        controller.Stunt = pi == 0 ? stuntZones : stuntZones.ForAnotherPlayer();
+                        controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
+                        controller.PlayerIndex = pi;
+                        controller.DebugCompleteStunt = _debugScoreboard;
+                        // The objective marker HUD (item 2), one per pane: projects that player's
+                        // active danger zone through THEIR camera, with the edge arrow + clock
+                        // bearing + run status.
+                        controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
+                        if (race != null)
+                        {
+                            // Racing (item 7): no per-player splits board — the shared ranked board
+                            // below covers the whole window when the last pilot is in. The marker
+                            // HUD shows this player's placing meanwhile.
+                            race.Add(pi, controller.Stunt, PlaneDisplayName(stats));
+                            controller.Race = race;
+                            controller.Marker.Race = race;
+                            controller.Marker.PlayerIndex = pi;
+                        }
                         else
                         {
-                            // The objective marker HUD (item 2): projects the active danger zone through
-                            // the flight camera, draws the edge arrow + clock bearing + run status.
-                            controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
-                            GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
-                            // The end-of-run scoreboard (item 3): per-zone splits + total + persisted
-                            // best time, keyed chapter/mission/plane in user://stunt_scores.json.
+                            // Solo: the end-of-run scoreboard (item 3) — per-zone splits + total +
+                            // persisted best time, keyed chapter/mission/plane in
+                            // user://stunt_scores.json (race totals are deliberately not recorded).
                             var scoreKey = $"{_chapter}/{_mission}/{planeName}";
                             controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
                                 PlaneDisplayName(stats), $"{_chapter}   ·   {Humanize(_scenario)}",
                                 ScoreStore.Load(), scoreKey);
                             GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
-                            controller.DebugCompleteStunt = _debugScoreboard;
+                        }
+                        if (verbose)
+                        {
+                            GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
                             what += $" [stunt: {controller.Stunt.TotalCount} zones]";
                         }
-                    }
-                    else if (_stunt && pi == 1)
-                    {
-                        GD.Print("--stunt with --players: danger zones are player 1's for now " +
-                                 "(splitscreen stunt racing is M2.5 item 7); others fly free");
                     }
 
                     var (spawnPos, spawnLookAt) = ChooseSpawn(spawnList, missionZrdrPath, spawnBase, pi, tag);
@@ -726,6 +751,24 @@ public partial class PlaneViewer : Node3D
                     rig.Controller = controller;
                     _worldRoot!.AddChild(controller);
                 }
+                // The race's shared results board (item 7): one ranked row per player, over the
+                // WHOLE window rather than inside a pane — the race ends for everybody at once — so
+                // it goes on its own CanvasLayer above the splitscreen panes. Any player's R there
+                // is a rematch, which restarts every plane, so it routes back through the session.
+                if (race != null)
+                {
+                    var board = StuntRaceBoard.Build(race, $"{_chapter}   ·   {Humanize(_scenario)}",
+                        exitsToMenu: _menuDriven);
+                    var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
+                    boardLayer.AddChild(board);
+                    _worldRoot!.AddChild(boardLayer);
+                    foreach (var rig in _rigs)
+                        if (rig.Controller != null)
+                            rig.Controller.RestartRace = () => RestartRace(race);
+                    GD.Print($"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, " +
+                             "own progress + clock each, shared ranked board");
+                }
+
                 if (_rigs.Count > 1)
                 {
                     var flown = new List<string>(_rigs.Count);
@@ -941,6 +984,18 @@ public partial class PlaneViewer : Node3D
             ReturnToMenu();
             _menu.ShowError($"Could not load {chapter} / {string.Join(", ", _planeNames)} — see the log.");
         }
+    }
+
+    /// <summary>Rematch from the shared race board (M2.5 item 7, R): every player's zones, clock and
+    /// placing cleared, then every plane back to its own spawn — same chapter, aircraft and spawn
+    /// points. The board retires itself once the placings are gone. The session owns the planes, so
+    /// the restart lands here rather than in the FlightController that read the button.</summary>
+    private void RestartRace(StuntRace race)
+    {
+        GD.Print("stunt race: rematch — fresh clocks and zones for every pilot");
+        race.Restart();
+        foreach (var rig in _rigs)
+            rig.Controller?.Respawn();
     }
 
     /// <summary>Tears down the current session (frees <see cref="_worldRoot"/> and drops every cached

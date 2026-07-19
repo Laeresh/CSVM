@@ -80,6 +80,11 @@ public sealed class StuntMission
     /// Zones to win!"), resolved at load from the message table. Empty if the table is absent.</summary>
     public string IntroLine { get; private set; } = "";
 
+    /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race, item 7). Empty in a
+    /// solo run, so single-player logs read exactly as before — but with four pilots clearing zones
+    /// in one shared world the completion lines are otherwise indistinguishable.</summary>
+    public string LogTag = "";
+
     /// <summary>The zone the HUD points at: the first still-incomplete zone in list order
     /// (item 2's cycling overrides the displayed one). Null once the run is complete.</summary>
     public StuntZone? ActiveZone => _active >= 0 && _active < _zones.Count ? _zones[_active] : null;
@@ -154,6 +159,26 @@ public sealed class StuntMission
         return new StuntMission(zones) { IntroLine = messages.Get(IntroMsgKey) };
     }
 
+    /// <summary>A second, independent run over the same Danger Zones (M2.5 item 7, splitscreen
+    /// racing): same zone list, positions and display strings, but its own completion flags, clock,
+    /// active target and events. Copying beats calling <see cref="Load"/> once per player — the
+    /// ia.json/targets.json/messages parse and the gamez lookups happen once for the session.</summary>
+    public StuntMission ForAnotherPlayer()
+    {
+        var zones = new List<StuntZone>(_zones.Count);
+        foreach (var z in _zones)
+            zones.Add(new StuntZone
+            {
+                DzName = z.DzName,
+                PathName = z.PathName,
+                Position = z.Position,
+                Description = z.Description,
+                Category = z.Category,
+                Help = z.Help,
+            });
+        return new StuntMission(zones) { IntroLine = IntroLine };
+    }
+
     /// <summary>Physics-frame test: complete any incomplete zone the plane is now within
     /// <see cref="DzRadius"/> of (order-free — several can complete in one pass).</summary>
     public void Update(Vector3 planePos)
@@ -181,7 +206,7 @@ public sealed class StuntMission
         z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits (item 3)
         z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
-        GD.Print($"stunt: completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
+        GD.Print($"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
         // Keep pointing at the manually-cycled target (item 2) unless it was the zone just
         // completed; otherwise auto-advance to the next incomplete in list order.
@@ -190,12 +215,12 @@ public sealed class StuntMission
         if (CompletedCount >= _zones.Count && !AllComplete)
         {
             AllComplete = true;
-            GD.Print("stunt: ALL DANGER ZONES COMPLETE");
+            GD.Print($"stunt: {LogTag}ALL DANGER ZONES COMPLETE");
             RunCompleted?.Invoke();
         }
         else if (ActiveZone is { } next)
         {
-            GD.Print($"stunt: next target → {next.DzName} ({next.MarkerText()})");
+            GD.Print($"stunt: {LogTag}next target → {next.DzName} ({next.MarkerText()})");
         }
     }
 
@@ -255,12 +280,14 @@ public sealed class StuntMission
     /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with
     /// synthetic, increasing split times so the end-of-run scoreboard renders deterministically for
     /// a screenshot / layout pass. Drives the real <see cref="Complete"/> path (fires the events,
-    /// sets AllComplete). Not reachable in normal play.</summary>
-    public void DebugCompleteAll()
+    /// sets AllComplete). Not reachable in normal play. <paramref name="extraPerZone"/> pads every
+    /// split (the splitscreen race passes the player index, so the synthetic board shows a real
+    /// ranking instead of four identical totals).</summary>
+    public void DebugCompleteAll(float extraPerZone = 0f)
     {
         for (int i = 0; i < _zones.Count; i++)
         {
-            Elapsed += 8f + i * 9.5f;
+            Elapsed += 8f + i * 9.5f + extraPerZone;
             if (!_zones[i].Completed)
                 Complete(_zones[i]);
         }

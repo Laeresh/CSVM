@@ -99,6 +99,19 @@ public partial class FlightController : Node3D
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
+    /// <summary>The splitscreen stunt race this plane is one seat of (M2.5 item 7), or null when
+    /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
+    /// on, and R only becomes a rematch once the whole field is in — a rematch restarts every
+    /// player, so it goes through <see cref="RestartRace"/> rather than this plane alone.</summary>
+    public StuntRace? Race;
+
+    /// <summary>Restarts the whole race (the session owns every player's plane, so it does the
+    /// work). Invoked when a player presses R on the shared results board.</summary>
+    public Action? RestartRace;
+
+    /// <summary>0-based player index — this plane's seat in the race and its pane.</summary>
+    public int PlayerIndex;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -137,6 +150,7 @@ public partial class FlightController : Node3D
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
+    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
     private float _holdElapsed;                  // sim time into the HoldSegments sequence
     private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
@@ -159,6 +173,7 @@ public partial class FlightController : Node3D
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
+    private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
     // Collision severity (Run-2 item 10b, all TUNE): impact speed along the contact
     // normal decides between a survivable graze and a crash. A graze damages the
@@ -236,7 +251,10 @@ public partial class FlightController : Node3D
         SnapCamera();
     }
 
-    private void Respawn()
+    /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
+    /// crash respawn (R), and the session's per-plane reset for a race rematch (item 7). Leaves the
+    /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
+    public void Respawn()
     {
         _crashed = false;
         _holdElapsed = 0f; // scripted hold sequences restart from the spawn
@@ -375,21 +393,39 @@ public partial class FlightController : Node3D
         // while paused (returned above — a debug screenshot freeze must not run the timer).
         Stunt?.Tick(dt);
 
-        // Debug: force-complete the run so the scoreboard renders for a deterministic screenshot.
-        if (DebugCompleteStunt && Stunt is { AllComplete: false })
-            Stunt.DebugCompleteAll();
+        // Debug: force-complete the run so the results board renders for a deterministic
+        // screenshot. In a race the players finish STAGGERED by index (and their totals padded by
+        // it), so the shot exercises the real one-pilot-finishes-while-the-others-fly path — the
+        // placings, the waiting banner, then the shared board — instead of four identical totals
+        // landing on frame one.
+        if (DebugCompleteStunt && Stunt is { AllComplete: false }
+            && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
+            Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
 
-        // Run complete: the scoreboard is up and the flight sim freezes in place (the chase camera
-        // in _Process still holds on the plane). R (gamepad Y/A) starts a fresh run — the
+        // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
+        // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
         // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone
-        // (item 3). Checked before the crash branch so completing the final zone always restarts
-        // cleanly.
+        // (item 3). In a race (item 7) this player is simply parked at the finish while the rest
+        // of the field flies on, and R only means "rematch" — restarting everybody — once the
+        // last pilot is in. Checked before the crash branch so completing the final zone always
+        // restarts cleanly.
         if (Stunt is { AllComplete: true })
         {
-            if (RespawnPressed())
-                RestartStuntRun();
+            // Unattended scripted runs rematch on a timer, the same rule as the crash branch's
+            // auto-respawn below — so a --hold race soak-test keeps racing instead of parking on
+            // the board forever. Player 1 alone runs the timer; the rematch restarts everybody.
+            bool autoRematch = HoldSegments != null && Race is { AllFinished: true } && PlayerIndex == 0
+                && (_autoRestartIn -= dt) <= 0f;
+            if (RespawnPressed() || autoRematch)
+            {
+                if (Race == null)
+                    RestartStuntRun();
+                else if (Race.AllFinished)
+                    RestartRace?.Invoke();
+            }
             return;
         }
+        _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
 
         if (_crashed)
         {
