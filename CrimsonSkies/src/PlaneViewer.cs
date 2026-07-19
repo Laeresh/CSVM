@@ -4,6 +4,7 @@ using System.Diagnostics;
 using System.IO;
 using CrimsonSkies.Flight;
 using CrimsonSkies.Mech3;
+using CrimsonSkies.UI;
 using Godot;
 
 namespace CrimsonSkies;
@@ -12,6 +13,11 @@ namespace CrimsonSkies;
 /// Milestone 2 vertical-slice viewer: loads one aircraft from the player's own
 /// extracted game data and renders it with orbit controls — or, with --fly,
 /// free flight over the chapter world with arcade controls.
+///
+/// Launched with no content-selecting arg (a bare launch, e.g. RunGame.ps1), it shows the
+/// in-game launchscreen (Mode → Chapter → Plane; see src/UI/LaunchMenu.cs) instead; the menu's
+/// selection feeds the same StartSession build path the CLI drives, and Esc from a menu-launched
+/// flight returns to the launchscreen (ReturnToMenu). Any explicit content arg bypasses the menu.
 ///
 /// F12 (any mode) saves the current frame to a timestamped PNG under the repo's
 /// git-ignored Screenshots/ folder. F11 (any mode) prints the current camera pose as
@@ -84,6 +90,9 @@ namespace CrimsonSkies;
 ///   --campos=x,y,z               place the camera here instead of auto-framing
 ///   --lookat=x,y,z               orbit/look target (default: model AABB center)
 ///   --screenshot=path            render a few frames, save a PNG, then quit
+///   --menu[=mode|chapter|plane]  force the in-game launchscreen even alongside other args (it
+///                                otherwise shows only on a bare no-content-arg launch); the
+///                                optional screen name opens it there (a --screenshot layout aid)
 /// </summary>
 public partial class PlaneViewer : Node3D
 {
@@ -136,31 +145,54 @@ public partial class PlaneViewer : Node3D
     private float _yaw = 2.5f, _pitch = 0.3f; // default: front-left three-quarter view (nose is -Z)
     private bool _dragging;
 
+    // Session lifecycle (M2.5 item 4 — the launchscreen's in-process world rebuild): everything a
+    // session builds hangs under _worldRoot, so Esc-to-menu can free it and StartSession run again.
+    // The camera, lights and global shader params live on `this` and persist across sessions.
+    private Node3D? _worldRoot;    // the current session's subtree (world/plane/HUD/effects)
+    private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
+    private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
+    private bool _forceMenu;       // --menu: show the launchscreen even alongside other args
+    private string _menuStartScreen = ""; // --menu=<mode|chapter|plane>: open the menu on that screen (screenshot aid)
+    private bool _inSession;       // a world is currently built
+
+    // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
+    // each (re)build and recomputes the chapter-dependent gamez/texture/mission paths from _chapter.
+    private string _repoRoot = "";
+    private string _planesGamezPath = "";  // extracted/planes.zip — the aircraft models (always this)
+    private string _zrdrPath = "";
+    private string _soundsPath = "";
+    private string _interpPath = "";
+    private string _messagesPath = "";
+    private string _gamezPath = "";         // --gamez= override value (used verbatim when set)
+    private string _texturesPath = "";      // --textures= override value (verbatim when set)
+    private bool _gamezOverridden, _texturesOverridden, _zrdrOverridden, _soundsOverridden;
+    private bool _mute, _debugCollision;
+
     public override void _Ready()
     {
        
         var projectDir = ProjectSettings.GlobalizePath("res://");
-        var repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
-        var gamezPath = Path.Combine(repoRoot, "extracted", "planes.zip");
-        var planesGamezPath = gamezPath;
-        var texturesPath = Path.Combine(repoRoot, "extracted", "C1", "texture.zip");
-        var zrdrPath = Path.Combine(repoRoot, "extracted", "zrdr.zip");
-        var soundsPath = Path.Combine(repoRoot, "extracted", "soundsh.zip");
-        var interpPath = Path.Combine(repoRoot, "extracted", "interp.json");
-        var messagesPath = Path.Combine(repoRoot, "extracted", "messages.json");
-        bool mute = false;
-        bool debugCollision = false;
+        _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
+        var planesGamezPath = Path.Combine(_repoRoot, "extracted", "planes.zip");
+        _zrdrPath = Path.Combine(_repoRoot, "extracted", "zrdr.zip");
+        _soundsPath = Path.Combine(_repoRoot, "extracted", "soundsh.zip");
+        _interpPath = Path.Combine(_repoRoot, "extracted", "interp.json");
+        _messagesPath = Path.Combine(_repoRoot, "extracted", "messages.json");
 
-        bool gamezOverridden = false, texturesOverridden = false, zrdrOverridden = false, soundsOverridden = false;
+        // A content-selecting arg (--plane/--chapter/--fly/--stunt/--damage/--screenshot) builds
+        // directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
+        bool hasContentArg = false;
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
-            if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
-            else if (arg == "--damage") _damageLab = true;
-            else if (arg.StartsWith("--damage=")) { _damageLab = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); }
-            else if (arg == "--chapter") _worldMode = true;
-            else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; }
-            else if (arg == "--fly") _fly = true;
-            else if (arg == "--stunt") _stunt = true;
+            if (arg.StartsWith("--plane=")) { _planeName = arg["--plane=".Length..]; hasContentArg = true; }
+            else if (arg == "--damage") { _damageLab = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage=")) { _damageLab = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); hasContentArg = true; }
+            else if (arg == "--chapter") { _worldMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; hasContentArg = true; }
+            else if (arg == "--fly") { _fly = true; hasContentArg = true; }
+            else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
+            else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
+            else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
             else if (arg == "--debug-dzpaths") _debugDzPaths = true;
             else if (arg == "--debug-scoreboard") _debugScoreboard = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
@@ -169,19 +201,19 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--spawn-at=")) _spawnAt = ParseVec3(arg["--spawn-at=".Length..]);
             else if (arg.StartsWith("--spawn-dir=")) _spawnDir = ParseVec3(arg["--spawn-dir=".Length..]);
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
-            else if (arg.StartsWith("--gamez=")) { gamezPath = arg["--gamez=".Length..]; gamezOverridden = true; }
-            else if (arg.StartsWith("--textures=")) { texturesPath = arg["--textures=".Length..]; texturesOverridden = true; }
-            else if (arg.StartsWith("--zrdr=")) { zrdrPath = arg["--zrdr=".Length..]; zrdrOverridden = true; }
-            else if (arg.StartsWith("--interp=")) interpPath = arg["--interp=".Length..];
-            else if (arg.StartsWith("--sounds=")) { soundsPath = arg["--sounds=".Length..]; soundsOverridden = true; }
-            else if (arg.StartsWith("--messages=")) messagesPath = arg["--messages=".Length..];
-            else if (arg == "--mute") mute = true;
-            else if (arg == "--debug-collision") debugCollision = true;
+            else if (arg.StartsWith("--gamez=")) { _gamezPath = arg["--gamez=".Length..]; _gamezOverridden = true; }
+            else if (arg.StartsWith("--textures=")) { _texturesPath = arg["--textures=".Length..]; _texturesOverridden = true; }
+            else if (arg.StartsWith("--zrdr=")) { _zrdrPath = arg["--zrdr=".Length..]; _zrdrOverridden = true; }
+            else if (arg.StartsWith("--interp=")) _interpPath = arg["--interp=".Length..];
+            else if (arg.StartsWith("--sounds=")) { _soundsPath = arg["--sounds=".Length..]; _soundsOverridden = true; }
+            else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
+            else if (arg == "--mute") _mute = true;
+            else if (arg == "--debug-collision") _debugCollision = true;
             else if (arg.StartsWith("--hold=")) _holdSegments = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
             else if (arg.StartsWith("--shots=")) _screenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..]));
             else if (arg.StartsWith("--jitter=")) _jitterDeg = float.Parse(arg["--jitter=".Length..], System.Globalization.CultureInfo.InvariantCulture);
-            else if (arg.StartsWith("--screenshot=")) _screenshotPath = arg["--screenshot=".Length..];
+            else if (arg.StartsWith("--screenshot=")) { _screenshotPath = arg["--screenshot=".Length..]; hasContentArg = true; }
             else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--pitch=")) _pitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--campos=")) _camPos = ParseVec3(arg["--campos=".Length..]);
@@ -207,31 +239,12 @@ public partial class PlaneViewer : Node3D
         // a single shot never jitters. --jitter=<deg> overrides (0 disables).
         if (_jitterDeg < 0f)
             _jitterDeg = _screenshotShots > 1 ? 0.15f : 0f;
-        // The chapter drives both the world's gamez and its texture archive. (The static
-        // plane viewer keeps textures at C1: C1's texture.zbd also carries every player-plane
-        // skin, so it is the right default even when not building a world.)
-        if (!texturesOverridden)
-            texturesPath = Path.Combine(repoRoot, "extracted", _chapter, "texture.zip");
-        if (_worldMode && !gamezOverridden)
-            gamezPath = Path.Combine(repoRoot, "extracted", _chapter, "gamez.zip");
-        // Instant-action spawns come from the mission's own zrdr (ia.json), a different
-        // archive than --zrdr (which holds the shared vehicle/player/engine/sound defs).
-        var missionZrdrPath = Path.Combine(repoRoot, "extracted", _chapter, _mission, "zrdr.zip");
-
-        // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
-        // (loose JSON/PNG/WAV: no zip decompression at load, and greppable in the editor);
-        // fall back to the .zip. Skip paths the user set explicitly via --gamez=/etc.
-        static string PreferUnzipped(string zipPath)
-        {
-            var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
-            return Directory.Exists(dir) ? dir : zipPath;
-        }
-        planesGamezPath = PreferUnzipped(planesGamezPath);
-        if (!gamezOverridden) gamezPath = PreferUnzipped(gamezPath);
-        if (!texturesOverridden) texturesPath = PreferUnzipped(texturesPath);
-        if (!zrdrOverridden) zrdrPath = PreferUnzipped(zrdrPath);
-        if (!soundsOverridden) soundsPath = PreferUnzipped(soundsPath);
-        missionZrdrPath = PreferUnzipped(missionZrdrPath);
+        // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
+        // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
+        // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
+        _planesGamezPath = PreferUnzipped(planesGamezPath);
+        if (!_zrdrOverridden) _zrdrPath = PreferUnzipped(_zrdrPath);
+        if (!_soundsOverridden) _soundsPath = PreferUnzipped(_soundsPath);
 
         // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
         // shader references, before any material using it is built. Defaults are a no-op
@@ -251,6 +264,44 @@ public partial class PlaneViewer : Node3D
         SetupLighting();
         _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
         AddChild(_camera);
+
+        // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
+        // (Mode → Chapter → Plane). Its selection fills in _chapter/_planeName/_stunt and calls
+        // StartSession, so there is exactly one downstream build path. Esc from a menu-launched
+        // flight returns here (see ReturnToMenu).
+        if (_forceMenu || !hasContentArg)
+        {
+            _menuDriven = true;
+            ShowLaunchMenu();
+            return;
+        }
+        StartSession();
+    }
+
+    /// <summary>Builds one flight/view session from the current fields (mode, chapter, plane, spawn,
+    /// …) into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and StartSession
+    /// can run again — the launchscreen's in-process world rebuild. The camera, lights and global
+    /// shader params live on <c>this</c> and persist across sessions. Returns true on success; false
+    /// (leaving the partial _worldRoot for the caller to free) when the build threw.</summary>
+    private bool StartSession()
+    {
+        _worldRoot = new Node3D { Name = "Session" };
+        AddChild(_worldRoot);
+        _camera.Fov = _fly ? 62 : 50;
+
+        // The build body reads the base paths as plain locals (unchanged from when this was inline
+        // in _Ready); the chapter-dependent paths are recomputed here so a new launchscreen chapter
+        // selection takes effect on rebuild.
+        string repoRoot = _repoRoot, zrdrPath = _zrdrPath, soundsPath = _soundsPath,
+            interpPath = _interpPath, messagesPath = _messagesPath, planesGamezPath = _planesGamezPath;
+        bool mute = _mute, debugCollision = _debugCollision;
+
+        string texturesPath = _texturesOverridden ? _texturesPath
+            : PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, "texture.zip"));
+        string gamezPath = _gamezOverridden ? _gamezPath
+            : _worldMode ? PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, "gamez.zip"))
+            : _planesGamezPath;
+        var missionZrdrPath = PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, _mission, "zrdr.zip"));
 
         try
         {
@@ -330,7 +381,7 @@ public partial class PlaneViewer : Node3D
                     if (_horizon != null)
                     {
                         _horizon.Scale = Vector3.One * HorizonScale;
-                        AddChild(_horizon);
+                        _worldRoot!.AddChild(_horizon);
                     }
                     // Weather (the flown mission's weather.json): distance fog for the rendered
                     // zone + the cloud-band whiteout + the ambient cloud puffs. Applied whenever
@@ -363,24 +414,24 @@ public partial class PlaneViewer : Node3D
                     }
                     else
                     {
-                        var smoke = MakePuffer(zrdrPath, textures, this, "pufftrails.json", "smokepuffer");
-                        var fire = MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer");
+                        var smoke = MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "smokepuffer");
+                        var fire = MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer");
                         var panelTrails = new List<Effects.Puffer>();
                         for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
-                            if (MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer") is { } pt)
+                            if (MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
                         var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
                         // the HUD gauge cluster as a lab toggle (user request): the damage
                         // dial mirrors the sliders, blinks on decreases like a flight hit
                         var labGauges = GaugeCluster.Build(gamez, _planeName, textures, stats.DestroyableParts);
-                        AddChild(new DamageLab(stats, visuals, _plane, _damagePreset, labGauges));
+                        _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _damagePreset, labGauges));
                         GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
                                  $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
                         what += " + damage lab";
                     }
                 }
             }
-            AddChild(_plane);
+            _worldRoot!.AddChild(_plane);
             // The deck is now in the tree at its original position; remember its centre so
             // _Process can re-anchor it under the player each frame (see UpdateCloudDeck).
             if (_deck != null)
@@ -539,7 +590,7 @@ public partial class PlaneViewer : Node3D
 
                 var (spawnPos, spawnLookAt) = ChooseSpawn(missionZrdrPath);
                 controller.Setup(new FlightModel(stats), _camera, spawnPos, spawnLookAt);
-                AddChild(controller);
+                _worldRoot!.AddChild(controller);
                 what += $" + '{_planeName}' flying";
             }
 
@@ -551,14 +602,77 @@ public partial class PlaneViewer : Node3D
         }
         catch (Exception e)
         {
-            GD.PrintErr($"failed to load plane: {e}");
+            GD.PrintErr($"failed to load session: {e}");
             if (_screenshotPath != null)
                 GetTree().Quit(1);
-            return;
+            return false;
         }
 
         if (!_fly)
             FrameCamera();
+        _inSession = true;
+        return true;
+    }
+
+    /// <summary>Shows the launchscreen (building it on first use) and wiring its Launch/Quit
+    /// callbacks. Re-shown by <see cref="ReturnToMenu"/> after Esc-from-flight.</summary>
+    private void ShowLaunchMenu()
+    {
+        if (_menu == null)
+        {
+            _menu = LaunchMenu.Build(_zrdrPath);
+            _menu.Launch = StartSessionFromMenu;
+            _menu.Quit = () => GetTree().Quit();
+            AddChild(_menu);
+        }
+        _menu.ShowMenu(_menuStartScreen);
+    }
+
+    /// <summary>The launchscreen picked a mode/chapter/plane: fill the build fields and start the
+    /// session. On a build failure, return to the menu with a note rather than leave a blank
+    /// screen.</summary>
+    private void StartSessionFromMenu(string chapter, string plane, bool stunt)
+    {
+        _chapter = chapter;
+        _planeName = plane;
+        _stunt = stunt;
+        _fly = true;
+        _worldMode = true;
+        // Derive the spawn scenario from the mode each rebuild (a previous stunt run may have left
+        // it set), unless the tester pinned one with --scenario= alongside the bare launch.
+        if (!_scenarioExplicit)
+            _scenario = stunt ? "stunt_flying" : "zeppelin_run";
+        _menu!.HideMenu();
+        if (!StartSession())
+        {
+            ReturnToMenu();
+            _menu.ShowError($"Could not load {chapter} / {plane} — see the log.");
+        }
+    }
+
+    /// <summary>Tears down the current session (frees <see cref="_worldRoot"/> and drops every cached
+    /// session node) and shows the launchscreen again — the in-process rebuild path for
+    /// Esc-from-flight and failed builds. The camera / lights / shader globals persist on
+    /// <c>this</c>.</summary>
+    private void ReturnToMenu()
+    {
+        if (_worldRoot != null)
+        {
+            _worldRoot.QueueFree();
+            _worldRoot = null;
+        }
+        // Drop the cached session references so _Process (which may run once more before the
+        // deferred QueueFree lands) skips them via its null guards.
+        _plane = null;
+        _horizon = null;
+        _deck = null;
+        _whiteout = null;
+        _puffs = null;
+        _precip = null;
+        _edgeExtender = null;
+        _weather = null;
+        _inSession = false;
+        ShowLaunchMenu();
     }
 
     /// <summary>Parse a scripted hold sequence: segments separated by ';', each
@@ -689,7 +803,7 @@ public partial class PlaneViewer : Node3D
             };
             _whiteout.SetAnchorsPreset(Control.LayoutPreset.FullRect);
             canvas.AddChild(_whiteout);
-            AddChild(canvas);
+            _worldRoot!.AddChild(canvas);
 
             // Ambient cloud puffs: the soft wisps that drift past the plane at altitude
             // (OriginalScreenshots/"C1 IA1 Cloud Puffs and Moon.png"). A hand-tuned field
@@ -700,7 +814,7 @@ public partial class PlaneViewer : Node3D
                 _weather.CloudBottom, _weather.CloudTop);
             if (_puffs != null)
             {
-                AddChild(_puffs);
+                _worldRoot!.AddChild(_puffs);
                 GD.Print("cloud puffs: ambient field active over the cloud band");
             }
         }
@@ -711,7 +825,7 @@ public partial class PlaneViewer : Node3D
         // shader's TIME + camera built-ins, so it needs no _Process driving.
         _precip = Effects.Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
-            AddChild(_precip);
+            _worldRoot!.AddChild(_precip);
     }
 
     /// <summary>Picks the flight spawn for the current mission: a world position + a look-at
@@ -803,6 +917,14 @@ public partial class PlaneViewer : Node3D
         UpdateCamera();
     }
 
+    /// <summary>Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
+    /// (loose JSON/PNG/WAV: no zip decompression at load); else the .zip path verbatim.</summary>
+    private static string PreferUnzipped(string zipPath)
+    {
+        var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
+        return Directory.Exists(dir) ? dir : zipPath;
+    }
+
     private static Vector3 ParseVec3(string s)
     {
         var parts = s.Split(',');
@@ -846,6 +968,16 @@ public partial class PlaneViewer : Node3D
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
+            // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
+            if (_menu is { Visible: true })
+                return;
+            // Esc out of a menu-launched flight tears the world down and returns to the launchscreen
+            // (item 4); a CLI-launched run just quits, as before.
+            if (_menuDriven && _inSession)
+            {
+                ReturnToMenu();
+                return;
+            }
             GetTree().Quit();
             return;
         }
@@ -926,7 +1058,11 @@ public partial class PlaneViewer : Node3D
         // no-op until a cell boundary (1024 m) is crossed, then ~a window row rebuilds.
         _edgeExtender?.Update(_camera.Position);
 
-        if (_screenshotPath == null || _plane == null)
+        if (_screenshotPath == null)
+            return;
+        // Nothing built yet: only shoot once a session's plane exists — unless the launchscreen is
+        // up (--menu --screenshot captures the menu itself for layout verification).
+        if (_plane == null && _menu is not { Visible: true })
             return;
         if (--_screenshotFrames > 0)      // still counting down the warm-up delay
             return;
