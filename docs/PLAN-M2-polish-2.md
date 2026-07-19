@@ -25,8 +25,8 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 9. ⏸ Animated vehicles (pt 2) — train/car path motion + steam puffers **(DEFERRED 2026-07-18 — needs a mech3ax cam_anim.zbd extension; survey findings recorded)**
 10. ☑ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup **(DONE 2026-07-19 — visual A/Bs pending user playtest)**
 11. ☑ Dive sound — tune down (ours reads louder than the original) **(DONE 2026-07-19 — pending user A/B dive)**
-12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original
-13. ☐ `docs/formats/` — public reader-format reference, seeded with this run's decodes
+12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original **(user-deferred 2026-07-19 — done after 13)**
+13. ☑ `docs/formats/` — public reader-format reference, seeded with this run's decodes **(DONE 2026-07-19)**
 
 ---
 
@@ -710,6 +710,24 @@ zrdr page into the per-family pages listed above.*
 
 **Verify:** pages exist and cross-link; a fresh reader can implement a weather parser from
 `weather.md` alone; no game-asset bulk data anywhere in `docs/`.
+
+**DONE (2026-07-19):** `docs/formats/` is now the complete public reference — 11 pages +
+index. New: `README.md` (page index + the shared reader conventions: everything-is-float,
+alternating key/list dicts with the meaningful-duplicates caveat, bare-scalar blocks, the
+dual colour-triple rule, `kind_of` inheritance, name wildcards, units, and the extraction
+map incl. the rtexture/rimage findings); the coarse `zrdr.md` split into per-family pages
+— `spawns.md` (ia spawn_points + PLAYER_INIT with the fields-[3]/[4]-are-not-spawn-state
+caveat + the campaign mission↔folder map), `sounds.md` (SETS entry schema, player.json
+curve blocks incl. the item-11 "curve volume ≠ linear mix amplitude" caveat, MS-ADPCM),
+`effects.md` (full PUFFER_STATE schema from Puffer.cs's parser, the three-layer effects
+survey, flipbook texture families, anchor nodes), `clutter.md` (interp.json boot scripts,
+AddClutterTemplates, template subtree shape, the undecoded-alignment note) — with
+`zrdr.md` repurposed as the archive overview (three scopes + reader-family index);
+`vehicle.md` absorbed the flight-stats detail (units, dynamics steady-rate formula,
+engines.json) and points its puffer section at `effects.md`. All pre-existing pages'
+headers now link back to the README index; verified no stale intra-docs references and
+no game-asset bulk data (field tables + tiny excerpt values only). Rule going forward
+(already in CLAUDE.md): new decodes land with their docs page in the same change.
 
 ---
 

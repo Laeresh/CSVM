@@ -1,6 +1,6 @@
 # World structure (chapter gamez.zbd, validated on C1)
 
-Part of the project's format documentation (see also `gamez.md`, `zrdr.md`). Moved from CLAUDE.md on 2026-07-18.
+Part of the [format documentation](README.md) (see also [gamez.md](gamez.md), [clutter.md](clutter.md)). Moved from CLAUDE.md on 2026-07-18.
 
 - World content lives in TWO places: the `world1` World node's `children` (66 in C1: horizon, cloud groups, zeppelins, trains, fvol volumes…) **and** ~350 top-level parentless subtrees referenced only via the World's `partitions` (12×12 spatial grid over `area` x,z ∈ [-12288, 0]; each cell lists node indices; the union of distinct refs = placed terrain tiles + buildings + vehicles).
 - The remaining ~160 parentless roots (bulletholes, firetrails, muzzle flashes, projectiles…) are runtime-spawned effect prototypes — not world scenery — **except the clutter templates** (C1: `terpat02`, `river1`, `river2`), which ARE scenery the engine stamps onto matching-textured terrain at runtime (see `Clutter.cs`; the chapter's `AddClutterTemplates` list in interp.json names them).

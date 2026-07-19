@@ -1,8 +1,8 @@
 # ANIMATION_DEFINITION readers (zepstate, startanims, building/vehicle anims)
 
-Validated against this install's zrdr extraction (mech3ax v0.6.1), 2026-07-18, while
-implementing the anim-state engine part 1 (mission start states). Field tables + tiny
-excerpt values only — no bulk game data.
+Part of the [format documentation](README.md). Validated against this install's zrdr
+extraction (mech3ax v0.6.1), 2026-07-18, while implementing the anim-state engine part 1
+(mission start states). Field tables + tiny excerpt values only — no bulk game data.
 
 The original compiles these reader sources into per-mission `mis_anim.zbd` archives
 (a binary format mech3ax does **not** support); the zrdr JSON sources carry the same

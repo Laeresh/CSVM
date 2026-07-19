@@ -1,6 +1,6 @@
 # GameZ format facts (validated on this install, planes.zbd)
 
-Part of the project's format documentation (see also `world-structure.md`, `zrdr.md`). Validated against this install with mech3ax v0.6.1; moved from CLAUDE.md on 2026-07-18. Documents formats only — no game asset data (see the repo's hard rule).
+Part of the [format documentation](README.md) (see also [world-structure.md](world-structure.md)). Validated against this install with mech3ax v0.6.1; moved from CLAUDE.md on 2026-07-18. Documents formats only — no game asset data (see the repo's hard rule).
 
 - `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
 - Euler `transformation.rotation` composes **R = Ry(y)·Rx(x)·Rz(z)** = Godot's `EulerOrder.Yxz` (fit numerically, zero error, against the 221 nodes that also carry a matrix). When `matrix` is present, use it instead; it is stored transposed — real columns are (a,b,c),(d,e,f),(g,h,i).

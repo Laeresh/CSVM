@@ -1,7 +1,7 @@
 # weather.json — per-mission atmosphere (validated on this install)
 
-Part of the project's format documentation (see also `zrdr.md`, `world-structure.md`,
-`gamez.md`). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
+Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
+[world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
 `CrimsonSkies/src/Flight/Weather.cs` (`WeatherState`) + `PlaneViewer.SetupWeather`.
 
@@ -13,11 +13,11 @@ calibration).
 
 One `weather.json` per mission folder, in the mission's own zrdr archive
 (`extracted/<chapter>/<mission>/zrdr/`), alongside `ia.json`/`objectives.json` (see
-`zrdr.md`). Some folders are multiplayer-only or lack the file — the loader returns "no
-fog" then.
+[spawns.md](spawns.md)). Some folders are multiplayer-only or lack the file — the loader
+returns "no fog" then.
 
-`weather.json` root[0] is one alternating **dict** (`key, [values…]`, see the zrdr
-conventions). Its blocks:
+`weather.json` root[0] is one alternating **dict** (`key, [values…]`, see the
+[shared conventions](README.md#shared-conventions-zrdr-readers)). Its blocks:
 
 | Block | Read as | Notes |
 |---|---|---|

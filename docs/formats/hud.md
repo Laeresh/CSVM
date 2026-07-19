@@ -1,8 +1,9 @@
 # HUD: compass tape + cockpit gauges
 
-Validated 2026-07-18 against `OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by
-pixel-probing every tick and label; gauges decoded 2026-07-19 from the planes.zbd
-`gauges` subtrees + `OriginalScreenshots/HUD with dmg.png`. Remake implementations:
+Part of the [format documentation](README.md). Validated 2026-07-18 against
+`OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by pixel-probing every tick and
+label; gauges decoded 2026-07-19 from the planes.zbd `gauges` subtrees +
+`OriginalScreenshots/HUD with dmg.png`. Remake implementations:
 `src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
 
 ## Textures

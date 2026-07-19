@@ -1,8 +1,9 @@
 # vehicle.json — aircraft definitions
 
-Validated against this install's zrdr extraction (mech3ax v0.6.1), decoded across
-Milestone-2 flight work and Run-2 item 10 (2026-07-19). One reader file, shared by every
-mission scope; the root list alternates `defName, [properties…]`.
+Part of the [format documentation](README.md). Validated against this install's zrdr
+extraction (mech3ax v0.6.1), decoded across Milestone-2 flight work and Run-2 item 10
+(2026-07-19). One reader file, shared by every mission scope; the root list alternates
+`defName, [properties…]`.
 
 ## Def structure & inheritance
 
@@ -27,6 +28,23 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
 | `bullethole_anims`, `turrets`, `cannon_jam`, weapon lists | dogfight-milestone scope, undecoded here |
+
+## Units, dynamics & engines
+
+Units are meters/seconds: `fd_speed` 135 m/s ≈ 302 mph matches the Bloodhawk's published
+top speed; `flight_ceiling` 2500 m. `player.json` holds player-global values —
+`nom_gravity` = 20 m/s² (an arcade 2 g) — plus the sound curve blocks
+([sounds.md](sounds.md)).
+
+The `dynamics` block: `rec_moments_inertia` is the *reciprocal* inertia per axis
+(x = pitch, y = yaw, z = roll); steady-state rotation rate = torque · recInertia /
+`ang_momentum_damp` (Bloodhawk roll ≈ 1.65 rad/s). `return_rate` is extra centering
+applied when the stick is released. `fd_speed` is the full-throttle level-speed
+equilibrium (drag balances thrust there).
+
+`engines.json` is a flat list of rows `[id, name, power]`; a plane def's `engine`
+property picks its stock engine by id (Bloodhawk: 11 = Lvl-2, power 0.62). Engine power
+scales thrust/acceleration; `fd_speed` stays the level-speed cap.
 
 ## destroyable_parts (Run-2 item 10)
 
@@ -97,13 +115,8 @@ Note the left/right pair is point-symmetric (both z signs flipped), not mirrored
 probably hand-authored. The remake does **not** use these (its swept boxes are derived
 from the actual mesh, item 10a); documented for completeness.
 
-## Puffer COLORS / TEXTURES (effect readers, same conventions)
+## Effect emitters
 
-`PUFFER_STATE` blocks (pufftrails.json, flame_ball.json, player_plane_destruct.json, …)
-add two keys beyond the flipbook schema documented with the crash fireball:
-`TEXTURES [names…]` — a static pool, each particle picks one at random — and
-`COLORS [[lifeFrac, r, g, b, a], …]` — a color-over-age ramp, rgb integer 0–255 (the
-weather.json rule: any component > 1 ⇒ ÷255), alpha 0–1. A state is an emitter definition
-iff it has `NUMBER` (burst: N sprites per `TIME_INTERVAL`) or `DISTANCE_INTERVAL` (trail:
-one sprite per N meters of the followed node's motion); stop-stubs share the NAME but
-carry only `ACTIVE_STATE`.
+The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
+`large_fireball`, …) are `PUFFER_STATE` definitions — full schema in
+[effects.md](effects.md).
