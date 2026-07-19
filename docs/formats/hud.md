@@ -83,8 +83,17 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
   red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
   window's side). The whole node toggles/blinks.
-- **Damage display**: the `damageindicator` node's own mesh is the silhouette face;
-  its four children `nosedamage` / `taildamage` / `leftwingdamage` / `rightwingdamage`
+- **Damage display**: the dial's face is a single untextured 12-gon (the dark backing
+  disc). ⚠ **Where it is parented differs per aircraft** — verified across the whole
+  roster 2026-07-19: on `player_bhawk` it is the `damageindicator` node's *own* mesh,
+  but on **every other player plane** that node is mesh-less (`mesh_index` −1) and the
+  identical 12-gon hangs off an extra generically-named child instead (`g951` on the
+  Fury, `g927` Kestrel, `g1156` Balmoral, `g992` Warhawk, `g843` Devastator, …). A
+  reader that only looks at the dial node's own mesh therefore draws a backing disc for
+  the Bloodhawk and bare floating zone shapes for all ten other aircraft. The safe rule
+  is the one the other two dials already need: **anything under the dial that is not a
+  recognised functional child is face geometry.** Its
+  four children `nosedamage` / `taildamage` / `leftwingdamage` / `rightwingdamage`
   each carry exactly two polygons (priority 7): a **border bar** at the bezel edge
   (`greenhilite.tif`; nose = top bar, tail = bottom, wings = left/right slanted bars)
   and a **part-shaped hatch fill** tracing that part on this plane's silhouette

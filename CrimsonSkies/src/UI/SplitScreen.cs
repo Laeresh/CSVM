@@ -39,10 +39,23 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private const int Gutter = 2;   // px between panes (TUNE)
 
+    /// <summary>Where player <paramref name="index"/>'s pane sits in a <paramref name="size"/>
+    /// area shared by <paramref name="players"/> players: 2P stacked top/bottom, 3–4P a 2×2 grid
+    /// (3P's fourth quadrant unused). Static and public because the launchscreen's splitscreen
+    /// plane select lays its panes out with the very same call — so you pick your aircraft in the
+    /// pane you will then fly in.</summary>
+    public static Rect2 PaneRect(int index, int players, Vector2 size)
+    {
+        int cols = players <= 2 ? 1 : 2, rows = 2;
+        float paneW = (size.X - (cols - 1) * Gutter) / cols;
+        float paneH = (size.Y - (rows - 1) * Gutter) / rows;
+        int col = index % cols, row = index / cols;
+        return new Rect2(col * (paneW + Gutter), row * (paneH + Gutter), paneW, paneH);
+    }
+
     private readonly List<SubViewport> _views = new();
     private readonly List<SubViewportContainer> _panes = new();
     private Control _root = null!;
-    private int _cols, _rows;
 
     /// <summary>One SubViewport per player, in player order. Add the player's camera (and its
     /// HUD canvases) to it.</summary>
@@ -98,9 +111,6 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private void Init(int players, Viewport mainViewport)
     {
-        _cols = players <= 2 ? 1 : 2;
-        _rows = 2;
-
         _root = new Control { Name = "panes", MouseFilter = Control.MouseFilterEnum.Ignore };
         _root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         AddChild(_root);
@@ -153,13 +163,11 @@ public sealed partial class SplitScreen : CanvasLayer
         var size = _root.Size;
         if (size.X < 1f || size.Y < 1f)
             return;
-        float paneW = (size.X - (_cols - 1) * Gutter) / _cols;
-        float paneH = (size.Y - (_rows - 1) * Gutter) / _rows;
         for (int i = 0; i < _panes.Count; i++)
         {
-            int col = i % _cols, row = i / _cols;
-            _panes[i].Position = new Vector2(col * (paneW + Gutter), row * (paneH + Gutter));
-            _panes[i].Size = new Vector2(paneW, paneH);
+            var rect = PaneRect(i, _panes.Count, size);
+            _panes[i].Position = rect.Position;
+            _panes[i].Size = rect.Size;
         }
     }
 }

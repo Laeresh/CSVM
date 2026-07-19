@@ -84,8 +84,9 @@ namespace CrimsonSkies;
 ///                                Requires --fly/--stunt; N=1 is the normal single-player path.
 ///                                Launched from the menu instead, the join flow binds the pads
 ///   --debug-join=N               (launchscreen only) add N device-less players to the join strip
-///                                so the multi-cursor plane screen can be screenshot without N
-///                                controllers; they can never act, so the shot is deterministic
+///                                so the splitscreen aircraft select can be screenshot without N
+///                                controllers; they can never act (and the last starts locked, so
+///                                both panel states show), making the shot deterministic
 ///   --hold=pitch,roll,yaw,thr    scripted flight input instead of the keyboard (automated runs);
 ///                                ';'-separated segments with '@seconds' durations sequence inputs
 ///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
@@ -895,8 +896,9 @@ public partial class PlaneViewer : Node3D
             AddChild(_menu);
         }
         _menu.ShowMenu(_menuStartScreen);
-        // --debug-join=N: synthesize N extra device-less players so the multi-cursor plane screen
-        // can be screenshot on a one-controller machine (they can never act — deterministic).
+        // --debug-join=N: synthesize N extra device-less players so the splitscreen aircraft
+        // select can be screenshot on a one-controller machine (they can never act, so the
+        // shot is deterministic; the last one starts locked to show both panel states).
         if (_debugJoin > 0)
         {
             _menu.DebugJoin(_debugJoin);

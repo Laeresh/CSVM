@@ -14,18 +14,25 @@ namespace CrimsonSkies.UI;
 /// chapter, the per-player plane + pad, and the mode; PlaneViewer builds the world through the
 /// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
 ///
-/// <para><b>Join flow (item 6).</b> Player 1 is the keyboard plus every pad no other player has
-/// claimed. Any such pad joins as its own player by pressing Start, up to
-/// <see cref="SplitScreen.MaxPlayers"/> — including a pad player 1 is currently reading, which is
-/// deliberate: splitting the only controller off as player 2 and leaving player 1 on the keyboard
-/// is the one way to reach the keyboard-vs-one-controller two-player setup. The join strip under
-/// the breadcrumb shows who is in on every screen. Player 1 alone picks the mode
-/// and the chapter (the others can only leave, with B); on the <b>Plane</b> screen every joined
-/// player moves their <i>own</i> cursor through the same list and locks their pick with A —
-/// duplicates allowed — and the flight starts when everyone is locked. B unlocks; B while
-/// unlocked leaves the session (player 1 goes back to the chapter screen instead, which unlocks
-/// everyone). A pad that disconnects drops its player (player 1 just loses its pad and keeps the
-/// keyboard).</para>
+/// <para><b>Join flow (item 6).</b> Two phases, in this order. First player 1 — the keyboard plus
+/// every pad nobody else holds — picks the mode and the chapter, and the pad it actually steers
+/// those screens with is <b>claimed</b> for player 1 (driving with the keyboard claims nothing,
+/// which leaves every pad free and is exactly the keyboard-versus-controllers setup). Then, on the
+/// <b>Plane</b> screen, any still-free pad joins as its own player by pressing Start, up to
+/// <see cref="SplitScreen.MaxPlayers"/>. Ordering it that way is what makes Start unambiguous: it
+/// can only ever mean "a new player", never "steal the pad player 1 is holding". The join strip
+/// under the breadcrumb shows who is in on every screen. Each player then locks their pick with A
+/// — <b>duplicates are allowed</b>, nothing reserves an aircraft — and the flight starts when
+/// everyone is locked. B unlocks; B while unlocked leaves the session (player 1 goes back to the
+/// chapter screen instead, which unlocks everyone). A pad that disconnects drops its player
+/// (player 1 just loses its pad and keeps the keyboard).</para>
+///
+/// <para><b>The aircraft screen splits</b> once more than one player has joined: instead of one
+/// list with several cursors on it, each player gets their own panel — laid out by the very same
+/// <see cref="SplitScreen.PaneRect"/> the flight panes use, so you choose in the pane you will
+/// then fly in, in your own colour, with your own roster position, stats and lock state. The
+/// shared breadcrumb and join hint move to a strip along the bottom. One player keeps the plain
+/// centred layout, which is why a single-player launchscreen is pixel-identical to item 4's.</para>
 ///
 /// <para><b>Input</b> is polled per player every frame through <see cref="MenuInput"/> rather
 /// than Godot's input map / focus system: it needs no project-settings wiring, behaves identically
@@ -112,10 +119,11 @@ public sealed partial class LaunchMenu : CanvasLayer
     private const int DetailFont = 16;
     private const int FooterFont = 15;
     private const int ErrorFont = 15;
-    // Multi-player plane rows are [tag gutter][name][matching spacer] so the list does not shift
-    // sideways as cursors appear and disappear. Reference widths at 720p (TUNE).
-    private const int TagGutter = 92;
-    private const int NameWidth = 190;
+    // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
+    // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
+    // Reference values at 720p (TUNE).
+    private const float StripHeightFrac = 0.12f;
+    private const int PanePad = 10;
 
     private static readonly Color TitleColor = new(0.96f, 0.80f, 0.35f);
     private static readonly Color CrumbColor = new(0.55f, 0.68f, 0.86f);
@@ -136,6 +144,9 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // The joined players, player 1 first. Never empty once ShowMenu has run.
     private readonly List<Slot> _slots = new();
+    // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
+    // player 1 is on the keyboard and every connected pad is still free to join).
+    private int _p1Pad = -1;
     // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
     // pads that have no player (and therefore no MenuInput) yet.
     private readonly Dictionary<int, bool> _joinPrev = new();
@@ -144,6 +155,10 @@ public sealed partial class LaunchMenu : CanvasLayer
     private string _stripText = "";
 
     private VBoxContainer _body = null!;
+    private CenterContainer _center = null!;
+    // The splitscreen plane-select root (one panel per player + a shared bottom strip). Shown
+    // instead of _center on the Plane screen once more than one player has joined.
+    private Control _paneRoot = null!;
 
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
     /// extraction the plane stats come from. Add it to the tree, wire <see cref="Launch"/> /
@@ -161,13 +176,18 @@ public sealed partial class LaunchMenu : CanvasLayer
         bg.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         root.AddChild(bg);
 
-        var center = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
-        center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
-        root.AddChild(center);
+        menu._center = new CenterContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        menu._center.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(menu._center);
 
         menu._body = new VBoxContainer();
         menu._body.AddThemeConstantOverride("separation", 6);
-        center.AddChild(menu._body);
+        menu._center.AddChild(menu._body);
+
+        // The splitscreen plane select lives alongside the centred layout; exactly one is visible.
+        menu._paneRoot = new Control { MouseFilter = Control.MouseFilterEnum.Ignore, Visible = false };
+        menu._paneRoot.SetAnchorsPreset(Control.LayoutPreset.FullRect);
+        root.AddChild(menu._paneRoot);
 
         return menu;
     }
@@ -216,7 +236,13 @@ public sealed partial class LaunchMenu : CanvasLayer
     public void DebugJoin(int extraPlayers)
     {
         for (int i = 0; i < extraPlayers && _slots.Count < SplitScreen.MaxPlayers; i++)
-            _slots.Add(new Slot { PlaneIndex = (i + 1) % Planes.Length });
+            _slots.Add(new Slot
+            {
+                PlaneIndex = (i + 1) % Planes.Length,
+                // Lock the last one so a screenshot shows both panel states (locked border lit
+                // vs still choosing) side by side.
+                Locked = i == extraPlayers - 1,
+            });
         GD.Print($"launchscreen: --debug-join → {_slots.Count} players (the added ones have no device)");
         if (Visible)
             Rebuild();
@@ -246,10 +272,13 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     // --- players / devices ---
 
-    /// <summary>Whether a pad belongs to a joined player 2–4. Player 1's pads are deliberately NOT
-    /// claims — it holds whatever is left over, so any of them can still join as its own player.</summary>
+    /// <summary>Whether a pad already belongs to a player: one of players 2–4, or the pad player 1
+    /// claimed on the Mode/Chapter screens (<see cref="_p1Pad"/>). Before that claim, player 1's
+    /// pads are only borrowed — it reads every free device, so any of them can still join.</summary>
     private bool IsClaimed(int pad)
     {
+        if (pad == _p1Pad)
+            return true;
         for (int i = 1; i < _slots.Count; i++)
             if (_slots[i].Input.Pad == pad)
                 return true;
@@ -276,10 +305,25 @@ public sealed partial class LaunchMenu : CanvasLayer
                 dirty = true;
             }
         }
+        if (_p1Pad >= 0 && !connected.Contains(_p1Pad))
+        {
+            GD.Print($"launchscreen: P1's pad {_p1Pad} disconnected — back to keyboard + any free pad");
+            _p1Pad = -1;
+            dirty = true;
+        }
+        // Once player 1 has claimed a pad it reads only that one; until then it borrows every
+        // device nobody else has, which is what keeps the any-pad phantom-device policy.
         var free = new List<int>(connected.Count);
-        foreach (int pad in connected)
-            if (!IsClaimed(pad))
-                free.Add(pad);
+        if (_p1Pad >= 0)
+        {
+            free.Add(_p1Pad);
+        }
+        else
+        {
+            foreach (int pad in connected)
+                if (!IsClaimed(pad))
+                    free.Add(pad);
+        }
         var p1 = _slots[0].Input;
         if (free.Count != p1.Pads.Length)
         {
@@ -311,11 +355,16 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     /// <summary>Start on an unclaimed pad joins a new player (up to the splitscreen rig's
-    /// capacity). Allowed on every screen — a late joiner on the plane screen simply gets a
-    /// cursor and the launch waits for their lock.</summary>
+    /// capacity). <b>Only on the Plane screen:</b> player 1 sets the mode and the chapter first —
+    /// claiming its own pad in the process (<see cref="ClaimP1Pad"/>) — and everybody else joins
+    /// once the aircraft list is up. That ordering is what makes the gesture unambiguous; when
+    /// joining was allowed everywhere, Start on the pad player 1 was steering split it off as
+    /// player 2 and dumped player 1 back on the keyboard.</summary>
     private bool ScanJoins()
     {
         bool dirty = false;
+        if (_screen != Screen.Plane)
+            return false;
         foreach (int pad in Input.GetConnectedJoypads())
         {
             bool pressed = MenuInput.JoinPressed(pad);
@@ -331,6 +380,22 @@ public sealed partial class LaunchMenu : CanvasLayer
             dirty = true;
         }
         return dirty;
+    }
+
+    /// <summary>Pins player 1 to whichever pad it is actually steering the Mode/Chapter screens
+    /// with ("logging in" that controller). Called only from those screens, so by the time the
+    /// aircraft list appears player 1's device is settled and every other pad is unambiguously a
+    /// joiner. Player 1 driving with the keyboard claims nothing — then all pads stay free, which
+    /// is exactly the keyboard-versus-controllers setup.</summary>
+    private bool ClaimP1Pad()
+    {
+        int pad = _slots[0].Input.LastActivePad;
+        if (_p1Pad >= 0 || pad < 0)
+            return false;
+        _p1Pad = pad;
+        GD.Print($"launchscreen: P1 claimed pad {pad} \"{Input.GetJoyName(pad)}\" " +
+                 "(other pads join at aircraft select)");
+        return true;
     }
 
     private void Unjoin(int index)
@@ -350,6 +415,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         if (_screen != Screen.Plane)
         {
             var p1 = _slots[0].Input;
+            dirty |= ClaimP1Pad();
             if (p1.Move != 0)
             {
                 int n = _screen == Screen.Mode ? Modes.Length : Chapters.Length;
@@ -365,6 +431,8 @@ public sealed partial class LaunchMenu : CanvasLayer
                 _screen = _screen == Screen.Mode ? Screen.Chapter : Screen.Plane;
                 if (_screen == Screen.Chapter)
                     _stunt = _modeIndex == 1;
+                else
+                    PrimeJoins(); // joining opens here — a Start held on the way in must not fire
                 dirty = true;
             }
             else if (p1.Back)
@@ -455,6 +523,18 @@ public sealed partial class LaunchMenu : CanvasLayer
 
     private void Rebuild()
     {
+        // Several players choosing aircraft get a real split screen — one panel each, laid out by
+        // SplitScreen.PaneRect, so you pick in the pane you will then fly in. Everything else (and
+        // every single-player screen) keeps the centred layout untouched.
+        bool split = _screen == Screen.Plane && _slots.Count > 1;
+        _center.Visible = !split;
+        _paneRoot.Visible = split;
+        if (split)
+        {
+            RebuildPanes();
+            return;
+        }
+
         foreach (var c in _body.GetChildren())
             c.QueueFree();
 
@@ -493,6 +573,108 @@ public sealed partial class LaunchMenu : CanvasLayer
         _body.AddChild(Label(Footer(), (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
     }
 
+    /// <summary>The splitscreen aircraft select: one panel per player in that player's pane of the
+    /// screen (the same <see cref="SplitScreen.PaneRect"/> geometry the flight panes use), plus a
+    /// shared bottom strip carrying the breadcrumb, the join strip and the controls line. Each
+    /// panel shows the player's tag + device, the full aircraft roster with their own cursor, the
+    /// focused plane's stats, and their lock state — the panel border lights up in the player's
+    /// colour once locked, which is the at-a-glance "who are we waiting for".</summary>
+    private void RebuildPanes()
+    {
+        foreach (var c in _paneRoot.GetChildren())
+            c.QueueFree();
+
+        var size = GetViewport().GetVisibleRect().Size;
+        float s = Mathf.Max(1f, size.Y / 720f);
+        float stripH = size.Y * StripHeightFrac;
+        var paneArea = new Vector2(size.X, Mathf.Max(1f, size.Y - stripH));
+
+        for (int i = 0; i < _slots.Count; i++)
+        {
+            var rect = SplitScreen.PaneRect(i, _slots.Count, paneArea);
+            var panel = new PanelContainer
+            {
+                Position = rect.Position,
+                Size = rect.Size,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+            };
+            var color = SplitScreen.PlayerColor(i);
+            bool locked = _slots[i].Locked;
+            panel.AddThemeStyleboxOverride("panel", new StyleBoxFlat
+            {
+                BgColor = locked ? new Color(color, 0.10f) : new Color(0.06f, 0.07f, 0.10f, 0.92f),
+                BorderColor = locked ? color : new Color(color, 0.45f),
+                BorderWidthLeft = (int)(2 * s),
+                BorderWidthRight = (int)(2 * s),
+                BorderWidthTop = (int)(2 * s),
+                BorderWidthBottom = (int)(2 * s),
+                ContentMarginLeft = PanePad * s,
+                ContentMarginRight = PanePad * s,
+                ContentMarginTop = PanePad * s,
+                ContentMarginBottom = PanePad * s,
+            });
+            panel.AddChild(PaneBody(i, rect.Size - Vector2.One * (2f * PanePad * s), s));
+            _paneRoot.AddChild(panel);
+        }
+
+        // The shared strip: what everyone already chose, who is in, and the controls.
+        var strip = new VBoxContainer
+        {
+            Position = new Vector2(0f, size.Y - stripH),
+            Size = new Vector2(size.X, stripH),
+            Alignment = BoxContainer.AlignmentMode.Center,
+            MouseFilter = Control.MouseFilterEnum.Ignore,
+        };
+        strip.AddChild(Label(Breadcrumb(), (int)(CrumbFont * s), CrumbColor, HorizontalAlignment.Center));
+        strip.AddChild(JoinStrip(s));
+        strip.AddChild(Label("↑↓  Choose       Enter / A  Lock in       Esc / B  Unlock  ·  leave",
+            (int)(FooterFont * s), FooterColor, HorizontalAlignment.Center));
+        if (_error.Length > 0)
+            strip.AddChild(Label(_error, (int)(ErrorFont * s), ErrorColor, HorizontalAlignment.Center));
+        _paneRoot.AddChild(strip);
+    }
+
+    /// <summary>One player's panel contents. The roster is the full list — it fits, because the
+    /// font scale is derived from the pane's own height rather than the window's (a 4P quarter
+    /// pane and a 2P half pane are the same height, so both land on the same size).</summary>
+    private Control PaneBody(int player, Vector2 inner, float s)
+    {
+        var slot = _slots[player];
+        var color = SplitScreen.PlayerColor(player);
+        var font = _body.GetThemeDefaultFont();
+
+        // Fit the roster + header + stats + status into the pane's height.
+        float paneScale = s;
+        if (font != null)
+        {
+            float refH = font.GetHeight(CrumbFont)                       // the player/device header
+                       + Planes.Length * font.GetHeight(RowFont)         // the roster
+                       + font.GetHeight(DetailFont)                      // stats
+                       + font.GetHeight(FooterFont)                      // lock status
+                       + 4 * 4;                                          // separations
+            paneScale = Mathf.Min(s, inner.Y / refH);
+        }
+
+        var box = new VBoxContainer { MouseFilter = Control.MouseFilterEnum.Ignore };
+        box.AddThemeConstantOverride("separation", (int)(2 * paneScale));
+
+        box.AddChild(Label($"{SplitScreen.PlayerTag(player)}   {slot.Input.DeviceLabel}",
+            (int)(CrumbFont * paneScale), color, HorizontalAlignment.Center));
+
+        for (int i = 0; i < Planes.Length; i++)
+        {
+            bool sel = i == slot.PlaneIndex;
+            box.AddChild(Label((sel ? "▶  " : "     ") + Planes[i].Name, (int)(RowFont * paneScale),
+                sel ? color : RowColor, HorizontalAlignment.Center));
+        }
+
+        box.AddChild(Label(PlaneStat(Planes[slot.PlaneIndex].Node), (int)(DetailFont * paneScale),
+            DetailColor, HorizontalAlignment.Center));
+        box.AddChild(Label(slot.Locked ? "✓  LOCKED IN" : "choosing…", (int)(FooterFont * paneScale),
+            slot.Locked ? color : FooterColor, HorizontalAlignment.Center));
+        return box;
+    }
+
     /// <summary>How large to draw this screen: the item-4 rule (720p metrics, scaled up on taller
     /// viewports) capped so the screen's actual content still fits the viewport. The cap matters
     /// because the screens are not all the same height — a four-player plane select adds a cursor
@@ -513,19 +695,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         float refH =
             font.GetHeight(TitleFont) + font.GetHeight(CrumbFont) + font.GetHeight(FooterFont) +
             font.GetHeight(HeadingFont) + rows * font.GetHeight(RowFont) +
-            DetailLineCount() * font.GetHeight(DetailFont) +
-            FooterLineCount() * font.GetHeight(FooterFont) +
+            font.GetHeight(DetailFont) + font.GetHeight(FooterFont) +
             (_error.Length > 0 ? font.GetHeight(ErrorFont) + 4 : 0) +
             8 + 8 + 6 + 10 + 16 +          // the explicit spacers Rebuild adds
             6 * (10 + rows);               // the body VBox's separation between children
         return Mathf.Min(s, viewH / refH);
     }
-
-    private int DetailLineCount() =>
-        _screen == Screen.Plane && _slots.Count > 1 ? _slots.Count : 1;
-
-    private int FooterLineCount() =>
-        _screen == Screen.Plane && _slots.Count > 1 ? 2 : 1;
 
     private int CurrentCount() => _screen switch
     {
@@ -543,9 +718,9 @@ public sealed partial class LaunchMenu : CanvasLayer
         _ => _slots[0].PlaneIndex,
     };
 
-    /// <summary>One list row. With a single player this is exactly the item-4 layout (a centred
-    /// label with a ▶ cursor); with several it becomes [tag gutter][name][matching spacer] so the
-    /// list never shifts sideways as cursors move, with each player's tag in their own colour.</summary>
+    /// <summary>One centred list row with a ▶ cursor — the item-4 layout, used by every screen
+    /// the centred body draws. A multi-player aircraft screen never comes through here: it splits
+    /// into per-player panes instead (<see cref="RebuildPanes"/>).</summary>
     private Control Row(int index, float s)
     {
         string text = _screen switch
@@ -554,66 +729,14 @@ public sealed partial class LaunchMenu : CanvasLayer
             Screen.Chapter => Chapters[index].Name,
             _ => Planes[index].Name,
         };
-        if (_screen != Screen.Plane || _slots.Count == 1)
-        {
-            bool sel = index == CurrentIndex;
-            return Label((sel ? "▶  " : "     ") + text, (int)(RowFont * s),
-                sel ? RowFocusColor : RowColor, HorizontalAlignment.Center);
-        }
-
-        var row = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.Center };
-        row.AddThemeConstantOverride("separation", (int)(8 * s));
-
-        var tags = new HBoxContainer { Alignment = BoxContainer.AlignmentMode.End };
-        tags.AddThemeConstantOverride("separation", (int)(6 * s));
-        tags.CustomMinimumSize = new Vector2(TagGutter * s, 0f);
-        int here = 0;
-        int only = -1;
-        for (int i = 0; i < _slots.Count; i++)
-        {
-            if (_slots[i].PlaneIndex != index)
-                continue;
-            here++;
-            only = i;
-            var tag = Label(SplitScreen.PlayerTag(i) + (_slots[i].Locked ? " ✓" : ""),
-                (int)(RowFont * s * 0.72f), SplitScreen.PlayerColor(i), HorizontalAlignment.Right);
-            tag.SizeFlagsHorizontal = Control.SizeFlags.ShrinkEnd;
-            tags.AddChild(tag);
-        }
-        row.AddChild(tags);
-
-        var name = Label(text, (int)(RowFont * s),
-            here == 0 ? RowColor : here == 1 ? SplitScreen.PlayerColor(only) : RowFocusColor,
-            HorizontalAlignment.Center);
-        name.SizeFlagsHorizontal = Control.SizeFlags.Fill; // must not expand — it would eat the row
-        name.CustomMinimumSize = new Vector2(NameWidth * s, 0f);
-        row.AddChild(name);
-
-        // Mirror of the tag gutter, so the name column stays centred on screen.
-        row.AddChild(new Control { CustomMinimumSize = new Vector2(TagGutter * s, 0f) });
-        return row;
+        bool sel = index == CurrentIndex;
+        return Label((sel ? "▶  " : "     ") + text, (int)(RowFont * s),
+            sel ? RowFocusColor : RowColor, HorizontalAlignment.Center);
     }
 
-    /// <summary>The detail area: one stats line for the focused entry, or — on a multi-player
-    /// plane screen — one line per player showing their current pick and lock state.</summary>
-    private Control DetailBlock(float s)
-    {
-        if (_screen != Screen.Plane || _slots.Count == 1)
-            return Label(Detail(CurrentIndex), (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center);
-
-        var box = new VBoxContainer();
-        box.AddThemeConstantOverride("separation", (int)(2 * s));
-        for (int i = 0; i < _slots.Count; i++)
-        {
-            var slot = _slots[i];
-            string line = $"{SplitScreen.PlayerTag(i)}   {Planes[slot.PlaneIndex].Name}   ·   " +
-                          $"{PlaneSpeed(Planes[slot.PlaneIndex].Node)}   " +
-                          (slot.Locked ? "· LOCKED" : "· choosing…");
-            box.AddChild(Label(line, (int)(DetailFont * s), SplitScreen.PlayerColor(i),
-                HorizontalAlignment.Center));
-        }
-        return box;
-    }
+    /// <summary>The detail area: one stats line for the focused entry.</summary>
+    private Control DetailBlock(float s) =>
+        Label(Detail(CurrentIndex), (int)(DetailFont * s), DetailColor, HorizontalAlignment.Center);
 
     /// <summary>The join strip shown under the breadcrumb on every screen: who is in, on what
     /// device, plus the hint that free pads can join with Start.</summary>
@@ -646,26 +769,23 @@ public sealed partial class LaunchMenu : CanvasLayer
         return string.Join(" | ", parts);
     }
 
-    /// <summary>The hint beside the join strip. Note it says "on a pad", not "on a free pad":
-    /// player 1's leftover pads are joinable too, and that is deliberate — pressing Start on the
-    /// only controller splits it off as player 2 and leaves player 1 on the keyboard, which is the
-    /// one way to reach the keyboard-vs-one-controller two-player setup. B un-joins.</summary>
+    /// <summary>The hint beside the join strip. Joining only happens on the aircraft screen, so
+    /// the earlier screens say where it will be rather than inviting a press that does nothing.</summary>
     private string JoinHint()
     {
         if (_slots.Count >= SplitScreen.MaxPlayers)
             return $"({SplitScreen.MaxPlayers}-player maximum)";
+        if (_screen != Screen.Plane)
+            return "(other players join at aircraft select)";
         return Input.GetConnectedJoypads().Count > 0
-            ? "(press START on a pad to join)"
+            ? "(press START on a free pad to join)"
             : "(connect a pad and press START to join)";
     }
 
     private string Footer()
     {
-        if (_screen == Screen.Plane && _slots.Count > 1)
-            return "↑↓  Choose       Enter / A  Lock in       Esc / B  Unlock  ·  leave" +
-                   "\nFlight starts when every player is locked in";
         string back = _screen == Screen.Mode ? "Esc / B  Quit" : "Esc / B  Back";
-        string who = _slots.Count > 1 && _screen != Screen.Plane ? "       (P1 chooses)" : "";
+        string who = _slots.Count > 1 ? "       (P1 chooses)" : "";
         return $"↑↓  Navigate       Enter / A  Select       {back}{who}";
     }
 

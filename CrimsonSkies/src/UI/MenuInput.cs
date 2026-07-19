@@ -46,6 +46,13 @@ public sealed class MenuInput
     public bool Back;       // pressed this frame (edge)
     public bool Start;      // pressed this frame (edge)
 
+    /// <summary>The last of this player's pads seen actually doing something (a menu button or the
+    /// stick past the deadzone) — −1 until one does. The launchscreen uses it to <i>claim</i> the
+    /// pad player 1 drives the Mode/Chapter screens with, so that pad is player 1's for good and
+    /// only the remaining ones can join. Start is excluded on purpose: it is the join gesture, not
+    /// evidence that this player owns the pad.</summary>
+    public int LastActivePad = -1;
+
     private bool _acceptPrev, _backPrev, _startPrev;
     private int _dirPrev;
     private float _repeatTimer;
@@ -93,6 +100,27 @@ public sealed class MenuInput
         bool start = RawStart();
         Start = start && !_startPrev;
         _startPrev = start;
+
+        int active = ScanActivePad();
+        if (active >= 0)
+            LastActivePad = active;
+    }
+
+    /// <summary>The first of this player's pads currently producing menu input (excluding Start).
+    /// Phantom devices never register — they read idle — so a pad found here is demonstrably a
+    /// real one somebody is holding.</summary>
+    private int ScanActivePad()
+    {
+        foreach (int pad in Pads)
+        {
+            if (Input.IsJoyButtonPressed(pad, JoyButton.A) ||
+                Input.IsJoyButtonPressed(pad, JoyButton.B) ||
+                Input.IsJoyButtonPressed(pad, JoyButton.DpadUp) ||
+                Input.IsJoyButtonPressed(pad, JoyButton.DpadDown) ||
+                Mathf.Abs(Input.GetJoyAxis(pad, JoyAxis.LeftY)) > StickDeadzone)
+                return pad;
+        }
+        return -1;
     }
 
     /// <summary>Seeds the edge flags from the current state (no press is reported for anything

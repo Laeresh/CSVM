@@ -247,20 +247,31 @@ public sealed partial class GaugeCluster : Control
         face.Sort((a, b) => a.Priority.CompareTo(b.Priority));
     }
 
-    /// <summary>The damage dial: its own mesh is the silhouette face; each *damage
-    /// child is one zone — border bar ("hilite" texture) + hatch fill. Color
-    /// thresholds come from the matching destroyable part's injure anims.</summary>
+    /// <summary>The damage dial: each *damage child is one zone — border bar ("hilite" texture) +
+    /// hatch fill — and everything else is the silhouette face. Color thresholds come from the
+    /// matching destroyable part's injure anims.
+    ///
+    /// <para><b>Where the face lives differs per plane</b> (user-reported 2026-07-19, via a 4P
+    /// screenshot): the Bloodhawk carries the dial's dark backing disc on the `damageindicator`
+    /// node itself, but every other plane leaves that node mesh-less (`mesh_index` −1) and hangs
+    /// the disc off an extra generically-named child (`g951`, `g927`, `g1156`, `g843`, …) — the
+    /// same untextured 12-gon either way. Reading only the dial node's own mesh therefore drew a
+    /// backing disc for the Bloodhawk and bare wireframe zones for all ten other aircraft. So any
+    /// non-zone child counts toward the face, which is exactly the rule
+    /// <see cref="ExtractInstrument"/> already uses for the other two dials.</para></summary>
     private void ExtractDamageDial(GameZ gz, TextureArchive textures, GameZNode dial,
         IReadOnlyList<DestroyablePart> parts)
     {
         _dmgFace.AddRange(MeshPolys(gz, textures, dial));
-        _dmgFace.Sort((a, b) => a.Priority.CompareTo(b.Priority));
 
         foreach (int ci in dial.Children)
         {
             var child = gz.Nodes[ci];
             if (!child.Name.EndsWith("damage", StringComparison.OrdinalIgnoreCase))
+            {
+                _dmgFace.AddRange(MeshPolys(gz, textures, child));
                 continue;
+            }
             var zone = new DamageZone { Part = child.Name[..^"damage".Length] };
             foreach (var p in MeshPolys(gz, textures, child))
                 (p.TexName.Contains("hilite", StringComparison.OrdinalIgnoreCase)
@@ -282,6 +293,7 @@ public sealed partial class GaugeCluster : Control
                 }
             _zones.Add(zone);
         }
+        _dmgFace.Sort((a, b) => a.Priority.CompareTo(b.Priority));
 
         // the four swap variants the cockpit.gw texture cycle names
         string[] hilite = { "greenhilite", "yellowhilite", "orangehilite", "redhilite" };
