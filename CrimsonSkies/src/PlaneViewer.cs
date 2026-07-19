@@ -330,7 +330,7 @@ public partial class PlaneViewer : Node3D
                         for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
                             if (MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
-                        var visuals = new DamageVisuals(builder.DamagePanels, stats, smoke, fire, panelTrails);
+                        var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
                         AddChild(new DamageLab(stats, visuals, _plane, _damagePreset));
                         GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
                                  $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
@@ -422,7 +422,7 @@ public partial class PlaneViewer : Node3D
                     for (int i = 0; i < 4; i++)
                         if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
                             panelTrails.Add(pt);
-                    controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, stats, smoke, fire, panelTrails);
+                    controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
                     GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
                              $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
                              $"{panelTrails.Count} panel fire trails");

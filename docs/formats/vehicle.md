@@ -54,12 +54,18 @@ A list of part entries:
     pdpanel4 @0.3, pdpanel3 @0.15; right wing: pdpanel6 @0.4, pdpanel1 @0.3,
     pdpanel2 @0.15; nose pdpanel7 / tail pdpanel8 @0.15.
 
-The `pdpanelN` anim (`ANIMATION_DEFINITION`, ON_CALL) sets `OBJECT_ACTIVE_STATE pdpN
-ACTIVE` **without** deactivating the healthy `pdpN_h` twin (the original layers the torn
-panel over the skin by draw order) and calls effect anims at the panel: `gimmeflakes`
-debris, `yellow_sparks_follow`, `small_fireball_follow`, `short_firetrail` /
-`loop_short_firetrail` — the discrete-puff fire trail streaming from every damaged panel
-(clearly visible in `OriginalScreenshots/C1 IA1 Crash.mp4`).
+The `pdpanelN` anim (`ANIMATION_DEFINITION`, ON_CALL, one shared def per panel in
+player-1.json, re-rooted per plane via the injure entry's rootName) sets
+`OBJECT_ACTIVE_STATE pdpN ACTIVE` **without** deactivating the healthy `pdpN_h` twin,
+and calls effect anims at the panel: `gimmeflakes` debris, `yellow_sparks_follow`,
+`small_fireball_follow`, `short_firetrail` / `loop_short_firetrail` — the discrete-puff
+fire trail streaming from every damaged panel (clearly visible in
+`OriginalScreenshots/C1 IA1 Crash.mp4`). In fact **no zrdr data ever deactivates an
+`_h` node** — yet `player_destruct_reset.json` (`plane_reset`) re-ACTIVEs
+`pdp2_h`/`pdp3_h` alongside setting every `pdpN`/`pcdpN` INACTIVE, so the original
+engine must hide the healthy skins at damage time by an engine-side rule. Beware: the
+`pdpN`↔`pdpN_h` numbering is crossed on three plane models — pair torn↔healthy by mesh
+position, not by name (measurements in `gamez.md`, "Player-plane damage states").
 
 ## Def-level injure_anims
 
