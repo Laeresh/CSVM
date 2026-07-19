@@ -17,7 +17,7 @@ land with their `docs/formats/` page in the same change (targets/messages → a 
 ## Checklist
 
 1. ☑ Stunt mission core — dzones/targets/messages loaders, dz resolution, sphere detection, `--stunt` mode *(done 2026-07-19; scripted verification + user-confirmed full 5/5 `AllComplete` run)*
-2. ☐ Marker HUD — original-format text + distance + clock position, edge arrow, target cycling, run status line
+2. ☑ Marker HUD — original-format text + distance/clock position, edge arrow, target cycling, run-status + intro line *(done 2026-07-19; `src/Flight/MarkerHud.cs`; scripted on-screen/left/behind/fly-through shots verified projection, edge arrow side, clock bearing, auto-advance + cleared flash; user A/B pending)*
 3. ☐ Scoring — timer + splits, end scoreboard, best-time persistence, restart flow
 4. ☐ Launchscreen — Mode → Chapter → Plane, keyboard/controller navigation, no-args default
 5. ☐ Splitscreen foundation — shared-world multi-viewport rendering + per-player input (CLI-driven, free flight)

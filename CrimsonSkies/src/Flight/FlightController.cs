@@ -87,6 +87,12 @@ public partial class FlightController : Node3D
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
+    /// <summary>The stunt objective marker HUD (M2.5 item 2): the active zone's projected marker /
+    /// screen-edge arrow + clock bearing, the run-status line, intro/complete banners. Added to
+    /// the HUD canvas, fed the plane pose each frame; the camera + mission are bound at Build.
+    /// Null in free flight (and when --stunt found no danger zones).</summary>
+    public MarkerHud? Marker;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -104,6 +110,7 @@ public partial class FlightController : Node3D
     private float _holdElapsed;                  // sim time into the HoldSegments sequence
     private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
+    private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private ImmediateMesh? _probe;               // debug collision-probe line
     private float _damageCooldown;               // s left before the next HP subtraction
@@ -170,6 +177,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(Compass);
         if (Gauges != null)
             canvas.AddChild(Gauges);
+        if (Marker != null)
+            canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         AddChild(canvas);
         if (DebugCollision)
         {
@@ -268,6 +277,16 @@ public partial class FlightController : Node3D
         return pads.Count > 0 && Input.IsJoyButtonPressed(pads[0], JoyButton.Start);
     }
 
+    /// <summary>Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
+    /// The plan suggested gamepad Y, but Y is the respawn button, so X (a free face button) instead.</summary>
+    private static bool CycleTargetPressed()
+    {
+        if (Input.IsKeyPressed(Key.Tab))
+            return true;
+        var pads = Input.GetConnectedJoypads();
+        return pads.Count > 0 && Input.IsJoyButtonPressed(pads[0], JoyButton.X);
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = (float)delta;
@@ -285,6 +304,11 @@ public partial class FlightController : Node3D
         _pausePrev = pausePressed;
         if (_paused)
             return;
+
+        // Advance the stunt clock every physics frame — including through the crash freeze so the
+        // clock never stops (item 3 rule); it stops only at AllComplete (inside Tick). Frozen
+        // while paused (returned above — a debug screenshot freeze must not run the timer).
+        Stunt?.Tick(dt);
 
         if (_crashed)
         {
@@ -674,11 +698,24 @@ public partial class FlightController : Node3D
 
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
+        // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
+        var nose = -_model.Attitude.Z;
+        float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
         if (Compass != null)
+            Compass.HeadingDeg = headingDeg;
+        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) and
+        // feed it this frame's pose so it can project the zone and compute the clock bearing.
+        if (Stunt != null)
         {
-            // heading of the nose: 0 = north (−Z), 90 = east (+X)
-            var nose = -_model.Attitude.Z;
-            Compass.HeadingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+            bool cycle = CycleTargetPressed();
+            if (cycle && !_cyclePrev)
+                Stunt.CycleTarget();
+            _cyclePrev = cycle;
+        }
+        if (Marker != null)
+        {
+            Marker.PlanePos = _model.Position;
+            Marker.HeadingDeg = headingDeg;
         }
         if (Gauges != null)
         {
@@ -696,8 +733,9 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
-        // Stunt run status (item 1 placeholder — the projected marker HUD is item 2).
-        if (Stunt != null)
+        // Stunt run status now lives in the marker HUD (item 2); keep the compact text line only
+        // as a fallback if the marker somehow wasn't built.
+        if (Stunt != null && Marker == null)
             _hud.Text += $"\n{Stunt.StatusLine()}";
         if (_paused)
             _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";

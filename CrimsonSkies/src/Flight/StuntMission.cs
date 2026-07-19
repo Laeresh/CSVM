@@ -49,6 +49,10 @@ public sealed class StuntMission
     /// gate geometry; a single point + radius approximates the bridge/tunnel/hangar opening).</summary>
     public const float DzRadius = 60f;
 
+    /// <summary>Messages key for the run-start intro line ("Fly through all the Danger Zones to
+    /// win!") — the marker HUD's one-shot banner (item 2).</summary>
+    private const string IntroMsgKey = "MSG_BRF_IASF_OBJ2";
+
     private readonly List<StuntZone> _zones;
     private int _active = -1;
 
@@ -56,6 +60,16 @@ public sealed class StuntMission
     public int CompletedCount { get; private set; }
     public int TotalCount => _zones.Count;
     public IReadOnlyList<StuntZone> Zones => _zones;
+
+    /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame —
+    /// including through the crash freeze ("the clock never stops"), frozen only once the run is
+    /// complete. Read by the marker HUD (item 2) and scoring (item 3). Not reset on respawn (a
+    /// mid-run crash keeps the same clock, like the completed zones).</summary>
+    public float Elapsed { get; private set; }
+
+    /// <summary>The one-shot run-start line the marker HUD shows ("Fly through all the Danger
+    /// Zones to win!"), resolved at load from the message table. Empty if the table is absent.</summary>
+    public string IntroLine { get; private set; } = "";
 
     /// <summary>The zone the HUD points at: the first still-incomplete zone in list order
     /// (item 2's cycling overrides the displayed one). Null once the run is complete.</summary>
@@ -128,7 +142,7 @@ public sealed class StuntMission
         GD.Print($"stunt: {zones.Count} danger zone(s) loaded");
         foreach (var z in zones)
             GD.Print($"  {z.DzName}: {z.MarkerText()} @ ({z.Position.X:0},{z.Position.Y:0},{z.Position.Z:0})");
-        return new StuntMission(zones);
+        return new StuntMission(zones) { IntroLine = messages.Get(IntroMsgKey) };
     }
 
     /// <summary>Physics-frame test: complete any incomplete zone the plane is now within
@@ -143,13 +157,25 @@ public sealed class StuntMission
                 Complete(z);
     }
 
+    /// <summary>Advance the run clock one physics frame. Called every frame — including through
+    /// the crash freeze so the clock never stops (item 3 rule) — and stops accumulating once the
+    /// run is complete.</summary>
+    public void Tick(float dt)
+    {
+        if (!AllComplete)
+            Elapsed += dt;
+    }
+
     private void Complete(StuntZone z)
     {
         z.Completed = true;
         CompletedCount++;
         GD.Print($"stunt: completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
-        AdvanceActive();
+        // Keep pointing at the manually-cycled target (item 2) unless it was the zone just
+        // completed; otherwise auto-advance to the next incomplete in list order.
+        if (_active < 0 || _zones[_active].Completed)
+            AdvanceActive();
         if (CompletedCount >= _zones.Count && !AllComplete)
         {
             AllComplete = true;
@@ -163,7 +189,7 @@ public sealed class StuntMission
     }
 
     // The displayed target is the first still-incomplete zone in list order (auto-advance on
-    // completion; item 2 layers manual cycling on top).
+    // completion; CycleTarget layers manual cycling on top).
     private void AdvanceActive()
     {
         for (int i = 0; i < _zones.Count; i++)
@@ -173,6 +199,27 @@ public sealed class StuntMission
                 return;
             }
         _active = -1;
+    }
+
+    /// <summary>Manual target cycling (item 2): point the HUD at the next still-incomplete zone in
+    /// list order (wrapping). No-op once the run is complete. Whichever zone ends up displayed is
+    /// still auto-advanced when it (or the displayed one) completes.</summary>
+    public void CycleTarget()
+    {
+        if (AllComplete || _active < 0)
+            return;
+        int n = _zones.Count;
+        for (int k = 1; k <= n; k++)
+        {
+            int i = (int)Mathf.PosMod(_active + k, n);
+            if (!_zones[i].Completed)
+            {
+                if (i != _active)
+                    GD.Print($"stunt: target → {_zones[i].DzName} ({_zones[i].MarkerText()})");
+                _active = i;
+                return;
+            }
+        }
     }
 
     /// <summary>Compact HUD status: "2/5 zones — Danger Zone [Fly Through] - Train Tunnel Mid",

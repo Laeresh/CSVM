@@ -518,7 +518,13 @@ public partial class PlaneViewer : Node3D
                     if (controller.Stunt == null)
                         GD.PushWarning($"--stunt: no danger zones for {_chapter}/{_mission} — flying free");
                     else
+                    {
+                        // The objective marker HUD (item 2): projects the active danger zone through
+                        // the flight camera, draws the edge arrow + clock bearing + run status.
+                        controller.Marker = MarkerHud.Build(controller.Stunt, _camera);
+                        GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
                         what += $" [stunt: {controller.Stunt.TotalCount} zones]";
+                    }
                 }
 
                 var (spawnPos, spawnLookAt) = ChooseSpawn(missionZrdrPath);
