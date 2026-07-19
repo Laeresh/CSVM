@@ -46,9 +46,12 @@ public sealed partial class GaugeCluster : Control
     private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT / STALL (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
     private const float DamageBlinkPeriod = 0.32f; // s per on/off cycle of the hit part (TUNE)
-    // Color thresholds fall back to the data's common values when a part carries no
-    // *_damage_yellow / *_damage_red injure anims (all shipped defs: 0.46 / 0.20).
-    private const float DefaultYellow = 0.46f, DefaultRed = 0.20f;
+    // Four color states (user-confirmed in the original: green/yellow/orange/red, the
+    // full cockpit.gw cycle) over the data's three *_damage_* injure thresholds — each
+    // threshold steps to the NEXT color: green above the "green" anim's 0.72, yellow
+    // ≤ 0.72, orange ≤ 0.46, red ≤ 0.20 (red on a still-flying plane matches the
+    // reference shot). Defaults when a part carries no such anims:
+    private const float DefaultYellowAt = 0.72f, DefaultOrangeAt = 0.46f, DefaultRedAt = 0.20f;
 
     // Screen metrics measured in OriginalScreenshots/HUD.png (2556×1440) via dark-span
     // scans of the bezel rings, scaled by viewport height like CompassTape. All three
@@ -76,7 +79,7 @@ public sealed partial class GaugeCluster : Control
         public string Part = "";               // "nose" / "tail" / "leftwing" / "rightwing"
         public List<GaugePoly> Border = new(); // the bezel-edge bar ("hilite")
         public List<GaugePoly> Fill = new();   // the part-shaped hatch overlay
-        public float YellowBelow = DefaultYellow, RedBelow = DefaultRed;
+        public float YellowAt = DefaultYellowAt, OrangeAt = DefaultOrangeAt, RedAt = DefaultRedAt;
         public float BlinkLeft;                // s of post-hit blinking remaining
     }
 
@@ -88,9 +91,9 @@ public sealed partial class GaugeCluster : Control
     private GaugePoly? _spdNeedle;
     private readonly List<GaugePoly> _dmgFace = new();
     private readonly List<DamageZone> _zones = new();
-    // color-variant textures for the zone swap (index 0 green / 1 yellow / 2 red)
-    private readonly Texture2D?[] _hilite = new Texture2D?[3];
-    private readonly Texture2D?[] _hatch = new Texture2D?[3];
+    // color-variant textures for the zone swap (0 green / 1 yellow / 2 orange / 3 red)
+    private readonly Texture2D?[] _hilite = new Texture2D?[4];
+    private readonly Texture2D?[] _hatch = new Texture2D?[4];
 
     private double _time;
 
@@ -265,22 +268,25 @@ public sealed partial class GaugeCluster : Control
             foreach (var part in parts)
                 if (part.Name.Equals(zone.Part, StringComparison.OrdinalIgnoreCase))
                 {
+                    // each anim threshold steps to the NEXT color (see the constants)
                     foreach (var (frac, anim) in part.InjureAnims)
                     {
-                        if (anim.EndsWith("_damage_yellow", StringComparison.OrdinalIgnoreCase))
-                            zone.YellowBelow = frac;
+                        if (anim.EndsWith("_damage_green", StringComparison.OrdinalIgnoreCase))
+                            zone.YellowAt = frac;
+                        else if (anim.EndsWith("_damage_yellow", StringComparison.OrdinalIgnoreCase))
+                            zone.OrangeAt = frac;
                         else if (anim.EndsWith("_damage_red", StringComparison.OrdinalIgnoreCase))
-                            zone.RedBelow = frac;
+                            zone.RedAt = frac;
                     }
                     break;
                 }
             _zones.Add(zone);
         }
 
-        // the green/yellow/red swap variants the cockpit.gw texture cycle names
-        string[] hilite = { "greenhilite", "yellowhilite", "redhilite" };
-        string[] hatch = { "grn_hatchptrn", "yel_hatchptrn", "red_hatchptrn" };
-        for (int i = 0; i < 3; i++)
+        // the four swap variants the cockpit.gw texture cycle names
+        string[] hilite = { "greenhilite", "yellowhilite", "orangehilite", "redhilite" };
+        string[] hatch = { "grn_hatchptrn", "yel_hatchptrn", "orng_hatchptrn", "red_hatchptrn" };
+        for (int i = 0; i < 4; i++)
         {
             _hilite[i] = textures.Find(hilite[i]);
             _hatch[i] = textures.Find(hatch[i]);
@@ -394,7 +400,7 @@ public sealed partial class GaugeCluster : Control
             if (z.BlinkLeft > 0f && !DamagePhaseOn)
                 continue; // blink-off phase hides the whole zone (fill + outline)
             float frac = PartFraction?.Invoke(z.Part) ?? 1f;
-            int color = frac <= z.RedBelow ? 2 : frac <= z.YellowBelow ? 1 : 0;
+            int color = frac > z.YellowAt ? 0 : frac > z.OrangeAt ? 1 : frac > z.RedAt ? 2 : 3;
             foreach (var p in z.Border)
                 DrawGaugePoly(p, dmgC, dmgR, 0f, _hilite[color], ZoneFlat[color]);
             foreach (var p in z.Fill)
@@ -405,7 +411,8 @@ public sealed partial class GaugeCluster : Control
     // flat zone tints when a color-variant png is missing from the archive
     private static readonly Color[] ZoneFlat =
     {
-        new(0.25f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f), new(0.9f, 0.1f, 0.1f),
+        new(0.25f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f),
+        new(0.95f, 0.55f, 0.05f), new(0.9f, 0.1f, 0.1f),
     };
 
     /// <summary>Draws one extracted poly at a dial's screen center/radius, rotated

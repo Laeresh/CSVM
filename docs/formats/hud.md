@@ -89,14 +89,16 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   and a **part-shaped hatch fill** tracing that part on this plane's silhouette
   (`grn_hatchptrn.tif`, 8×8, tiled UVs up to ~5×). `cockpit.gw` gives each zone a
   4-map texture cycle — green/yellow/**orange**/red `*hilite` + `*_hatchptrn` — the
-  color change IS a texture swap. (The remake uses 3 of the 4: the reference shots
-  show green/yellow/red.) **So part positions are per-plane mesh data, nothing is
-  computed from the silhouette texture.**
+  color change IS a texture swap. **So part positions are per-plane mesh data,
+  nothing is computed from the silhouette texture.**
 - **Thresholds**: every player part's vehicle.json `injure_anims` carry
   `*_damage_green` at 0.72, `*_damage_yellow` at 0.46, `*_damage_red` at 0.20 (the
-  anims themselves live in the undecoded cam_anim.zbd; the remake maps fraction >
-  0.46 green, > 0.20 yellow, else red). Blink: the original blinks a zone (fill +
-  border) for ~5 s after it takes a hit, even inside green (user-observed).
+  anims themselves live in the undecoded cam_anim.zbd). The display uses **all four
+  cycle colors** (orange user-confirmed in the original, 2026-07-19) — each anim
+  threshold steps to the *next* color: green > 0.72, yellow ≤ 0.72, orange ≤ 0.46,
+  red ≤ 0.20 (red on a still-flying plane matches the damage reference shot; the
+  anim names lag their effect by one state). Blink: the original blinks a zone
+  (fill + border) for ~5 s after it takes a hit, even inside green (user-observed).
 - **Scales** (measured off the face textures): altimeter 0–9 clockwise from top, 36°
   per digit — long needle 360°/1,000 ft, short 360°/10,000 ft; speedometer labels
   0/100/200/300 at ≈0°/69°/143°/216° clockwise → **≈0.72°/mph** linear.
