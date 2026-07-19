@@ -417,7 +417,7 @@ public partial class PlaneViewer : Node3D
                     var smoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
                     var fire = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
                     // per-panel fire trails (the original streams one from every damaged
-                    // panel — clearly visible in OriginalScreenshots/C1 IA1 Crash.mp4)
+                    // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
                     var panelTrails = new List<Effects.Puffer>();
                     for (int i = 0; i < 4; i++)
                         if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)

@@ -60,7 +60,7 @@ player-1.json, re-rooted per plane via the injure entry's rootName) sets
 and calls effect anims at the panel: `gimmeflakes` debris, `yellow_sparks_follow`,
 `small_fireball_follow`, `short_firetrail` / `loop_short_firetrail` — the discrete-puff
 fire trail streaming from every damaged panel (clearly visible in
-`OriginalScreenshots/C1 IA1 Crash.mp4`). In fact **no zrdr data ever deactivates an
+`OriginalScreenshots/Videos/C1 IA1 Crash.mp4`). In fact **no zrdr data ever deactivates an
 `_h` node** — yet `player_destruct_reset.json` (`plane_reset`) re-ACTIVEs
 `pdp2_h`/`pdp3_h` alongside setting every `pdpN`/`pcdpN` INACTIVE, so the original
 engine must hide the healthy skins at damage time by an engine-side rule. Beware: the

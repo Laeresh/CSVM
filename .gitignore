@@ -19,5 +19,5 @@ Desktop.ini
 *.swp
 CopyToOneDrive.ps1
 
-#Video Files
-OriginalScreenshots/C1 IA1 Tile Loading.mp4
+# Reference videos of the original game (large binaries — referenced by docs, not committed)
+/OriginalScreenshots/Videos/

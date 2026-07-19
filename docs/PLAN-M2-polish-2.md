@@ -346,7 +346,7 @@ works; landlocked C4 edges continue as mountains.
 
 **DONE (2026-07-18, two passes):** *Pass 1* landed a static 4-ring mirrored skirt around the
 map. The user then flew the original for 10+ minutes past the edge and filmed it
-(`OriginalScreenshots/C1 IA1 Tile Loading.mp4`): the original **reloads a tile grid around
+(`OriginalScreenshots/Videos/C1 IA1 Tile Loading.mp4`): the original **reloads a tile grid around
 the plane indefinitely** — the fog wall creeps in for ~10 s, then the loaded grid re-centers
 and the visible radius jumps back out — with **clutter trees on the continued terrain**; and
 a user in-game test of pass 1 showed our whole-map mirror brought **the airport back** every
@@ -626,7 +626,7 @@ respawn; `Reset` re-pockets everything. *Verified:* scripted crash screenshots s
 burning wreck with scattered pieces (fire soft against terrain and the barn wall after the
 soft-particle fix), auto-respawn cleans up, cycles deterministic, zero errors.
 
-*Reference video analysis (`OriginalScreenshots/C1 IA1 Crash.mp4`, user-provided during
+*Reference video analysis (`OriginalScreenshots/Videos/C1 IA1 Crash.mp4`, user-provided during
 implementation):* the original's graze → survive → burn → final-crash arc matches the model
 (big dust burst on the graze, plane flies on, per-panel fire trails, then a massive
 persistent explosion on the final impact). Recorded follow-ups (backlog): a brown dust-burst

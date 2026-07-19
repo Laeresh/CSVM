@@ -70,7 +70,7 @@ public sealed class DamageVisuals
     /// <param name="panelTrails">a pool of firepuffer trail emitters, one assigned per
     /// flipped panel — the original streams a discrete-puff fire trail from every
     /// damaged panel (its pdpanelN anims call short_firetrail WITH_NODE pdpN; clearly
-    /// visible in OriginalScreenshots/C1 IA1 Crash.mp4).</param>
+    /// visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4).</param>
     public DamageVisuals(IEnumerable<Node3D> panels, Node3D planeRoot, PlaneStats stats,
         Puffer? smokeTrail, Puffer? fireTrail, List<Puffer>? panelTrails = null)
     {
