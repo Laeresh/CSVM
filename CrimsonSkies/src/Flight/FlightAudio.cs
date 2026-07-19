@@ -26,6 +26,12 @@ public partial class FlightAudio : Node
     private const float SilenceThreshold = 0.002f;
     private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
 
+    // Item 11: the prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
+    // user's reference video (Bloodhawk dive to ~1.27x fd_speed) bounds the original's whine at
+    // 0.06-0.14 of the engine's amplitude — the reader volume is evidently not a linear mix gain
+    // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
+    private const float WhineMixGain = 0.12f;
+
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats)
     {
         _stats = stats;
@@ -114,7 +120,8 @@ public partial class FlightAudio : Node
             _engine.VolumeDb = Mathf.LinearToDb(Mathf.Max(
                 SilenceThreshold, _stats.EngineVolume.Eval(throttle) * _engineVol * _engineRamp));
         }
-        UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol, _stats.WhinePitch.Eval(speedFrac));
+        UpdateLoop(_whine, _stats.WhineVolume.Eval(speedFrac) * _whineVol * WhineMixGain,
+            _stats.WhinePitch.Eval(speedFrac));
         UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol, 1f);
     }
 

@@ -24,7 +24,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 8. ☑ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker **(DONE 2026-07-18)**
 9. ⏸ Animated vehicles (pt 2) — train/car path motion + steam puffers **(DEFERRED 2026-07-18 — needs a mech3ax cam_anim.zbd extension; survey findings recorded)**
 10. ☑ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup **(DONE 2026-07-19 — visual A/Bs pending user playtest)**
-11. ☐ Dive sound — tune down (ours reads louder than the original)
+11. ☑ Dive sound — tune down (ours reads louder than the original) **(DONE 2026-07-19 — pending user A/B dive)**
 12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original
 13. ☐ `docs/formats/` — public reader-format reference, seeded with this run's decodes
 
@@ -648,6 +648,22 @@ name it) and the rattle (`snd_planeshake`, 0→1 over 1.0–1.2×) stacks on top
 rattle balance in the same pass; if the character still reads wrong at matched loudness,
 revisit the WAV choice against the archive. **Verify:** user A/B — same full-throttle dive in
 both games.
+
+**DONE (2026-07-19):** measured instead of eyeballed — the user recorded the original
+(`OriginalScreenshots/Videos/Bloodhawk Dive Sound.mp4`, climb → near-vertical dive → pull-out)
+and spectral analysis against the extracted WAVs pinned the target. HUD gauge frames give the
+flight state (level ≈ 300 mph = exactly fd_speed 135 m/s; dive needle deep in the red arc at
+~375–385 mph → speedFrac ≈ 1.25–1.28 — the curves' saturation zone), yet the audio contains
+no trace of `engine_whine.wav`: its isolated second-loudest harmonic is absent (amp ≤ ~0.06
+of the engine's) and its broadband hiss never lifts the flat 2.5–6 kHz band (amp ≤ ~0.14) —
+vs our curve-cap 0.5 (−6 dB): 12–18 dB hot. The reader's volume number is not a linear mix
+amplitude in the original engine. Landed as `FlightAudio.WhineMixGain` 0.12 TUNE (~−24 dB vs
+engine at saturation); rattle untouched (plane_shake.wav is inherently quiet — the recording
+can't even measure its presence, so its data curve stands). The WAV-choice re-check came out
+clean: an all-archive comb sweep found no better prop_sound candidate — the extra dive-window
+combs are the original's ~5%-detuned dual engine stack plus Doppler-shifted IA-traffic engines
+(details, dead ends, and the item-12 dive-envelope datum ≈1.27×fd_speed in HISTORY
+2026-07-19). Build + scripted dive smoke clean; **user A/B dive pending.**
 
 ## 12. Turn rates — per-axis calibration
 
