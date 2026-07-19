@@ -56,6 +56,18 @@ public sealed class FlightModel
                                                   // keeps air resistance biting at low speed. The full-throttle
                                                   // equilibrium stays exactly fd_speed for any blend value.
 
+    // Per-axis control-rate calibration (Run-2 item 12), replacing the old global ×2.
+    // Steady rate = torque · recInertia · Tune / ang_momentum_damp (× eff on yaw), and a
+    // full 360° takes ≈ 1/damp spin-up + 2π/rate. Solved against the user's stopwatch
+    // measurements of the original (Bloodhawk, full throttle): 360° roll in 2 s
+    // (3.49 rad/s), sustained full-pitch 360° at 90° bank in 11 s (0.58 rad/s — the
+    // original also bleeds speed in that turn; whether its pitch rate slows with speed
+    // is an open fidelity question, ours is constant), full-rudder 360° in 30 s
+    // (0.21 rad/s at cruise, where eff = 0.4).
+    private const float PitchTune = 0.75f;        // TUNE: calibrated 2026-07-19
+    private const float YawTune = 1.32f;          // TUNE: calibrated 2026-07-19 (at cruise eff)
+    private const float RollTune = 2.12f;         // TUNE: calibrated 2026-07-19
+
     public FlightModel(PlaneStats stats)
     {
         Stats = stats;
@@ -81,13 +93,12 @@ public sealed class FlightModel
         // Control surfaces bite proportionally to airspeed; return_rate adds extra
         // centering on an axis while its stick is released.
         // Inverted eff. Turns faster the slower the plane is. Still not same as original
-        float eff = 1.4f-Mathf.Clamp(Speed / s.FdSpeed, MinControlEff, MaxControlEff);
-        float rotationTune = 2.0f;
+        float eff = 1.4f - Mathf.Clamp(Speed / s.FdSpeed, MinControlEff, MaxControlEff);
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X*rotationTune,
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * PitchTune,
             //eff only works on Yaw like the original
-            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y*rotationTune * eff,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z*rotationTune);
+            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * YawTune * eff,
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * RollTune);
         var damp = new Vector3(
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),
@@ -97,7 +108,8 @@ public sealed class FlightModel
         // stall: below stall speed the nose is pulled toward WORLD-down (a great-circle
         // rotation about the nose×down axis — no twist about the nose, works at any
         // attitude including inverted). Deep-stall rate exceeds full-elevator authority
-        // (~0.8 rad/s steady), so the drop is decisive until airspeed recovers.
+        // (~0.58 rad/s steady after the item-12 calibration), so the drop is decisive
+        // until airspeed recovers.
         float stallSpeed = StallSpeedFrac * s.FdSpeed;
         bool stalled = isStalled();
         float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame

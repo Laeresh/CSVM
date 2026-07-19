@@ -61,6 +61,14 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 - **Crossed `pdpN_h` numbering** (bloodhawk/firebrand/brigand data quirk): does the *original*
   amputate the wrong wingtip on wing damage too? Its engine hides healthy skins by an
   engine-side rule we can't see; we pair by mesh position since 2026-07-19.
+- **Dive terminal speed**: the dive-video gauge frames pin the original's near-vertical dive
+  terminal at ≈ 1.27×fd_speed (~385 mph); our drag curve + `MaxDiveSpeedFrac` cap runs to
+  1.7×. Matching it means reshaping the overspeed drag (or the cap) — interacts with the
+  whine/rattle curves that key off speed/fd_speed (HISTORY 2026-07-19).
+- **Pitch rate vs speed**: the user's 11 s sustained full-pitch 360° visibly bled speed in the
+  original — its pitch rate may slow with speed; ours is constant (item-12 calibration matches
+  the 11 s average). Likewise the yaw `eff` speed shape (`1.4 − clamp(v/fd)`) is an unvalidated
+  interim model away from cruise.
 - **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
   overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
   Throttle cut? Camera Doppler? A speed/RPM term? Needs a controlled full-throttle-dive
@@ -72,6 +80,7 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 ## TUNE constants pending playtest
 
 See CLAUDE.md → "Open TUNE items pending playtest" (kept there, next to current status):
-compass drum, fog range factor, flight-model constants + per-axis rotation split (= Run-2
-item 12), control-surface angles/slew, cloud-puff opacity/density, wing-light flash duration,
-collision feel vs building corners, item-10 damage feel set, item-11 `WhineMixGain` 0.12.
+compass drum, fog range factor, flight-model constants + the item-12 per-axis
+`PitchTune`/`YawTune`/`RollTune` (calibrated 2026-07-19, feel A/B pending), control-surface
+angles/slew, cloud-puff opacity/density, wing-light flash duration, collision feel vs
+building corners, item-10 damage feel set, item-11 `WhineMixGain` 0.12.

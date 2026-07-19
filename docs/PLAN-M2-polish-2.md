@@ -25,7 +25,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 9. ⏸ Animated vehicles (pt 2) — train/car path motion + steam puffers **(DEFERRED 2026-07-18 — needs a mech3ax cam_anim.zbd extension; survey findings recorded)**
 10. ☑ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup **(DONE 2026-07-19 — visual A/Bs pending user playtest)**
 11. ☑ Dive sound — tune down (ours reads louder than the original) **(DONE 2026-07-19 — pending user A/B dive)**
-12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original **(user-deferred 2026-07-19 — done after 13)**
+12. ☑ Turn rates — split `rotationTune` per axis, calibrate vs measured original **(DONE 2026-07-19 — pending user feel A/B)**
 13. ☑ `docs/formats/` — public reader-format reference, seeded with this run's decodes **(DONE 2026-07-19)**
 
 ---
@@ -684,6 +684,27 @@ after the pitch factor settles. Update the CLAUDE.md dynamics bullet.
 
 **Verify:** scripted full-roll time within ~10 % of the measured original; stall-cap and
 knife-edge regressions unchanged; CLAUDE.md consistent with the code.
+
+**DONE (2026-07-19):** User measurements (original Bloodhawk, full throttle): 360° roll in
+**2 s**, sustained full-pitch 360° at 90° bank ("horizontal loop") in **11 s** (with visible
+speed bleed), full-rudder 360° in **30 s**. The rotation subsystem is a linear first-order
+lag (steady rate = torque·recInertia·Tune/damp, spin-up τ = 1/damp = 0.2 s, so time-to-360°
+≈ 0.2 + 2π/rate), so the constants solve in closed form from the Bloodhawk dynamics
+(pitch 3.3·1.18, yaw 2.0·1.0, roll 7.5·1.1, damp 5): `RollTune` **2.12** (3.49 rad/s —
+the old ×2 was 189°/s, already close), `PitchTune` **0.75** (0.58 rad/s — the old ×2 gave
+89°/s, a 4.2 s turn, way too fast), `YawTune` **1.32** (0.21 rad/s at cruise through the
+yaw-only speed factor `eff` = 0.4 at fd_speed; the old ×2 gave a 19.8 s circle). Verified by
+scripted `--hold` telemetry runs: steady `rates=` read **3.50 / 0.58 / 0.21** rad/s exactly
+(yaw measured after a 25 s full-throttle run-up to cruise 134 m/s, its position trace closing
+a full circle every ~30 s). Stall regression (throttle-0 full-pull run): the horizon cap
+holds (nose only descends from its stall-entry elevation) and release drops into a normal
+glide; one behavior shift from the pitch cut — a held full-stick stall now settles at the
+stall-drop/elevator equilibrium (~22 m/s, nose ~28°) instead of pinning at the cap, a milder
+cousin of the accepted arcade-hang artifacts. Knife-edge behavior untouched (roll rate only
+changed 189→200°/s). Open fidelity questions recorded: the original may couple pitch rate to
+speed (ours matches the 11 s average with a constant rate), and the yaw calibration is
+cruise-specific (the `eff` speed shape is the user's interim model). **Pending user feel A/B**
+— especially pitch, whose authority dropped ~2.7×.
 
 ## 13. `docs/formats/` — public reader-format reference
 

@@ -46,7 +46,12 @@ https://github.com/bethington/ghidra-mcp
     - Map extension not exactily the same as in original
     - C4 Cloud deck texture not following plane
     - generic way to find billboard sprites (flames on refinery?)
+    - Still some lights not having correct look --campos=-4419.995,147.909,-5960.063 --lookat=-4419.357,147.405,-5960.646
+    - C3 Massive z fighting at beach --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
+    - C3 trees in water --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
+    - C3 What is this: --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
 - Sound
+    - Mute when not focused
     - Engine retune: he confusing extra combs turned out to be the original playing the engine as a ~5%-detuned dual stack (a chorus effect — ours is a single loop, noted as a backlog fidelity nit)
 - HUD
     - Needles not correct form (could create procedually instead of by texture in Hi-Def mode)
@@ -60,7 +65,9 @@ Original-game research: does part damage degrade handling/power before a critica
  - Yes decreases turn rate depending on which part is damaged (elevator, ruder) Dmg Motor has decreased performance.
  - Probably depending on dmg state green, yellow red
 Measurements for item 12: time a full 360° roll and a sustained pitch maneuver in the original (Bloodhawk, cruise speed).
-1.0-1.2 seconds
+roll 2sec
+pitch 11 sec(with slow down of speed?)
+yaw 30sec
 Reference screenshots for item 6: original night shots of the deck underside, sky gradient, and lit terrain at spots we can reproduce with --campos.
 
 
