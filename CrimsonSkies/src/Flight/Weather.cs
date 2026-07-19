@@ -177,6 +177,7 @@ public sealed class WeatherState
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
                 w._zones[zone] = new ZoneFog(color, near, far,low, high, clip, WorldLightFactor(z));
+                GD.Print($"ZoneFog {zone} {w._zones[zone]}");
             }
         w.ParsePrecip(inner);
         return w;
