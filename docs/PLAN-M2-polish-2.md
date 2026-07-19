@@ -23,7 +23,7 @@ Scope decisions from the 2026-07-17 grilling session are recorded in the footer.
 7. ☑ Map edge continuation — rolling window of repeated border tiles + clutter **(DONE 2026-07-18)**
 8. ☑ Mission states (anim-state engine pt 1) — zepstate/startanims; fixes destroyed-variant flicker **(DONE 2026-07-18)**
 9. ⏸ Animated vehicles (pt 2) — train/car path motion + steam puffers **(DEFERRED 2026-07-18 — needs a mech3ax cam_anim.zbd extension; survey findings recorded)**
-10. ☐ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup
+10. ☑ Collision damage model — collider fit → part HP + severity → visible damage → crash breakup **(DONE 2026-07-19 — visual A/Bs pending user playtest)**
 11. ☐ Dive sound — tune down (ours reads louder than the original)
 12. ☐ Turn rates — split `rotationTune` per axis, calibrate vs measured original
 13. ☐ `docs/formats/` — public reader-format reference, seeded with this run's decodes
@@ -544,6 +544,96 @@ sustained fire + black smoke Puffers at the wreck (~10 s, `fire.json` data) on t
 fireball + explosion sound. Parts persist until respawn. *Verify:* scripted crash — plane
 visibly breaks apart, parts tumble and lie on the ground, wreck burns; auto-respawn cleans
 everything; water crash acceptable interim (surface variants deferred).
+
+**DONE (2026-07-19), all four stages:**
+
+*10a — collider fit rebuilt as greedy volume-guided box refinement.* The planned spanwise
+vertex-gap split could not fix the Bloodhawk (its aft region has no vertex gap — the barn door
+was the thin swept-wing trailing edge AABB'd together with the tall center fins), so the final
+algorithm: regions become **clipped geometry** (triangles Sutherland–Hodgman-cut at the region
+planes, so a giant wing-root triangle can't drag a box across a boundary), then each region box
+is repeatedly cut at the axis plane (x/y/z) removing the most enclosed volume — evaluating
+**one OR two parallel planes** per axis, since the bilateral (twin-fin/twin-boom) case defeats
+single cuts: slicing one Kestrel fin off gains nothing while the remainder holds the other
+fin's height. Triangles bin by centroid (64 bins/axis) but boxes enclose full corners, so
+sparse long panels (wings with verts only at the ribs) never lose surface coverage; an empty
+middle range (twin booms bridged over air) yields no box at all. Gates: cut ≥ 30 % of the box's
+volume (`VolumeSplitFrac`), ≤ 8 boxes (`MaxBoxes`), MinCutWidth 0.35 m off the rim — all TUNE.
+Measured: Bloodhawk tail 11.6×2.4×3.1 m barn door (86 m³) → five hugging boxes ≈ 12 m³ (slim
+fins + flat outboard strips), wing split left/right 3.8 m each; Kestrel tail → fin 0.5×1.9 +
+stabilizer 3.9×0.3 + fin (the between-fins pocket is free air); Peacemaker biplane wing stack
+3.3 m slab → thin per-wing slabs + 0.3 m tip struts; whole fleet 5–8 boxes. *Verified:*
+`--debug-collision` wireframes hug the airframe; the item-8 knife-edge regression still
+crashes `(wing)` with impact 6 m below center; 15 s cruise + all-planes builds clean.
+
+*10b — part HP + severity.* `PlaneStats` parses `destroyable_parts` (nose/tail/leftwing/
+rightwing, 20–25 HP, `critical`/`engine` flags, per-part + def-level `injure_anims`) →
+`PlaneDamage` (per-part HP, `MapStruckPart`: wing/canard by impact X sign — left = −X,
+verified against planes.zbd node boxes — fuselage fore/aft → nose/tail). FlightController's
+collision response is severity-based: **vn** (impact speed along the contact normal, from a
+rest query deepened 5 cm past the just-touching pose — at exactly cast[1] GetRestInfo often
+came back empty and the head-on fallback normal turned shallow grazes into crashes) decides:
+vn ≥ `CrashSpeed` 25 m/s → crash; below → graze: quadratic severity damage
+(`GrazeMaxDamage` 18 × (vn/25)²), reposition at the swept safe pose + 0.15 m push-out,
+velocity deflected along the surface with severity-scaled tangential loss
+(`GrazeFriction` 0.35), lever-arm attitude kick, 0.3 s damage cooldown (multi-frame scrapes),
+HUD impact flash + persistent `DMG part %` line. **Trees (clutter_col) are soft**: fixed
+2.5 HP + ×0.92 speed per strike, plow straight through, never a direct crash. A dead
+`critical` part downs the plane (`part destroyed:` log). Two user-reported fixes from the
+first playtest: **ground-stop rule** (slid below 12 m/s on the ground = wreck, not a parked
+plane collecting zero-damage kisses) and an **un-embed loop** (after a graze, boxes still
+overlapping non-clutter geometry get pushed out along the normal ≤ 3 × 0.3 m, else explode —
+the observed glitch-through can't persist). *Verified* scripted + user-flown: −10° flat-floor
+touch at 106 m/s grazes (nose −10.5 HP) into a long belly slide of cooldown-spaced kisses,
+ending in a real named-collider crash (`rrbrdg3` bridge); −20…−30° hits crash outright
+(hillside normal (−0.31,0.90,0.31) → vn 50); user log shows both part-death crashes
+(`nose`/`leftwing (critical)`) and 7-tree forest plows; respawn resets HP (identical cycles).
+
+*10c — visible damage.* Flight builds construct the exterior `pdpN` torn-skin panels hidden
+(static viewer still skips them; `pcdpN` cockpit panels always skipped); `DamageVisuals`
+flips them as the struck part's HP fraction crosses its `injure_anims` thresholds (pdpN
+shown + its healthy `pdpN_h` twin hidden — the original's pdpanelN anim only ACTIVEs pdpN
+over the healthy skin by draw order; hiding the twin is our layering-safe equivalent), and
+streams a **discrete-puff fire trail from every flipped panel** (pool of 4 firepuffer trail
+emitters — the dominant damaged-plane look in the user's reference video, matching the
+pdpanelN anims' `short_firetrail WITH_NODE pdpN` calls). Def-level thresholds:
+`player_smoketrail` at ≤ 0.10 of **any part** (a total-HP reading could never fire before a
+critical part died at 75 % total — interpretation documented) starts the nose
+`dense_firetrail` pair: black smoke (COLORS ramp, born orange 255,164,90 → near-black) +
+fire, emitted per meter of motion; `player_fuelleak` (0.85) unwired. The
+`*_damage_green/yellow/red` entries are the cockpit indicator — unwired until a cockpit
+exists. **Puffer grew the machinery**: DISTANCE_INTERVAL trail emission (per-meter spawn
+with carry, world-anchored), static TEXTURES pools (random pick per puff), COLORS
+age-ramps (per-instance colors; ramp presence ⇒ blend_mix — black smoke is invisible
+additively), and two shader fixes benefiting every effect: a quad-rim fade (fire_f01 leaks
+border pixels up to 247 — faint additive rectangles on grown quads) and **soft particles**
+(depth-texture fade over the last 1.5 m — a billboard tilted by the high chase camera dips
+into terrain/walls and the depth test cut it with hard straight lines; was very visible on
+the 12 m wreck fire). *Verified:* panels+trails load on every plane (10 panels, 4 trails);
+threshold flips exercised to the Visible-toggle boundary by scripted grazes; **the panel-flip
+/ smoke-trail look itself is pending the user's next flight** (normal play reaches the
+states easily — their manual session took a nose to 3 %).
+
+*10d — crash breakup.* `PlaneBuilder.BuildDestroyed` builds the plane's `destroyed` subtree
+(Bloodhawk: 4 `pieceN` wreck meshes, opaque airframe skins) with the plane-root→destroyed
+transform chain baked in; `CrashBreakup` scatters the pieces at the crash pose with
+impact-derived velocities (0.45 × impact velocity + 7 m/s scatter + up-kick, random tumble,
+all TUNE), hand-simulates ballistic + ground-rest (short down-ray per piece, rest 0.4 m
+above ground), and burns the wreck ~10 s: `player_plane_destruct.json`'s **fire_n_smoke**
+(3 sprites/0.1 s, 3.5–5 m ×2.5, upward) + a rising `black_smoke` trail column (anchor
+climbs 2.2 m/s) — on top of the existing fireball + explosion sound. Pieces persist until
+respawn; `Reset` re-pockets everything. *Verified:* scripted crash screenshots show the
+burning wreck with scattered pieces (fire soft against terrain and the barn wall after the
+soft-particle fix), auto-respawn cleans up, cycles deterministic, zero errors.
+
+*Reference video analysis (`OriginalScreenshots/C1 IA1 Crash.mp4`, user-provided during
+implementation):* the original's graze → survive → burn → final-crash arc matches the model
+(big dust burst on the graze, plane flies on, per-panel fire trails, then a massive
+persistent explosion on the final impact). Recorded follow-ups (backlog): a brown dust-burst
+effect on hard grazes, burning debris arcs in the final explosion, and the explosion's
+scale/persistence (full `player_plane_destruct` choreography — already on the backlog per
+the scope footer). Open TUNEs pending playtest: CrashSpeed 25 / graze friction + kick /
+tree softness / GrazeStopSpeed 12 / breakup scatter constants.
 
 ## 11. Dive sound — tune down
 

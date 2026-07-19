@@ -30,7 +30,9 @@ public sealed class PlaneBuilder
     private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
     private readonly bool _spinningProps;
+    private readonly bool _withDamagePanels;
     private readonly List<Node3D> _wingFlares = new();
+    private readonly List<Node3D> _damagePanels = new();
     private StandardMaterial3D? _flareMaterial;
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;
@@ -40,10 +42,19 @@ public sealed class PlaneBuilder
     /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
     public IReadOnlyList<Node3D> WingFlares => _wingFlares;
 
+    /// <summary>Flight and damage-lab builds (Run-2 item 10c): the exterior damage-state
+    /// panels — the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
+    /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
+    /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
+    public IReadOnlyList<Node3D> DamagePanels => _damagePanels;
+
     /// <param name="spinningProps">Free-flight build: hide the static propeller disc and
     /// keep the spinning blur layers (a PropAnimator drives them). Default (exterior view)
-    /// keeps the static disc and hides the blur layers.</param>
-    public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false)
+    /// keeps the static disc and hides the blur layers. Implies damage panels.</param>
+    /// <param name="damagePanels">Build the exterior pdpN torn-skin panels (hidden) even
+    /// with static props — the viewer's --damage lab flips them without flying.</param>
+    public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
+        bool damagePanels = false)
     {
         _gamez = gamez;
         _textures = textures;
@@ -54,6 +65,7 @@ public sealed class PlaneBuilder
         // inward and must be culled from outside, as the original engine does.
         _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true);
         _spinningProps = spinningProps;
+        _withDamagePanels = spinningProps || damagePanels;
     }
 
     private static bool IsPropBlurTexture(string tex) =>
@@ -64,10 +76,13 @@ public sealed class PlaneBuilder
     // re-activates the healthy pdpN_h panels, which are real airframe sections (the
     // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
     // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
-    private static bool IsDamagePanel(string name)
+    // In flight builds the exterior pdpN panels are BUILT hidden instead of skipped,
+    // so DamageVisuals can flip them at the injure_anims HP thresholds (item 10c).
+    private static bool IsDamagePanel(string name, out bool cockpit)
     {
-        int start = name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase) ? 3
-            : name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase) ? 4 : -1;
+        cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
+        int start = cockpit ? 4
+            : name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase) ? 3 : -1;
         if (start < 0 || start == name.Length)
             return false;
         for (int i = start; i < name.Length; i++)
@@ -75,6 +90,11 @@ public sealed class PlaneBuilder
                 return false;
         return true;
     }
+
+    /// <summary>pdpN_h — the healthy twin of an exterior damage panel.</summary>
+    private static bool IsHealthyPanel(string name) =>
+        name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
+        && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
@@ -86,19 +106,70 @@ public sealed class PlaneBuilder
         return built;
     }
 
+    /// <summary>Builds the plane's 'destroyed' wreck-piece subtree (skipped by
+    /// <see cref="Build"/>) for the crash breakup (Run-2 item 10d): a group of
+    /// pieceN meshes. The returned root's transform is the accumulated plane-root →
+    /// destroyed chain, so `planePose × root.Transform × piece.Transform` is each
+    /// piece's crash-time world pose. Null when the plane has no such subtree.</summary>
+    public Node3D? BuildDestroyed(string rootName)
+    {
+        var root = _gamez.FindByName(rootName);
+        if (root == null)
+            return null;
+        // depth-first for the 'destroyed' group, accumulating local transforms
+        (GameZNode Node, Transform3D Acc)? found = null;
+        void Search(GameZNode n, Transform3D acc)
+        {
+            if (found != null)
+                return;
+            acc *= n.Local ?? Transform3D.Identity;
+            if (n.Name.Equals("destroyed", StringComparison.OrdinalIgnoreCase))
+            {
+                found = (n, acc);
+                return;
+            }
+            foreach (int c in n.Children)
+                Search(_gamez.Nodes[c], acc);
+        }
+        // accumulate below the root only (the built plane model itself carries the
+        // root node's transform)
+        foreach (int c in root.Children)
+            Search(_gamez.Nodes[c], Transform3D.Identity);
+        if (found == null)
+            return null;
+        var built = _scene.BuildSubtree(found.Value.Node, _ => false);
+        if (built != null)
+            built.Transform = found.Value.Acc;
+        return built;
+    }
+
     /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
     /// the original starts them off and flashes them via wing_light.json's blink anim), and
     /// re-skins each glow quad as an additive camera-facing billboard so it reads from any
-    /// angle — the source quads are one-sided (only showed from behind). See <see cref="WingLights"/>.</summary>
+    /// angle — the source quads are one-sided (only showed from behind). See <see cref="WingLights"/>.
+    /// The same walk collects the flight build's damage panels: torn-skin pdpN hidden
+    /// (reset state), healthy pdpN_h twins as built.</summary>
     private void CollectWingFlares(Node node)
     {
-        if (node is Node3D n3d && WingLights.IsFlare(n3d.Name))
+        if (node is Node3D n3d)
         {
-            n3d.Visible = false;
-            foreach (var child in n3d.GetChildren())
-                if (child is MeshInstance3D mi && mi.Name.ToString() == "mesh")
-                    mi.MaterialOverride = FlareMaterial();
-            _wingFlares.Add(n3d);
+            if (WingLights.IsFlare(n3d.Name))
+            {
+                n3d.Visible = false;
+                foreach (var child in n3d.GetChildren())
+                    if (child is MeshInstance3D mi && mi.Name.ToString() == "mesh")
+                        mi.MaterialOverride = FlareMaterial();
+                _wingFlares.Add(n3d);
+            }
+            else if (IsDamagePanel(n3d.Name, out bool cockpit) && !cockpit)
+            {
+                n3d.Visible = false; // torn skin waits for DamageVisuals to flip it on
+                _damagePanels.Add(n3d);
+            }
+            else if (IsHealthyPanel(n3d.Name))
+            {
+                _damagePanels.Add(n3d);
+            }
         }
         foreach (var child in node.GetChildren())
             CollectWingFlares(child);
@@ -124,7 +195,11 @@ public sealed class PlaneBuilder
 
     private bool Skip(GameZNode node)
     {
-        if (SkipNames.Contains(node.Name) || IsDamagePanel(node.Name))
+        if (SkipNames.Contains(node.Name))
+            return true;
+        // Cockpit damage panels always skip; exterior pdpN skip only in the plain static
+        // viewer — flight and damage-lab builds construct them hidden for DamageVisuals (10c).
+        if (IsDamagePanel(node.Name, out bool cockpit) && (cockpit || !_withDamagePanels))
             return true;
         // Skyhook arms (zeppelin docking): every plane has a *_hook subtree (blood_hook,
         // kest_hook, gyro_hook, …) whose *_hook.json anim RESET_STATE deactivates the

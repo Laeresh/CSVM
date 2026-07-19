@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using CrimsonSkies.Mech3;
 using Godot;
 
@@ -30,8 +31,22 @@ public sealed class PufferState
     public float DeviationDistance;
     public int Number = 1;
 
+    /// <summary>Trail emission (Run-2 item 10c): emit one sprite per this many meters
+    /// of the followed node's motion (the smoke/fire trail puffers in
+    /// pufftrails.json's dense_firetrail). 0 = burst-style (NUMBER per TIME_INTERVAL).</summary>
+    public float DistanceInterval;
+
     /// <summary>Flipbook: texture name to show once the particle's age reaches Time (ascending).</summary>
     public IReadOnlyList<(float Time, string Texture)> TextureSequence = Array.Empty<(float, string)>();
+
+    /// <summary>Static texture pool (the TEXTURES key — smoke101/102/103): each
+    /// particle picks one at random and keeps it. Alternative to TextureSequence.</summary>
+    public IReadOnlyList<string> Textures = Array.Empty<string>();
+
+    /// <summary>Color-over-age ramp (the COLORS key): (lifeFraction, color) entries,
+    /// ascending; rgb are 0–255 in the reader (normalized here), alpha 0–1. The
+    /// dense_firetrail smoke is born orange (255,164,90) and turns near-black.</summary>
+    public IReadOnlyList<(float Frac, Color Color)> Colors = Array.Empty<(float, Color)>();
 
     /// <summary>Loads a reader file (e.g. "flame_ball.json") from a zrdr zip/dir and returns
     /// the fully-defined <c>PUFFER_STATE</c> named <paramref name="pufferName"/>, or null.</summary>
@@ -49,8 +64,9 @@ public sealed class PufferState
     }
 
     /// <summary>Depth-first search for the fully-defined PUFFER_STATE with the given NAME.
-    /// The reader also holds "stop" stubs that share the name but only flip ACTIVE_STATE
-    /// (no NUMBER); those are skipped.</summary>
+    /// The reader also holds "stop" stubs that share the name but only flip ACTIVE_STATE;
+    /// those are skipped. Fully-defined = has NUMBER (burst emitters) or
+    /// DISTANCE_INTERVAL (trail emitters, e.g. dense_firetrail's smoke/fire).</summary>
     public static PufferState? FindInReader(List<object?> reader, string pufferName)
     {
         PufferState? found = null;
@@ -63,7 +79,7 @@ public sealed class PufferState
                     && i + 1 < list.Count && list[i + 1] is List<object?> body)
                 {
                     var d = ZrdrDict.FromAlternating(body);
-                    if (d.Has("NUMBER")
+                    if ((d.Has("NUMBER") || d.Has("DISTANCE_INTERVAL"))
                         && string.Equals(d.Str("NAME"), pufferName, StringComparison.OrdinalIgnoreCase))
                     {
                         found = Parse(d);
@@ -100,6 +116,7 @@ public sealed class PufferState
             GrowthFactor = d.Float("GROWTH_FACTOR", 1f),
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
+            DistanceInterval = d.Float("DISTANCE_INTERVAL"),
         };
 
         var seq = new List<(float, string)>();
@@ -108,6 +125,25 @@ public sealed class PufferState
                 && pair[0] is float t && pair[1] is string tex)
                 seq.Add((t, tex));
         s.TextureSequence = seq;
+
+        var texList = new List<string>();
+        foreach (var item in d.List("TEXTURES") ?? new List<object?>())
+            if (item is string name)
+                texList.Add(name);
+        s.Textures = texList;
+
+        // COLORS entries are [lifeFrac, r, g, b, a] with rgb 0–255 (the same
+        // integer-encoding rule as weather.json: any component > 1 ⇒ /255).
+        var colors = new List<(float, Color)>();
+        foreach (var item in d.List("COLORS") ?? new List<object?>())
+            if (item is List<object?> { Count: >= 5 } c
+                && c[0] is float frac && c[1] is float r && c[2] is float g
+                && c[3] is float b && c[4] is float a)
+            {
+                float scale = r > 1f || g > 1f || b > 1f ? 1f / 255f : 1f;
+                colors.Add((frac, new Color(r * scale, g * scale, b * scale, a)));
+            }
+        s.Colors = colors;
         return s;
     }
 }
@@ -132,6 +168,7 @@ public sealed partial class Puffer : Node3D
     {
         public Vector3 Pos, Vel;
         public float BaseSize, Age, Life;
+        public float Frame; // static-TEXTURES pool: the randomly picked atlas column
     }
 
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
@@ -150,15 +187,23 @@ public sealed partial class Puffer : Node3D
     private int _burstsSpawned, _burstsTotal;
     private bool _active;
 
+    private bool _trailing;        // distance-interval trail mode (DISTANCE_INTERVAL states)
+    private Vector3 _trailPrev;    // last emit-line end, world space
+    private float _trailCarry;     // meters of motion carried into the next interval
+
+    private const int TrailPool = 640; // live-particle cap for trail emitters
+
     private const string ShaderCode = """
         shader_type spatial;
-        render_mode blend_add, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+        render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
 
         uniform sampler2D atlas : source_color, filter_linear;
         uniform float frame_count = 1.0;
+        uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
 
         varying flat float v_frame;
         varying flat float v_alpha;
+        varying flat vec4 v_color;
 
         void vertex() {
             // Billboard the instance quad toward the camera, keeping its per-instance scale
@@ -170,47 +215,75 @@ public sealed partial class Puffer : Node3D
             MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
             v_frame = INSTANCE_CUSTOM.x;
             v_alpha = INSTANCE_CUSTOM.y;
+            v_color = COLOR;
         }
 
         void fragment() {
             float col = floor(v_frame + 0.5);
             vec2 uv = vec2((UV.x + col) / frame_count, UV.y);
             vec4 t = texture(atlas, uv);
-            ALBEDO = t.rgb;
-            ALPHA = t.a * v_alpha;
+            // fade to nothing at the quad rim: some source frames leak bright pixels
+            // to their border (fire_f01 edge maxes at 247), which otherwise paints
+            // faint additive rectangles over dark ground on large grown quads
+            vec2 rim = smoothstep(vec2(0.0), vec2(0.12), UV)
+                     * smoothstep(vec2(0.0), vec2(0.12), vec2(1.0) - UV);
+            // soft particles: a billboard tilted by a high chase camera dips into the
+            // terrain and the depth test cuts it with a hard straight line — fade
+            // alpha out over the last ~1.5 m before the scene depth instead
+            float scene_raw = texture(depth_texture, SCREEN_UV).r;
+            vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
+            float scene_z = unproj.z / unproj.w;
+            float soft = clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0);
+            ALBEDO = t.rgb * v_color.rgb;
+            ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
         }
         """;
 
-    /// <summary>Builds an emitter for <paramref name="state"/>, loading its flipbook frames
-    /// from <paramref name="textures"/> into an atlas. Null if no frame texture is found.
-    /// <paramref name="activeDuration"/> is how long the puffer emits (the calling animation's
-    /// STOP time; large_fireball stops its puffer at 0.3 s).</summary>
+    /// <summary>Builds an emitter for <paramref name="state"/>, loading its flipbook (or
+    /// static TEXTURES pool) frames from <paramref name="textures"/> into an atlas. Null
+    /// if no frame texture is found. <paramref name="activeDuration"/> is how long a
+    /// burst puffer emits (the calling animation's STOP time; large_fireball stops its
+    /// puffer at 0.3 s) — ignored by trail (DISTANCE_INTERVAL) states, which emit while
+    /// driven via <see cref="TrailAdvance"/>. States with a COLORS ramp alpha-blend
+    /// (black smoke is invisible additively); flipbook fire stays additive.</summary>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f)
     {
-        var atlas = BuildAtlas(state.TextureSequence, textures);
+        var frameNames = state.TextureSequence.Count > 0
+            ? state.TextureSequence.Select(f => f.Texture).ToList()
+            : state.Textures.ToList();
+        var atlas = BuildAtlas(frameNames, textures);
         if (atlas == null)
             return null;
         var puffer = new Puffer();
-        puffer.Init(state, atlas, activeDuration);
+        puffer.Init(state, atlas, frameNames.Count, activeDuration);
         return puffer;
     }
 
-    private void Init(PufferState state, ImageTexture atlas, float activeDuration)
+    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration)
     {
         _state = state;
         Name = "puffer_" + state.Name;
-        // Emit at t = 0, TimeInterval, 2·TimeInterval, … while active.
-        _burstsTotal = Mathf.Max(1, Mathf.FloorToInt(activeDuration / Mathf.Max(state.TimeInterval, 1e-3f) + 1e-3f) + 1);
-        _particles = new Particle[state.Number * _burstsTotal];
+        if (state.DistanceInterval > 0f)
+        {
+            _particles = new Particle[TrailPool];
+        }
+        else
+        {
+            // Emit at t = 0, TimeInterval, 2·TimeInterval, … while active.
+            _burstsTotal = Mathf.Max(1, Mathf.FloorToInt(activeDuration / Mathf.Max(state.TimeInterval, 1e-3f) + 1e-3f) + 1);
+            _particles = new Particle[state.Number * _burstsTotal];
+        }
 
-        var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
+        var code = ShaderCode.Replace("BLEND_MODE", state.Colors.Count > 0 ? "blend_mix" : "blend_add");
+        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
         mat.SetShaderParameter("atlas", atlas);
-        mat.SetShaderParameter("frame_count", (float)state.TextureSequence.Count);
+        mat.SetShaderParameter("frame_count", (float)frameCount);
 
         _mm = new MultiMesh
         {
             TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
             UseCustomData = true,
+            UseColors = true,
             Mesh = new QuadMesh { Size = Vector2.One },
             InstanceCount = _particles.Length,
             VisibleInstanceCount = 0,
@@ -245,11 +318,96 @@ public sealed partial class Puffer : Node3D
     public void Clear()
     {
         _emitting = false;
+        _trailing = false;
         _active = false;
         _liveCount = 0;
         if (_mm != null)
             _mm.VisibleInstanceCount = 0;
         Visible = false;
+    }
+
+    /// <summary>Advances a DISTANCE_INTERVAL trail emitter to the followed node's new
+    /// world position, emitting one sprite per interval of motion (with carry across
+    /// frames) — the dense_firetrail smoke/fire trailing a damaged plane. The first
+    /// call starts the trail; call every frame while the effect is on.</summary>
+    public void TrailAdvance(Vector3 worldPos)
+    {
+        if (_state.DistanceInterval <= 0f)
+            return;
+        if (!_trailing)
+        {
+            TopLevel = true;             // particles live in world space, left behind the plane
+            GlobalPosition = Vector3.Zero;
+            _trailing = true;
+            _trailPrev = worldPos;
+            _trailCarry = 0f;
+            _active = true;
+            Visible = true;
+            return;
+        }
+        var delta = worldPos - _trailPrev;
+        float dist = delta.Length();
+        _trailPrev = worldPos;
+        if (dist < 1e-5f)
+            return;
+        var dir = delta / dist;
+        float interval = _state.DistanceInterval;
+        _trailCarry += dist;
+        // walk back from the current position so the newest puff sits at the plane
+        var start = worldPos - dir * (_trailCarry - interval);
+        int count = (int)(_trailCarry / interval);
+        for (int k = 0; k < count; k++)
+            SpawnTrailPuff(start + dir * (k * interval));
+        _trailCarry -= count * interval;
+    }
+
+    /// <summary>Stops trail emission; live smoke decays naturally.</summary>
+    public void TrailEnd() => _trailing = false;
+
+    /// <summary>Static-viewer variant of <see cref="TrailAdvance"/>: emits the trail's
+    /// per-meter puffs AT a fixed world point, spending <paramref name="speedMps"/>
+    /// meters of virtual motion per second — the damage lab's parked plane, whose
+    /// panels burn in place (the puffs' own random velocity and growth make the
+    /// stacked emissions read as a flickering fire). Same carry, pool and spawn
+    /// path as the moving trail.</summary>
+    public void TrailBurnAt(Vector3 worldPos, float dt, float speedMps)
+    {
+        if (_state.DistanceInterval <= 0f)
+            return;
+        if (!_trailing)
+        {
+            TopLevel = true;
+            GlobalPosition = Vector3.Zero;
+            _trailing = true;
+            _trailPrev = worldPos;
+            _trailCarry = 0f;
+            _active = true;
+            Visible = true;
+        }
+        _trailCarry += speedMps * dt;
+        int count = (int)(_trailCarry / _state.DistanceInterval);
+        for (int k = 0; k < count; k++)
+            SpawnTrailPuff(worldPos);
+        _trailCarry -= count * _state.DistanceInterval;
+    }
+
+    private void SpawnTrailPuff(Vector3 worldPos)
+    {
+        if (_liveCount >= _particles.Length)
+            return; // pool exhausted — oldest puffs finish before new ones spawn
+        var min = _state.MinRandomVelocity;
+        var max = _state.MaxRandomVelocity;
+        float d = _state.DeviationDistance;
+        _particles[_liveCount++] = new Particle
+        {
+            Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+            Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
+            BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+            Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
+            Age = 0f,
+            Frame = _state.TextureSequence.Count > 0 ? 0f
+                : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+        };
     }
 
     public override void _Process(double delta)
@@ -268,6 +426,8 @@ public sealed partial class Puffer : Node3D
         }
 
         // integrate live particles, swap-removing the dead so survivors stay packed at the front
+        bool flipbook = _state.TextureSequence.Count > 0;
+        bool hasRamp = _state.Colors.Count > 0;
         float damp = Mathf.Exp(-_state.Friction * dt);
         for (int i = 0; i < _liveCount; i++)
         {
@@ -285,15 +445,36 @@ public sealed partial class Puffer : Node3D
             float lifeFrac = p.Age / p.Life;
             float size = p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, lifeFrac);
             _mm.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), p.Pos));
-            _mm.SetInstanceCustomData(i, new Color(FrameFor(p.Age), FadeFor(lifeFrac), 0f, 0f));
+            // The COLORS ramp owns the fade when present (its alpha ends at 0);
+            // otherwise the render-nicety envelope eases the additive glow in/out.
+            _mm.SetInstanceCustomData(i, new Color(
+                flipbook ? FrameFor(p.Age) : p.Frame,
+                hasRamp ? 1f : FadeFor(lifeFrac), 0f, 0f));
+            _mm.SetInstanceColor(i, hasRamp ? RampColor(lifeFrac) : Colors.White);
         }
         _mm.VisibleInstanceCount = _liveCount;
 
-        if (_liveCount == 0 && !_emitting)
+        if (_liveCount == 0 && !_emitting && !_trailing)
         {
             _active = false;
             Visible = false;
         }
+    }
+
+    /// <summary>Interpolates the COLORS (lifeFrac, color) ramp.</summary>
+    private Color RampColor(float lifeFrac)
+    {
+        var ramp = _state.Colors;
+        if (lifeFrac <= ramp[0].Frac)
+            return ramp[0].Color;
+        for (int i = 1; i < ramp.Count; i++)
+            if (lifeFrac <= ramp[i].Frac)
+            {
+                float span = ramp[i].Frac - ramp[i - 1].Frac;
+                float t = span > 1e-6f ? (lifeFrac - ramp[i - 1].Frac) / span : 1f;
+                return ramp[i - 1].Color.Lerp(ramp[i].Color, t);
+            }
+        return ramp[^1].Color;
     }
 
     private void SpawnBatch()
@@ -333,15 +514,15 @@ public sealed partial class Puffer : Node3D
 
     private float Rand(float a, float b) => a + (float)_rng.NextDouble() * (b - a);
 
-    private static ImageTexture? BuildAtlas(IReadOnlyList<(float Time, string Texture)> seq, TextureArchive textures)
+    private static ImageTexture? BuildAtlas(IReadOnlyList<string> names, TextureArchive textures)
     {
-        if (seq.Count == 0)
+        if (names.Count == 0)
             return null;
-        var frames = new Image[seq.Count];
+        var frames = new Image[names.Count];
         int fw = 0, fh = 0;
-        for (int i = 0; i < seq.Count; i++)
+        for (int i = 0; i < names.Count; i++)
         {
-            var tex = textures.Find(seq[i].Texture);
+            var tex = textures.Find(names[i]);
             if (tex == null)
                 return null;
             var img = tex.GetImage();
@@ -350,7 +531,7 @@ public sealed partial class Puffer : Node3D
             fw = Mathf.Max(fw, img.GetWidth());
             fh = Mathf.Max(fh, img.GetHeight());
         }
-        var atlas = Image.CreateEmpty(fw * seq.Count, fh, false, Image.Format.Rgba8);
+        var atlas = Image.CreateEmpty(fw * names.Count, fh, false, Image.Format.Rgba8);
         for (int i = 0; i < frames.Length; i++)
         {
             var f = frames[i];

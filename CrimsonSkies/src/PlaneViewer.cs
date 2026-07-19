@@ -19,6 +19,13 @@ namespace CrimsonSkies;
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build
+///   --damage[=part:frac,…]       (static --plane mode) damage lab: one HP slider per
+///                                destroyable part drives the item-10c damage visuals on
+///                                the parked plane — torn-skin panel flips, panel fires
+///                                burning in place, the ≤10% nose smoke/fire pair.
+///                                Optional presets (fraction 0–1, or a percent when >1):
+///                                --damage=leftwing:0.25,nose:40. H hides the sliders;
+///                                combine with --screenshot for deterministic damage shots
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -78,6 +85,8 @@ public partial class PlaneViewer : Node3D
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
 
     private string _planeName = "player_bhawk";
+    private bool _damageLab;           // --damage: per-part HP sliders driving the 10c visuals (static --plane mode)
+    private List<(string, float)>? _damagePreset; // --damage=part:frac,… preset fractions
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
@@ -129,6 +138,8 @@ public partial class PlaneViewer : Node3D
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) _planeName = arg["--plane=".Length..];
+            else if (arg == "--damage") _damageLab = true;
+            else if (arg.StartsWith("--damage=")) { _damageLab = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); }
             else if (arg == "--chapter") _worldMode = true;
             else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; }
             else if (arg == "--fly") _fly = true;
@@ -156,6 +167,11 @@ public partial class PlaneViewer : Node3D
 
         if (_fly)
             _worldMode = true;
+        if (_damageLab && _worldMode)
+        {
+            GD.Print("--damage is the static plane viewer's lab (use --plane without --chapter/--fly); ignoring");
+            _damageLab = false;
+        }
         // Burst captures dither the camera by default so z-fighting flickers across frames;
         // a single shot never jitters. --jitter=<deg> overrides (0 disables).
         if (_jitterDeg < 0f)
@@ -290,10 +306,37 @@ public partial class PlaneViewer : Node3D
             }
             else
             {
-                var builder = new PlaneBuilder(gamez, textures);
+                // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
+                var builder = new PlaneBuilder(gamez, textures, damagePanels: _damageLab);
                 _plane = builder.Build(_planeName);
                 meshInstances = builder.MeshInstanceCount;
                 what = $"'{_planeName}'";
+
+                // Damage lab (--damage): per-part HP sliders driving the item-10c damage
+                // visuals on the parked plane — the same DamageVisuals/puffer pipeline as
+                // flight, with the distance-interval trails burning in place (DamageLab).
+                if (_damageLab)
+                {
+                    var stats = PlaneStats.Load(zrdrPath, _planeName);
+                    if (stats.DestroyableParts.Count == 0)
+                    {
+                        GD.Print($"damage lab: '{_planeName}' ({stats.DefName}) has no destroyable_parts");
+                    }
+                    else
+                    {
+                        var smoke = MakePuffer(zrdrPath, textures, this, "pufftrails.json", "smokepuffer");
+                        var fire = MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer");
+                        var panelTrails = new List<Effects.Puffer>();
+                        for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
+                            if (MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer") is { } pt)
+                                panelTrails.Add(pt);
+                        var visuals = new DamageVisuals(builder.DamagePanels, stats, smoke, fire, panelTrails);
+                        AddChild(new DamageLab(stats, visuals, _plane, _damagePreset));
+                        GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
+                                 $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
+                        what += " + damage lab";
+                    }
+                }
             }
             AddChild(_plane);
             // The deck is now in the tree at its original position; remember its centre so
@@ -322,6 +365,9 @@ public partial class PlaneViewer : Node3D
                     WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
                     Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
                     Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
+                    // per-part HP from destroyable_parts (item 10b) — collisions below
+                    // the crash threshold damage the struck part instead of crashing
+                    Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
                 };
                 controller.AddChild(planeModel);
                 if (controller.Props != null)
@@ -334,6 +380,13 @@ public partial class PlaneViewer : Node3D
                     GD.Print($"plane collider: {controller.Collider.Summary}");
                 else
                     GD.PushWarning("no airframe collision boxes — falling back to the center ray");
+                if (controller.Damage != null)
+                {
+                    var partDescs = new List<string>();
+                    foreach (var p in stats.DestroyableParts)
+                        partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
+                    GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
+                }
 
                 // The original's heading tape, rebuilt from the chapter's own HUD
                 // textures (compassticks2/compasstxt ship in every chapter's archive).
@@ -355,6 +408,37 @@ public partial class PlaneViewer : Node3D
                 else
                 {
                     GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
+                }
+
+                // Visible damage (item 10c): torn-skin panel flips + the low-HP smoke/fire
+                // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
+                if (controller.Damage != null)
+                {
+                    var smoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
+                    var fire = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
+                    // per-panel fire trails (the original streams one from every damaged
+                    // panel — clearly visible in OriginalScreenshots/C1 IA1 Crash.mp4)
+                    var panelTrails = new List<Effects.Puffer>();
+                    for (int i = 0; i < 4; i++)
+                        if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
+                            panelTrails.Add(pt);
+                    controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, stats, smoke, fire, panelTrails);
+                    GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
+                             $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
+                             $"{panelTrails.Count} panel fire trails");
+                }
+
+                // Crash breakup (item 10d): the plane's destroyed-subtree wreck pieces +
+                // the player_plane_destruct wreck fire and a rising black-smoke column.
+                var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
+                var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
+                controller.Breakup = CrashBreakup.Create(
+                    planeBuilder.BuildDestroyed(_planeName), wreckFire, wreckSmoke);
+                if (controller.Breakup != null)
+                {
+                    controller.AddChild(controller.Breakup.WreckRoot);
+                    GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
+                             $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
                 }
 
                 if (!mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath)))
@@ -411,6 +495,37 @@ public partial class PlaneViewer : Node3D
                           at.Length > 1 ? F(at[1]) : 0f));
         }
         return segments.ToArray();
+    }
+
+    /// <summary>Parse --damage= presets: "nose:0.25,leftwing:40" — part:fraction pairs,
+    /// values > 1 read as percent. Malformed pairs are skipped with a note.</summary>
+    private static List<(string, float)> ParseDamagePreset(string s)
+    {
+        var list = new List<(string, float)>();
+        foreach (var item in s.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = item.Split(':');
+            if (kv.Length == 2 && float.TryParse(kv[1], System.Globalization.NumberStyles.Float,
+                    System.Globalization.CultureInfo.InvariantCulture, out float v))
+                list.Add((kv[0].Trim(), Mathf.Clamp(v > 1f ? v / 100f : v, 0f, 1f)));
+            else
+                GD.Print($"--damage: cannot parse '{item}' (want part:fraction)");
+        }
+        return list;
+    }
+
+    /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
+    /// emitter under <paramref name="parent"/>; null (logged by PufferState.Load) when
+    /// the reader or its textures are missing. Shared by the flight assembly and the
+    /// static damage lab.</summary>
+    private static Effects.Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
+        string file, string name, float duration = 0.3f)
+    {
+        var state = Effects.PufferState.Load(zrdrPath, file, name);
+        var puffer = state != null ? Effects.Puffer.Create(state, textures, duration) : null;
+        if (puffer != null)
+            parent.AddChild(puffer);
+        return puffer;
     }
 
     /// <summary>Loads the flown mission's weather.json and applies it: sets the distance-fog

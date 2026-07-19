@@ -63,6 +63,19 @@ public partial class FlightController : Node3D
     /// back to the old center-ray-only test.</summary>
     public PlaneCollider? Collider;
 
+    /// <summary>Per-part hit points from the vehicle def's destroyable_parts (Run-2
+    /// item 10b). When set, collisions below the crash threshold damage the struck
+    /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
+    public PlaneDamage? Damage;
+
+    /// <summary>Visible damage (Run-2 item 10c): torn-skin pdpanel flips + the low-HP
+    /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
+    public DamageVisuals? Visuals;
+
+    /// <summary>Crash breakup (Run-2 item 10d): the plane's 'destroyed' wreck pieces
+    /// scatter at the impact and the wreck burns until respawn. Optional.</summary>
+    public CrashBreakup? Breakup;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
@@ -82,6 +95,9 @@ public partial class FlightController : Node3D
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private ImmediateMesh? _probe;               // debug collision-probe line
+    private float _damageCooldown;               // s left before the next HP subtraction
+    private float _damageFlash;                  // s left on the HUD impact line
+    private string _damageFlashText = "";
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
@@ -95,6 +111,27 @@ public partial class FlightController : Node3D
     private const float UnderMapY = 0f;        // C1 terrain sits at y≈100+; below this we're lost
     private const float CollisionMargin = 6f;   // m of look-ahead past the nose (airframe half-length)
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
+
+    // Collision severity (Run-2 item 10b, all TUNE): impact speed along the contact
+    // normal decides between a survivable graze and a crash. A graze damages the
+    // struck part (quadratic in severity), slides the velocity along the surface
+    // with some tangential loss, and kicks the attitude; trees are soft obstacles —
+    // the plane plows through with fixed damage and speed loss, never a direct
+    // crash (the data still kills it once a critical part's HP drains).
+    private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
+    private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
+    private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
+    private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
+    private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
+    private const float TreeDamage = 2.5f;       // HP per tree strike
+    private const float TreeSpeedFactor = 0.92f; // speed retained per tree strike
+    private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
+    private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
+    private const float GrazeStopSpeed = 12f;    // m/s — grinding to (near) standstill on the
+                                                 // ground explodes the plane (user-reported:
+                                                 // a stopped plane sat there collecting 0-dmg kisses)
+    private const float EmbedPushOut = 0.3f;     // m per un-embed attempt after a graze
+    private const int EmbedTries = 3;            // attempts before giving up ⇒ explode, never tunnel
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
     private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
@@ -148,6 +185,11 @@ public partial class FlightController : Node3D
         CrashEffect?.Clear();
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
+        Damage?.Reset();     // every part back to full HP
+        Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
+        Breakup?.Reset();    // wreck pieces hidden, burn out
+        _damageCooldown = 0f;
+        _damageFlash = 0f;
         if (PlaneModel != null)
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
@@ -185,6 +227,10 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
         Audio?.OnCrash();
         CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
+        // the wreck: destroyed-subtree pieces scatter with the impact velocity and
+        // the fire/smoke burn at the impact point (item 10d)
+        Breakup?.Begin(PlaneModel?.GlobalTransform ?? GlobalTransform, impact,
+            _model.VelocityDir * _model.Speed);
         GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
@@ -228,6 +274,8 @@ public partial class FlightController : Node3D
 
         if (_crashed)
         {
+            // the wreck pieces keep tumbling/resting while the sim is frozen
+            Breakup?.Advance(dt, GetWorld3D()?.DirectSpaceState);
             // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
             // unattended HoldSegments runs respawn on a timer instead
             if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
@@ -238,6 +286,7 @@ public partial class FlightController : Node3D
         var prev = _model.Position;          // committed position from last frame
         var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
         _lastInput = input;
+        _damageCooldown -= dt;
         _model.Step(input, dt);
 
         // Crash when the frame's flight path runs into solid world geometry (terrain,
@@ -251,16 +300,18 @@ public partial class FlightController : Node3D
         float len = step.Length();
         float margin = Collider == null ? CollisionMargin : 0f;
         var probeEnd = len > 1e-4f ? to + step / len * margin : to;
-        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part, out float stopFrac);
+        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
+            out var normal, out float stopFrac);
         if (!hit && HitWorld(prev, probeEnd, out impact, out hitName))
         {
             hit = true;
             part = "center";
+            normal = len > 1e-4f ? -step / len : Vector3.Up;
             stopFrac = 1f;
         }
         if (_probe != null)
             DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
-        if (hit)
+        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
         {
             Crash(impact, hitName, part);
             return;
@@ -346,17 +397,134 @@ public partial class FlightController : Node3D
         };
     }
 
+    /// <summary>Decides a confirmed collision's outcome (Run-2 item 10b): false =
+    /// crash (severe impact, a critical part destroyed, or no damage data), true =
+    /// survivable graze — the struck part takes severity-scaled damage, the plane is
+    /// placed at the swept safe pose, its velocity deflects along the surface with
+    /// some tangential loss, and the attitude takes a lever-arm kick. Trees
+    /// (clutter_col) are soft: fixed damage + speed loss, fly straight through.</summary>
+    private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
+        string hitName, string part, Vector3 normal)
+    {
+        if (Damage == null)
+            return false; // no destroyable_parts data — every hit crashes (old behavior)
+        bool tree = hitName.EndsWith("clutter_col");
+        var vel = _model.VelocityDir * _model.Speed;
+        float vn = tree ? 0f : Mathf.Abs(vel.Dot(normal));
+        if (!tree && vn >= CrashSpeed)
+        {
+            GD.Print($"impact severity: vn={vn:0.0} m/s (spd {_model.Speed:0.0}, " +
+                     $"n=({normal.X:0.00},{normal.Y:0.00},{normal.Z:0.00})) ≥ {CrashSpeed} — crash");
+            return false;
+        }
+
+        float speedBefore = _model.Speed;
+        var localImpact = GlobalTransform.AffineInverse() * impact;
+        string dataPart = PlaneDamage.MapStruckPart(part, localImpact);
+        if (_damageCooldown <= 0f)
+        {
+            _damageCooldown = DamageCooldown;
+            float dmg = tree ? TreeDamage
+                : GrazeMaxDamage * (vn / CrashSpeed) * (vn / CrashSpeed);
+            var state = Damage.Apply(dataPart, dmg);
+            if (state != null)
+            {
+                Visuals?.OnPartDamage(dataPart, state.Fraction);
+                if (state.Hp <= 0f && state.Def.Critical)
+                {
+                    GD.Print($"part destroyed: {dataPart} (critical) — " +
+                             $"{(tree ? "tree strike" : $"vn={vn:0.0} m/s")} into {hitName}");
+                    return false; // the data's meaning: a dead critical part downs the plane
+                }
+                _damageFlashText = $"⚠ IMPACT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
+                _damageFlash = DamageFlashTime;
+                GD.Print($"graze ({part}→{dataPart}): {hitName} " +
+                         $"{(tree ? "tree" : $"vn={vn:0.0} m/s")} dmg={dmg:0.0} " +
+                         $"hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
+            }
+        }
+
+        if (tree)
+        {
+            _model.Speed = speedBefore * TreeSpeedFactor; // plow through, shedding speed
+            return true;
+        }
+
+        // Slide: place at the safe pose just off the surface, keep the tangential
+        // velocity (with a severity-scaled loss), and kick the attitude about the
+        // lever arm — impulse direction is the surface normal at the impact point.
+        _model.Position = prev + step * stopFrac + normal * GrazePushOut;
+        var slide = vel - normal * vel.Dot(normal);
+        float slideLen = slide.Length();
+        _model.Speed = slideLen * (1f - GrazeFriction * vn / CrashSpeed);
+        if (slideLen > 1e-4f)
+            _model.VelocityDir = slide / slideLen;
+        var inv = _model.Attitude.Inverse();
+        var lever = (inv * (impact - _model.Position)).Normalized();
+        var kick = lever.Cross((inv * normal).Normalized());
+        _model.BodyRates += kick * (GrazeKick * vn / CrashSpeed);
+
+        // A plane ground to (near) standstill is a wreck, not a parked aircraft
+        // (user-reported: it sat there collecting zero-damage kisses forever).
+        if (_model.Speed < GrazeStopSpeed)
+        {
+            GD.Print($"ground stop: slid to {_model.Speed:0.0} m/s — destroyed");
+            return false;
+        }
+
+        // Un-embed check: if any airframe box still overlaps world geometry at the
+        // new pose (V-ditches, berm backsides — the reported terrain glitch-through),
+        // push out along the contact normal; if it can't get free, explode rather
+        // than tunnel.
+        if (Collider != null && GetWorld3D()?.DirectSpaceState is { } space2)
+        {
+            for (int attempt = 0; ; attempt++)
+            {
+                var pose = new Transform3D(_model.Attitude, _model.Position);
+                bool overlapping = false;
+                foreach (var p in Collider.Parts)
+                {
+                    var q = new PhysicsShapeQueryParameters3D
+                    {
+                        Shape = p.Shape,
+                        Transform = pose * p.Local,
+                    };
+                    // trees (clutter_col) are soft — never "embedded" in a forest
+                    foreach (var hitInfo in space2.IntersectShape(q, 4))
+                        if (hitInfo["collider"].Obj is not Node b || !b.Name.ToString().EndsWith("clutter_col"))
+                        {
+                            overlapping = true;
+                            break;
+                        }
+                    if (overlapping)
+                        break;
+                }
+                if (!overlapping)
+                    break;
+                if (attempt >= EmbedTries)
+                {
+                    GD.Print("embedded in terrain after a graze — destroyed");
+                    return false;
+                }
+                _model.Position += normal * EmbedPushOut;
+            }
+        }
+        return true;
+    }
+
     /// <summary>Sweeps each airframe box along this frame's motion against the static
-    /// world colliders. On a hit, reports the earliest one: contact point (from rest
-    /// info at the just-touching pose), collider name, which part struck, and the
-    /// motion fraction where it stopped (for the debug draw). False when no collider
-    /// was built or nothing is in the way.</summary>
+    /// world colliders. On a hit, reports the earliest one: contact point + surface
+    /// normal (from rest info at the just-touching pose), collider name, which part
+    /// struck, and the motion fraction where it stopped (for the debug draw). False
+    /// when no collider was built or nothing is in the way.</summary>
     private bool SweepAirframe(Vector3 from, Vector3 motion, out Vector3 impact,
-        out string hitName, out string part, out float stopFrac)
+        out string hitName, out string part, out Vector3 normal, out float stopFrac)
     {
         impact = _model.Position;
         hitName = "";
         part = "";
+        float mLen = motion.Length();
+        normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
         stopFrac = 1f;
         if (Collider == null)
             return false;
@@ -379,14 +547,19 @@ public partial class FlightController : Node3D
             hit = true;
             stopFrac = cast[0];
             part = p.Name;
-            // Contact details at the first-overlap pose; the box's swept center is the
-            // fallback if the rest query finds nothing (numerical edge).
-            query.Transform = query.Transform.Translated(motion * cast[1]);
+            // Contact details slightly PAST the first-overlap pose — at exactly
+            // cast[1] the box may only just touch and GetRestInfo comes back empty,
+            // which would leave the head-on fallback normal (vn = full speed) on
+            // what was really a shallow graze. The box's swept center is the last
+            // resort if even the deepened query finds nothing.
+            query.Transform = query.Transform.Translated(
+                motion * cast[1] + (mLen > 1e-6f ? motion / mLen * 0.05f : Vector3.Zero));
             query.Motion = Vector3.Zero;
             var rest = space.GetRestInfo(query);
             if (rest.Count > 0)
             {
                 impact = (Vector3)rest["point"];
+                normal = (Vector3)rest["normal"];
                 hitName = GodotObject.InstanceFromId((ulong)rest["collider_id"]) is Node body
                     ? $"{body.GetParent()?.Name}/{body.Name}"
                     : "world";
@@ -394,6 +567,7 @@ public partial class FlightController : Node3D
             else
             {
                 impact = (baseXf * p.Local).Origin + motion * cast[1];
+                normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
                 hitName = "world";
             }
         }
@@ -481,6 +655,13 @@ public partial class FlightController : Node3D
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
         if(_model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
+        if (!_paused && !_crashed && _damageFlash > 0f)
+        {
+            _damageFlash -= (float)delta;
+            _hud.Text += $"\n{_damageFlashText}";
+        }
+        if (Damage?.Summary() is { Length: > 0 } dmgSummary)
+            _hud.Text += $"\nDMG {dmgSummary}";
         if (_paused)
             _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";
         else if (_crashed)
@@ -501,6 +682,7 @@ public partial class FlightController : Node3D
         {
             WingLights?.Advance(delta);
             Surfaces?.Advance(delta, _lastInput);
+            Visuals?.Update(_model.Position, _model.Attitude); // smoke/fire trail emission
         }
     }
 

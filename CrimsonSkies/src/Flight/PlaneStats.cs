@@ -19,6 +19,24 @@ public readonly struct SoundCurve
         : MinY + (MaxY - MinY) * Mathf.Clamp((x - MinX) / (MaxX - MinX), 0f, 1f);
 }
 
+/// <summary>One entry of a vehicle def's 'destroyable_parts' block (Run-2 item 10):
+/// a damageable airframe section — nose / tail / leftwing / rightwing for the
+/// player planes — with its hit points and state-change anims. 'critical' means
+/// the plane is destroyed when this part's HP reaches 0; the tail additionally
+/// carries 'engine' (power loss on destruction — flight-handling penalties are
+/// out of scope this run, recorded only). InjureAnims maps descending
+/// HP fractions to anim names: the *_damage_green/yellow/red cockpit-indicator
+/// cycle plus the pdpanelN torn-skin panel flips (10c wires the panels).</summary>
+public sealed class DestroyablePart
+{
+    public string Name = "";
+    public float MaxHp = 20f;
+    public bool Critical;
+    public bool Engine;
+    public string? GotHitAnim;
+    public List<(float Frac, string Anim)> InjureAnims = new();
+}
+
 /// <summary>
 /// Flight parameters for one player aircraft, pulled from the zrdr extraction:
 /// vehicle.json (per-plane 'dynamics' block, resolved through the 'kind_of'
@@ -62,6 +80,18 @@ public sealed class PlaneStats
     public SoundCurve WhinePitch = new(1f, 0.65f, 1.2f, 1.25f);
     public string RattleSound = "snd_planeshake";
     public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
+
+    /// <summary>The plane's damageable sections ('destroyable_parts', nearest def in
+    /// the kind_of chain). Empty when the def has none (damage model disabled).</summary>
+    public List<DestroyablePart> DestroyableParts = new();
+
+    /// <summary>The def-level 'injure_anims' (distinct from each part's): descending
+    /// HP-fraction thresholds → whole-plane effect anims — [0.10 player_smoketrail]
+    /// (the dying plane's dense_firetrail smoke) and [0.85 player_fuelleak]. Read as
+    /// "any part's fraction crosses the threshold" (assumption — the exact original
+    /// trigger is undecoded; a total-HP reading could never fire 0.10 before a
+    /// critical part died at 75% total).</summary>
+    public List<(float Frac, string Anim)> VehicleInjureAnims = new();
 
     public static PlaneStats Load(string zrdrPath, string planeNodeName)
     {
@@ -158,6 +188,64 @@ public sealed class PlaneStats
             FlightCeiling = Prop("flight_ceiling", 2500f),
         };
         stats.EngineSound = PropStr("engine_sound", stats.EngineSound);
+
+        // def-level injure_anims: [frac, animName] pairs (smoke trail / fuel leak)
+        foreach (var d in chain)
+        {
+            if (d.List("injure_anims") is not { } injureList)
+                continue;
+            foreach (var item in injureList)
+                if (item is List<object?> { Count: >= 2 } entry
+                    && entry[0] is float frac && entry[1] is string anim)
+                    stats.VehicleInjureAnims.Add((frac, anim));
+            break;
+        }
+
+        // destroyable_parts: nearest def in the chain that has the block. Each part
+        // is [name, hp, hp, flags…, "got_hit_anim", [anim, root], "injure_anims",
+        // [[frac, anim, root], …]] — the two hp values are identical for the player
+        // defs (AI variants differ); the first is taken as max HP.
+        foreach (var d in chain)
+        {
+            if (d.List("destroyable_parts") is not { } partsList)
+                continue;
+            foreach (var item in partsList)
+            {
+                if (item is not List<object?> p || p.Count == 0 || p[0] is not string partName)
+                    continue;
+                var part = new DestroyablePart { Name = partName };
+                bool hpSet = false;
+                for (int i = 1; i < p.Count; i++)
+                {
+                    switch (p[i])
+                    {
+                        case float hp when !hpSet:
+                            part.MaxHp = hp;
+                            hpSet = true;
+                            break;
+                        case "critical":
+                            part.Critical = true;
+                            break;
+                        case "engine":
+                            part.Engine = true;
+                            break;
+                        case "got_hit_anim" when i + 1 < p.Count && p[i + 1] is List<object?> hit:
+                            part.GotHitAnim = hit.Count > 0 ? hit[0] as string : null;
+                            i++;
+                            break;
+                        case "injure_anims" when i + 1 < p.Count && p[i + 1] is List<object?> anims:
+                            foreach (var a in anims)
+                                if (a is List<object?> { Count: >= 2 } entry
+                                    && entry[0] is float frac && entry[1] is string anim)
+                                    part.InjureAnims.Add((frac, anim));
+                            i++;
+                            break;
+                    }
+                }
+                stats.DestroyableParts.Add(part);
+            }
+            break;
+        }
 
         // stock engine power factor: 'engine' prop → engines.json row [id, name, power]
         int engineId = (int)Prop("engine", 0f);

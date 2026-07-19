@@ -14,9 +14,15 @@
     world view). So you can run it with no args (prompts both, then flies) or with
     extra flight flags (e.g. --debug-collision) and still get the prompts.
 
-    Explicit static views are passed through verbatim, no prompts:
-      * --plane=<node>         orbit-view one aircraft
-      * --chapter[=<code>]     static world view
+    Explicit static views:
+      * --plane=<node>          orbit-view one aircraft (verbatim, no prompts)
+      * --chapter[=<code>]      static world view (verbatim, no prompts)
+      * --damage[=part:frac,..] the damage lab -- a static plane view with per-part
+                                HP sliders. Prompts for the plane unless --plane= is
+                                also given; never adds --fly or a chapter. (Passing
+                                --fly/--chapter alongside --damage goes through
+                                verbatim instead, and the viewer ignores --damage
+                                with its own note.)
 
     Any other CrimsonSkies user args are forwarded as-is (see
     CrimsonSkies/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
@@ -37,6 +43,14 @@
 .EXAMPLE
     .\RunDev.ps1 --plane=player_kestrel
     Build, then orbit-view the Kestrel (static view -- no prompts, no flight).
+
+.EXAMPLE
+    .\RunDev.ps1 --damage
+    Build, pick a plane from the menu, then the damage lab (per-part HP sliders).
+
+.EXAMPLE
+    .\RunDev.ps1 --damage=leftwing:0.25 --plane=player_kestrel
+    Build, then the Kestrel damage lab preset to a 25% left wing; no prompts.
 #>
 
 $ErrorActionPreference = "Stop"
@@ -99,6 +113,14 @@ function Select-Item {
     return $Items[$DefaultIndex]
 }
 
+# Prompt for a plane from the roster and return its --plane= argument.
+function Select-Plane {
+    $defIdx = [Math]::Max(0, [array]::IndexOf(($Planes | ForEach-Object { $_.Node }), $DefaultPlane))
+    $plane  = Select-Item -Title "Select a plane:" -Items $Planes -DefaultIndex $defIdx
+    Write-Host "Plane:   $($plane.Name) ($($plane.Node))" -ForegroundColor Green
+    return "--plane=$($plane.Node)"
+}
+
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
 }
@@ -118,19 +140,25 @@ if ($args.Count -gt 0) { $UserArgs += $args }
 $hasPlane   = @($UserArgs | Where-Object { $_ -like '--plane=*' }).Count -gt 0
 $hasChapter = @($UserArgs | Where-Object { $_ -like '--chapter=*' -or $_ -eq '--chapter' }).Count -gt 0
 $hasFly     = $UserArgs -contains '--fly'
+$hasDamage  = @($UserArgs | Where-Object { $_ -eq '--damage' -or $_ -like '--damage=*' }).Count -gt 0
 
-# Fly flow = anything that isn't an explicit static view. A bare --plane (orbit view)
-# or a bare --chapter (static world view) is passed through verbatim; everything else
-# (no args, --fly, or extra flight flags) prompts for whatever wasn't specified.
-$flyFlow = $hasFly -or (-not $hasPlane -and -not $hasChapter)
+# Damage-lab flow: --damage is the static plane viewer's lab (PlaneViewer ignores it
+# in world/fly mode), so it needs a plane and must NOT get --fly or a chapter. Prompt
+# for the plane when missing and pass everything else through. An explicit --fly or
+# --chapter alongside --damage skips this flow (verbatim pass-through; the viewer
+# prints its own ignore note).
+$damageFlow = $hasDamage -and -not $hasFly -and -not $hasChapter
 
-if ($flyFlow) {
-    if (-not $hasPlane) {
-        $defIdx = [Math]::Max(0, [array]::IndexOf(($Planes | ForEach-Object { $_.Node }), $DefaultPlane))
-        $plane  = Select-Item -Title "Select a plane:" -Items $Planes -DefaultIndex $defIdx
-        Write-Host "Plane:   $($plane.Name) ($($plane.Node))" -ForegroundColor Green
-        $UserArgs += "--plane=$($plane.Node)"
-    }
+# Fly flow = anything that isn't an explicit static view. A bare --plane (orbit view),
+# a bare --chapter (static world view), or a --damage lab run stays static; everything
+# else (no args, --fly, or extra flight flags) prompts for whatever wasn't specified.
+$flyFlow = -not $damageFlow -and ($hasFly -or (-not $hasPlane -and -not $hasChapter))
+
+if ($damageFlow) {
+    if (-not $hasPlane) { $UserArgs += Select-Plane }
+}
+elseif ($flyFlow) {
+    if (-not $hasPlane) { $UserArgs += Select-Plane }
     if (-not $hasChapter) {
         $defIdx  = [Math]::Max(0, [array]::IndexOf(($Chapters | ForEach-Object { $_.Code }), $DefaultChapter))
         $chapter = Select-Item -Title "Select a chapter (map):" -Items $Chapters -DefaultIndex $defIdx
