@@ -96,7 +96,7 @@ public sealed partial class MarkerHud : Control
 
         // Run-status: elapsed time + zones done, top-centre under the compass tape.
         DrawLines(font, new Vector2(cx, RefStatusY * s),
-            new[] { $"{FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
+            new[] { $"{StuntMission.FormatTime(_mission.Elapsed)}    ZONES {_mission.CompletedCount}/{_mission.TotalCount}" },
             statusFont, HudBlue, topAnchored: true);
 
         // One-shot intro banner (fades over the last second of its window).
@@ -115,7 +115,7 @@ public sealed partial class MarkerHud : Control
         if (_mission.AllComplete)
         {
             DrawLines(font, new Vector2(cx, Size.Y * 0.26f),
-                new[] { "ALL DANGER ZONES CLEARED", FormatTime(_mission.Elapsed) }, bannerFont, HudGreen);
+                new[] { "ALL DANGER ZONES CLEARED", StuntMission.FormatTime(_mission.Elapsed) }, bannerFont, HudGreen);
             return;
         }
 
@@ -176,12 +176,6 @@ public sealed partial class MarkerHud : Control
         float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
         int h = Mathf.RoundToInt(rel / 30f) % 12;
         return h == 0 ? 12 : h;
-    }
-
-    private static string FormatTime(float t)
-    {
-        int min = (int)(t / 60f);
-        return $"{min}:{t - min * 60f:00.0}";
     }
 
     /// <summary>Distance in the HUD's imperial units (feet under a mile, miles above — matching the

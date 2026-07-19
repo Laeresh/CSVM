@@ -18,7 +18,7 @@ land with their `docs/formats/` page in the same change (targets/messages → a 
 
 1. ☑ Stunt mission core — dzones/targets/messages loaders, dz resolution, sphere detection, `--stunt` mode *(done 2026-07-19; scripted verification + user-confirmed full 5/5 `AllComplete` run)*
 2. ☑ Marker HUD — original-format text + distance/clock position, edge arrow, target cycling, run-status + intro line *(done 2026-07-19; `src/Flight/MarkerHud.cs`; scripted on-screen/left/behind/fly-through shots verified projection, edge arrow side, clock bearing, auto-advance + cleared flash; user A/B pending)*
-3. ☐ Scoring — timer + splits, end scoreboard, best-time persistence, restart flow
+3. ☑ Scoring — timer + splits, end scoreboard, best-time persistence, restart flow *(done 2026-07-19; `src/Flight/StuntScoreboard.cs` + `src/Flight/ScoreStore.cs`; three user hand-flown runs verified monotonic splits, NEW-BEST/keeps-best persistence surviving relaunch, clock through crashes; board layout via `--debug-scoreboard`. Same-turn: FormatTime → InvariantCulture, DzRadius 60→30 m. Open: fonts/placement + DzRadius A/B)*
 4. ☐ Launchscreen — Mode → Chapter → Plane, keyboard/controller navigation, no-args default
 5. ☐ Splitscreen foundation — shared-world multi-viewport rendering + per-player input (CLI-driven, free flight)
 6. ☐ Splitscreen join + plane select — Start-to-join in the launchscreen, simultaneous pick, 2P/4P layouts, per-player HUD

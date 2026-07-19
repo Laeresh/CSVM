@@ -18,6 +18,15 @@ public sealed class StuntZone
     public string Help = "";          // resolved action, e.g. "Fly Through"
     public bool Completed;
 
+    /// <summary>Run clock, seconds, at the moment this zone was flown through — its cumulative
+    /// time from run start (item 3 scoring). 0 until completed; the scoreboard's per-zone split is
+    /// the delta between consecutive completions in <see cref="CompletionOrder"/>.</summary>
+    public float CompletedAt;
+
+    /// <summary>0-based order in which this zone was cleared (the run is order-free, so this is
+    /// the flown order, not the ia.json list order). −1 until completed.</summary>
+    public int CompletionOrder = -1;
+
     /// <summary>The original's assembled marker text without the clock suffix (item 2 adds
     /// that): "Danger Zone [Fly Through] - Train Tunnel Mid". Degrades gracefully if any
     /// part is absent.</summary>
@@ -47,7 +56,7 @@ public sealed class StuntMission
 {
     /// <summary>Sphere radius, m, for "flew through" a danger zone (TUNE — the original has no
     /// gate geometry; a single point + radius approximates the bridge/tunnel/hangar opening).</summary>
-    public const float DzRadius = 60f;
+    public const float DzRadius = 15f;
 
     /// <summary>Messages key for the run-start intro line ("Fly through all the Danger Zones to
     /// win!") — the marker HUD's one-shot banner (item 2).</summary>
@@ -169,6 +178,8 @@ public sealed class StuntMission
     private void Complete(StuntZone z)
     {
         z.Completed = true;
+        z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits (item 3)
+        z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
         GD.Print($"stunt: completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
@@ -220,6 +231,66 @@ public sealed class StuntMission
                 return;
             }
         }
+    }
+
+    /// <summary>Start a fresh run (item 3, the scoreboard's "R — New Run"): every zone incomplete,
+    /// the clock back to zero, the active target back to the first zone. Unlike a mid-run respawn
+    /// this DOES clear progress and the clock — it is the deliberate opposite of the
+    /// crash-keeps-everything rule.</summary>
+    public void Reset()
+    {
+        foreach (var z in _zones)
+        {
+            z.Completed = false;
+            z.CompletedAt = 0f;
+            z.CompletionOrder = -1;
+        }
+        CompletedCount = 0;
+        AllComplete = false;
+        Elapsed = 0f;
+        _active = -1;
+        AdvanceActive();
+    }
+
+    /// <summary>Debug/testing only (--debug-scoreboard): instantly complete the whole run with
+    /// synthetic, increasing split times so the end-of-run scoreboard renders deterministically for
+    /// a screenshot / layout pass. Drives the real <see cref="Complete"/> path (fires the events,
+    /// sets AllComplete). Not reachable in normal play.</summary>
+    public void DebugCompleteAll()
+    {
+        for (int i = 0; i < _zones.Count; i++)
+        {
+            Elapsed += 8f + i * 9.5f;
+            if (!_zones[i].Completed)
+                Complete(_zones[i]);
+        }
+    }
+
+    /// <summary>The zones in the order they were flown through (item 3 scoreboard) — completed
+    /// zones by <see cref="StuntZone.CompletionOrder"/>, any still-incomplete zones appended in
+    /// list order.</summary>
+    public IEnumerable<StuntZone> InCompletionOrder()
+    {
+        var done = new List<StuntZone>();
+        foreach (var z in _zones)
+            if (z.Completed)
+                done.Add(z);
+        done.Sort((a, b) => a.CompletionOrder.CompareTo(b.CompletionOrder));
+        foreach (var z in done)
+            yield return z;
+        foreach (var z in _zones)
+            if (!z.Completed)
+                yield return z;
+    }
+
+    /// <summary>"m:ss.t" run-clock formatting, shared by the marker HUD status line and the
+    /// scoreboard (item 3). Invariant culture so the decimal is always a period regardless of the
+    /// player's system locale (a game clock, and deterministic across screenshot runs).</summary>
+    public static string FormatTime(float seconds)
+    {
+        int min = (int)(seconds / 60f);
+        return string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{0}:{1:00.0}", min, seconds - min * 60f);
     }
 
     /// <summary>Compact HUD status: "2/5 zones — Danger Zone [Fly Through] - Train Tunnel Mid",

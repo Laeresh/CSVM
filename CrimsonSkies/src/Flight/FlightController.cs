@@ -93,9 +93,19 @@ public partial class FlightController : Node3D
     /// Null in free flight (and when --stunt found no danger zones).</summary>
     public MarkerHud? Marker;
 
+    /// <summary>The end-of-run results overlay (M2.5 item 3): splits + total + best-time on
+    /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
+    /// the run's RunCompleted. Null in free flight.</summary>
+    public StuntScoreboard? Scoreboard;
+
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
+
+    /// <summary>Debug/testing (--debug-scoreboard): force-complete the stunt run on the first
+    /// physics frame so the results scoreboard renders deterministically for a screenshot. No
+    /// effect without a stunt run.</summary>
+    public bool DebugCompleteStunt;
 
     private FlightModel _model = null!;
     private Camera3D _camera = null!;
@@ -179,6 +189,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(Gauges);
         if (Marker != null)
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
+        if (Scoreboard != null)
+            canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
         AddChild(canvas);
         if (DebugCollision)
         {
@@ -220,6 +232,15 @@ public partial class FlightController : Node3D
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
         if (_camera != null && IsInsideTree())
             SnapCamera();
+    }
+
+    /// <summary>Full stunt restart from the results scoreboard (item 3, R): fresh clock + every
+    /// zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
+    /// scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.</summary>
+    private void RestartStuntRun()
+    {
+        Stunt?.Reset();
+        Respawn();
     }
 
     /// <summary>True if the segment crosses any static world collider; on a hit,
@@ -309,6 +330,22 @@ public partial class FlightController : Node3D
         // clock never stops (item 3 rule); it stops only at AllComplete (inside Tick). Frozen
         // while paused (returned above — a debug screenshot freeze must not run the timer).
         Stunt?.Tick(dt);
+
+        // Debug: force-complete the run so the scoreboard renders for a deterministic screenshot.
+        if (DebugCompleteStunt && Stunt is { AllComplete: false })
+            Stunt.DebugCompleteAll();
+
+        // Run complete: the scoreboard is up and the flight sim freezes in place (the chase camera
+        // in _Process still holds on the plane). R (gamepad Y/A) starts a fresh run — the
+        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone
+        // (item 3). Checked before the crash branch so completing the final zone always restarts
+        // cleanly.
+        if (Stunt is { AllComplete: true })
+        {
+            if (RespawnPressed())
+                RestartStuntRun();
+            return;
+        }
 
         if (_crashed)
         {

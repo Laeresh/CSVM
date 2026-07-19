@@ -107,6 +107,7 @@ public partial class PlaneViewer : Node3D
     private bool _scenarioExplicit;    // --scenario= given (so --stunt doesn't override it)
     private bool _stunt;               // --stunt: stunt-flying mode (= --fly + stunt_flying spawns + StuntMission)
     private bool _debugDzPaths;        // --debug-dzpaths: build the dzpaths route ribbons (debug-only geometry)
+    private bool _debugScoreboard;     // --debug-scoreboard: force-complete the stunt run to screenshot the results board
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -161,6 +162,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--fly") _fly = true;
             else if (arg == "--stunt") _stunt = true;
             else if (arg == "--debug-dzpaths") _debugDzPaths = true;
+            else if (arg == "--debug-scoreboard") _debugScoreboard = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -523,6 +525,14 @@ public partial class PlaneViewer : Node3D
                         // the flight camera, draws the edge arrow + clock bearing + run status.
                         controller.Marker = MarkerHud.Build(controller.Stunt, _camera);
                         GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
+                        // The end-of-run scoreboard (item 3): per-zone splits + total + persisted
+                        // best time, keyed chapter/mission/plane in user://stunt_scores.json.
+                        var scoreKey = $"{_chapter}/{_mission}/{_planeName}";
+                        controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
+                            PlaneDisplayName(stats), $"{_chapter}   ·   {Humanize(_scenario)}",
+                            ScoreStore.Load(), scoreKey);
+                        GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
+                        controller.DebugCompleteStunt = _debugScoreboard;
                         what += $" [stunt: {controller.Stunt.TotalCount} zones]";
                     }
                 }
@@ -584,6 +594,28 @@ public partial class PlaneViewer : Node3D
                 GD.Print($"--damage: cannot parse '{item}' (want part:fraction)");
         }
         return list;
+    }
+
+    /// <summary>A readable plane name for the stunt scoreboard (item 3) from the vehicle.json def
+    /// name — the player defs are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the
+    /// leading p and title-case → "Bloodhawk". Falls back to the node name. (Placeholder until the
+    /// item-4 launchscreen introduces a proper data-driven roster of display names.)</summary>
+    private static string PlaneDisplayName(PlaneStats stats)
+    {
+        var d = stats.DefName;
+        string name = d.Length > 1 && (d[0] == 'p' || d[0] == 'P') ? d[1..]
+            : d.Length > 0 ? d
+            : stats.NodeName;
+        return Humanize(name);
+    }
+
+    /// <summary>"stunt_flying" → "Stunt Flying": underscores to spaces, each word title-cased.</summary>
+    private static string Humanize(string s)
+    {
+        var words = s.Split(new[] { '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
+        for (int i = 0; i < words.Length; i++)
+            words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..].ToLowerInvariant();
+        return string.Join(' ', words);
     }
 
     /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
