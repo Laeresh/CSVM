@@ -331,7 +331,10 @@ public partial class PlaneViewer : Node3D
                             if (MakePuffer(zrdrPath, textures, this, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
                         var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
-                        AddChild(new DamageLab(stats, visuals, _plane, _damagePreset));
+                        // the HUD gauge cluster as a lab toggle (user request): the damage
+                        // dial mirrors the sliders, blinks on decreases like a flight hit
+                        var labGauges = GaugeCluster.Build(gamez, _planeName, textures, stats.DestroyableParts);
+                        AddChild(new DamageLab(stats, visuals, _plane, _damagePreset, labGauges));
                         GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
                                  $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
                         what += " + damage lab";
@@ -393,6 +396,20 @@ public partial class PlaneViewer : Node3D
                 controller.Compass = CompassTape.Build(textures);
                 if (controller.Compass != null)
                     GD.Print("compass: heading tape from compassticks2/compasstxt");
+
+                // The cockpit dials (altimeter / speedometer / damage display), rebuilt
+                // from the plane's own gauges subtree in planes.zbd + the chapter's
+                // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
+                controller.Gauges = GaugeCluster.Build(planesGamez, _planeName, textures,
+                    stats.DestroyableParts);
+                if (controller.Gauges != null)
+                {
+                    var damage = controller.Damage;
+                    if (damage != null)
+                        controller.Gauges.PartFraction = name =>
+                            damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
+                    GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
+                }
 
                 // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
                 // its flipbook frames from the same texture archive. Built here while the

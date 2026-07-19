@@ -28,30 +28,48 @@ public sealed partial class DamageLab : Node
     private readonly DamageVisuals _visuals;
     private readonly Node3D _plane;
     private readonly IReadOnlyList<(string Part, float Frac)> _preset;
+    private readonly GaugeCluster? _gauges;
 
     private readonly Dictionary<string, HSlider> _sliders = new(StringComparer.OrdinalIgnoreCase);
     private readonly Dictionary<string, Label> _readouts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, float> _lastFractions = new(StringComparer.OrdinalIgnoreCase);
     private CanvasLayer _ui = null!;
+    private CanvasLayer? _gaugeLayer;
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
 
     public DamageLab(PlaneStats stats, DamageVisuals visuals, Node3D plane,
-        IReadOnlyList<(string Part, float Frac)>? preset = null)
+        IReadOnlyList<(string Part, float Frac)>? preset = null, GaugeCluster? gauges = null)
     {
         _stats = stats;
         _visuals = visuals;
         _plane = plane;
         _preset = preset ?? Array.Empty<(string, float)>();
+        _gauges = gauges;
         Name = "damage_lab";
     }
 
     public override void _Ready()
     {
+        // The HUD gauge cluster (user request): the damage dial mirrors the sliders —
+        // colors from the fractions, the 5 s post-hit blink from slider decreases.
+        // Altimeter/speedometer draw at rest (no flight data). Toggled from the panel.
+        if (_gauges != null)
+        {
+            _gauges.PartFraction = name =>
+                _sliders.TryGetValue(name, out var s) ? (float)(s.Value / 100.0) : 1f;
+            _gaugeLayer = new CanvasLayer { Layer = 0 };
+            _gaugeLayer.AddChild(_gauges);
+            AddChild(_gaugeLayer);
+        }
         BuildUi();
         foreach (var (part, frac) in _preset)
             if (_sliders.TryGetValue(part, out var slider))
                 slider.Value = frac * 100.0; // fires ValueChanged → Reapply
             else
                 GD.Print($"damage lab: --damage names unknown part '{part}'");
+        // presets are an initial state, not fresh hits — cancel the blink their
+        // slider moves triggered so --screenshot damage shots stay deterministic
+        _gauges?.Reset();
         Reapply(); // sync the readouts even when no preset moved a slider
     }
 
@@ -120,6 +138,13 @@ public sealed partial class DamageLab : Node
         };
         box.AddChild(repair);
 
+        if (_gaugeLayer != null)
+        {
+            var hud = new CheckButton { Text = "HUD gauges", ButtonPressed = true };
+            hud.Toggled += on => _gaugeLayer.Visible = on;
+            box.AddChild(hud);
+        }
+
         margin.AddChild(box);
         panel.AddChild(margin);
         _ui.AddChild(panel);
@@ -151,6 +176,15 @@ public sealed partial class DamageLab : Node
         var fractions = new Dictionary<string, float>(StringComparer.OrdinalIgnoreCase);
         foreach (var (name, slider) in _sliders)
             fractions[name] = (float)(slider.Value / 100.0);
+
+        // a slider going DOWN = the part "took damage" — start its gauge blink,
+        // exactly like a flight hit (repairs don't blink)
+        foreach (var (name, frac) in fractions)
+        {
+            if (_lastFractions.TryGetValue(name, out float prev) && frac < prev)
+                _gauges?.OnPartDamage(name);
+            _lastFractions[name] = frac;
+        }
 
         foreach (var part in _stats.DestroyableParts)
             if (_readouts.TryGetValue(part.Name, out var readout))

@@ -1,7 +1,9 @@
-# HUD: the compass tape
+# HUD: compass tape + cockpit gauges
 
 Validated 2026-07-18 against `OriginalScreenshots/HUD.png` (2556×1440, dgVoodoo) by
-pixel-probing every tick and label. Remake implementation: `src/Flight/CompassTape.cs`.
+pixel-probing every tick and label; gauges decoded 2026-07-19 from the planes.zbd
+`gauges` subtrees + `OriginalScreenshots/HUD with dmg.png`. Remake implementations:
+`src/Flight/CompassTape.cs`, `src/Flight/GaugeCluster.cs`.
 
 ## Textures
 
@@ -46,6 +48,66 @@ The compass ships as two small textures in **every chapter's `texture.zbd`** (no
   drum's silhouette); regular ticks fade out ~20 px before reaching the rim.
 - Labels every 45° (octants), no numeric readout, no lubber line — the current
   heading is read from the centered, brightest label.
+
+## The cockpit gauges (altimeter / speedometer / damage display)
+
+**The gauge dials are 3D models inside each player plane's tree in planes.zbd** — a
+`gauges` subtree under the (otherwise skipped) cockpit, one per plane, with the same
+child names everywhere: `altimeter`, `speedometer`, `damageindicator`, plus `comp`,
+`horizn`, `gungauge`, `missilegauge`, `nitrogauge`. All dial meshes are flat polygons
+in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the interp
+`support\cockpit.gw` boot script wires their dynamic behavior via `FindSubNode` +
+`CycleTextureSet` texture swaps. Texture pixels live in **every chapter's
+`texture.zbd`** (not rimage.zbd).
+
+- **Face**: each dial's face is a 12-gon (radius 1) mapping the full face texture —
+  `altimeter.tif` / `speedometer.tif` / the per-plane `<short>_damage.tif`
+  (`bldhwk_damage`, `ke_damage`, `pm_damage`, `agyro_damage`, `avenger_damage`,
+  `bal_damage`, `fury_damage`, + AI planes). The face texture includes the bezel ring
+  and the *unlit* (dark) LOW ALT / STALL windows; 12-gon corners cut the texture's
+  square corners. Draw priority 1.
+- **Needles are single textured quads — the taper and the hub are painted in
+  `needle.tif` (32×128, no alpha, drawn opaque), not meshed.** Quad x −0.055…0.052,
+  y −0.245…0.510 (pivot at the origin, tip +y = texture top; the texture's top 60 %
+  is the light shaft with a notch, the bottom 40 % the dark hub box with two black
+  discs). The altimeter has two: `hundreds` (long, priority 9, z 0.05) and
+  `thousands` (short/wider: x ±0.07, y −0.181…0.368, priority 8, z 0.025 — same
+  texture); the speedometer one (`speed`, priority 8). The nodes' modeled rest
+  rotations are arbitrary; the engine sets absolute angles. **Note:** the shaft in
+  the texture is a flat full-width slab (rows 0–75 all constant, verified by full
+  sampling), yet the original's rendered needle is a slim lance tapering to a point
+  — that shape is applied engine-side, in neither the texture nor the mesh/UVs (the
+  remake replicates it with a load-time alpha taper).
+- **Warning overlays** `lowalt_on` / `stallwarning_on` (priority 7 — *under* the
+  needles): the lit window quad (`lowalt.tif` / `stall.tif`, 64×32, red) **plus two
+  red bezel slashes** (`redhilite.tif` quads at the dial edge, left+right of the
+  window's side). The whole node toggles/blinks.
+- **Damage display**: the `damageindicator` node's own mesh is the silhouette face;
+  its four children `nosedamage` / `taildamage` / `leftwingdamage` / `rightwingdamage`
+  each carry exactly two polygons (priority 7): a **border bar** at the bezel edge
+  (`greenhilite.tif`; nose = top bar, tail = bottom, wings = left/right slanted bars)
+  and a **part-shaped hatch fill** tracing that part on this plane's silhouette
+  (`grn_hatchptrn.tif`, 8×8, tiled UVs up to ~5×). `cockpit.gw` gives each zone a
+  4-map texture cycle — green/yellow/**orange**/red `*hilite` + `*_hatchptrn` — the
+  color change IS a texture swap. (The remake uses 3 of the 4: the reference shots
+  show green/yellow/red.) **So part positions are per-plane mesh data, nothing is
+  computed from the silhouette texture.**
+- **Thresholds**: every player part's vehicle.json `injure_anims` carry
+  `*_damage_green` at 0.72, `*_damage_yellow` at 0.46, `*_damage_red` at 0.20 (the
+  anims themselves live in the undecoded cam_anim.zbd; the remake maps fraction >
+  0.46 green, > 0.20 yellow, else red). Blink: the original blinks a zone (fill +
+  border) for ~5 s after it takes a hit, even inside green (user-observed).
+- **Scales** (measured off the face textures): altimeter 0–9 clockwise from top, 36°
+  per digit — long needle 360°/1,000 ft, short 360°/10,000 ft; speedometer labels
+  0/100/200/300 at ≈0°/69°/143°/216° clockwise → **≈0.72°/mph** linear.
+- **Screen layout** (HUD.png, 2556×1440, bezel dark-span scans): all three dials
+  share **radius ≈ 85 px**; altimeter center (425.5, 1108.5), damage dial
+  (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
+  the altimeter. (The two reference screenshots place the cluster slightly
+  differently — HUD.png is the canonical one, matching the compass metrics.)
+- Also in the subtree, unwired in the remake: `gungauge`/`missilegauge` (ammo
+  counters via letter/digit texture cycles, `ggindicatorN`/`mgindicatorN` belt
+  lights), `nitrogauge`, the artificial-horizon `horizn` and drum `comp` compass.
 
 ## Open question
 

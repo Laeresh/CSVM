@@ -40,10 +40,17 @@ https://github.com/bethington/ghidra-mcp
 - FlightModel
     - Turn rates, especially rolling is a lot faster in original -> Added a factor
     - Should loose height on stalling -> Done
+- Dmg Model
+    - Collider for tail need to be retuned (Bloodhawk wings have tail colliders)
 - Environment
     - Map extension not exactily the same as in original
     - C4 Cloud deck texture not following plane
     - generic way to find billboard sprites (flames on refinery?)
+- Sound
+    - Engine retune: he confusing extra combs turned out to be the original playing the engine as a ~5%-detuned dual stack (a chorus effect — ours is a single loop, noted as a backlog fidelity nit)
+- HUD
+    - Needles not correct form (could create procedually instead of by texture in Hi-Def mode)
+    - Crash Dmg display blinking completly red
 ## Milestone 2 Polishing Run 2
 
 ### Work for me

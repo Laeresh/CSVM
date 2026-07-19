@@ -58,6 +58,11 @@ public partial class FlightController : Node3D
     /// archive lacks the compass textures.</summary>
     public CompassTape? Compass;
 
+    /// <summary>The original's cockpit dials (altimeter / speedometer / damage
+    /// display) rebuilt from the plane's own gauges subtree; added to the HUD canvas
+    /// and fed altitude/AGL/speed/stall + part-damage events. Optional.</summary>
+    public GaugeCluster? Gauges;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -157,6 +162,8 @@ public partial class FlightController : Node3D
         canvas.AddChild(_hud);
         if (Compass != null)
             canvas.AddChild(Compass);
+        if (Gauges != null)
+            canvas.AddChild(Gauges);
         AddChild(canvas);
         if (DebugCollision)
         {
@@ -186,6 +193,7 @@ public partial class FlightController : Node3D
         WingLights?.Reset(); // flares off; the cycle restarts from this spawn
         Surfaces?.Reset();   // control surfaces back to neutral
         Damage?.Reset();     // every part back to full HP
+        Gauges?.Reset();     // damage-dial blink timers cleared
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         Breakup?.Reset();    // wreck pieces hidden, burn out
         _damageCooldown = 0f;
@@ -319,6 +327,14 @@ public partial class FlightController : Node3D
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
 
+        // height over ground for the altimeter's LOW ALT warning: one ray straight
+        // down per physics frame (world + map-edge extension colliders)
+        if (Gauges != null)
+            Gauges.AglMeters = HitWorld(_model.Position,
+                _model.Position + Vector3.Down * 1000f, out var ground, out _)
+                ? _model.Position.Y - ground.Y
+                : float.MaxValue;
+
         if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
             Respawn();
 
@@ -333,7 +349,9 @@ public partial class FlightController : Node3D
                      $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
                      $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
                      $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
-                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}");
+                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
+                     (Gauges != null && Gauges.AglMeters < float.MaxValue
+                         ? $" agl={Gauges.AglMeters:0}" : ""));
         }
     }
 
@@ -430,6 +448,7 @@ public partial class FlightController : Node3D
             if (state != null)
             {
                 Visuals?.OnPartDamage(dataPart, state.Fraction);
+                Gauges?.OnPartDamage(dataPart); // damage dial: hit zone blinks 5 s
                 if (state.Hp <= 0f && state.Def.Critical)
                 {
                     GD.Print($"part destroyed: {dataPart} (critical) — " +
@@ -651,6 +670,12 @@ public partial class FlightController : Node3D
             // heading of the nose: 0 = north (−Z), 90 = east (+X)
             var nose = -_model.Attitude.Z;
             Compass.HeadingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+        }
+        if (Gauges != null)
+        {
+            Gauges.SpeedMph = mph;
+            Gauges.AltitudeFt = ft;
+            Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
         }
         _hud.Text = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT   THR {_model.Throttle * 100,3:0}%";
         if(_model.isStalled())
