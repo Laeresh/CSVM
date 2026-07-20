@@ -153,3 +153,18 @@ Internally `_worldMode` stopped being set piecemeal during arg parsing and is no
 **Regressions.** Both labs start hidden/clean, so `--viewer --plane=player_bhawk` and `--viewer --plane=player_kestrel --damage=leftwing:0.25` are **byte-identical by md5** to the pre-inversion `--plane=…` equivalents. Battery clean: bare `--plane`/`--chapter` fly, `--viewer --plane`/`--viewer --chapter` are static, `--damage` opens the lab, `--fly`/`--stunt`/4P race/2P mixed planes/`--menu=plane`/bare launchscreen all build error-free.
 
 **Open:** the labs are mouse-driven (Godot UI) while flight is keyboard/pad — fine for a dev tool, but the panels have had no interactive playtest, only scripted verification. Whether the *launchscreen* should offer a livery picker for actual play is still open (see `backlog.md`).
+
+
+## 2026-07-20 — Fix: H did nothing in a plain `--viewer` (damage lab was never built)
+
+User report after the CLI inversion: "H for damage does not work. The livery lab with L works."
+
+**Cause, and it was not the key handler.** `DamageLab` and `LiveryLab` have structurally identical `_UnhandledKeyInput` overrides, so the obvious suspicion — input being swallowed by the visible panel's focusable widgets, or by `PlaneViewer._UnhandledInput` — was wrong on both counts. Diagnosed by injecting synthetic key events through `Input.ParseInputEvent` from `_Process` and logging every key each lab's handler actually saw: with `--damage`, both labs received H perfectly and the panel *did* toggle (the HUD gauges staying up made it look like it hadn't). Without `--damage`, only the livery lab logged anything — because `PlaneViewer` only ever constructed a `DamageLab` when `--damage` was passed. There was no node to receive the key. The livery lab is built for every `--viewer`, which is exactly why L worked and H didn't.
+
+That also made the livery panel's own hint ("H the damage lab") a promise the build didn't keep.
+
+**Fix, matching the original request that `--viewer` integrate the other viewer options.** Every `--viewer` session now builds a damage lab; `--damage` only decides whether it opens at launch (and presets the sliders). New `DamageLab.StartHidden` keeps it out of sight otherwise, and `PlaneBuilder` gets `damagePanels: _viewerMode` so the `pdpN` torn-skin panels exist to flip. H now toggles the lab **as a whole** — slider panel and gauge layer together — since H means "is the damage lab here", not "is one of its two CanvasLayers here"; `_gaugesWanted` remembers the panel's HUD-gauges checkbox across a hide/show.
+
+**Verified** by the same injection harness (removed again afterwards): in a plain `--viewer`, one injected H raises sliders + gauges, and two H presses return the viewport to a frame **byte-identical by md5** to the baseline — the real test that the toggle leaves nothing behind. `--viewer --plane=player_bhawk` and `--viewer --plane=player_kestrel --damage=leftwing:0.25` remain byte-identical to their pre-inversion `--plane=` equivalents even though the model now carries the hidden torn-skin panels. Battery clean: viewer, damage, a plane with no destroyable_parts, `--viewer --chapter`, bare `--plane` flight, 4P stunt race, `--debug-livery=2`. Load cost of the always-built lab: ~730 ms vs ~525 ms for `--viewer` (PlaneStats + 10 puffers + the gauge cluster), unchanged for `--damage`.
+
+**Worth remembering:** "the key handler doesn't fire" and "the node doesn't exist" look identical from the outside. Injecting input and logging what each candidate handler receives separated them in one run; reading the two handlers side by side would never have, because they were never different.

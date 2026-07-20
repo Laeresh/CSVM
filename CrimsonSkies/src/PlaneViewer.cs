@@ -509,6 +509,10 @@ public partial class PlaneViewer : Node3D
             else
             {
                 // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
+                // Every --viewer session gets one now (2026-07-20), so H always has something
+                // to toggle; --damage only decides whether it opens straight away. Built
+                // hidden otherwise, and the panels are built hidden regardless, so a plain
+                // --viewer still renders byte-identically.
                 // Static views build unpainted unless --paint asks (randomByDefault: false),
                 // so every existing orbit/damage screenshot renders exactly as before.
                 // Resolved once: the livery lab below opens on exactly the scheme the plane
@@ -517,16 +521,17 @@ public partial class PlaneViewer : Node3D
                 // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
                 // model is built bare and there is one write path for paint (its Repaint).
                 // Everywhere else the builder paints at construction as usual.
-                var builder = new PlaneBuilder(gamez, textures, damagePanels: _damageLab,
+                var builder = new PlaneBuilder(gamez, textures, damagePanels: _viewerMode,
                     scheme: _viewerMode ? null : staticScheme);
                 _plane = builder.Build(_planeName);
                 meshInstances = builder.MeshInstanceCount;
                 what = $"'{_planeName}'";
 
-                // Damage lab (--damage): per-part HP sliders driving the item-10c damage
-                // visuals on the parked plane — the same DamageVisuals/puffer pipeline as
-                // flight, with the distance-interval trails burning in place (DamageLab).
-                if (_damageLab)
+                // Damage lab: per-part HP sliders driving the item-10c damage visuals on the
+                // parked plane — the same DamageVisuals/puffer pipeline as flight, with the
+                // distance-interval trails burning in place (DamageLab). Present in every
+                // --viewer session (H), opened at launch only by --damage.
+                if (_viewerMode)
                 {
                     var stats = PlaneStats.Load(zrdrPath, _planeName);
                     if (stats.DestroyableParts.Count == 0)
@@ -545,10 +550,14 @@ public partial class PlaneViewer : Node3D
                         // the HUD gauge cluster as a lab toggle (user request): the damage
                         // dial mirrors the sliders, blinks on decreases like a flight hit
                         var labGauges = GaugeCluster.Build(gamez, _planeName, textures, stats.DestroyableParts);
-                        _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _damagePreset, labGauges));
+                        _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _damagePreset, labGauges)
+                        {
+                            StartHidden = !_damageLab, // --damage opens it; plain --viewer waits for H
+                        });
                         GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
-                                 $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
-                        what += " + damage lab";
+                                 $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails"
+                                 + (_damageLab ? "" : " (hidden — H)"));
+                        what += _damageLab ? " + damage lab" : " + damage lab (H)";
                     }
                 }
 

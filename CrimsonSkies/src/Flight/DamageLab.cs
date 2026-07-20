@@ -19,8 +19,12 @@ namespace CrimsonSkies.Flight;
 /// lab's undo, which flight never needs; rebuilding only on set changes keeps a
 /// slider drag from restarting the fires at every pixel of travel).
 ///
-/// H toggles the slider panel (clean F12 shots). --damage=part:frac,… presets
-/// the sliders, so --screenshot runs capture damage states deterministically.
+/// H toggles the lab — panel AND gauges together, so it is genuinely present or absent
+/// (clean F12 shots). Every --viewer session builds one: with --damage it opens straight
+/// away, otherwise it waits hidden behind H, which is what makes H mean something in a
+/// plain --viewer (before 2026-07-20 the lab only existed when --damage was passed, so H
+/// silently did nothing — user-reported). --damage=part:frac,… presets the sliders, so
+/// --screenshot runs capture damage states deterministically.
 /// </summary>
 public sealed partial class DamageLab : Node
 {
@@ -36,6 +40,12 @@ public sealed partial class DamageLab : Node
     private CanvasLayer _ui = null!;
     private CanvasLayer? _gaugeLayer;
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
+    private bool _gaugesWanted = true; // the panel's HUD-gauges checkbox, remembered across H
+
+    /// <summary>Build the lab but keep it out of sight until H. Set for a plain --viewer
+    /// (no --damage), so the lab is always THERE to toggle while an unadorned viewer
+    /// screenshot stays byte-identical to one with no lab at all.</summary>
+    public bool StartHidden { get; init; }
 
     public DamageLab(PlaneStats stats, DamageVisuals visuals, Node3D plane,
         IReadOnlyList<(string Part, float Frac)>? preset = null, GaugeCluster? gauges = null)
@@ -71,6 +81,19 @@ public sealed partial class DamageLab : Node
         // slider moves triggered so --screenshot damage shots stay deterministic
         _gauges?.Reset();
         Reapply(); // sync the readouts even when no preset moved a slider
+        if (StartHidden)
+            SetLabVisible(false);
+    }
+
+    /// <summary>Shows or hides the whole lab — slider panel and HUD gauges together. H is
+    /// "is the damage lab here", not "is one of its two layers here"; the panel's own
+    /// checkbox still controls the gauges independently while the lab is up, and its state
+    /// is remembered across a hide/show.</summary>
+    private void SetLabVisible(bool on)
+    {
+        _ui.Visible = on;
+        if (_gaugeLayer != null)
+            _gaugeLayer.Visible = on && _gaugesWanted;
     }
 
     /// <summary>Burns the assigned trails in place at the parked plane.</summary>
@@ -80,7 +103,7 @@ public sealed partial class DamageLab : Node
     public override void _UnhandledKeyInput(InputEvent @event)
     {
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H })
-            _ui.Visible = !_ui.Visible;
+            SetLabVisible(!_ui.Visible);
     }
 
     private void BuildUi()
@@ -141,7 +164,7 @@ public sealed partial class DamageLab : Node
         if (_gaugeLayer != null)
         {
             var hud = new CheckButton { Text = "HUD gauges", ButtonPressed = true };
-            hud.Toggled += on => _gaugeLayer.Visible = on;
+            hud.Toggled += on => { _gaugesWanted = on; _gaugeLayer.Visible = on && _ui.Visible; };
             box.AddChild(hud);
         }
 
