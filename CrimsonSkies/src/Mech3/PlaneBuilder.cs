@@ -34,6 +34,7 @@ public sealed class PlaneBuilder
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
     private PaintScheme? _scheme;
+    private PatternLibrary _patterns;
     private PlanePainter? _painter;
     private string? _skinPrefix;
     private StandardMaterial3D? _flareMaterial;
@@ -65,12 +66,15 @@ public sealed class PlaneBuilder
     /// the shipped unpainted skins, which is what every static view did before paint existed.
     /// Painting is per builder, so two players in the same aircraft can wear different
     /// liveries without disturbing the shared texture cache.</param>
+    /// <param name="patterns">The original's per-pattern region masks from the UI resource
+    /// archive (see <see cref="PatternLibrary"/>). An empty library paints nothing.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
-        bool damagePanels = false, PaintScheme? scheme = null)
+        bool damagePanels = false, PaintScheme? scheme = null, PatternLibrary? patterns = null)
     {
         _gamez = gamez;
         _textures = textures;
         _scheme = scheme;
+        _patterns = patterns ?? PatternLibrary.Empty;
         // The propeller/rotor blur discs (rotorblur/zeprotorblur) are soft sprites — their
         // alpha peaks at ~26%, so the default 1-bit AlphaScissor cutout erases them entirely.
         // Alpha-BLEND them instead (as with the clouds) so the translucent disc shows.
@@ -172,9 +176,11 @@ public sealed class PlaneBuilder
             GD.Print($"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material — building unpainted");
             return;
         }
-        _painter = new PlanePainter(_textures, _scheme, _skinPrefix);
+        _painter = new PlanePainter(_textures, _patterns, _scheme, _skinPrefix);
         GD.Print($"[paint] {root.Name} ({_skinPrefix}): {_scheme}"
-            + (_painter.SkinIsUnkeyed ? " — skin has no paint regions, decals only" : ""));
+            + (_painter.PatternMissesAircraft
+                ? $" — pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only"
+                : ""));
     }
 
     /// <summary>Re-liveries the already-built aircraft in place: a fresh painter, then every
@@ -186,7 +192,7 @@ public sealed class PlaneBuilder
     {
         _scheme = scheme;
         _painter = scheme != null && _skinPrefix != null
-            ? new PlanePainter(_textures, scheme, _skinPrefix)
+            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
             : null;
         _scene.Repaint();
     }

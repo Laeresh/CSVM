@@ -13,6 +13,10 @@ mech3ax does not handle `.rof`; it is unrelated to the ZBD family. Decoded 2026-
 hand. The reader it belongs to ships as `GOSDATA\ASSETS\BINARIES\roffile.dll`, which is where
 the format's name comes from.
 
+**Consumed by the remake since 2026-07-20**: `src/Mech3/PatternLibrary.cs` reads the `.BM`
+masks straight out of this extraction and `src/Mech3/PlanePainter.cs` composites them, which
+is how aircraft get their liveries (see [paint.md](paint.md)).
+
 **This is where the plane customisation UI lives** — the screens behind the `CustomPlane`
 reference screenshots — and, most usefully, where the **paint region masks** are
 (see "Paint region masks" below, and [paint.md](paint.md)).
@@ -115,6 +119,21 @@ plus `BROADWAY` and `ITSTAXI`. Filenames are the aircraft skin names (`BLO_WING.
 The order was settled by comparing against the game's own textures of the same name in
 `texture.zbd`: **170 of 173 same-named skins match on `(width, height)` = `(second, first)`**.
 
+**Row order is BOTTOM-UP** (corrected 2026-07-20). Rows are stored last-to-first relative to
+the ZBD textures and to PNG, so a consumer must read source row `height-1-y` when writing row
+`y`. Rendering the masks without this mirrors every livery along the texture's V axis — found
+by the user in-game ("the stripes are on the wrong sides of the wings and tail", with the
+Black Swan Fury, whose livery should read close to its unpainted skin, as the clearest tell).
+
+Confirmed by structural (edge-map) cross-correlation of each `.BM` shading map against the
+ZBD texture of the same name, over all four orientations and all 55 same-sized `FORTUNE`
+pairs. Restricted to pairs that can actually discriminate (peak correlation > 0.25 and a
+margin > 0.08 over the runner-up), **flipV wins 24 to 3**, and it holds every large margin —
+`bal_fuslage` 0.68 vs 0.02, `bri_wingbottom` 0.70 vs −0.02, `pea_spinner` 0.78 vs 0.09,
+`war_engine` 0.91 vs 0.59. The same test on the paint masks against the ZBD skins' own
+body-hue regions agrees. The three dissenters (`fir_engine`, `dev_spinner`, `bri_reartop`)
+are unexplained and listed under Open.
+
 **Payload** is always exactly `width * height * 10` bytes, in planes (`n = width * height`):
 
 | Range | Content |
@@ -172,14 +191,22 @@ RGBA and BGRA are indistinguishable on it.
 ## Open
 
 - **Overlay channel order and blend mode.** Greyscale content leaves RGBA vs BGRA
-  undetermined, and whether the 4th channel is alpha or a separate mask is untested.
-- **Slot order.** The masks give three slots in file order; that they correspond to
-  `paint_color1..3` in the same order is inferred from the Hughes and Fortune patterns
-  rendering correctly, not proven for all twelve.
+  undetermined. The remake composites it as straight alpha-over-RGB and renders correctly on
+  everything inspected, which is consistent with but does not prove that reading.
+- **Slot order.** *Confirmed 2026-07-20* — file order **is** `paint_color1..3`. Rendering the
+  Fortune Hunters Bloodhawk with all three plausible assignments against
+  `OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png` singled one out: only
+  *(red, black, white)* puts black on the outer wing panels with the white swoosh between
+  them. See [paint.md](paint.md) "Slot order, confirmed".
 - **`BROADWAY` and `ITSTAXI`** are pattern folders with no matching `paint_pattern` in
   `vehicle.json` — probably story/cutscene liveries.
 - **The three dimension mismatches** (of 173) between `.BM` header and `texture.zbd` were not
   chased; likely UI-only variants.
+- **Three skins prefer unflipped rows.** `fir_engine` (0.95 vs 0.68), `dev_spinner` (0.99 vs
+  0.83) and `bri_reartop` (0.57 vs 0.43) score higher unflipped in the row-order test above,
+  against 24 that prefer flipped. All three are engine/spinner parts whose textures are close
+  to V-symmetric, so this may be noise on an almost-tie rather than a real per-file
+  difference; the remake flips globally and they render correctly.
 - **Mipmaps are absent.** 10 bytes/pixel is exactly the four planes with nothing left over, so
   these are base-level only.
 

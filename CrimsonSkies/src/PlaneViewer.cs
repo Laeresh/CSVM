@@ -140,6 +140,8 @@ public partial class PlaneViewer : Node3D
     private ulong _paintSeed;              // --paint-seed=N: reproducible random liveries
     private bool _paintSeedExplicit;
     private List<PaintScheme>? _paintCatalog;  // the 12 shipped patterns, loaded on demand
+    private string _rofPath = "";              // --rof=: the extracted UI archive (paint patterns)
+    private PatternLibrary? _patternLibrary;   // the per-pattern region masks, loaded once
     private bool _damageLab;           // --damage: per-part HP sliders driving the 10c visuals (static --plane mode)
     private List<(string, float)>? _damagePreset; // --damage=part:frac,… preset fractions
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
@@ -225,6 +227,7 @@ public partial class PlaneViewer : Node3D
         _soundsPath = Path.Combine(_repoRoot, "extracted", "soundsh.zip");
         _interpPath = Path.Combine(_repoRoot, "extracted", "interp.json");
         _messagesPath = Path.Combine(_repoRoot, "extracted", "messages.json");
+        _rofPath = Path.Combine(_repoRoot, "extracted", "rof");
 
         // A content-selecting arg (--plane/--chapter/--fly/--stunt/--viewer/--damage/--screenshot)
         // builds directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
@@ -254,6 +257,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--paint-color=")) _paintColorOverride = ParsePaintColors(arg["--paint-color=".Length..]);
             else if (arg.StartsWith("--paint-decal=")) _paintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]);
             else if (arg.StartsWith("--paint-seed=")) { _paintSeed = ulong.Parse(arg["--paint-seed=".Length..]); _paintSeedExplicit = true; }
+            else if (arg.StartsWith("--rof=")) _rofPath = arg["--rof=".Length..];
             else if (arg == "--debug-scoreboard") _debugScoreboard = true;
             else if (arg == "--debug-livery") _debugLivery ??= 0;
             else if (arg.StartsWith("--debug-livery=")) _debugLivery = int.Parse(arg["--debug-livery=".Length..]);
@@ -517,12 +521,13 @@ public partial class PlaneViewer : Node3D
                 // so every existing orbit/damage screenshot renders exactly as before.
                 // Resolved once: the livery lab below opens on exactly the scheme the plane
                 // wears, not a second roll of --paint=random.
-                var staticScheme = SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng());
+                var staticPatterns = PatternsForPlane(gamez, _planeName);
+                var staticScheme = SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(), staticPatterns);
                 // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
                 // model is built bare and there is one write path for paint (its Repaint).
                 // Everywhere else the builder paints at construction as usual.
                 var builder = new PlaneBuilder(gamez, textures, damagePanels: _viewerMode,
-                    scheme: _viewerMode ? null : staticScheme);
+                    scheme: _viewerMode ? null : staticScheme, patterns: Patterns);
                 _plane = builder.Build(_planeName);
                 meshInstances = builder.MeshInstanceCount;
                 what = $"'{_planeName}'";
@@ -567,7 +572,8 @@ public partial class PlaneViewer : Node3D
                 // screenshot is byte-identical to the pre-paint viewer. L toggles it.
                 if (_viewerMode && builder.SkinPrefix != null)
                 {
-                    var lab = new UI.LiveryLab(builder, PaintCatalog(zrdrPath), textures, staticScheme)
+                    var lab = new UI.LiveryLab(builder, PaintCatalog(zrdrPath), textures, staticScheme,
+                        Patterns.PatternsFor(builder.SkinPrefix))
                     {
                         DebugShow = _debugLivery.HasValue,
                         DebugPatternSteps = _debugLivery ?? 0,
@@ -656,7 +662,9 @@ public partial class PlaneViewer : Node3D
                     // Flight repaints the field on every map load: each player draws their
                     // own random livery (colours + decals) unless --paint pins one.
                     var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
-                        scheme: SchemeFor(pi, zrdrPath, randomByDefault: true, paintRng));
+                        scheme: SchemeFor(pi, zrdrPath, randomByDefault: true, paintRng,
+                            PatternsForPlane(planesGamez, planeName)),
+                        patterns: Patterns);
                     var planeModel = planeBuilder.Build(planeName);
                     meshInstances += planeBuilder.MeshInstanceCount;
 
@@ -1191,7 +1199,30 @@ public partial class PlaneViewer : Node3D
     /// shipped unpainted skins. <paramref name="randomByDefault"/> is set for flight modes,
     /// where every player gets a fresh random livery on each map load unless --paint says
     /// otherwise; static views default to unpainted.</summary>
-    private PaintScheme? SchemeFor(int index, string zrdrPath, bool randomByDefault, RandomNumberGenerator rng)
+    /// <summary>The original's per-pattern paint region masks, scanned once per session from
+    /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
+    /// run — aircraft then build unpainted rather than failing.</summary>
+    private PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
+
+    /// <summary>The patterns this aircraft has masks for — the list the original's paint UI
+    /// offers for that plane. Empty when the model carries no skin prefix to key on.</summary>
+    private List<string> PatternsForPlane(GameZ planesGamez, string planeNode)
+    {
+        var root = planesGamez.FindByName(planeNode);
+        var prefix = root != null ? PlanePainter.PrefixFor(planesGamez, root) : null;
+        return prefix != null ? Patterns.PatternsFor(prefix) : new List<string>();
+    }
+
+    private static bool ContainsPattern(IReadOnlyList<string> list, string name)
+    {
+        foreach (var p in list)
+            if (string.Equals(p, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
+
+    private PaintScheme? SchemeFor(int index, string zrdrPath, bool randomByDefault, RandomNumberGenerator rng,
+        IReadOnlyList<string>? available = null)
     {
         // --paint= takes one name per player like --plane=; the last covers any remainder.
         string? name = _paintNames is { Length: > 0 }
@@ -1207,19 +1238,31 @@ public partial class PlaneViewer : Node3D
 
         var catalog = PaintCatalog(zrdrPath);
         PaintScheme? scheme;
-        if (name == null)
-            scheme = PaintScheme.Random(rng, catalog);
-        else if (string.Equals(name, "random", StringComparison.OrdinalIgnoreCase))
-            scheme = PaintScheme.Random(rng, catalog);
+        if (name == null || string.Equals(name, "random", StringComparison.OrdinalIgnoreCase))
+        {
+            // A pattern is per aircraft, so a random livery draws from the ones THIS plane
+            // actually has masks for — picking one it does not carry would paint nothing.
+            scheme = PaintScheme.Random(rng, catalog, available);
+        }
         else
         {
-            scheme = catalog.Find(s => string.Equals(s.Pattern, name, StringComparison.OrdinalIgnoreCase));
-            if (scheme == null)
+            // Named: take the catalog's canonical colours when vehicle.json knows the pattern,
+            // else a bare scheme (BROADWAY/ITSTAXI ship masks but no vehicle def names them).
+            var known = catalog.Find(s => string.Equals(s.Pattern, name, StringComparison.OrdinalIgnoreCase)
+                                       || string.Equals(s.FolderName, name, StringComparison.OrdinalIgnoreCase));
+            bool haveMasks = available == null || available.Count == 0
+                || ContainsPattern(available, name)
+                || (known != null && ContainsPattern(available, known.FolderName));
+            if (known == null && !haveMasks)
             {
-                GD.Print($"[paint] unknown pattern '{name}' — known: "
-                    + string.Join(", ", catalog.ConvertAll(s => s.Pattern)) + ", random, none");
+                var offer = available is { Count: > 0 } ? string.Join(", ", available) : "(no pattern library)";
+                GD.Print($"[paint] unknown pattern '{name}' — this aircraft has: {offer}, random, none");
                 return null;
             }
+            scheme = known ?? new PaintScheme { Pattern = name };
+            if (!haveMasks)
+                GD.Print($"[paint] pattern '{name}' ships no skins for this aircraft — "
+                    + $"it has: {string.Join(", ", available!)}; painting decals only");
         }
 
         // An explicit colour/decal list overrides whatever the scheme brought, so a single

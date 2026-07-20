@@ -197,3 +197,50 @@ Verified by rendering slot1/2/3 as R/G/B: `HUGHES` resolves into clean rectangul
 **Not done, deliberately:** `PlanePainter` still runs on hue windows. Reworking it onto the real masks is a change to the paint system with its own verification burden (the shading map to multiply is the `.BM`'s base plane, **not** the ZBD skin — a different image at the same dimensions), and the user scheduled it as a separate session. `docs/formats/paint.md` gained a "Superseded" section stating that every divergence it documents — achromatic regions unpainted, the Fury decals-only, slot order guessed — is a consequence of inferring regions from hue and disappears under the masks.
 
 **Open:** overlay channel order (its content is greyscale, so RGBA vs BGRA is undetermined), the `BROADWAY`/`ITSTAXI` pattern folders that match no `paint_pattern`, and 3 of 173 `.BM`↔`texture.zbd` dimension mismatches.
+
+
+## 2026-07-20 — Paint patterns: reworked onto the original's own region masks
+
+User find, following the earlier paint work: the pattern artwork is in `GOSDATA\ASSETS\crimson.rof`, the UI resource archive nothing had opened. Container and `.BM` texture format decoded in `docs/formats/rof.md`; this entry is the remake side.
+
+**What the masks are.** Each `ASSETS/GRAPHICS/<PATTERN>/<SKIN>.BM` carries a near-greyscale shading map, three 8-bit per-pixel weight masks (one per paint colour slot, summing to 255) and a 32bpp overlay. That is exactly the region table `paint.md` had recorded as absent from the game files — it was in the UI archive rather than the ZBD set. `src/Mech3/PatternLibrary.cs` (new) reads it; `src/Mech3/PlanePainter.cs` was rewritten to composite `shading * (w1*c1 + w2*c2 + w3*c3) / 255` with the overlay over the top, on the `.BM`'s own shading plane rather than the ZBD skin of the same name (different images).
+
+**Patterns are per aircraft, and the whole stack now knows it.** `FORTUNE` covers all eleven planes; every other pattern covers one to three. `PatternLibrary.PatternsFor(prefix)` is that list and it drives everything — random liveries draw from the plane's own set, the livery lab's stepper walks it (`studio [4/4]` on a Fury), and `--paint=` validates against it, logging the aircraft's actual set when you name a pattern it lacks. The decisive confirmation: the Fury's four patterns (FORTUNE, BLCKSWAN, HUGHES, STUDIO) are exactly the four the user screenshotted from the original's paint UI.
+
+**Two open questions closed by rendering against the references.**
+
+*Slot order* — file order is `paint_color1..3`. Rendering the Fortune Hunters Bloodhawk with all three plausible assignments and comparing to `CustomPlane Paint1 Bloodhawk.png` singled one out: only *(red, black, white)* puts black on the outer wing panels with the white swoosh between them. White in both trims loses the black wing; black in slot 3 paints the swoosh instead of the panel.
+
+*`player_fortune`'s missing colours* — the same test pins them at `223,0,41 / 0,0,0 / 255,255,255`, the shape every shipped scheme has (`hughes` is yellow/black/white). The red was already known from the paint UI swatch and a saved `.pln` at 0x68; the trims are read off the reference. Still an inference from artwork, not a value found in a file, and recorded as such.
+
+**Verified.** All four Fury patterns render correctly — including the Studio Security blue with its white checkerboard, which the previous implementation could not produce at all because the Fury's ZBD skin is featureless near-black. The Fortune Hunters Bloodhawk matches the blueprint reference down to the black outer wing panels, white swoosh and canard edging. All ten aircraft paint in coherent Fortune Hunters livery with correct decals. `--paint=cccp` on a Bloodhawk logs `ships no skins for this aircraft — it has: BLAKE, FORTUNE, HUGHES`. Unpainted static screenshots remain **byte-identical by md5** to the pre-paint baseline; `--fly`, 4P stunt race, 2P mixed planes, static `--chapter`, the damage lab and the menu all build clean. Load cost **fell into measurement noise** (4P: 5537 ms painted vs 5606 ms unpainted, 3-run averages) — a flat multiply-add per texel replaced per-texel HSV conversion plus a percentile pass.
+
+**What the rework fixed**, all of it consequences of the old approach inferring regions from hue: colourless regions now paint (the Bloodhawk's black outer wings), the Fury paints, slot order is data instead of a guess at region area, and region borders arrive antialiased in the masks rather than needing a soft hue falloff invented to stop them speckling.
+
+**Superseded.** The hand-authored hue-window table is gone from the code. Its measurements survive in `paint.md` because they remain a true description of the ZBD skins — just not of where paint goes.
+
+**Open:** the paint UI's "Shade" column is still unexplained (three Colour *and* three Shade dropdowns, but the masks give each slot exactly one colour); the overlay's channel order is consistent with alpha-over-RGB but the available content is greyscale and cannot prove it; `BROADWAY` and `ITSTAXI` ship masks but no `paint_pattern` names them, so they have no canonical colours.
+
+
+### 2026-07-20 (same day) — Fix: `.BM` rows are bottom-up
+
+User report on the pattern work: "the skin seems to be flipped in the front-tail axis — the Black Swan pattern on the Fury should look similar to the unpainted one, but the stripes are on the wrong sides of the wings and tail."
+
+Correct, and it is a format-level fact rather than a plumbing slip: **`.BM` rows are stored last-to-first**, where the ZBD textures and PNG are top-down. `PlanePainter` now reads source row `h-1-y` for each destination row `y` (shading, all three masks and the overlay alike).
+
+Diagnosed rather than guessed, because the first two attempts at a cheap test failed. Plain luminance correlation between the `.BM` shading map and the ZBD skin of the same name is near-useless — they are genuinely different images (one neutral, one carrying the paint keys), so the numbers came back weak and self-contradictory (`flipV` for some skins, `flipH` for others). Matching the mask's slot-1 region against the ZBD skin's own body-hue region did better (flipV 5, ident 1, flipVH 3) but still left doubt. What settled it was **edge-map cross-correlation** — panel lines and rivets are shared between the two images even though the colouring is not — run over all four orientations for all 55 same-sized `FORTUNE`/ZBD pairs, then restricted to pairs that can actually discriminate (peak > 0.25, margin > 0.08 over the runner-up): **flipV 24, ident 3**, holding every large margin (`bal_fuslage` 0.68 vs 0.02, `bri_wingbottom` 0.70 vs −0.02, `pea_spinner` 0.78 vs 0.09, `war_engine` 0.91 vs 0.59).
+
+Verified visually the way the user framed it: the Black Swan Fury's rib stripes now sit exactly where the unpainted skin's do, and all four Fury patterns still match the reference screenshots (Studio Security's checkerboard, Hughes' black wingtips, Fortune's red-and-black). A texture-level three-way — ZBD skin, `.BM` as-is, `.BM` flipped — shows the flipped composite matching the ZBD orientation and the unflipped one mirrored, which is the same conclusion by eye.
+
+**Open:** three skins (`fir_engine`, `dev_spinner`, `bri_reartop`) score *better* unflipped. All three are engine/spinner parts whose textures are near V-symmetric, so this is plausibly noise on an almost-tie rather than a per-file difference; the remake flips globally and they render correctly. Recorded in `docs/formats/rof.md`.
+
+
+### 2026-07-20 (same day) — Livery lab: stepping a squadron loads its colours
+
+User request: "switching the squadron in livery lab should change to the respective squadron colors." It previously kept the current colours and only swapped the mask layout, with a separate button to load the shipped ones — the wrong default, since a squadron *is* its colours.
+
+`SelectPattern` now delegates to a shared `LoadSquadronLivery`, so stepping the Bloodhawk's three gives Fortune Hunters red with the fhunter logo, Blake blue-gray with the Blake logo and Hughes yellow with the Hughes "H", each complete. Decals move with the colours — a squadron's markings are part of its identity. Patterns vehicle.json names no colours for (`BROADWAY`, `ITSTAXI`) keep the current ones, since there is nothing canonical to load. The former "squadron colours" button became "reset to squadron colours", which is now its real job: undo slider edits without changing pattern.
+
+*Bug found while verifying:* `CliArgs()` indexed `_catalog[_patternIndex]`, but `_patternIndex` indexes the **aircraft's** pattern list — different list, different length (12 vs 2–4). It never threw, it just compared against an unrelated scheme, so a freshly-loaded squadron livery printed the long `--paint-color=…/--paint-decal=…` form instead of the compact `--paint=BLAKE`. Now resolved by name.
+
+Verified by stepping both a 3-pattern aircraft and a 4-pattern one: `--paint=BLAKE` → `FORTUNE` → `HUGHES` on the Bloodhawk and `BLCKSWAN` → `FORTUNE` → `HUGHES` → `STUDIO` on the Fury, each logging its own colour triple and decal set, with the panel swatches tracking and the CLI line back to its compact form.

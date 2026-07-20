@@ -28,6 +28,10 @@ public sealed partial class LiveryLab : Node
 
     private readonly PlaneBuilder _builder;
     private readonly IReadOnlyList<PaintScheme> _catalog;
+    // The patterns THIS aircraft has masks for — the same list the original's paint UI offers
+    // per plane (the Fury has four, the Balmoral two). Stepping is over this, not the
+    // vehicle.json catalog, because a pattern the plane lacks would paint nothing.
+    private readonly IReadOnlyList<string> _patterns;
     private readonly TextureArchive _textures;
     private readonly RandomNumberGenerator _rng = new();
 
@@ -53,15 +57,16 @@ public sealed partial class LiveryLab : Node
     public int DebugPatternSteps { get; init; }
 
     public LiveryLab(PlaneBuilder builder, IReadOnlyList<PaintScheme> catalog,
-        TextureArchive textures, PaintScheme? initial)
+        TextureArchive textures, PaintScheme? initial, IReadOnlyList<string>? patterns = null)
     {
         _builder = builder;
         _catalog = catalog;
+        _patterns = patterns ?? Array.Empty<string>();
         _textures = textures;
         _scheme = initial;
         _rng.Randomize();
         if (initial != null)
-            _patternIndex = IndexOfPattern(initial.Pattern);
+            _patternIndex = IndexOfPattern(initial);
         Name = "livery_lab";
     }
 
@@ -90,33 +95,63 @@ public sealed partial class LiveryLab : Node
             _ui.Visible = !_ui.Visible;
     }
 
-    private int IndexOfPattern(string pattern)
+    /// <summary>Position of a scheme's pattern in this aircraft's pattern list. Matches on
+    /// either spelling — vehicle.json says `player_fortune`, the archive folder is `FORTUNE`.</summary>
+    private int IndexOfPattern(PaintScheme scheme)
     {
-        for (int i = 0; i < _catalog.Count; i++)
-            if (string.Equals(_catalog[i].Pattern, pattern, StringComparison.OrdinalIgnoreCase))
+        for (int i = 0; i < _patterns.Count; i++)
+            if (string.Equals(_patterns[i], scheme.Pattern, StringComparison.OrdinalIgnoreCase)
+                || string.Equals(_patterns[i], scheme.FolderName, StringComparison.OrdinalIgnoreCase))
                 return i;
         return -1;
     }
 
+    /// <summary>The catalog's canonical colours for a pattern folder name, or null when
+    /// vehicle.json names no such pattern (BROADWAY and ITSTAXI ship masks but no def).</summary>
+    private PaintScheme? CatalogFor(string folder)
+    {
+        foreach (var s in _catalog)
+            if (string.Equals(s.FolderName, folder, StringComparison.OrdinalIgnoreCase))
+                return s;
+        return null;
+    }
+
     // ---- edits -------------------------------------------------------------------------
 
-    /// <summary>Loads a shipped pattern wholesale — colours and decals — so the twelve can be
-    /// stepped through and compared against the original.</summary>
+    /// <summary>Steps to the next/previous pattern this aircraft carries and puts on that
+    /// squadron's whole livery — colours and decals, not just the mask layout. Switching
+    /// squadron means switching to their colours; stepping the Bloodhawk's three gives you
+    /// Fortune Hunters red, Blake blue-gray and Hughes yellow, each with its own logos.
+    /// A pattern vehicle.json names no colours for (BROADWAY, ITSTAXI) keeps the current
+    /// ones, since there is nothing canonical to load.</summary>
     private void SelectPattern(int delta)
     {
-        if (_catalog.Count == 0)
+        if (_patterns.Count == 0)
             return;
-        _patternIndex = Mathf.PosMod(_patternIndex + delta, _catalog.Count);
-        var src = _catalog[_patternIndex];
+        _patternIndex = Mathf.PosMod(_patternIndex + delta, _patterns.Count);
+        LoadSquadronLivery();
+    }
+
+    /// <summary>(Re)loads the current pattern's shipped squadron colours and decals — the
+    /// livery as the game's own defs define it. Also the panel's "squadron colours" button,
+    /// which is how you get back to canonical after dragging the RGB sliders.</summary>
+    private void LoadSquadronLivery()
+    {
+        if (_patternIndex < 0 || _patternIndex >= _patterns.Count)
+            return;
+        var folder = _patterns[_patternIndex];
+        var src = CatalogFor(folder);
         _scheme = new PaintScheme
         {
-            Pattern = src.Pattern,
-            Color1 = src.Color1,
-            Color2 = src.Color2,
-            Color3 = src.Color3,
-            NoseDecal = src.NoseDecal,
-            TailDecal = src.TailDecal,
-            WingDecal = src.WingDecal,
+            Pattern = folder,
+            // No catalog entry (BROADWAY/ITSTAXI ship masks but no vehicle def names them):
+            // carry the current colours rather than inventing some.
+            Color1 = src?.Color1 ?? _scheme?.Color1 ?? Colors.White,
+            Color2 = src?.Color2 ?? _scheme?.Color2 ?? Colors.White,
+            Color3 = src?.Color3 ?? _scheme?.Color3 ?? Colors.White,
+            NoseDecal = src?.NoseDecal ?? _scheme?.NoseDecal ?? 21,
+            TailDecal = src?.TailDecal ?? _scheme?.TailDecal ?? 7,
+            WingDecal = src?.WingDecal ?? _scheme?.WingDecal ?? 7,
         };
         Apply();
     }
@@ -152,8 +187,8 @@ public sealed partial class LiveryLab : Node
 
     private void Randomize()
     {
-        _scheme = PaintScheme.Random(_rng, _catalog);
-        _patternIndex = IndexOfPattern(_scheme.Pattern);
+        _scheme = PaintScheme.Random(_rng, _catalog, _patterns);
+        _patternIndex = IndexOfPattern(_scheme);
         Apply();
     }
 
@@ -186,7 +221,7 @@ public sealed partial class LiveryLab : Node
         _paintedToggle.ButtonPressed = painted;
         _patternLabel.Text = !painted
             ? "unpainted — shipped skin"
-            : $"{_scheme!.Label}{(_patternIndex >= 0 ? $"   [{_patternIndex + 1}/{_catalog.Count}]" : "   (edited)")}";
+            : $"{_scheme!.Label}{(_patternIndex >= 0 ? $"   [{_patternIndex + 1}/{_patterns.Count}]" : "   (not for this plane)")}";
 
         for (int slot = 0; slot < 3; slot++)
         {
@@ -216,7 +251,11 @@ public sealed partial class LiveryLab : Node
         if (_scheme == null)
             return "--paint=none";
         var s = _scheme;
-        bool clean = _patternIndex >= 0 && SameAs(_catalog[_patternIndex], s);
+        // _patternIndex indexes THIS AIRCRAFT's pattern list, not the vehicle.json catalog —
+        // different lists, different lengths. Resolve the catalog entry by name.
+        bool clean = _patternIndex >= 0
+            && CatalogFor(_patterns[_patternIndex]) is { } canonical
+            && SameAs(canonical, s);
         if (clean)
             return $"--paint={s.Pattern}";
         string pattern = _patternIndex >= 0 ? $"--paint={s.Pattern} " : "";
@@ -256,6 +295,7 @@ public sealed partial class LiveryLab : Node
 
         box.AddChild(new Label { Text = "LIVERY LAB" });
         box.AddChild(Small("L hides this panel · H toggles the damage lab"));
+        box.AddChild(Small("patterns are per aircraft — this plane's set only"));
 
         _paintedToggle = new CheckButton { Text = "painted" };
         _paintedToggle.Toggled += on => { if (!_suppressCallbacks) SetPainted(on); };
@@ -337,6 +377,10 @@ public sealed partial class LiveryLab : Node
         box.AddChild(Small("00–20 squadron logos · 21–49 nose art"));
 
         box.AddChild(Separator());
+
+        var squadron = new Button { Text = "reset to squadron colours" };
+        squadron.Pressed += LoadSquadronLivery;
+        box.AddChild(squadron);
 
         var random = new Button { Text = "random livery" };
         random.Pressed += Randomize;

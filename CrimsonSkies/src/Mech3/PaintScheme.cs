@@ -18,10 +18,21 @@ namespace CrimsonSkies.Mech3;
 /// </summary>
 public sealed class PaintScheme
 {
-    /// <summary>Named scheme (<c>hughes</c>, <c>blackhat</c>, <c>player_fortune</c>, …).
-    /// The pattern table itself lives engine-side in the original and is NOT in any
-    /// extracted file — we only ever see the name, so it is a label here.</summary>
+    /// <summary>Named pattern — and since 2026-07-20 this selects real data, not just a label:
+    /// it names a folder of per-skin region masks in the UI resource archive (see
+    /// <see cref="PatternLibrary"/> and <c>docs/formats/rof.md</c>), which is what decides
+    /// WHERE the three colours go. Patterns are per aircraft: <c>FORTUNE</c> covers all
+    /// eleven, the rest one to three, so a scheme is only meaningful together with a plane.
+    /// vehicle.json spells the names lower-case (<c>hughes</c>, <c>player_fortune</c>) and the
+    /// archive upper-case (<c>HUGHES</c>, <c>FORTUNE</c>); <see cref="FolderName"/> bridges them.</summary>
     public string Pattern = "";
+
+    /// <summary>The archive folder this pattern's masks live in. vehicle.json's
+    /// <c>player_fortune</c> is the archive's <c>FORTUNE</c>; every other name maps by
+    /// upper-casing.</summary>
+    public string FolderName => string.Equals(Pattern, "player_fortune", StringComparison.OrdinalIgnoreCase)
+        ? "FORTUNE"
+        : Pattern.ToUpperInvariant();
 
     /// <summary>Paint slot 1–3, applied to the skin's first/second/third keyed region
     /// (see <see cref="PlanePainter"/>). Slot 1 is the body.</summary>
@@ -79,8 +90,8 @@ public sealed class PaintScheme
             {
                 Pattern = pattern,
                 Color1 = ReadColor(d, "paint_color1", FortuneRed),
-                Color2 = ReadColor(d, "paint_color2", Colors.White),
-                Color3 = ReadColor(d, "paint_color3", Colors.White),
+                Color2 = ReadColor(d, "paint_color2", FortuneTrim),
+                Color3 = ReadColor(d, "paint_color3", FortuneFlash),
                 NoseDecal = (int)d.Float("paint_decal1", 21f),
                 TailDecal = (int)d.Float("paint_decal2", 7f),   // 07fhunter_logo1
                 WingDecal = (int)d.Float("paint_decal3", 7f),
@@ -93,10 +104,19 @@ public sealed class PaintScheme
         return list;
     }
 
-    // The Fortune Hunters red the original's paint UI shows for the player's own plane —
-    // the pattern ships without colours (they come from the engine-side pattern table),
-    // and this is the value read out of a saved .pln file at 0x68. See paint.md.
+    // player_fortune ships a pattern name and NO colours (they come from wherever the engine
+    // keeps its pattern defaults — still not located), so the catalog entry has to supply
+    // them. Red from the paint UI's own swatch and a saved .pln at 0x68; black + white for
+    // slots 2/3 read off the reference top view in
+    // OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png, where the Bloodhawk's outer wing
+    // panels are BLACK and the swoosh dividing them WHITE. That is the same shape every
+    // shipped scheme has (identity colour, dark trim, light trim) — `hughes` is
+    // yellow/black/white — and rendering all three combinations against the reference singled
+    // this one out: white/white loses the black wing entirely, black in slot 3 puts it on the
+    // swoosh instead of the panel. See paint.md.
     private static readonly Color FortuneRed = FromBytes(223, 0, 41);
+    private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
+    private static readonly Color FortuneFlash = FromBytes(255, 255, 255);
 
     private static Color ReadColor(ZrdrDict d, string key, Color fallback)
     {
@@ -127,14 +147,22 @@ public sealed class PaintScheme
     /// scheme is drawn the same way, with the catalog's own colours in the pool. Nose decals
     /// come from the 21–49 nose-art range and tail/wing from the 00–20 squadron logos,
     /// matching how every shipped def uses the three slots.</summary>
-    public static PaintScheme Random(RandomNumberGenerator rng, IReadOnlyList<PaintScheme>? catalog)
+    /// <param name="patterns">The pattern names this aircraft actually has masks for
+    /// (<see cref="PatternLibrary.PatternsFor"/>) — a pattern is per-plane, so drawing one the
+    /// aircraft does not carry would paint nothing. Null/empty falls back to the catalog's
+    /// names, which is only right when no library is loaded.</param>
+    public static PaintScheme Random(RandomNumberGenerator rng, IReadOnlyList<PaintScheme>? catalog,
+        IReadOnlyList<string>? patterns = null)
     {
         // RandiRange, not Randi() % n: Randi returns a full uint, and casting it to int
         // overflows negative for half the range, which indexes out of the catalog.
         var basis = catalog is { Count: > 0 } ? catalog[rng.RandiRange(0, catalog.Count - 1)] : new PaintScheme();
+        string pattern = patterns is { Count: > 0 }
+            ? patterns[rng.RandiRange(0, patterns.Count - 1)]
+            : basis.Pattern;
         return new PaintScheme
         {
-            Pattern = basis.Pattern,
+            Pattern = pattern,
             Color1 = IdentityColor(rng, catalog),
             Color2 = TrimColor(rng, catalog, dark: true),
             Color3 = TrimColor(rng, catalog, dark: false),

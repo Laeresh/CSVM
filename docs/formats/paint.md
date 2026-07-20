@@ -184,77 +184,106 @@ three paint colours sit at **0x68 as RGBA bytes** (`df 00 29 00` = `(223,0,41)`,
 `ff ff ff 00`), preceded by what appear to be pattern and decal indices. Fully decoding this
 record is only needed to *import* a player's saved planes, which nothing depends on yet.
 
-## Open
-
-- **Where the pattern table lives.** *Answered 2026-07-20* — `crimson.rof`, as one folder of
-  masked skins per pattern (see [rof.md](rof.md)). The pattern names still appear as bare
-  *references* in `vehicle.json`/`ia.json` and in no zrdr reader, but they resolve to the
-  archive's `ASSETS/GRAPHICS/<PATTERN>/` folders. Two folders (`BROADWAY`, `ITSTAXI`) have no
-  matching `paint_pattern`; the default colours that `player_fortune` omits are still not
-  located.
-- **What a pattern actually varies.** *Answered* — the region masks themselves. Each pattern
-  ships its own mask set per skin, so a pattern is literally "where the three colours go",
-  plus a compositing overlay for stripes and squadron marks.
-- **The "Shade" column.** The paint UI offers three *Colour* dropdowns and three *Shade*
-  dropdowns; only three colours are stored per scheme. Shade may be a UI-side ramp-endpoint
-  choice folded into the stored RGB, or a fourth stored field not yet identified.
-- **How the engine identifies a region.** *Answered* — per-pixel weight masks shipped
-  alongside the shading map, not a palette or colour heuristic. This also explains the Fury:
-  its ZBD skin needs no hue at all, because the region data was never in the skin.
-- **Achromatic paint regions.** The Bloodhawk's outer wing panels are a *neutral light gray*
-  in the shipped skin but read **black** in the paint UI's top view — consistent with the mask
-  model, where a region's colour is independent of the shading map's hue.
-
 ## Implementing this in the remake
 
-**Implemented 2026-07-20** — `src/Mech3/PaintScheme.cs` (the record + the shipped catalog +
-random liveries) and `src/Mech3/PlanePainter.cs` (the recolour + decal swap), applied through
-an optional `SceneBuilder` texture-substitution hook that `PlaneBuilder` drives per aircraft.
+**Reworked onto the original's own masks 2026-07-20**, replacing the hue-window workaround
+below. `src/Mech3/PatternLibrary.cs` reads the `.BM` region masks out of the extracted UI
+archive, `src/Mech3/PlanePainter.cs` composites them, `src/Mech3/PaintScheme.cs` holds the
+record, and the result reaches the renderer through a `SceneBuilder` texture-substitution hook
+that `PlaneBuilder` drives per aircraft.
 
-What it does:
+Per texel, exactly the formula in [rof.md](rof.md):
 
-1. **Regions.** Since the engine's own region table is not in the data (above), the remake
-   substitutes a **hand-authored per-aircraft table of hue windows** (`PlanePainter.Regions`),
-   measured from the table in "What the regions actually look like". Window order *is* paint
-   slot order, slot 1 = body.
-2. **Recolour.** Texels inside a window are recoloured, keeping their **value** as the
-   position along the paint colour's ramp — which preserves the baked shading exactly.
-   Membership fades out with hue distance *and* with desaturation, so antialiased region
-   borders cross over smoothly; a hard threshold speckles every edge (verified in
-   development). Desaturated texels are unpainted structure and are left alone.
-3. **Decals.** `<prefix>_noselogo`/`_taillogo`/`_winglogo` are swapped for the numbered decal
-   the scheme names, via `TextureArchive.FindByDecalIndex`.
+```
+shaded_paint = shading * (w1*colour1 + w2*colour2 + w3*colour3) / 255
+```
 
-Verified: a `player_fortune` Bloodhawk renders **red with white swooshes** matching
-`CustomPlane Paint1 Bloodhawk.png`, a Fortune Hunters Kestrel matches `Kestrel.png`, and the
-twelve shipped patterns render as distinct, correctly-badged liveries.
+then the pattern's overlay composited over it (4th channel as alpha). Two details are
+load-bearing: the shading map is the `.BM`'s own base plane, **not** the ZBD skin of the same
+name; and `.BM` rows are stored **bottom-up**, so each source row is read from `h-1-y` (see
+[rof.md](rof.md) — without the flip every livery is mirrored along V, which is how the bug
+first surfaced in-game). Parts a pattern ships no `.BM`
+for keep their shipped ZBD texture; the ZBD skin's alpha channel is carried onto the composite
+where the two agree on dimensions, so `SceneBuilder`'s blend-vs-scissor choice stays valid.
 
-### Known divergences from the original
+Decals are unchanged: `<prefix>_noselogo`/`_taillogo`/`_winglogo` swap for the numbered decal
+via `TextureArchive.FindByDecalIndex`.
 
-- **Achromatic regions are not painted.** The Bloodhawk's outer wing panels stay gray where
-  the original paints them (black under Fortune Hunters), because a hue window cannot see a
-  region with no hue. Same class of gap wherever a plane has a neutral paint region.
-- **The Fury never changes colour** beyond its decals — its skin has no key to recolour at
-  all (above). `PlanePainter` logs `skin has no paint regions, decals only` for it.
-- **Slot order is by region area, not by the original's mapping.** For the Bloodhawk the
-  evidence is consistent (body = colour 1, swoosh = colour 2/3, both white under Fortune
-  Hunters so the reference cannot distinguish them), but it is unvalidated for the rest.
-- **"Shade" is not modelled.** The paint UI stores three Colour *and* three Shade dropdowns;
-  only three colours exist in the data. The remake ramps each region from black to the
-  scheme colour, which is the Shade=black case.
+### Patterns are per aircraft
 
-### Superseded — the real masks are available (2026-07-20)
+A pattern covers only the planes it ships skins for, which is why the original's paint UI
+offers a different list per aircraft. Measured over the extraction:
 
-Everything in "Implementing this in the remake" describes a workaround for region data that
-was believed absent. It is not absent: `crimson.rof` ships the original's own per-pattern,
-per-skin region masks (above, and [rof.md](rof.md)). Every divergence listed here is a
-consequence of inferring regions from hue, and all of them disappear under the real masks —
-achromatic regions become expressible, the Fury gains regions, slot order stops being a guess,
-and borders come antialiased rather than needing a soft hue falloff to avoid speckling.
+| Aircraft | Patterns |
+|---|---|
+| Bloodhawk `blo` | FORTUNE, BLAKE, HUGHES |
+| Kestrel `kes` | FORTUNE, HUGHES, MEDUSAS |
+| Fury `fur` | FORTUNE, BLCKSWAN, HUGHES, STUDIO |
+| Peacemaker `pea` | FORTUNE, BLAKE, BRITISH, BROADWAY |
+| Warhawk `war` | FORTUNE, BLACKHAT, SACTRUST |
+| Brigand `bri` | FORTUNE, BLACKHAT, MEDUSAS |
+| Balmoral `bal` | FORTUNE, BRITISH |
+| Hellhound `hel` | FORTUNE, GERMAN, SACTRUST |
+| Autogyro `agyro` | FORTUNE, BLACKHAT, ITSTAXI, STUDIO |
+| Firebrand `fir` | FORTUNE, HOLLYWD |
+| Devastator `dev` | FORTUNE, CCCP |
 
-Reworking `PlanePainter` onto the masks is **not done** — it is a real change to the paint
-system, deliberately left to its own session. The pieces it needs: `ExtractRof.ps1` produces
-`<SKIN>_mask.png` next to each skin; the shading map to multiply is the `.BM`'s own base plane
-(**not** the ZBD skin, which is a different image); and the composite is
-`shading * (w1*c1 + w2*c2 + w3*c3) / 255` with the overlay layer over the top.
+`FORTUNE` is the only pattern covering all eleven. The four the Fury carries match the user's
+four `CustomPlane Paint Fury Pattern *.png` reference screenshots exactly, which is the
+confirmation that this list *is* what the paint UI offers.
 
+`PatternLibrary.PatternsFor(prefix)` is that list; random liveries draw from it, the livery
+lab steps it, and `--paint=` validates against it (naming a pattern the aircraft lacks logs
+the aircraft's own set and paints decals only).
+
+### Slot order, confirmed
+
+Slot 1 = identity/body, slot 2 = dark trim, slot 3 = light trim — the order the masks ship in
+matches `paint_color1..3`. Settled by rendering the Fortune Hunters Bloodhawk with all three
+plausible assignments against `CustomPlane Paint1 Bloodhawk.png`: only *(red, black, white)*
+puts black on the outer wing panels and the white swoosh between them, as the reference shows.
+White in both trims loses the black wing entirely; black in slot 3 paints the swoosh instead
+of the panel.
+
+That also pins down **`player_fortune`'s missing colours** as `223,0,41 / 0,0,0 / 255,255,255`
+— the same shape every shipped scheme has (`hughes` is yellow/black/white). The red comes from
+the paint UI's swatch and a saved `.pln` at 0x68; the trims are read off the reference. Still
+an inference from artwork, not a value found in a file.
+
+### What the rework fixed
+
+Every divergence the hue-window version carried was a consequence of guessing regions from
+colour, and all of them are gone:
+
+- **Achromatic regions paint.** The Bloodhawk's outer wing panels are black under Fortune
+  Hunters, as in the original — a hue window could not see a region with no hue.
+- **The Fury paints.** Its ZBD skin is featureless near-black, but its `.BM` masks are
+  complete; all four of its patterns render correctly, including the Studio Security
+  blue-and-white checkerboard.
+- **Slot order is data, not area rank.**
+- **Borders come antialiased** in the masks themselves, so the soft hue falloff that existed
+  only to stop borders speckling is gone.
+- **It is faster.** A flat multiply-add per texel replaced per-texel HSV conversion plus a
+  percentile pass; painting four aircraft is now within measurement noise of not painting.
+
+### Superseded — the hue-window approach (2026-07-19 → 2026-07-20)
+
+Before the masks were found, the remake inferred regions from a hand-authored per-aircraft
+table of hue windows, keyed on the "What the regions actually look like" table above. It
+produced a correct-looking red Bloodhawk and twelve distinguishable liveries, but could not
+express a colourless region, could not paint the Fury at all, and had to guess slot order. The
+table and its measurements are kept above because they remain a true description of the ZBD
+skins; the code is gone.
+
+## Open
+
+- **The "Shade" column.** The paint UI offers three *Colour* and three *Shade* dropdowns while
+  only three colours exist per scheme, and the masks give each slot exactly one colour. Shade
+  is still unexplained — possibly a UI-side ramp endpoint folded into the stored RGB.
+- **Overlay channel order** is still unconfirmed (see rof.md); treating the 4th channel as
+  alpha over RGB renders correctly on the content inspected, which is greyscale and so cannot
+  distinguish RGBA from BGRA.
+- **`player_fortune`'s colours** are inferred from artwork (above), not located in a file.
+- **`BROADWAY` and `ITSTAXI`** ship masks (Peacemaker and Autogyro) but no `paint_pattern`
+  names them, so they have no canonical colours; the remake offers them with whatever colours
+  are current.
