@@ -25,6 +25,7 @@ public sealed class SceneBuilder
     private readonly Func<string, bool>? _blendTexture;
     private readonly Func<string, bool>? _billboardTexture;
     private readonly Func<string, bool>? _glowTexture;
+    private readonly Func<string, ImageTexture?, ImageTexture?>? _textureSubstitute;
     private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
@@ -72,11 +73,19 @@ vec3 csky_srgb_to_linear(vec3 c) {
     /// sprites (lamp/beacon glow quads, `*flare*` textures): billboarded like the cloud
     /// sprites, always alpha-blended, and exempt from the `csky_world_light` night dimming —
     /// a lamp emits light, it doesn't get darker at night.</param>
+    /// <param name="textureSubstitute">Given a material's texture name and the texture the
+    /// archive resolved for it, returns the texture to actually use. The aircraft paint pass
+    /// (<see cref="PlanePainter"/>) hooks in here to hand back a recoloured skin or a swapped
+    /// decal — per plane instance, so the shared archive cache is never mutated. The
+    /// substitute must keep the original's alpha class (opaque vs cutout vs soft), since the
+    /// blend/scissor decision is already made from the archive's classification.</param>
     public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false,
         bool generateCollision = false, Func<string, bool>? blendTexture = null,
         Func<string, bool>? billboardTexture = null, bool cullBackfaces = false,
-        Func<string, bool>? glowTexture = null)
+        Func<string, bool>? glowTexture = null,
+        Func<string, ImageTexture?, ImageTexture?>? textureSubstitute = null)
     {
+        _textureSubstitute = textureSubstitute;
         _gamez = gamez;
         _textures = textures;
         _fullbright = fullbright;
@@ -367,7 +376,7 @@ void fragment() {
         if (_glowMaterialCache.TryGetValue(materialIndex, out var cached))
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
-        var tex = texName != null ? _textures.Find(texName) : null;
+        var tex = texName != null ? Resolve(texName) : null;
         Material mat = tex != null
             ? BillboardMaterial(tex, blend: true, scissor: false, glow: true)
             : GetMaterial(materialIndex, 0, 0, true);
@@ -454,6 +463,15 @@ void fragment() {
         return mat;
     }
 
+    // The archive lookup every material goes through, plus the caller's optional
+    // substitution (aircraft paint). Find() must still run even when a substitute exists:
+    // it is what sets LastHadAlpha/LastAlphaIsSoft, which the blend/scissor choice reads.
+    private ImageTexture? Resolve(string texName)
+    {
+        var tex = _textures.Find(texName);
+        return _textureSubstitute != null ? _textureSubstitute(texName, tex) : tex;
+    }
+
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
@@ -462,7 +480,7 @@ void fragment() {
 
         if (src?.TextureName is { } texName)
         {
-            var tex = _textures.Find(texName);
+            var tex = Resolve(texName);
             if (tex == null)
                 // Genuine game-data gaps (pir_spinner, barngrill) get a neutral gray, like
                 // the original engine; anything else is likely our lookup failing and stays

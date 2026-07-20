@@ -30,17 +30,22 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 
 ## Feature backlog
 
-- **Aircraft paint schemes + decals** (decoded 2026-07-19, not implemented — user-reported:
-  our Bloodhawk is blue, the original's is red). Shipped skin textures are unpainted shading
-  maps whose palette holds contiguous per-region colour ramps; the engine writes the scheme's
-  colours in at load time. Scheme data is already in hand: `vehicle.json` `paint_pattern` +
-  `paint_color1..3` (RGB 0–255) + `paint_decal1..3`, `ia.json` `ace_*` for IA aces, and a
-  gapless numbered decal set 00–49 in every chapter's `texture.zbd` indexed directly by
-  `paint_decalN` (00–20 squadron logos, 21–49 nose art) that swaps onto each plane's
-  `*_noselogo`/`*_taillogo`/`*_winglogo` placeholder slots. Full decode + the four
-  implementation steps: `docs/formats/paint.md`. Open before building it: the per-texture
-  palette ramp ranges, and where the `paint_pattern` table itself lives (engine-side — it is
-  in no zrdr and no plaintext string in the exe/dlls/resources).
+- **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
+  "Known divergences"; these are the leftovers):
+  - **Achromatic paint regions.** A hue window cannot see a paint region with no hue, so the
+    Bloodhawk's outer wing panels stay gray where the original paints them black. Needs a
+    per-texture value-band rule (hand-authored per aircraft) or a better region key.
+  - **The Fury is unpaintable.** Its skins are an all-neutral near-black shading map with no
+    key at all, yet the original flies a studio-blue `secfury`. It gets decals only today.
+  - **Slot order.** Regions are assigned to colour slots by area; validated only on the
+    Bloodhawk, and even there the reference cannot separate slots 2 and 3 (both white under
+    Fortune Hunters).
+  - **The paint UI's "Shade" column** is unmodelled — three Colour *and* three Shade
+    dropdowns exist in the UI, only three colours in the data. We ramp black → colour.
+  - **A livery picker in the launchscreen.** Selection is CLI-only (`--paint=`); flight
+    randomizes per player. Decide from playtest whether the menu should offer it.
+  - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
+    catalog but nothing flies them — there are no AI aircraft yet.
 - **Full `player_plane_destruct` crash choreography**: surface variants
   (`player_crash_default/_dirt/_water`), sparks, black smokeball, `plane_destroy_sg` sound,
   crash trails. Current state = fireball + breakup pieces + 10 s wreck fire (item 10d).

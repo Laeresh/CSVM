@@ -114,6 +114,36 @@ public sealed class TextureArchive : IDisposable
         return tex;
     }
 
+    /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/> — the source
+    /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache: that
+    /// one is shared across every plane and world instance and must never be mutated, and
+    /// its images already carry generated mipmaps. Each call returns a new Image.</summary>
+    public Image? FindImage(string materialTextureName)
+    {
+        var name = Resolve(Path.GetFileNameWithoutExtension(materialTextureName));
+        var bytes = name != null ? ReadBytes(name) : null;
+        if (bytes == null)
+            return null;
+        var img = new Image();
+        return img.LoadPngFromBuffer(bytes) == Error.Ok ? img : null;
+    }
+
+    /// <summary>The archive's texture whose name begins with a zero-padded two-digit
+    /// number, e.g. 21 → "21ace_star" — how <c>paint_decalN</c> indexes the gapless 00–49
+    /// decal set every chapter ships. Null when out of range. The half-size "_1" LOD twins
+    /// are excluded (they share the numeric prefix but are not the decal itself).</summary>
+    public string? FindByDecalIndex(int index)
+    {
+        if (index is < 0 or > 99)
+            return null;
+        var prefix = index.ToString("00");
+        foreach (var name in _byBaseName.Keys)
+            if (name.Length > 2 && name.StartsWith(prefix, StringComparison.Ordinal)
+                && !char.IsDigit(name[2]) && !name.EndsWith("_1", StringComparison.Ordinal))
+                return name;
+        return null;
+    }
+
     // Classifies the alpha channel (see LastAlphaIsSoft). Soft when scissoring at 0.5
     // would show (almost) nothing — max alpha below ~140/255 — or when partial alpha
     // dominates and nearly-opaque texels are rare (soft sprites like clouds and smoke,

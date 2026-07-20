@@ -33,7 +33,13 @@ public sealed class PlaneBuilder
     private readonly bool _withDamagePanels;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
+    private readonly PaintScheme? _scheme;
+    private PlanePainter? _painter;
     private StandardMaterial3D? _flareMaterial;
+
+    /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
+    /// aircraft's skin prefix — null when built unpainted.</summary>
+    public PlanePainter? Painter => _painter;
 
     public int MeshInstanceCount => _scene.MeshInstanceCount;
 
@@ -53,17 +59,24 @@ public sealed class PlaneBuilder
     /// keeps the static disc and hides the blur layers. Implies damage panels.</param>
     /// <param name="damagePanels">Build the exterior pdpN torn-skin panels (hidden) even
     /// with static props — the viewer's --damage lab flips them without flying.</param>
+    /// <param name="scheme">Paint this aircraft in the given livery — its skins recoloured
+    /// and its three decal placeholders swapped (see <see cref="PlanePainter"/>). Null builds
+    /// the shipped unpainted skins, which is what every static view did before paint existed.
+    /// Painting is per builder, so two players in the same aircraft can wear different
+    /// liveries without disturbing the shared texture cache.</param>
     public PlaneBuilder(GameZ gamez, TextureArchive textures, bool spinningProps = false,
-        bool damagePanels = false)
+        bool damagePanels = false, PaintScheme? scheme = null)
     {
         _gamez = gamez;
         _textures = textures;
+        _scheme = scheme;
         // The propeller/rotor blur discs (rotorblur/zeprotorblur) are soft sprites — their
         // alpha peaks at ~26%, so the default 1-bit AlphaScissor cutout erases them entirely.
         // Alpha-BLEND them instead (as with the clouds) so the translucent disc shows.
         // cullBackfaces: aircraft interior structure (the gyro's frame lattice) faces
         // inward and must be culled from outside, as the original engine does.
-        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true);
+        _scene = new SceneBuilder(gamez, textures, blendTexture: IsPropBlurTexture, cullBackfaces: true,
+            textureSubstitute: (name, tex) => _painter?.Substitute(name, tex) ?? tex);
         _spinningProps = spinningProps;
         _withDamagePanels = spinningProps || damagePanels;
     }
@@ -101,6 +114,7 @@ public sealed class PlaneBuilder
     {
         var root = _gamez.FindByName(rootName)
             ?? throw new ArgumentException($"node '{rootName}' not found in GameZ data");
+        EnsurePainter(root);
         var built = _scene.BuildSubtree(root, Skip)!;
         CollectWingFlares(built);
         return built;
@@ -116,6 +130,7 @@ public sealed class PlaneBuilder
         var root = _gamez.FindByName(rootName);
         if (root == null)
             return null;
+        EnsurePainter(root); // wreck pieces wear the same skins, so the same livery
         // depth-first for the 'destroyed' group, accumulating local transforms
         (GameZNode Node, Transform3D Acc)? found = null;
         void Search(GameZNode n, Transform3D acc)
@@ -141,6 +156,24 @@ public sealed class PlaneBuilder
         if (built != null)
             built.Transform = found.Value.Acc;
         return built;
+    }
+
+    // The painter can only be built once the aircraft's root is known — its skin prefix is
+    // read off the model's own material names. Built on the first Build/BuildDestroyed call
+    // and reused, so both share one painted-texture cache.
+    private void EnsurePainter(GameZNode root)
+    {
+        if (_scheme == null || _painter != null)
+            return;
+        var prefix = PlanePainter.PrefixFor(_gamez, root);
+        if (prefix == null)
+        {
+            GD.Print($"[paint] {root.Name}: no <prefix>_noselogo material — building unpainted");
+            return;
+        }
+        _painter = new PlanePainter(_textures, _scheme, prefix);
+        GD.Print($"[paint] {root.Name} ({prefix}): {_scheme}"
+            + (_painter.SkinIsUnkeyed ? " — skin has no paint regions, decals only" : ""));
     }
 
     /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
