@@ -62,19 +62,8 @@ https://github.com/bethington/ghidra-mcp
 - HUD
     - Needles not correct form (could create procedually instead of by texture in Hi-Def mode)
     - Crash Dmg display blinking completly red
-## Milestone 2 Polishing Run 2
 
 ### Work for me
-Your side of the run, collected from the grill answers:
-
-Original-game research: does part damage degrade handling/power before a critical part dies, or is it cosmetic until the explosion? (Decides a future run's scope.)
- - Yes decreases turn rate depending on which part is damaged (elevator, ruder) Dmg Motor has decreased performance.
- - Probably depending on dmg state green, yellow red
-Measurements for item 12: time a full 360° roll and a sustained pitch maneuver in the original (Bloodhawk, cruise speed).
-roll 2sec
-pitch 11 sec(with slow down of speed?)
-yaw 30sec
-Reference screenshots for item 6: original night shots of the deck underside, sky gradient, and lit terrain at spots we can reproduce with --campos.
 
 
 Lighting
