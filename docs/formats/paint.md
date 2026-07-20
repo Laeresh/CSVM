@@ -133,7 +133,16 @@ on palette index:
   shared paint palette either.
 
 So the engine cannot be doing an index-range palette swap. Whatever table it uses to decide
-"this texel is paint slot 2" is keyed on something else and is not in the extracted data.
+"this texel is paint slot 2" is keyed on something else and is not in the ZBD data.
+
+> **Found, 2026-07-20 — it is in `crimson.rof`.** The region table exists after all, in the UI
+> resource archive rather than the ZBD set: each `ASSETS/GRAPHICS/<PATTERN>/<SKIN>.BM` carries
+> a greyscale shading map plus **three 8-bit per-pixel weight masks, one per paint colour slot,
+> summing to 255**. That is a direct answer to "how the engine identifies a region", and it is
+> per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
+> [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
+> 1/2/3). **The sections below describing hue windows document what the remake does today,
+> which predates this find** — see "Superseded" at the bottom.
 
 ### What the regions actually look like
 
@@ -177,24 +186,24 @@ record is only needed to *import* a player's saved planes, which nothing depends
 
 ## Open
 
-- **Where the pattern table lives.** The pattern names (`player_fortune`, `blckswan`, `hughes`,
-  …) appear only as *references* — in `vehicle.json` and `ia.json`. They are in no zrdr reader
-  and no plaintext string in `crimson.exe`, `strings.dll`, `CrimsonSkies.gpr` or the resource
-  files (`crimson.icd` is the SafeDisc-wrapped real image). The pattern presumably selects the
-  palette-range→colour-slot mapping engine-side, and carries the default colours that
-  `player_fortune` omits.
-- **What a pattern actually varies.** Colours are explicit in the data, so a pattern is
-  something else — likely which regions exist and which slot each maps to, possibly a stripe
-  geometry/UV variant. Untested.
+- **Where the pattern table lives.** *Answered 2026-07-20* — `crimson.rof`, as one folder of
+  masked skins per pattern (see [rof.md](rof.md)). The pattern names still appear as bare
+  *references* in `vehicle.json`/`ia.json` and in no zrdr reader, but they resolve to the
+  archive's `ASSETS/GRAPHICS/<PATTERN>/` folders. Two folders (`BROADWAY`, `ITSTAXI`) have no
+  matching `paint_pattern`; the default colours that `player_fortune` omits are still not
+  located.
+- **What a pattern actually varies.** *Answered* — the region masks themselves. Each pattern
+  ships its own mask set per skin, so a pattern is literally "where the three colours go",
+  plus a compositing overlay for stripes and squadron marks.
 - **The "Shade" column.** The paint UI offers three *Colour* dropdowns and three *Shade*
   dropdowns; only three colours are stored per scheme. Shade may be a UI-side ramp-endpoint
   choice folded into the stored RGB, or a fourth stored field not yet identified.
-- **How the engine identifies a region.** The open question, and the one that matters. Not
-  palette index (above), and not texture colour alone (the Fury). Most likely a per-texture or
-  per-material table compiled into the engine.
+- **How the engine identifies a region.** *Answered* — per-pixel weight masks shipped
+  alongside the shading map, not a palette or colour heuristic. This also explains the Fury:
+  its ZBD skin needs no hue at all, because the region data was never in the skin.
 - **Achromatic paint regions.** The Bloodhawk's outer wing panels are a *neutral light gray*
-  in the shipped skin but read **black** in the paint UI's top view — so at least one paint
-  region carries no hue at all and is indistinguishable from unpainted structure by colour.
+  in the shipped skin but read **black** in the paint UI's top view — consistent with the mask
+  model, where a region's colour is independent of the shading map's hue.
 
 ## Implementing this in the remake
 
@@ -233,3 +242,19 @@ twelve shipped patterns render as distinct, correctly-badged liveries.
 - **"Shade" is not modelled.** The paint UI stores three Colour *and* three Shade dropdowns;
   only three colours exist in the data. The remake ramps each region from black to the
   scheme colour, which is the Shade=black case.
+
+### Superseded — the real masks are available (2026-07-20)
+
+Everything in "Implementing this in the remake" describes a workaround for region data that
+was believed absent. It is not absent: `crimson.rof` ships the original's own per-pattern,
+per-skin region masks (above, and [rof.md](rof.md)). Every divergence listed here is a
+consequence of inferring regions from hue, and all of them disappear under the real masks —
+achromatic regions become expressible, the Fury gains regions, slot order stops being a guess,
+and borders come antialiased rather than needing a soft hue falloff to avoid speckling.
+
+Reworking `PlanePainter` onto the masks is **not done** — it is a real change to the paint
+system, deliberately left to its own session. The pieces it needs: `ExtractRof.ps1` produces
+`<SKIN>_mask.png` next to each skin; the shading map to multiply is the `.BM`'s own base plane
+(**not** the ZBD skin, which is a different image); and the composite is
+`shading * (w1*c1 + w2*c2 + w3*c3) / 255` with the overlay layer over the top.
+

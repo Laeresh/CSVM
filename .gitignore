@@ -26,3 +26,6 @@ CopyToOneDrive.ps1
 
 # Reference videos of the original game (large binaries — referenced by docs, not committed)
 /OriginalScreenshots/Videos/
+
+# Claude Code scratch/probe artifacts
+.scratch/

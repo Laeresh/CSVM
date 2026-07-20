@@ -26,6 +26,8 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
 | [paint.md](paint.md) | Aircraft paint: `paint_pattern`/`paint_color`/`paint_decal` schemes, the numbered 00–49 decal set, why shipped skins are unpainted key textures |
+| [rof.md](rof.md) | `.rof` UI resource archives: the container, the GUI scripts + `LAYOUT.CSV`, and the `.BM` texture format carrying the **paint region masks** |
+| [strings.md](strings.md) | UI text: the `langui.dll` Win32 string table, `RESOURCE.H` symbols, the `[FONTID]` convention, the aircraft name/description blocks |
 
 ## Shared conventions (zrdr readers)
 
@@ -69,3 +71,7 @@ data); `soundsh/soundsl` → `sounds` (WAVs); `zrdr` → `reader` (JSON);
 are *downscaled* quality tiers of the base `texture` set (never higher-res); `rimage` is
 menu/briefing UI only. `cam_anim.zbd`/`mis_anim.zbd` are unsupported by mech3ax — the
 container survey lives in [anim-definitions.md](anim-definitions.md).
+
+`ExtractRof.ps1` (repo root) covers the non-ZBD half of the install: the `.rof` UI resource
+archives and the `langui.dll` string table, into `extracted\rof\`. These are decoded by this
+project rather than by mech3ax — see [rof.md](rof.md) and [strings.md](strings.md).
