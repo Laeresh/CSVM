@@ -277,9 +277,18 @@ skins; the code is gone.
 
 ## Open
 
-- **The "Shade" column.** The paint UI offers three *Colour* and three *Shade* dropdowns while
-  only three colours exist per scheme, and the masks give each slot exactly one colour. Shade
-  is still unexplained — possibly a UI-side ramp endpoint folded into the stored RGB.
+- ~~**The "Shade" column.**~~ *Answered 2026-07-20 (user): Shade is simply the **brightness** of
+  the chosen colour.* The UI's Colour dropdown picks the hue family and Shade picks how light
+  or dark it is; their product is the single RGB that ends up in `paint_colorN`. There is no
+  fourth stored field and nothing extra to model — a scheme really is three colours, and the
+  masks giving each slot exactly one colour is consistent, not a contradiction. The remake
+  exposes **RGB sliders** instead of the original's two dropdowns, which spans the same space
+  and more, so any original livery is reachable by matching its colour directly.
+
+  This also **independently confirms `player_fortune`'s colours**, which had been derived only
+  by rendering. `CustomPlane Paint1 Bloodhawk.png` shows Colour/Shade of *red/red*,
+  *white/**black***, *white/white* — resolving to **red, black, white**, exactly the triple
+  that the three-way render test singled out. Two unrelated routes, same answer.
 - **Overlay channel order** is still unconfirmed (see rof.md); treating the 4th channel as
   alpha over RGB renders correctly on the content inspected, which is greyscale and so cannot
   distinguish RGBA from BGRA.

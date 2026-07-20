@@ -244,3 +244,14 @@ User request: "switching the squadron in livery lab should change to the respect
 *Bug found while verifying:* `CliArgs()` indexed `_catalog[_patternIndex]`, but `_patternIndex` indexes the **aircraft's** pattern list — different list, different length (12 vs 2–4). It never threw, it just compared against an unrelated scheme, so a freshly-loaded squadron livery printed the long `--paint-color=…/--paint-decal=…` form instead of the compact `--paint=BLAKE`. Now resolved by name.
 
 Verified by stepping both a 3-pattern aircraft and a 4-pattern one: `--paint=BLAKE` → `FORTUNE` → `HUGHES` on the Bloodhawk and `BLCKSWAN` → `FORTUNE` → `HUGHES` → `STUDIO` on the Fury, each logging its own colour triple and decal set, with the panel swatches tracking and the CLI line back to its compact form.
+
+
+### 2026-07-20 (same day) — "Shade" answered: it is brightness
+
+User: *"The shade column is just brightness of the color. We have rgb sliders instead of combo boxes so we can match the color."*
+
+That closes the last standing question about the scheme record. The original's paint screen offers a Colour dropdown (the hue family) and a Shade dropdown (how light or dark it is); their product is the single RGB stored in `paint_colorN`. There is no fourth field, and the region masks giving each slot exactly one colour is consistent with that rather than in tension with it. No code change — the remake exposes RGB sliders where the original had two dropdowns, which spans the same space and more, so any original livery is reachable by matching the colour directly.
+
+It also **independently confirms `player_fortune`'s colours**, which until now rested on a single line of reasoning. The Bloodhawk paint-UI reference reads Colour/Shade of red/red, white/**black**, white/white — i.e. slot 2 is *white at black brightness* = **black** — resolving to (red, black, white). That is exactly the triple the three-way render test had singled out by matching black outer wing panels and a white swoosh against the same screenshot. Two unrelated routes to the same answer, so the inference is now well supported rather than merely consistent.
+
+Recorded in `docs/formats/paint.md`; the remaining open items there are the overlay's channel order and the three near-V-symmetric skins that prefer unflipped rows.

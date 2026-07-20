@@ -113,7 +113,11 @@ public sealed class PaintScheme
     // shipped scheme has (identity colour, dark trim, light trim) — `hughes` is
     // yellow/black/white — and rendering all three combinations against the reference singled
     // this one out: white/white loses the black wing entirely, black in slot 3 puts it on the
-    // swoosh instead of the panel. See paint.md.
+    // swoosh instead of the panel.
+    // Corroborated independently once "Shade" was explained (it is the colour's BRIGHTNESS,
+    // so the stored RGB is Colour x Shade): that same screenshot's dropdowns read red/red,
+    // white/BLACK, white/white — slot 2 being white at black brightness IS black. Two
+    // unrelated routes, same triple. See paint.md.
     private static readonly Color FortuneRed = FromBytes(223, 0, 41);
     private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
     private static readonly Color FortuneFlash = FromBytes(255, 255, 255);
