@@ -255,3 +255,42 @@ That closes the last standing question about the scheme record. The original's p
 It also **independently confirms `player_fortune`'s colours**, which until now rested on a single line of reasoning. The Bloodhawk paint-UI reference reads Colour/Shade of red/red, white/**black**, white/white — i.e. slot 2 is *white at black brightness* = **black** — resolving to (red, black, white). That is exactly the triple the three-way render test had singled out by matching black outer wing panels and a white swoosh against the same screenshot. Two unrelated routes to the same answer, so the inference is now well supported rather than merely consistent.
 
 Recorded in `docs/formats/paint.md`; the remaining open items there are the overlay's channel order and the three near-V-symmetric skins that prefer unflipped rows.
+
+## 2026-07-20 — Aircraft normals rendered inverted; mesh lab landed
+
+User report: *"I have a hunch that the normals of the planes are not in the correct direction. Fury has some lighter patches for example seen from the top. From below the wing edge and tail are somehow lighted. I don't know where the lighting is coming from in the viewer."* The hunch was right; the location was not.
+
+**The file data is clean.** Three mechanisms were eliminated by measurement before any code was written. Stored normals agree with their polygon winding on **0 of 1827** Fury triangles inverted (Bloodhawk 0/1505, Kestrel 3/2207) — but only once the probe triangulates the way `SceneBuilder.EmitPolygon` actually does, fan vs *alternating strip*. A first pass took a Newell normal over each polygon's raw index list, which is meaningless for a `triangle_strip` (that list is a strip, not a closed loop) and reported a false 7–14% inversion rate. Worth remembering: the wrong triangulation manufactured exactly the evidence the hypothesis predicted. Also ruled out: mirrored nodes (0 negative-determinant transforms across five aircraft) and importer damage (no `GenerateNormals`, no `Index` weld). Separately, `unk164` is **not** a usable bounding box — 0 of 89 Fury mesh nodes match their own vertex AABB and it is all-zero for most, so it is no shortcut for `PlaneCollider`.
+
+**The renderer inverts them.** Our normals point to the polygon's visible side; that side is the CCW loop, which is Godot's *back* face — the reason single-sided aircraft surfaces use `cull_front`. So **every** visible aircraft fragment is back-facing, and Godot negates `NORMAL` on back faces. The normal reached the light calculation pointing into the airframe and every upward surface shaded as though lit from underneath, which is also precisely why the *underside* looked lit.
+
+Diagnosed with the new mesh lab, in the order that mattered: culling was eliminated first — the wing stayed dark in **all four** cull modes (6.4 / 7.8 / 6.4 / 6.6), so sidedness was not the cause — and then a controlled light settled it. Viewed from above with ambient off:
+
+| sun | panel | wing top |
+|---|---|---|
+| straight **down** (lighting the top) | 67.8 | **6.4** |
+| straight **up** (lighting from underneath) | 146.6 | **104.4** |
+
+A wing's upper surface, seen from above and lit from above, was black, and lit up when the sun moved beneath it.
+
+**Fix:** `SceneBuilder.GetBiasShader`'s **shaded** path emits `NORMAL = -normalize(...)`, cancelling the engine flip. Correct for both sidedness cases — single-sided shows only the CCW side; a double-sided (`cull_disabled`) polygon gets the engine's flip on exactly the side that needs it. Fullbright substitutes an empty sign and its shader text is byte-identical to before, so **the world is provably unaffected** (it never reads NORMAL anyway). Under sun-straight-down from above, Fury wing top **6.4 → 73.8**.
+
+**The reported "lighter patches" were never a separate bug.** They are the `pdpanelN_h` healthy damage panels — proved by `--damage=leftwing:0.1`, which replaced the bright wingtip patch with the torn-skin panel at exactly the same footprint. They stood out only because their light-grey texture survived the inversion while the near-black wing around them went to 6.4. After the fix their brightness ratio against the wing falls from **19.4× to 1.55×** and they are no longer visible. Matches `OriginalScreenshots/Fury from above.png` (brightly lit from above, no grey patches).
+
+**Verification:** regression battery 0 errors across viewer × 3 aircraft, painted, static C1, `--fly`, `--stunt`, damage lab; unadorned `--viewer` still byte-identical by md5 with the lab present.
+
+**New:** `src/UI/MeshLab.cs` (`--viewer`, **M**) — normal lines (per-face/per-corner; provenance / direction / winding colouring), wireframe with hard smoothing seams highlighted plus the engine's viewport wireframe, `PlaneCollider` boxes coloured by `PlaneDamage` part and split at x=0 where a slab could map to either wing, steerable lighting with a headlight mode, and `cull` × `normal source` override cyclers (16 combinations) whose materials replicate SceneBuilder's vertex stage verbatim so an override differs in the thing under test and nothing else. `--debug-mesh[=spec]` presets it for scripted screenshots. Two bugs caught during its own build, both worth keeping in mind: it must be constructed **after** the plane joins the tree (`GlobalTransform` on a detached node returns identity and logs per call), and it must **seed its light sliders from the scene** — a hardcoded default re-aimed the sun and broke the byte-identical viewer screenshot.
+
+**Open:** aircraft carry evenly-spaced bright "comb" stripes along the wing and tail trailing edges. Texture-level (no wireframe edges bound them) and they survive painting, so a pattern ships no `.BM` for those skins. Pre-existing and unrelated to the normals; not chased. Also unverified: whether flight lighting wants re-tuning against the reference videos now that every aircraft is substantially brighter.
+
+### 2026-07-20 (same day) — Fix: mesh lab crashed cycling the normal-source override
+
+User report of `Index p_surface = 0 is out of bounds (surface_override_materials.size() = 0)` from `MeshLab.ApplyOverrides`, which they could not reproduce. The backtrace's line numbers placed `CycleRow` ~9 lines earlier than the current source, identifying it as a **pre-fix binary** — but chasing it anyway found a genuine defect and a genuine hole in the first fix.
+
+**Root cause:** `SurfaceTool.Commit()` returns a **0-surface** mesh when the surface it was given carries no triangles. `AllSmooth` swapped such a mesh into the `MeshInstance3D`, which resized its `surface_override_materials` array to 0, and the next `SetSurfaceOverrideMaterial(0, …)` failed. Frame `<BuildUi>b__84_6` in the report is the *normal src [V]* cycler, which matches: only that cycler reaches `AllSmooth`.
+
+**Two guards, because the first one checked the wrong quantity.** The initial fix tested `Mesh.GetSurfaceCount()`, but Godot bounds-checks the **instance's** override array, and those are different numbers — MeshInstance3D sizes the array at mesh-assignment time, so a mesh whose surfaces are committed afterwards (exactly what SceneBuilder does, committing into an already-assigned ArrayMesh) leaves it short. Now: `SmoothMesh` refuses to swap in a 0-surface mesh, and `SetOverride` checks `GetSurfaceOverrideMaterialCount()` and **recovers** — re-assigning the mesh to force the resize — rather than skipping. Skipping would leave a surface un-overridden without saying so, which in a diagnostic lab means drawing a conclusion from half an A/B; if recovery still fails it logs once, as a plain line.
+
+**Testing note worth keeping.** The crash only ever appeared on the *button* path, which no one-shot `--debug-mesh` spec reaches — it takes a second `ApplyOverrides` after a mesh swap. Added `--debug-mesh=cycle=N` (steps the cycler N times at launch, the same convention as `--debug-livery=N`). The first attempt to validate it was worthless: reverting only `SetOverride` still passed, because the *other* guard was silently doing the work. Reverting **both** reproduced the user's error exactly (4 occurrences), and the fixed build passes across Fury/Bloodhawk/autogyro at `cycle=9` (2¼ full loops, so every transition). A regression test that has never been seen to fail proves nothing.
+
+Plain `--viewer` re-checked against **full** stderr this time (the earlier byte-identical run had grepped only for the screenshot line, which would have hidden exactly this class of error): 0 ERROR lines, screenshot still byte-identical.

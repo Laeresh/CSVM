@@ -163,6 +163,7 @@ public partial class PlaneViewer : Node3D
     // --debug-livery[=N]: open the livery lab panel (hidden by default) and optionally step
     // the pattern N times, so one screenshot exercises the panel and its stepper. Null = off.
     private int? _debugLivery;
+    private string? _debugMesh; // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -189,6 +190,11 @@ public partial class PlaneViewer : Node3D
     private readonly List<Vector3> _focusPoints = new(); // scratch: rig camera positions for the edge extender
     private UI.SplitScreen? _split;    // the splitscreen pane rig (null in single player)
     private Camera3D _camera = null!;
+    // Built once in _Ready and kept across sessions (like the camera). The mesh lab steers
+    // both — sun direction/energy and the ambient — so held here rather than local to
+    // SetupLighting.
+    private DirectionalLight3D _sun = null!;
+    private Godot.Environment? _env;
     private Vector3 _orbitCenter;
     private float _orbitDistance = 20f;
     private float _yaw = 2.5f, _pitch = 0.3f; // default: front-left three-quarter view (nose is -Z)
@@ -261,6 +267,8 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--debug-scoreboard") _debugScoreboard = true;
             else if (arg == "--debug-livery") _debugLivery ??= 0;
             else if (arg.StartsWith("--debug-livery=")) _debugLivery = int.Parse(arg["--debug-livery=".Length..]);
+            else if (arg == "--debug-mesh") _debugMesh ??= "";
+            else if (arg.StartsWith("--debug-mesh=")) _debugMesh = arg["--debug-mesh=".Length..];
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -581,8 +589,20 @@ public partial class PlaneViewer : Node3D
                     _worldRoot!.AddChild(lab);
                     what += " + livery lab";
                 }
+
+                if (_viewerMode)
+                    what += " + mesh lab";
             }
             _worldRoot!.AddChild(_plane);
+            // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
+            // cull-mode and normal-source overrides. Like the other two labs it is built in every
+            // --viewer session and starts hidden (M), so an unadorned viewer screenshot is
+            // unchanged; --debug-mesh opens it and presets modes. Built AFTER the plane joins the
+            // tree: it reads geometry back through GlobalTransform, which on a detached node
+            // returns identity and logs an error per call rather than walking the subtree.
+            if (_viewerMode && _plane != null)
+                _worldRoot!.AddChild(new UI.MeshLab(_plane, PlaneCollider.Build(_plane),
+                    _sun, _env, _camera) { DebugSpec = _debugMesh });
             // The deck is now in the tree at its original position; remember its centre so
             // _Process can re-anchor it under each player every frame, and give every rig past
             // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
@@ -1504,22 +1524,22 @@ public partial class PlaneViewer : Node3D
 
     private void SetupLighting()
     {
-        var sun = new DirectionalLight3D
+        _sun = new DirectionalLight3D
         {
             RotationDegrees = new Vector3(-45, 150, 0), // shine onto the -Z (nose) side
             LightEnergy = 1.6f,
             ShadowEnabled = true,
         };
-        AddChild(sun);
+        AddChild(_sun);
 
-        var env = new Godot.Environment
+        _env = new Godot.Environment
         {
             BackgroundMode = Godot.Environment.BGMode.Sky,
             Sky = new Sky { SkyMaterial = new ProceduralSkyMaterial() },
             AmbientLightSource = Godot.Environment.AmbientSource.Sky,
             AmbientLightEnergy = 0.9f,
         };
-        AddChild(new WorldEnvironment { Environment = env });
+        AddChild(new WorldEnvironment { Environment = _env });
     }
 
     private void FrameCamera()

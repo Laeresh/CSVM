@@ -626,16 +626,29 @@ void fragment() {
         // the (already-linear) texture multiply reproduces the gamma-space product. (item 6.)
         if (!shaded)
             sb.AppendLine(SrgbToLinearFn);
-        sb.AppendLine(@"
-void vertex() {
+        // Normal sign — aircraft only; the fullbright world never reads NORMAL. Our source
+        // normals point to the polygon's visible side, and that side is the CCW loop, which is
+        // Godot's BACK face (the reason single-sided surfaces use cull_front above). So every
+        // visible aircraft fragment is back-facing, and Godot negates NORMAL on back faces:
+        // the normal reaches the light calculation pointing INTO the airframe, and every
+        // upward-facing surface shades as though lit from underneath. Pre-negating cancels
+        // that engine flip, and it is correct for both sidedness cases — single-sided shows
+        // only the CCW side, and a double-sided (cull_disabled) polygon gets the engine's flip
+        // on exactly the side that needs it.
+        // Measured on the Fury via the mesh lab (ambient off, sun straight down, viewed from
+        // above): wing top 6.4 → 73.8, and the light-grey "patches" at the wingtips and tail
+        // — which were only the places a bright texture survived the inversion — disappear.
+        string normalSign = shaded ? "-" : "";
+        sb.AppendLine($@"
+void vertex() {{
     VERTEX = (MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    NORMAL = normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
+    NORMAL = {normalSign}normalize(MODELVIEW_NORMAL_MATRIX * NORMAL);
     // Scale toward the eye (the view-space origin): identical projected position,
     // depth nudged nearer by bias × distance — a scale-invariant polygon offset.
     VERTEX *= 1.0 - (depth_bias + node_bias);
-}
+}}
 
-void fragment() {");
+void fragment() {{");
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
