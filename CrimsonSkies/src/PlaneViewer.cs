@@ -163,7 +163,8 @@ public partial class PlaneViewer : Node3D
     // --debug-livery[=N]: open the livery lab panel (hidden by default) and optionally step
     // the pattern N times, so one screenshot exercises the panel and its stepper. Null = off.
     private int? _debugLivery;
-    private string? _debugMesh; // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
+    private string? _debugMesh;  // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
+    private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -269,6 +270,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-livery=")) _debugLivery = int.Parse(arg["--debug-livery=".Length..]);
             else if (arg == "--debug-mesh") _debugMesh ??= "";
             else if (arg.StartsWith("--debug-mesh=")) _debugMesh = arg["--debug-mesh=".Length..];
+            else if (arg == "--debug-names") _debugNames ??= "meshes";
+            else if (arg.StartsWith("--debug-names=")) _debugNames = arg["--debug-names=".Length..];
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -915,6 +918,25 @@ public partial class PlaneViewer : Node3D
 
         if (!_fly)
             FrameCamera();
+
+        // Node-name labels (T) — in BOTH the viewer and flight: reading a misplaced object's
+        // name off it as you fly past is the fast way to identify it. Covers the whole session
+        // subtree, so it labels the world and the aircraft alike. Off until pressed (and it
+        // builds nothing until then), so no screenshot changes. In splitscreen the selection
+        // follows P1's camera; the labels themselves render in every pane.
+        var flownPlanes = new List<Node3D>();
+        foreach (var rig in _rigs)
+            if (rig.Controller?.PlaneModel is { } flown)
+                flownPlanes.Add(flown);
+        _worldRoot!.AddChild(new UI.NodeLabels(_worldRoot!, _rigs.Count > 0 ? _rigs[0].Camera : _camera)
+        {
+            InitialMode = _debugNames == null ? UI.NodeLabels.Mode.Off : UI.NodeLabels.ParseMode(_debugNames),
+            // The flown aircraft sits metres from the camera while the world is hundreds of
+            // metres away, so without this it wins every label slot. Empty in --viewer, where
+            // the parked aircraft IS the subject.
+            Deprioritise = flownPlanes,
+        });
+
         _inSession = true;
         return true;
     }
