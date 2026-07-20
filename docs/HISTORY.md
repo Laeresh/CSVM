@@ -347,3 +347,38 @@ post-removal commit count was ~50, not ~24).
 Format knowledge recorded in `docs/formats/anim-definitions.md` the same day. Next: plan
 item 4 — semantic `AnimDef` field decode + event dispatch, cross-validated against the
 already-decoded zrdr JSON for the same anims.
+
+## 2026-07-21 — mech3ax fork: CS anim archives fully decoded semantically (plan item 4)
+
+`docs/PLAN-mech3ax-cs-revival.md` item 4: every `AnimDef` field, support array and sequence
+event in the CS `cam_anim.zbd`/`mis_anim.zbd` archives is now decoded into mech3ax's shared
+API types (fork commit `60a0603`), replacing item 3's raw-blob regions. Round-trip stays
+**byte-identical on all 61 archives**; the SI-script frame data is the only remaining raw
+region (item 5).
+
+- **Architecture:** a new `EventCs` trait in `anim-events` with impls that delegate to
+  `EventPm` — justified empirically: a data census over all 61 archives showed every event
+  type shared with PM has PM's exact payload size. CS-specific pieces: e12
+  OBJECT_MOTION_SI_SCRIPT (64 B `{0, node_index, script_slot, zeros}`), the two events
+  beyond the known vocabulary — **e46 SOUND_ADJUST** and **e47 OBJECT_MOTION_SI_SCRIPT
+  ALL_NAMES** (both named via the zrdr sources, payloads preserved raw) — and a CS
+  `IF`/`ELSEIF` condition codec adding NODE_BELOW_ALT/ANIM_HEALTH/ANIM_HEALTH-range/
+  NODE_ACTIVE plus the MAIN_ROOT_NODE (−100) sentinel.
+- **Semantics recovered:** the item-3 "unknowns array" is the compiled **NAME1 node path**;
+  the u32 list is the def's **SI-script pool indices** (e12 events index into it — item 5's
+  record-attribution question answered as a side effect); flag bit 5 = "RESET_TIME key
+  present" and bits 12/13 = SAVE_LOG, both pinned by the reader oracle; activation
+  prerequisites ARE used (correcting item 3's note).
+- **Verified:** 61/61 byte-identical (`cargo test` with `CS_ANIM_DIR`); the decoded
+  `hangar3_doors` matches `C1/zrdr/hangar3.json` **field-for-field** (activation, SAVE_LOG,
+  all 5 RESET_STATE ops, all 4 sequences incl. the duplicate `open_door2` name and the
+  ±50 m / 9–10 s door motions) — the ground-truth oracle no other mech3ax game has; full
+  workspace test suite green (MW/PM/RC unaffected); clippy adds no warnings vs baseline.
+- Data quirks handled along the way: duplicate node names inside one def (C1/M02 references
+  the *second* `pzep_interior` by index — disambiguated with a reversible `~N` suffix),
+  garbage-padded name fields (preserved as pads), stale pointers and `wait_for` values,
+  rotations beyond ±180°, negative light ranges, a handful of relaxed PM-corpus data bounds.
+
+Format page updated the same turn (`docs/formats/anim-definitions.md` — compiled-archives
+section rewritten as decoded fact). Next: item 5 (SI-script frame decode — now a bounded
+question) then item 6 (CLI wiring + test.py).

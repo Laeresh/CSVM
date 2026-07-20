@@ -5,7 +5,8 @@ extraction (mech3ax v0.6.1), 2026-07-18, while implementing the anim-state engin
 (mission start states). Field tables + tiny excerpt values only — no bulk game data.
 
 The original compiles these reader sources into per-mission `mis_anim.zbd` archives
-(a binary format mech3ax does **not** support); the zrdr JSON sources carry the same
+(a binary format upstream mech3ax does not support; the project's mech3ax **fork decodes
+it** — see the compiled-archives section below); the zrdr JSON sources carry the same
 definitions, so scanning them is a full substitute for state purposes.
 
 ## Where definitions live
@@ -102,14 +103,16 @@ across scenarios; `zeppelins.json` is the gameplay config of the always-present 
 zeppelin (`multiplayer1zep`), not a state selector. Scenario selection evidently drives
 spawns/objectives/AI at engine level, not the world build.
 
-## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (surveyed 2026-07-18, extraction deferred)
+## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (fork decode: container + defs + events COMPLETE)
 
-The binary archives mech3ax does not support for CS. Surveyed while scoping the
-anim-playback engine (Run-2 item 9); **playback is deferred until the data is extractable
-via a mech3ax extension** (decided 2026-07-18 — note: upstream mech3ax HEAD has since
-dropped its CS gamez support, so the future fork must account for that). Everything below
-was validated by direct binary analysis of this install's C1 archives; the partial decode
-is recorded so that work can resume where this left off.
+The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
+scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
+(`tools/mech3ax`, plan `docs/PLAN-mech3ax-cs-revival.md`) has implemented them in
+`crates/anim/src/cs/`: the container (item 3, 2026-07-20) and the full semantic
+`AnimDef` + event decode (item 4, 2026-07-21) round-trip **byte-identically on all 61
+archives of this install**; only the SI-script frame data is still carried as raw bytes
+(item 5) and the CLI is not wired yet (item 6). Everything below is byte-verified against
+this install.
 
 **Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
 spline scripts that exist **nowhere as loose files** — they are compiled only into these
@@ -138,34 +141,77 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C — mech3ax's
   per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
   AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
-- **AnimDef records (2026-07-20, complete: a structural walk delimits every def, seq and
-  script in all 61 archives of this install, landing byte-exactly at EOF):** each record is
+- **AnimDef records (semantic decode COMPLETE 2026-07-21, fork plan item 4** — every field,
+  support array and sequence event is decoded into mech3ax's API types in
+  `crates/anim/src/cs/`; round-trip **byte-identical on all 61 archives**, and the decoded
+  `hangar3_doors` matches its reader-JSON source field-for-field — activation, SAVE_LOG,
+  all five RESET_STATE ops, all four sequences with their door motions**)**: each record is
   a **272-byte** C struct — PM's 268-byte `AnimDefC` layout with one extra dword — with the
   same field offsets as PM (`anim_name`[32]@0, `name`[32]@40, `anim_root_name`[32]@76,
   flags@156, status/activation/priority/`2`@160–163, exec range@164, `reset_time`@172,
   health@180, `seq_defs_ptr`@204, `reset_state_ptr`@208, `unknown_seq_ptr`@212, eight u8
   counts@216 (seq/object/node/light/puffer/dynamic-sound/static-sound/effect), prereq
   count/min@224, anim-ref count@226, then the support-array pointers). First record is the
-  `reserved_anim_0` placeholder (same convention as MW/PM/RC, but carrying its name rather
-  than all-zero). After each record its support arrays follow inline, then an optional
-  RESET_SEQUENCE, then the sequences (64-byte PM `SeqDefInfoC` headers + `size` bytes of
-  events each). **CS deltas from PM** (all byte-verified): `execution_priority` is 1 or 4
-  (PM always 4); `anim_ptr`/`anim_root_ptr` @72/@108 hold real hash-like values (PM: always
-  0xFFFFFFFF); flag bits 18/22 appear (undefined in PM; observed flag union 0xC40C36);
-  static-sound refs are **40 bytes** (PM 36); and three structures PM's layout reserves but
-  never uses are live in CS: the **unknowns array** (`unknowns_count`@36 × 36-byte records,
-  `unknowns_ptr`@32 — PM asserts both zero), a **u32 index list** (count in PM's `zero227`
-  byte @227, pointer in PM's `zero264` @264, 4-byte entries after the support arrays — e.g.
-  `gi_scene1` carries {0,1,2,3}), and **one extra unnamed sequence** appended after the
-  counted ones whenever `unknown_seq_ptr`@212 ≠ 0 (PM asserts it NULL). Object refs are
-  PM's 92-byte shape (with node *indices* where PM stores pointers), node refs PM's 44-byte
-  shape (name @+4), light/puffer/dynamic-sound 44, effect 36 and activation-prereq 48
-  unexercised in this install's data (counts always 0), anim refs 72 (`ref_ty`=1 =
-  CALL_ANIMATION observed). Event blobs inside sequences use the standard 12-byte event
-  header `{type u8, start_offset u8, pad u16, size u32, start_time f32}` with types matching
-  the documented op set (observed so far: SOUND 1, OBJECT_ACTIVE_STATE 6, OBJECT_MOTION 10,
-  SEQUENCE 22, CALL_ANIMATION 24, STOP_ANIMATION 25, FBFX_COLOR_FROM_TO 36, …) and payload
-  shapes matching mech3ax's existing implementations where compared (e06 = 8 B, e22 = 36 B).
+  `reserved_anim_0` placeholder (carries its name, ON_CALL activation, INVALID anim ptrs,
+  and a per-archive flags dword — C1/M05 has bit 21). After each record its support arrays
+  follow inline **in this order**: NAME1 node path, objects, nodes, lights, puffers,
+  dynamic sounds, static sounds, activation prereqs, anim refs, SI-script-id list; then an
+  optional RESET_SEQUENCE, the counted sequences (64-byte PM `SeqDefInfoC` headers + `size`
+  bytes of events), and an optional extra unnamed sequence when `unknown_seq_ptr`@212 ≠ 0.
+  **CS deltas from PM** (all byte-verified): `execution_priority` ∈ {1,4,5,6} (PM always
+  4); `anim_ptr`/`anim_root_ptr` @72/@108 hold real hash-like values (PM: 0xFFFFFFFF);
+  `anim_name`/`anim_root_name` can carry truncation garbage past the terminator (preserved
+  as pads); the **"unknowns" array is the compiled `NAME1` node path** — one 36-byte
+  `{name[32], node ptr/index u32}` record per path component, e.g. `mp1zrprop11` carries
+  {multiplayer1zep, reng11}, exactly `NAME1 ["mp1zrprop1*", ["multiplayer1zep","reng1*"]]`
+  resolved for the instance; the **u32 index list** (count in PM's `zero227`@227, pointer
+  in PM's `zero264`@264) is the def's **SI-script pool indices** — `freightercruise` → [0],
+  `hooked_to_klondike` → [5..10], `cpeject1` → [14..28] — and the def's
+  OBJECT_MOTION_SI_SCRIPT events index into it. Object refs are PM's 92-byte shape (node
+  *indices* where PM stores pointers, and live `root_idx`); node refs PM's 44-byte shape
+  with live `flags`/`root_idx`/`ptr`; a def's node list can contain **duplicate names**
+  (same name, different pointers — the mech3ax fork disambiguates with a reversible `~N`
+  suffix since events reference nodes by index); light/puffer/dynamic-sound 44 bytes;
+  static-sound refs **40 bytes** = one garbage-padded name field (the garbage runs past
+  byte 32); **activation prereqs (48 B) ARE used** (contra the earlier survey note): object
+  prereqs carry `active` ∈ {0,1,2} and real pointers, `min_to_satisfy` up to the count;
+  anim refs 72 B — `ref_ty` **1 = CALL_ANIMATION with LOCAL_NAME** (name + local_name
+  halves, both garbage-padded), 0 = plain CALL_ANIMATION. Object/node name fields use MW/PM's
+  `Default_node_name` padding convention, with zero-padded and garbage exceptions.
+- **Events (all decoded):** the standard 12-byte header `{type u8, start_offset u8 ∈
+  {1,2,3}, pad u16 = 0, size u32 incl. header, start_time f32}`. 35 event types occur in
+  this install; **every type shared with PM has PM's exact payload layout** (e01 16 B, e02
+  60, e04 140, e05 100, e06 8, e07 20, e08 16, e09 20, e10 320, e11 132, e13 12, e14 24,
+  e15/e16 4, e17 8, e20 36, e22/e23 36, e24 68, e25 36, e26/e27 36, e28 68, e30 8,
+  e31/e33 16, e32/e34 0, e35 4, e36 52, e41 24, e42 584). Three are CS-specific:
+  **e12 OBJECT_MOTION_SI_SCRIPT is 64 bytes** `{0, node_index, script_index, 52 zero
+  bytes}` where `script_index` indexes the def's script-id list; **e46 = SOUND_ADJUST**
+  (176 B, the volume/frequency/pan fade-series op — `hdplayer*` defs; payload not yet
+  field-decoded); **e47 = OBJECT_MOTION_SI_SCRIPT in its `ROOT`/`ALL_NAMES` form** (multi-
+  node skeletal person animations — `caboosewave`, ladder climbs; payload = count u32 +
+  count × 76-byte records, not yet field-decoded). **CS event quirks** (all preserved by
+  the fork): `IF`/`ELSEIF` conditions add **NODE_BELOW_ALT 0x100** (node + altitude),
+  **ANIM_HEALTH 0x800** (float), **ANIM_HEALTH two-value form 0x1000** (min/max — uses the
+  dword PM asserts zero; `locklear_zep_nacelles` `ANIM_HEALTH [20, 32]`), and
+  **NODE_ACTIVE 0x2000** (node index); `NODE_NEAR_GROUND` compiles to NODE_UNDERCOVER
+  (0x10) **with the value negated**; node references know two sentinels — **INPUT_NODE =
+  −200** (also in SOUND AT_NODE and PUFFER_STATE AT_NODE) and **MAIN_ROOT_NODE = −100**
+  (`OPERAND_NODE ["MAIN_ROOT_NODE"]`, and plain node refs); e27 INVALIDATE_ANIMATION
+  carries index 0 or −100; e24 CALL_ANIMATION has stale small `wait_for` values without
+  the flag; e10 OBJECT_MOTION adds flag bit 15 = **`GRAVITY [..., DO_INTERSECTIONS]`** and
+  ranges compiled with only the MIN flag bit; e28 FOG_STATE carries real fog names
+  (`drop_fog`); e04 light ranges can be negative/reversed; e42 puffer data has
+  `START_AGE_RANGE` min −1, zero deviation distance with the flag set, size ranges with
+  max == min, and the never-in-MW/PM `UNKNOWN_RANGE` flag live (incl. reversed values).
+- **AnimDef flags (partially named):** bit 1 = EXECUTION_BY_RANGE (exact iff with the range
+  fields); bit 4 = HAS_CALLBACKS; **bit 5 = "RESET_TIME key present in the reader source"**
+  (oracle-confirmed: `hangar3_doors` has `RESET_TIME [-1.0]` and bit 5 set with value −1 —
+  in CS the flag does NOT mean the value is ≠ −1); bits 10/11 = NETWORK_LOG SET/ON, bits
+  12/13 = SAVE_LOG SET/ON (oracle-confirmed via `SAVE_LOG ON`); unknown CS-only bits: 2
+  (prop/rotor spin defs), 14+15 (always together; `m_build`/`s_build` building templates),
+  17 (rare; firetrucks/flak), 18 (nearly all defs), 21, 22 (nearly all defs), 23
+  (camera/intro defs). The fork stores the raw dword (`flags_raw`) since the unknown bits
+  make reconstruction impossible.
 - **SI-script pool** (the part item 9 needs): back-to-back records of
   `{source path\0, object name\0, frames…}`. Frame = `{flags u32: 1=translate, 2=rotate,
   4=scale; start f32, end f32}` + one **19-float block per set flag**. Translate block
@@ -178,16 +224,19 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   translate, with the quaternion in place of translate's `base Vec3 + unk f32`. mech3ax
   round-trips the spline blocks as preserved bytes (`Bytes<16>`) without interpreting the
   cubics. The frame structs (`FrameC` 12 B; translate/rotate/scale data 76 B each) match CS
-  byte-for-byte (`tr_passengine1`: flags=3, start=0, end≈3.636 s). One CS divergence from
-  PM: CS pool records are `{path\0, object\0, frames…}` with inline nul-terminated strings —
-  PM instead prefixes a 28-byte `SiScriptC` header (name lengths, `spline_interp`,
-  `frame_count`, `script_data_len`); how CS delimits records is the open question behind the
-  camera/`cpilot_eject` parse failures below.
-- **Validation state:** a flags-driven frame walker parses **24 of C1's 48 scripts
-  byte-exactly** to the next record — including all four train scripts and both
-  fueltrucks (every vehicle motion) — with contiguous monotonic times; the failures are
-  confined to camera/`cpilot_eject` scripts (an undecoded variant: they stop early on
-  padding or run slightly past — likely an extra sub-record). Train data: 4 scripts
+  byte-for-byte (`tr_passengine1`: flags=3, start=0, end≈3.636 s). The 2026-07-18 survey's
+  "no header struct / how are records delimited" question was **resolved by the fork's
+  structural stage (item 3): the pool IS PM's format verbatim** — all 28-byte `SiScriptC`
+  headers first (name lengths, `spline_interp` — true in CS, false in PM —, `frame_count`,
+  `script_data_len`), then each script's names + frame data, sizes declared exactly. Which
+  scripts belong to which def is declared too: the def's u32 list (above) holds its pool
+  indices, and each e12 event names its slot in that list.
+- **Validation state:** record delimiting is exact via the `SiScriptC` headers (byte-
+  identical round-trip with the frame data preserved raw). The earlier flags-driven frame
+  walker interpreted **24 of C1's 48 scripts byte-exactly** — including all four train
+  scripts and both fueltrucks (every vehicle motion) — with contiguous monotonic times; the
+  camera/`cpilot_eject` scripts still need their frame-data variant decoded (fork plan
+  item 5, now a bounded question since each script's exact extent is known). Train data: 4 scripts
   (`tr_passengine1/tankercar1/boxcar1/caboose1.zan`) × 90 frames × ~3.64 s (= 40 ticks at
   `SCRIPT_FRAME_RATE` 11), total ~327 s per loop, starting at the parked consist position
   `(−6943…−6961, 128, −5456…−5412)` and covering a ~3.9 × 2.2 km track loop — all

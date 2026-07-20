@@ -81,8 +81,8 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 1. ☑ Fork housekeeping — add `upstream` remote, confirm baseline `cargo build`/`cargo test`/`test.py` on `main` as-is (done 2026-07-20, see section 1)
 2. ☑ Study `crates/anim/src/{mw,pm,rc}` as the porting template; write down what's shared (`common/`) vs per-game (done 2026-07-20, see section 2 — incl. byte-verification against the real C1 `cam_anim.zbd`)
 3. ☑ Implement `crates/anim/src/cs/` container + def-list + info block, byte-region-correct (garbage-preserving) round-trip (done 2026-07-20, see section 3 — round-trip verified **byte-identical on all 61 archives**, exceeding the planned C1-only bar)
-4. ☐ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema
-5. ☐ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant
+4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
+5. ☐ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (partly pre-answered by item 4: the def's u32 list = its pool indices, e12 events name their slot, and the `SiScriptC` headers delimit every record exactly — only the frame-data *content* of the camera/eject variant remains)
 6. ☐ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install
 7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup
 
@@ -271,6 +271,48 @@ gives a ground-truth oracle no other mech3ax game format has.
 `cam_anim.zbd` round-trip byte-identical with every def field now named (no remaining
 opaque/garbage regions inside `AnimDef` records — the outer garbage-preservation escape hatch
 from item 3 should no longer be needed here).
+
+**DONE 2026-07-21** (fork commit `60a0603`, exceeding the planned C1-only bar: **all 61
+archives round-trip byte-identically** with the full semantic decode). The def/support/event
+model now goes through mech3ax's shared API types exactly like MW/PM/RC: `cs/anim_def.rs`
+(the 272-byte struct with Maybe-typed flags/activation, PM-style asserts adjusted to CS
+data), `cs/support.rs` (typed support arrays), and a new `EventCs` trait in `anim-events`
+whose impls **delegate to `EventPm` wherever the payload layout is PM's** — which the survey
+proved is every shared event type (all 32 shared types match PM's payload size exactly).
+Survey scripts: `.scratch/cs_anim_survey.py` / `_survey2.py` in the main repo.
+
+Key decode results (full detail in `docs/formats/anim-definitions.md`):
+- The item-3 "unknowns array" is the compiled **NAME1 node path** ({multiplayer1zep, reng11}
+  for `mp1zrprop11` — matching `multi1_zep_nacelles.json`'s `NAME1` exactly); it precedes
+  the objects array. The u32 list is the def's **SI-script pool indices**, and the CS e12
+  event (64 B, not PM's 24) references `{node_index, script_slot}` into it — which
+  pre-answers item 5's delimiting question.
+- Two event types beyond the known MW/PM/RC vocabulary, both named via the reader oracle:
+  **e46 = SOUND_ADJUST** (fade series; `hdplayer*`) and **e47 = OBJECT_MOTION_SI_SCRIPT in
+  its ROOT/ALL_NAMES form** (skeletal person anims; count × 76-byte records). Both are
+  preserved as raw payloads (new API variants) — field decode is item-5-adjacent.
+- CS `IF`/`ELSEIF` conditions extend PM's set: NODE_BELOW_ALT (0x100), ANIM_HEALTH (0x800),
+  two-value ANIM_HEALTH (0x1000, uses PM's asserted-zero dword), NODE_ACTIVE (0x2000);
+  `NODE_NEAR_GROUND` = NODE_UNDERCOVER with negated value. New node sentinel
+  **MAIN_ROOT_NODE = −100** (alongside INPUT_NODE −200, which CS also uses in
+  SOUND/PUFFER_STATE AT_NODE).
+- Flag bits pinned by the oracle: bit 5 = "RESET_TIME key present" (not value ≠ −1), 12/13 =
+  SAVE_LOG SET/ON; bit 1 = EXECUTION_BY_RANGE proven iff; 8 CS-only bits remain unnamed, so
+  the raw dword is stored (`flags_raw`) and is authoritative on write.
+- Corrections to item-3 notes: activation prerequisites ARE used (object `active` ∈ {0,1,2},
+  real pointers, `min_to_satisfy` up to the count); static sounds are one 40-byte
+  garbage-padded name field (the trailing bytes are not always zero).
+- CS data quirks handled: duplicate node names within a def (disambiguated with a reversible
+  `~N` suffix — events reference nodes by index, and C1/M02 references the *second*
+  `pzep_interior`), stale pointers/`wait_for` values, `reserved_anim_0` with per-archive
+  flags, rotations beyond ±180°, negative light ranges, several relaxed PM data bounds.
+
+**Verified:** `cargo test` with `CS_ANIM_DIR` = 61/61 byte-identical; full workspace test
+suite green (MW/PM/RC untouched paths); clippy no new warnings vs baseline; decoded
+`hangar3_doors` matches `C1/zrdr/hangar3.json` field-for-field (activation, SAVE_LOG, all 5
+RESET_STATE ops, all 4 sequences incl. duplicate sequence names and the ±50/±25 door
+motions), plus a `dump_anim_def` debug test (env `CS_ANIM_DUMP=<path>;<name>`) for future
+oracle checks.
 
 ## 5. SI-script rotate block + the camera/`cpilot_eject` gap
 
