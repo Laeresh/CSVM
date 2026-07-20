@@ -33,6 +33,7 @@
 https://boardgamegeek.com/thread/2882301/crimson-skies-new-components-for-2022
 https://github.com/bethington/ghidra-mcp
 
+
 ## Issues
 - Extract rof file zlib 1.3.1 
 - Dive sound not as present in the game
@@ -50,6 +51,11 @@ https://github.com/bethington/ghidra-mcp
     - C3 Massive z fighting at beach --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
     - C3 trees in water --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
     - C3 What is this: --campos=-6151.614,136.079,-3198.714 --lookat=-6150.76,135.796,-3199.151
+    - C2 Seaplane Hangar has Zeppelin over its position and is nowhere near the sea:
+        screenshot saved: Z:\Crimson Skies\Screenshots\crimsonskies_2026-07-19_16-26-53-115.png
+        camera pose: --campos=-220.479,42.865,-315.996 --lookat=-219.928,42.708,-315.176
+        screenshot saved: Z:\Crimson Skies\Screenshots\crimsonskies_2026-07-19_16-28-32-371.png
+        camera pose: --campos=26.538,13.511,25.575 --lookat=25.895,13.551,24.81
 - Sound
     - Mute when not focused
     - Engine retune: he confusing extra combs turned out to be the original playing the engine as a ~5%-detuned dual stack (a chorus effect — ours is a single loop, noted as a backlog fidelity nit)
