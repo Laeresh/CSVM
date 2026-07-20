@@ -310,3 +310,40 @@ Names come from the `cs_name` meta SceneBuilder stamps on every node, never `Nod
 Selection runs on a 0.35 s timer rather than per frame (positions are world-static and Label3D billboards itself, so the cadence is invisible), and the candidate walk is redone on the same timer because the flight tree genuinely changes — MapEdgeExtender adds and drops border tiles on cell crossings, and a one-shot walk would label ghosts and miss new ground.
 
 Builds no nodes until first switched on, so an untouched session renders identically — the static viewer screenshot is still byte-identical. `--debug-names[=meshes|all]` presets it for scripted shots.
+
+## 2026-07-20 — mech3ax fork: CS anim archives structurally decoded + byte-identical round-trip (plan items 1–3)
+
+Work in `tools/mech3ax` (the user's fork), per `docs/PLAN-mech3ax-cs-revival.md` (plan
+re-verified same day after being drafted by a weaker model — four factual errors corrected:
+deleted-code inventory undercounted ~2× and missed the 625-line `world/data.rs`, the anim-info
+cross-check pointed at MW's 68-byte layout where 0x6c = 108 = PM's, the "trailing script pool
+discrepancy" dissolved once PM's reader was read (PM *is* a trailing pool), and the
+post-removal commit count was ~50, not ~24).
+
+- **Item 1 (fork housekeeping):** `upstream` remote added (fork was already at rc3 head);
+  `cargo build`/`cargo test` clean (141 tests); `test.py` run against this install via a
+  `tools/test-versions/crimson-cs/zbd` junction + `strings.dll` copy — `--- ALL OK ---` on
+  every already-supported CS format (sounds/interp/messages/reader/53 texture ZBDs), gamez +
+  anim print the expected `SKIPPING`. So current upstream `main` still fully supports CS's
+  non-gamez formats; only gamez + anim are the gap.
+- **Item 2 (template study):** PM confirmed as near-verbatim donor by byte-probing the real
+  C1 `cam_anim.zbd`: CS's anim-info block is PM's 108-byte `AnimInfoC` field-for-field
+  (def_count 476 / script_count 48 / gravity −9.8 decoded), and the SI-script pool is PM's
+  exact format — 28-byte `SiScriptC` headers then per-script names+frames, whose declared
+  sizes run byte-exactly to EOF. That discovery retro-explains the 2026-07-18 survey's
+  24-of-48 "parse failures": the survey's walker simply lacked the header block's declared
+  counts. Upstream's `RotateDataC` also confirms the survey's undecoded rotate block
+  (quaternion + delta + 3×16-byte spline blocks).
+- **Item 3 (structural round-trip):** a Python walk model was iterated against the install
+  until it delimited every def/seq/script in **all 61 archives** byte-exactly to EOF —
+  discovering the full CS `AnimDefC` (272 B: PM's 268 + a u32-list ptr @264 with count in
+  PM's `zero227`), 40-byte static-sound refs (PM 36), the live `unknowns` array (36-B
+  records; PM asserts it empty), and the extra unnamed sequence behind `unknown_seq_ptr`
+  (PM asserts NULL). Then `crates/anim/src/cs/mod.rs` (structural stage: typed structs for
+  fixed records, event/frame regions preserved as raw bytes) landed with a
+  `roundtrip_real_archives` test: **61/61 byte-identical**, clippy-clean. The zero-def is
+  preserved verbatim (its flags vary per archive — C1/M05 has bit 21 set).
+
+Format knowledge recorded in `docs/formats/anim-definitions.md` the same day. Next: plan
+item 4 — semantic `AnimDef` field decode + event dispatch, cross-validated against the
+already-decoded zrdr JSON for the same anims.

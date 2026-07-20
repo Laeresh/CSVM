@@ -122,15 +122,50 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   the chapter-scope compiled anim archive, holding chapter + shared defs **including all
   vehicle SI scripts** (C1: the 4 train cars, 2 fueltrucks, mission-intro cameras,
   `cpilot_eject` body parts — 48 scripts total).
-- **Container** (same family as MW3 `anim.zbd`, which mech3ax fully supports — the natural
-  implementation template): header `{signature u32 = 0x08170616` (identical to MW3),
-  `version u32 = 53` (MW3 = 39), `nBase u32 = 2, nAnimFiles u32}`; then 2 ×
-  `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the archive was built against),
-  then nAnimFiles × `{path char[80], mtime u32}` (the `.zrd`/`.zan` sources; mtimes are
-  year-2000 Unix timestamps). Then an anim-info block (~0x6c bytes: gravity −9.8 f32,
-  counts, runtime pointers), then the AnimDef records (fixed C struct + inline sequence
-  data, first record a `reserved_anim_0` placeholder — **internals not decoded**), then the
-  SI-script pool, which runs byte-exactly to EOF.
+- **Container** (same family as MW3/PM `anim.zbd`, which mech3ax fully supports — **PM is
+  the closest sibling**, verified 2026-07-20 against mech3ax's own structs): 16-byte header
+  `{signature u32 = 0x08170616` (identical to MW3), `version u32 = 53` (RC 28 / MW 39 /
+  PM 50), `nBase u32 = 2, nAnimFiles u32}` (byte order confirmed: C1 = `16 06 17 08 | 35 |
+  02 | AA`); then nBase × `{path char[128], mtime u32}` (the gamez.zbd + planes.zbd the
+  archive was built against — a CS-only list), then nAnimFiles × `{path char[80], mtime u32}`
+  (the `.zrd`/`.zan` sources; mtimes are year-2000 Unix timestamps; entry shape = mech3ax's
+  common `AnimDefFileC` exactly, though CS keeps the count in the header rather than before
+  the entries). Then the anim-info block — **PM's 108-byte (0x6c) `AnimInfoC` layout
+  verbatim**, decoded field-for-field on C1 cam_anim @0x38E0: `def_count u16` @10 (476),
+  `defs_ptr` @12, `script_count u32` @16 (48 — the SI-script pool count), `scripts_ptr` @20,
+  `msg_count/msgs_ptr` @24/28 (0), `world_ptr` @32, `gravity f32` @36 (−9.8), `unk40` @40
+  (1), `one60` @60 (1), zeros elsewhere; the three pointers are per-archive runtime garbage
+  (C1 cam_anim: defs 0x048F631C / scripts 0x048BB5DC / world 0x03B8000C — mech3ax's
+  per-game `Mission` tables preserve these for byte-identical round-trip). Then `def_count`
+  AnimDef records, then the SI-script pool, which runs byte-exactly to EOF.
+- **AnimDef records (2026-07-20, complete: a structural walk delimits every def, seq and
+  script in all 61 archives of this install, landing byte-exactly at EOF):** each record is
+  a **272-byte** C struct — PM's 268-byte `AnimDefC` layout with one extra dword — with the
+  same field offsets as PM (`anim_name`[32]@0, `name`[32]@40, `anim_root_name`[32]@76,
+  flags@156, status/activation/priority/`2`@160–163, exec range@164, `reset_time`@172,
+  health@180, `seq_defs_ptr`@204, `reset_state_ptr`@208, `unknown_seq_ptr`@212, eight u8
+  counts@216 (seq/object/node/light/puffer/dynamic-sound/static-sound/effect), prereq
+  count/min@224, anim-ref count@226, then the support-array pointers). First record is the
+  `reserved_anim_0` placeholder (same convention as MW/PM/RC, but carrying its name rather
+  than all-zero). After each record its support arrays follow inline, then an optional
+  RESET_SEQUENCE, then the sequences (64-byte PM `SeqDefInfoC` headers + `size` bytes of
+  events each). **CS deltas from PM** (all byte-verified): `execution_priority` is 1 or 4
+  (PM always 4); `anim_ptr`/`anim_root_ptr` @72/@108 hold real hash-like values (PM: always
+  0xFFFFFFFF); flag bits 18/22 appear (undefined in PM; observed flag union 0xC40C36);
+  static-sound refs are **40 bytes** (PM 36); and three structures PM's layout reserves but
+  never uses are live in CS: the **unknowns array** (`unknowns_count`@36 × 36-byte records,
+  `unknowns_ptr`@32 — PM asserts both zero), a **u32 index list** (count in PM's `zero227`
+  byte @227, pointer in PM's `zero264` @264, 4-byte entries after the support arrays — e.g.
+  `gi_scene1` carries {0,1,2,3}), and **one extra unnamed sequence** appended after the
+  counted ones whenever `unknown_seq_ptr`@212 ≠ 0 (PM asserts it NULL). Object refs are
+  PM's 92-byte shape (with node *indices* where PM stores pointers), node refs PM's 44-byte
+  shape (name @+4), light/puffer/dynamic-sound 44, effect 36 and activation-prereq 48
+  unexercised in this install's data (counts always 0), anim refs 72 (`ref_ty`=1 =
+  CALL_ANIMATION observed). Event blobs inside sequences use the standard 12-byte event
+  header `{type u8, start_offset u8, pad u16, size u32, start_time f32}` with types matching
+  the documented op set (observed so far: SOUND 1, OBJECT_ACTIVE_STATE 6, OBJECT_MOTION 10,
+  SEQUENCE 22, CALL_ANIMATION 24, STOP_ANIMATION 25, FBFX_COLOR_FROM_TO 36, …) and payload
+  shapes matching mech3ax's existing implementations where compared (e06 = 8 B, e22 = 36 B).
 - **SI-script pool** (the part item 9 needs): back-to-back records of
   `{source path\0, object name\0, frames…}`. Frame = `{flags u32: 1=translate, 2=rotate,
   4=scale; start f32, end f32}` + one **19-float block per set flag**. Translate block
@@ -138,7 +173,16 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   where `component(t) = value + c1·t + c2·t² + c3·t³`, `t` seconds since frame start —
   verified exact against each next frame's base value and C1-continuous (next frame's `c1`
   = previous frame's exit derivative). Rotate block: starts with a unit quaternion
-  `(w,x,y,z)`; remaining 15 floats presumed the same avg+cubic scheme — **not decoded**.
+  `(w,x,y,z)`; the remaining 15 floats are **confirmed by mech3ax's own `RotateDataC`**
+  (2026-07-20): `delta Vec3` + three per-axis 16-byte spline blocks — the same shape as
+  translate, with the quaternion in place of translate's `base Vec3 + unk f32`. mech3ax
+  round-trips the spline blocks as preserved bytes (`Bytes<16>`) without interpreting the
+  cubics. The frame structs (`FrameC` 12 B; translate/rotate/scale data 76 B each) match CS
+  byte-for-byte (`tr_passengine1`: flags=3, start=0, end≈3.636 s). One CS divergence from
+  PM: CS pool records are `{path\0, object\0, frames…}` with inline nul-terminated strings —
+  PM instead prefixes a 28-byte `SiScriptC` header (name lengths, `spline_interp`,
+  `frame_count`, `script_data_len`); how CS delimits records is the open question behind the
+  camera/`cpilot_eject` parse failures below.
 - **Validation state:** a flags-driven frame walker parses **24 of C1's 48 scripts
   byte-exactly** to the next record — including all four train scripts and both
   fueltrucks (every vehicle motion) — with contiguous monotonic times; the failures are

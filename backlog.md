@@ -10,15 +10,19 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 
 - **Animated world vehicles** (Run-2 item 9, deferred 2026-07-18, user decision): train/car/zep
   motion is `OBJECT_MOTION_SI_SCRIPT` whose `.zan` spline scripts exist only compiled inside
-  `cam_anim.zbd`, which mech3ax does not extract for CS → needs a **mech3ax fork extension**
-  (MW3 `anim.zbd` family, version 53 vs 39; upstream HEAD dropped CS gamez support, the fork
-  must carry it). Container + translate-cubic frames already decoded:
-  `docs/formats/anim-definitions.md`. Resuming this also unlocks: anim-state engine part 2
-  (per-object NAME1/generic-root defs), timed hangar-door motion, train steam `PUFFER_STATE`,
-  road-vehicle `OBJECT_MOTION_FROM_TO` chains (`cars_moving`/`trucks_moving`).
+  `cam_anim.zbd`, which mech3ax does not extract for CS → needs a **mech3ax fork extension**.
+  **Scheduled 2026-07-20: `docs/PLAN-mech3ax-cs-revival.md`** (Track B, items 1–7) — adding
+  `cam_anim.zbd`/`mis_anim.zbd` as a fourth variant of the existing `crates/anim` MW/PM/RC
+  container format, plus the same plan's Track A (items 8–14) for reviving `gamez.zbd`/
+  `planes.zbd` support upstream deleted in commit `7f592ec`. Resuming this also unlocks:
+  anim-state engine part 2 (per-object NAME1/generic-root defs), timed hangar-door motion,
+  train steam `PUFFER_STATE`, road-vehicle `OBJECT_MOTION_FROM_TO` chains
+  (`cars_moving`/`trucks_moving`).
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
-  lossless; fix candidate documented in the format support table (CLAUDE.md).
+  lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
+  the gamez revival is already touching) / item 14 (its own small upstream PR if not already
+  folded into the gamez PR).
 - **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device
