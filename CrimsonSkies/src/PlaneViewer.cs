@@ -147,12 +147,20 @@ public partial class PlaneViewer : Node3D
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
     private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
+    // --viewer: the static inspection view (2026-07-20). Flight is the default for any
+    // content arg, so this is how you get the parked-plane orbit — and it is where the
+    // damage lab (--damage) and the livery lab (L) live.
+    private bool _viewerMode;
+    private bool _chapterGiven;        // --chapter/--chapter= seen: --viewer renders that world
     private string _mission = "IA1";   // which mission's spawns to fly from (--mission=): IA1, M01, …
     private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
     private bool _scenarioExplicit;    // --scenario= given (so --stunt doesn't override it)
     private bool _stunt;               // --stunt: stunt-flying mode (= --fly + stunt_flying spawns + StuntMission)
     private bool _debugDzPaths;        // --debug-dzpaths: build the dzpaths route ribbons (debug-only geometry)
     private bool _debugScoreboard;     // --debug-scoreboard: force-complete the stunt run to screenshot the results board
+    // --debug-livery[=N]: open the livery lab panel (hidden by default) and optionally step
+    // the pattern N times, so one screenshot exercises the panel and its stepper. Null = off.
+    private int? _debugLivery;
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -218,17 +226,24 @@ public partial class PlaneViewer : Node3D
         _interpPath = Path.Combine(_repoRoot, "extracted", "interp.json");
         _messagesPath = Path.Combine(_repoRoot, "extracted", "messages.json");
 
-        // A content-selecting arg (--plane/--chapter/--fly/--stunt/--damage/--screenshot) builds
-        // directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
+        // A content-selecting arg (--plane/--chapter/--fly/--stunt/--viewer/--damage/--screenshot)
+        // builds directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
+        //
+        // FLIGHT IS THE DEFAULT (2026-07-20): a content arg with no --viewer flies. So
+        // `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4, where both
+        // used to open a static orbit view. `--viewer` asks for that static inspection view
+        // back, and is where the damage and livery labs live. `--fly` is still accepted and
+        // still means exactly this — it is simply redundant now.
         bool hasContentArg = false;
         bool playersExplicit = false; // --players= given (else a --plane= list implies the count)
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) { ParsePlanes(arg["--plane=".Length..]); hasContentArg = true; }
-            else if (arg == "--damage") { _damageLab = true; hasContentArg = true; }
-            else if (arg.StartsWith("--damage=")) { _damageLab = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); hasContentArg = true; }
-            else if (arg == "--chapter") { _worldMode = true; hasContentArg = true; }
-            else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _worldMode = true; hasContentArg = true; }
+            else if (arg == "--viewer") { _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--damage") { _damageLab = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage=")) { _damageLab = true; _viewerMode = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); hasContentArg = true; }
+            else if (arg == "--chapter") { _chapterGiven = true; hasContentArg = true; }
+            else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _chapterGiven = true; hasContentArg = true; }
             else if (arg == "--fly") { _fly = true; hasContentArg = true; }
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
@@ -240,6 +255,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--paint-decal=")) _paintDecalOverride = ParsePaintDecals(arg["--paint-decal=".Length..]);
             else if (arg.StartsWith("--paint-seed=")) { _paintSeed = ulong.Parse(arg["--paint-seed=".Length..]); _paintSeedExplicit = true; }
             else if (arg == "--debug-scoreboard") _debugScoreboard = true;
+            else if (arg == "--debug-livery") _debugLivery ??= 0;
+            else if (arg.StartsWith("--debug-livery=")) _debugLivery = int.Parse(arg["--debug-livery=".Length..]);
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -274,8 +291,19 @@ public partial class PlaneViewer : Node3D
             if (!_scenarioExplicit)
                 _scenario = "stunt_flying";
         }
-        if (_fly)
-            _worldMode = true;
+        // Flight is the default for any content arg; --viewer opts out into the static
+        // inspection view. Asking for both is a contradiction — the explicit --viewer wins,
+        // since a bare --fly is now just the default spelled out.
+        if (_viewerMode && _fly)
+        {
+            GD.Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
+            _fly = _stunt = false;
+        }
+        if (hasContentArg && !_viewerMode)
+            _fly = true;
+        // The static viewer shows a chapter world when asked for one, else the parked plane.
+        // Flight always needs the world built.
+        _worldMode = _fly || (_viewerMode && _chapterGiven);
         // A --plane= list of several aircraft states the player count on its own (item 6's
         // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
         // different planes); an explicit --players= still wins.
@@ -286,12 +314,12 @@ public partial class PlaneViewer : Node3D
         _players = Mathf.Clamp(_players, 1, UI.SplitScreen.MaxPlayers);
         if (_players > 1 && !_fly)
         {
-            GD.Print($"--players={_players} needs --fly/--stunt (nothing to fly in a static view); using 1");
+            GD.Print($"--players={_players} needs flight (nothing to fly in --viewer); using 1");
             _players = 1;
         }
         if (_damageLab && _worldMode)
         {
-            GD.Print("--damage is the static plane viewer's lab (use --plane without --chapter/--fly); ignoring");
+            GD.Print("--damage is the plane lab (use --viewer --plane without --chapter); ignoring");
             _damageLab = false;
         }
         // Burst captures dither the camera by default so z-fighting flickers across frames;
@@ -483,8 +511,14 @@ public partial class PlaneViewer : Node3D
                 // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
                 // Static views build unpainted unless --paint asks (randomByDefault: false),
                 // so every existing orbit/damage screenshot renders exactly as before.
+                // Resolved once: the livery lab below opens on exactly the scheme the plane
+                // wears, not a second roll of --paint=random.
+                var staticScheme = SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng());
+                // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
+                // model is built bare and there is one write path for paint (its Repaint).
+                // Everywhere else the builder paints at construction as usual.
                 var builder = new PlaneBuilder(gamez, textures, damagePanels: _damageLab,
-                    scheme: SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng()));
+                    scheme: _viewerMode ? null : staticScheme);
                 _plane = builder.Build(_planeName);
                 meshInstances = builder.MeshInstanceCount;
                 what = $"'{_planeName}'";
@@ -516,6 +550,21 @@ public partial class PlaneViewer : Node3D
                                  $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails");
                         what += " + damage lab";
                     }
+                }
+
+                // Livery lab (--viewer): pattern / RGB colour sliders / decal slots, repainting
+                // the parked plane live via PlaneBuilder.Repaint. Built hidden-by-default state
+                // is "unpainted" unless --paint named a scheme, so an unadorned --viewer
+                // screenshot is byte-identical to the pre-paint viewer. L toggles it.
+                if (_viewerMode && builder.SkinPrefix != null)
+                {
+                    var lab = new UI.LiveryLab(builder, PaintCatalog(zrdrPath), textures, staticScheme)
+                    {
+                        DebugShow = _debugLivery.HasValue,
+                        DebugPatternSteps = _debugLivery ?? 0,
+                    };
+                    _worldRoot!.AddChild(lab);
+                    what += " + livery lab";
                 }
             }
             _worldRoot!.AddChild(_plane);
@@ -998,6 +1047,7 @@ public partial class PlaneViewer : Node3D
         _stunt = stunt;
         _fly = true;
         _worldMode = true;
+        _viewerMode = false; // the menu always launches flight, even after a --viewer --menu launch
         // Derive the spawn scenario from the mode each rebuild (a previous stunt run may have left
         // it set), unless the tester pinned one with --scenario= alongside the bare launch.
         if (!_scenarioExplicit)

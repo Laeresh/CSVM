@@ -3,6 +3,11 @@
 /CrimsonSkiesGame/
 /extracted/
 /tools/
+# Archives: every zip in this tree so far has been game data or an extraction of it
+# (CSVM-Complete.zip, the unzbd outputs). Ignored as a class rather than by name, so the
+# next one is covered too — no .zip has ever been tracked here. Un-ignore a specific
+# file with `git add -f` if a genuinely code-only archive ever needs committing.
+*.zip
 
 # Godot / .NET build artifacts
 /CrimsonSkies/.godot/

@@ -10,9 +10,11 @@
     (see the Milestone 2.5 launchscreen). Nothing is chosen on the command line.
 
     Any arguments you pass are forwarded verbatim to the game, so an explicit content
-    arg (--fly, --stunt, --plane=, --chapter=, --screenshot=, ...) bypasses the
+    arg (--plane=, --chapter=, --stunt, --viewer, --screenshot=, ...) bypasses the
     launchscreen and builds directly -- handy for jumping straight into a specific
-    setup. See CrimsonSkies/src/PlaneViewer.cs for the full arg list.
+    setup. Flight is the default for those: --plane=player_fury flies the Fury, and
+    --viewer is what asks for the static inspection view instead. See
+    CrimsonSkies/src/PlaneViewer.cs for the full arg list.
 
 .EXAMPLE
     .\RunGame.ps1
@@ -21,6 +23,10 @@
 .EXAMPLE
     .\RunGame.ps1 --stunt --chapter=C4 --plane=player_fury
     Build, then jump straight into a Rocky Mountains stunt run in the Fury (no menu).
+
+.EXAMPLE
+    .\RunGame.ps1 --viewer --plane=player_kestrel
+    Build, then orbit-view the Kestrel; press L for the livery lab.
 #>
 
 $ErrorActionPreference = "Stop"

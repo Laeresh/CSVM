@@ -4,25 +4,25 @@
 
 .DESCRIPTION
     Runs `dotnet build` on the Godot .NET project, then launches the game via the
-    Godot console executable. The default action is free flight (--fly) over a
-    chapter world -- the milestone 2 vertical slice.
+    Godot console executable. FLIGHT IS THE DEFAULT: any invocation without --viewer
+    flies, so a bare --plane=<node> now flies that aircraft rather than orbit-viewing
+    it (the 2026-07-20 CLI inversion; --fly is still accepted and still means this).
 
-    Interactive selection: whenever you do NOT pass --plane, the script prompts you
-    to pick a plane; whenever you do NOT pass --chapter, it prompts you to pick a
-    chapter (map). Both prompts run in the "fly flow" -- i.e. any invocation that
-    isn't an explicit static view (a bare --plane orbit view, or a bare --chapter
-    world view). So you can run it with no args (prompts both, then flies) or with
-    extra flight flags (e.g. --debug-collision) and still get the prompts.
+    Interactive selection: in the fly flow, whenever you do NOT pass --plane the
+    script prompts you to pick a plane, and whenever you do NOT pass --chapter it
+    prompts you to pick a chapter (map). So you can run it with no args (prompts
+    both, then flies) or with extra flight flags (e.g. --debug-collision) and still
+    get the prompts.
 
-    Explicit static views:
-      * --plane=<node>          orbit-view one aircraft (verbatim, no prompts)
-      * --chapter[=<code>]      static world view (verbatim, no prompts)
-      * --damage[=part:frac,..] the damage lab -- a static plane view with per-part
-                                HP sliders. Prompts for the plane unless --plane= is
-                                also given; never adds --fly or a chapter. (Passing
-                                --fly/--chapter alongside --damage goes through
-                                verbatim instead, and the viewer ignores --damage
-                                with its own note.)
+    Static inspection (--viewer):
+      * --viewer                orbit-view an aircraft; prompts for the plane if
+                                --plane= is missing. Press L in-session for the
+                                LIVERY LAB (pattern, RGB colour sliders, decal
+                                slots, repainting the plane live).
+      * --viewer --chapter[=C1] static world view (no plane, no prompts)
+      * --damage[=part:frac,..] the damage lab -- implies --viewer, so it needs no
+                                extra flag. Per-part HP sliders (H toggles them);
+                                prompts for the plane unless --plane= is given.
 
     Any other CrimsonSkies user args are forwarded as-is (see
     CrimsonSkies/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
@@ -37,12 +37,16 @@
     Build, pick a plane + chapter, then fly with the collision probe drawn.
 
 .EXAMPLE
-    .\RunDev.ps1 --fly --plane=player_kestrel
+    .\RunDev.ps1 --plane=player_kestrel
     Build, fly the Kestrel; plane prompt skipped, chapter prompt still shown.
 
 .EXAMPLE
-    .\RunDev.ps1 --plane=player_kestrel
-    Build, then orbit-view the Kestrel (static view -- no prompts, no flight).
+    .\RunDev.ps1 --viewer --plane=player_kestrel
+    Build, then orbit-view the Kestrel (no prompts, no flight). L = livery lab.
+
+.EXAMPLE
+    .\RunDev.ps1 --viewer --paint=hughes
+    Build, pick a plane, then orbit it in the Hughes livery; L to edit it live.
 
 .EXAMPLE
     .\RunDev.ps1 --damage
@@ -144,25 +148,21 @@ if ($args.Count -gt 0) { $UserArgs += $args }
 
 $hasPlane   = @($UserArgs | Where-Object { $_ -like '--plane=*' }).Count -gt 0
 $hasChapter = @($UserArgs | Where-Object { $_ -like '--chapter=*' -or $_ -eq '--chapter' }).Count -gt 0
-$hasFly     = $UserArgs -contains '--fly'
+$hasViewer  = $UserArgs -contains '--viewer'
 $hasDamage  = @($UserArgs | Where-Object { $_ -eq '--damage' -or $_ -like '--damage=*' }).Count -gt 0
 
-# Damage-lab flow: --damage is the static plane viewer's lab (PlaneViewer ignores it
-# in world/fly mode), so it needs a plane and must NOT get --fly or a chapter. Prompt
-# for the plane when missing and pass everything else through. An explicit --fly or
-# --chapter alongside --damage skips this flow (verbatim pass-through; the viewer
-# prints its own ignore note).
-$damageFlow = $hasDamage -and -not $hasFly -and -not $hasChapter
+# Flight is the viewer's default (2026-07-20), so the flows key on --viewer, not --fly.
+# Viewer flow  = the static inspection view: --viewer, or --damage (which implies it).
+#                It needs a plane, unless --chapter asked for a static world instead.
+# Fly flow     = everything else, including a bare --plane= (which now FLIES that
+#                aircraft rather than orbit-viewing it). Prompts for whatever is missing.
+$viewerFlow = $hasViewer -or $hasDamage
 
-# Fly flow = anything that isn't an explicit static view. A bare --plane (orbit view),
-# a bare --chapter (static world view), or a --damage lab run stays static; everything
-# else (no args, --fly, or extra flight flags) prompts for whatever wasn't specified.
-$flyFlow = -not $damageFlow -and ($hasFly -or (-not $hasPlane -and -not $hasChapter))
-
-if ($damageFlow) {
-    if (-not $hasPlane) { $UserArgs += Select-Plane }
+if ($viewerFlow) {
+    if (-not $hasPlane -and -not $hasChapter) { $UserArgs += Select-Plane }
+    if ($hasDamage -and -not $hasViewer) { $UserArgs += "--viewer" }
 }
-elseif ($flyFlow) {
+else {
     if (-not $hasPlane) { $UserArgs += Select-Plane }
     if (-not $hasChapter) {
         $defIdx  = [Math]::Max(0, [array]::IndexOf(($Chapters | ForEach-Object { $_.Code }), $DefaultChapter))
@@ -170,7 +170,7 @@ elseif ($flyFlow) {
         Write-Host "Chapter: $($chapter.Name) ($($chapter.Code))" -ForegroundColor Green
         $UserArgs += "--chapter=$($chapter.Code)"
     }
-    if (-not $hasFly) { $UserArgs += "--fly" }
+    # No --fly appended: it is the default now, and still accepted if you type it.
 }
 
 Write-Host "Launching Godot: $($UserArgs -join ' ')" -ForegroundColor Cyan

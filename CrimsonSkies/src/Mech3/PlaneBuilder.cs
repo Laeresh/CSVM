@@ -33,8 +33,9 @@ public sealed class PlaneBuilder
     private readonly bool _withDamagePanels;
     private readonly List<Node3D> _wingFlares = new();
     private readonly List<Node3D> _damagePanels = new();
-    private readonly PaintScheme? _scheme;
+    private PaintScheme? _scheme;
     private PlanePainter? _painter;
+    private string? _skinPrefix;
     private StandardMaterial3D? _flareMaterial;
 
     /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
@@ -163,18 +164,36 @@ public sealed class PlaneBuilder
     // and reused, so both share one painted-texture cache.
     private void EnsurePainter(GameZNode root)
     {
+        _skinPrefix ??= PlanePainter.PrefixFor(_gamez, root);
         if (_scheme == null || _painter != null)
             return;
-        var prefix = PlanePainter.PrefixFor(_gamez, root);
-        if (prefix == null)
+        if (_skinPrefix == null)
         {
-            GD.Print($"[paint] {root.Name}: no <prefix>_noselogo material — building unpainted");
+            GD.Print($"[paint] {root.Name}: no <prefix>_noselogo/_taillogo/_winglogo material — building unpainted");
             return;
         }
-        _painter = new PlanePainter(_textures, _scheme, prefix);
-        GD.Print($"[paint] {root.Name} ({prefix}): {_scheme}"
+        _painter = new PlanePainter(_textures, _scheme, _skinPrefix);
+        GD.Print($"[paint] {root.Name} ({_skinPrefix}): {_scheme}"
             + (_painter.SkinIsUnkeyed ? " — skin has no paint regions, decals only" : ""));
     }
+
+    /// <summary>Re-liveries the already-built aircraft in place: a fresh painter, then every
+    /// textured material re-resolved through it. The viewer's livery lab drives this from its
+    /// sliders — repainting ~8 small skins is a few ms, where rebuilding the model for each
+    /// slider pixel would not be interactive. Null paints nothing (back to the shipped skins).
+    /// No-op before <see cref="Build"/>, which is what discovers the skin prefix.</summary>
+    public void Repaint(PaintScheme? scheme)
+    {
+        _scheme = scheme;
+        _painter = scheme != null && _skinPrefix != null
+            ? new PlanePainter(_textures, scheme, _skinPrefix)
+            : null;
+        _scene.Repaint();
+    }
+
+    /// <summary>The aircraft's skin-texture prefix, known once <see cref="Build"/> has run.
+    /// Null when the model carries no decal-placeholder material to read it from.</summary>
+    public string? SkinPrefix => _skinPrefix;
 
     /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
     /// the original starts them off and flashes them via wing_light.json's blink anim), and

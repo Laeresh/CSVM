@@ -463,6 +463,27 @@ void fragment() {
         return mat;
     }
 
+    // Every textured material this builder made, paired with the texture name it resolved
+    // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
+    // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
+    // for every slider pixel). Only shader materials carrying an `albedo_tex` are listed.
+    private readonly List<(ShaderMaterial Material, string TextureName)> _texturedMaterials = new();
+
+    /// <summary>The textured materials built here, each with its source texture name, so a
+    /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
+    public IReadOnlyList<(ShaderMaterial Material, string TextureName)> TexturedMaterials => _texturedMaterials;
+
+    /// <summary>Re-resolves every textured material through the current substitution hook and
+    /// writes the result back into the live material. Used by the viewer's livery lab: the
+    /// substitute closure reads a mutable painter, so changing the scheme and calling this
+    /// repaints the built aircraft in place.</summary>
+    public void Repaint()
+    {
+        foreach (var (mat, texName) in _texturedMaterials)
+            if (Resolve(texName) is { } tex)
+                mat.SetShaderParameter("albedo_tex", tex);
+    }
+
     // The archive lookup every material goes through, plus the caller's optional
     // substitution (aircraft paint). Find() must still run even when a substitute exists:
     // it is what sets LastHadAlpha/LastAlphaIsSoft, which the blend/scissor choice reads.
@@ -505,7 +526,9 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor);
-            return BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
+            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
+            _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
+            return textured;
         }
 
         var color = src?.Color ?? Colors.White;
