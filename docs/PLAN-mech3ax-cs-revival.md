@@ -84,11 +84,11 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
 5. ☑ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (done 2026-07-21, see section 5 — all 1090 scripts of all 61 archives frame-decode byte-exactly; the "failure variant" never existed, and the rotate cubics are half-angle offsets composed `exp(v)⊗base`)
 6. ☑ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install (done 2026-07-21, see section 6 — test.py `--- ALL OK ---`, all 61 archives byte-identical through the real zip pipeline)
-7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup
+7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup (**skipped for now by user decision 2026-07-21** — Track A started first; revisit after)
 
 **Track A — `gamez.zbd`/`planes.zbd` (do second):**
-8. ☐ Recover the deleted `cs/` module from `7f592ec~1` as porting reference (don't try to compile it as-is)
-9. ☐ Diff the common gamez/nodes infra between `7f592ec~1` and current `HEAD` to scope the port
+8. ☑ Recover the deleted `cs/` module from `7f592ec~1` as porting reference (done 2026-07-21, see section 8 — worktree at `tools/mech3ax-cs-ref`, inventory verified, 13 wiring files outside `cs/` catalogued)
+9. ☑ Diff the common gamez/nodes infra between `7f592ec~1` and current `HEAD` to scope the port (done 2026-07-21, see section 9 — the port targets a unified `GameZ`/`Node` API + relocated by-kind node modules; `TextureName` rename machinery obsolete)
 10. ☐ Port `cs` gamez/nodes code onto the current `pm`-based architecture (mesh/model/node code, per-chapter texture fixup tables, reactivate `VERSION_CS`)
 11. ☐ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG
 12. ☐ Verify byte-identical round-trip against the real install (reactivate `test.py`'s CS gamez skip); stretch goal: fix the known 72-byte `planes.zbd` cosmetic diff
@@ -463,6 +463,33 @@ the largest deleted file — plus the 435-line `node.rs` dispatcher, and
 **Verify:** the recovered tree is readable/diffable side-by-side with current `pm/` in an
 editor or via `diff -u`; no attempt made to build it standalone.
 
+**DONE 2026-07-21.** Recovered as a detached `git worktree` at **`tools/mech3ax-cs-ref`**
+(commit `0e8707b` = `7f592ec~1`, "GameZ: derive hardware_render flag" — the last commit CS
+compiled against). Being a worktree of the fork repo, it costs no second clone, stays
+read-only reference (never build/commit there), and `git worktree remove ../mech3ax-cs-ref`
+disposes of it when Track A lands. Inventory verified against the plan's framing numbers,
+all exact: `crates/gamez/src/gamez/cs/` mod 229 / models 187 / nodes 208 / fixup 273 /
+data/mod 152 + the eight per-chapter texture tables + planes.rs (4,040 lines with mods);
+`crates/nodes/src/cs/` 2,509 lines — seven node kinds incl. the 625-line `world/data.rs`
+and the 435-line `node.rs` dispatcher; `crates/api-types/src/nodes/cs.rs` 105.
+
+Beyond the `cs/` directories, `7f592ec`'s full diffstat (63 files, −7,968/+34) catalogues
+**13 wiring files the port must also restore or re-plumb**, each a small targeted diff
+(`git show 7f592ec -- <file>` is the reference): `api-types/src/gamez/mod.rs` (−23:
+`GameZDataCs`/`GameZMetadataCs` variants), `api-types/src/nodes/mod.rs` (−1: cs module),
+`gamez/common.rs` (−29: CS masks/consts, `VERSION_CS` kept dead), `gamez/mod.rs` (−1),
+`nodes/src/flags.rs` (−31: CS node flags), `nodes/src/lib.rs` (−1), `nodes/src/math.rs`
+(−16), `lib/src/{read,write}.rs` (−8/−9: public API entry points), `metadata-gen` (−14),
+`unzbd`/`rezbd` `commands.rs` (−20/−28: the bail arms), `test.py` (−61: the CS gamez run),
+README/CHANGELOG. Also in the same commit: `model/ng/` → `model/pm/` and `textures/ng.rs`
+→ `pm.rs` renames (confirming "ng" *was* the PM+CS common code) — old CS code imports
+`textures::ng`/`model::ng`, which map 1:1 onto today's `pm` modules.
+
+Sanity diff done: `diff -u` old `cs/mod.rs` vs current `pm/mod.rs` reads cleanly, and
+current `pm/mod.rs` still uses the same `data::Campaign` shape old CS's `data/mod.rs`
+mirrored — the PM-as-donor hypothesis holds at the top level. Scoping the common-infra
+delta is item 9.
+
 ## 9. Scope the port
 
 **Goal:** a concrete list of exactly what changed in the common gamez/nodes code between
@@ -483,6 +510,68 @@ shape specifically, since that's the module the port targets.
 
 **Verify:** a written list (comment block or scratch note, not necessarily a docs page) of
 "common-infra changes CS's port must account for," used to drive item 10.
+
+**DONE 2026-07-21.** ~29 commits touch the relevant infra between `7f592ec~1` and `main`.
+The list, ordered by how much they change the port (not by date):
+
+1. **One `GameZ` struct + one `Node` type for all games** (`04da5ce`, building on `4aa5dd1`).
+   `api-types/gamez/mod.rs` now has a single `GameZ {textures, materials, models, nodes,
+   metadata}` + `GameZMetadata {datetime, material/model/node_array_size, node_last_free}`,
+   and `api-types/gamez/nodes.rs` a single `Node` struct (per-game-only fields annotated
+   `// PM` etc.) with a `NodeData` sum over Camera/Display/Empty/Light/Lod/Object3d/Window/
+   World. **Do NOT revive `GameZDataCs`/`GameZMetadataCs`/`NodeCs`/`api-types/nodes/cs.rs`** —
+   the port maps CS onto the unified types, adding `// CS` fields where CS genuinely
+   diverges (the old CS `node.rs` is 435 lines and its `world/data.rs` 625 — the field-set
+   comparison against unified `Node`/`World` is item 10's first real task, and the main
+   place "port" ≠ "copy").
+2. **Node code moved crates and is now organized by kind, not by game** (`7b41ee4`,
+   `27f4f36`, `66c974c`, `9fd2f47`, `f850598`, `2bca2d6`): gamez node read/write lives in
+   `crates/gamez/src/nodes/<kind>/`, where camera/display/window/object3d are **game-shared**
+   (single read/write) and light/lod/world/node-dispatch have `{mw,pm,rc}` submodules. CS
+   adds `cs/` submodules to the per-game kinds + a `gamez/pm→cs`-style `nodes/{read,write}.rs`
+   pair under `gamez/cs/`; for the shared kinds, check CS's old
+   camera(190)/display/window/object3d code against the shared readers before writing
+   anything new. The standalone `crates/nodes` crate still exists but now serves **mechlib
+   only** (mw/pm wrappers) — the CS gamez port shouldn't touch it.
+3. **Materials reference textures by index, not name** (`4df8963` + the unified API):
+   `TexturedMaterial.texture_index: IndexR` replaced name resolution, so CS's whole
+   `TextureName {original, renamed}` dedupe/redupe machinery (`dedupe_texture_names`/
+   `redupe_texture_names` in old `cs/mod.rs`) is architecturally obsolete — duplicate
+   texture names no longer break material resolution. `mech3ax_common::Rename` still
+   exists if needed. **Downstream flag for item 13:** v0.6.1's extraction JSON carries the
+   renamed (`.-N`-suffixed) texture names and our Godot `TextureArchive` compensates —
+   the fork's output will differ here by design, so the cutover diff must treat that as an
+   intentional improvement, not a regression.
+4. **Index/count newtypes + `chk!`/`len!` idiom** (`c6ae212`, `4df8963`): raw `i32`/`u32`
+   counts became `Count`/`Count32`/`IndexO`/`IndexR` with checked conversions;
+   `assert_that!`/`assert_len!` largely became `chk!(offset, …)`/`len!(…)` (Track B's item 4
+   already worked in this idiom). Mechanical but pervasive across every ported file.
+5. **API types are declared via `api!`/`sum!`/`bit!`/`num!` macro_rules** (`89a46e3` …
+   `16eb6b5`, replacing the proc-macro derives the old CS code used) and every new type
+   registers in `crates/metadata-gen` (learned the hard way in Track B item 6). Old CS
+   `#[derive(… Struct)]`/`#[dotnet(…)]` declarations translate 1:1 but must be rewritten.
+6. **Header slot 32 semantics** (`b3cee34`): PM's header field at offset 32 is now
+   `node_last_free` (was misread as node_count) and lives in `GameZMetadata`. CS's header
+   has `light_index` in that slot (old `HeaderCsC`) — a genuine CS divergence to keep,
+   but its round-trip (recomputed from the light node on write, hardcoded 2338 for planes)
+   should be re-examined against the new metadata idiom.
+7. **Model/materials internals moved on** (`01353a4` PM poly flag `unk6`/in-out, `5eefe90`
+   PM mechlib material-ref split, `3db51d2` mip validation, `d1551a4`): current `model/pm/`
+   IS the old `model/ng/` (renamed by `7f592ec` itself — old CS imports `textures::ng`/
+   `model::ng` map 1:1 onto today's `pm` modules), but it has evolved since; `cs/fixup.rs`'s
+   mesh-index hacks and the non-sequential mesh read (`4896f52`) must be re-validated
+   against the new `models::read_models(read, nodes_offset, material_count)` signature
+   rather than assumed portable.
+8. **Style bar**: edition 2024 (`130d38e`, `a63d54a` fmt) + clippy (`2c5a61c`) — cosmetic,
+   but the ported code should be written in the current idiom from the start (Track B did).
+
+CLI/plumbing (small, known shapes): `lib/src/{read,write}.rs` lost their CS gamez FFI arms
+(−8/−9 lines), `unzbd`/`rezbd` `gamez()` has the literal bail arm to replace with a
+`gamez_cs` following `gamez_pm` (item 11), `test.py` keeps its flippable CS gamez skip
+(item 12). Old-CS read-flow facts worth keeping in view for item 10: `Fixup::read(&header)`
+selects per-campaign mesh-index hacks and detects planes.zbd (write side keys off timestamp
+`967277477`); `nodes::read_nodes` takes `light_index`, `&models` and an `is_gamez` flag —
+none of which the PM template passes.
 
 ## 10. Port `cs` onto current `pm`-based architecture
 

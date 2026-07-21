@@ -453,3 +453,34 @@ round-trip; clippy clean on every touched crate. Docs same turn: plan item 6 DON
 `docs/formats/anim-definitions.md` (CLI + NaN-delta quirk), CLAUDE.md format table.
 Next: item 7 — consume in this project (ExtractAssets.ps1 anim mode, SI-script playback
 for the train/trucks, backlog cleanup).
+
+## 2026-07-21 — mech3ax fork: Track A started — CS gamez module recovered + port scoped (plan items 8–9)
+
+Track B's item 7 (consume anim in this project) skipped for now by user decision; Track A
+(`gamez.zbd`/`planes.zbd` revival) started instead.
+
+- **Item 8 — recovery:** the deleted CS gamez/nodes code is on disk again as a detached
+  git worktree at `tools/mech3ax-cs-ref` (commit `0e8707b` = `7f592ec~1`, the last commit
+  CS compiled against; read-only reference, `git worktree remove` disposes of it).
+  Inventory matches the plan's framing exactly (gamez `cs/` 5,089 lines incl. the eight
+  per-chapter texture tables + planes.rs; nodes `cs/` 2,509 lines, seven node kinds;
+  api-types `cs.rs` 105). The removal commit's full diffstat (63 files, −7,968) also
+  catalogues 13 wiring files outside `cs/` the port must restore (api-types mods, common
+  consts, node flags/math, lib FFI arms, metadata-gen, CLI bail arms, test.py).
+- **Item 9 — port scoping:** ~29 infra commits between `7f592ec~1` and `main` read and
+  classified into an 8-point list (in the plan, section 9). Headlines: upstream unified
+  everything into a **single `GameZ` struct + single `Node` API type** for all games
+  (`04da5ce`) — the port maps CS onto those instead of reviving `GameZDataCs`/`NodeCs`;
+  node read/write moved to `crates/gamez/src/nodes/<kind>/{mw,pm,rc}` organized by kind,
+  with camera/display/window/object3d now game-shared; materials reference textures **by
+  index** (`4df8963`), making CS's `TextureName` dedupe/rename machinery obsolete (flagged
+  for item 13: the extraction JSON will intentionally differ from v0.6.1's renamed
+  `.-N` names our Godot TextureArchive compensates for); plus the Count/Index newtypes +
+  `chk!` idiom, the `api!` macro type system + metadata-gen registration, PM header slot
+  32 = `node_last_free` vs CS's `light_index`, and `model/ng`→`model/pm` mapping CS's old
+  imports 1:1. Confirmed current `pm/mod.rs` still uses the `data::Campaign` shape old
+  CS mirrored — PM stays the donor.
+
+No code written yet (both items are reference/analysis by design). Next: item 10 — the
+actual port, starting with the field-set comparison of CS's old 435-line `node.rs` /
+625-line `world/data.rs` against the unified `Node`/`World` API types.
