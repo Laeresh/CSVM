@@ -990,3 +990,85 @@ edge-on sliver) and reads at full brightness regardless of the mission's SUNLIGH
 not yet wired into the renderer — the 5 models that use it all share materials with
 non-scrolling meshes, so wiring it needs the material cache keyed by more than
 `materialIndex`; left as a follow-up since nothing currently reported needs it).
+
+## 2026-07-21 — `IF`/`ELSEIF` condition evaluation + the `AnimationLod` quality setting
+
+Item 1 of `docs/PLAN-anim-rendering-followups.md`. `AnimRuntime`'s sequence runner used to
+treat every `If`/`Elseif` as "skip the branch body", on the reading that conditions were
+gameplay state a world build could not answer. A survey of all 16,195 conditions across the
+install (all 8 chapters, `cam_anim` + every `mis_anim`) showed that is false — there are ten
+kinds and every one of them is answerable:
+
+| Count | Condition | Rule used |
+|---:|---|---|
+| 4537 | `RandomWeight` | `rand() < w`, re-rolled per evaluation |
+| 4007 | `AnimHealth` | `health <= n`; uniformly false at an undamaged object's full health |
+| 1052 | `PlayerRange` | `dist²(anchor, player) <= value` |
+| 717 | `NodeActive` | the referenced node is visible |
+| 473 | `NodeUndercover` | **stubbed false** — needs a ground/occlusion probe; all 473 are `ON_CALL` |
+| 124 | `AnimHealthRange` | `min <= health <= max` |
+| 120 | `AnimationLod` | `QualityLod >= n` — our setting, not the data's |
+| 120 | `PlayerFirstPerson` | false (no cockpit view yet) |
+| 28 | `NodeBelowAlt` | node world Y < altitude |
+| 17 | `HwRender` | true |
+
+Landed: `AnimRuntime.EvaluateCondition` + `ConditionNode`, a per-open-IF `_branchTaken` stack
+in `SequenceRunner` (a pure skip-to-`Endif` cannot express "the ELSE runs when the IF didn't",
+so the old `SkipBranch` split into `NextBranch`/`SkipToEnd`), `AnimDefinition.NodeList` (the
+`nodes` support array in order — conditions index it), `AnimDefs.ReaderCondition` (the zrdr
+front-end's IF/ELSEIF normalizer), and `--anim-lod=N` in `PlaneViewer`.
+
+**Three decode findings**, all recorded in `docs/formats/anim-definitions.md`:
+
+- Compiled `PlayerRange` is metres **squared** where the reader's is metres (reader 270 ↔
+  compiled 72900, exact across the install), and compiled `ANIMATION_LOD` is `2` where the
+  reader's is the token `HIGH`. Both conversions happen once, in `ReaderCondition`, so the
+  runtime has one convention.
+- Condition node references are **1-based indices into the definition's own `nodes` support
+  array** — not gamez node indices and not names (mech3ax resolves index→name for every other
+  event kind but leaves conditions raw). Two negative sentinels share the field, -100
+  `MAIN_ROOT_NODE` and -200 `INPUT_NODE`, both meaning "the node this def was invoked on";
+  they arrive as u32 that float32 JSON parsing rounds together, which is harmless since they
+  resolve identically, so the resolver tests magnitude rather than equality.
+- `HW_RENDER`/`PLAYER_1ST_PERSON` take no reader argument and store `false` in the shared
+  4-byte value slot, so that slot is unused for them and the condition is the runtime flag
+  itself. (C1B's `four_bulletholes` reads backwards under that rule — but it is an `ON_CALL`
+  player-cockpit def that never runs in a world build, so nothing turns on it.)
+
+**One consequence had to be fixed with it.** Evaluating conditions made the data's *poll*
+idiom live for the first time: `If <cond> → CallAnimation; Endif; Loop{-1}` re-issues the call
+on every frame the condition holds. C1/MP1's `rearm_node_1/call_door` uses it to fire
+`rearm_door_close` while the player is within 25 m, and `CallAnimation`'s restart-on-call
+behaviour pinned that 2 s door at frame 0 for as long as you hovered. `CallAnimation` now
+skips a definition already live on the same anchor; `Start` keeps its restart semantics for
+the bootstrap passes, and the hangar-door pair that relies on "later registration wins"
+resolves through `AddMotion`, not through this. Verified by parking the free camera on the
+rearm pad: the condition logs `false → TRUE → false` and `rabdr` cycles 163 → 177 → 167 →
+154 m instead of standing still.
+
+**Verified.** `If(skipped branch)` is gone from the unhandled report in every chapter. C1
+reports `AnimationLod 33✓/0✗` — the refinery, six docklights, six reflights and the police
+light are all taken — and `--anim-lod=0` flips that to `0✓/33✗` with the `LightState` count
+dropping 520→518 and `LightAnimation` disappearing, so the knob demonstrably gates real
+content in both directions. All 8 chapters build with **zero errors**; `state ops applied` is
+unchanged in every one of them (only `unresolved` rises, by exactly the newly-taken
+`PlayerRange` branches whose `snd_zepengine` target is not built in these worlds). Screenshot
+A/B against a stashed pre-change build differs only within a **measured** run-to-run noise
+floor: C1/C1B/C3 byte-identical both ways; C1C/C2B/C4 ~5–6% of pixels, matched to within half
+a point by a same-build-vs-same-build run (self-animating precipitation — rain, rain, snow);
+C2 and C5 a handful of pixels in the identical bounding box. Mode battery (fly, stunt,
+viewer, damage lab, 2P, 4P race, `--menu=plane`, static C4 weather view) error-free.
+
+The condition log was kept rather than reverted, in a shape that cannot spam: per-kind
+true/false tallies printed once after the bootstrap, and under `--debug-anim` one line per
+condition the first time it is seen and thereafter only when its verdict **flips**.
+
+Also fixed while landing this: `GlobalPosition` on a node outside the tree returns identity
+**and logs a Godot error per call**, and the world subtree is still detached while the
+bootstrap passes run (PlaneViewer parents it afterwards) — thousands of error lines, which
+`AnimRuntime.WorldPos` avoids by accumulating local transforms instead.
+
+**Open:** item 1 alone produces no *visible* change, exactly as the plan predicted — the
+branches now execute, but their payload is very often a `LightState` the runtime still does
+not act on. That is item 2, and it is where the refinery/dock/lighthouse lights actually
+light up.

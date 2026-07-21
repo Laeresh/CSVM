@@ -166,6 +166,11 @@ public partial class PlaneViewer : Node3D
     // --debug-anim: log every live animation motion once a second (headless verification
     // that the train/doors actually move, without flying a camera at them).
     private bool _debugAnim;
+    // --anim-lod=N: our answer to the data's ANIMATION_LOD condition, a quality setting
+    // rather than a fact about the world. Default = the highest tier the data asks for, so
+    // every LOD-gated branch runs; lower it only to A/B what the original hid on slow
+    // hardware. See AnimRuntime.QualityLod.
+    private int _animLod = AnimRuntime.HighLod;
     private bool _debugDzPaths;        // --debug-dzpaths: build the dzpaths route ribbons (debug-only geometry)
     private bool _debugScoreboard;     // --debug-scoreboard: force-complete the stunt run to screenshot the results board
     // --debug-livery[=N]: open the livery lab panel (hidden by default) and optionally step
@@ -266,6 +271,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
             else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
             else if (arg == "--debug-anim") _debugAnim = true;
+            else if (arg.StartsWith("--anim-lod=")) _animLod = int.Parse(arg["--anim-lod=".Length..]);
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
             else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
             else if (arg == "--debug-dzpaths") _debugDzPaths = true;
@@ -503,8 +509,16 @@ public partial class PlaneViewer : Node3D
                 var animRuntime = new AnimRuntime
                 {
                     DebugMotions = _debugAnim,
+                    QualityLod = _animLod,
                     PufferParent = _worldRoot,
                     PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+                    // PLAYER_RANGE conditions measure from the player. Player 1's camera is
+                    // the honest answer in every mode this project has (chase cam in flight,
+                    // the free camera in --freecam, the orbit eye in a static view), and it
+                    // is resolved per call because none of those cameras exist yet here.
+                    PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                        ? cam.GlobalPosition
+                        : Vector3.Zero,
                 };
                 animRuntime.Bind(_plane, animProgram);
                 animRuntime.PufferFactory = null;

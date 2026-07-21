@@ -173,6 +173,13 @@ public sealed class AnimDefinition
     /// </summary>
     public readonly Dictionary<string, int> NodeRefs = new(StringComparer.OrdinalIgnoreCase);
 
+    /// <summary>The <c>nodes</c> support array's names in container order. Separate from
+    /// <see cref="NodeRefs"/> because IF/ELSEIF conditions reference a node by its **1-based
+    /// position** in this array rather than by name (mech3ax resolves the index→name mapping
+    /// for every other event kind, but leaves condition node indices raw) — see
+    /// <c>AnimRuntime.ConditionNode</c>.</summary>
+    public readonly List<string> NodeList = new();
+
     public bool OnStartup => Activation.Equals("OnStartup", StringComparison.OrdinalIgnoreCase);
 
     public static AnimDefinition Parse(AnimData d, string sourceFile)
@@ -206,6 +213,8 @@ public sealed class AnimDefinition
                 if (r.Str("name") is { } refName && r.Num("ptr") is { } ptr
                     && ptr >= 0 && ptr < 0xFFFFFFFu)
                     def.NodeRefs.TryAdd(refName, (int)ptr);
+        foreach (var r in d.Objects("nodes"))
+            def.NodeList.Add(r.Str("name") ?? "");
         if (d.Obj("reset_state") is { } reset)
             def.ResetState = AnimSequence.Parse(reset);
         foreach (var seq in d.Objects("sequences"))

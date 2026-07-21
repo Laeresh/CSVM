@@ -179,6 +179,11 @@ public static class AnimDefs
             case "PufferState":
                 AddPufferState(data, fields);
                 break;
+            case "If":
+            case "Elseif":
+                if (ReaderCondition(fields) is { } condition)
+                    data["condition"] = condition;
+                break;
         }
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.
@@ -262,6 +267,57 @@ public static class AnimDefs
             data["colors"] = list;
         }
     }
+
+    /// <summary>
+    /// A reader IF/ELSEIF body → the compiled <c>condition</c> payload
+    /// <see cref="AnimRuntime"/> evaluates: a one-key union, e.g.
+    /// <c>{"RandomWeight": 0.15}</c>. The reader spells the same ten conditions with its own
+    /// vocabulary, and two of them change units on the way through the compiler — this is
+    /// where that is undone so the runtime has exactly one convention:
+    /// <c>PLAYER_RANGE</c> is metres in the reader and metres SQUARED compiled (reader 270 ↔
+    /// compiled 72900, measured across the install), and <c>ANIMATION_LOD</c> is the token
+    /// <c>HIGH</c> in the reader and the number 2 compiled. <c>NODE_NEAR_GROUND</c> is the
+    /// reader's name for the condition upstream calls <c>NodeUndercover</c>.
+    /// </summary>
+    private static Dictionary<string, object?>? ReaderCondition(Dictionary<string, List<object?>?> fields)
+    {
+        Dictionary<string, object?> Union(string tag, object? value) =>
+            new(StringComparer.Ordinal) { [tag] = value };
+
+        if (fields.ContainsKey("RANDOM_WEIGHT"))
+            return Union("RandomWeight", Num(fields, "RANDOM_WEIGHT") ?? 0f);
+        if (fields.ContainsKey("ANIM_HEALTH"))
+            return Union("AnimHealth", Num(fields, "ANIM_HEALTH") ?? 0f);
+        if (fields.ContainsKey("PLAYER_RANGE"))
+        {
+            float r = Num(fields, "PLAYER_RANGE") ?? 0f;
+            return Union("PlayerRange", r * r);
+        }
+        if (fields.ContainsKey("ANIMATION_LOD"))
+            return Union("AnimationLod", (float)LodLevel(First(fields, "ANIMATION_LOD") as string));
+        if (fields.ContainsKey("PLAYER_1ST_PERSON"))
+            return Union("PlayerFirstPerson", false);
+        if (fields.ContainsKey("HW_RENDER"))
+            return Union("HwRender", false);
+        if (fields.ContainsKey("NODE_ACTIVE"))
+            return Union("NodeActive", First(fields, "NODE_ACTIVE"));
+        if (fields.TryGetValue("NODE_NEAR_GROUND", out var nng) && nng is { Count: >= 2 })
+            return Union("NodeUndercover", new Dictionary<string, object?>(StringComparer.Ordinal)
+                { ["node"] = nng[0], ["distance"] = AnimData.AsNum(nng[1]) ?? 0f });
+        if (fields.TryGetValue("NODE_BELOW_ALT", out var nba) && nba is { Count: >= 2 })
+            return Union("NodeBelowAlt", new Dictionary<string, object?>(StringComparer.Ordinal)
+                { ["node"] = nba[0], ["altitude"] = AnimData.AsNum(nba[1]) ?? 0f });
+        return null;
+    }
+
+    // The reader's LOD tokens. Only HIGH ships in this install; an unrecognised token is
+    // treated as HIGH so a decode gap never silently disables content.
+    private static int LodLevel(string? token) => token?.ToUpperInvariant() switch
+    {
+        "LOW" => 0,
+        "MED" or "MEDIUM" => 1,
+        _ => AnimRuntime.HighLod,
+    };
 
     private static Dictionary<string, object?> Obj3(float x, float y, float z) =>
         new(StringComparer.Ordinal) { ["x"] = x, ["y"] = y, ["z"] = z };

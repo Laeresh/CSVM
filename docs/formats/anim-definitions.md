@@ -96,32 +96,63 @@ Rotations are **radians**, not degrees: the maximum magnitude in the data is `15
 ### `IF`/`ELSEIF` conditions are all evaluable
 
 Ten condition kinds appear across the install. None of them is opaque gameplay state that a
-world build has no value for — an earlier reading that led the runtime to skip every branch:
+world build has no value for — an earlier reading, which led the runtime to skip every
+branch. **All ten are evaluated as of 2026-07-21** (`AnimRuntime.EvaluateCondition`).
 
-| Count | Condition | How to evaluate |
-|---:|---|---|
-| 4537 | `RandomWeight` (0..1) | A dice roll. |
-| 4007 | `AnimHealth` | Object health — full in a fresh world. |
-| 1052 | `PlayerRange` | Distance from the player/camera; live scene state. |
-| 717 | `NodeActive` | Whether a node is active; our own scene state. |
-| 473 | `NodeUndercover` | Node + distance. |
-| 124 | `AnimHealthRange` | `{min,max}` health window. |
-| 120 | `AnimationLod` | Our own detail-level setting. |
-| 120 | `PlayerFirstPerson` | Our own camera mode. |
-| 28 | `NodeBelowAlt` | Node altitude vs a threshold; scene state. |
-| 17 | `HwRender` | Hardware rendering — true. |
+The compiled payload is a one-key union under `data.If.condition`, e.g.
+`{"AnimationLod": 2}`; the reader spells the same conditions with its own vocabulary and, for
+two of them, **different units** — that conversion happens once, in `AnimDefs.ReaderCondition`,
+so the runtime has a single convention.
+
+| Count | Condition | Reader spelling | Rule used |
+|---:|---|---|---|
+| 4537 | `RandomWeight` (0..1) | `RANDOM_WEIGHT [w]` | `rand() < w`, re-rolled per evaluation. |
+| 4007 | `AnimHealth` | `ANIM_HEALTH [n]` | `health <= n` — "worn down to n". Full health in a world build, so uniformly false. |
+| 1052 | `PlayerRange` | `PLAYER_RANGE [m]` | `dist²(anchor, player) <= value`. **Compiled is metres SQUARED** (reader 270 ↔ compiled 72900, exact across the install). |
+| 717 | `NodeActive` | `NODE_ACTIVE [name]` | the node is visible. Compiled carries an INDEX, reader a name — see below. |
+| 473 | `NodeUndercover` | `NODE_NEAR_GROUND [name, d]` | **stubbed false** — needs a ground/occlusion probe. All 473 sit in `ON_CALL` defs the bootstrap never reaches. |
+| 124 | `AnimHealthRange` | — | `min <= health <= max`. Same as `AnimHealth`: false at full health. |
+| 120 | `AnimationLod` | `ANIMATION_LOD [HIGH]` | `ourLod >= n`. **Our setting, not the data's** — see below. |
+| 120 | `PlayerFirstPerson` | `PLAYER_1ST_PERSON` | our camera mode; false until a cockpit view exists. |
+| 28 | `NodeBelowAlt` | `NODE_BELOW_ALT [name, alt]` | node world Y < alt. |
+| 17 | `HwRender` | `HW_RENDER` | true. |
+
+`HW_RENDER` and `PLAYER_1ST_PERSON` take **no reader argument** and every compiled instance
+stores `false` in the shared 4-byte value slot, so that slot is unused for them and the
+condition is the runtime flag itself. (The one piece of counter-evidence is C1B's
+`four_bulletholes`, whose branches read backwards under that rule — but it is an `ON_CALL`
+player-cockpit def that never runs in a world build, so nothing turns on it.)
+
+`AnimationLod` is a **quality setting**: 2 is the only value anywhere in the install (the
+reader spells it `HIGH`), so the project defaults to 2 and every LOD-gated branch passes —
+the hardware has no reason to hide detail the original hid only for performance.
+`--anim-lod=N` lowers it for A/B comparison.
+
+**Condition node references are 1-based indices into the definition's own `nodes` support
+array**, not gamez node indices and not names — mech3ax resolves index→name for every other
+event kind but leaves conditions raw. Two negative sentinels ride in the same u32 field:
+`-100` `MAIN_ROOT_NODE` and `-200` `INPUT_NODE` (arriving as 4294967196 / 4294967096), both
+meaning "the node this definition was invoked on" = the anchor. float32 JSON parsing cannot
+tell those two apart, which does not matter since they resolve identically.
 
 This matters because the branches gate real content: C1's `refinery_fire_always` and
-`ref_light_always1..6` wrap their entire light sequence in `If { AnimationLod: 2 }`, and
-`litehouse_sparking` gates its spark bursts on `If { RandomWeight: 0.7 }`. Skipping branches
-means those effects never run at all.
+`ref_light_always1..6` wrap their entire light sequence in `If { AnimationLod: 2 }`,
+`litehouse_sparking` gates its spark bursts on `If { RandomWeight: 0.7 }`, and C1/MP1's
+`rearm_node_1/call_door` is a **poll** — `If { PlayerRange: 625 } → CallAnimation; Endif;
+Loop{-1}` — that fires the rearm-bay door when the player closes to 25 m. Skipping branches
+meant none of it ran.
+
+That poll idiom pins down one more semantic: **`CALL_ANIMATION` does not restart an animation
+that is already running** on the same anchor. The call is re-issued every frame the condition
+holds, so restarting would freeze the 2 s door at its first frame for as long as you hover.
+
+No `RESET_STATE` in either source contains control flow (verified across the install), so the
+instantaneous base-state pass never has to interpret a branch.
 
 Playback ops seen and deferred to part 2+: `OBJECT_MOTION` (continuous spin),
-`OBJECT_MOTION_SI_SCRIPT` (spline `.zan` scripts — the train), `OBJECT_ADD_CHILD`/
-`OBJECT_DELETE_CHILD` (reparenting), `CALL_ANIMATION`/`CALL_SEQUENCE`/`STOP_ANIMATION`/
-`INVALIDATE_ANIMATION`, `SOUND`/`SOUND_NODE`, `PUFFER_STATE`, `LIGHT_STATE`,
-`CAMERA_STATE`, `FBFX_COLOR_FROM_TO`, `CALLBACK`, `IF`/`ELSEIF`/`ELSE`/`ENDIF`
-(`RANDOM_WEIGHT`, `NODE_ACTIVE`, `ANIM_HEALTH` conditions), `LOOP`, `DETONATE_WEAPON`.
+`OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` (reparenting), `SOUND`/`SOUND_NODE`, `LIGHT_STATE`,
+`OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`, `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
+`FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
 
 ## The mission zrdr scope is a LIBRARY, not a manifest
 

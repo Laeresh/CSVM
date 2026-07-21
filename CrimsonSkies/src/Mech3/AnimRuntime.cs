@@ -84,6 +84,34 @@ public sealed partial class AnimRuntime : Node
     /// headless run can verify that (say) the train actually drives its loop.</summary>
     public bool DebugMotions;
 
+    /// <summary>
+    /// Our answer to the data's <c>ANIMATION_LOD</c> condition — a project quality setting,
+    /// not a fact about the world. The original hid detail on slow hardware; every
+    /// LOD-gated branch in this install asks for the same tier (the reader spells it
+    /// <c>HIGH</c>, which compiles to 2, and 2 is the only value that appears in all 8
+    /// chapters), so the default passes them all. <c>--anim-lod=N</c> lowers it for A/B
+    /// comparison.
+    /// </summary>
+    public int QualityLod = HighLod;
+
+    /// <summary>The reader's <c>ANIMATION_LOD HIGH</c> — see <see cref="QualityLod"/>.</summary>
+    public const int HighLod = 2;
+
+    /// <summary>Where the player is, for <c>PLAYER_RANGE</c> conditions. Supplied by the
+    /// session (the flown aircraft, or the spectator camera); absent → the viewport camera,
+    /// and failing that the world origin. During the bootstrap passes there is no camera
+    /// yet, which is harmless: every PLAYER_RANGE definition in this install re-polls from a
+    /// <c>Loop{-1}</c>, so a bootstrap-time miss corrects on the next frame.</summary>
+    public Func<Vector3>? PlayerPosition;
+
+    /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
+    /// exists yet (backlog), so false.</summary>
+    public bool FirstPerson;
+
+    // RANDOM_WEIGHT dice. A field rather than GD.Randf() so a seed can be pinned later if a
+    // reproducible --debug-anim run is ever wanted.
+    private readonly Random _rng = new();
+
     private void Bootstrap(Node3D worldRoot, AnimProgram program)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -168,6 +196,7 @@ public sealed partial class AnimRuntime : Node
         if (netHidden.Count > 0)
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
+        ReportConditions();
         ReportUnhandled();
     }
 
@@ -210,8 +239,9 @@ public sealed partial class AnimRuntime : Node
     }
 
     /// <summary>Starts a definition on one anchor (null = resolve its node names globally),
-    /// running every sequence that is not ACTIVATION ON_CALL. Re-starting a def that is
-    /// already live on the same anchor restarts it, matching CALL_ANIMATION semantics.</summary>
+    /// running every sequence that is not ACTIVATION ON_CALL. Starting a def that is already
+    /// live on the same anchor RESTARTS it — CALL_ANIMATION deliberately does not take this
+    /// path for a running animation (see its case in <see cref="Dispatch"/>).</summary>
     public void Start(AnimDefinition def, Node3D? anchor)
     {
         // CALL_ANIMATION chains are data, and the data can (and in some chapters does) form
@@ -247,6 +277,11 @@ public sealed partial class AnimRuntime : Node
 
     private const int MaxStartDepth = 8;
     private int _startDepth;
+
+    /// <summary>Is this definition already running on this anchor? (Instance identity is
+    /// (definition, anchor) throughout.)</summary>
+    private bool IsLive(AnimDefinition def, Node3D? anchor) =>
+        _instances.Any(i => i.Def == def && i.Anchor == anchor);
 
     /// <summary>Stops every live instance of an animation name (optionally only on one
     /// anchor). Used by STOP_ANIMATION and by restart-on-call.</summary>
@@ -361,9 +396,18 @@ public sealed partial class AnimRuntime : Node
                 return true; // handled by the runner owning the sequence; nothing global to do
 
             case "CallAnimation":
+                // A call does NOT restart an animation that is already live on this anchor.
+                // The data's poll idiom is `If <condition> → CallAnimation; Endif; Loop{-1}`,
+                // which re-issues the call on EVERY frame the condition holds — C1/MP1's
+                // `rearm_node_1/call_door` fires `rearm_door_close` for as long as the player
+                // stays within 25 m. Restarting there pins the 2 s door at its first frame for
+                // as long as you hover, which is exactly backwards. (Nothing regresses: the
+                // bootstrap passes call Start directly, and the hangar-door pair that relies
+                // on "later registration wins" resolves through AddMotion, not through this.)
                 if (ev.Data.Str("name") is { } callName)
                     foreach (var target in _program.ByAnimName(callName))
-                        Start(target, anchor);
+                        if (!IsLive(target, anchor))
+                            Start(target, anchor);
                 return true;
 
             case "StopAnimation":
@@ -505,6 +549,169 @@ public sealed partial class AnimRuntime : Node
         if (inst == null)
             return;
         inst.Runners.Add(new SequenceRunner(seq));
+    }
+
+    // ---- IF/ELSEIF conditions ----
+
+    // Per condition kind: how often it evaluated true / false. Reported after the bootstrap
+    // passes, which is the headless proof that (say) the refinery's AnimationLod branch is
+    // now TAKEN rather than skipped.
+    private readonly Dictionary<string, (int True, int False)> _conditions = new(StringComparer.Ordinal);
+
+    /// <summary>
+    /// Evaluates one IF/ELSEIF condition. Every kind the data uses is answerable — an
+    /// earlier reading held them to be opaque gameplay state and skipped every branch, which
+    /// meant the refinery/dock/lighthouse light sequences never ran at all. Semantics and the
+    /// evidence for each are in docs/formats/anim-definitions.md; the two units that bite are
+    /// that compiled <c>PlayerRange</c> is metres SQUARED (reader 270 → compiled 72900) and
+    /// that compiled <c>AnimHealth</c> is a "damaged down to" threshold, so an undamaged
+    /// object fails it.
+    ///
+    /// An unparseable or unknown condition returns false — the old skip-the-branch behaviour,
+    /// which is the safe direction: a branch that should not have run poses objects wrongly.
+    /// </summary>
+    private bool EvaluateCondition(AnimData? condition, AnimDefinition def, Node3D? anchor)
+    {
+        if (condition?.Union() is not { } union)
+        {
+            CountCondition("<absent>", false);
+            return false;
+        }
+        var (kind, value) = union;
+        var obj = value is Dictionary<string, object?> fields ? new AnimData(fields) : null;
+        float num = AnimData.AsNum(value) ?? 0f;
+        bool result = kind switch
+        {
+            "RandomWeight" => _rng.NextDouble() < num,
+            "AnimationLod" => QualityLod >= (int)num,
+            // The 4-byte value slot is unused for these two: the reader form takes no
+            // argument (`IF HW_RENDER`) and every compiled instance stores 0, so the
+            // condition is the runtime flag itself.
+            "HwRender" => true,
+            "PlayerFirstPerson" => FirstPerson,
+            "PlayerRange" => anchor != null
+                             && WorldPos(anchor).DistanceSquaredTo(PlayerPos()) <= num,
+            // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
+            // Nothing in a world build damages scenery, so every object sits at its
+            // definition's full health and these are uniformly false — which is correct
+            // (an undamaged AA gun does not smoke). Verified: no definition using an
+            // AnimHealth condition ships health 0, so full health is never below a threshold.
+            "AnimHealth" => def.Health <= num,
+            "AnimHealthRange" => obj != null
+                                 && def.Health >= (obj.Num("min") ?? 0f)
+                                 && def.Health <= (obj.Num("max") ?? 0f),
+            "NodeActive" => ConditionNode(value, def, anchor) is { } n && n.Visible,
+            "NodeBelowAlt" => obj != null
+                              && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
+                                 is { } n2
+                              && WorldPos(n2).Y < (obj.Num("altitude") ?? 0f),
+            // NODE_UNDERCOVER (the reader spells it NODE_NEAR_GROUND) needs a ground/occlusion
+            // probe this class has no access to. All 473 uses sit in ON_CALL definitions the
+            // bootstrap never reaches, so a false stub costs nothing today.
+            "NodeUndercover" => false,
+            _ => false,
+        };
+        CountCondition(kind, result);
+        // --debug-anim: each condition spelled out (kind, operand, anchor, verdict) the first
+        // time it is seen and thereafter only when its verdict FLIPS. The poll idiom —
+        // `If … Endif Loop{-1}` — re-evaluates every frame, so logging every evaluation would
+        // bury the log; logging the transitions is what you actually want to read (this is
+        // how "the player came within 25 m and the rearm door fired" shows up).
+        if (DebugMotions && Flipped(kind, anchor, result))
+        {
+            var at = anchor == null ? "<global>"
+                : $"{NameOf(anchor)} {WorldPos(anchor).Snapped(Vector3.One)}";
+            GD.Print($"anim/debug: cond {kind}({Describe(value)}) on {at} " +
+                     $"[player {PlayerPos().Snapped(Vector3.One)}] → {(result ? "TRUE" : "false")}");
+        }
+        return result;
+    }
+
+    private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
+
+    private bool Flipped(string kind, Node3D? anchor, bool result)
+    {
+        var key = (kind, anchor);
+        if (_condLast.TryGetValue(key, out bool prev) && prev == result)
+            return false;
+        _condLast[key] = result;
+        return true;
+    }
+
+    private static string Describe(object? value) => value switch
+    {
+        null => "",
+        Dictionary<string, object?> d => string.Join(",", d.Select(kv => $"{kv.Key}={kv.Value}")),
+        _ => value.ToString() ?? "",
+    };
+
+    private static string NameOf(Node3D n) =>
+        n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
+
+    /// <summary>A node's world position, valid DURING the bootstrap too. The world subtree
+    /// is still detached while the bootstrap passes run (PlaneViewer parents it after the
+    /// build), and Godot's <c>GlobalPosition</c> both returns identity and logs an error for
+    /// a node outside the tree — one line per evaluation, which is thousands. Accumulate the
+    /// local transforms instead; the world node itself rests at the origin, so the result is
+    /// the same number either way.</summary>
+    private static Vector3 WorldPos(Node3D node)
+    {
+        if (node.IsInsideTree())
+            return node.GlobalPosition;
+        var xform = node.Transform;
+        for (var p = node.GetParent() as Node3D; p != null; p = p.GetParent() as Node3D)
+            xform = p.Transform * xform;
+        return xform.Origin;
+    }
+
+    private Vector3 PlayerPos()
+    {
+        if (PlayerPosition != null)
+            return PlayerPosition();
+        return IsInsideTree() && GetViewport().GetCamera3D() is { } cam ? cam.GlobalPosition : Vector3.Zero;
+    }
+
+    /// <summary>
+    /// Resolves a condition's node reference. The compiled form is a **1-based index into the
+    /// definition's <c>nodes</c> support array** (mech3ax resolves indices to names for every
+    /// other event kind but leaves these raw); the reader form is the name itself.
+    ///
+    /// Two negative sentinels exist: -100 <c>MAIN_ROOT_NODE</c> and -200 <c>INPUT_NODE</c>,
+    /// both meaning "the node this definition was invoked on" = our anchor. They arrive as
+    /// u32 (4294967196 / 4294967096) and the JSON layer parses numbers as float32, which
+    /// cannot tell those two apart — hence the magnitude test rather than an equality check.
+    /// It does not matter here: both resolve to the anchor.
+    /// </summary>
+    private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
+    {
+        if (reference is string name)
+            return string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
+                   || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase)
+                ? anchor
+                : ResolveOne(name, def, anchor);
+        if (AnimData.AsNum(reference) is not { } idx)
+            return null;
+        if (idx > 1e9f)
+            return anchor; // negative sentinel
+        int i = (int)idx;
+        if (i < 1 || i > def.NodeList.Count)
+            return null;
+        return ResolveOne(def.NodeList[i - 1], def, anchor);
+    }
+
+    private void CountCondition(string kind, bool result)
+    {
+        var (t, f) = _conditions.TryGetValue(kind, out var c) ? c : (0, 0);
+        _conditions[kind] = result ? (t + 1, f) : (t, f + 1);
+    }
+
+    private void ReportConditions()
+    {
+        if (_conditions.Count == 0)
+            return;
+        var parts = _conditions.OrderByDescending(kv => kv.Value.True + kv.Value.False)
+            .Select(kv => $"{kv.Key} {kv.Value.True}✓/{kv.Value.False}✗");
+        GD.Print($"anim: conditions evaluated (lod {QualityLod}): {string.Join(", ", parts)}");
     }
 
     private void Count(string kind) =>
@@ -770,6 +977,10 @@ public sealed partial class AnimRuntime : Node
         private float _due;           // when the next event fires
         private bool _done;
         private int _loopsLeft = -2;  // -2 = no loop seen yet
+        // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
+        // reached with the flag set is the *fall-through* off the end of a taken branch and
+        // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
+        private readonly List<bool> _branchTaken = new();
 
         public SequenceRunner(AnimSequence seq) => _seq = seq;
 
@@ -806,6 +1017,7 @@ public sealed partial class AnimRuntime : Node
                         _pc = 0;
                         _clock = 0f;
                         _due = 0f;
+                        _branchTaken.Clear(); // a new iteration re-tests every condition
                         // A loop over purely instantaneous events is the data's "keep this
                         // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
                         // whose emitters run on their own TIME_INTERVAL). Left unchecked it
@@ -816,17 +1028,38 @@ public sealed partial class AnimRuntime : Node
                             return;
                         break;
                     case "If":
+                        _branchTaken.Add(false);
+                        goto case "Elseif";
                     case "Elseif":
-                        // Conditions are gameplay state (ANIM_HEALTH, RANDOM_WEIGHT, …) that
-                        // an at-rest world build cannot evaluate. Skip the branch body rather
-                        // than guessing — a wrong guess silently poses objects incorrectly.
-                        rt.Count($"{ev.Kind}(skipped branch)");
-                        _pc = SkipBranch(_pc);
+                        if (Taken)
+                        {
+                            // Falling out of a branch that ran: everything left in the chain
+                            // is dead, so jump to the ENDIF (which pops the frame).
+                            _pc = SkipToEnd(_pc);
+                            break;
+                        }
+                        if (rt.EvaluateCondition(ev.Data.Obj("condition"), inst.Def, inst.Anchor))
+                        {
+                            Taken = true;
+                            _pc++;      // run the branch body
+                        }
+                        else
+                        {
+                            _pc = NextBranch(_pc); // the next ELSEIF/ELSE/ENDIF
+                        }
                         break;
                     case "Else":
-                        _pc = SkipBranch(_pc);
+                        if (Taken)
+                            _pc = SkipToEnd(_pc);
+                        else
+                        {
+                            Taken = true;
+                            _pc++;
+                        }
                         break;
                     case "Endif":
+                        if (_branchTaken.Count > 0)
+                            _branchTaken.RemoveAt(_branchTaken.Count - 1);
                         _pc++;
                         break;
                     default:
@@ -849,8 +1082,24 @@ public sealed partial class AnimRuntime : Node
             _ => _clock + duration + ev.StartTime,
         };
 
-        // Advances past the body of a branch to the matching Else/Elseif/Endif, honouring nesting.
-        private int SkipBranch(int from)
+        /// <summary>Has some branch of the innermost open IF chain already run? A malformed
+        /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
+        /// data degrades to running the branch instead of faulting.</summary>
+        private bool Taken
+        {
+            get => _branchTaken.Count > 0 && _branchTaken[^1];
+            set { if (_branchTaken.Count > 0) _branchTaken[^1] = value; }
+        }
+
+        // The next ELSEIF/ELSE/ENDIF of this chain (nesting-aware) — where a FAILED condition
+        // continues. Lands ON the event, so the loop re-dispatches it as the next candidate.
+        private int NextBranch(int from) => Scan(from, stopAtElse: true);
+
+        // The chain's own ENDIF — where a branch that ran, or one skipped past its whole
+        // chain, continues. Lands ON the ENDIF so it pops the frame.
+        private int SkipToEnd(int from) => Scan(from, stopAtElse: false);
+
+        private int Scan(int from, bool stopAtElse)
         {
             int depth = 0;
             for (int i = from + 1; i < _seq.Events.Count; i++)
@@ -859,12 +1108,12 @@ public sealed partial class AnimRuntime : Node
                 {
                     case "If": depth++; break;
                     case "Endif":
-                        if (depth == 0) return i + 1;
+                        if (depth == 0) return i;
                         depth--;
                         break;
                     case "Else":
                     case "Elseif":
-                        if (depth == 0) return i;
+                        if (depth == 0 && stopAtElse) return i;
                         break;
                 }
             }

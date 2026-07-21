@@ -160,6 +160,9 @@ and are user-verified.
   has no value for; guessing would silently pose objects wrongly, so the branch body is skipped
   and counted. `RANDOM_WEIGHT` and `NODE_ACTIVE` are both evaluable and would be the place to
   start.
+  **SUPERSEDED 2026-07-21** — this reading was wrong. A survey of all 16,195 conditions in the
+  install found ten kinds and every one of them answerable; all ten now evaluate. See
+  `docs/PLAN-anim-rendering-followups.md` item 1 and `docs/formats/anim-definitions.md`.
 - **The safety net hides 54 uncovered `destroyed` subtrees, where the old code hid 53.** One
   more definition's coverage moved when compiled defs replaced their reader twins. No visible
   difference (the net exists for exactly this and hides it either way), but it is one

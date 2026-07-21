@@ -16,7 +16,7 @@ screenshot at the specific location the report came from.
 
 ## Checklist
 
-1. ☐ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting
+1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
 2. ☐ `LightState` + the remaining unacted-on event kinds
 3. ☐ Mission-spawned entity rosters (`hk_zep`, CTF props)
 4. ☐ `texture_scroll` rendering
@@ -94,6 +94,35 @@ log that `refinery_fire_always`'s `AnimationLod` branch is now taken. Full 8-cha
 regression (zero errors; op-count increases are expected and fine here, unlike the mission-
 roster fix — document the new counts). `--debug-anim` pose log unaffected for the train/cars/
 doors (this item touches only control flow, not the transform/roster fixes already landed).
+
+**LANDED 2026-07-21.** All ten condition kinds evaluate (`AnimRuntime.EvaluateCondition`),
+`--anim-lod=N` added (default 2 = the reader's `HIGH`, the only tier the data asks for).
+The condition-evaluation log was kept rather than reverted, in a shape that does not spam:
+per-kind true/false tallies after the bootstrap, plus `--debug-anim` lines on the first
+evaluation and every verdict FLIP. Verification, full detail in `docs/HISTORY.md`:
+`If(skipped branch)` disappears from the unhandled report in every chapter; C1 reports
+`AnimationLod 33✓/0✗` (refinery + 6 docklights + 6 reflights + police, taken) and
+`--anim-lod=0` flips it to `0✓/33✗` with `LightState` dropping 520→518 — the knob works both
+ways; all 8 chapters build with **zero errors** and their before/after screenshots differ
+only within a *measured* run-to-run noise floor (C1/C1B/C3 byte-identical both ways; C1C/C2B/C4
+~5–6% from self-animating precipitation, same magnitude same-build-vs-same-build; C2/C5 a
+handful of px in the identical bbox); the full mode battery (fly/stunt/viewer/damage/2P/4P
+race/menu, plus a static C4 weather view) is error-free.
+
+Three findings, all now in `docs/formats/anim-definitions.md`: compiled `PlayerRange` is
+metres **squared** while the reader's is metres (270 ↔ 72900) and compiled `ANIMATION_LOD` is
+`2` while the reader's is the token `HIGH`, both converted once in `AnimDefs.ReaderCondition`;
+condition node references are **1-based indices into the def's own `nodes` array** (not gamez
+indices, not names) with -100/-200 sentinels meaning "the anchor"; and evaluating conditions
+is what first made the data's poll idiom live (`If <cond> → CallAnimation; Endif; Loop{-1}`),
+which forced a second semantic — **`CALL_ANIMATION` must not restart a running animation**,
+or C1/MP1's rearm-bay door stays pinned at frame 0 for as long as the player hovers within
+25 m. That was verified by parking the free camera on the pad and watching the condition flip
+`false → TRUE → false` while `rabdr` cycled 163 → 177 → 167 → 154 m.
+
+**Follow-up left open:** `NodeUndercover` (the reader's `NODE_NEAR_GROUND`) is stubbed false —
+it needs a ground/occlusion probe `AnimRuntime` has no access to. All 473 uses sit in
+`ON_CALL` definitions the bootstrap never reaches, so nothing is currently affected.
 
 ## 2. `LightState` + the remaining unacted-on event kinds
 
