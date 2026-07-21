@@ -68,3 +68,12 @@ https://github.com/bethington/ghidra-mcp
 
 Lighting
 One open thread: SunIncidence = 0.46 is fit to that single overcast reference. The night/day self-scaling is a principled prediction — a matched C1B-night and a bright-day original would let me confirm or nudge that one constant. Cheap to grab whenever you're in-game.
+
+
+## Milestone 2 Polishing Run 3
+- Environment
+    - We need a generic way to find billboard sprites. I found multiple more instances of billboard that are facing the player some are turned directly to camera, some only in x,y axis (flames on harbor raffinery)
+    - Billboard should generally have no collision. The collision for trees is nice but not in the original
+    - determing which zone is used on which chapter/missionn
+    - Fine tuning fog and environment (Recording videos from spawn points flying straight for x seconds)
+    - Better mission states, there is still a lot of difference in the maps. Perhaps we need a pipeline to find the difference or need to crack the mission loading states
