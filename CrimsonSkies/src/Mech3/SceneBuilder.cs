@@ -29,6 +29,7 @@ public sealed class SceneBuilder
     private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
+    private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
@@ -286,13 +287,15 @@ void fragment() {
         if (mesh.Polygons.Count == 0)
             return null;
 
-        // Billboard sprites (clouds) are recentered on their quad center: the material
-        // billboards around the mesh origin, but the source quads sit offset from it, so
-        // without this they would swing around the node as the camera turns. The offset is
-        // stored per mesh; every instance re-applies it as its local position.
+        // Billboard sprites (clouds, glow flares, cylindrical facades) are recentered on
+        // their quad center: the material billboards around the mesh origin, but the source
+        // quads sit offset from it, so without this they would swing around the node as the
+        // camera turns. The offset is stored per mesh; every instance re-applies it as its
+        // local position.
         bool glowSprite = IsGlowSpriteMesh(mesh);
+        var cylAxis = GetCylindricalAxis(mesh);
         var offset = Vector3.Zero;
-        if ((UsesBillboardTexture(mesh) || glowSprite) && mesh.Vertices.Count > 0)
+        if ((UsesBillboardTexture(mesh) || glowSprite || cylAxis != CylAxis.None) && mesh.Vertices.Count > 0)
         {
             foreach (var v in mesh.Vertices)
                 offset += v;
@@ -329,8 +332,8 @@ void fragment() {
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset);
-            st.SetMaterial(glowSprite
-                ? GetGlowMaterial(materialIndex)
+            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex)
+                : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis)
                 : GetMaterial(materialIndex, priority, rank, doubleSided));
             st.Commit(arrayMesh);
         }
@@ -353,16 +356,29 @@ void fragment() {
         return false;
     }
 
-    // A glow flare SPRITE: a single-polygon mesh entirely skinned with a glow (flare)
-    // texture — the lamp/beacon light quads (refinery_flare 16 m, gen_flare_yellow 4 m,
-    // docklight_flare, litehsflare, …). Only these billboard: the same flare textures also
-    // appear on polys INSIDE regular geometry (C4 world Brigand wing meshes carry an
-    // oil_liteflare poly; the shared effects-atlas mesh has flare polys) where recentering/
-    // billboarding would distort the mesh, and multi-poly flare STRINGS (11× 6-poly
-    // flare_green rows, 22–72 m long) would swing around a common centroid if billboarded
-    // whole — those keep static rendering (per-poly pivots would be the faithful upgrade).
+    // A glow flare SPRITE — the lamp/beacon light quads (refinery_flare 16 m, gen_flare_yellow
+    // 4 m, docklight_flare, litehsflare, …): billboards fully toward the camera, never
+    // night-dimmed (it's a light source, not lit scenery).
+    //
+    // The real discriminator is the gamez model's own data (2026-07-21): every Facade model
+    // whose FacadeMode is "SphericalY" and isn't a cloud sprite is one of these — verified
+    // across all 8 chapters, where that bucket is cloud1/cloud2 (the OTHER SphericalY case,
+    // handled separately via _billboardTexture) plus flare/lamp/muzzle-flash/ammo-tip/splash
+    // sprites and nothing else. This supersedes the former single-polygon + texture-name-
+    // "flare" heuristic, which is now the LEGACY fallback for a v0.6.1 extraction (no
+    // ModelType data at all): that heuristic under-matched (fire101.tif's refinery flame
+    // doesn't contain "flare" and was rendered as static, non-billboarded geometry) and
+    // relied on a single-polygon restriction that data now explains directly — C1's 11
+    // multi-poly `flare_green` "strings" (which must NOT billboard as one sprite, or they'd
+    // swing around a shared centroid) carry ModelType "Default", not "Facade", even though
+    // they still carry a leftover FacadeMode value; gating on ModelType=="Facade" first is
+    // what correctly excludes them without a polygon-count guess.
     private bool IsGlowSpriteMesh(GameZMesh mesh)
     {
+        if (mesh.ModelType != null)
+            return mesh.ModelType == "Facade" && mesh.FacadeMode == "SphericalY" && !UsesBillboardTexture(mesh);
+
+        // Legacy fallback (no ModelType data in this extraction).
         if (_glowTexture == null || mesh.Polygons.Count != 1)
             return false;
         var poly = mesh.Polygons[0];
@@ -371,6 +387,17 @@ void fragment() {
         var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
         return tex != null && _glowTexture(tex);
     }
+
+    // Y-axis or X-axis cylindrical billboard: the mesh spins about one fixed world axis to
+    // face the camera on the other two, like a tree card or a flame that should stay upright
+    // (as opposed to SphericalY's full camera-facing rotation). Same ModelType=="Facade" gate
+    // as IsGlowSpriteMesh; None on a legacy extraction (no per-axis fallback existed before,
+    // so nothing regresses — these meshes simply rendered static, as they always did).
+    private enum CylAxis { None, Y, X }
+
+    private static CylAxis GetCylindricalAxis(GameZMesh mesh) =>
+        mesh.ModelType != "Facade" ? CylAxis.None :
+        mesh.FacadeMode switch { "CylindricalY" => CylAxis.Y, "CylindricalX" => CylAxis.X, _ => CylAxis.None };
 
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
@@ -386,6 +413,39 @@ void fragment() {
             ? BillboardMaterial(tex, blend: true, scissor: false, glow: true)
             : GetMaterial(materialIndex, 0, 0, true);
         _glowMaterialCache[materialIndex] = mat;
+        return mat;
+    }
+
+    // Cylindrical (Y- or X-axis) billboard material: unlike glow flares this respects the
+    // texture's own alpha classification (trees/cables are hard-edge cutouts — Clutter's
+    // tiled trees already scissor, and these individually-placed Facade trees should read
+    // the same way; fire/flame sprites are soft and blend), and dims with the world's
+    // SUNLIGHT UNLESS the texture is a light source itself (the caller's glowTexture
+    // predicate — the same delegate the legacy spherical fallback uses, so one rule governs
+    // every light-vs-scenery billboard in the renderer; WorldBuilder widened it 2026-07-21
+    // to also catch the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
+    private readonly Dictionary<(int Material, int Axis), Material> _cylindricalMaterialCache = new();
+
+    private Material GetCylindricalMaterial(int materialIndex, CylAxis axis)
+    {
+        var key = (materialIndex, (int)axis);
+        if (_cylindricalMaterialCache.TryGetValue(key, out var cached))
+            return cached;
+        var texName = _gamez.Materials[materialIndex].TextureName;
+        var tex = texName != null ? Resolve(texName) : null;
+        Material mat;
+        if (tex != null)
+        {
+            bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
+            bool scissor = _textures.LastHadAlpha && !blend;
+            bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
+            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow);
+        }
+        else
+        {
+            mat = GetMaterial(materialIndex, 0, 0, true);
+        }
+        _cylindricalMaterialCache[key] = mat;
         return mat;
     }
 
@@ -758,6 +818,77 @@ void fragment() {
 
         var shader = new Shader { Code = sb.ToString() };
         _billboardShaderCache[key] = shader;
+        return shader;
+    }
+
+    // A single-axis (Y or X) cylindrical billboard: the mesh spins about that one fixed
+    // world axis to face the camera on the other two, rather than SphericalY's full
+    // camera-facing rotation — trees/lampposts/flame/cable stay upright as the camera orbits
+    // instead of tipping toward it like a light-source glow. Same technique as Clutter's
+    // proven tree-billboard shader (skip_vertex_transform + a hand-built spin matrix), kept
+    // as its own generator rather than shared code because the two differ in fog/dim/
+    // instancing details already (Clutter is a MultiMesh with no per-mesh pivot cache).
+    private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor, bool glow)
+    {
+        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow) };
+        mat.SetShaderParameter("albedo_tex", tex);
+        return mat;
+    }
+
+    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow)
+    {
+        int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0);
+        if (_cylindricalShaderCache.TryGetValue(key, out var cached))
+            return cached;
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("shader_type spatial;");
+        sb.Append("render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled");
+        if (blend)
+            sb.Append(", blend_mix, depth_draw_never");
+        sb.AppendLine(";");
+        sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
+        sb.AppendLine("global uniform vec3 csky_fog_color;");
+        sb.AppendLine("global uniform vec2 csky_fog_range;");
+        sb.AppendLine("global uniform vec2 csky_fog_alt;");
+        if (!glow)
+            sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        sb.AppendLine(SrgbToLinearFn);
+        // Fixed axis + the plane the camera direction is measured in: Y keeps world-up fixed
+        // and spins in XZ (Clutter's tree technique); X keeps the local-right axis fixed and
+        // spins in YZ (a horizontal pipe's flame/muzzle flash facing the camera around its
+        // own barrel axis).
+        string toCam = axis == CylAxis.X
+            ? "CAMERA_POSITION_WORLD.yz - origin.yz" : "CAMERA_POSITION_WORLD.xz - origin.xz";
+        string spinRows = axis == CylAxis.X
+            ? "vec3(1.0, 0.0, 0.0), vec3(0.0, dir.y, -dir.x), vec3(0.0, dir.x, dir.y)"
+            : "vec3(dir.y, 0.0, -dir.x), vec3(0.0, 1.0, 0.0), vec3(dir.x, 0.0, dir.y)";
+        sb.AppendLine($@"
+void vertex() {{
+    vec3 origin = MODEL_MATRIX[3].xyz;
+    vec2 to_cam = {toCam};
+    float len = length(to_cam);
+    vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
+    mat3 spin = mat3({spinRows});
+    VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX, 1.0)).xyz;
+}}
+
+void fragment() {{
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
+        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+        sb.AppendLine(glow
+            ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
+            : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
+        if (blend || scissor)
+            sb.AppendLine("    ALPHA = col.a;");
+        if (scissor)
+            sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
+        sb.AppendLine("}");
+
+        var shader = new Shader { Code = sb.ToString() };
+        _cylindricalShaderCache[key] = shader;
         return shader;
     }
 

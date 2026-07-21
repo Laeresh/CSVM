@@ -31,6 +31,14 @@ public sealed class PufferState
     public float DeviationDistance;
     public int Number = 1;
 
+    /// <summary>AT_NODE's optional trailing offset (AT_NODE is [nodeName, dx?, dy?, dz?]),
+    /// in the host node's own frame — the same convention as <see cref="LocalVelocity"/>.
+    /// This is what spreads a multi-emitter effect around its anchor instead of stacking
+    /// every emitter on the anchor's exact origin: C1's waterfall attaches three splash
+    /// puffers to the single node <c>waterfall01</c>, offset ±11 m sideways and 8 m up so
+    /// the spray reads as the base of the falls rather than one point source.</summary>
+    public Vector3 AtNodeOffset;
+
     /// <summary>Trail emission (Run-2 item 10c): emit one sprite per this many meters
     /// of the followed node's motion (the smoke/fire trail puffers in
     /// pufftrails.json's dense_firetrail). 0 = burst-style (NUMBER per TIME_INTERVAL).</summary>
@@ -132,6 +140,7 @@ public sealed class PufferState
             LifetimeMax = Range("lifetime_range", "max", 1f),
             DeviationDistance = d.Num("deviation_distance") ?? 0f,
             Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
+            AtNodeOffset = Vec("translate"),
         };
 
         var growth = new List<AnimData>(d.Objects("growth_factors"));
@@ -194,6 +203,8 @@ public sealed class PufferState
             DeviationDistance = d.Float("DEVIATION_DISTANCE"),
             Number = (int)d.Float("NUMBER", 1f),
             DistanceInterval = d.Float("DISTANCE_INTERVAL"),
+            // AT_NODE is [nodeName, dx?, dy?, dz?] — the offset starts at index 1, past the name.
+            AtNodeOffset = new Vector3(d.Float("AT_NODE", 0f, 1), d.Float("AT_NODE", 0f, 2), d.Float("AT_NODE", 0f, 3)),
         };
 
         var seq = new List<(float, string)>();
@@ -528,12 +539,16 @@ public sealed partial class Puffer : Node3D
         // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
         // is not. Rotating the local part is what keeps a banking/turning emitter correct.
         var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
+        // AT_NODE's offset is likewise in the host's own frame — this is what spreads C1's
+        // three waterfall splash puffers (±11 m sideways) instead of stacking them on the
+        // shared anchor node's exact origin.
+        var origin = worldPos + worldBasis * _state.AtNodeOffset;
         float d = _state.DeviationDistance;
         for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
         {
             _particles[_liveCount++] = new Particle
             {
-                Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+                Pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
                 Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
                 BaseSize = Rand(_state.SizeMin, _state.SizeMax),
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax),

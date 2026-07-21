@@ -33,6 +33,7 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | Key | Value | Meaning |
 |---|---|---|
 | `NAME` | string | referenced by anims' `PUFFER_STATE` calls |
+| `AT_NODE` | `[nodeName, dx?, dy?, dz?]` | attach point; the optional trailing offset is in the host node's own frame, same convention as `LOCAL_VELOCITY` — what spreads C1's three waterfall splash puffers ±11 m either side of the shared anchor `waterfall01` instead of stacking them on one point (2026-07-21 fix: the offset was parsed nowhere and silently dropped, in both the compiled-event and reader-event front-ends — 862 of 4387 PUFFER_STATE events in this install carry a non-zero one) |
 | `NUMBER` | int | burst mode: sprites spawned per `TIME_INTERVAL` |
 | `TIME_INTERVAL` | s | burst spawn period (default 0.1) |
 | `DISTANCE_INTERVAL` | m | trail mode: one sprite per N meters of the followed node's motion (`dense_firetrail`: smoke 1.0 m / fire 0.25 m) |

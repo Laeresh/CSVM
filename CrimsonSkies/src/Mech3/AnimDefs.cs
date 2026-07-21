@@ -94,6 +94,15 @@ public static class AnimDefs
                     break;
             }
         }
+        // The compiled archives always set anim_name (verified: never null in this install,
+        // even where it just repeats NAME — see the waterfall01 dump in
+        // docs/formats/anim-definitions.md). Mirroring that here is what lets a reader-only
+        // def COLLIDE with its compiled counterpart in AnimProgram's (Name, AnimName) dedupe
+        // key instead of instantiating a second, independently-running copy alongside it —
+        // the bug that silently killed the C1 waterfall's splash puffers every frame (a
+        // reader duplicate whose PUFFER_STATE events parsed as OFF — see below — kept
+        // tearing down the compiled instance's puffers moments after they spawned).
+        def.AnimName ??= def.Name;
         return def;
     }
 
@@ -167,11 +176,105 @@ public static class AnimDefs
                 AddFromTo(data, fields, "rotate", "ROTATE_FROM", "ROTATE_TO");
                 AddFromTo(data, fields, "scale", "SCALE_FROM", "SCALE_TO");
                 break;
+            case "PufferState":
+                AddPufferState(data, fields);
+                break;
         }
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.
         data["raw"] = body;
         return new AnimEvent { Kind = kind, Data = new AnimData(data) };
+    }
+
+    /// <summary>
+    /// Normalizes a reader PUFFER_STATE body into the same field shape
+    /// <see cref="Effects.PufferState.FromAnimEvent"/> reads from the compiled archives —
+    /// the two forms agree field-for-field except ACTIVE_STATE's token spelling and
+    /// AT_NODE's optional trailing offset. Without this, a reader-only puffer event carried
+    /// none of its own fields (no case existed here at all): <c>active_state</c> came back
+    /// null, which <c>HandlePufferState</c>'s <c>?? 0f</c> default reads as "stop" — the C1
+    /// waterfall bug, where a reader-scope duplicate of the (correctly compiled) waterfall
+    /// def re-asserted its puffers as OFF every frame.
+    /// </summary>
+    private static void AddPufferState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
+    {
+        data["active_state"] = string.Equals(First(fields, "ACTIVE_STATE") as string, "ACTIVE",
+            StringComparison.OrdinalIgnoreCase) ? 1f : 0f;
+        // AT_NODE is [nodeName, dx?, dy?, dz?] — the trailing offset is what the compiled
+        // shape carries separately as "translate" (verified against splashpuffer2/3, whose
+        // reader AT_NODE ["waterfall01", 11, 8, -8] matches the compiled translate exactly).
+        if (fields.TryGetValue("AT_NODE", out var atNode) && atNode is { Count: > 0 } && atNode[0] is string atName)
+        {
+            data["at_node"] = atName;
+            if (atNode.Count >= 4 && AnimData.AsNum(atNode[1]) is { } ox
+                && AnimData.AsNum(atNode[2]) is { } oy && AnimData.AsNum(atNode[3]) is { } oz)
+                data["translate"] = Obj3(ox, oy, oz);
+        }
+        if (Num(fields, "TIME_INTERVAL") is { } ti)
+            data["interval_garbage"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                { ["interval_value"] = ti };
+        if (Vec(fields, "LOCAL_VELOCITY") is { } lv) data["local_velocity"] = lv;
+        if (Vec(fields, "WORLD_VELOCITY") is { } wv) data["world_velocity"] = wv;
+        if (Vec(fields, "MIN_RANDOM_VELOCITY") is { } minv) data["min_random_velocity"] = minv;
+        if (Vec(fields, "MAX_RANDOM_VELOCITY") is { } maxv) data["max_random_velocity"] = maxv;
+        if (Vec(fields, "WORLD_ACCELERATION") is { } wa) data["world_acceleration"] = wa;
+        if (Num(fields, "FRICTION") is { } fr) data["friction"] = fr;
+        if (Num(fields, "DEVIATION_DISTANCE") is { } dd) data["deviation_distance"] = dd;
+        if (Num(fields, "NUMBER") is { } num) data["number"] = num;
+        if (RangeObj(fields, "SIZE_RANGE") is { } sr) data["size_range"] = sr;
+        if (RangeObj(fields, "LIFETIME_RANGE") is { } lr) data["lifetime_range"] = lr;
+        // GROWTH_FACTOR is one scalar in the reader; FromAnimEvent reads a one-entry
+        // growth_factors list the same way it reads the compiled shape's rare single-entry case.
+        if (Num(fields, "GROWTH_FACTOR") is { } gf)
+            data["growth_factors"] = new List<object?>
+                { new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = 0f, ["max"] = gf } };
+
+        if (fields.TryGetValue("TEXTURES", out var texs) && texs != null)
+        {
+            var list = new List<object?>();
+            foreach (var t in texs)
+                if (t is string texName)
+                    list.Add(new Dictionary<string, object?>(StringComparer.Ordinal) { ["name"] = texName });
+            data["textures"] = list;
+        }
+        if (fields.TryGetValue("TEXTURE_SEQUENCE", out var seqRaw) && seqRaw != null)
+        {
+            // Entries are [time, texName] pairs (PufferState.Parse's reader-form reading).
+            var seq = data.TryGetValue("textures", out var existing) && existing is List<object?> l ? l : new List<object?>();
+            foreach (var item in seqRaw)
+                if (item is List<object?> { Count: >= 2 } pair && AnimData.AsNum(pair[0]) is { } t && pair[1] is string tex)
+                    seq.Add(new Dictionary<string, object?>(StringComparer.Ordinal) { ["name"] = tex, ["run_time"] = t });
+            data["textures"] = seq;
+        }
+        if (fields.TryGetValue("COLORS", out var cols) && cols != null)
+        {
+            var list = new List<object?>();
+            foreach (var item in cols)
+                if (item is List<object?> { Count: >= 5 } c && AnimData.AsNum(c[0]) is { } frac
+                    && AnimData.AsNum(c[1]) is { } r && AnimData.AsNum(c[2]) is { } g
+                    && AnimData.AsNum(c[3]) is { } b && AnimData.AsNum(c[4]) is { } a)
+                    list.Add(new Dictionary<string, object?>(StringComparer.Ordinal)
+                    {
+                        ["unk00"] = frac,
+                        ["color"] = new Dictionary<string, object?>(StringComparer.Ordinal) { ["r"] = r, ["g"] = g, ["b"] = b },
+                        ["unk16"] = a,
+                    });
+            data["colors"] = list;
+        }
+    }
+
+    private static Dictionary<string, object?> Obj3(float x, float y, float z) =>
+        new(StringComparer.Ordinal) { ["x"] = x, ["y"] = y, ["z"] = z };
+
+    // {min,max} from a 2-element reader field (SIZE_RANGE, LIFETIME_RANGE), matching the
+    // compiled shape's {"min":…, "max":…} object.
+    private static Dictionary<string, object?>? RangeObj(Dictionary<string, List<object?>?> fields, string key)
+    {
+        if (!fields.TryGetValue(key, out var v) || v is not { Count: >= 2 })
+            return null;
+        if (AnimData.AsNum(v[0]) is not { } min || AnimData.AsNum(v[1]) is not { } max)
+            return null;
+        return new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = min, ["max"] = max };
     }
 
     private static void AddFromTo(Dictionary<string, object?> data,

@@ -154,6 +154,11 @@ public sealed partial class AnimRuntime : Node
                  $"{_instances.Count} live instance(s), {_motions.Count} live motion(s) " +
                  $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
                  $"start {sw.ElapsedMilliseconds - resetMs} ms]");
+        if (program.MissionLibrarySkipped.Count > 0)
+            GD.Print($"anim: {program.MissionLibrarySkipped.Count} mission-scope reader def(s) " +
+                     $"not in this mission's compiled manifest, so not instantiated: " +
+                     string.Join(", ", program.MissionLibrarySkipped.Take(8)) +
+                     (program.MissionLibrarySkipped.Count > 8 ? ", …" : ""));
         if (ran.Count > 0 || missing.Count > 0)
             GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
                      (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
@@ -619,14 +624,36 @@ public sealed partial class AnimRuntime : Node
         }
     }
 
-    /// <summary>An OBJECT_MOTION_FROM_TO tween: linear over the authored run time, in the
-    /// node's own parent frame, offset from its authored rest pose (a missing FROM means
-    /// "from wherever it is now").</summary>
+    /// <summary>
+    /// An OBJECT_MOTION_FROM_TO tween: linear over the authored run time, in the node's own
+    /// parent frame.
+    ///
+    /// The <c>translate</c>/<c>rotate</c>/<c>scale</c> channels are ABSOLUTE poses in that
+    /// frame, not offsets from the rest pose — verified across all 8 chapters: C1's
+    /// <c>mafia</c> car moves from (-6796, 128, -5958), which is its authored node translate
+    /// to within a metre, and C5's <c>m_gerter</c> crane hook moves between (21.3, 19.9,
+    /// -20.2) and (21.3, 7.9, -20.2) in its parent crane's frame. Adding these to the rest
+    /// pose doubles every world-space position (the C1 traffic ended up 7 km off the map).
+    /// Nodes whose animation is what places them — C2's <c>sailboat2</c> rests at its parent's
+    /// origin — simply don't match their rest pose, which is why "does it match the rest pose"
+    /// is a bad test and absolute-in-parent-frame is the rule.
+    ///
+    /// The separate <c>*_delta</c> channels are the genuinely relative ones (29 uses across
+    /// the whole install) and are applied ON TOP of the rest pose.
+    ///
+    /// Rotations are RADIANS. The data's extremes settle it: the maximum is 15.708 = 5π,
+    /// 99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Running them through
+    /// DegToRad made every rotation ~57× too small, i.e. visually nothing turned.
+    ///
+    /// A missing FROM means "from the rest pose" (absolute channels) or "from no offset"
+    /// (delta channels).
+    /// </summary>
     private sealed class FromToMotion : IAnimMotion
     {
         public Node3D Target { get; private init; } = null!;
         private Transform3D _rest;
         private Vector3? _tFrom, _tTo, _rFrom, _rTo, _sFrom, _sTo;
+        private Vector3? _tdFrom, _tdTo, _rdFrom, _rdTo, _sdFrom, _sdTo;
         private float _t, _runTime;
 
         public bool Finished => _t >= _runTime;
@@ -642,8 +669,15 @@ public sealed partial class AnimRuntime : Node
             (m._tFrom, m._tTo) = Channel(data, "translate");
             (m._rFrom, m._rTo) = Channel(data, "rotate");
             (m._sFrom, m._sTo) = Channel(data, "scale");
-            return m._tTo != null || m._rTo != null || m._sTo != null ? m : null;
+            (m._tdFrom, m._tdTo) = Channel(data, "translate_delta");
+            (m._rdFrom, m._rdTo) = Channel(data, "rotate_delta");
+            (m._sdFrom, m._sdTo) = Channel(data, "scale_delta");
+            return m.HasAnyChannel ? m : null;
         }
+
+        private bool HasAnyChannel =>
+            _tTo != null || _rTo != null || _sTo != null ||
+            _tdTo != null || _rdTo != null || _sdTo != null;
 
         private static (Vector3?, Vector3?) Channel(AnimData data, string name)
         {
@@ -660,21 +694,30 @@ public sealed partial class AnimRuntime : Node
         {
             _t = t;
             float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
-            var basis = _rest.Basis;
+
             var origin = _rest.Origin;
             if (_tTo is { } tTo)
-                origin = _rest.Origin + (_tFrom ?? Vector3.Zero).Lerp(tTo, u);
+                origin = (_tFrom ?? _rest.Origin).Lerp(tTo, u);
+            if (_tdTo is { } tdTo)
+                origin += (_tdFrom ?? Vector3.Zero).Lerp(tdTo, u);
+
+            // Rebuild the basis from the absolute euler when a rotate channel is present,
+            // otherwise keep the rest orientation; deltas then compose on top of that.
+            var basis = _rest.Basis;
             if (_rTo is { } rTo)
-            {
-                var deg = (_rFrom ?? Vector3.Zero).Lerp(rTo, u);
-                basis = _rest.Basis * Basis.FromEuler(
-                    new Vector3(Mathf.DegToRad(deg.X), Mathf.DegToRad(deg.Y), Mathf.DegToRad(deg.Z)),
-                    EulerOrder.Yxz);
-            }
+                basis = Euler((_rFrom ?? _rest.Basis.GetEuler(EulerOrder.Yxz)).Lerp(rTo, u));
+            if (_rdTo is { } rdTo)
+                basis *= Euler((_rdFrom ?? Vector3.Zero).Lerp(rdTo, u));
+
             if (_sTo is { } sTo)
-                basis = basis.Scaled((_sFrom ?? Vector3.One).Lerp(sTo, u));
+                basis = basis.Orthonormalized().Scaled((_sFrom ?? Vector3.One).Lerp(sTo, u));
+            if (_sdTo is { } sdTo)
+                basis = basis.Scaled((_sdFrom ?? Vector3.One).Lerp(sdTo, u));
+
             Target.Transform = new Transform3D(basis, origin);
         }
+
+        private static Basis Euler(Vector3 radians) => Basis.FromEuler(radians, EulerOrder.Yxz);
     }
 
     // ---- instances and sequence timing ----
@@ -959,19 +1002,24 @@ public sealed partial class AnimRuntime : Node
         return rest;
     }
 
-    private void PoseTranslate(Node3D target, Vector3 offset, bool relative)
+    // The *_STATE poses use the same absolute-in-parent-frame convention as
+    // OBJECT_MOTION_FROM_TO — see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
+    // carries an explicit RELATIVE flag (false in all 1143 uses in this install) and
+    // OBJECT_ROTATE_STATE a BASIS of "Absolute" (6430 of ~6600), which is the data saying so
+    // outright.
+
+    private void PoseTranslate(Node3D target, Vector3 position, bool relative)
     {
-        var rest = RestOf(target);
-        target.Position = relative ? target.Position + offset : rest.Origin + offset;
+        RestOf(target); // record the authored pose before we disturb it
+        target.Position = relative ? target.Position + position : position;
         _opsApplied++;
     }
 
-    private void PoseRotate(Node3D target, Vector3 degrees)
+    private void PoseRotate(Node3D target, Vector3 radians)
     {
         var rest = RestOf(target);
-        target.Basis = rest.Basis * Basis.FromEuler(
-            new Vector3(Mathf.DegToRad(degrees.X), Mathf.DegToRad(degrees.Y), Mathf.DegToRad(degrees.Z)),
-            EulerOrder.Yxz);
+        target.Basis = Basis.FromEuler(radians, EulerOrder.Yxz)
+                            .Scaled(rest.Basis.Scale);
         _opsApplied++;
     }
 
@@ -980,7 +1028,7 @@ public sealed partial class AnimRuntime : Node
         if (scale.LengthSquared() < 1e-9f)
             return;
         var rest = RestOf(target);
-        target.Basis = rest.Basis.Scaled(scale);
+        target.Basis = rest.Basis.Orthonormalized().Scaled(scale);
         _opsApplied++;
     }
 

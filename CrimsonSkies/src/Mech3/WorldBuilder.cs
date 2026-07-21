@@ -41,17 +41,24 @@ public sealed class WorldBuilder
         tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
         && !tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase);
 
-    // Light-source flare sprites (validated in C1, user-reported 2026-07-18): single flat
-    // quads the original renders camera-billboarded — `refinery_flare` 16 m + the 4 m
+    // Light-source flare/fire sprites (validated in C1, user-reported 2026-07-18): single
+    // flat quads the original renders camera-billboarded — `refinery_flare` 16 m + the 4 m
     // `gen_flare_yellow` lamps (oil_liteflare.tif), `docklight_flare` 9.6 m blue pier lights
     // (dock_liteflare.tif), the 19.2 m lighthouse `litehsflare` (poleflare.tif), `bflare`
     // (beflare5.tif). World-fixed they show edge-on/skewed — the user's "lamps not oriented
     // to the camera". Classified by texture like the clouds; also never solid, never dimmed.
+    // Widened 2026-07-21 to "fire"/"flame" — the refinery's own gas flame (fire101.tif) isn't
+    // "*flare*"-named but is exactly the same kind of always-lit, non-solid billboard sprite
+    // (surveyed across all 8 chapters: fireflare1 already matched "flare"; fire101/fire102/
+    // fire_barrel01 are the only new matches, nothing else in the install contains either
+    // substring — so this can't accidentally catch unrelated scenery).
     internal static bool IsFlareTexture(string tex) =>
-        tex.Contains("flare", StringComparison.OrdinalIgnoreCase);
+        tex.Contains("flare", StringComparison.OrdinalIgnoreCase)
+        || tex.Contains("fire", StringComparison.OrdinalIgnoreCase)
+        || tex.Contains("flame", StringComparison.OrdinalIgnoreCase);
 
     // Rendered but not solid: the plane should fly through cloud/sky geometry and lamp
-    // flare sprites, not crash into them. Terrain, water, buildings, zeppelins, trains
+    // flare/fire sprites, not crash into them. Terrain, water, buildings, zeppelins, trains
     // stay solid. The flare exemption mirrors SceneBuilder.IsGlowSpriteMesh (single-poly
     // sprite quads only) — geometry that merely CONTAINS a flare poly stays collidable.
     private bool NoCollisionNode(GameZNode n) =>

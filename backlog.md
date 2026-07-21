@@ -12,12 +12,14 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
   item 7): the C1 train drives its SI-script track loop, the road vehicles run their
   `OBJECT_MOTION_FROM_TO` chains and the hangar doors swing, via the generic `AnimRuntime`.
   `PufferState` landed the same day (the train's steam plume, waterfall mist — user-confirmed
-  in-game). Remaining from this entry, as its own follow-up: the **effect/audio event kinds**
-  the runtime dispatches but does not yet act on — `Sound`/`SoundNode`, `LightState`/
-  `LightAnimation`, `ObjectOpacityFromTo`/`ObjectOpacityState`, `ObjectCycleTexture`,
-  `FbfxColorFromTo`, `CameraState`, `ObjectAddChild` (reparenting), and `ObjectMotion` (the
-  debris-scatter primitive, reachable only from destruction sequences). Each is one `case` in
-  the runtime's dispatch table; the engine does not change shape to add them.
+  in-game), including two follow-up bugs found and fixed the same day: a reader-def dedupe gap
+  that let a duplicate `waterfall01` instance re-kill the splash puffers every frame, and the
+  `AT_NODE` spread offset being parsed nowhere (silently dropped on 862 of 4387 PUFFER_STATE
+  events install-wide) — the mist sat on one point instead of spreading across the falls until
+  fixed. **Everything else this entry originally listed (the remaining event kinds, `If`/
+  `Elseif` evaluation, mission-spawned entity rosters, `texture_scroll`) is now scheduled in
+  `docs/PLAN-anim-rendering-followups.md`** (2026-07-21, 4 independent session-sized items with
+  goal/evidence/approach/verify each) — see that plan rather than this entry for current detail.
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
   lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code

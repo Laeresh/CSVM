@@ -345,6 +345,21 @@ public sealed class GameZ
                     });
                 }
             }
+            // "model_type"/"facade_mode"/"texture_scroll" are unified-shape-only (absent on
+            // a legacy v0.6.1 tree, where the fields stay at their all-static defaults —
+            // SceneBuilder falls back to its texture-name billboard heuristic in that case).
+            // ModelType=="Facade" is the real discriminator, NOT facade_mode alone: a
+            // Default-typed model can still carry a stale facade_mode value (verified: C1's
+            // multi-poly `flare_green` "strings" are ModelType=Default, FacadeMode=
+            // CylindricalY, and must NOT billboard — they'd swing around a shared centroid).
+            if (m.TryGetProperty("model_type", out var mt) && mt.ValueKind == JsonValueKind.String)
+                mesh.ModelType = mt.GetString();
+            if (m.TryGetProperty("facade_mode", out var fm) && fm.ValueKind == JsonValueKind.String)
+                mesh.FacadeMode = fm.GetString();
+            if (m.TryGetProperty("texture_scroll", out var sc) && sc.ValueKind == JsonValueKind.Object)
+                mesh.TextureScroll = new Vector2(
+                    sc.TryGetProperty("u", out var su) ? su.GetSingle() : 0f,
+                    sc.TryGetProperty("v", out var sv) ? sv.GetSingle() : 0f);
             Meshes.Add(mesh);
         }
     }
@@ -442,6 +457,17 @@ public sealed class GameZMesh
     public List<Vector3> Normals { get; } = new();
     public List<GameZPolygon> Polygons { get; } = new();
     public List<GameZLight> Lights { get; } = new(); // point-sprite lights (stars, nav beacons)
+
+    // Null on a legacy (v0.6.1) extraction, which doesn't carry these fields — see the
+    // ParseMeshes remark. "Facade" is the original's own billboard-sprite classification;
+    // FacadeMode names the rotation axis (SceneBuilder.GetCylindricalAxis/IsGlowSpriteMesh).
+    public string? ModelType;
+    public string? FacadeMode;
+    // UV units/second (rare: 5 models in this install — a hangar glass-roof sky reflection,
+    // an oil-dock texture, and three boat wake fronts; the waterfall's own falls/falls_edge
+    // textures do NOT scroll — their motion in the original is the splash puffers, not a
+    // UV animation).
+    public Vector2 TextureScroll;
 }
 
 public struct GameZLight

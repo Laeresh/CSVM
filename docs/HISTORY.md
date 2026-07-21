@@ -804,3 +804,189 @@ Three things surfaced on the way, none of them the puffers:
 
 Also fixed here: `--debug-anim` now reports whether each animated node is **visible in tree**, since
 a correctly-animated node inside a deactivated subtree moves perfectly and renders nothing.
+
+## 2026-07-21 — Animation transform semantics: absolute poses, radians
+
+User-reported mission-state divergences in C1/IA1 (starting with "missing animated cars")
+traced to a single root cause in `AnimRuntime`, not to per-object gaps.
+
+**Every transform channel in the anim data — `translate`, `rotate`, `scale`, in both the
+`*_STATE` events and `OBJECT_MOTION_FROM_TO` — is an absolute pose in the node's own parent
+frame, and rotations are in radians.** The runtime treated all of them as offsets from the
+authored rest pose and ran rotations through `DegToRad`. Full evidence in
+`docs/formats/anim-definitions.md`; the decisive measurements:
+
+- C1's `mafia` car is authored to drive `(-6796, 128, -5958) → (-6521, 128, -5958)`, and its
+  gamez node rests at `(-6795.828, 128.0, -5956.72)` under the `world1` root. Adding the two
+  put it at `(-13574, 256, -11914)` — exactly double, y included, ~7 km off the map. Every
+  `OBJECT_MOTION_FROM_TO`-driven world object was displaced the same way, which is why the
+  C1 traffic was "missing": it was rendering, in the wrong hemisphere of the map.
+- 627 of the resolvable `OBJECT_TRANSLATE_STATE` uses have `STATE` exactly equal to the node's
+  rest translate — the same doubling. The 367 zero-valued ones were no-ops by luck.
+- Rotation magnitudes peak at `15.708 = 5π` with 99.93% ≤ 2π and 228 on exact π/2 multiples,
+  so the values are radians; `DegToRad` made every rotation ~57× too small and nothing visibly
+  turned.
+
+Landed: `FromToMotion` rebuilt around absolute channels (with the previously-unhandled
+`*_delta` channels applied on top of the rest pose), and `PoseTranslate`/`PoseRotate`/
+`PoseScale` likewise. `PoseTranslate` still calls `RestOf` purely to record the authored pose
+before disturbing it, so a later motion on the same node doesn't cache an already-moved pose
+as its rest.
+
+**Verified:** the C1 traffic (`mafia`, `police_car`, `black_car1`, `car_go_home`, `car_loop1`)
+now runs the airfield road at y=128 inside the user's reported viewpoint instead of at y=256
+seven kilometres away; all 8 chapters build with **zero errors and identical state-op counts**
+to the pre-change run (C1 3533/91, C5 4150/23), and the hangar-3 door and train poses are
+unchanged frame-for-frame, so the previously pixel-verified behaviours did not regress.
+
+**Also surveyed, not yet acted on:** all ten `IF`/`ELSEIF` condition kinds are evaluable
+(`RandomWeight` is a dice roll, `AnimHealth` is full health in a fresh world, `AnimationLod`/
+`HwRender`/`PlayerFirstPerson` are our own settings, `PlayerRange`/`NodeActive`/`NodeBelowAlt`
+are live scene state). The runtime still skips every branch, which is what suppresses C1's
+refinery flame lighting and lighthouse sparking — both gate their entire light sequence behind
+`If { AnimationLod: 2 }` / `If { RandomWeight: 0.7 }`. Table in the format doc.
+
+## 2026-07-21 — Mission object rosters: the mission zrdr scope is a library, not a manifest
+
+Follow-up to the transform fix, from three user observations of the original C1/IA1 (stunt
+flying): a Hollywood Knights zeppelin sits on the field that should not be there, the
+Passenger Hangar should contain a zeppelin, and a cargo train should be parked in the cut
+below the terminal. All three were confirmed against the game data and reference screenshots.
+
+**Root cause for two of the three:** `AnimProgram` applied every reader definition in the
+mission zrdr scope unconditionally. But a mission folder ships reader files it never uses —
+C1/IA1 carries a `zepstate.zrd.json` hiding `dliner1` and `cargotrain`, and its compiled
+`mis_anim` contains neither. The missions that genuinely hide them (C1/M04) compile both.
+The rule, verified over every zepstate in the install:
+
+| Mission | zepstate defs | compiled? |
+|---|---|---|
+| C1/IA1, C1B/IA1, C1C/IA1, C2/IA1, C2B/IA1, C4/IA1 | `dliner1`, `cargotrain` | **unused** |
+| C1/M02 | `hk_zep`, `lkshadow`, `tethershadow`, `tethertower` | COMPILED |
+| C1/M04 | `dliner1`, `cargotrain` | COMPILED |
+| C3/IA1, C3/M02, C3/M03, C4/M03 | `cargozep1` | COMPILED |
+
+C3/IA1 compiling `cargozep1` is why the rule is "consult the mission's compiled manifest",
+not "Instant Action ignores zepstate". Two independent user observations corroborate it:
+C1/M04 shows the field zeppelin with an empty hangar and no parked train (exactly what
+compiling both state defs produces), and C1/M02 is the one mission where the tether tower
+disappears — the only mission that compiles `tethertower`.
+
+Landed: mission-scope reader defs are now gated by the mission's compiled manifest, and only
+when that manifest actually loaded (an extraction without `mis_anim` degrades to the previous
+behaviour rather than to an empty program). Shared and chapter scopes stay unconditional —
+they are the world's furniture, not a per-mission roster.
+
+**Verified:** C1/IA1 skips exactly `dliner1/dlinerstate` and `cargotrain/cargotrainstate`
+(3533 → 3531 state ops, i.e. only those two hides), the Passenger Hangar zeppelin and the
+parked train both render in their reference positions, and the per-chapter skip counts match
+the data survey exactly — 2 for C1/C1B/C1C/C2/C2B/C4, 0 for C3 (compiles its def) and C5 (no
+zepstate). All 8 chapters build with zero errors.
+
+**Corrects a recorded finding:** the docs previously stated that `zepstate` "is never
+compiled into any archive", generalised from C1/IA1. It is compiled into the missions that
+use it; being *uncompiled* is precisely the signal that a mission does not instantiate it.
+
+**Still open — `hk_zep`:** the field zeppelin is an AI-vehicle entity, not scenery.
+`aiv.zrd.json` is the roster (C1/IA1 lists only the player; C1/M02 lists `hk_zep`; C1/M04
+lists `hk_zep` and `piratezep`), and `zeppelins.zrd.json` the flyable-zeppelin roster
+(C1/IA1: `multiplayer1zep`). Nothing in IA1 scope hides `hk_zep`, so it needs the second half
+of the rule: a mission-spawned entity's gamez geometry is inactive unless that mission's
+roster names it. Not yet implemented — `dliner1` must stay visible under it, so the entity
+set has to come from the rosters themselves rather than from a name pattern.
+
+## 2026-07-21 — Puffer bugs: reader-duplicate instances, dropped ACTIVE_STATE, dropped AT_NODE offset
+
+User report: the C1 waterfall's splash mist was invisible entirely, then (after the first
+fix) visible but stuck at one point instead of spread across the base of the falls. Traced
+to three compounding bugs, none of them rendering — all in the animation data path.
+
+**1. Reader/compiled duplicate instances.** `AnimDefs.ParseDef` left `AnimName` as whatever
+`ANIMATION_NAME` provided, or null if the reader def didn't carry one. The compiled archives
+always set it (confirmed: never null in this install). C1's `zrdr/waterfalls.zrd.json` (a
+shared-scope def duplicating the compiled `waterfall01` def, itself otherwise harmless) has
+no `ANIMATION_NAME`, so its `AnimName` parsed as null — which meant `AnimProgram`'s
+`(Name, AnimName)` dedupe key **did not match** the compiled def's key, and both got
+anchored and `Start()`-ed as two independent, concurrently-running `AnimInstance`s over the
+same three splash puffers. Fixed: `ParseDef` now defaults `AnimName ??= Name`, mirroring the
+compiled side exactly, so a reader def collides with its compiled counterpart instead of
+running a phantom second copy. (Measurable effect: C1's def count dropped from 853 to 814 —
+39 other reader defs across the install had the same silent duplication.)
+
+**2. `PufferState` had no reader-normalizer case.** `AnimDefs.ToEvent`'s switch handles
+`ObjectActiveState`/`ObjectTranslateState`/etc. but had **no `PufferState` case at all** — a
+reader `PUFFER_STATE` op's fields (`active_state`, `at_node`, velocities, size/lifetime
+ranges, textures, colors) never reached the normalized `AnimData`, only the untouched `raw`
+body. `HandlePufferState` reads `ev.Data.Num("active_state") ?? 0f`, so a reader-sourced
+event silently read as **OFF**. Combined with bug 1, the duplicate reader instance for
+`waterfall01` spent every frame re-asserting its (always-parsed-as-off) PUFFER_STATE events,
+tearing down the puffers the correctly-parsed compiled instance had just rebuilt — diagnosed
+by tracing `HandlePufferState`'s call sequence directly (temporary instrumentation, removed):
+`on=True` from the compiled def, immediately followed by three `on=False` calls with `raw=`
+(null) from a second def whose `defAnim` was empty. Fixed: `AddPufferState` normalizes the
+reader body into the exact shape `Effects.PufferState.FromAnimEvent` expects — `ACTIVE_STATE`
+token → numeric 1/0 (matching `ObjectActiveState`'s existing ACTIVE/INACTIVE handling
+elsewhere), `AT_NODE`'s `[name, dx?, dy?, dz?]` split into `at_node` + an optional
+`translate`, `TIME_INTERVAL` → `interval_garbage.interval_value`, and the velocity/range/
+texture/color fields into the same object shapes the compiled JSON uses.
+
+**3. `AT_NODE`'s offset was parsed nowhere, in EITHER front-end.** Once 1 and 2 were fixed,
+the mist appeared but sat at a single point — C1's three splash puffers (`splashpuffer1` at
+the bare anchor, `splashpuffer2`/`3` offset ±11 m sideways +8 m up) all spawned at the exact
+same position. `Effects.PufferState` had no field for the offset at all; `SpawnSustained`
+only ever used the host node's raw `GlobalTransform.Origin`. Surveyed: 862 of 4387
+PUFFER_STATE events in this install carry a non-zero `AT_NODE` offset — a widespread
+correctness gap, not a waterfall-only one. Fixed: `PufferState.AtNodeOffset` (parsed in both
+`FromAnimEvent` and the reader-form `Parse`), applied in `SpawnSustained` as
+`worldBasis * AtNodeOffset` — the same host-local-frame convention `LOCAL_VELOCITY` already
+uses, so a banking/rotated emitter offsets correctly too.
+
+**Verified:** the waterfall now shows three distinct splash points spread across the base of
+the falls, matching the reference screenshot's spray pattern; all 8 chapters build with zero
+errors and unchanged state-op counts (the dedupe fix removes redundant *instances*, never
+redundant *state applications* — C1's op count stayed 3531 throughout); the C1 train/cars/
+hangar doors are pixel-identical to the pre-fix run (spot-checked via `--debug-anim` pose
+log); `--fly`/`--stunt` smoke clean. Schema documented in `docs/formats/effects.md`.
+
+## 2026-07-21 — Billboard axis is data-driven: `model_type`/`facade_mode`
+
+User request: differentiate billboards that fully rotate to face the camera (lights) from
+ones that should only spin about a fixed vertical axis (trees, the refinery's gas flame),
+which the renderer had no way to express — `IsGlowSpriteMesh`/`billboardTexture` only ever
+produced a single full camera-facing rotation, driven by matching texture names against a
+hand-maintained list (`*flare*`).
+
+**The format itself already carries this classification.** Every model in gamez.zbd/
+planes.zbd (`GameZMesh`, one per `meshes.json`/`models.json` entry) has its own
+`model_type` (`Default`/`Facade`) and, when `Facade`, a `facade_mode` axis
+(`SphericalY`/`CylindricalY`/`CylindricalX`) — fields the renderer never read at all.
+Full survey and the `model_type`-vs-`facade_mode` gating trap in `docs/formats/gamez.md`.
+
+Landed: `GameZ.ParseMeshes` reads the three fields (null/zero on a legacy v0.6.1 extraction,
+which doesn't carry them — no crash, `SceneBuilder` falls back to its old texture-name
+heuristic). `SceneBuilder.IsGlowSpriteMesh` is now gated on `ModelType=="Facade"` first
+(superseding its old single-polygon restriction, which the data explains more precisely: the
+11 six-poly `flare_green` "flare string" models are `ModelType=="Default"` despite carrying a
+stale `CylindricalY` `facade_mode`, and must stay static). A new `GetCylindricalAxis`/
+`GetCylindricalMaterial`/`GetCylindricalShader` path handles `CylindricalY`/`CylindricalX`
+Facade meshes — a single-axis billboard using the same vertex technique Clutter's tree
+shader already proved (`skip_vertex_transform` + a hand-built spin matrix), generalized to
+either axis. Axis-billboarded materials read the texture's own alpha classification (scissor
+for hard-cutout trees, blend for soft fire) and dim with the world's SUNLIGHT unless the
+texture is a light source — reusing the same `glowTexture` delegate the legacy fallback
+already used. `WorldBuilder.IsFlareTexture` (that delegate) widened from `*flare*`-only to
+also match `*fire*`/`*flame*` — surveyed safe across all 8 chapters (only `fire101`/
+`fire102`/`fire_barrel01` newly match) — which is what makes the refinery's `fire101.tif`
+flame billboard and stay lit at all; before this it wasn't classified as a sprite by any
+existing predicate and rendered as static, non-billboarded geometry.
+
+**Verified:** all 8 chapters build with zero errors (regression: same mesh-instance and
+gamez-node counts as before, confirming the new classification adds coverage without
+reclassifying anything that used to render a different way). The refinery flame now
+billboards (checked from two angles — an upright flame silhouette from both, not a thin
+edge-on sliver) and reads at full brightness regardless of the mission's SUNLIGHT dimming.
+
+**Also fixed in `docs/formats/gamez.md`/CLAUDE.md:** documented `texture_scroll` (parsed,
+not yet wired into the renderer — the 5 models that use it all share materials with
+non-scrolling meshes, so wiring it needs the material cache keyed by more than
+`materialIndex`; left as a follow-up since nothing currently reported needs it).

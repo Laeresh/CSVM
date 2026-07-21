@@ -62,9 +62,59 @@ bare flag (`LOCAL_NODES_ONLY`).
 | Op | Body | Meaning |
 |---|---|---|
 | `OBJECT_ACTIVE_STATE` | `NAME` [node…], `STATE` [`ACTIVE`\|`INACTIVE`] | Show/hide a subtree (and its collidability). A multi-entry NAME is a parent→child path (`["piratezep","interior"]`). |
-| `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z] | Base local translation offset from the authored rest pose (RESET_STATE uses `[0,0,0]`). |
-| `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z] | Base local rotation, degrees. |
-| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE_TO`/`ROTATE_TO` [x,y,z], `RUN_TIME` [s] | Timed motion; part 1 applies the **end** pose (C1 hangar 3: four `h3_dr*` doors `TRANSLATE_TO ±25/±50, 0, 0` over 9–10 s), part 2 plays it. |
+| `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z], `RELATIVE` | **Absolute** position in the node's parent frame (see below). `RELATIVE` is `false` in all 1143 uses in this install. |
+| `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame, **radians**. `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
+| `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). |
+
+### Transform channels are absolute, and rotations are radians
+
+**Every transform channel — `translate`, `rotate`, `scale`, in both the `*_STATE` events and
+`OBJECT_MOTION_FROM_TO` — is an absolute value in the node's own parent frame, not an offset
+from its authored rest pose.** The `*_DELTA` channels (`translate_delta`, `rotate_delta`,
+`scale_delta` — 29 uses across the whole install) are the genuinely relative ones.
+
+Evidence, surveyed over all 8 chapters (2026-07-21):
+
+- C1's `mafia` car moves `from (-6796, 128, -5958) to (-6521, 128, -5958)`; its gamez node's
+  authored translate is `(-6795.828, 128.0, -5956.72)` and its parent is the `world1` root.
+  Adding the channel to the rest pose put the C1 traffic at `(-13574, 256, -11914)` — exactly
+  double, y included — i.e. ~7 km off the map.
+- C5's `m_gerter` crane hook moves between `(21.3, 19.9, -20.2)` and `(21.3, 7.9, -20.2)`,
+  small numbers because its parent is `m_crane`. C1's `sinker` moves `(0,0,0) → (0,-7.5,3.5)`
+  in its parent boat's frame.
+- For `OBJECT_TRANSLATE_STATE`, 627 of the resolvable uses have `STATE` **exactly equal to**
+  the node's authored rest translate — the doubling case again. The 367 zero-valued uses are
+  no-ops only because those nodes rest at the origin.
+- "Does `from` match the node's rest pose" is a **bad test**: nodes whose animation is what
+  places them (C2's `sailboat2`, C1's `car_go_home`) rest at their parent's origin and
+  legitimately don't match. Absolute-in-parent-frame is the rule that covers both families.
+
+Rotations are **radians**, not degrees: the maximum magnitude in the data is `15.708 = 5π`,
+99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
+`DegToRad` makes every rotation ~57× too small — visually, nothing turns.
+
+### `IF`/`ELSEIF` conditions are all evaluable
+
+Ten condition kinds appear across the install. None of them is opaque gameplay state that a
+world build has no value for — an earlier reading that led the runtime to skip every branch:
+
+| Count | Condition | How to evaluate |
+|---:|---|---|
+| 4537 | `RandomWeight` (0..1) | A dice roll. |
+| 4007 | `AnimHealth` | Object health — full in a fresh world. |
+| 1052 | `PlayerRange` | Distance from the player/camera; live scene state. |
+| 717 | `NodeActive` | Whether a node is active; our own scene state. |
+| 473 | `NodeUndercover` | Node + distance. |
+| 124 | `AnimHealthRange` | `{min,max}` health window. |
+| 120 | `AnimationLod` | Our own detail-level setting. |
+| 120 | `PlayerFirstPerson` | Our own camera mode. |
+| 28 | `NodeBelowAlt` | Node altitude vs a threshold; scene state. |
+| 17 | `HwRender` | Hardware rendering — true. |
+
+This matters because the branches gate real content: C1's `refinery_fire_always` and
+`ref_light_always1..6` wrap their entire light sequence in `If { AnimationLod: 2 }`, and
+`litehouse_sparking` gates its spark bursts on `If { RandomWeight: 0.7 }`. Skipping branches
+means those effects never run at all.
 
 Playback ops seen and deferred to part 2+: `OBJECT_MOTION` (continuous spin),
 `OBJECT_MOTION_SI_SCRIPT` (spline `.zan` scripts — the train), `OBJECT_ADD_CHILD`/
@@ -72,6 +122,51 @@ Playback ops seen and deferred to part 2+: `OBJECT_MOTION` (continuous spin),
 `INVALIDATE_ANIMATION`, `SOUND`/`SOUND_NODE`, `PUFFER_STATE`, `LIGHT_STATE`,
 `CAMERA_STATE`, `FBFX_COLOR_FROM_TO`, `CALLBACK`, `IF`/`ELSEIF`/`ELSE`/`ENDIF`
 (`RANDOM_WEIGHT`, `NODE_ACTIVE`, `ANIM_HEALTH` conditions), `LOOP`, `DETONATE_WEAPON`.
+
+## The mission zrdr scope is a LIBRARY, not a manifest
+
+A mission folder ships reader files it never uses. **A mission-scope reader definition applies
+only if the mission's compiled `mis_anim` archive contains it** (matched on the compiled
+extraction's own file naming, `<anchor>-<anim_name>.json`).
+
+C1/IA1 carries a `zepstate.zrd.json` that hides `dliner1` and `cargotrain`, yet in the
+original both are present in Instant Action — `dliner1` is the zeppelin inside the Passenger
+Hangar (`dz1` is 140 m from it) and `cargotrain` is the consist parked in the cut below the
+terminal at (-5102, 128, -3852). Its `mis_anim` compiles neither. Verified over every
+zepstate in this install:
+
+| Mission | zepstate defs | in compiled `mis_anim`? |
+|---|---|---|
+| C1/IA1, C1B/IA1, C1C/IA1, C2/IA1, C2B/IA1, C4/IA1 | `dliner1`, `cargotrain` | **unused** |
+| C1/M02 | `hk_zep`, `lkshadow`, `tethershadow`, `tethertower` | COMPILED |
+| C1/M04 | `dliner1`, `cargotrain` | COMPILED |
+| C3/IA1, C3/M02, C3/M03, C4/M03 | `cargozep1` | COMPILED |
+
+C3/IA1 compiles `cargozep1`, so this is **not** "Instant Action ignores zepstate" — the
+compiled set is the authority. Two user observations of the original corroborate it: C1/M04
+shows the field zeppelin with an empty hangar and no parked train (what compiling both defs
+produces), and C1/M02 is the only mission where the tether tower disappears — the only
+mission that compiles `tethertower`.
+
+⚠ This **supersedes** the earlier note that `zepstate` "is never compiled into any archive",
+which was generalised from C1/IA1. It is compiled into the missions that use it; being
+uncompiled is exactly the signal that the mission does not instantiate it.
+
+### Mission-spawned entities (open)
+
+Scenery props are hidden by compiled `zepstate` defs as above, but *entities* work the other
+way round — they are absent unless a roster spawns them. C1's `hk_zep` (the Hollywood Knights
+zeppelin, at (-5248, 200, -5208) beside `tethertower`) has no def in IA1 scope at all, yet the
+original does not show it in Instant Action. The rosters:
+
+- **`aiv.zrd.json`** — AI vehicles. C1/IA1: player only. C1/M02: `hk_zep`. C1/M04: `hk_zep`, `piratezep`.
+- **`zeppelins.zrd.json`** — flyable zeppelins, with position/yaw/engines/cannons/gasbags.
+  C1/IA1: `multiplayer1zep`. C1/M04: `piratezep`. MP1/MP2: none. MP3: `multiplayer1zep`, `multiplayer2zep`.
+
+The same shape governs the CTF props (`ctf_1`/`ctf_2`, `cs_flag_1`/`cs_flag_2`), referenced
+only by C1/MP2's `targets.zrd.json` and visible only in Capture the Flag. Not yet
+implemented; note `dliner1` must stay visible under any such rule, so the entity set has to be
+derived from the rosters rather than from a name pattern.
 
 ## startanims.json
 
