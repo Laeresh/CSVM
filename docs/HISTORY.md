@@ -563,3 +563,77 @@ with the variant under a `data` key and several fields renamed (`node_index`→`
 `TextureArchive.cs` with viewer smoke tests, not a binary swap — which is exactly the
 conservatism that item already called for. Nothing in the remake changes until then: it
 still runs on the pinned v0.6.1 binary.
+
+## 2026-07-21 — extraction pipeline cut over to the mech3ax fork (plan item 13)
+
+`extracted/` is now produced by the fork build (`tools/mech3ax/target/release/unzbd.exe`)
+instead of the pinned v0.6.1 binary. The fork is the only build with CS `gamez`/`planes`
+support that round-trips byte-identically (v0.6.1 leaves a 72-byte `planes.zbd` diff), so
+this closes the last dependency on an unmaintained binary for the formats the remake
+actually reads.
+
+**This was a loader port, not a binary swap.** The fork targets upstream's unified API, so
+its JSON is deliberately shape-incompatible: `nodes.json` went from a tagged union per node
+(`{"Object3d": {…}}`) to a flat node with the variant under `data` (`mesh_index`→
+`model_index`, `children`→`child_indices`, `transformation`→`transform`, whose "no
+transform" case is the string `"Initial"` and whose stored matrix moved from `matrix.a…i`
+to `original.r00…r22`); `meshes.json`→`models.json` (polygon `unk04`→`priority`,
+`triangle_strip`→`tri_strip`; mesh light `extra`→`vertices`); materials reference textures
+by `texture_index` into `textures.json` rather than inlining the name, and texture entries
+went `{original, renamed}`→`{name}`; partition cells `nodes[].index`→`values[].node_index`;
+reader archive entries `ia.json`→`ia.zrd.json`; `interp.json` `last_modified`→`datetime`.
+
+**`GameZ.cs`, `TextureArchive.cs` and `Zrdr.cs` now read *both* shapes.** That was a
+deliberate choice over cutting only to the new one: it costs a handful of `TryGetProperty`
+fallbacks in the idiom the files already used for `unk04`/`priority`, it makes the rollback
+this step called for a pure data operation (`ExtractAssets.ps1 -Unzbd <v0.6.1 unzbd>` with
+no code revert), and it let the port be *proven* by rendering the same scene from both
+trees.
+
+**Two real breakages found by measurement, not assumed:**
+- The fork also exposes a per-node `index` field — 1-based, with duplicates, i.e. v0.6.1's
+  `node_index` renamed. `child_indices` are **not** in that space; they are flat list
+  positions like before. Confirmed by consistency count (6553 parent/child agreements as
+  positions vs 59 as index values) before writing the parser. Getting it backwards would
+  have rebuilt the scene graph wrong, silently.
+- `bldhwk_cowling..tif`: v0.6.1 hid the 35 duplicate `bldhwk_cowling` texture-table entries
+  behind `.-N` renames, so `TextureArchive` never met the doubled period that the
+  `prefix\0suffix\0` decode produces when the suffix is empty. The fork stores the true
+  name and it resolved to nothing — fixed with a trailing-dot strip in `Resolve`.
+
+`ExtractAssets.ps1` gained `-Unzbd <path>` (defaults to the fork build, errors with build
+instructions if absent) and no longer dies on the extractor's stderr: PowerShell 5.1 wraps
+a native exe's stderr in ErrorRecords, which `$ErrorActionPreference = "Stop"` turns
+terminating, so unzbd's output is now captured and judged by exit code. Upstream mech3ax
+emits one `object3d transform fail` warning per node whose euler angles don't recompose to
+the stored matrix bit-for-bit (155 across a full run) — informational, since the original
+matrix is preserved verbatim and the Godot loader prefers it, so those are counted and
+summarized rather than printed. Anything else on stderr is surfaced.
+
+**Verified:** the ported loaders render the C1 Bloodhawk **md5-identical** to a pre-change
+stashed baseline *and* md5-identical from the fork tree — a three-way match that pins both
+"no regression on the old tree" and "the two shapes are equivalent". Before the swap:
+node count/order, every `model_index`, every node name (except the Display node, unnamed in
+v0.6.1 and `"display"` in the fork), the `"Initial"`↔null correspondence (3675/3675) and
+partition refs (346/346) all match; scale is unit on all 4181 transformed nodes, so ignoring
+it is safe; all 881 C1 texture PNGs are **pixel**-identical (all 881 differ byte-wise —
+encoder only); all 222 readers are semantically identical; `soundsh.zip` is **byte**-identical;
+`interp.json`/`messages.json` match apart from the key rename. After the swap: a full
+re-extraction of all 184 archives with zero failures, then a 12-case battery (viewer × 2
+aircraft, damage lab, `--fly` on C1/C1B/C2B/C3/C4/C5, `--stunt`, a 4P race, static C2,
+launchscreen) clean on the zipped tree and re-run on the **unpacked** tree to exercise the
+directory code paths, and the four frame-deterministic shots md5-identical to v0.6.1-tree
+renders. The damage-lab shot differs but is not frame-deterministic at all: its fire trails
+vary 413–479 px between runs on a single tree, and the cross-tree difference (433–473 px)
+sits inside that floor — measured rather than waved away.
+
+**Pre-existing gap surfaced (not caused here):** C3's gamez references `cloud1.tif`/
+`cloud2.tif` but C3's `texture.zbd` ships neither, identically in both trees (every other
+chapter ships them), so flying C3 logs two "not found in archive" lines. It belongs on
+`TextureArchive.KnownAbsentFromGameData` next to `pir_spinner`/`barngrill`, but that is a
+visible behaviour change (neutral gray instead of debug magenta) and was left for the user
+to decide.
+
+The pinned v0.6.1 binary stays in `tools/` as the documented fallback, and `cam_anim`/
+`mis_anim` remain skipped by `ExtractAssets.ps1` — the fork extracts them byte-identically,
+but nothing consumes them until plan item 7.

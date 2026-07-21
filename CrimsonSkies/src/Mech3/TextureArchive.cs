@@ -176,11 +176,20 @@ public sealed class TextureArchive : IDisposable
     {
         if (_byBaseName.TryGetValue(baseName, out var exact))
             return exact;
-        // mech3ax disambiguates duplicate texture-table entries as "name.-N";
-        // the pixel data lives under the original name
+        // mech3ax v0.6.1 disambiguates duplicate texture-table entries as "name.-N";
+        // the pixel data lives under the original name. The fork indexes textures by
+        // position instead and never renames, so this is legacy-tree-only.
         var m = System.Text.RegularExpressions.Regex.Match(baseName, @"^(.*)\.-\d+$");
         if (m.Success && _byBaseName.TryGetValue(m.Groups[1].Value, out var renamed))
             return renamed;
+        // Names stored as "prefix\0suffix\0" decode with a period restored at the first
+        // zero, so a name whose suffix is empty comes back doubled: "bldhwk_cowling..tif"
+        // → base "bldhwk_cowling." → the PNG is "bldhwk_cowling". Only the fork's tree
+        // exposes these (v0.6.1 hid them behind the ".-N" renames above); it is the one
+        // resolution case the shape change would otherwise have broken.
+        var trimmed = baseName.TrimEnd('.');
+        if (trimmed.Length != baseName.Length && _byBaseName.TryGetValue(trimmed, out var undoubled))
+            return undoubled;
         // fixed-width truncation fallback: unique prefix match
         string? match = null;
         foreach (var (name, retrieval) in _byBaseName)

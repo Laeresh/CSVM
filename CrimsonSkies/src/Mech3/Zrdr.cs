@@ -14,24 +14,51 @@ namespace CrimsonSkies.Mech3;
 /// </summary>
 public static class Zrdr
 {
+    /// <summary>The names a requested reader file may be stored under. mech3ax v0.6.1
+    /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
+    /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
+    /// identical — all 222 readers verified semantically equal across the two — so only
+    /// the lookup needs to accept both (2026-07-21, revival-plan item 13).</summary>
+    private static IEnumerable<string> CandidateNames(string fileName)
+    {
+        yield return fileName;
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            yield return stem + ".zrd.json";
+    }
+
     /// <summary>Loads one reader file (e.g. "vehicle.json") from a zrdr ZIP or a directory of JSON files.</summary>
     public static List<object?> LoadFile(string zrdrPath, string fileName)
     {
-        byte[] bytes;
+        byte[]? bytes = null;
         if (Directory.Exists(zrdrPath))
         {
-            bytes = File.ReadAllBytes(Path.Combine(zrdrPath, fileName));
+            foreach (var candidate in CandidateNames(fileName))
+            {
+                var p = Path.Combine(zrdrPath, candidate);
+                if (File.Exists(p))
+                {
+                    bytes = File.ReadAllBytes(p);
+                    break;
+                }
+            }
         }
         else
         {
             using var zip = ZipFile.OpenRead(zrdrPath);
-            var entry = zip.GetEntry(fileName)
-                ?? throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
-            using var s = entry.Open();
-            using var ms = new MemoryStream();
-            s.CopyTo(ms);
-            bytes = ms.ToArray();
+            foreach (var candidate in CandidateNames(fileName))
+            {
+                if (zip.GetEntry(candidate) is not { } entry)
+                    continue;
+                using var s = entry.Open();
+                using var ms = new MemoryStream();
+                s.CopyTo(ms);
+                bytes = ms.ToArray();
+                break;
+            }
         }
+        if (bytes == null)
+            throw new FileNotFoundException($"'{fileName}' missing from '{zrdrPath}'");
         using var doc = JsonDocument.Parse(bytes);
         return Convert(doc.RootElement) as List<object?>
             ?? throw new InvalidDataException($"'{fileName}' is not a reader list");

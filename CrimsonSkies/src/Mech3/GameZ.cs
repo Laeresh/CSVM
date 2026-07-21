@@ -9,13 +9,41 @@ namespace CrimsonSkies.Mech3;
 
 /// <summary>
 /// In-memory model of a mech3ax GameZ extraction (planes.zbd / gamez.zbd → ZIP of
-/// nodes.json / meshes.json / materials.json). Only the fields the renderer needs.
+/// nodes.json / models.json / materials.json / textures.json). Only the fields the
+/// renderer needs.
+///
+/// <para><b>Two extraction shapes are accepted</b> (2026-07-21, revival-plan item 13).
+/// The pinned mech3ax v0.6.1 binary emits the "legacy" shape; the fork (which restored
+/// CS gamez support on top of upstream's unified API) emits a "unified" one. They carry
+/// semantically identical data — verified field-for-field on C1 + planes: same node
+/// count and order, same model_index values, same transforms, same partitions — but
+/// spell it differently:</para>
+/// <list type="bullet">
+/// <item>nodes.json: <c>{"Object3d": {…}}</c> → a flat node with the variant under
+/// <c>data</c>; <c>mesh_index</c> → <c>model_index</c>, <c>children</c> →
+/// <c>child_indices</c>, <c>transformation</c> → <c>transform</c> (an "Initial" string
+/// where the legacy shape wrote null, else a <c>RotateTranslateScale</c> whose
+/// <c>original</c> is the legacy <c>matrix</c>).</item>
+/// <item>meshes.json → models.json; polygon <c>unk04</c> → <c>priority</c>,
+/// <c>triangle_strip</c> → <c>tri_strip</c>; mesh light <c>extra</c> →
+/// <c>vertices</c>.</item>
+/// <item>materials.json: <c>texture</c> (a name) → <c>texture_index</c> into
+/// textures.json, whose entries went from <c>{original, renamed}</c> to
+/// <c>{name}</c>.</item>
+/// </list>
+/// <para>Reading both keeps `tools/` rollback-able to v0.6.1 without a code revert —
+/// the conservatism the revival plan asks for at this step — and let the port be proven
+/// by rendering the same scene from both trees.</para>
 /// </summary>
 public sealed class GameZ
 {
     public List<GameZNode> Nodes { get; } = new();
     public List<GameZMesh> Meshes { get; } = new();
     public List<GameZMaterial> Materials { get; } = new();
+
+    // textures.json order. Only the unified shape needs it: its materials reference
+    // textures by index, where the legacy shape inlined the name. Empty when legacy.
+    private readonly List<string> _textureNames = new();
 
     private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
 
@@ -27,8 +55,14 @@ public sealed class GameZ
         {
             using var nodes = File.OpenRead(Path.Combine(path, "nodes.json"));
             gz.ParseNodes(nodes);
-            using var meshes = File.OpenRead(Path.Combine(path, "meshes.json"));
-            gz.ParseMeshes(meshes);
+            // "models.json" is the fork's name for what v0.6.1 called "meshes.json".
+            var models = Path.Combine(path, "models.json");
+            using (var s = File.OpenRead(File.Exists(models) ? models : Path.Combine(path, "meshes.json")))
+                gz.ParseMeshes(s);
+            // Unified-shape materials index into textures.json, so it must be read first.
+            var textures = Path.Combine(path, "textures.json");
+            if (File.Exists(textures))
+                using (var s = File.OpenRead(textures)) gz.ParseTextures(s);
             using var mats = File.OpenRead(Path.Combine(path, "materials.json"));
             gz.ParseMaterials(mats);
         }
@@ -36,14 +70,24 @@ public sealed class GameZ
         {
             using var zip = ZipFile.OpenRead(path);
             using (var s = OpenEntry(zip, "nodes.json")) gz.ParseNodes(s);
-            using (var s = OpenEntry(zip, "meshes.json")) gz.ParseMeshes(s);
+            using (var s = OpenEntry(zip, "models.json", "meshes.json")) gz.ParseMeshes(s);
+            var tex = zip.GetEntry("textures.json");
+            if (tex != null)
+                using (var s = tex.Open()) gz.ParseTextures(s);
             using (var s = OpenEntry(zip, "materials.json")) gz.ParseMaterials(s);
         }
         return gz;
     }
 
-    private static Stream OpenEntry(ZipArchive zip, string name) =>
-        (zip.GetEntry(name) ?? throw new FileNotFoundException($"'{name}' missing from archive")).Open();
+    /// <summary>Opens the first of <paramref name="names"/> the archive actually has —
+    /// how the models.json / meshes.json rename is absorbed.</summary>
+    private static Stream OpenEntry(ZipArchive zip, params string[] names)
+    {
+        foreach (var name in names)
+            if (zip.GetEntry(name) is { } entry)
+                return entry.Open();
+        throw new FileNotFoundException($"none of [{string.Join(", ", names)}] present in archive");
+    }
 
     public GameZNode? FindByName(string name)
     {
@@ -91,19 +135,30 @@ public sealed class GameZ
         int index = 0;
         foreach (var wrapper in doc.RootElement.EnumerateArray())
         {
-            // Each node is an enum wrapper: {"Object3d": {...}} or {"Lod": {...}}
-            var prop = FirstProperty(wrapper);
-            var body = prop.Value;
-            // Not every kind has every field: Display lacks name+children,
-            // Window/Camera/Light lack children.
+            // Legacy: the node IS an enum wrapper, {"Object3d": {...}} / {"Lod": {...}},
+            // with name/mesh_index/children inside the variant body.
+            // Unified: a flat node carrying name/model_index/child_indices itself, with
+            // only the variant-specific fields under "data".
+            bool unified = wrapper.TryGetProperty("data", out var data) && data.ValueKind == JsonValueKind.Object;
+            var prop = FirstProperty(unified ? data : wrapper);
+            var body = prop.Value;      // the variant-specific fields (area, range, transform…)
+            var header = unified ? wrapper : body; // where name / mesh index / children live
+            // Not every kind has every field: Display lacks name+children (legacy only —
+            // the unified shape names it "display"), Window/Camera/Light lack children.
             var node = new GameZNode
             {
                 Kind = prop.Name,
-                Name = body.TryGetProperty("name", out var nm) ? nm.GetString() ?? "" : "",
-                MeshIndex = body.TryGetProperty("mesh_index", out var mi) ? mi.GetInt32() : -1,
+                Name = header.TryGetProperty("name", out var nm) ? nm.GetString() ?? "" : "",
+                MeshIndex = (header.TryGetProperty("model_index", out var mi)
+                    || header.TryGetProperty("mesh_index", out mi)) ? mi.GetInt32() : -1,
                 Index = index++,
             };
-            if (body.TryGetProperty("children", out var kids) && kids.ValueKind == JsonValueKind.Array)
+            // Both spellings are flat list positions, NOT the node's own "index" field
+            // (which the unified shape also exposes, 1-based and with duplicates — the
+            // legacy "node_index" by another name). Verified on C1: reading them as flat
+            // positions is parent/child-consistent 6553 times, as index values 59.
+            if ((header.TryGetProperty("child_indices", out var kids)
+                 || header.TryGetProperty("children", out kids)) && kids.ValueKind == JsonValueKind.Array)
                 foreach (var c in kids.EnumerateArray())
                     node.Children.Add(c.GetInt32());
             if (node.Kind == "Lod")
@@ -133,38 +188,63 @@ public sealed class GameZ
                     {
                         node.PartitionCols = row.GetArrayLength();
                         foreach (var cell in row.EnumerateArray())
-                            foreach (var nref in cell.GetProperty("nodes").EnumerateArray())
-                            {
-                                int idx = nref.GetProperty("index").GetInt32();
-                                if (seen.Add(idx))
-                                    node.PartitionNodes.Add(idx);
-                            }
+                        {
+                            // Legacy: "nodes": [{index, …}]. Unified: "values":
+                            // [{node_index, …}] (its sibling "node_indices" is empty in
+                            // every chapter, but is read too in case that ever changes).
+                            if (cell.TryGetProperty("nodes", out var refs) || cell.TryGetProperty("values", out refs))
+                                foreach (var nref in refs.EnumerateArray())
+                                {
+                                    if (!nref.TryGetProperty("index", out var iv))
+                                        iv = nref.GetProperty("node_index");
+                                    if (seen.Add(iv.GetInt32()))
+                                        node.PartitionNodes.Add(iv.GetInt32());
+                                }
+                            if (cell.TryGetProperty("node_indices", out var plain) && plain.ValueKind == JsonValueKind.Array)
+                                foreach (var nref in plain.EnumerateArray())
+                                    if (seen.Add(nref.GetInt32()))
+                                        node.PartitionNodes.Add(nref.GetInt32());
+                        }
                     }
                 }
             }
+            // Legacy "transformation" is an object or null; unified "transform" is either
+            // the string "Initial" (exactly where legacy wrote null — 3675/3675 on C1) or
+            // a {"RotateTranslateScale": {…}} wrapper.
             if (body.TryGetProperty("transformation", out var tf) && tf.ValueKind == JsonValueKind.Object)
                 node.Local = ParseTransform(tf);
+            else if (body.TryGetProperty("transform", out tf) && tf.ValueKind == JsonValueKind.Object)
+                node.Local = ParseTransform(FirstProperty(tf).Value);
             Nodes.Add(node);
         }
     }
 
     private static Transform3D ParseTransform(JsonElement tf)
     {
-        var tr = ParseVec3(tf.GetProperty("translation"));
+        // translation/rotation/matrix (legacy) vs translate/rotate/original (unified).
+        // Scale exists only in the unified shape and is unit on every node of every
+        // chapter and of planes.zbd (0 of 4181 non-unit), so it is deliberately ignored.
+        var tr = ParseVec3(tf.TryGetProperty("translation", out var t) ? t : tf.GetProperty("translate"));
         Basis basis;
-        if (tf.TryGetProperty("matrix", out var m) && m.ValueKind == JsonValueKind.Object)
+        if ((tf.TryGetProperty("matrix", out var m) || tf.TryGetProperty("original", out m))
+            && m.ValueKind == JsonValueKind.Object)
         {
             // Stored transposed: the actual rotation matrix has columns (a,b,c), (d,e,f), (g,h,i).
+            // The unified shape spells those r00..r02, r10..r12, r20..r22 (and appends the
+            // translation as r30..r32, which duplicates "translate" and is not read).
+            float M(string legacy, string unified) =>
+                (m.TryGetProperty(legacy, out var v) ? v : m.GetProperty(unified)).GetSingle();
             basis = new Basis(
-                new Vector3(m.GetProperty("a").GetSingle(), m.GetProperty("b").GetSingle(), m.GetProperty("c").GetSingle()),
-                new Vector3(m.GetProperty("d").GetSingle(), m.GetProperty("e").GetSingle(), m.GetProperty("f").GetSingle()),
-                new Vector3(m.GetProperty("g").GetSingle(), m.GetProperty("h").GetSingle(), m.GetProperty("i").GetSingle()));
+                new Vector3(M("a", "r00"), M("b", "r01"), M("c", "r02")),
+                new Vector3(M("d", "r10"), M("e", "r11"), M("f", "r12")),
+                new Vector3(M("g", "r20"), M("h", "r21"), M("i", "r22")));
         }
         else
         {
             // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z) — Godot's YXZ order
             // (verified numerically against the 221 nodes that carry both forms).
-            basis = Basis.FromEuler(ParseVec3(tf.GetProperty("rotation")), EulerOrder.Yxz);
+            basis = Basis.FromEuler(ParseVec3(tf.TryGetProperty("rotation", out var r) ? r : tf.GetProperty("rotate")),
+                EulerOrder.Yxz);
         }
         return new Transform3D(basis, tr);
     }
@@ -196,7 +276,9 @@ public sealed class GameZ
                         poly.NormalIndices.Add(x.GetInt32());
                 }
                 var pf = p.GetProperty("flags");
-                poly.TriangleStrip = pf.TryGetProperty("triangle_strip", out var ts) && ts.GetBoolean();
+                // v0.6.1 "triangle_strip"; the fork spells it "tri_strip".
+                poly.TriangleStrip = (pf.TryGetProperty("triangle_strip", out var ts)
+                    || pf.TryGetProperty("tri_strip", out ts)) && ts.ValueKind == JsonValueKind.True;
                 // Double-sided flag. mech3ax v0.6.1 emits it as "unk2"; upstream has since
                 // identified it as SHOW_BACKFACE — accept both spellings.
                 poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
@@ -235,7 +317,9 @@ public sealed class GameZ
             {
                 foreach (var l in lights.EnumerateArray())
                 {
-                    if (!l.TryGetProperty("extra", out var extra) || extra.GetArrayLength() == 0)
+                    // v0.6.1 "extra"; the fork spells the same array "vertices".
+                    if ((!l.TryGetProperty("extra", out var extra) && !l.TryGetProperty("vertices", out extra))
+                        || extra.ValueKind != JsonValueKind.Array || extra.GetArrayLength() == 0)
                         continue;
                     var c = l.GetProperty("color");
                     // Per-light params (field meanings inferred from the C1 value survey,
@@ -265,6 +349,20 @@ public sealed class GameZ
         }
     }
 
+    /// <summary>textures.json — the unified shape's material texture table. Entries are
+    /// <c>{name}</c>; v0.6.1 wrote <c>{original, renamed}</c>, where "renamed" carried a
+    /// <c>name.-N</c> disambiguation for duplicate table entries. The fork drops that
+    /// machinery entirely (materials reference textures by index, so duplicates need no
+    /// unique name), which is why <see cref="TextureArchive"/>'s <c>.-N</c> fallback is
+    /// legacy-only. Both spellings are read so either tree loads.</summary>
+    private void ParseTextures(Stream stream)
+    {
+        using var doc = JsonDocument.Parse(BufferAll(stream));
+        foreach (var t in doc.RootElement.EnumerateArray())
+            _textureNames.Add(
+                (t.TryGetProperty("name", out var n) ? n : t.GetProperty("original")).GetString() ?? "");
+    }
+
     private void ParseMaterials(Stream stream)
     {
         using var doc = JsonDocument.Parse(BufferAll(stream));
@@ -275,7 +373,14 @@ public sealed class GameZ
             var mat = new GameZMaterial();
             if (prop.Name == "Textured")
             {
-                mat.TextureName = body.GetProperty("texture").GetString();
+                // Legacy inlined the name; the fork stores an index into textures.json.
+                if (body.TryGetProperty("texture", out var tn))
+                    mat.TextureName = tn.GetString();
+                else if (body.TryGetProperty("texture_index", out var ti))
+                {
+                    int i = ti.GetInt32();
+                    mat.TextureName = i >= 0 && i < _textureNames.Count ? _textureNames[i] : null;
+                }
             }
             else // Colored
             {

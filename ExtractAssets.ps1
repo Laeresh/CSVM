@@ -10,7 +10,7 @@
     extension to .zip -- or .json for interp). Re-running only re-extracts files
     whose source is newer than the existing output, unless -Force is given.
 
-    Mode mapping (mech3ax v0.6.1, game type `cs`):
+    Mode mapping (game type `cs`):
         interp.zbd        -> interp    -> .json
         planes.zbd        -> gamez     -> .zip   (planes.zbd is a GameZ-format file)
         gamez.zbd         -> gamez     -> .zip
@@ -19,14 +19,22 @@
         rimage.zbd        -> textures  -> .zip
         texture.zbd       -> textures  -> .zip
         rtexture*.zbd     -> textures  -> .zip
-        cam_anim.zbd      -> SKIPPED (mech3ax has no CS anim support -- deferred)
-        mis_anim.zbd      -> SKIPPED (   "                              "        )
+        cam_anim.zbd      -> SKIPPED (supported by the fork, but nothing consumes it yet)
+        mis_anim.zbd      -> SKIPPED (   "                                           "  )
 
-    Anim archives (cam_anim/mis_anim) are genuinely unsupported by mech3ax for
-    Crimson Skies today, so they are reported and skipped rather than failed.
+    Anim archives (cam_anim/mis_anim) round-trip byte-identically in the fork since
+    2026-07-21, but no part of the Godot project reads them yet (revival-plan item 7,
+    SI-script playback, is deferred), so they are still reported and skipped.
 
 .PARAMETER Source
     Root of the game's ZBD tree. Default: CrimsonSkiesGame\ZBD next to this script.
+
+.PARAMETER Unzbd
+    Path to the unzbd.exe to extract with. Default: the fork build at
+    tools\mech3ax\target\release\unzbd.exe (`cargo build --release` in tools\mech3ax).
+    Pass the pinned tools\mech3ax-v0.6.1-...\unzbd.exe to fall back to the old binary --
+    the Godot loaders read either extraction shape (see GameZ.cs), so that rollback
+    needs no code change.
 
 .PARAMETER Dest
     Output root. Default: extracted\ next to this script.
@@ -52,6 +60,7 @@
 param(
     [string] $Source,
     [string] $Dest,
+    [string] $Unzbd,
     [switch] $Unzip,
     [switch] $Force
 )
@@ -61,10 +70,19 @@ $ErrorActionPreference = "Stop"
 $RepoRoot = $PSScriptRoot
 if (-not $Source) { $Source = Join-Path $RepoRoot "CrimsonSkiesGame\ZBD" }
 if (-not $Dest)   { $Dest   = Join-Path $RepoRoot "extracted" }
-$UnzbdExe = Join-Path $RepoRoot "tools\mech3ax-v0.6.1-x86_64-pc-windows-msvc\unzbd.exe"
+# The fork (tools\mech3ax) is the extraction source of record since 2026-07-21: it is the
+# only build with CS gamez/planes support that round-trips byte-identically (the pinned
+# v0.6.1 binary leaves a 72-byte planes.zbd diff), and it also supports cam_anim/mis_anim.
+$ForkUnzbd = Join-Path $RepoRoot "tools\mech3ax\target\release\unzbd.exe"
+if (-not $Unzbd) { $Unzbd = $ForkUnzbd }
+$UnzbdExe = $Unzbd
 
 if (-not (Test-Path $UnzbdExe)) {
-    throw "unzbd not found at $UnzbdExe -- see CLAUDE.md for the tools/ setup."
+    if ($UnzbdExe -eq $ForkUnzbd) {
+        throw "unzbd not found at $UnzbdExe -- build it with ``cargo build --release`` in tools\mech3ax, " +
+              "or pass -Unzbd <path> (e.g. the pinned tools\mech3ax-v0.6.1-x86_64-pc-windows-msvc\unzbd.exe)."
+    }
+    throw "unzbd not found at $UnzbdExe"
 }
 if (-not (Test-Path $Source)) {
     throw "Source ZBD tree not found at $Source"
@@ -93,10 +111,11 @@ $zbds = Get-ChildItem -Path $SourceFull -Recurse -File -Filter *.zbd | Sort-Obje
 Write-Host "Extracting $($zbds.Count) ZBD file(s)" -ForegroundColor Cyan
 Write-Host "  from: $SourceFull"
 Write-Host "  to:   $Dest"
+Write-Host "  with: $UnzbdExe"
 if ($Unzip) { Write-Host "  (will also unzip produced archives)" }
 Write-Host ""
 
-$extracted = 0; $upToDate = 0; $skipped = 0; $unzipped = 0
+$extracted = 0; $upToDate = 0; $skipped = 0; $unzipped = 0; $transformNotes = 0
 $failures = New-Object System.Collections.Generic.List[string]
 $unknowns = New-Object System.Collections.Generic.List[string]
 
@@ -132,11 +151,35 @@ foreach ($zbd in $zbds) {
     }
     else {
         Write-Host "  ->   $outRel  [$($plan.Mode)]" -ForegroundColor Green
-        & $UnzbdExe cs $plan.Mode $zbd.FullName $outPath
-        if ($LASTEXITCODE -ne 0) {
-            Write-Host "       FAILED (unzbd exit $LASTEXITCODE)" -ForegroundColor Red
-            $failures.Add("$rel (exit $LASTEXITCODE)")
+        # unzbd writes diagnostics to stderr, and $ErrorActionPreference = "Stop" would
+        # turn any of them into a terminating error (PowerShell 5.1 wraps a native exe's
+        # stderr in ErrorRecords). Capture instead, and judge by the exit code.
+        $prevEap = $ErrorActionPreference
+        $ErrorActionPreference = "Continue"
+        $output = & $UnzbdExe cs $plan.Mode $zbd.FullName $outPath 2>&1
+        $exit = $LASTEXITCODE
+        $ErrorActionPreference = $prevEap
+
+        $stderrLines = @($output | Where-Object { $_ -is [System.Management.Automation.ErrorRecord] })
+        # "object3d transform fail" is upstream mech3ax noting that recomposing a node's
+        # transform from its euler angles doesn't reproduce the stored matrix bit-for-bit.
+        # It is informational, not a failure: the original matrix is preserved verbatim
+        # (that is what makes the gamez round-trip byte-identical), and the Godot loader
+        # reads it in preference to the angles. Counted, not printed -- a few hundred
+        # across a full run would bury real errors.
+        $benign = @($stderrLines | Where-Object { "$_" -match "object3d transform fail" })
+        $unexpected = @($stderrLines | Where-Object { "$_" -notmatch "object3d transform fail" })
+
+        if ($exit -ne 0) {
+            Write-Host "       FAILED (unzbd exit $exit)" -ForegroundColor Red
+            $stderrLines | ForEach-Object { Write-Host "         $_" -ForegroundColor Red }
+            $failures.Add("$rel (exit $exit)")
             continue
+        }
+        foreach ($line in $unexpected) { Write-Host "       $line" -ForegroundColor Yellow }
+        if ($benign.Count -gt 0) {
+            Write-Host "       ($($benign.Count) transform-precision notes)" -ForegroundColor DarkGray
+            $transformNotes += $benign.Count
         }
         $extracted++
     }
@@ -160,6 +203,9 @@ Write-Host "  extracted:  $extracted"
 Write-Host "  up to date: $upToDate"
 Write-Host "  skipped:    $skipped (cam_anim/mis_anim unsupported for CS)"
 if ($Unzip)              { Write-Host "  unzipped:   $unzipped" }
+if ($transformNotes -gt 0) {
+    Write-Host "  transform-precision notes: $transformNotes (informational -- see the comment in this script)" -ForegroundColor DarkGray
+}
 if ($unknowns.Count -gt 0) {
     Write-Host "  UNKNOWN types (no mode mapped -- check the script):" -ForegroundColor Yellow
     $unknowns | ForEach-Object { Write-Host "    $_" -ForegroundColor Yellow }

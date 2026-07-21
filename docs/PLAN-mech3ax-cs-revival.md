@@ -92,7 +92,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 10. ☑ Port `cs` gamez/nodes code onto the current `pm`-based architecture (done 2026-07-21, see section 10 — all 9 archives byte-identical)
 11. ☑ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG (done 2026-07-21, folded into section 10)
 12. ☑ Verify byte-identical round-trip against the real install (done 2026-07-21 — `test.py` `--- ALL OK ---`; **the 72-byte `planes.zbd` stretch goal is also fixed**, see section 10)
-13. ☐ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (see section 10's "Downstream impact")
+13. ☑ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (done 2026-07-21, see section 13 — the Godot loaders read *either* shape, so the v0.6.1 rollback needs no code revert)
 14. ☐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication)
 
 ---
@@ -710,6 +710,78 @@ mech3ax-side work above.
 **Verify:** fork-produced `extracted/` tree is byte-identical to the current pinned-binary
 tree (or an intentional, documented improvement, e.g. the planes.zbd fix) across every chapter;
 `CrimsonSkies` viewer smoke-tests clean against the fork's output before `tools/` is updated.
+
+### Result (done 2026-07-21)
+
+**The byte-identical bar had to be replaced, because it is unreachable by construction** —
+the fork's JSON shape is deliberately different (that is the whole premise of this item)
+and its PNG encoder emits different bytes. The bar actually met is stronger where it
+counts: *semantic* equality of every extracted file, plus **pixel** equality of the
+rendered result.
+
+**Shape delta measured on C1 + planes** (all mechanical renames; data identical):
+
+| | v0.6.1 | fork |
+|---|---|---|
+| node wrapper | `{"Object3d": {…}}` | flat node, variant under `data` |
+| node fields | `mesh_index`, `children`, `transformation` | `model_index`, `child_indices`, `transform` |
+| no-transform | `transformation: null` | `transform: "Initial"` |
+| stored matrix | `matrix.a…i` | `transform.…original.r00…r22` |
+| mesh file | `meshes.json` | `models.json` |
+| polygon | `unk04`, `triangle_strip` | `priority`, `tri_strip` |
+| mesh light | `extra` | `vertices` |
+| material texture | `texture` (name) | `texture_index` → `textures.json` |
+| texture entry | `{original, renamed}` | `{name}` |
+| partition cell | `nodes[].index` | `values[].node_index` |
+| reader entry | `ia.json` | `ia.zrd.json` |
+| interp entry | `last_modified` | `datetime` |
+
+**Equivalences verified before touching anything:** node count and order identical
+(7064/7064), every `model_index` identical, every node name identical (1 difference: the
+Display node is unnamed in v0.6.1 and `"display"` in the fork), `transform: "Initial"`
+lands on exactly the 3675 nodes where v0.6.1 wrote null, partition refs identical
+(346/346), scale is unit on all 4181 transformed nodes of C1 + planes (so ignoring it is
+safe), all 881 C1 texture PNGs **pixel**-identical (all 881 differ byte-wise — PNG encoder
+only), all 222 readers semantically identical, `soundsh.zip` **byte**-identical,
+`interp.json` and `messages.json` identical apart from the one key rename.
+
+**Two things the shape change genuinely broke, both fixed:**
+1. `child_indices` had to be confirmed to be *flat list positions*, not the fork's new
+   1-based `index` field (which has duplicates — it is v0.6.1's `node_index` renamed).
+   Reading them as positions is parent/child-consistent 6553 times vs 59; getting this
+   backwards would have silently rebuilt the scene graph wrong.
+2. `bldhwk_cowling..tif` — v0.6.1 hid the 35 duplicate `bldhwk_cowling` texture entries
+   behind `.-N` renames, so `TextureArchive` never saw the doubled period the
+   `prefix\0suffix\0` decode produces. The fork stores the true name, which resolved to
+   nothing. Fixed with a trailing-dot strip in `Resolve`.
+
+**Decision: the Godot loaders read *both* shapes** rather than only the new one. It costs
+a handful of `TryGetProperty` fallbacks in the style the file already used for
+`unk04`/`priority`, and it buys the rollback this item asks for — `ExtractAssets.ps1
+-Unzbd <v0.6.1 path>` reverts the pipeline with no code revert — plus it made the port
+provable by rendering the same scene from both trees.
+
+**Verified:** the ported loaders render the C1 Bloodhawk **md5-identical** to a
+pre-change stashed baseline *and* md5-identical from the fork tree (three-way match); a
+full fork re-extraction of all 184 archives succeeded with zero failures; on the swapped-in
+fork tree a 12-case battery (viewer × 2 aircraft, damage lab, `--fly` on C1/C1B/C2B/C3/C4/
+C5, `--stunt`, a 4P race, static C2, launchscreen) ran clean, then was re-run against the
+**unpacked** tree to exercise the directory code paths (which differ from the zip paths);
+and the four frame-deterministic shots (2 aircraft, static C2, menu) are **md5-identical**
+to v0.6.1-tree renders. The damage-lab shot differs, but it is not frame-deterministic at
+all — its fire trails vary 413–479 px between runs *on one tree*, and the cross-tree
+difference (433–473 px) sits inside that floor.
+
+**Pre-existing gap surfaced, not caused here:** C3's `gamez` references `cloud1.tif`/
+`cloud2.tif` but C3's `texture.zbd` ships neither — identically true in both trees (every
+other chapter ships them). It logs two "not found in archive" lines when flying C3. It is a
+retail-data gap, so it belongs on `TextureArchive.KnownAbsentFromGameData` beside
+`pir_spinner`/`barngrill`; left alone here because that is a visible behaviour change
+(gray instead of debug magenta) and outside this item.
+
+**Not done here:** the pinned v0.6.1 binary stays in `tools/` as the documented fallback,
+and `cam_anim`/`mis_anim` stay skipped by `ExtractAssets.ps1` — the fork extracts them
+byte-identically, but nothing in the Godot project consumes them until item 7.
 
 ## 14. Upstream PR(s)
 
