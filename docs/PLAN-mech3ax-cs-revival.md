@@ -93,7 +93,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 11. ☑ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG (done 2026-07-21, folded into section 10)
 12. ☑ Verify byte-identical round-trip against the real install (done 2026-07-21 — `test.py` `--- ALL OK ---`; **the 72-byte `planes.zbd` stretch goal is also fixed**, see section 10)
 13. ☑ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (done 2026-07-21, see section 13 — the Godot loaders read *either* shape, so the v0.6.1 rollback needs no code revert)
-14. ☐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication)
+14. ◐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication) — **preparation done 2026-07-21** (see section 14: two independent, individually-verified branches + PR bodies + a pre-PR discussion draft in `docs/upstream-pr/`); **opening them is the user's step and has not happened — nothing is pushed**
 
 ---
 
@@ -804,3 +804,44 @@ permanent fork) — costs nothing, and changes how much polish to invest before 
 
 **Verify:** N/A — this is a communication/process step, owned by the user per the project's
 existing division of labor.
+
+**PREPARATION DONE 2026-07-21; OPENING IS THE USER'S STEP (nothing pushed).** The single
+working branch was split into two **independent** PR branches off `cbb838f` (rc3), each
+verified on its own rather than only in combination: `pr-cs-anim` (Track B, 4 commits) and
+`pr-cs-gamez` (Track A, 1 commit). Either can merge first, in either order. `cs-anim` was
+rebuilt as the integration branch of both and is what this project builds from; the local
+release binary was rebuilt from it, so `ExtractAssets.ps1` is unaffected.
+
+**The split surfaced a real defect, not just bookkeeping.** The anim work did not stand on its
+own: `metadata-gen` panicked at type resolution (`type … events::NodeBelowAlt required by
+Condition.NodeBelowAlt not found`), because the codegen registrations for four types the
+*anim* work introduced were written later, during the *gamez* work, and so lived in the gamez
+commit. Section 10 above already diagnosed this correctly ("Track B item 4 added … but never
+registered them") but fixed it in the wrong commit — anyone taking the anim work alone (which
+is exactly what an upstream PR is) got a broken generator. The registration and its changelog
+line now live in the anim branch where the types are introduced; the gamez branch no longer
+touches `metadata-gen`.
+
+**The `Ascii::from_str_suffix_first` fix is deliberately NOT split into its own PR**, against
+this section's tentative option (3). As implemented it is purely additive and its only caller
+is the CS texture writer, so a standalone PR would hand upstream dead code. It stays in the
+gamez PR as its own changelog entry, with a note offering the alternative (fixing
+`from_str_suffix` itself, which is arguably more correct but changes MW/PM/RC write behaviour
+and cannot be verified here — no MW/PM/RC installs).
+
+**Verified per branch, independently:** `cargo build`/`cargo test --workspace` clean on both;
+`metadata-gen` runs clean on both (389 / 375 generated files); `test.py --release`
+`--- ALL OK ---` on both, each correctly skipping the other's CS suite. On the re-integrated
+`cs-anim`: `--- ALL OK ---` with **nothing skipped** — all 61 anim + 9 gamez archives. The
+check that the split changed no behaviour: `git diff df16d8e cs-anim` (pre-split tip vs.
+re-integration) is **one reordered CHANGELOG line** — the code trees are identical.
+
+**Deliverables** in `docs/upstream-pr/`: `README.md` (branch table, split rationale,
+verification, push commands), `pr-0-discussion.md` (the cheap pre-PR question to upstream —
+was the CS removal bandwidth or architecture? — which determines how much polish the gamez PR
+deserves), `pr-1-anim.md` and `pr-2-gamez.md` (ready-to-paste PR bodies, first line = title).
+Recommended order: post the discussion, open the anim PR regardless of the answer, hold the
+gamez PR on it.
+
+**Not done:** pushing the branches, opening the PRs, and all upstream communication — the
+user's, per the project's division of labor.

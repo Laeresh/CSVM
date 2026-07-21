@@ -637,3 +637,48 @@ to decide.
 The pinned v0.6.1 binary stays in `tools/` as the documented fallback, and `cam_anim`/
 `mis_anim` remain skipped by `ExtractAssets.ps1` — the fork extracts them byte-identically,
 but nothing consumes them until plan item 7.
+
+## 2026-07-21 — mech3ax CS revival plan item 14: upstream PRs prepared (not opened)
+
+Split the fork's single working branch into the two independently-mergeable upstream PRs the
+plan called for, both off `cbb838f` (0.7.0-rc3): `pr-cs-anim` (Track B `cam_anim`/`mis_anim`,
+4 commits) and `pr-cs-gamez` (Track A CS `gamez`/`planes` revival, 1 commit). `cs-anim` was
+rebuilt as the integration branch of both and the local release binary rebuilt from it, so
+`ExtractAssets.ps1` and `extracted/` are unaffected.
+
+Making them independent — rather than stacking gamez on anim — surfaced a genuine defect. The
+anim work did not stand alone: `metadata-gen` panicked at type resolution (`type
+mech3ax_api_types::anim::events::NodeBelowAlt required by Condition.NodeBelowAlt not found`),
+because the codegen registrations for four types the *anim* work introduced had been written
+later, during the *gamez* work, and lived in the gamez commit. The 2026-07-21 gamez entry
+diagnosed this correctly but fixed it in the wrong commit; anyone taking the anim work alone —
+i.e. an upstream reviewer — got a broken generator. The registration and its changelog line
+moved into the anim branch (amended into stage 4, beside its sibling CS event registrations);
+the gamez branch no longer touches `metadata-gen`.
+
+Also decided **against** the plan's tentative third PR for the `Ascii::from_str_suffix_first`
+fix (the 72-byte `planes.zbd` diff): as implemented it is purely additive and its only caller
+is the CS texture writer, so a standalone PR would be dead code upstream. It stays in the
+gamez PR as its own changelog entry, with the alternative (fixing `from_str_suffix` itself)
+offered in the PR body but not taken — it would change MW/PM/RC write behaviour and there are
+no MW/PM/RC installs here to verify against.
+
+Per-branch doc conflicts (`README.md` support matrix, `CHANGELOG.md`) were resolved so each PR
+claims only its own support; the integration branch claims both.
+
+**Verified independently per branch**, not just in combination: `cargo build --workspace` and
+`cargo test --workspace` clean on both; `cargo run -p mech3ax-metadata-gen` clean on both (389
+files on anim, 375 on gamez); `test.py … --release` → `--- ALL OK ---` on both, each correctly
+reporting `SKIPPING crimson-cs` for the other track's suite. On the re-integrated `cs-anim`:
+`--- ALL OK ---` with nothing skipped — all 61 anim archives and all 9 gamez archives
+byte-identical. The proof that the split changed no behaviour: `git diff df16d8e cs-anim`
+(pre-split tip vs. re-integration) is **one reordered CHANGELOG line**; the code trees are
+identical. Test outputs in `.scratch/mech3ax-test-{anim,gamez,both}/` (git-ignored).
+
+Deliverables in `docs/upstream-pr/`: `README.md` (branch table, split rationale, verification,
+push commands), `pr-0-discussion.md` (a short pre-PR question to upstream — was dropping CS
+`gamez` a bandwidth call or an architectural one? — which determines how much polish the gamez
+PR is worth), and `pr-1-anim.md` / `pr-2-gamez.md` as ready-to-paste PR bodies.
+
+**Nothing is pushed and no PR is open.** Pushing the branches and all upstream communication
+are the user's, per the project's division of labor.
