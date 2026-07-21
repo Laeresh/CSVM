@@ -103,7 +103,7 @@ across scenarios; `zeppelins.json` is the gameplay config of the always-present 
 zeppelin (`multiplayer1zep`), not a state selector. Scenario selection evidently drives
 spawns/objectives/AI at engine level, not the world build.
 
-## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (fork decode: container + defs + events COMPLETE)
+## Compiled anim archives — `cam_anim.zbd` / `mis_anim.zbd` (fork support COMPLETE, CLI wired)
 
 The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
 scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
@@ -112,8 +112,13 @@ scoping the anim-playback engine (Run-2 item 9); since then the project's mech3a
 `AnimDef` + event decode (item 4, 2026-07-21), and the SI-script frame decode (item 5,
 2026-07-21) round-trip **byte-identically on all 61 archives of this install** with no
 raw regions left except the per-axis spline coefficient blocks (kept as bytes by
-upstream's own MW/PM convention; their semantics are decoded below). Only the CLI is not
-wired yet (item 6). Everything below is byte-verified against this install.
+upstream's own MW/PM convention; their semantics are decoded below). The CLI landed with
+item 6 (2026-07-21): `unzbd cs anim <archive> <zip>` / `rezbd cs anim <zip> <archive>`
+extract to the same zip-of-JSON shape as MW/PM/RC (per-def JSONs + per-script `*.zan.json`
++ `metadata.json`; the CS-only container data — the two base-file entries and the raw
+runtime pointers `defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`, which vary
+per archive and fit no PM-style mission table — ride in optional metadata fields).
+Everything below is byte-verified against this install.
 
 **Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
 spline scripts that exist **nowhere as loose files** — they are compiled only into these
@@ -245,9 +250,15 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   own MW/PM choice). Scale block: translate's shape (rare — 477 frames set scale).
 - **Validation state:** the fork's semantic decode round-trips **all 61 archives
   byte-identically** with every one of the install's **1090 scripts frame-decoded**
-  (76,845 frames). The 2026-07-18 survey's "24 of 48 C1 scripts fail to parse" was an
-  artifact of not knowing the record delimiting (resolved by the headers + flags=0
-  frames); no camera/`cpilot_eject` frame-data variant exists. Train data: 4 scripts
+  (76,845 frames) — since item 6 also through the real CLI zip pipeline (test.py
+  `--- ALL OK ---`, which additionally exercises the JSON layer). The 2026-07-18 survey's
+  "24 of 48 C1 scripts fail to parse" was an artifact of not knowing the record delimiting
+  (resolved by the headers + flags=0 frames); no camera/`cpilot_eject` frame-data variant
+  exists. A second uninitialized-data quirk besides `pfighter11.zan` surfaced at the JSON
+  layer (item 6): `carneypkup_cam.zan;camera1` (C5/M02) carries one degenerate frame
+  (start=end=0) whose translate+rotate `delta` vectors are six `0xFFC00000` NaNs — the
+  only non-finite decoded floats in the whole install (measured field-by-field). JSON
+  cannot represent NaN, so the fork preserves the bits in an optional `delta_raw` field. Train data: 4 scripts
   (`tr_passengine1/tankercar1/boxcar1/caboose1.zan`) × 90 frames × ~3.64 s (= 40 ticks at
   `SCRIPT_FRAME_RATE` 11), total ~327 s per loop, starting at the parked consist position
   `(−6943…−6961, 128, −5456…−5412)` and covering a ~3.9 × 2.2 km track loop — all

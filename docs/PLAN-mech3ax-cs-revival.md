@@ -83,7 +83,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 3. ☑ Implement `crates/anim/src/cs/` container + def-list + info block, byte-region-correct (garbage-preserving) round-trip (done 2026-07-20, see section 3 — round-trip verified **byte-identical on all 61 archives**, exceeding the planned C1-only bar)
 4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
 5. ☑ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (done 2026-07-21, see section 5 — all 1090 scripts of all 61 archives frame-decode byte-exactly; the "failure variant" never existed, and the rotate cubics are half-angle offsets composed `exp(v)⊗base`)
-6. ☐ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install
+6. ☑ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install (done 2026-07-21, see section 6 — test.py `--- ALL OK ---`, all 61 archives byte-identical through the real zip pipeline)
 7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup
 
 **Track A — `gamez.zbd`/`planes.zbd` (do second):**
@@ -385,6 +385,41 @@ across the whole install, not just C1.
 mission's `mis_anim.zbd` in the real install (answered in item 1: the
 `tools/test-versions/crimson-cs/zbd` junction + `strings.dll` copy satisfies `name_to_game`'s
 `-cs` convention as-is — no `test.py` change needed).
+
+**DONE 2026-07-21** (fork commit `946b79d`). The CLI arms turned out to require an API
+refactor first: `cs::read_anim`/`write_anim` had kept item 3's whole-archive in-memory
+struct, while the CLI's `anim()` builds on the `SaveItem`/`LoadItem` callback shape all
+three other games share — so the CS module was reshaped to match PM exactly (per-def and
+per-script callbacks, `AnimMetadata` in/out; the common `ANIMATION_LIST` entry read/write
+factored out for CS's header-counted list). Where the CS container carries data
+`AnimMetadata` had no slot for, new **optional CS-only metadata fields** follow item 4's
+API precedent: `base_files` (the two gamez/planes.zbd entries) and `ptrs`
+(`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/`zero_def_flags`) — a 61-archive info-block
+survey (`.scratch/cs_anim_info_probe.py`) settled the item-2 design question **against** a
+PM-style `Mission` pointer table (56 distinct `defs_ptr` values) and pinned every other
+field constant for PM-style asserts (`unk40` is 0 for all 13 multiplayer missions, 1
+otherwise; `script_count` may be 0, which PM's asserts forbid). `test.py` runs CS via a
+`*_anim.zbd` glob (its per-folder name mangling needed nothing else); README support
+matrix + CHANGELOG updated; the item-4 event types and the new `AnimPtrs` registered in
+`metadata-gen` (item 4 had skipped registration).
+
+One real bug surfaced only at this item's JSON layer, which the in-memory round-trip test
+can't see: `carneypkup_cam.zan;camera1` (C5/M02) contains a degenerate frame whose
+translate+rotate `delta` vectors are six `0xFFC00000` NaNs — serde_json writes NaN as
+`null`, which fails to parse back. A field-by-field survey (`.scratch/cs_anim_nanprobe.py`)
+showed these are the **only** non-finite decoded floats in the whole install (bases,
+frame times, and all other deltas are finite), so `TranslateData`/`RotateData`/`ScaleData`
+gained an optional `delta_raw` bits-preserving field (the same idiom as the adjacent
+`garbage` field, which stores a file f32 as u32 for exactly this reason); MW/PM/RC output
+is unchanged (field absent when finite).
+
+**Verified:** `test.py` `--- ALL OK ---` on the full install — all 61 archives
+byte-identical through the real `unzbd cs anim` → `rezbd cs anim` zip pipeline (which
+also exercises the JSON serialization layer for every def and script), all other suites
+(sounds/interp/messages/reader/textures, 52 texture ZBDs) unchanged; full workspace
+`cargo test` green incl. the in-memory 61/61 round-trip; `cargo clippy` clean on every
+touched crate (anim, anim-events, api-types, unzbd, rezbd; remaining warnings
+pre-existing).
 
 ## 7. Consume in this project
 

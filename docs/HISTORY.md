@@ -418,3 +418,38 @@ Verified: `cargo test` with `CS_ANIM_DIR` 61/61 byte-identical; full workspace s
 green; clippy clean on the crate. Docs updated same turn (`docs/formats/
 anim-definitions.md` SI-pool + validation sections, plan item 5 DONE, CLAUDE.md format
 table). Next: item 6 (CLI wiring + test.py CS anim skip flip).
+
+## 2026-07-21 — mech3ax fork: CS anim CLI wired + full-install test.py pass (plan item 6)
+
+`unzbd cs anim` / `rezbd cs anim` work end-to-end (fork commit `946b79d`, branch
+`cs-anim`); test.py's CS anim skip is flipped (a `*_anim.zbd` glob for CS) and reports
+`--- ALL OK ---` across the whole install — **all 61 cam_anim/mis_anim archives
+byte-identical through the real zip pipeline**, all other suites unchanged. README
+support matrix + CHANGELOG updated in the fork.
+
+- The CLI arms required reshaping `cs::read_anim`/`write_anim` from item 3's
+  whole-archive in-memory struct onto the `SaveItem`/`LoadItem` callback API all other
+  games share (per-def/per-script items, `AnimMetadata` in/out); the common
+  `ANIMATION_LIST` entry read/write was factored out for CS's header-counted list.
+- CS container data with no `AnimMetadata` slot rides in new optional fields (item-4
+  precedent): `base_files` + raw `ptrs` (`defs_ptr`/`scripts_ptr`/`world_ptr`/`unk40`/
+  `zero_def_flags`). A 61-archive info-block survey (`.scratch/cs_anim_info_probe.py`)
+  ruled out a PM-style `Mission` pointer table (56 distinct `defs_ptr`), pinned every
+  other field constant for asserts, and found `unk40` = 0 exactly on the 13 multiplayer
+  missions and `script_count` legitimately 0 (PM asserts it > 0).
+- One bug only the JSON layer could show (the in-memory round-trip test never
+  serializes): `carneypkup_cam.zan;camera1` (C5/M02) has a degenerate frame whose
+  translate+rotate deltas are six `0xFFC00000` NaNs — serde_json writes NaN as `null`,
+  which fails to parse back. A field-by-field survey (`.scratch/cs_anim_nanprobe.py`)
+  confirmed these are the install's only non-finite decoded floats, so
+  `TranslateData`/`RotateData`/`ScaleData` gained an optional bit-preserving
+  `delta_raw` (same idiom as the adjacent `garbage` f32-as-u32 field); MW/PM/RC JSON
+  output is unchanged. Also registered the item-4 event types + `AnimPtrs` in
+  metadata-gen (item 4 had skipped registration).
+
+Verified: test.py `--- ALL OK ---` (61 anim archives + sounds/interp/messages/reader/
+textures unchanged); full workspace `cargo test` green incl. the in-memory 61/61
+round-trip; clippy clean on every touched crate. Docs same turn: plan item 6 DONE,
+`docs/formats/anim-definitions.md` (CLI + NaN-delta quirk), CLAUDE.md format table.
+Next: item 7 — consume in this project (ExtractAssets.ps1 anim mode, SI-script playback
+for the train/trucks, backlog cleanup).
