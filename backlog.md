@@ -149,3 +149,26 @@ compass drum, fog range factor, flight-model constants + the item-12 per-axis
 `PitchTune`/`YawTune`/`RollTune` (calibrated 2026-07-19, feel A/B pending), control-surface
 angles/slew, cloud-puff opacity/density, wing-light flash duration, collision feel vs
 building corners, item-10 damage feel set, item-11 `WhineMixGain` 0.12.
+
+## C5 ground z-fighting — coarse quad coplanar with the detailed city ground
+
+Found 2026-07-21 while investigating the animation-runtime performance regression; the user
+asked whether follow-up plan item 3 would clear it. **It would not** — full diagnosis in
+`docs/HISTORY.md` (2026-07-21 entry), summarised here so it isn't re-chased.
+
+Repro: `--viewer --chapter=C5 --sky-zone=zone2 --campos=-9533.178,76.319,-3367.413
+--lookat=-9451.281,28.148,-3398.597`, measured with `--shots=5 --jitter=0.006` (a *sub-pixel*
+dither — the 0.15° default moves the camera far too much to isolate depth flips). 8.42% of
+pixels flip.
+
+Ruled out: the map-edge extender (identical flicker without `--sky-zone`), and entity rosters /
+item 3 (only 2 mesh nodes within 1500 m, generic ground names — item 3 hides discrete roster
+objects). Confirmed cause: the depth bias is proportional to view distance
+(`VERTEX *= 1.0 - (depth_bias + node_bias)`), so coplanar surfaces sharing a draw priority get
+`rank × 2e-6` ≈ 0.16 mm at ~80 m. A 100× bias drops the flicker to 0.01%.
+
+**Open question before fixing:** raising the bias makes a large flat low-resolution quad win
+over the detailed night-city ground, which is likely backwards. Why is that coarse quad drawn
+coplanar with the fine city at all — is it a coarse LOD tile that SceneBuilder's nearest-LOD
+selection should have dropped? — and which does the original draw on top? Answer that before
+touching the constants; a bias bump alone would lock in the wrong surface across all chapters.

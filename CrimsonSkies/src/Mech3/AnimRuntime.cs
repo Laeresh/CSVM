@@ -1212,6 +1212,9 @@ public sealed partial class AnimRuntime : Node
         private float _due;           // when the next event fires
         private bool _done;
         private int _loopsLeft = -2;  // -2 = no loop seen yet
+        // Did the current loop iteration schedule any time? Decides whether reaching the
+        // LOOP starts the next iteration at once or yields to the next frame.
+        private bool _iterScheduledTime;
         // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
         // reached with the flag set is the *fall-through* off the end of a taken branch and
         // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
@@ -1233,6 +1236,8 @@ public sealed partial class AnimRuntime : Node
                 {
                     _pc++;
                     _due = NextDue(ev, duration);
+                    if (duration > 0f || ev.StartTime > 0f)
+                        _iterScheduledTime = true;
                     continue;
                 }
                 // Control flow.
@@ -1248,17 +1253,25 @@ public sealed partial class AnimRuntime : Node
                         }
                         if (_loopsLeft > 0)
                             _loopsLeft--;
-                        bool instantIteration = _clock <= 0f;
+                        // A loop over purely instantaneous events is the data's "keep this
+                        // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
+                        // whose emitters run on their own TIME_INTERVAL; the poll idiom
+                        // `If … CallAnimation; Endif; Loop{-1}` is the other shape). Left
+                        // unchecked it spins as fast as the per-frame guard allows; yield to
+                        // the next frame instead, so such a loop polls exactly once a frame.
+                        // Loops whose body takes time are unaffected — they are already
+                        // waiting on _due, and must start their next iteration immediately.
+                        //
+                        // The test is "did this iteration schedule any time?", NOT "is the
+                        // clock zero": the clock is reset to 0 here, so on the NEXT frame it
+                        // reads dt at this point and an instantaneous body ran a second time
+                        // before yielding — every poll loop in the chapter costing double.
+                        bool instantIteration = !_iterScheduledTime;
                         _pc = 0;
                         _clock = 0f;
                         _due = 0f;
+                        _iterScheduledTime = false;
                         _branchTaken.Clear(); // a new iteration re-tests every condition
-                        // A loop over purely instantaneous events is the data's "keep this
-                        // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
-                        // whose emitters run on their own TIME_INTERVAL). Left unchecked it
-                        // spins as fast as the per-frame guard allows; yield to the next frame
-                        // instead. Loops whose body takes time are unaffected — they are
-                        // already waiting on _due.
                         if (instantIteration)
                             return;
                         break;
@@ -1438,8 +1451,23 @@ public sealed partial class AnimRuntime : Node
         return candidates;
     }
 
+    /// <summary>Every world node matching a NAME pattern, optionally restricted to one
+    /// subtree. A full scan of the node index — and the data calls it constantly, because the
+    /// poll idiom (<c>If … CallAnimation; Endif; Loop{-1}</c>) re-dispatches its body every
+    /// frame, so C5's ~400 live poll loops asked for hundreds of resolutions per frame.
+    ///
+    /// The answer is memoized because it cannot change: <see cref="_index"/> is built once
+    /// during the bootstrap and never added to, and the only runtime mutation of the world
+    /// tree is <see cref="SetSubtreeActive"/>, which toggles visibility and colliders without
+    /// reparenting or freeing anything. Callers must treat the returned list as read-only.
+    /// </summary>
     private List<Node3D> FindAll(string pattern, Node3D? scope)
     {
+        // Godot object identity is by native pointer, so key on the instance id rather than
+        // relying on GodotObject equality semantics inside a tuple comparer.
+        var key = (pattern, scope?.GetInstanceId() ?? 0UL);
+        if (_findCache.TryGetValue(key, out var hit))
+            return hit;
         var match = Matcher(pattern);
         var result = new List<Node3D>();
         foreach (var (node, srcName) in _index)
@@ -1451,8 +1479,11 @@ public sealed partial class AnimRuntime : Node
             if (matches && (scope == null || node == scope || scope.IsAncestorOf(node)))
                 result.Add(node);
         }
+        _findCache[key] = result;
         return result;
     }
+
+    private readonly Dictionary<(string Pattern, ulong Scope), List<Node3D>> _findCache = new();
 
     // Wildcard NAME → predicate: '*' (and the '**' template form) match any run of
     // characters, '#' a run of digits ('air_gen#' covers 'air_gen'). Plain names compare

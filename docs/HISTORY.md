@@ -1300,3 +1300,92 @@ triggers the four `fire.zrd.json` animations** — their names appear in exactly
 own, and `CALL_ANIMATION` references animations by name string only (no index form exists
 anywhere in this data). The original invokes them engine-side, so reproducing a persistent fire
 means choosing our own trigger. User is checking the disassembly for xrefs to those strings.
+
+## 2026-07-21 — Animation runtime performance: C5 was 7.5 fps, script-bound (fixed, 8×)
+
+**Report:** "performance tanked in the last few commits; C5 has over 130 ms script times."
+
+**Reproduced** with `--perf` on C5: 7.5 fps, 133 ms/frame, **GPU 0.27–0.47 ms and render-CPU
+2 ms** — i.e. essentially the whole frame was C# — so this was never a rendering-cost question
+(the same trap the `LIGHT_STATE` cost fell into; `--perf` exists because of it).
+
+**Diagnosed** by temporary probe scaffolding (named stopwatch accumulators dumped once a
+second, plus a per-event-kind dispatch counter). Two compounding causes, both in `AnimRuntime`:
+
+1. **`FindAll` was an uncached full scan of the node index**, and the instance walk spent
+   **296 ms of its 299 ms** inside it across **~700 calls/frame**. Each call walks every world
+   node running a matcher predicate plus `IsAncestorOf`. The `LIGHT_STATE` work had already
+   cached *its* host resolution for exactly this reason; nothing else was.
+2. **Every instantaneous loop body ran twice per frame, not once.** The yield guard read
+   `bool instantIteration = _clock <= 0f`, but the clock is reset to 0 *by the loop itself*, so
+   on the next frame it reads `dt` at that point — the guard fails, the body runs a second
+   time, and only then does the clock read 0 and yield. Measured exactly: `Loop` 814
+   dispatches/frame → 407 after the fix, `PufferState` 558 → 279, `ObjectActiveState` 417 →
+   205, `If` 220 → 110. C5 runs ~400 live poll loops (`If … CallAnimation; Endif; Loop{-1}`),
+   so this doubled the call volume feeding cause 1.
+
+**Fixed:** memoize `FindAll` on `(pattern, scope instance id)`, and test "did this iteration
+schedule any time?" (a flag set when an event reports a duration or a start offset) instead of
+"is the clock zero". The memo is sound because `_index` is built once in the bootstrap and
+never added to, and the only runtime mutation of the world tree is `SetSubtreeActive`, which
+toggles visibility and colliders without reparenting or freeing — so the answer cannot change.
+Callers must treat the returned list as read-only (none mutate it today).
+
+**Verified** by an 8-chapter A/B (stash the fix, rebuild, re-run, diff):
+
+| | C1 | C1B | C1C | C2 | C2B | C3 | C4 | C5 |
+|---|---|---|---|---|---|---|---|---|
+| before | 34.3 | 31.9 | 33.1 | 31.4 | 28.2 | 45.8 | 122.5 | 133.2 ms |
+| after | 16.7 | 16.7 | 16.7 | 16.7 | 16.7 | 16.8 | 16.7 | 16.7 ms |
+| | 2.1× | 1.9× | 2.0× | 1.9× | 1.7× | 2.7× | 7.3× | **8.0×** |
+
+Every chapter now sits on the 60 fps vsync cap, so these are floors, not ceilings. **Behaviour
+is unchanged:** every bootstrap figure is identical in all 8 chapters — defs, anchored count,
+state ops applied, unresolved, ON_STARTUP + startanims, live instances, live motions, puffer
+emitters, condition tallies, unacted event kinds. Only the bracketed load timings moved, all
+downward (C5 reset states 665→402 ms, start 274→130 ms; C1 600→366 ms), since the bootstrap
+resolves through the same cache. Static plane viewer and static C1 screenshots **byte-identical**
+(md5); the full mode battery (fly/stunt/viewer/damage/2P/4P race/freecam/menu) is error-free.
+
+One residual, sub-perceptual and understood: the static C5 world view differs by ~19k dark
+pixels at **Δ≈1/255 in the red channel only**. Poll loops now advance light flicker once a
+frame instead of twice, so warm `LIGHT_STATE` spill settles at a marginally different value.
+Not structural — the C5 static view is otherwise deterministic run-to-run (1 px).
+
+**Note on `--perf`'s script figure:** it reports Godot's `TIME_PROCESS` monitor, which reads
+~2.2× the measured frame time here. Trust `frame`/`fps` for absolutes and use `script` only as
+an A/B ratio.
+
+## 2026-07-21 — C5 ground z-fighting: diagnosed, NOT a mission-state/roster problem
+
+User reported ground z-fighting in C5 and asked whether follow-up plan **item 3**
+(mission-spawned entity rosters) would clear it. It would not — recorded here so it isn't
+re-chased. Repro camera (user-supplied):
+`--campos=-9533.178,76.319,-3367.413 --lookat=-9451.281,28.148,-3398.597`.
+
+Measured with the purpose-built burst tooling — `--shots=5 --jitter=0.006`, a *sub-pixel*
+dither so camera motion can't masquerade as a depth flip (the default 0.15° moves far too much
+here: it changed 92% of pixels and told us nothing). **8.42% of pixels flip hard.**
+
+Three findings:
+- **Not the map-edge extender.** Rendering the same pose without `--sky-zone` (which is what
+  enables extension in static views) gives 77,629 flipping px vs 77,566 with — identical.
+- **Not entities, so not item 3.** The node-label overlay shows only **2 mesh nodes within
+  1500 m**, generically named (`g4684`) — terrain/city ground, not roster entities. Item 3
+  spawns/hides discrete objects (zeppelins, CTF props); it cannot touch a ground surface. The
+  mechanism that fixed the *C1 airfield* coplanar flicker was a different one (anchored
+  RESET_STATEs hiding `destroyed` variants), and C5's safety net reports just 1 uncovered
+  destroyed subtree.
+- **It is our depth-bias replication.** Raising `SurfaceRankBias` 2e-6→2e-4 and `NodeOrderBias`
+  5e-8→5e-6 collapses the flicker from 8.42% to **0.01%**. The shader applies
+  `VERTEX *= 1.0 - (depth_bias + node_bias)`, so separation is proportional to view distance:
+  two coplanar surfaces sharing a draw priority get only `rank × 2e-6`, which at the ~80 m
+  eye-to-ground distance here is 0.16 mm — far below depth-buffer precision.
+
+**Do not just raise the constants.** With the fight resolved, what wins is a large **flat,
+washed-out, low-resolution quad** lying over the detailed night-city ground (its hard straight
+edges cut across the frame) — i.e. biasing picks the surface that is probably the *wrong* one.
+The real question is why that coarse quad is drawn coplanar with the fine city at all (a
+coarse LOD tile built alongside the fine one is the obvious suspect, given SceneBuilder's
+nearest-LOD selection) and which the original draws on top. Unscheduled; belongs in the
+backlog, not in item 3.
