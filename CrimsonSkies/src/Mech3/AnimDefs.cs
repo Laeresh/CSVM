@@ -192,6 +192,9 @@ public static class AnimDefs
                 if (ReaderCondition(fields) is { } condition)
                     data["condition"] = condition;
                 break;
+            case "CallAnimation":
+                AddCallTarget(data, fields);
+                break;
         }
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.
@@ -385,6 +388,31 @@ public static class AnimDefs
         if (AnimData.AsNum(v[0]) is not { } min || AnimData.AsNum(v[1]) is not { } max)
             return null;
         return new Dictionary<string, object?>(StringComparer.Ordinal) { ["min"] = min, ["max"] = max };
+    }
+
+    // CALL_ANIMATION's optional target node — the node the CALLEE is re-anchored onto, which
+    // is how one authored template serves many sites (`CALL_ANIMATION [NAME [huge_30sec_fire],
+    // WITH_NODE [rc*_dbase1]]` puts a fire on one ship section). The reader spells it three
+    // ways; the compiled form nests the first two under `parameters` as a one-key union, so
+    // normalize to that and AnimRuntime keeps a single path.
+    //
+    // NOTE this must not touch data["node"]/data["name"] — for this event kind those already
+    // hold the name of the ANIMATION being called, which is a different thing entirely.
+    private static void AddCallTarget(Dictionary<string, object?> data,
+        Dictionary<string, List<object?>?> fields)
+    {
+        foreach (var (readerKey, tag) in new[] { ("WITH_NODE", "WithNode"), ("AT_NODE", "AtNode") })
+        {
+            if (First(fields, readerKey) is not string node)
+                continue;
+            data["parameters"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                [tag] = new Dictionary<string, object?>(StringComparer.Ordinal) { ["node"] = node },
+            };
+            return;
+        }
+        if (First(fields, "OPERAND_NODE") is string operand)
+            data["operand_node"] = operand;
     }
 
     private static void AddFromTo(Dictionary<string, object?> data,

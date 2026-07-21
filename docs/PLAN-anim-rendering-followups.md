@@ -17,7 +17,7 @@ screenshot at the specific location the report came from.
 ## Checklist
 
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
-2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights done 2026-07-21; texture/sprite animation re-scoped, see below)**
+2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
 3. ☐ Mission-spawned entity rosters (`hk_zep`, CTF props)
 4. ☐ `texture_scroll` rendering
 
@@ -202,37 +202,76 @@ Remaining kinds after this pass (C1 bootstrap counts): `ObjectMotion`×73,
 `ObjectOpacityState`×58, `SoundNode`×38, `ObjectAddChild`×38, `Callback`×8,
 `ObjectCycleTexture`×1.
 
-### Next up: `OBJECT_ADD_CHILD` (scoped 2026-07-21, not started)
+**`EFFECTS` is node-keyed, not texture-keyed — settled 2026-07-21 (user observation).** This
+decides the design and was worth the check: `flame01` (the refinery gas flare, node 2998 under
+`vent1` → `refinery.flt`) and `mb_spinflame` (the 3-poly muzzle burst) both render **material
+88 = `fire101.tif`**, which is frame 1 of the `fire1` flipbook. If EFFECTS animated by
+texture/material, both would flicker for free and the refinery would cost us nothing. The user
+confirmed a **sustained** muzzle flash never changes texture — always `fire101`, rotating and
+flashing but no frame advance — which rules that out (a brief flash would have been weak
+evidence; a held one is not). So the flipbook binds specifically to the `fire1`/`fire2` template
+nodes, `flame01` is a separate static base flame, and the animated fire the user sees at the
+refinery is a **placed `fire2` instance** — 6 frames @ 5 fps, matching their independent
+"looks like only 6 states" read.
 
-Chosen as the next piece of item 2 because it unblocks a whole family (the `EFFECTS` fire
-flipbooks and burning objects generally). Survey done, so a fresh session can start from here:
+### ~~Next up: `OBJECT_ADD_CHILD`~~ — WITHDRAWN 2026-07-21, both premises were false
 
-- **1,152 `ObjectAddChild` + 192 `ObjectDeleteChild`** install-wide; 38 at C1 bootstrap. The
-  payload is trivial - `{parent, child}`, both names - so the handler itself is small.
-- **It is NOT only a destruction feature.** 293 of the defs using it are `OnStartup` against 822
-  `OnCall`, so a real part of it composes the world at build time (e.g. the `apassengers`
-  defs add named passenger characters to a `pass_st` station node). That matters because we
-  have no weapons, so anything gated purely on combat damage would be unverifiable today.
+`OBJECT_ADD_CHILD` was scoped here as the next piece of item 2 "because it unblocks a whole
+family (the `EFFECTS` fire flipbooks and burning objects generally)". A survey of all 1,152
+`ObjectAddChild` + 192 `ObjectDeleteChild` events before writing any code disproved that, and
+disproved the supporting claim too. **Do not implement it as a means to the fire flipbooks.**
 
-**Two decode questions to settle BEFORE writing the handler** - they decide the design:
+| Claim made here | What the data says |
+|---|---|
+| "unblocks the `EFFECTS` fire flipbooks" | `fire1.flt`/`fire2.flt` are **never** an `ObjectAddChild` child — 0 of 1,152. Nothing reparents them. The linkage does not exist. |
+| "293 of the defs using it are `OnStartup` against 822 `OnCall`" | **Zero** `OnStartup` defs contain `ObjectAddChild`, install-wide. It is 838 `ByRange{0,90000}`, 240 `OnCall`, 9 `ByRange{0,40000}`. |
+| "the `apassengers` defs add passengers to a `pass_st` station node" | `pass_st` is **not a gamez node in any chapter** — the parent cannot resolve. Those 9 defs are `OnCall` and the bootstrap never reaches them. |
 
-1. **Move or clone?** `fire2.flt` is a single node, but many objects burn. Does the data reparent
-   the one template (implying only one fire at a time, and that `OBJECT_DELETE_CHILD` returns
-   it), or does the original instance it per site? Check whether any two live defs ever add the
-   same child to different parents concurrently.
-2. **The templates are not built at all.** `fire1.flt`/`fire2.flt` are parentless roots, and
-   `WorldBuilder` builds only the World's children plus partition-referenced subtrees, so they
-   are absent from the scene. Something has to construct and hold that pool (inactive) before a
-   reparent can target it - decide where that lives, and whether the same is true of the other
-   1,152 events' children.
+What the 1,152 events actually are: **865 (75%) attach sound *definitions*, not nodes**
+(`snd_zepengine`→`spin` alone is 849; `snd_zepengine`/`snd_police`/`snd_waterfall` are entries
+in `sounds.zrd.json`, not `nodes.json`), so they are inert until `Sound`/`SoundNode` lands;
+~148 are cutscene machinery (`camera1`/`player`/`cpilot`) for cutscenes this project does not
+have; the rest are mission-cutscene entities in M02/M04/M05/MP3, plus 20 CTF flag lights that
+belong to item 3. **Implementing it today is a provable no-op.** The real dependency runs the
+other way: `ObjectAddChild` is mostly the positioning layer for sound emitters, so it should
+follow `Sound`, not precede it.
 
-Reparenting in Godot must preserve the world transform (`RemoveChild`/`AddChild` then re-apply
-`GlobalTransform`), and `AnimRuntime._rest` records an authored pose per touched node, so check
-how a reparent interacts with that before assuming it is inert.
+Both of its "decode questions to settle first" are answered as a side effect. **Clone, not
+move**: `snd_waterfall` goes to `waterfall01/02/03` and `snd_police` to four cars concurrently
+(15 of 40 distinct children have multiple parents). **The template-pool question is moot** for
+the fire nodes, since nothing targets them.
 
-Once this lands, the `EFFECTS` flipbooks (see item 2's re-scope above) are a small addition on
-top: `TextureCycler` already plays frame lists, so EFFECTS only needs the reader parsed and
-bound to the node's material.
+### Next up instead: template instancing — `CALL_ANIMATION` targets **(the runtime half LANDED 2026-07-21)**
+
+Chasing the above surfaced the actual mechanism, and a real bug. See the item-2 re-scope
+above for the fire findings; the short version is that effect templates are placed by
+`CALL_ANIMATION`'s target parameter, not by reparenting.
+
+**Landed:** `CallAnimation` was dropping its target and running every callee on the *caller's*
+anchor. Fixed in `AnimRuntime.CallTargetAnchor` + an `AnimDefs` normalizer case — see
+`docs/HISTORY.md` and the `anim-definitions.md` "CALL_ANIMATION carries a target node" section.
+
+**Postponed 2026-07-21 (user decision): the remaining fire work is a minor detail and its
+trigger is unrecoverable** — the user searched the disassembly and found no xref either. Moved
+to `backlog.md` under "Blocked / deferred" with the full decode, so nothing needs re-deriving
+if it is ever picked up. What was left, in dependency order:
+
+1. **Build the effect-template pool.** `fire1`/`fire2` (and `large_firetrail`, `short_firetrail`,
+   `lg_fireball`, … — the parentless roots at gamez indices ~74–150) are real geometry that
+   `WorldBuilder` never builds, because it builds only World children plus partition-referenced
+   subtrees. Until they exist in the scene, a retargeted call to a fire animation has nothing to
+   pose. Decide where the pool lives and whether instances are per-site copies.
+2. **The `EFFECTS` flipbook.** `effects.zrd.json` binds `fire1` → 12 maps @ 10 fps and `fire2` →
+   6 maps @ 5 fps. `TextureCycler` already plays frame lists, so this is small **once the
+   templates are built**. Note the maps resolve **by filename from the texture archive**, not
+   through the gamez texture table: `textures.json` registers only `fire101`/`fire102` in every
+   chapter, while `extracted/<ch>/texture/` holds all twelve `fire1NN.png`.
+3. **The trigger is not in the data.** All four `fire.zrd.json` animations (`timed_big_fire`,
+   `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`) appear in **exactly one
+   file — their own**. Nothing in any compiled archive or reader calls them, and
+   `CALL_ANIMATION` references animations by name string only (no index form exists anywhere).
+   So the original invokes them engine-side. Reproducing a persistent fire means choosing our
+   own trigger; **user is checking the disassembly** for xrefs to those strings.
 
 ## 3. Mission-spawned entity rosters (`hk_zep`, CTF props)
 

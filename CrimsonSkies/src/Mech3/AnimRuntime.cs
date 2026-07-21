@@ -203,6 +203,7 @@ public sealed partial class AnimRuntime : Node
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
         ReportConditions();
+        ReportRetargets();
         ReportUnhandled();
     }
 
@@ -412,9 +413,19 @@ public sealed partial class AnimRuntime : Node
                 // bootstrap passes call Start directly, and the hangar-door pair that relies
                 // on "later registration wins" resolves through AddMotion, not through this.)
                 if (ev.Data.Str("name") is { } callName)
+                {
+                    // A call may re-anchor the callee onto ANOTHER node. That is the data's
+                    // template-instancing mechanism: the effect templates (the fire/firetrail/
+                    // fireball roots) are parentless single copies, and the call is what puts
+                    // one at a specific site — `CallAnimation{huge_30sec_fire, WithNode:
+                    // rc*_dbase1}` burns one ship section. 29,633 WITH_NODE + 7,640 AT_NODE +
+                    // 179 OPERAND_NODE call sites carry a target; ignoring it ran every one of
+                    // them on the CALLER's anchor instead of where the data put it.
+                    var callAnchor = CallTargetAnchor(ev, def, anchor) ?? anchor;
                     foreach (var target in _program.ByAnimName(callName))
-                        if (!IsLive(target, anchor))
-                            Start(target, anchor);
+                        if (!IsLive(target, callAnchor))
+                            Start(target, callAnchor);
+                }
                 return true;
 
             case "StopAnimation":
@@ -708,6 +719,44 @@ public sealed partial class AnimRuntime : Node
         return found.Count > 0 ? found[0] : null;
     }
 
+    /// <summary>
+    /// The anchor a CALL_ANIMATION hands its callee, or null when the call names no target
+    /// (then the caller's own anchor stands, which is what every call used to get).
+    ///
+    /// The target is written in the CALLER's namespace, so it resolves through the caller's
+    /// definition and scope. Three spellings reach here as two shapes: compiled events nest
+    /// <c>WITH_NODE</c>/<c>AT_NODE</c> under <c>parameters</c> as a one-key union, which is
+    /// also what the reader front-end normalizes to; <c>OPERAND_NODE</c> stays a bare name.
+    ///
+    /// A named-but-unresolvable target falls back to the caller's anchor rather than dropping
+    /// the call — that is the pre-change behaviour, so a node the builder skipped can't make
+    /// an effect disappear — but it is counted, since silently mis-placing an effect is
+    /// exactly the failure this method exists to fix.
+    /// </summary>
+    private Node3D? CallTargetAnchor(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        string? targetName = null;
+        if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p })
+            targetName = new AnimData(p).Str("node");
+        targetName ??= ev.Data.Str("operand_node");
+        if (targetName == null)
+            return null;
+
+        var resolved = ResolveOne(targetName, def, anchor);
+        if (resolved != null)
+            _retargeted++;
+        else
+            _retargetUnresolved++;
+        // Once per distinct (callee, target, caller) triple. The data's poll idiom re-issues
+        // its calls every frame, so an unconditional line here would bury the log — the same
+        // reason condition logging prints only first-evaluation and verdict flips.
+        if (DebugMotions && _retargetsLogged.Add($"{ev.Data.Str("name")}|{targetName}|{def.AnimName}"))
+            GD.Print($"anim: retarget '{ev.Data.Str("name")}' onto '{targetName}' "
+                     + $"({(resolved != null ? resolved.GetMeta(NameMeta).AsString() : "UNRESOLVED")})"
+                     + $" [caller {def.AnimName}]");
+        return resolved;
+    }
+
     private void CallSequence(AnimDefinition def, Node3D? anchor, string name)
     {
         var seq = def.Sequences.FirstOrDefault(s =>
@@ -875,6 +924,20 @@ public sealed partial class AnimRuntime : Node
     {
         var (t, f) = _conditions.TryGetValue(kind, out var c) ? c : (0, 0);
         _conditions[kind] = result ? (t + 1, f) : (t, f + 1);
+    }
+
+    // CALL_ANIMATION retargeting tallies. Deliberately NOT routed through Count(), which is
+    // the "event kinds not yet acted on" channel — a retargeted call is acted on, and filing
+    // it there would report a working feature as a missing one.
+    private int _retargeted, _retargetUnresolved;
+    private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
+
+    private void ReportRetargets()
+    {
+        if (_retargeted == 0 && _retargetUnresolved == 0)
+            return;
+        GD.Print($"anim: {_retargeted} call(s) retargeted onto a named node"
+                 + (_retargetUnresolved > 0 ? $", {_retargetUnresolved} target(s) unresolved" : ""));
     }
 
     private void ReportConditions()

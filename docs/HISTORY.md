@@ -1227,3 +1227,76 @@ today, so that flicker already is the flame's flicker. And the `EFFECTS` reader
 (`effects.zrd.json`, the node-bound flipbooks `fire1`/`fire2`) is deliberately not wired up:
 those are parentless template objects the original clones to burn sites via `OBJECT_ADD_CHILD`,
 so they belong with that unimplemented event kind rather than ahead of it.
+
+## 2026-07-21 — `CALL_ANIMATION` targets: the real template-instancing mechanism (and `OBJECT_ADD_CHILD` withdrawn)
+
+Started as `docs/PLAN-anim-rendering-followups.md`'s scoped "next up" item,
+`OBJECT_ADD_CHILD`. **Surveying the data before writing code disproved both of that item's
+premises, so it was withdrawn rather than implemented**, and the survey surfaced the actual
+mechanism plus a real bug, which is what landed instead.
+
+**`OBJECT_ADD_CHILD` would have been a provable no-op.** Across all 1,152 `ObjectAddChild` +
+192 `ObjectDeleteChild` events install-wide: `fire1.flt`/`fire2.flt` are **never** an
+AddChild child (0 of 1,152), so the plan's "it unblocks the `EFFECTS` fire flipbooks" linkage
+does not exist; **zero** defs containing it are `OnStartup` (against the plan's claimed 293) —
+it is 838 `ByRange{0,90000}`, 240 `OnCall`, 9 `ByRange{0,40000}`; and its own cited build-time
+example cannot resolve, because `pass_st` is not a gamez node in any chapter. What the events
+actually are: **865 (75%) attach sound *definitions*, not nodes** (`snd_zepengine`→`spin` is
+849 alone; those `snd_*` names live in `sounds.zrd.json`), inert until `Sound`/`SoundNode`
+lands; ~148 are cutscene machinery this project has no cutscenes for; the rest are mission
+entities and 20 CTF flag lights belonging to follow-up item 3. The dependency runs opposite to
+the plan's reading — AddChild is mostly the *positioning layer for sound emitters*. Its two
+"decode questions to settle first" fell out for free: **clone, not move** (15 of 40 distinct
+children have multiple concurrent parents — `snd_waterfall` to `waterfall01/02/03`,
+`snd_police` to four cars), and the template-pool question is moot since nothing targets them.
+
+**What landed: `CallAnimation` was silently dropping its target node.** A call may name
+another node to run the callee on — `WITH_NODE` (29,633 sites), `AT_NODE` (7,640),
+`OPERAND_NODE` (179) — and the runtime ran every callee on the *caller's* anchor instead.
+That is the data's template-instancing mechanism: one authored definition serving many sites,
+and how effect templates get placed (`CALL_ANIMATION [NAME [huge_30sec_fire], WITH_NODE
+[rc*_dbase1]]` burns one ship section). `AnimRuntime.CallTargetAnchor` resolves it in the
+caller's namespace; `AnimDefs.AddCallTarget` normalizes the reader's spellings into the
+compiled `parameters` union so there is one runtime path. Two subtleties: `FindAll` matches
+`node == scope`, which is what makes anchoring ON the target resolve the callee's own
+reference to it; and the `IsLive` guard had to move to the **resolved** anchor, since instance
+identity is (def, anchor) and the caller's anchor swallows every site after the first.
+
+**Verified.** The proving case is C1/M05, where eight zeppelin engines each call the generic
+`gen_zep`/`random_prop` — whose entire body is "rotate the node named `propstill` to a random
+angle" — targeting their own `propstill`: `anim: 8 call(s) retargeted onto a named node`,
+each resolving to its own engine's node, where before all eight resolved globally to the first
+and shared one prop angle. All 8 chapters build with **zero errors**, unchanged mesh-instance
+and live-instance counts (C1 3,458 / 616 both before and after); static plane viewer
+**byte-identical** (md5); full mode battery clean (fly, stunt, viewer, damage, 2P, 4P race,
+menu, M05 story). One measurement trap worth recording: the bootstrap's `unresolved` op count
+**varies run to run on an unchanged build** (C1/M05 measured 100, 106, 107) because
+`RandomWeight` conditions take different branches — an apparent +2 regression was noise, and
+this area needs a re-measured floor rather than a single baseline run.
+
+**Fire, decoded properly (three layers, none of them `OBJECT_ADD_CHILD`).** Templates:
+`fire1`/`fire2` are real single-poly `Facade`/`CylindricalY` meshes under the **parentless
+roots** `fire1.flt`/`fire2.flt`, which `WorldBuilder` never builds. Flipbook:
+`effects.zrd.json` gives `fire1` 12 maps @ 10 fps and `fire2` 6 @ 5 fps, resolved **by
+filename from the texture archive** — every chapter's `textures.json` registers only
+`fire101`/`fire102` while `extracted/<ch>/texture/` ships all twelve `fire1NN.png`, which is
+the tell that EFFECTS is its own lookup path. Behaviours: `fire.zrd.json` holds four `ON_CALL`
+defs, all anchored on `fire2.flt`.
+
+**`EFFECTS` is node-keyed, not texture-keyed — settled by user observation**, and it decides
+the design. `flame01` (the refinery gas flare) and `mb_spinflame` (the muzzle burst) both
+render material 88 = `fire101.tif`, i.e. frame 1 of the `fire1` flipbook; if the effect bound
+to the texture, both would animate for free and the refinery would cost nothing. The user
+confirmed a **sustained** muzzle flash never changes texture — always `fire101`, rotating and
+flashing but no frame advance. (A *brief* flash would have proved nothing: 0.1 s at 10 fps is
+one frame. The held case is what makes it evidence.) So `flame01` is a static base flame and
+the animated fire at the refinery is a **placed `fire2` instance** — 6 frames @ 5 fps, matching
+the user's independent "looks like only 6 states" read. This corrects the previous entry's
+closing note, which recorded the templates as being cloned to burn sites via
+`OBJECT_ADD_CHILD`.
+
+**Open:** the templates still are not built, so no fire renders yet; and **nothing in the data
+triggers the four `fire.zrd.json` animations** — their names appear in exactly one file, their
+own, and `CALL_ANIMATION` references animations by name string only (no index form exists
+anywhere in this data). The original invokes them engine-side, so reproducing a persistent fire
+means choosing our own trigger. User is checking the disassembly for xrefs to those strings.

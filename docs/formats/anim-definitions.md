@@ -155,6 +155,77 @@ Playback ops seen and deferred: `OBJECT_MOTION` (continuous spin),
 `FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
 (`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below.)
 
+`CALL_ANIMATION` dispatched from the start but **ignored its target node** until 2026-07-21 —
+see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing
+mechanism and `OBJECT_ADD_CHILD` is **not** (surveyed: the fire templates are never its
+children, and 75% of its 1,152 uses attach sound *definitions* rather than nodes).
+
+## `CALL_ANIMATION` carries a target node — this is the template-instancing mechanism
+
+Surveyed and implemented 2026-07-21. A call may name **another node to run the callee on**,
+and that is how one authored definition serves many sites. Three spellings, two shapes:
+
+| Reader | Compiled | Uses |
+|---|---|---|
+| `WITH_NODE [name]` | `parameters: {"WithNode": {node, position}}` | 29,633 |
+| `AT_NODE [name]` | `parameters: {"AtNode": {node, position, translate}}` | 7,640 |
+| `OPERAND_NODE [name]` | `operand_node: "name"` (bare, not nested) | 179 |
+
+`parameters` is a one-key union, so `AnimData.Union()` reads it directly. The reader front-end
+normalizes `WITH_NODE`/`AT_NODE` into the compiled shape (`AnimDefs.AddCallTarget`) so the
+runtime has a single path. **The target is written in the CALLER's namespace** and resolves
+through the caller's definition and scope.
+
+Why it matters, with the case that proves it: C1/M05's eight zeppelin engines each run
+`stop_wvzreng1..4`/`stop_wvzleng1..4`, and each calls the **generic** definition `gen_zep`/
+`random_prop` — whose whole body is "rotate the node named `propstill` to a random angle" —
+targeting its own `propstill`. Ignore the target and all eight calls resolve `propstill`
+globally to whichever one is first, so eight engines share one prop angle. Honour it and each
+engine gets its own. The same mechanism is what places effect templates:
+`CALL_ANIMATION [NAME [huge_30sec_fire], WITH_NODE [rc*_dbase1]]` burns one ship section.
+
+Two implementation notes. Instance identity is `(definition, anchor)`, so retargeting is also
+what lets one definition run concurrently on many sites — the `IsLive` check must use the
+**resolved** anchor, not the caller's, or the second site is swallowed as a duplicate. And an
+unresolvable target falls back to the caller's anchor rather than dropping the call, so a node
+the builder skipped cannot make an effect vanish; the fallback is counted and reported.
+
+**There is no index form.** Animations are referenced by name string everywhere in this data —
+relevant because the four `fire.zrd.json` definitions are called by nothing (see below).
+
+## Fire: templates, flipbooks, and a trigger that lives in the exe
+
+Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report.
+Three separate layers, none of which is `OBJECT_ADD_CHILD`:
+
+- **Templates.** `fire1`/`fire2` (C1 nodes 494/496) sit under the **parentless roots**
+  `fire1.flt`/`fire2.flt` (493/495) — real single-polygon `Facade`/`CylindricalY` meshes on
+  materials 88/133 (`fire101.tif`/`fire102.tif`). `WorldBuilder` builds only World children plus
+  partition-referenced subtrees, so they are never in the scene. The same is true of the other
+  effect roots (`large_firetrail`, `short_firetrail`, `lg_fireball`, `flame_ball_01`, … at
+  gamez indices ~74–150).
+- **The flipbook — `effects.zrd.json`.** `["fire1.flt", NAME ["fire1"], SPEED [10.0], LOOPING
+  ["ON"], MAPS [fire101.tif … fire112.tif]]` and `fire2` with 6 maps @ 5 fps. The maps resolve
+  **by filename against the texture archive**, not through the gamez texture table — every
+  chapter's `textures.json` registers only `fire101`/`fire102`, while `extracted/<ch>/texture/`
+  ships all twelve `fire1NN.png`. That asymmetry is the tell that EFFECTS is its own lookup path.
+- **Behaviours — `fire.zrd.json`.** Four `ON_CALL` definitions, **all anchored on `fire2.flt`**:
+  `timed_big_fire`, `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`. They
+  scale the template up and back down and flicker a `big_fire_light`.
+
+**EFFECTS binds to the NODE, not the texture or material** (settled 2026-07-21 by user
+observation, and it decides the design). `flame01` — the refinery gas flare, node 2998 under
+`vent1` → `refinery.flt` → `refinery` → `world1` — renders material 88, i.e. **frame 1 of the
+`fire1` flipbook**, as does the 3-polygon muzzle burst `mb_spinflame`. Were the effect bound to
+the texture, both would animate for free. A **sustained** muzzle flash never changes texture
+(always `fire101`, rotating and flashing but no frame advance), which rules that out — note a
+*brief* flash would have proved nothing, since 0.1 s at 10 fps is one frame. So `flame01` is a
+static base flame and the animated fire at the refinery is a **placed `fire2` instance**.
+
+**Nothing in the data triggers them.** All four names appear in exactly one file — their own.
+No compiled archive, no other reader, and there is no index-based call form. The original
+invokes them engine-side, so reproducing a persistent fire requires choosing our own trigger.
+
 ## `LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights
 
 Surveyed across the whole install 2026-07-21: **1,468 `LIGHT_STATE` events, every one of them

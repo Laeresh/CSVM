@@ -20,6 +20,32 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
   `Elseif` evaluation, mission-spawned entity rosters, `texture_scroll`) is now scheduled in
   `docs/PLAN-anim-rendering-followups.md`** (2026-07-21, 4 independent session-sized items with
   goal/evidence/approach/verify each) — see that plan rather than this entry for current detail.
+- **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
+  2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
+  so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
+  a decision, not on data. Decode in `docs/formats/anim-definitions.md` ("Fire: templates,
+  flipbooks, and a trigger that lives in the exe"):
+  - **Templates:** `fire1`/`fire2` are real single-poly `Facade`/`CylindricalY` meshes under the
+    **parentless roots** `fire1.flt`/`fire2.flt` (C1 nodes 493–496), which `WorldBuilder` never
+    builds (it builds only World children + partition-referenced subtrees). Same for the other
+    effect roots (`large_firetrail`, `short_firetrail`, `lg_fireball`, … ~gamez idx 74–150).
+  - **Flipbook:** `effects.zrd.json` gives `fire1` 12 maps @ 10 fps, `fire2` 6 @ 5 fps, resolved
+    **by filename from the texture archive** — `textures.json` registers only `fire101`/`fire102`
+    while `extracted/<ch>/texture/` ships all twelve `fire1NN.png`. `TextureCycler` already plays
+    frame lists, so this is small *once the templates are built*.
+  - **EFFECTS is node-keyed, not texture-keyed** (user-confirmed: a *sustained* muzzle flash never
+    changes texture, always `fire101`). So `flame01` — the refinery gas flare, sharing material 88
+    with the `fire1` template — is a **static base flame**, and the animated fire the user sees
+    there is a **placed `fire2` instance** (6 frames @ 5 fps, matching their independent read).
+  - **Why it is blocked:** the four `fire.zrd.json` behaviours (`timed_big_fire`,
+    `persistent_big_fire`, `persistent_small_fire`, `timed_small_fire`, all anchored on
+    `fire2.flt`) are called by **nothing** — their names appear in exactly one file, their own,
+    and `CALL_ANIMATION` references animations by name string only (no index form exists anywhere
+    in this data). **User searched the disassembly 2026-07-21 and found no trigger either.** So
+    the original starts them engine-side by a condition we cannot recover; reproducing them means
+    inventing our own trigger, which is a fidelity guess rather than a data-driven port.
+  - **If resumed:** the placement half already works — `CALL_ANIMATION`'s target parameter landed
+    2026-07-21 and is the mechanism that puts a template at a site. Build the template pool first.
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
   lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
