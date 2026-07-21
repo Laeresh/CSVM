@@ -330,7 +330,7 @@ public partial class FlightController : Node3D
     /// slot) dead. Splitscreen binds each player to its own device list instead.</summary>
     private bool PadPressed(JoyButton button)
     {
-        foreach (int pad in PadDevices ?? (IEnumerable<int>)Input.GetConnectedJoypads())
+        foreach (int pad in Pads.For(PadDevices))
             if (Input.IsJoyButtonPressed(pad, button))
                 return true;
         return false;
@@ -341,7 +341,7 @@ public partial class FlightController : Node3D
     private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
-        foreach (int pad in PadDevices ?? (IEnumerable<int>)Input.GetConnectedJoypads())
+        foreach (int pad in Pads.For(PadDevices))
         {
             float a = Input.GetJoyAxis(pad, axis);
             if (Mathf.Abs(a) > Mathf.Abs(v))

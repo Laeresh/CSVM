@@ -17,7 +17,7 @@ screenshot at the specific location the report came from.
 ## Checklist
 
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
-2. ☐ `LightState` + the remaining unacted-on event kinds
+2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights done 2026-07-21; texture/sprite animation re-scoped, see below)**
 3. ☐ Mission-spawned entity rosters (`hk_zep`, CTF props)
 4. ☐ `texture_scroll` rendering
 
@@ -162,6 +162,43 @@ audio — note audio can't be screenshot-verified, describe what should be audib
 user confirm). Full 8-chapter regression after each kind. Update the "Playback ops seen and
 deferred to part 2+" list in `docs/formats/anim-definitions.md` — remove each kind as it
 lands, don't leave the doc claiming something is deferred once it isn't.
+
+**PARTIALLY LANDED 2026-07-21 — `LIGHT_STATE` + `LIGHT_ANIMATION`.** Details in
+`docs/HISTORY.md`; decode in `docs/formats/anim-definitions.md`.
+
+The plan's tentative "sprite-glow route" was **wrong**, and the evidence for that is worth
+keeping: the flare a player sees at a light's position is already gamez geometry
+(`docklight_flare` = `Facade`/`SphericalY` on `dock_liteflare.tif`, `flame01` =
+`Facade`/`CylindricalY` on `fire101.tif`), so a glow sprite would double-draw it. And a real
+`OmniLight3D` is equally wrong, because the world renders `unshaded`. What a `PointSource`
+supplies is the spill onto surrounding geometry, which is what landed. Also settled: the
+per-fragment cost the plan worried about is a non-issue (0.27 ms viewport GPU with 16 lights);
+the real cost was C# re-resolving `AT_NODE` ~1,740×/second through a full-world scan.
+
+**Re-scoped by the user, 2026-07-21** — what they meant by "the lights animate" is not point
+lighting but **animated light sprites**, and both mechanisms are still unimplemented:
+
+- **`EFFECTS` reader** (`extracted/zrdr/effects.zrd.json`) — named texture flipbooks bound to
+  nodes: `["fire1.flt", NAME "fire1", SPEED 10.0, LOOPING ON, MAPS [fire101.tif … fire112.tif]]`
+  and `fire2` (6 maps @ 5 fps). Compiled anim defs carry an `effects` support array that
+  references these. The project has **no code and no docs page** for the mechanism (the
+  *textures* are already described in `docs/formats/effects.md` as puffer flipbooks — it is the
+  node-bound EFFECTS animation that is missing). This is the flame flicker the user described.
+- **Material texture cycles** — gamez materials carry a `cycle` field
+  (`texture_indices`/`speed`/`looping`); 3 in C1 (`splash01`→3 frames, two walking-man sprites),
+  5 in C1B (water, surf, wake fronts, turbulence). `ObjectCycleTexture{name, reset}` (144
+  events, no texture list of its own) is what triggers them. Also unimplemented.
+- **Lighthouse "circling light" is NOT an animation.** Confirmed by the user against the
+  original: it is a billboard rotating about its axis with an **offset from the lighthouse
+  centre**, so it stays visible from every direction. There is no rotation anywhere in the data
+  (only `hsliteson`/`hslitesoff` lit/unlit variants and a `poleflare.tif` `CylindricalY`
+  facade). So the thing to check is our **cylindrical-billboard pivot**: `SceneBuilder`
+  recenters billboard meshes on their quad centroid, which would destroy exactly the offset
+  that produces the sweep.
+
+Remaining kinds after this pass (C1 bootstrap counts): `ObjectMotion`×73,
+`ObjectOpacityState`×58, `SoundNode`×38, `ObjectAddChild`×38, `Callback`×8,
+`ObjectCycleTexture`×1.
 
 ## 3. Mission-spawned entity rosters (`hk_zep`, CTF props)
 

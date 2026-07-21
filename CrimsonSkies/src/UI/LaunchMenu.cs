@@ -293,7 +293,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// rejoins it on un-join. Returns true when anything changed (the strip needs redrawing).</summary>
     private bool SyncDevices()
     {
-        var connected = Input.GetConnectedJoypads();
+        var connected = Pads.Connected();
         bool dirty = false;
         for (int i = _slots.Count - 1; i >= 1; i--)
         {
@@ -350,7 +350,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     private void PrimeJoins()
     {
         _joinPrev.Clear();
-        foreach (int pad in Input.GetConnectedJoypads())
+        foreach (int pad in Pads.Connected())
             _joinPrev[pad] = MenuInput.JoinPressed(pad);
     }
 
@@ -365,7 +365,7 @@ public sealed partial class LaunchMenu : CanvasLayer
         bool dirty = false;
         if (_screen != Screen.Plane)
             return false;
-        foreach (int pad in Input.GetConnectedJoypads())
+        foreach (int pad in Pads.Connected())
         {
             bool pressed = MenuInput.JoinPressed(pad);
             _joinPrev.TryGetValue(pad, out bool prev);
@@ -777,7 +777,7 @@ public sealed partial class LaunchMenu : CanvasLayer
             return $"({SplitScreen.MaxPlayers}-player maximum)";
         if (_screen != Screen.Plane)
             return "(other players join at aircraft select)";
-        return Input.GetConnectedJoypads().Count > 0
+        return Pads.Connected().Count > 0
             ? "(press START on a free pad to join)"
             : "(connect a pad and press START to join)";
     }

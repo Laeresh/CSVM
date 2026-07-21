@@ -193,6 +193,12 @@ public sealed partial class AnimRuntime : Node
         if (_puffers.Count > 0)
             GD.Print($"anim: {_puffers.Count} puffer emitter(s): " +
                      string.Join(", ", _puffers.Keys.Select(k => k.Name).Distinct()));
+        if (_lights.Count > 0)
+        {
+            int on = _lights.Values.Count(l => l.Active);
+            GD.Print($"anim: {_lights.Count} point light(s), {on} lit at startup: " +
+                     string.Join(", ", _lights.Keys.Select(k => k.Name).Distinct().Take(10)));
+        }
         if (netHidden.Count > 0)
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
@@ -226,6 +232,7 @@ public sealed partial class AnimRuntime : Node
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
         TickPuffers(dt);
+        TickLights(dt);
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -419,6 +426,14 @@ public sealed partial class AnimRuntime : Node
                 HandlePufferState(ev, def, anchor);
                 return true;
 
+            case "LightState":
+                HandleLightState(ev, def, anchor);
+                return true;
+
+            case "LightAnimation":
+                HandleLightAnimation(ev, anchor, instant);
+                return true;
+
             default:
                 // Sound / light / opacity / texture-cycle / FBFX / camera and the
                 // rest: dispatched, counted, and reported once per kind. Adding a handler is
@@ -524,6 +539,163 @@ public sealed partial class AnimRuntime : Node
             var xform = node.GlobalTransform;
             puffer.SustainAt(xform.Origin, xform.Basis, dt);
         }
+    }
+
+    // ---- LIGHT_STATE / LIGHT_ANIMATION ----
+
+    /// <summary>
+    /// One of the world's animated point lights. What the original did with these was modulate
+    /// the vertex lighting of nearby geometry; the visible flare at the light's own position is
+    /// separate gamez Facade geometry that already renders (C1's <c>docklight_flare</c> →
+    /// <c>dock_liteflare.tif</c>, <c>flame01</c> → <c>fire101.tif</c>). See
+    /// <see cref="WorldLights"/> for how the spill reaches the fullbright shader.
+    /// </summary>
+    private sealed class AnimLight
+    {
+        public Node3D? Host;          // AT_NODE target — the light rides its world pose
+        public string? HostName;      // the AT_NODE name Host was resolved from (see HandleLightState)
+        public Vector3 Offset;        // AT_NODE's trailing offset, in the host's own frame
+        public Color Color = new(1f, 1f, 1f);
+        public float RangeMin, RangeMax;
+        public bool Active;
+
+        // LIGHT_ANIMATION: signed deltas applied over run_time (see HandleLightAnimation).
+        public float TweenLeft;
+        public Color ColorRate;
+        public float MinRate, MaxRate;
+    }
+
+    // Keyed by (light name, anchor). The anchor identifies the *instance* of the definition,
+    // and a definition's `lights` array is its own symbol table — so two refineries each get
+    // their own orange_light. It cannot be keyed by host node the way puffers are: the flicker
+    // events are partial updates carrying only {name, range}, with no AT_NODE to resolve from.
+    private readonly Dictionary<(string Name, Node3D? Anchor), AnimLight> _lights = new();
+
+    /// <summary>Where the world's lights are delivered. Null outside a lit session, in which
+    /// case LIGHT_STATE is tracked but never rendered.</summary>
+    public WorldLights? Lights;
+
+    /// <summary>
+    /// Applies one LIGHT_STATE. The load-bearing detail is that this is a **partial update**:
+    /// the fire and refinery flickers are streams of <c>{name, range}</c> events 0.03–0.07 s
+    /// apart that must leave position, colour and active state untouched (the compiled form
+    /// spells the absent fields null — measured install-wide: translate null on 707 of 1468
+    /// events, colour null on 703, and range null on exactly the 321 that switch a light off).
+    /// So every field is applied only when present, never defaulted.
+    /// </summary>
+    private void HandleLightState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (ev.Data.Str("name") is not { } name)
+            return;
+        var key = (name, anchor);
+        if (!_lights.TryGetValue(key, out var light))
+            _lights[key] = light = new AnimLight { Host = anchor };
+
+        // AT_NODE arrives as translate:{AtNode:{name, pos}} — node plus a local offset, the same
+        // shape (and the same frame) as a puffer's AT_NODE.
+        if (ev.Data.Obj("translate")?.Obj("AtNode") is { } at)
+        {
+            // Resolve the host ONCE per light. These events are not occasional: a fire's flicker
+            // re-issues its full LIGHT_STATE — AT_NODE and all — every loop iteration, measured
+            // at ~2,700 LIGHT_STATEs/second on C1, of which ~1,740 missed the compiled symbol
+            // table and fell through to ResolveOne's full-world scan (7,064 nodes with a regex
+            // matcher, so ~12M comparisons/second). That, not the shader, was the entire cost of
+            // this feature: --perf put the whole viewport's GPU time at 0.26 ms while script time
+            // sat near 50 ms. The name is what identifies the target, so re-resolving an
+            // unchanged one can only produce the node we already have.
+            if (at.Str("name") is { } hostName)
+            {
+                if (light.Host == null || !string.Equals(hostName, light.HostName, StringComparison.Ordinal))
+                {
+                    if (ResolveOne(hostName, def, anchor) is { } host)
+                        light.Host = host;
+                    light.HostName = hostName;
+                }
+            }
+            light.Offset = at.Vec3("pos");
+        }
+        if (ev.Data.Obj("range") is { } range)
+        {
+            light.RangeMin = range.Num("min") ?? light.RangeMin;
+            light.RangeMax = range.Num("max") ?? light.RangeMax;
+        }
+        if (ev.Data.Obj("color") is { } color)
+            light.Color = new Color(color.Num("r") ?? 0f, color.Num("g") ?? 0f, color.Num("b") ?? 0f);
+        if (ev.Data.Has("active_state"))
+        {
+            light.Active = ev.Data.Bool("active_state");
+            light.TweenLeft = 0f; // switching a light re-arms it; a half-run pulse must not carry over
+        }
+        _opsApplied++;
+    }
+
+    /// <summary>
+    /// Applies one LIGHT_ANIMATION: signed **deltas** to a light's range and colour, ramped over
+    /// <c>run_time</c>. They are deltas, not targets — C1B's <c>ap_light</c> pulse runs
+    /// {min +50, max +160} over 0.1 s and then {min −50, max −160} over 0.05 s, and a negative
+    /// range is not a value a light can hold. Under <paramref name="instant"/> (a RESET_STATE)
+    /// the delta lands whole, matching how timed motions collapse to their end pose there.
+    /// </summary>
+    private void HandleLightAnimation(AnimEvent ev, Node3D? anchor, bool instant)
+    {
+        if (ev.Data.Str("name") is not { } name
+            || !_lights.TryGetValue((name, anchor), out var light))
+        {
+            Count("LightAnimation(no light)");
+            return;
+        }
+        var range = ev.Data.Obj("range");
+        var color = ev.Data.Obj("color");
+        float dMin = range?.Num("min") ?? 0f, dMax = range?.Num("max") ?? 0f;
+        var dColor = new Color(color?.Num("r") ?? 0f, color?.Num("g") ?? 0f, color?.Num("b") ?? 0f);
+        float runTime = ev.Data.Num("run_time") ?? 0f;
+
+        if (instant || runTime <= 0f)
+        {
+            light.RangeMin += dMin;
+            light.RangeMax += dMax;
+            light.Color += dColor;
+            light.TweenLeft = 0f;
+        }
+        else
+        {
+            light.MinRate = dMin / runTime;
+            light.MaxRate = dMax / runTime;
+            light.ColorRate = dColor / runTime;
+            light.TweenLeft = runTime;
+        }
+        _opsApplied++;
+    }
+
+    /// <summary>Advances light tweens and submits every active light at its host's current world
+    /// pose. Per frame, because hosts move (a muzzle flash rides its turret).</summary>
+    private void TickLights(float dt)
+    {
+        if (Lights == null)
+            return;
+        Lights.Begin();
+        foreach (var light in _lights.Values)
+        {
+            if (light.TweenLeft > 0f)
+            {
+                float step = Mathf.Min(dt, light.TweenLeft);
+                light.RangeMin += light.MinRate * step;
+                light.RangeMax += light.MaxRate * step;
+                light.Color += light.ColorRate * step;
+                light.TweenLeft -= step;
+            }
+            if (!light.Active || light.RangeMax <= 0f)
+                continue;
+            // A light inside a subtree the mission deactivated is off, exactly like the flare
+            // sprite sitting at the same place: the destroyed variant of a building must not
+            // keep lighting the ground through its healthy twin.
+            if (light.Host is not { } host || !IsInstanceValid(host) || !host.IsVisibleInTree())
+                continue;
+            Lights.Add(host.GlobalTransform * light.Offset, light.Color, light.RangeMin, light.RangeMax);
+        }
+        Lights.Commit(PlayerPos());
+        if (DebugMotions)
+            Lights.LogOnce();
     }
 
     /// <summary>Resolves a single node name for this definition — the compiled symbol table

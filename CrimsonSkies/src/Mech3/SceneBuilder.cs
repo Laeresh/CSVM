@@ -674,7 +674,34 @@ void fragment() {
         // is dimmed by this scalar before fog, matching the original's ambient+diffuse lighting of
         // the baked-vertex world. Fullbright only — shaded (plane) surfaces are lit for real.
         if (!shaded)
+        {
             sb.AppendLine("global uniform float csky_world_light = 1.0;");
+            // The animated world's point lights (LIGHT_STATE). The world is unshaded, so a real
+            // Godot light contributes nothing to it — the original's DX7 point lights modulated
+            // the same baked vertex lighting this shader reads, i.e. what they do is spill onto
+            // nearby geometry. Packed as a 2×N data texture because global uniforms cannot be
+            // arrays; see WorldLights for the layout. csky_light_count = 0 skips the loop, which
+            // is what keeps an unlit world bit-identical to the pre-lights renderer.
+            sb.AppendLine("global uniform sampler2D csky_light_data;");
+            sb.AppendLine("global uniform int csky_light_count;");
+            sb.AppendLine(@"
+// Measured with --perf on C1's harbour (16 lights live): this loop costs nothing worth
+// optimising — the whole viewport's GPU time is 0.26 ms with lights on. An earlier
+// bounding-sphere early-out here was removed as unmeasurable complexity; the real cost of
+// LIGHT_STATE was always C# (see AnimRuntime's host-resolution cache).
+vec3 csky_light_spill(vec3 world_pos, vec3 normal) {
+    vec3 spill = vec3(0.0);
+    for (int i = 0; i < csky_light_count; i++) {
+        vec4 pr = texelFetch(csky_light_data, ivec2(0, i), 0); // xyz = position, w = range max
+        vec4 cr = texelFetch(csky_light_data, ivec2(1, i), 0); // rgb = linear colour, a = range min
+        vec3 to_light = pr.xyz - world_pos;
+        float dist = length(to_light);
+        float ndl = max(dot(normal, to_light / max(dist, 0.0001)), 0.0);
+        spill += cr.rgb * ndl * (1.0 - smoothstep(cr.a, pr.w, dist));
+    }
+    return spill;
+}");
+        }
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the
             // air, where plain isotropic mipmap selection blurs the ground to mush (the C5
@@ -717,9 +744,13 @@ void fragment() {{");
         // Shaded (planes) keeps raw COLOR for the real-lighting path; fullbright (world) applies
         // the gamma-space vertex modulate (see SrgbToLinearFn above).
         string vcol = shaded ? "COLOR" : "vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a)";
+        // The surface's own albedo is kept separately from the modulated result: a point light's
+        // spill is light falling ON the surface, so it must be modulated by the same albedo
+        // rather than added to the final colour (an unlit black texture stays black under a lamp).
         sb.AppendLine(textured
-            ? $"    vec4 col = {vcol} * texture(albedo_tex, UV);"
-            : $"    vec4 col = {vcol} * albedo_color;");
+            ? "    vec4 base_col = texture(albedo_tex, UV);"
+            : "    vec4 base_col = albedo_color;");
+        sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         if (!shaded)
             sb.AppendLine("    ALBEDO *= csky_world_light;"); // per-mission SUNLIGHT dimming (world/deck/dome)
@@ -734,6 +765,24 @@ void fragment() {{");
         // back to world space for the horizontal camera distance + the fragment-altitude fade.
         // The aircraft is always within the near range at chase distance, so this is a no-op on it.
         sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+        // Animated point lights, before the fog mix so a lit surface still fogs out with
+        // distance. Deliberately NOT scaled by csky_world_light: a lamp is a light source, so it
+        // does not dim with the mission's SUNLIGHT — the same rule the glow-flare sprites follow.
+        // With no lights active csky_light_spill returns exactly vec3(0.0) and the add is an
+        // identity, which is what keeps an unlit world bit-identical to the pre-lights renderer.
+        // (Braces are load-bearing: emitting the ALBEDO line unguarded put it in the SHADED
+        // shader too, where light_n does not exist — every aircraft silently fell back to
+        // Godot's untextured default material.)
+        if (!shaded)
+        {
+            // The world's normals reach here flipped for the same reason the aircraft's do: its
+            // single-sided polygons render with cull_front, so every visible fragment is
+            // back-facing and Godot negates NORMAL. Same cancelling minus as the shaded path,
+            // and verified the same way — negated lights the pier deck and the boat decks (a
+            // lamp above the pier); non-negated lights the pilings and hull sides instead.
+            sb.AppendLine("    vec3 light_n = normalize(-(INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);");
+            sb.AppendLine("    ALBEDO += base_col.rgb * csky_light_spill(fog_world, light_n);");
+        }
         sb.AppendLine("    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))");
         sb.AppendLine("        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
         sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");

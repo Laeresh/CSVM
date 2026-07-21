@@ -179,6 +179,14 @@ public static class AnimDefs
             case "PufferState":
                 AddPufferState(data, fields);
                 break;
+            case "LightState":
+                AddLightState(data, fields);
+                break;
+            case "LightAnimation":
+                if (RangeObj(fields, "RANGE") is { } lightDelta) data["range"] = lightDelta;
+                if (ColorObj(fields, "COLOR") is { } colorDelta) data["color"] = colorDelta;
+                if (Num(fields, "RUN_TIME") is { } lightRun) data["run_time"] = lightRun;
+                break;
             case "If":
             case "Elseif":
                 if (ReaderCondition(fields) is { } condition)
@@ -266,6 +274,52 @@ public static class AnimDefs
                     });
             data["colors"] = list;
         }
+    }
+
+    /// <summary>
+    /// Normalizes a reader LIGHT_STATE body into the compiled shape
+    /// <see cref="AnimRuntime"/>'s handler reads. 66 of this install's reader files carry
+    /// LIGHT_STATE, so skipping this front-end would repeat the PUFFER_STATE bug in a subtler
+    /// form: a reader-only fire would define a light with no range or colour.
+    ///
+    /// The one semantic that must survive the trip is **partiality** — a flicker event is
+    /// <c>["NAME", […], "RANGE", […]]</c> and nothing else, and it must not reset the light's
+    /// position, colour or active state. So each field is written only when the reader body
+    /// actually carries it, and ACTIVE_STATE's key is left absent rather than defaulted (the
+    /// handler tests <c>Has</c>, not the value).
+    /// </summary>
+    private static void AddLightState(Dictionary<string, object?> data, Dictionary<string, List<object?>?> fields)
+    {
+        if (First(fields, "ACTIVE_STATE") is string active)
+            data["active_state"] = string.Equals(active, "ACTIVE", StringComparison.OrdinalIgnoreCase);
+        // AT_NODE is [nodeName, dx?, dy?, dz?] as it is for a puffer, but LIGHT_STATE's compiled
+        // shape nests it as translate:{AtNode:{name,pos}} rather than a flat at_node + translate.
+        if (fields.TryGetValue("AT_NODE", out var atNode) && atNode is { Count: > 0 } && atNode[0] is string atName)
+        {
+            var pos = atNode.Count >= 4 && AnimData.AsNum(atNode[1]) is { } ox
+                && AnimData.AsNum(atNode[2]) is { } oy && AnimData.AsNum(atNode[3]) is { } oz
+                ? Obj3(ox, oy, oz)
+                : Obj3(0f, 0f, 0f);
+            data["translate"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+            {
+                ["AtNode"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                    { ["name"] = atName, ["pos"] = pos },
+            };
+        }
+        if (RangeObj(fields, "RANGE") is { } range) data["range"] = range;
+        if (ColorObj(fields, "COLOR") is { } color) data["color"] = color;
+    }
+
+    // {r,g,b} from a 3-element reader COLOR, matching the compiled shape.
+    private static Dictionary<string, object?>? ColorObj(Dictionary<string, List<object?>?> fields, string key)
+    {
+        if (!fields.TryGetValue(key, out var v) || v is not { Count: >= 3 })
+            return null;
+        if (AnimData.AsNum(v[0]) is not { } r || AnimData.AsNum(v[1]) is not { } g
+            || AnimData.AsNum(v[2]) is not { } b)
+            return null;
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+            { ["r"] = r, ["g"] = g, ["b"] = b };
     }
 
     /// <summary>

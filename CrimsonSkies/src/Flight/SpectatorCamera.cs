@@ -151,7 +151,7 @@ public sealed partial class SpectatorCamera : Node
     private static float PadAxis(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Input.GetConnectedJoypads())
+        foreach (int device in Pads.Connected())
         {
             float v = Input.GetJoyAxis(device, axis);
             if (Mathf.Abs(v) > Mathf.Abs(best))
@@ -163,7 +163,7 @@ public sealed partial class SpectatorCamera : Node
     private static float PadTrigger(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Input.GetConnectedJoypads())
+        foreach (int device in Pads.Connected())
             best = Mathf.Max(best, Input.GetJoyAxis(device, axis));
         return best;
     }
@@ -171,7 +171,7 @@ public sealed partial class SpectatorCamera : Node
     private static float PadButtonAxis()
     {
         bool up = false, down = false;
-        foreach (int device in Input.GetConnectedJoypads())
+        foreach (int device in Pads.Connected())
         {
             up |= Input.IsJoyButtonPressed(device, JoyButton.RightShoulder);
             down |= Input.IsJoyButtonPressed(device, JoyButton.LeftShoulder);

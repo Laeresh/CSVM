@@ -149,10 +149,65 @@ holds, so restarting would freeze the 2 s door at its first frame for as long as
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 
-Playback ops seen and deferred to part 2+: `OBJECT_MOTION` (continuous spin),
-`OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` (reparenting), `SOUND`/`SOUND_NODE`, `LIGHT_STATE`,
+Playback ops seen and deferred: `OBJECT_MOTION` (continuous spin),
+`OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` (reparenting), `SOUND`/`SOUND_NODE`,
 `OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`, `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
 `FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
+(`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below.)
+
+## `LIGHT_STATE` / `LIGHT_ANIMATION` — the world's point lights
+
+Surveyed across the whole install 2026-07-21: **1,468 `LIGHT_STATE` events, every one of them
+`type_: "PointSource"`** — no directional or spot lights exist in this data. A definition's
+`lights` array is its symbol table for them, exactly as `objects`/`nodes` are for geometry, so
+a light name is scoped to the definition instance (two refineries each own an `orange_light`).
+
+| Field | Notes |
+|---|---|
+| `name` | Index into the def's own `lights` array. |
+| `active_state` | On/off. true 1147× / false 321×. |
+| `translate` | `{AtNode:{name,pos}}` (761×) or null (707×) — a gamez node plus a local offset, the same shape and frame as a puffer's `AT_NODE`. |
+| `range` | `{min,max}` — full brightness inside `min`, nothing past `max`. Present on exactly the 1147 "on" events. **Every startup light in this install has a `max` between 2 and 22 m.** |
+| `color` | `{r,g,b}`, present 765×. A DX7 sRGB value, so it needs linearising like `FOG_COLOR`. |
+| `directional`, `saturated`, `subdivide`, `lightmap`, `static_`, `bicolored`, `orientation`, `ambient*`, `diffuse` | Null or false almost everywhere; nothing in this install depends on them. |
+
+**The load-bearing semantic is that a `LIGHT_STATE` is a PARTIAL update.** A fire or refinery
+flicker is a stream of `{name, range}` events 0.03–0.07 s apart that must leave position,
+colour and active state untouched — the reader spells this the same way
+(`"LIGHT_STATE", ["NAME", […], "RANGE", […]]` and nothing else). The compiled nulls line up
+exactly: `range` is null on precisely the 321 events that switch a light *off*. So a handler
+must apply only the fields present and never default the absent ones. 66 reader files also
+carry `LIGHT_STATE`, so the zrdr front-end needs the same normalizer (`AnimDefs.AddLightState`)
+— skipping it would repeat the `PUFFER_STATE` bug in a subtler form.
+
+`LIGHT_ANIMATION` (535 events) ramps a light over `run_time`, and its `range`/`color` are
+**signed deltas, not targets**: C1B's `ap_light` pulse runs `{min +50, max +160}` over 0.1 s
+then `{min −50, max −160}` over 0.05 s, and a negative range is not a value a light can hold.
+The reader's `RANGE` carries four numbers (`[min, max, altMin, altMax]`) where the compiled
+form splits the trailing pair into `range_alt` (null throughout this install).
+
+**Which chapters actually light anything:** only **C1**. It is the sole chapter with
+`OnStartup` definitions containing `LIGHT_STATE` (36 of them — the refinery flare, six
+docklights, six reflights, the police light); every other chapter's light events sit in
+`ON_CALL` combat/destruction effects (`gunhit_lt`, `muzzle_lt`, `fuel_light`) that a bootstrap
+never reaches. C1 reports 35 lights at startup, growing to ~57 as delayed and looping
+sequences fire.
+
+**What a point light is FOR here.** The visible flare at a light's own position is *already*
+separate gamez geometry — C1's `docklight_flare` is a `Facade`/`SphericalY` mesh textured
+`dock_liteflare.tif`, and the refinery's `flame01` is a `Facade`/`CylindricalY` mesh textured
+`fire101.tif`. Both render without any animation. So `LIGHT_STATE` is not what draws the lamp;
+it is the **spill onto surrounding geometry**, which is what the original's DX7 point lights
+did to the same baked vertex lighting our world shader reads. Rendering notes in
+`docs/architecture.md` under `WorldLights.cs`.
+
+**Cost warning for anyone adding a handler here.** These events are not occasional. C1 fires
+~2,700 `LIGHT_STATE`s per second at steady state, because each fire's flicker re-issues its
+*full* event — `AT_NODE` included — every loop iteration. Resolving that node name per event
+put ~1,740 calls/second through `AnimRuntime.ResolveOne`'s full-world fallback scan (7,064
+nodes against a regex matcher, ~12M comparisons/second) and cost ~7 ms/frame on its own. The
+name is what identifies the target, so the resolution is cached per light and only redone when
+the name changes.
 
 ## The mission zrdr scope is a LIBRARY, not a manifest
 

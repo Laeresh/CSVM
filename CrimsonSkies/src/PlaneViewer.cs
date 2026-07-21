@@ -223,6 +223,37 @@ public partial class PlaneViewer : Node3D
     private bool _forceMenu;       // --menu: show the launchscreen even alongside other args
     private string _menuStartScreen = ""; // --menu=<mode|chapter|plane>: open the menu on that screen (screenshot aid)
     private bool _inSession;       // a world is currently built
+    private WorldLights? _worldLights; // the session's LIGHT_STATE point lights (see WorldLights)
+    private bool _perf;            // --perf: log the CPU/GPU frame-time split once a second
+    private double _perfClock;
+    private int _perfFrames;
+    private double _perfProcess, _perfGpu, _perfCpuRender;
+
+    /// <summary>
+    /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
+    /// the editor GUI, but the same numbers are available at runtime — and the one that settles
+    /// most questions is the per-viewport measured GPU time, which separates "our shader got
+    /// more expensive" from "our C# got more expensive". Averaged over a second so a single
+    /// hitch doesn't read as a regression; A/B two builds by comparing the same line.
+    /// </summary>
+    private void ReportPerf(double delta)
+    {
+        var vp = GetViewport().GetViewportRid();
+        RenderingServer.ViewportSetMeasureRenderTime(vp, true);
+        _perfFrames++;
+        _perfClock += delta;
+        _perfProcess += Performance.GetMonitor(Performance.Monitor.TimeProcess);
+        _perfCpuRender += RenderingServer.ViewportGetMeasuredRenderTimeCpu(vp);
+        _perfGpu += RenderingServer.ViewportGetMeasuredRenderTimeGpu(vp);
+        if (_perfClock < 1.0)
+            return;
+        double n = _perfFrames;
+        GD.Print($"perf: {n / _perfClock:0.0} fps | frame {1000 * _perfClock / n:0.00} ms"
+                 + $" = script {1000 * _perfProcess / n:0.00} + render-cpu {_perfCpuRender / n:0.00}"
+                 + $" + gpu {_perfGpu / n:0.00} ms"
+                 + $" | draws {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame):0}");
+        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = 0;
+    }
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
     // each (re)build and recomputes the chapter-dependent gamez/texture/mission paths from _chapter.
@@ -271,6 +302,11 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
             else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
             else if (arg == "--debug-anim") _debugAnim = true;
+            // A connected pad with stick drift steers the free camera and nudges the flight
+            // model, which quietly makes a "deterministic" scripted screenshot not one. SDL's
+            // hints don't help (Godot 4.7 enumerates the pad regardless), so the switch is ours.
+            else if (arg == "--no-pads") Pads.Disabled = true;
+            else if (arg == "--perf") _perf = true;
             else if (arg.StartsWith("--anim-lod=")) _animLod = int.Parse(arg["--anim-lod=".Length..]);
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
             else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
@@ -386,16 +422,26 @@ public partial class PlaneViewer : Node3D
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
             RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
+        // with no lit animations renders exactly as it did before they existed.
+        WorldLights.RegisterGlobals();
 
-        // Gamepad hotplug: every input read polls Input.GetConnectedJoypads() fresh, so a pad
-        // plugged in mid-game works the moment the engine reports it. Log the roster at launch
-        // and every connect/disconnect so a silent pad is diagnosable from the console.
-        Input.Singleton.JoyConnectionChanged += (device, connected) =>
-            GD.Print(connected
-                ? $"gamepad connected: device {device} \"{Input.GetJoyName((int)device)}\" guid={Input.GetJoyGuid((int)device)}"
-                : $"gamepad disconnected: device {device}");
-        var padsAtLaunch = Input.GetConnectedJoypads();
-        if (padsAtLaunch.Count == 0)
+        // Gamepad hotplug: every input read polls Pads.Connected() fresh, so a pad plugged in
+        // mid-game works the moment the engine reports it. Log the roster at launch and every
+        // connect/disconnect so a silent pad is diagnosable from the console.
+        if (Pads.Disabled)
+            GD.Print("gamepad: --no-pads, ignoring every device (keyboard/scripted input only)");
+        else
+            Input.Singleton.JoyConnectionChanged += (device, connected) =>
+                GD.Print(connected
+                    ? $"gamepad connected: device {device} \"{Input.GetJoyName((int)device)}\" guid={Input.GetJoyGuid((int)device)}"
+                    : $"gamepad disconnected: device {device}");
+        var padsAtLaunch = Pads.Connected();
+        if (Pads.Disabled)
+        {
+            // nothing more to report — the roster is deliberately empty
+        }
+        else if (padsAtLaunch.Count == 0)
             GD.Print("gamepad: none at launch (hotplug live — connect any time)");
         else
             foreach (int p in padsAtLaunch)
@@ -512,6 +558,9 @@ public partial class PlaneViewer : Node3D
                     QualityLod = _animLod,
                     PufferParent = _worldRoot,
                     PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+                    // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the
+                    // session so a teardown drops the previous world's lights.
+                    Lights = _worldLights = new WorldLights(),
                     // PLAYER_RANGE conditions measure from the player. Player 1's camera is
                     // the honest answer in every mode this project has (chase cam in flight,
                     // the free camera in --freecam, the orbit eye in a static view), and it
@@ -1109,7 +1158,7 @@ public partial class PlaneViewer : Node3D
     {
         if (players <= 1)
             return null;
-        var pads = Input.GetConnectedJoypads();
+        var pads = Pads.Connected();
         var assignment = new int[players][];
         for (int i = 0; i < players; i++)
             assignment[i] = i < pads.Count ? new[] { pads[i] } : Array.Empty<int>();
@@ -1224,6 +1273,10 @@ public partial class PlaneViewer : Node3D
         _precip = null;
         _edgeExtender = null;
         _weather = null;
+        // Clears csky_light_count, so the next world does not inherit this one's spill for the
+        // frame between teardown and the new runtime's first tick.
+        _worldLights?.Dispose();
+        _worldLights = null;
         _rigs.Clear();
         _split = null;
         _camera.Current = true;
@@ -1763,6 +1816,8 @@ public partial class PlaneViewer : Node3D
 
     public override void _Process(double delta)
     {
+        if (_perf)
+            ReportPerf(delta);
         // Everything below is anchored to *a* camera, so it runs once per rig — one in single
         // player, one per pane in splitscreen (each on that player's own visual layer).
         foreach (var rig in _rigs)

@@ -1072,3 +1072,79 @@ bootstrap passes run (PlaneViewer parents it afterwards) — thousands of error 
 branches now execute, but their payload is very often a `LightState` the runtime still does
 not act on. That is item 2, and it is where the refinery/dock/lighthouse lights actually
 light up.
+
+## 2026-07-21 — Animation point lights (`LIGHT_STATE`/`LIGHT_ANIMATION`), a pad kill switch, and a runtime profiler
+
+Follow-up plan (`docs/PLAN-anim-rendering-followups.md`) item 2, partially: the highest-count
+unacted-on event kind. C1's harbour now casts light — blue pools under the six dock lamps,
+warm pools under the refinery flares — where the flare *sprites* previously hung over pitch-dark
+piers.
+
+**The design call, made from data before writing code** (the plan explicitly asked for it, and
+suggested a glow-sprite route that turned out to be wrong): all 1,468 `LIGHT_STATE` events in
+the install are `type_: "PointSource"`, and the visible flare at a light's position is *already*
+gamez geometry — `docklight_flare` is a `Facade`/`SphericalY` mesh on `dock_liteflare.tif`,
+`flame01` a `Facade`/`CylindricalY` mesh on `fire101.tif`. A glow sprite would double-draw a
+flare that already renders, offset by the payload's 1–3 m. Meanwhile the world renders
+`unshaded`, so an `OmniLight3D` contributes literally nothing to it. What a `PointSource`
+supplies is the **spill onto surrounding geometry** — precisely what the original's DX7 point
+lights did to the same baked vertex lighting our shader reads. So: `src/Mech3/WorldLights.cs`
+packs the active set into a 2×N `Rgbaf` texture (global uniforms can't be arrays) and
+`SceneBuilder`'s fullbright shader adds `base_col.rgb * spill` before the fog mix.
+
+Decode notes now in `docs/formats/anim-definitions.md`: a `LIGHT_STATE` is a **partial update**
+(a fire's flicker is `{name, range}` every 0.03–0.07 s and must not reset position/colour/active
+state — the compiled nulls confirm it, `range` being null on exactly the 321 events that switch
+a light off); `LIGHT_ANIMATION` ramps **signed deltas**, not targets; 66 reader files also carry
+`LIGHT_STATE`, so `AnimDefs` needed the same normalizer that `PUFFER_STATE` did.
+
+**Verified.** A/B through the existing `--anim-lod` knob (which gates exactly these sequences):
+dock 33,185 px changed, peak delta `[70,130,196]` blue; refinery 117 px, `[34,16,0]` orange.
+Static plane viewer **byte-identical** (md5) to the stashed pre-change baseline. Static world
+views byte-identical in 6 of 8 chapters; C2/C3 differ by 2 px against a *measured* same-build
+floor of 1–2 px (on C3 with a smaller max delta than the floor). All 8 chapters zero errors.
+Mode battery (fly / stunt / viewer / damage lab / 4P race / menu / C5 freecam) clean.
+
+**Three findings worth keeping.**
+1. The world's normals need the **same cancelling negation** the aircraft's do — `cull_front`
+   makes every visible fragment back-facing and Godot flips `NORMAL`. Established by A/B rather
+   than assumed: negated lights the pier deck and the boat decks (a lamp above the pier),
+   non-negated lights the pilings and hull sides. This is the first time the world's normals
+   have been validated for lighting.
+2. A brace-less `if` emitted the light line into the **shaded** shader as well, where the spill
+   function does not exist — so every aircraft silently fell back to Godot's untextured default
+   material. Nothing errored visibly; only the byte-identical viewer check caught it.
+3. **C1 is the only chapter with `OnStartup` light definitions.** Everywhere else `LIGHT_STATE`
+   lives in `ON_CALL` combat/destruction effects a bootstrap never reaches, so the change is
+   inert in 7 of 8 chapters by construction, not by luck.
+
+**Performance, and two wrong guesses before the right answer.** Naively the feature cost
+~8.7 ms/frame. I first assumed the per-fragment shader loop and added a bounding-sphere
+early-out; measurement later showed viewport GPU time is **0.27 ms** with 16 lights live, so
+that was solving nothing and was removed. The real cause is CPU: each fire's flicker re-issues
+its *full* event including `AT_NODE`, ~2,700 `LIGHT_STATE`s/second on C1, of which ~1,740 fell
+through `ResolveOne` to the full-world fallback scan — 7,064 nodes against a regex matcher,
+~12M comparisons/second. Caching each light's host resolution (redone only when the name
+changes) removed it, with bit-identical output. The residual is ~2 ms/frame measured against a
+**re-measured same-session** baseline; an earlier 8.6 ms residual turned out to be partly
+machine drift over a long session, which is a standing lesson: re-measure the baseline before
+believing a regression.
+
+**Two tools landed alongside, both user-requested.** `src/Pads.cs` becomes the single owner of
+pad enumeration (concentrating the existing phantom-device policy) and adds `--no-pads`: a
+connected pad with stick drift steers the free camera and nudges the flight model, silently
+breaking scripted determinism, and SDL's `SDL_JOYSTICK_XINPUT`/`RAWINPUT`/`WGI` hints do not
+stop Godot 4.7 enumerating it. `--perf` logs fps / frame / script / render-CPU / **measured
+viewport GPU** ms once a second — Godot's visual profiler needs the editor GUI, but these
+runtime numbers are headless, suit scripted A/B better, and are what finally attributed the
+cost correctly.
+
+**Still open on item 2** (and re-scoped by the user mid-session): the animated *light sprite*
+behaviour — the flame cycling through `fire101–112` — is a different mechanism, the
+`EFFECTS` reader (`extracted/zrdr/effects.zrd.json`: `fire1` = 12 maps @ 10 fps, `fire2` = 6 @
+5 fps, bound to nodes `fire1.flt`/`fire2.flt`), together with the gamez materials' own `cycle`
+field (`texture_indices`/`speed`/`looping`, used by splash/water/wake/walking-man) that
+`ObjectCycleTexture{name,reset}` triggers. Neither is implemented or documented yet; that is
+the next piece. The lighthouse "circling light" is **not** an animation — the user confirmed it
+is billboard behaviour: a flare offset from the tower's centre so it stays visible from every
+direction, which makes our cylindrical-billboard pivot handling the thing to check.
