@@ -188,13 +188,11 @@ lighting but **animated light sprites**, and both mechanisms are still unimpleme
   (`texture_indices`/`speed`/`looping`); 3 in C1 (`splash01`→3 frames, two walking-man sprites),
   5 in C1B (water, surf, wake fronts, turbulence). `ObjectCycleTexture{name, reset}` (144
   events, no texture list of its own) is what triggers them. Also unimplemented.
-- **Lighthouse "circling light" is NOT an animation.** Confirmed by the user against the
-  original: it is a billboard rotating about its axis with an **offset from the lighthouse
-  centre**, so it stays visible from every direction. There is no rotation anywhere in the data
-  (only `hsliteson`/`hslitesoff` lit/unlit variants and a `poleflare.tif` `CylindricalY`
-  facade). So the thing to check is our **cylindrical-billboard pivot**: `SceneBuilder`
-  recenters billboard meshes on their quad centroid, which would destroy exactly the offset
-  that produces the sweep.
+- **Lighthouse "circling light" — FIXED 2026-07-21.** It is not an animation: a billboard
+  rotating about its axis with an offset from the tower centre, so it stays visible from every
+  direction. `SceneBuilder` was recentering cylindrical facades on their quad centroid, which
+  destroyed exactly that offset. Now only camera-*facing* sprites are recentered. See
+  `docs/HISTORY.md`; the same fix restores the `fireflare1` lamps and `nosegun1` muzzle flashes.
 
 Remaining kinds after this pass (C1 bootstrap counts): `ObjectMotion`×73,
 `ObjectOpacityState`×58, `SoundNode`×38, `ObjectAddChild`×38, `Callback`×8,

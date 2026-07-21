@@ -1148,3 +1148,38 @@ field (`texture_indices`/`speed`/`looping`, used by splash/water/wake/walking-ma
 the next piece. The lighthouse "circling light" is **not** an animation — the user confirmed it
 is billboard behaviour: a flare offset from the tower's centre so it stays visible from every
 direction, which makes our cylindrical-billboard pivot handling the thing to check.
+
+## 2026-07-21 — Lighthouse beam: cylindrical facades must not be recentered
+
+User report, and the description was the diagnosis: *"the lighthouse light circles the
+lighthouse — it is a billboard that rotates around its axis but has an offset to the center of
+the lighthouse so that it is visible from every direction."* There is no rotation animation
+anywhere in the data for it (searched all chapters: only `hsliteson`/`hslitesoff` lit/unlit
+texture variants, and `litehouse_light_on` re-asserting light+flare every 3 s). It is pure
+billboard behaviour, and we were destroying it.
+
+`SceneBuilder` recentered every billboard mesh on its quad centroid — necessary for the cloud
+sprites, whose quads sit up to ~650 m off their node origin and would otherwise swing wildly as
+the camera turns. But that rule had been extended to single-axis (cylindrical) facades, where it
+is exactly wrong: `GetCylindricalShader` spins the quad about `MODEL_MATRIX[3]`, the model
+origin, so a quad offset *perpendicular* to the spin axis **orbits** that origin. C1's
+`litehsflare` is a 19.24 m quad centred at local `(0, 0, 6)` — orbiting the tower at 6 m radius
+keeps the glow on the camera-facing side, which is what makes the lamp read as lit from every
+direction. Recentering pinned it to one authored world spot: viewed from the east the glow hung
+detached in mid-air beside a visibly dark lamp room.
+
+Fix is one condition — recenter only camera-*facing* sprites (`UsesBillboardTexture ||
+glowSprite`), never cylindrical ones.
+
+**Surveyed before changing the rule**, across all 8 chapters: 83 of 436 cylindrical facades have
+a quad centre more than 0.5 m off their spin axis, and they are exactly three mesh families,
+each of which *wants* the orbit — `litehsflare` (6.0 m, the lighthouse), the `fireflare1`
+hangar/street lamps (2.58–3.6 m, hanging off their poles) and the `nosegun1` muzzle flashes
+(2.4 m, which belong at the barrel tip rather than the gun's pivot). The other 353 have a zero
+or purely on-axis offset, where recentering was a no-op, so nothing else moves. Spherical
+sprites are untouched, which is what keeps the clouds and the moon correct.
+
+**Verified:** lighthouse shot from two angles before/after — the glow moves onto the lamp room
+from the east (brightest pixel +51 px) and is unchanged from the south, where the authored spot
+already faced the camera; 8 chapters zero errors with unchanged mesh-instance counts; plane
+viewer byte-identical (md5); fly and stunt clean.

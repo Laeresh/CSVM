@@ -287,15 +287,26 @@ void fragment() {
         if (mesh.Polygons.Count == 0)
             return null;
 
-        // Billboard sprites (clouds, glow flares, cylindrical facades) are recentered on
-        // their quad center: the material billboards around the mesh origin, but the source
-        // quads sit offset from it, so without this they would swing around the node as the
-        // camera turns. The offset is stored per mesh; every instance re-applies it as its
-        // local position.
+        // Camera-FACING sprites (clouds, spherical glow flares) are recentered on their quad
+        // center: the material billboards around the mesh origin, but the source quads sit
+        // offset from it — the cloud sprites by up to ~650 m — so without this they would
+        // swing around the node as the camera turns. The offset is stored per mesh; every
+        // instance re-applies it as its local position.
+        //
+        // Single-axis (cylindrical) facades are deliberately NOT recentered: there the offset
+        // is the authored effect, not an artifact. Their shader spins the quad about the model
+        // origin, so a quad offset perpendicular to that axis ORBITS it — which is exactly how
+        // the original makes C1's lighthouse beam sweep (`litehsflare`, a 19 m quad centred
+        // 6 m off the tower axis, so the beam stays visible from every direction), how the
+        // hangar/street lamps hang off their poles (`fireflare1`, 2.58-3.6 m) and how a muzzle
+        // flash sits at the barrel tip rather than the gun's pivot (`nosegun1`, 2.4 m).
+        // Recentering collapsed all of those to a sprite spinning in place. Surveyed across all
+        // 8 chapters: exactly those three families are affected — 83 of 436 cylindrical facades,
+        // and the other 353 have a zero (or purely on-axis) offset, so nothing else moves.
         bool glowSprite = IsGlowSpriteMesh(mesh);
         var cylAxis = GetCylindricalAxis(mesh);
         var offset = Vector3.Zero;
-        if ((UsesBillboardTexture(mesh) || glowSprite || cylAxis != CylAxis.None) && mesh.Vertices.Count > 0)
+        if ((UsesBillboardTexture(mesh) || glowSprite) && mesh.Vertices.Count > 0)
         {
             foreach (var v in mesh.Vertices)
                 offset += v;
