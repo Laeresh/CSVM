@@ -682,3 +682,13 @@ PR is worth), and `pr-1-anim.md` / `pr-2-gamez.md` as ready-to-paste PR bodies.
 
 **Nothing is pushed and no PR is open.** Pushing the branches and all upstream communication
 are the user's, per the project's division of labor.
+
+**Same-day, outward-facing steps (user-owned):** both PR branches pushed to the fork; issue
+[#3](https://github.com/TerranMechworks/mech3ax/issues/3) posted asking whether dropping CS
+`gamez` was a bandwidth call or an architectural one; the anim PR opened; the gamez PR prepared
+and deliberately held pending the answer to #3. A standing rule was decided in the same turn —
+**all outward-facing communication about this work discloses that it was done with the help of
+Claude Code** (PR bodies, issues, comments, writeups, not just the initial submission). Both PR
+bodies carry the disclosure above their technical content; commits already carried
+`Co-Authored-By: Claude`; issue #3's opening post predated the rule, so a follow-up disclosure
+comment was posted to that thread before either PR reached a reviewer.

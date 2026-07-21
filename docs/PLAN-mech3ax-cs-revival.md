@@ -843,5 +843,18 @@ deserves), `pr-1-anim.md` and `pr-2-gamez.md` (ready-to-paste PR bodies, first l
 Recommended order: post the discussion, open the anim PR regardless of the answer, hold the
 gamez PR on it.
 
-**Not done:** pushing the branches, opening the PRs, and all upstream communication — the
-user's, per the project's division of labor.
+**Status 2026-07-21 (user-owned steps, as they happened):** both branches pushed to the fork
+(`origin`, via `GIT_SSH=plink` — the OpenSSH path fails because `~/.ssh/config` points GitHub
+at `~/.ssh/github`, which is an SSH2 *public* key; the working private key is `githubp.ppk` in
+Pageant). Issue [#3](https://github.com/TerranMechworks/mech3ax/issues/3) posted, and the
+AI-assistance disclosure follow-up posted to that thread. **The anim PR is open.** The gamez
+PR is prepared and **deliberately held** pending upstream's answer on #3 — if the CS removal
+was architectural rather than bandwidth, it should not be opened at all.
+
+**Standing rule decided here:** every outward-facing communication about this work discloses
+that it was done with the help of Claude Code — PR bodies, issues, comments, community
+writeups, not just the initial submission. Both PR bodies carry it above the technical content;
+commits already carried `Co-Authored-By: Claude`.
+
+**Remaining:** upstream's reply on #3, then either open the gamez PR or close the track and
+keep the fork; plus whatever review iteration the anim PR draws.

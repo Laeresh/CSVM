@@ -20,6 +20,18 @@ The two PR branches are **independent** — either can be merged first, in eithe
 dependency on the other. That cost one real fix (below) and is worth it: upstream can take the
 uncontroversial one without waiting on the discussion the other may need.
 
+## Status (2026-07-21)
+
+| Step | State |
+|---|---|
+| Pre-PR question to upstream | **posted** — [#3](https://github.com/TerranMechworks/mech3ax/issues/3) |
+| AI-assistance disclosure on #3 | **posted** (the issue itself predated the rule) |
+| Anim PR (`pr-cs-anim`) | **opened** |
+| GameZ PR (`pr-cs-gamez`) | **prepared, deliberately held** pending upstream's answer on #3 |
+
+Both branches are pushed to the fork. Holding the gamez PR is the intended sequence, not an
+oversight: if upstream answers #3 with "architectural", that PR shouldn't be opened at all.
+
 ## AI-assistance disclosure (applies to everything that leaves this repo)
 
 **Standing rule, decided 2026-07-21: all outside communication about this work discloses that
@@ -31,8 +43,9 @@ Where it currently lives:
 - `pr-1-anim.md` and `pr-2-gamez.md` — a blockquote disclosure directly under the title, above
   the technical content, so a reviewer sees it before deciding how to read the PR.
 - The commits already carry a `Co-Authored-By: Claude` trailer (they did before this rule).
-- Issue #3 went out **before** this decision, so it has no disclosure. The follow-up comment to
-  post is at the bottom of `pr-0-discussion.md`; post it before either PR reaches a reviewer.
+- Issue #3 went out **before** this decision, so its opening post has no disclosure; the
+  follow-up comment at the bottom of `pr-0-discussion.md` was **posted to that thread**
+  (2026-07-21), ahead of any PR reaching a reviewer.
 
 The wording deliberately doesn't oversell: it names the tool, says the RE/implementation/
 verification were AI-assisted, states that the user reviewed it and stands behind it, and
