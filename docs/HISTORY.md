@@ -769,3 +769,38 @@ Verified by round-trip: a requested look-at direction and the printed one normal
 identical unit vector (delta length exactly 100.0 m), and pasting the printed pose back
 reproduces the view to 10 px of 230,400 (0.004% — the residual is the animated world moving
 between the two runs, not the camera).
+
+**Same-day (user request): `PUFFER_STATE` implemented — the train has steam.** `Puffer` gained a
+third emission mode, `SustainAt`: continuous `TIME_INTERVAL` emission at a **moving** node, which
+is what an animation's `ACTIVE_STATE 1` asks for and which neither the one-shot `Burst` (fixed
+point, finite pool) nor the distance-driven `TrailAdvance` could express. `PufferState.FromAnimEvent`
+parses the compiled payload; `AnimRuntime` keys one emitter per (puffer name, host node), builds it
+through a caller-supplied `PufferFactory` (a puffer bakes its atlas at construction and the session
+`TextureArchive` dies with the build scope, so the factory is cleared afterwards), and drives each
+from its host's world pose every frame. **User-confirmed in-game**: the C1 train trails a steam
+plume along the track. C1 raises 4 emitters (the waterfall's three splash puffers + the train's
+steam), C3 2, C4 9 (three waterfalls × three), C5 3; all 8 chapters error-free.
+
+Three things surfaced on the way, none of them the puffers:
+
+- **A latent binding bug that would have broken exactly this work.** `AnimDefinition.NodeRefs`
+  admitted `lights`/`puffers`/`dynamic_sounds` alongside `nodes`/`objects`. Measured over
+  C1/C2/C4/C5: **every one** of those three arrays' 2,616 `ptr` values is outside the node range
+  (they are runtime pointers), while `nodes`/`objects` resolve 100%. Left in, a PUFFER_STATE's own
+  name would have bound to a bogus index and resolved to nothing. Restricted to the two verified
+  arrays.
+- **A zero-duration `Loop` busy-spin.** C1's waterfall is `[PufferState ×3, Loop{-1}]` — all
+  instantaneous, so the sequence re-ran as fast as the per-frame guard allowed. A loop iteration
+  that consumed no time now yields to the next frame. This alone cut the wasted dispatch counts by
+  an order of magnitude (`ObjectOpacityState` 3,614→58, `If` 3,258→71, `LightState` 2,042→518).
+- **A wrong diagnosis, corrected.** The spectator camera appeared to drift on its own (99.8% of
+  pixels changed over 120 idle frames) and was attributed to a phantom device reporting
+  `LeftY = -1.000` at rest; a rest-baseline calibration was written to neutralise it. The real
+  cause was the **user holding a controller stick in another game** — Godot polls gamepads
+  regardless of window focus, unlike keyboard/mouse. The calibration was reverted (baking "rest"
+  at launch would go deaf to a direction held at startup) and re-measured at **0/57,600 px** drift
+  with the stick centred. Open question recorded for the user: whether pad reads should be gated on
+  window focus project-wide, which would also stop a flight taking stick input while alt-tabbed.
+
+Also fixed here: `--debug-anim` now reports whether each animated node is **visible in tree**, since
+a correctly-animated node inside a deactivated subtree moves perfectly and renders nothing.

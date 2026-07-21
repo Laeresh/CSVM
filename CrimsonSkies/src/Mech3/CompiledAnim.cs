@@ -194,9 +194,14 @@ public sealed class AnimDefinition
                 arr[i] = (int)(AnimData.AsNum(ids[i]) ?? 0f);
             def.SiScriptIds = arr;
         }
-        // The support arrays are the def's symbol table (see NodeRefs). 0xFFFFFFFF is the
-        // "no node" sentinel mech3ax preserves for refs the compiler left dangling.
-        foreach (var key in new[] { "nodes", "objects", "lights", "puffers", "dynamic_sounds" })
+        // The support arrays are the def's symbol table (see NodeRefs). ONLY `nodes` and
+        // `objects` carry node indices: measured over C1/C2/C4/C5, their in-range `ptr`s
+        // resolve to a matching node name 46,481/46,481 and 31,323/31,323 of the time, while
+        // `lights`/`puffers`/`dynamic_sounds` are out of node range in **every** one of their
+        // 2,616 entries — those are runtime pointers to engine objects, not node indices.
+        // Admitting them here would silently bind (say) a PUFFER_STATE's own name to a bogus
+        // index and resolve it to nothing instead of falling through to name matching.
+        foreach (var key in new[] { "nodes", "objects" })
             foreach (var r in d.Objects(key))
                 if (r.Str("name") is { } refName && r.Num("ptr") is { } ptr
                     && ptr >= 0 && ptr < 0xFFFFFFFu)

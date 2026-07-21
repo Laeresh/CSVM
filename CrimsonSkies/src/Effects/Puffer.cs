@@ -94,6 +94,83 @@ public sealed class PufferState
         return found;
     }
 
+    /// <summary>
+    /// Builds a state from a **compiled** animation's PUFFER_STATE event payload (the
+    /// `AnimEvent.Data` of an `AnimRuntime` dispatch), as opposed to <see cref="Parse"/>'s
+    /// reader form. The two agree: cross-checked on the C1 train's `steampuffer`, every
+    /// shared field is identical (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE 0.8–1.5,
+    /// LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour ramp).
+    ///
+    /// Two shape differences worth knowing:
+    /// - the emission interval is **always** in `interval_garbage.interval_value` — the
+    ///   `interval` field itself is null in all 4,387 PUFFER_STATE events of this install;
+    /// - `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose **second entry's
+    ///   max** is the reader's scalar (matches on 172 of 177 puffers whose name resolves to a
+    ///   single reader definition; the five outliers are names defined differently in
+    ///   different readers, not a mapping failure).
+    /// </summary>
+    public static PufferState FromAnimEvent(AnimData d)
+    {
+        Vector3 Vec(string key) => d.Vec3(key);
+        float Range(string key, string end, float fallback) =>
+            d.Obj(key)?.Num(end) ?? fallback;
+
+        var s = new PufferState
+        {
+            Name = d.Str("name") ?? "",
+            TimeInterval = d.Obj("interval")?.Num("value")
+                           ?? d.Obj("interval_garbage")?.Num("interval_value") ?? 0.1f,
+            LocalVelocity = Vec("local_velocity"),
+            WorldVelocity = Vec("world_velocity"),
+            MinRandomVelocity = Vec("min_random_velocity"),
+            MaxRandomVelocity = Vec("max_random_velocity"),
+            WorldAcceleration = Vec("world_acceleration"),
+            Friction = d.Num("friction") ?? 0f,
+            SizeMin = Range("size_range", "min", 1f),
+            SizeMax = Range("size_range", "max", 1f),
+            LifetimeMin = Range("lifetime_range", "min", 1f),
+            LifetimeMax = Range("lifetime_range", "max", 1f),
+            DeviationDistance = d.Num("deviation_distance") ?? 0f,
+            Number = Mathf.Max(1, (int)(d.Num("number") ?? 1f)),
+        };
+
+        var growth = new List<AnimData>(d.Objects("growth_factors"));
+        s.GrowthFactor = growth.Count >= 2 ? growth[1].Num("max") ?? 1f
+            : growth.Count == 1 ? growth[0].Num("max") ?? 1f : 1f;
+
+        // textures[] entries carry an optional run_time: present ⇒ a timed flipbook,
+        // absent ⇒ the static pool each particle picks one from.
+        var pool = new List<string>();
+        var seq = new List<(float, string)>();
+        foreach (var t in d.Objects("textures"))
+        {
+            if (t.Str("name") is not { } texName)
+                continue;
+            if (t.Num("run_time") is { } runTime)
+                seq.Add((runTime, texName));
+            else
+                pool.Add(texName);
+        }
+        s.Textures = pool;
+        s.TextureSequence = seq;
+
+        // colors[]: {unk00 = life fraction, color = rgb 0–255, unk16 = alpha 0–1}, the same
+        // ramp the reader spells [frac, r, g, b, a].
+        var colors = new List<(float, Color)>();
+        foreach (var c in d.Objects("colors"))
+        {
+            var rgb = c.Obj("color");
+            if (rgb == null)
+                continue;
+            float r = rgb.Num("r") ?? 0f, g = rgb.Num("g") ?? 0f, b = rgb.Num("b") ?? 0f;
+            float scale = r > 1f || g > 1f || b > 1f ? 1f / 255f : 1f;
+            colors.Add((c.Num("unk00") ?? 0f,
+                new Color(r * scale, g * scale, b * scale, c.Num("unk16") ?? 1f)));
+        }
+        s.Colors = colors;
+        return s;
+    }
+
     private static PufferState Parse(ZrdrDict d)
     {
         Vector3 Vec(string key) =>
@@ -191,7 +268,16 @@ public sealed partial class Puffer : Node3D
     private Vector3 _trailPrev;    // last emit-line end, world space
     private float _trailCarry;     // meters of motion carried into the next interval
 
+    private bool _sustaining;      // continuous TIME_INTERVAL mode (AnimRuntime's PUFFER_STATE)
+    private float _sustainCarry;   // seconds carried into the next emission interval
+
     private const int TrailPool = 640; // live-particle cap for trail emitters
+    // A sustained emitter never stops, so its pool is sized to the steady-state population
+    // (Number per interval, each living up to LifetimeMax) rather than to a burst duration.
+    private const int SustainPoolMin = 16, SustainPoolMax = 2048;
+    // Cap catch-up after a long frame (or a paused window): without it a 5 s hitch would
+    // spawn 5 s worth of particles in one frame and blow the pool.
+    private const int MaxSustainBatchesPerFrame = 8;
 
     private const string ShaderCode = """
         shader_type spatial;
@@ -246,7 +332,11 @@ public sealed partial class Puffer : Node3D
     /// puffer at 0.3 s) — ignored by trail (DISTANCE_INTERVAL) states, which emit while
     /// driven via <see cref="TrailAdvance"/>. States with a COLORS ramp alpha-blend
     /// (black smoke is invisible additively); flipbook fire stays additive.</summary>
-    public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f)
+    /// <param name="sustained">Continuous emission driven by <see cref="SustainAt"/> — the
+    /// animation system's ACTIVE_STATE 1 puffers (the C1 train's steam plume, the waterfall
+    /// mist), which run indefinitely at their TIME_INTERVAL rather than for a burst duration.</param>
+    public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
+        bool sustained = false)
     {
         var frameNames = state.TextureSequence.Count > 0
             ? state.TextureSequence.Select(f => f.Texture).ToList()
@@ -255,15 +345,22 @@ public sealed partial class Puffer : Node3D
         if (atlas == null)
             return null;
         var puffer = new Puffer();
-        puffer.Init(state, atlas, frameNames.Count, activeDuration);
+        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained);
         return puffer;
     }
 
-    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration)
+    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
+        bool sustained = false)
     {
         _state = state;
         Name = "puffer_" + state.Name;
-        if (state.DistanceInterval > 0f)
+        if (sustained)
+        {
+            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
+                                         / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
+            _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
+        }
+        else if (state.DistanceInterval > 0f)
         {
             _particles = new Particle[TrailPool];
         }
@@ -319,6 +416,7 @@ public sealed partial class Puffer : Node3D
     {
         _emitting = false;
         _trailing = false;
+        _sustaining = false;
         _active = false;
         _liveCount = 0;
         if (_mm != null)
@@ -391,6 +489,62 @@ public sealed partial class Puffer : Node3D
         _trailCarry -= count * _state.DistanceInterval;
     }
 
+    /// <summary>
+    /// Continuous emission at a moving world point — the third emission mode, alongside the
+    /// one-shot <see cref="Burst"/> and the distance-driven <see cref="TrailAdvance"/>. This
+    /// is what an animation's <c>PUFFER_STATE … ACTIVE_STATE 1</c> asks for: emit
+    /// <c>NUMBER</c> sprites every <c>TIME_INTERVAL</c>, indefinitely, wherever the emitter
+    /// node currently is (the C1 train's smokestack moves along the whole track loop).
+    /// Particles live in world space, so they are left behind rather than dragged along.
+    /// Call every frame while the puffer is on; <see cref="SustainEnd"/> stops emission and
+    /// lets the live particles decay.
+    /// </summary>
+    public void SustainAt(Vector3 worldPos, Basis worldBasis, float dt)
+    {
+        if (!_sustaining)
+        {
+            TopLevel = true;                 // world-space particles, like the trail mode
+            GlobalPosition = Vector3.Zero;
+            _sustaining = true;
+            _active = true;
+            Visible = true;
+            _sustainCarry = _state.TimeInterval; // emit on the very first frame
+        }
+        _sustainCarry += dt;
+        float interval = Mathf.Max(_state.TimeInterval, 1e-3f);
+        int batches = Mathf.Min((int)(_sustainCarry / interval), MaxSustainBatchesPerFrame);
+        for (int b = 0; b < batches; b++)
+            SpawnSustained(worldPos, worldBasis);
+        _sustainCarry -= batches * interval;
+    }
+
+    /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
+    public void SustainEnd() => _sustaining = false;
+
+    private void SpawnSustained(Vector3 worldPos, Basis worldBasis)
+    {
+        var min = _state.MinRandomVelocity;
+        var max = _state.MaxRandomVelocity;
+        // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
+        // is not. Rotating the local part is what keeps a banking/turning emitter correct.
+        var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
+        float d = _state.DeviationDistance;
+        for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
+        {
+            _particles[_liveCount++] = new Particle
+            {
+                Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+                Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
+                BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+                Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
+                Age = 0f,
+                Frame = _state.TextureSequence.Count > 0 ? 0f
+                    : Mathf.Min(_state.Textures.Count - 1,
+                        Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+            };
+        }
+    }
+
     private void SpawnTrailPuff(Vector3 worldPos)
     {
         if (_liveCount >= _particles.Length)
@@ -454,7 +608,7 @@ public sealed partial class Puffer : Node3D
         }
         _mm.VisibleInstanceCount = _liveCount;
 
-        if (_liveCount == 0 && !_emitting && !_trailing)
+        if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
         {
             _active = false;
             Visible = false;

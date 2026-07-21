@@ -66,8 +66,18 @@ public sealed partial class AnimRuntime : Node
     public static AnimRuntime Apply(Node3D worldRoot, AnimProgram program)
     {
         var runtime = new AnimRuntime { Name = "AnimRuntime" };
-        runtime.Bootstrap(worldRoot, program);
+        runtime.Bind(worldRoot, program);
         return runtime;
+    }
+
+    /// <summary>Runs the bootstrap passes against a built world. Separate from
+    /// <see cref="Apply"/> so a caller can set build-time-only collaborators (notably
+    /// <see cref="PufferFactory"/>, which depends on the session TextureArchive's lifetime)
+    /// before the passes fire the events that need them.</summary>
+    public void Bind(Node3D worldRoot, AnimProgram program)
+    {
+        Name = "AnimRuntime";
+        Bootstrap(worldRoot, program);
     }
 
     /// <summary>--debug-anim: log every live motion's target and pose once a second, so a
@@ -147,6 +157,9 @@ public sealed partial class AnimRuntime : Node
         if (ran.Count > 0 || missing.Count > 0)
             GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
                      (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
+        if (_puffers.Count > 0)
+            GD.Print($"anim: {_puffers.Count} puffer emitter(s): " +
+                     string.Join(", ", _puffers.Keys.Select(k => k.Name).Distinct()));
         if (netHidden.Count > 0)
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
@@ -178,6 +191,7 @@ public sealed partial class AnimRuntime : Node
         // Motions advance ONCE per frame, here — not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
+        TickPuffers(dt);
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -352,13 +366,125 @@ public sealed partial class AnimRuntime : Node
                 Stop(ev.Data.Str("name"));
                 return true;
 
+            case "PufferState":
+                HandlePufferState(ev, def, anchor);
+                return true;
+
             default:
-                // Sound / puffer / light / opacity / texture-cycle / FBFX / camera and the
+                // Sound / light / opacity / texture-cycle / FBFX / camera and the
                 // rest: dispatched, counted, and reported once per kind. Adding a handler is
                 // a case above and nothing else.
                 Count(ev.Kind);
                 return true;
         }
+    }
+
+    // ---- PUFFER_STATE ----
+
+    /// <summary>
+    /// Builds a <see cref="Effects.Puffer"/> for a state, or null. Supplied by PlaneViewer and
+    /// valid only DURING the world build: a puffer bakes its texture atlas at construction
+    /// from the session's <see cref="TextureArchive"/>, which is disposed when the build ends.
+    /// Cleared afterwards, so a later request is reported rather than silently faulting on a
+    /// closed zip handle. In practice every PUFFER_STATE that matters fires during the
+    /// bootstrap passes (measured on C1: the waterfall mist, the train's steam, two truck
+    /// dust plumes — nothing else reaches one).
+    /// </summary>
+    public Func<Effects.PufferState, Effects.Puffer?>? PufferFactory;
+
+    /// <summary>Where built puffers are parented (the session root, not the animated node —
+    /// their particles live in world space and must not be dragged by the emitter's motion).</summary>
+    public Node? PufferParent;
+
+    // One emitter per (puffer name, emitter node). Definitions re-assert their PUFFER_STATE
+    // every loop iteration — C1's waterfall is [PufferState ×3, Loop{-1}] — so the handler has
+    // to be idempotent: re-asserting an already-running emitter must be a no-op, not a
+    // second emitter.
+    private readonly Dictionary<(string Name, Node3D Node), Effects.Puffer> _puffers = new();
+    private readonly List<(Effects.Puffer Puffer, Node3D Node)> _activePuffers = new();
+
+    private void HandlePufferState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (ev.Data.Str("name") is not { } pufferName)
+            return;
+        // ACTIVE_STATE: 1 = start emitting, 0 = stop. The attach point is AT_NODE; note it is
+        // NOT the event's "name" (that is the puffer's own name, a different namespace).
+        bool on = (ev.Data.Num("active_state") ?? 0f) >= 1f;
+        var host = ev.Data.Str("at_node") is { } atNode
+            ? ResolveOne(atNode, def, anchor)
+            : anchor;
+        if (host == null)
+        {
+            Count("PufferState(no host node)");
+            return;
+        }
+
+        var key = (pufferName, host);
+        if (!on)
+        {
+            if (_puffers.TryGetValue(key, out var running))
+            {
+                running.SustainEnd();
+                _activePuffers.RemoveAll(a => a.Puffer == running);
+            }
+            return;
+        }
+        if (_puffers.ContainsKey(key))
+            return; // already running — the loop re-asserting it
+
+        if (PufferFactory == null)
+        {
+            Count("PufferState(after build)");
+            return;
+        }
+        var state = Effects.PufferState.FromAnimEvent(ev.Data);
+        // A PUFFER_STATE carrying no textures is an adjust/stop stub that re-asserts a puffer
+        // some other event defines — the readers have the same idiom, which is why
+        // PufferState.FindInReader tests for a "fully defined" state. There is nothing to
+        // build from it; C1's truck1dust_puffer and black_exhaust_puffer are the two here.
+        if (state.Textures.Count == 0 && state.TextureSequence.Count == 0)
+        {
+            Count($"PufferState(stub, no textures: {state.Name})");
+            return;
+        }
+        if (PufferFactory(state) is not { } puffer)
+        {
+            // Name it: a puffer whose textures are absent from this chapter's archive is a
+            // data-coverage fact worth being able to look up, not an anonymous count.
+            Count($"PufferState(no texture: {state.Name})");
+            return;
+        }
+        (PufferParent ?? _root).AddChild(puffer);
+        _puffers[key] = puffer;
+        _activePuffers.Add((puffer, host));
+        _opsApplied++;
+    }
+
+    // Drives every running emitter from its host node's current world pose. Emitters follow
+    // moving nodes (the train's smokestack travels the whole track loop), so this is per frame.
+    private void TickPuffers(float dt)
+    {
+        for (int i = _activePuffers.Count - 1; i >= 0; i--)
+        {
+            var (puffer, node) = _activePuffers[i];
+            if (!IsInstanceValid(puffer) || !IsInstanceValid(node))
+            {
+                _activePuffers.RemoveAt(i);
+                continue;
+            }
+            var xform = node.GlobalTransform;
+            puffer.SustainAt(xform.Origin, xform.Basis, dt);
+        }
+    }
+
+    /// <summary>Resolves a single node name for this definition — the compiled symbol table
+    /// first, then the reader-style name/wildcard match within the anchor's scope.</summary>
+    private Node3D? ResolveOne(string name, AnimDefinition def, Node3D? anchor)
+    {
+        if (def.NodeRefs.TryGetValue(name, out int idx) && _byIndex.TryGetValue(idx, out var bound))
+            return bound;
+        var found = ResolvePath(new List<string> { name }, anchor, def.LocalNodesOnly);
+        return found.Count > 0 ? found[0] : null;
     }
 
     private void CallSequence(AnimDefinition def, Node3D? anchor, string name)
@@ -424,7 +550,10 @@ public sealed partial class AnimRuntime : Node
             var t = m.Target;
             var name = t.HasMeta(NameMeta) ? t.GetMeta(NameMeta).AsString() : t.Name.ToString();
             var p = t.GlobalPosition;
-            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0})");
+            // Visibility matters as much as position here: a correctly-animated node inside a
+            // subtree the mission deactivated moves perfectly and renders nothing.
+            bool shown = t.IsVisibleInTree();
+            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
         }
         if (_motions.Count > 12)
             GD.Print($"anim/debug: … and {_motions.Count - 12} more");
@@ -630,9 +759,18 @@ public sealed partial class AnimRuntime : Node
                         }
                         if (_loopsLeft > 0)
                             _loopsLeft--;
+                        bool instantIteration = _clock <= 0f;
                         _pc = 0;
                         _clock = 0f;
                         _due = 0f;
+                        // A loop over purely instantaneous events is the data's "keep this
+                        // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
+                        // whose emitters run on their own TIME_INTERVAL). Left unchecked it
+                        // spins as fast as the per-frame guard allows; yield to the next frame
+                        // instead. Loops whose body takes time are unaffected — they are
+                        // already waiting on _due.
+                        if (instantIteration)
+                            return;
                         break;
                     case "If":
                     case "Elseif":

@@ -318,6 +318,25 @@ are not visible from the byte format alone, each measured against this install.
   every base quaternion is unit-norm and the yaw tracks the frame-to-frame chord heading to ~1°
   (frame 1 quat-yaw −33.11° against a chord of −43.12°, spanned by the frame's own −0.0505 rad/s
   rate); read literally the values are not even normalised. Undo the shift at the parse boundary.
+- **Compiled `PUFFER_STATE` payloads** (consumed 2026-07-21): the event carries the emitter's
+  full parameter set inline, so no reader lookup is needed — cross-checked field-for-field
+  against `train.json`'s own `steampuffer` (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE
+  0.8–1.5, LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour
+  ramp: all identical). Three shape facts: the emission interval is **always** in
+  `interval_garbage.interval_value` (`interval` itself is null in all 4,387 PUFFER_STATE events
+  of this install); `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose
+  **second entry's max** is the reader's scalar (matches 172 of 177 puffers whose name resolves
+  to a single reader definition); and an event whose `textures` array is **empty** is an
+  adjust/stop stub referencing a puffer another event defines — the readers have the same idiom
+  (C1's `truck1dust_puffer` and `black_exhaust_puffer`). `at_node` is the attach point, and is
+  NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
+  1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
+  loop iteration, so a consumer must treat re-assertion as idempotent.
+- **Only `nodes` and `objects` carry node indices.** `lights`, `puffers` and `dynamic_sounds`
+  hold runtime pointers instead — measured over C1/C2/C4/C5, **every one** of their 2,616 `ptr`
+  values is outside the node-array range, while `nodes`/`objects` resolve 46,481/46,481 and
+  31,323/31,323. Admitting the other three into a name→index table silently binds a puffer's
+  own name to a bogus index.
 - One plan-evidence correction: the `ANIMATION_PATH` key in `mis_anim.json` is the
   **directory** the engine resolves anim sources from (`..\data\c1\ia1\zrdr\zeps`), not a
   waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is

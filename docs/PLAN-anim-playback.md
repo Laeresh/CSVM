@@ -146,11 +146,15 @@ and are user-verified.
 
 ### Open / follow-ups
 
-- **The deferred event kinds** (one `case` each in the dispatch table): `PufferState` (387 in
-  C1 — the train's steam plume), `ObjectOpacityState`/`ObjectOpacityFromTo` (3,614),
-  `LightState`/`LightAnimation` (2,042), `Sound`/`SoundNode` (39), `ObjectAddChild` (39),
-  `ObjectCycleTexture`, `FbfxColorFromTo`, `CameraState`, `ObjectMotion`. Recorded in
-  `backlog.md`.
+- **`PufferState` landed 2026-07-21** (user request, same day): `Puffer` gained a third emission
+  mode (`SustainAt` — continuous `TIME_INTERVAL` emission at a moving node) and the runtime keys
+  one emitter per (puffer name, host node). User-confirmed in-game: the C1 train trails steam.
+- **The still-deferred event kinds** (one `case` each in the dispatch table): `LightState`/
+  `LightAnimation` (518 in C1), `ObjectOpacityState`/`ObjectOpacityFromTo` (58), `Sound`/
+  `SoundNode` (39), `ObjectAddChild` (39), `Callback` (8), `ObjectCycleTexture`,
+  `FbfxColorFromTo`, `CameraState`, `ObjectMotion`. Recorded in `backlog.md`. (These counts are
+  an order of magnitude below the first measurement because the zero-duration `Loop` busy-spin
+  was fixed — the waterfall's `[PufferState ×3, Loop{-1}]` had been re-running every frame.)
 - **`If`/`Elseif` branches are skipped, not evaluated** (3,258 in C1). Their conditions are
   gameplay state (`ANIM_HEALTH`, `RANDOM_WEIGHT`, `NODE_ACTIVE`, …) that an at-rest world build
   has no value for; guessing would silently pose objects wrongly, so the branch body is skipped
@@ -162,8 +166,14 @@ and are user-verified.
   unexplained delta in a coverage number, so it is written down rather than rounded off.
 - **596 live instances persist in C1** (looping or long-scheduled sequences). No measurable
   frame cost was observed, but this has not been profiled on a weak GPU/CPU.
-- Interactive playtest of the spectator camera (mouse-look feel, speed curve) is owed — it was
-  verified by scripted screenshots and the `--debug-anim` motion log, not by hand.
+- Spectator camera playtested 2026-07-21 (user: "feels workable"). One bug found and fixed: F11
+  printed a look-at of the world origin in `--freecam`, because `PrintCameraPose` branched on
+  `_fly` alone and fell into the orbit branch, whose `_orbitCenter` freecam never sets.
+- **Open question for the user: should gamepad reads be gated on window focus?** Godot polls pads
+  regardless of focus (unlike keyboard/mouse), so a controller moved while the game is alt-tabbed
+  still drives it — this was mistaken for a camera drift bug before the user identified the cause.
+  It affects `FlightController` and `MenuInput` as much as the spectator camera, so it is a
+  project-wide input-policy decision, not a local fix.
 
 ## Verification bar
 

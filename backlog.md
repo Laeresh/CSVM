@@ -11,12 +11,13 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 - ~~**Animated world vehicles**~~ — **LANDED 2026-07-21** (`docs/PLAN-anim-playback.md`, revival-plan
   item 7): the C1 train drives its SI-script track loop, the road vehicles run their
   `OBJECT_MOTION_FROM_TO` chains and the hangar doors swing, via the generic `AnimRuntime`.
-  Remaining from this entry, as its own follow-up: the **effect/audio event kinds** the runtime
-  dispatches but does not yet act on — `PufferState` (the train's steam plume), `Sound`/
-  `SoundNode`, `LightState`/`LightAnimation`, `ObjectOpacityFromTo`/`ObjectOpacityState`,
-  `ObjectCycleTexture`, `FbfxColorFromTo`, `CameraState`, and `ObjectMotion` (the debris-scatter
-  primitive, reachable only from destruction sequences). Each is one `case` in the runtime's
-  dispatch table; the engine does not change shape to add them.
+  `PufferState` landed the same day (the train's steam plume, waterfall mist — user-confirmed
+  in-game). Remaining from this entry, as its own follow-up: the **effect/audio event kinds**
+  the runtime dispatches but does not yet act on — `Sound`/`SoundNode`, `LightState`/
+  `LightAnimation`, `ObjectOpacityFromTo`/`ObjectOpacityState`, `ObjectCycleTexture`,
+  `FbfxColorFromTo`, `CameraState`, `ObjectAddChild` (reparenting), and `ObjectMotion` (the
+  debris-scatter primitive, reachable only from destruction sequences). Each is one `case` in
+  the runtime's dispatch table; the engine does not change shape to add them.
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
   lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
@@ -38,8 +39,6 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
   - **Achromatic paint regions.** A hue window cannot see a paint region with no hue, so the
     Bloodhawk's outer wing panels stay gray where the original paints them black. Needs a
     per-texture value-band rule (hand-authored per aircraft) or a better region key.
-  - **The Fury is unpaintable.** Its skins are an all-neutral near-black shading map with no
-    key at all, yet the original flies a studio-blue `secfury`. It gets decals only today.
   - **Slot order.** Regions are assigned to colour slots by area; validated only on the
     Bloodhawk, and even there the reference cannot separate slots 2 and 3 (both white under
     Fortune Hunters).
