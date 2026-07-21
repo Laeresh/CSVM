@@ -202,6 +202,38 @@ Remaining kinds after this pass (C1 bootstrap counts): `ObjectMotion`×73,
 `ObjectOpacityState`×58, `SoundNode`×38, `ObjectAddChild`×38, `Callback`×8,
 `ObjectCycleTexture`×1.
 
+### Next up: `OBJECT_ADD_CHILD` (scoped 2026-07-21, not started)
+
+Chosen as the next piece of item 2 because it unblocks a whole family (the `EFFECTS` fire
+flipbooks and burning objects generally). Survey done, so a fresh session can start from here:
+
+- **1,152 `ObjectAddChild` + 192 `ObjectDeleteChild`** install-wide; 38 at C1 bootstrap. The
+  payload is trivial - `{parent, child}`, both names - so the handler itself is small.
+- **It is NOT only a destruction feature.** 293 of the defs using it are `OnStartup` against 822
+  `OnCall`, so a real part of it composes the world at build time (e.g. the `apassengers`
+  defs add named passenger characters to a `pass_st` station node). That matters because we
+  have no weapons, so anything gated purely on combat damage would be unverifiable today.
+
+**Two decode questions to settle BEFORE writing the handler** - they decide the design:
+
+1. **Move or clone?** `fire2.flt` is a single node, but many objects burn. Does the data reparent
+   the one template (implying only one fire at a time, and that `OBJECT_DELETE_CHILD` returns
+   it), or does the original instance it per site? Check whether any two live defs ever add the
+   same child to different parents concurrently.
+2. **The templates are not built at all.** `fire1.flt`/`fire2.flt` are parentless roots, and
+   `WorldBuilder` builds only the World's children plus partition-referenced subtrees, so they
+   are absent from the scene. Something has to construct and hold that pool (inactive) before a
+   reparent can target it - decide where that lives, and whether the same is true of the other
+   1,152 events' children.
+
+Reparenting in Godot must preserve the world transform (`RemoveChild`/`AddChild` then re-apply
+`GlobalTransform`), and `AnimRuntime._rest` records an authored pose per touched node, so check
+how a reparent interacts with that before assuming it is inert.
+
+Once this lands, the `EFFECTS` flipbooks (see item 2's re-scope above) are a small addition on
+top: `TextureCycler` already plays frame lists, so EFFECTS only needs the reader parsed and
+bound to the node's material.
+
 ## 3. Mission-spawned entity rosters (`hk_zep`, CTF props)
 
 **Goal:** `hk_zep` (the Hollywood Knights zeppelin) sits on the C1/IA1 field when it should be
