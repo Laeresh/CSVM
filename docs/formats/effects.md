@@ -53,3 +53,41 @@ Rendering note (measured, remake convention): states **with** a COLORS ramp must
 alpha-blended (a near-black smoke ramp is invisible additively); ramp-less fire/flash
 states read correctly additive. The fade at end-of-life belongs to the ramp when present
 (its alpha ends at 0).
+
+
+## Texture flipbooks, layer by layer (2026-07-21)
+
+The install animates textures through **three** distinct mechanisms. They are easy to confuse
+because they share the same frame sets (`fire101-112` etc.), so:
+
+1. **Puffer flipbooks** - `PUFFER_STATE`'s `TEXTURES`/`TEXTURE_SEQUENCE`, played per *particle*.
+   Implemented (`src/Effects/Puffer.cs`); this is what animates crash fireballs and damage trails.
+2. **Material cycles** - a gamez material's own `cycle` block: `texture_indices` (the frame
+   list), `speed` (fps), `looping`. Played on the *surface*. Implemented 2026-07-21
+   (`src/Mech3/TextureCycler.cs`). Only 1-7 materials per chapter carry one, but they cover the
+   animated sea: C1B has `wtr00000` x16 @10 fps over 695 polygons and `srf0001` x16 @9 over 375,
+   plus `wakefront1` x5 @12 (boat wakes) and `turb01` x6 @12 (turbulence); C1 has `splash01` x3
+   @4 and the `bmanwalk`/`bmanrun` x6 @9 crowd sprites. `ObjectCycleTexture{name, reset}` (144
+   events, carrying no frame list of its own) is the anim-side trigger for these - still
+   unimplemented, so cycles currently run free rather than being started/reset by animation.
+3. **The `EFFECTS` reader** - `extracted/zrdr/effects.zrd.json`, the same idea bound to a NODE:
+
+   ```
+   ["fire1.flt", "NAME", ["fire1"], "SPEED", [10.0], "LOOPING", ["ON"],
+    "MAPS", ["fire101.tif", ..., "fire112.tif"]]
+   ["fire2.flt", "NAME", ["fire2"], "SPEED", [5.0],  "LOOPING", ["ON"],
+    "MAPS", ["fire101.tif", ..., "fire106.tif"]]
+   ```
+
+   Exactly two entries exist, and no compiled anim definition anywhere has a non-null `effects`
+   array, so the binding is by node name from this reader alone. `fire1`/`fire2` are single
+   `Facade`/`CylindricalY` quads (`fire101.tif`/`fire102.tif`) under **parentless template
+   nodes** - `fire.zrd.json` activates and scales `fire2.flt` wherever something burns. Not
+   wired up: the templates only reach a burn site through `OBJECT_ADD_CHILD` reparenting, which
+   is unimplemented, so EFFECTS belongs with that work rather than before it.
+
+**What is NOT a flipbook:** C1's refinery gas flare. `flame01` is a static `fire101.tif`
+billboard; its only animation is `refinery_fire.zrd.json`'s `LIGHT_STATE` flicker, cycling
+`orange_light`'s range 2->11, 3->15, 1.5->10, 2.5->14 in a tight loop. The flame's apparent
+flickering is the *light* flickering. (Checked because the fire textures' existence makes a
+texture cycle the intuitive guess; the reader is explicit that it is not.)

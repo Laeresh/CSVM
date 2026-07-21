@@ -396,6 +396,23 @@ public sealed class GameZ
                     int i = ti.GetInt32();
                     mat.TextureName = i >= 0 && i < _textureNames.Count ? _textureNames[i] : null;
                 }
+                // A material can carry its own texture flipbook: the original's animated water,
+                // surf, boat wakes, turbulence, splashes and the walking/running crowd sprites
+                // are all one material cycling a frame list at a fixed rate. Only 1-5 materials
+                // per chapter have one, but C1B's sea is 695 polygons of `wtr00000` and 375 of
+                // `srf0001`, so ignoring it leaves a large surface visibly frozen.
+                if (body.TryGetProperty("cycle", out var cyc) && cyc.ValueKind == JsonValueKind.Object)
+                {
+                    if (cyc.TryGetProperty("texture_indices", out var idx))
+                        foreach (var e in idx.EnumerateArray())
+                        {
+                            int i = e.GetInt32();
+                            if (i >= 0 && i < _textureNames.Count)
+                                mat.CycleTextures.Add(_textureNames[i]);
+                        }
+                    mat.CycleSpeed = cyc.TryGetProperty("speed", out var sp) ? sp.GetSingle() : 0f;
+                    mat.CycleLooping = !cyc.TryGetProperty("looping", out var lp) || lp.GetBoolean();
+                }
             }
             else // Colored
             {
@@ -501,4 +518,16 @@ public sealed class GameZMaterial
 {
     public string? TextureName; // set for Textured materials (e.g. "bldhwk_cowling.tif", may be truncated to 20 chars)
     public Color Color = Colors.White; // set for Colored materials
+
+    /// <summary>The material's own texture flipbook (the gamez `cycle` block), frame names in
+    /// order — empty for the overwhelming majority. Frame 0 repeats <see cref="TextureName"/>.
+    /// Driven by <see cref="TextureCycler"/>; the original's animated water/surf/wake/splash
+    /// and the walking-crowd sprites are all this one mechanism.</summary>
+    public readonly List<string> CycleTextures = new();
+
+    /// <summary>Flipbook rate in frames per second (gamez `speed`: 4–12 across this install).</summary>
+    public float CycleSpeed;
+
+    /// <summary>Whether the flipbook repeats (true for every cycle in this install).</summary>
+    public bool CycleLooping = true;
 }

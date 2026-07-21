@@ -178,6 +178,10 @@ the real cost was C# re-resolving `AT_NODE` ~1,740×/second through a full-world
 **Re-scoped by the user, 2026-07-21** — what they meant by "the lights animate" is not point
 lighting but **animated light sprites**, and both mechanisms are still unimplemented:
 
+- **Material texture cycles - DONE 2026-07-21** (`src/Mech3/TextureCycler.cs`): the gamez
+  material `cycle` block now plays, animating C1B's sea (695 polys of `wtr00000`, 375 of
+  `srf0001`), boat wakes, turbulence, splashes and the walking crowd. `ObjectCycleTexture`
+  remains unimplemented, so cycles run free rather than being started/reset by animation.
 - **`EFFECTS` reader** (`extracted/zrdr/effects.zrd.json`) — named texture flipbooks bound to
   nodes: `["fire1.flt", NAME "fire1", SPEED 10.0, LOOPING ON, MAPS [fire101.tif … fire112.tif]]`
   and `fire2` (6 maps @ 5 fps). Compiled anim defs carry an `effects` support array that

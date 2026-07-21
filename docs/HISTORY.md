@@ -1183,3 +1183,42 @@ sprites are untouched, which is what keeps the clouds and the moon correct.
 from the east (brightest pixel +51 px) and is unchanged from the south, where the authored spot
 already faced the camera; 8 chapters zero errors with unchanged mesh-instance counts; plane
 viewer byte-identical (md5); fly and stunt clean.
+
+
+## 2026-07-21 - Material texture flipbooks (animated water, surf, wakes, crowd)
+
+The original animates textures three different ways, all sharing the same frame sets, which is
+why they are easy to confuse. `docs/formats/effects.md` now separates them. This change lands
+the second: a gamez **material's own `cycle` block** (`texture_indices` + `speed` + `looping`),
+played on the surface.
+
+`GameZ.ParseMaterials` reads it; `SceneBuilder.RegisterCycle` resolves the frames while the
+TextureArchive is still open and registers each **built** material (not each source material -
+the cache is keyed by (material, priority, rank, sidedness), so one cycling source legitimately
+yields several ShaderMaterials and each needs its own swaps); `src/Mech3/TextureCycler.cs`
+advances them by swapping `albedo_tex`. Swapping from C# rather than indexing a
+`sampler2DArray` is deliberate - a chapter has 1-7 cycling materials, so it costs a few
+`SetShaderParameter` calls and needs no new shader variant, no atlas, and no assumption that
+frames share a size. Per chapter: C1 2, C1B 7, C2 7, C2B 1, C3 4, C4 3, C5 2, C1C 0.
+
+The payoff is C1B's sea - 695 polygons of `wtr00000` (16 frames @10 fps) and 375 of `srf0001`
+(16 @9), plus boat wakes and turbulence - which was rendering frozen.
+
+**A verification trap worth recording.** The water flipbook cannot be confirmed from a
+screenshot: the frames are 64x64 and differ from frame 0 by a mean of ~2/255 (max 3.8) - an
+intentionally gentle shimmer, and on C1B's dark sea it is invisible. A same-camera burst with
+and without the cycler came out identical to 0.01%, which reads as "not working" and is not.
+`srf` (mean abs diff up to 28.9), `wakefront` (23.9) and `splash` (32.5) do have real contrast.
+The reliable check is the new `--debug-anim` line logging each flipbook's current frame once a
+second; observed wrapping correctly at the authored rates (`wakefront x5 @12` f1->f3->f0,
+`wtr x16 @10` f9->f3->f13, `srf x16 @9` f8->f1->f10, `turb x6 @12`).
+
+**Verified:** all 8 chapters zero errors with their cycle counts logged; plane viewer
+byte-identical (md5); fly / stunt / 4P race / menu / damage lab clean.
+
+**Two related findings.** C1's refinery gas flare is *not* a flipbook - `flame01` is a static
+`fire101.tif` billboard whose only animation is the `LIGHT_STATE` range flicker landed earlier
+today, so that flicker already is the flame's flicker. And the `EFFECTS` reader
+(`effects.zrd.json`, the node-bound flipbooks `fire1`/`fire2`) is deliberately not wired up:
+those are parentless template objects the original clones to burn sites via `OBJECT_ADD_CHILD`,
+so they belong with that unimplemented event kind rather than ahead of it.

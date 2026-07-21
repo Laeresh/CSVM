@@ -505,6 +505,14 @@ public partial class PlaneViewer : Node3D
             {
                 var builder = new WorldBuilder(gamez, textures, collision: _fly);
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
+                // The original's material texture flipbooks (animated water/surf/wake/splash and
+                // the walking crowd). Parented to the world so a session teardown takes it too.
+                if (builder.Cycler.Count > 0)
+                {
+                    builder.Cycler.Debug = _debugAnim;
+                    _plane.AddChild(builder.Cycler);
+                    GD.Print($"texture cycles: {builder.Cycler.Count} animated material(s): " + string.Join(", ", builder.Cycler.Summary));
+                }
                 cloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
 
                 // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips

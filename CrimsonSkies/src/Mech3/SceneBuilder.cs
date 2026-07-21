@@ -569,6 +569,30 @@ void fragment() {
         return _textureSubstitute != null ? _textureSubstitute(texName, tex) : tex;
     }
 
+    /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
+    /// Set by the caller before building; null leaves cycling materials static, which is what
+    /// every pre-2026-07-21 caller got.</summary>
+    public TextureCycler? Cycler;
+
+    /// <summary>Registers a built material against its source's flipbook, if it has one. Called
+    /// per built material rather than per source material on purpose: the material cache is keyed
+    /// by (material, priority, rank, sidedness), so one cycling source can legitimately produce
+    /// several ShaderMaterials (C1B's water spans surfaces of different draw priority) and each
+    /// needs its own frame swaps. Frames resolve now, while the TextureArchive is open.</summary>
+    private void RegisterCycle(GameZMaterial src, ShaderMaterial mat)
+    {
+        if (Cycler == null || src.CycleTextures.Count < 2)
+            return;
+        var frames = new List<ImageTexture>(src.CycleTextures.Count);
+        foreach (var name in src.CycleTextures)
+        {
+            if (Resolve(name) is not { } frame)
+                return; // an incomplete flipbook would strobe a hole; leave it static instead
+            frames.Add(frame);
+        }
+        Cycler.Add(mat, frames, src.CycleSpeed, src.CycleLooping, src.TextureName ?? "?");
+    }
+
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
@@ -604,6 +628,7 @@ void fragment() {
                 return BillboardMaterial(tex, blend, scissor);
             var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
+            RegisterCycle(src, textured);
             return textured;
         }
 

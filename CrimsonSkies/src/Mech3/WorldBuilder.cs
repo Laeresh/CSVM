@@ -114,7 +114,14 @@ public sealed class WorldBuilder
         _scene = new SceneBuilder(gamez, textures, fullbright: true,
             generateCollision: collision, blendTexture: IsCloudOrSkyTexture,
             billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture);
+        _scene.Cycler = Cycler;
     }
+
+    /// <summary>Drives the world's material texture flipbooks (animated water, surf, boat wakes,
+    /// turbulence, the walking crowd). Built here so its frames resolve while the session's
+    /// TextureArchive is open; the caller adds it to the scene tree. Empty on chapters whose
+    /// materials carry no cycle, and it costs nothing then.</summary>
+    public readonly TextureCycler Cycler = new() { Name = "TextureCycler" };
 
     public Node3D Build(string worldName = "world1")
     {
