@@ -560,10 +560,17 @@ public partial class PlaneViewer : Node3D
                 // holding the TextureArchive: a puffer bakes its atlas at construction, and
                 // `textures` is disposed when this build scope ends. Cleared right after the
                 // bootstrap so a later request is reported instead of hitting a closed zip.
+                // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw):
+                // which of the chapter's entities this mission actually shows. Applied as the
+                // runtime's bootstrap pass 0 — see MissionSetup.
+                var missionSetup = MissionSetup.Load(interpPath, _chapter, _mission);
+                if (missionSetup == null)
+                    GD.Print($"mission setup: no script for {_chapter}/{_mission} ({interpPath})");
                 var animRuntime = new AnimRuntime
                 {
                     DebugMotions = _debugAnim,
                     QualityLod = _animLod,
+                    Setup = missionSetup,
                     PufferParent = _worldRoot,
                     PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
                     // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the

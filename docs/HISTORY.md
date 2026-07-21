@@ -1389,3 +1389,89 @@ The real question is why that coarse quad is drawn coplanar with the fine city a
 coarse LOD tile built alongside the fine one is the obvious suspect, given SceneBuilder's
 nearest-LOD selection) and which the original draws on top. Unscheduled; belongs in the
 backlog, not in item 3.
+
+## 2026-07-22 — Per-mission world setup: the interp boot script (follow-ups plan item 3)
+
+User-reported bug the item was scheduled on: `hk_zep`, the Blake Aviation zeppelin, sits
+moored at C1's tether tower in Instant Action when the original does not show it there (it is
+correctly present in M04, per the user's reference screenshot).
+
+**The plan's premise was false, and checking it before writing code is what found the real
+answer.** This is the third time that rule has paid — `OBJECT_ADD_CHILD` was withdrawn the
+same way. The plan proposed that entities are *absent unless a roster spawns them*, with
+`aiv.zrd.json` and `zeppelins.zrd.json` as the rosters. All three parts are wrong:
+
+| Claim | What the data says |
+|---|---|
+| `aiv.zrd.json` is the spawn roster; C1/M02 and C1/M04 list `hk_zep` | It is the AI **vehicle** table. Its only mention of `hk_zep` anywhere in the install is inside a *wingman's target-priority list* in C1/M02. C1/M04 — the one mission that shows the zeppelin — does not mention it at all. |
+| `zeppelins.zrd.json` is the flyable roster and gates presence | It is that zeppelin's gameplay config (position/yaw/engines/cannons/gasbags). It names `multiplayer1zep` for C1/IA1 — a node that mission actually *hides* — and never names `hk_zep`. |
+| Entities are absent-by-default | C1/M02's `zepstate` explicitly *deactivates* `hk_zep`. A default-absent entity would never need hiding. |
+
+**The real mechanism: `interp.zbd`'s per-mission boot scripts.** `interp.json` holds 98 named
+command lists, one per `support\…\*.gw` of the original build tree, of which **53 are
+per-mission world setup** (`support\<chapter>\<mission>.gw`). The chapter gamez contains every
+one of its missions' content; the engine loads all of it and then this script switches off what
+this mission does not want. C1/IA1's script contains `FindNode hk_zep` / `NodeSetActive off`
+outright; C1/M04's does not. The project already read `interp.json` — for
+`AddClutterTemplates` — so the file was in hand the whole time; only the mission scripts were
+unexamined.
+
+The CTF half falls out of the same place, exactly as the user described it: `ctf_1`/`ctf_2`
+and `cs_flag_1`/`cs_flag_2` are switched off by **every mission script except `mp2.gw`**, the
+Capture the Flag map. No roster, no mission-type check, no `targets.zrd.json` inference.
+
+**Landed:** `src/Mech3/MissionSetup.cs` parses the script into typed ops and applies it;
+`AnimRuntime` runs it as bootstrap **pass 0** through a resolver/setter pair, so it reuses the
+one proven name index (including the `.flt`-suffix equivalence) rather than growing a second.
+Pass 0 is before the animation passes because that is the engine's load order (world → `.gw` →
+anims) and it lets an animation state override a script state — C1/M02 deliberately hides
+`hk_zep` through both systems. Decode in the new `docs/formats/interp.md`.
+
+Three semantics that had to be read out of the data rather than assumed: **order matters and
+last write wins** (C3/M02 sets `cargozep1` on and then off; C4's scripts alternate
+`bhf`/`bhfplug`), so a name→state map is wrong; **a `FindNode` that matches nothing is normal**
+and the shipped scripts rely on it (C3's names `blackhatzep`/`blackswanzep`, absent from C3's
+gamez; `limo`, `britbalmoral_1..3` and `cpilot_shadow` are in the gamez but are unreachable
+roots — no parent, no partition reference — that WorldBuilder never builds, the same pool the
+effect templates live in), so it is logged and never warned; and **`DeleteTree` names its own
+target** instead of acting on the selection.
+
+**Verified.** The reported camera (`--campos=-5466.595,284.452,-5136.92
+--lookat=-5376.862,244.637,-5155.967`) shows the zeppelin gone from C1/IA1, leaving the bare
+tether tower and its mooring circle; the *same camera* on `--mission=M04` still shows it, so
+the two are separated by data alone. The CTF flag (yellow skull-and-crossbones) renders in
+C1/MP2 and the entire gate structure is absent in C1/IA1. All 8 chapters build with **zero
+errors** and deactivate exactly the counts an independent survey of the scripts predicted
+(29 / 11 / 2 / 19 / 4 / 41+1 / 28+1 / 15). The static plane viewer is **byte-identical** (md5)
+to the pre-change build, and the full mode battery (fly, stunt, static viewer, damage lab,
+2P fly, 4P race, menu) is error-free.
+
+**Scale of the change:** 3,558–15,185 polygons leave each chapter's Instant Action —
+principally phantom zeppelins. *Every* chapter parks both `multiplayer1zep` and
+`multiplayer2zep` in its world and switches them off outside multiplayer, so before this every
+IA map had two extra zeppelins in it. C1 also loses `piratezep` (2792 polys), `hk_zep` (1272),
+`workersvoyagezep`, `redcross` and nine `lifesaver*` props; C3 loses 43 objects including three
+`britbalmoral` aircraft, six boats with turrets and nine `studebaker` cars.
+
+**Deliberately not implemented — counted and reported by name**, the same incremental channel
+`AnimRuntime` uses for event kinds: `Object3DSetScroll`×68, `WorldPartitionSetActive`×25,
+`Object3DTranslate`×14, `Object3DRotate`×11. Two reasons for stopping there. No mission this
+project defaults to uses translate or rotate at all; and **`Object3DRotate`'s angle unit is
+genuinely ambiguous** — nine hand-authored integer uses (`0 45 0`, `0 172 0`) only make sense
+as degrees, while two high-precision ones paired with high-precision translates
+(`-0.000010 -3.144009 -0.000000`, i.e. π on Y) only make sense as radians. Guessing would
+silently mis-pose a prop. `WorldPartitionSetActive` is C3-only and every `off` sits in a story
+mission, so IA1 is unaffected in all 8 chapters either way.
+
+**A finding that re-scopes plan item 4.** C1's own `ia1.gw` ends with `FindNode wf01_water` /
+`Object3DSetScroll on 0.0 -0.4` and the same for `wf01_edge` — so the C1 waterfall **does**
+scroll its texture, at −0.4 v/s, even though its gamez `texture_scroll` is `{0,0}`. The plan's
+item 4 records the opposite as settled fact. The boot scripts are a second and apparently
+authoritative scroll source (68 uses in mission scripts, 7 more in the chapter `tex_fx.gw`
+scripts) that any scrolling work has to read alongside the gamez field; both plan text and
+`docs/formats/interp.md` now say so.
+
+**Open — a fidelity question only the user can answer:** whether the now-emptier Instant
+Action maps match their memory of the original. The data is unambiguous about what each
+script says, but C2 losing its Spruce Goose, tugs and barges, and C3 losing its boats,
+trucks and parked cars, are large enough visible changes to be worth a playtest A/B.

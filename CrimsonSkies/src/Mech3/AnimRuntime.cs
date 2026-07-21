@@ -112,6 +112,12 @@ public sealed partial class AnimRuntime : Node
     // reproducible --debug-anim run is ever wanted.
     private readonly Random _rng = new();
 
+    /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),
+    /// run as bootstrap pass 0. It is what decides which world entities this mission shows —
+    /// see <see cref="MissionSetup"/>. Null when the mission ships no script, which is normal.
+    /// Set before <see cref="Bind"/>.</summary>
+    public MissionSetup? Setup;
+
     private void Bootstrap(Node3D worldRoot, AnimProgram program)
     {
         var sw = System.Diagnostics.Stopwatch.StartNew();
@@ -119,6 +125,12 @@ public sealed partial class AnimRuntime : Node
         _program = program;
         IndexWorld(worldRoot);
         long indexMs = sw.ElapsedMilliseconds;
+
+        // Pass 0: the engine's own per-mission world setup, before any animation state. The
+        // chapter gamez holds every mission's content and this script switches off what this
+        // mission does not show (C1/IA1: hk_zep, both MP zeppelins, the CTF props, …). Runs
+        // first so an animation state can still override it, which is the engine's load order.
+        Setup?.Apply((name, scope) => FindAll(name, scope), SetSubtreeActive);
 
         // Pass 1: base states. Anchored defs only — a def whose NAME matches nothing in this
         // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare
@@ -175,6 +187,8 @@ public sealed partial class AnimRuntime : Node
         // Pass 4: safety net for destroyed-variant subtrees no definition covered.
         var netHidden = HideUncoveredDestroyed();
 
+        if (Setup != null)
+            GD.Print(Setup.Report());
         GD.Print($"anim: {program.Defs.Count} defs ({program.CompiledCount} compiled, " +
                  $"{program.ReaderCount} reader), {program.ScriptPoolCount} SI scripts; " +
                  $"{anchored} anchored, {_opsApplied} state ops applied, {_opsUnresolved} unresolved");

@@ -18,8 +18,8 @@ screenshot at the specific location the report came from.
 
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
 2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
-3. ☐ Mission-spawned entity rosters (`hk_zep`, CTF props)
-4. ☐ `texture_scroll` rendering
+3. ☑ Mission-spawned entity rosters (`hk_zep`, CTF props) **(done 2026-07-22 — the premise was wrong; it is the interp boot script, not a roster)**
+4. ☐ `texture_scroll` rendering **(premise updated 2026-07-22: `Object3DSetScroll` in the boot scripts is a second, authoritative source — see item 3)**
 
 **Dependency note:** items 1 and 2 are the two halves of one visible payoff — `AnimRuntime`
 currently *skips* every `If`/`Elseif` branch (item 1), and even once a branch runs, its
@@ -319,6 +319,44 @@ mission that SHOULD show it); MP3 shows both `multiplayer1zep` and `multiplayer2
 show neither. CTF props hidden outside MP2 (or whatever the confirmed real gate turns out to
 be), visible inside it, with flags non-collidable. Full 8-chapter regression.
 
+**LANDED 2026-07-22 — but the roster premise above is FALSE.** Checking it before writing
+code (the standing rule that already killed `OBJECT_ADD_CHILD`) disproved both candidates:
+`aiv.zrd.json` is the AI vehicle table whose *only* mention of `hk_zep` anywhere is inside a
+wingman's target-priority list in C1/M02, and `zeppelins.zrd.json` is the flyable-zeppelin
+gameplay config — it names `multiplayer1zep` for C1/IA1 (a node that mission actually hides)
+and never names `hk_zep` in C1/M04, the one mission that shows it. Neither could gate
+anything. The "entities are absent unless spawned" polarity was wrong too: C1/M02's
+`zepstate` explicitly *hides* `hk_zep`, which a default-absent entity would never need.
+
+**The real mechanism is the per-mission interp boot script**, `support\<chapter>\<mission>.gw`
+in `extracted/interp.json` — 53 of them, ~1,215 statements, and C1/IA1's contains
+`FindNode hk_zep` / `NodeSetActive off` outright. C1/M04's does not. Every mission script
+except `mp2.gw` switches off `ctf_1`/`ctf_2`/`cs_flag_1`/`cs_flag_2`, which is the CTF gate
+the user described, stated by the data rather than inferred. New module
+`src/Mech3/MissionSetup.cs` + `AnimRuntime` bootstrap pass 0; decode in
+`docs/formats/interp.md`, which the format README now indexes and
+`anim-definitions.md`'s corrected section points to.
+
+**Verified:** the reported camera shows the Blake Aviation zeppelin gone from C1/IA1 leaving
+the bare tether tower, while the same camera in C1/M04 still shows it; the CTF flag renders
+in C1/MP2 and the whole gate structure is absent in C1/IA1; all 8 chapters build with **zero
+errors** and deactivate exactly the counts the data survey predicted (29/11/2/19/4/41+1/28+1/15);
+the static plane viewer is **byte-identical** (md5); the full mode battery (fly/stunt/viewer/
+damage/2P/4P race/menu) is clean. Scale: 3.5k–15k polygons leave each chapter's Instant
+Action, and *every* chapter had both `multiplayer1zep` and `multiplayer2zep` parked in it.
+
+**Deliberately not implemented, counted and reported instead:** `Object3DTranslate`×14,
+`Object3DRotate`×11, `WorldPartitionSetActive`×25, `Object3DSetScroll`×68. No mission this
+project defaults to uses translate/rotate, and `Object3DRotate`'s angle unit is genuinely
+ambiguous (nine integer uses read as degrees, two high-precision ones as radians) — worth
+settling before acting on it. `WorldPartitionSetActive` is C3-only and every `off` is in a
+story mission, so IA1 is unaffected in all 8 chapters.
+
+**Feeds item 4:** `Object3DSetScroll on 0.0 -0.4` on `wf01_water`/`wf01_edge` is in C1's own
+`ia1.gw` — so the C1 waterfall *does* scroll, at −0.4 v/s, despite its gamez `texture_scroll`
+being `{0,0}`. Item 4's evidence section below says the opposite; the boot script is a second
+and apparently authoritative source that any scroll work must read.
+
 ## 4. `texture_scroll` rendering
 
 **Goal:** Wire the parsed-but-unused `GameZMesh.TextureScroll` (u/v units/second) into the
@@ -327,6 +365,16 @@ reflection (`h_zone1scroll`, `sky2.tif`), an oil-dock texture (`con_scroll`), an
 wake fronts (`wakefront1.tif`, C1B). Low priority — nothing currently reported needs it (the
 waterfall, which is what surfaced this field, turned out to scroll at `{0,0}`; its motion is
 entirely the splash-puffer mist, already landed).
+
+⚠ **Re-scoped 2026-07-22 by item 3's findings — the gamez field is not the only source, and
+the waterfall claim above is wrong.** The interp boot scripts set scroll rates at load time
+via `Object3DSetScroll on <u> <v>`: 68 uses in the 53 mission scripts plus 7 in the chapter
+`tex_fx.gw` scripts. C1's own `ia1.gw` ends with `FindNode wf01_water` /
+`Object3DSetScroll on 0.0 -0.4` and the same for `wf01_edge`, so the C1 waterfall **does**
+scroll at −0.4 v/s — the `{0,0}` in its gamez material is simply not where the answer lives.
+`MissionSetup` already parses and counts these statements (reported as "not acted on"), so
+this item now has two jobs: the gamez field *and* the script verb, which likely share one
+renderer path. Do the collision check below for both sources. See `docs/formats/interp.md`.
 
 **Evidence:** `docs/formats/gamez.md`'s `texture_scroll` bullet has the full field survey.
 The blocker isn't parsing (done) — it's that `SceneBuilder`'s material cache is keyed by

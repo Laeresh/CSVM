@@ -23,6 +23,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
 | [effects.md](effects.md) | `PUFFER_STATE` billboard-particle emitters, the effect reader files, flipbook textures, anchor nodes |
+| [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
 | [paint.md](paint.md) | Aircraft paint: `paint_pattern`/`paint_color`/`paint_decal` schemes, the numbered 00–49 decal set, why shipped skins are unpainted key textures |

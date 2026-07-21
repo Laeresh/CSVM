@@ -309,21 +309,32 @@ mission that compiles `tethertower`.
 which was generalised from C1/IA1. It is compiled into the missions that use it; being
 uncompiled is exactly the signal that the mission does not instantiate it.
 
-### Mission-spawned entities (open)
+### Mission-spawned entities — SOLVED 2026-07-22, and not by a roster
 
-Scenery props are hidden by compiled `zepstate` defs as above, but *entities* work the other
-way round — they are absent unless a roster spawns them. C1's `hk_zep` (the Hollywood Knights
-zeppelin, at (-5248, 200, -5208) beside `tethertower`) has no def in IA1 scope at all, yet the
-original does not show it in Instant Action. The rosters:
+Scenery props are hidden by compiled `zepstate` defs as above. *Entities* — the zeppelins,
+the CTF props, the vehicles and guns — are governed by a different system entirely: the
+**per-mission interp boot script** `support\<chapter>\<mission>.gw`, documented in
+[interp.md](interp.md). They are present by default and the script switches them off, which
+is the same polarity as `zepstate`, not the mirror image of it.
 
-- **`aiv.zrd.json`** — AI vehicles. C1/IA1: player only. C1/M02: `hk_zep`. C1/M04: `hk_zep`, `piratezep`.
-- **`zeppelins.zrd.json`** — flyable zeppelins, with position/yaw/engines/cannons/gasbags.
-  C1/IA1: `multiplayer1zep`. C1/M04: `piratezep`. MP1/MP2: none. MP3: `multiplayer1zep`, `multiplayer2zep`.
+C1's `hk_zep` (the Hollywood Knights zeppelin, at (-5248, 200, -5208) beside `tethertower`)
+has no def in IA1 scope at all, and needs none: `support\c1\ia1.gw` contains
+`FindNode hk_zep` / `NodeSetActive off`, while `support\c1\m04.gw` does not — which is
+exactly why it is on the field in M04 and nowhere else. The CTF props are switched off by
+every mission script except `mp2.gw`.
 
-The same shape governs the CTF props (`ctf_1`/`ctf_2`, `cs_flag_1`/`cs_flag_2`), referenced
-only by C1/MP2's `targets.zrd.json` and visible only in Capture the Flag. Not yet
-implemented; note `dliner1` must stay visible under any such rule, so the entity set has to be
-derived from the rosters rather than from a name pattern.
+⚠ **This corrects the roster hypothesis previously recorded here.** Neither candidate could
+have gated anything, and both were checked before implementing:
+
+- **`aiv.zrd.json`** is the AI *vehicle* table, not a spawn roster. Its only mention of
+  `hk_zep` anywhere in the install is inside a wingman's target-priority list in C1/M02; C1/M04,
+  the one mission that shows the zeppelin, does not name it at all.
+- **`zeppelins.zrd.json`** is the flyable-zeppelin gameplay config (position/yaw/engines/
+  cannons/gasbags). C1/IA1 lists `multiplayer1zep` — a node that mission's boot script
+  switches *off* — and C1/M04 lists only `piratezep`.
+
+The `dliner1` caveat that motivated the roster idea also dissolves: no name pattern is
+involved, the script names its nodes outright.
 
 ## startanims.json
 
