@@ -1471,7 +1471,10 @@ authoritative scroll source (68 uses in mission scripts, 7 more in the chapter `
 scripts) that any scrolling work has to read alongside the gamez field; both plan text and
 `docs/formats/interp.md` now say so.
 
-**Open — a fidelity question only the user can answer:** whether the now-emptier Instant
-Action maps match their memory of the original. The data is unambiguous about what each
-script says, but C2 losing its Spruce Goose, tugs and barges, and C3 losing its boats,
-trucks and parked cars, are large enough visible changes to be worth a playtest A/B.
+**Fidelity A/B — user-confirmed same day (2026-07-22):** nothing reads as missing from the
+emptier Instant Action maps. Notably the user did not know C2 *had* a Spruce Goose, which is
+mild positive evidence rather than mere absence of complaint: it is a large, recognisable
+Hollywood landmark, and never having noticed it is exactly what `support\c2\ia1.gw` hiding it
+predicts. Confirmation is "nothing looks wrong in our build", not a side-by-side against the
+original, so the door stays open on the smaller props (C3's boats/trucks/parked cars) if
+anything ever looks thin there.
