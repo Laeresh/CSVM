@@ -8,16 +8,15 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 
 ## Blocked / deferred
 
-- **Animated world vehicles** (Run-2 item 9, deferred 2026-07-18, user decision): train/car/zep
-  motion is `OBJECT_MOTION_SI_SCRIPT` whose `.zan` spline scripts exist only compiled inside
-  `cam_anim.zbd`, which mech3ax does not extract for CS → needs a **mech3ax fork extension**.
-  **Scheduled 2026-07-20: `docs/PLAN-mech3ax-cs-revival.md`** (Track B, items 1–7) — adding
-  `cam_anim.zbd`/`mis_anim.zbd` as a fourth variant of the existing `crates/anim` MW/PM/RC
-  container format, plus the same plan's Track A (items 8–14) for reviving `gamez.zbd`/
-  `planes.zbd` support upstream deleted in commit `7f592ec`. Resuming this also unlocks:
-  anim-state engine part 2 (per-object NAME1/generic-root defs), timed hangar-door motion,
-  train steam `PUFFER_STATE`, road-vehicle `OBJECT_MOTION_FROM_TO` chains
-  (`cars_moving`/`trucks_moving`).
+- ~~**Animated world vehicles**~~ — **LANDED 2026-07-21** (`docs/PLAN-anim-playback.md`, revival-plan
+  item 7): the C1 train drives its SI-script track loop, the road vehicles run their
+  `OBJECT_MOTION_FROM_TO` chains and the hangar doors swing, via the generic `AnimRuntime`.
+  Remaining from this entry, as its own follow-up: the **effect/audio event kinds** the runtime
+  dispatches but does not yet act on — `PufferState` (the train's steam plume), `Sound`/
+  `SoundNode`, `LightState`/`LightAnimation`, `ObjectOpacityFromTo`/`ObjectOpacityState`,
+  `ObjectCycleTexture`, `FbfxColorFromTo`, `CameraState`, and `ObjectMotion` (the debris-scatter
+  primitive, reachable only from destruction sequences). Each is one `case` in the runtime's
+  dispatch table; the engine does not change shape to add them.
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
   lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code

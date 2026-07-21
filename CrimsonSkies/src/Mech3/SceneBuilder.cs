@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -116,9 +116,14 @@ vec3 csky_srgb_to_linear(vec3 c) {
             collidable = false;
 
         var n3d = new Node3D { Name = Sanitize(node.Name) };
-        // The ORIGINAL gamez name, for name-based resolution (MissionState): Godot both
+        // The ORIGINAL gamez name, for name-based resolution (AnimRuntime): Godot both
         // sanitizes ('.'→'_') and auto-renames duplicate siblings, so Name is unreliable.
-        n3d.SetMeta(MissionState.NameMeta, node.Name);
+        n3d.SetMeta(AnimRuntime.NameMeta, node.Name);
+        // The node's flat gamez list position. Compiled animation definitions reference
+        // their objects by exactly this index (verified: 136,048 refs across all 8 chapters
+        // resolve exactly), which binds them unambiguously — names alone are duplicated and
+        // carry a '.flt' suffix inconsistently. See AnimRuntime.
+        n3d.SetMeta(AnimRuntime.IndexMeta, node.Index);
         if (node.Local is { } local)
             n3d.Transform = local;
 

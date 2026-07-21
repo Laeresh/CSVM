@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using CrimsonSkies.Mech3;
 using Godot;
@@ -169,9 +169,9 @@ public sealed partial class NodeLabels : Node
             if (ReferenceEquals(child, _holder) || child.Name.ToString().StartsWith("mesh_lab_"))
                 continue;
             bool childDeprio = deprio || IsDeprioritised(child);
-            if (child is Node3D n3d && n3d.HasMeta(MissionState.NameMeta)
+            if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
                 && (_mode == Mode.All || HasMesh(n3d)))
-                _candidates.Add((n3d, n3d.GetMeta(MissionState.NameMeta).AsString(),
+                _candidates.Add((n3d, n3d.GetMeta(AnimRuntime.NameMeta).AsString(),
                     childDeprio, LocalAnchor(n3d)));
             Walk(child, childDeprio);
         }

@@ -271,6 +271,53 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   hangar-door motions; the train's steam `PUFFER_STATE` is fully inline in `train.json`
   (all emitter params + `smokestack` attach node). Firetrucks / fueltrucks / patrol boat
   are `ON_CALL` only (mission-event driven — nothing calls them in free flight).
+## Consuming the extraction (playback, 2026-07-21)
+
+Everything above is about *decoding* the archives. This section is what the Godot side needed
+in order to **run** them (`docs/PLAN-anim-playback.md`, revival-plan item 7) — four facts that
+are not visible from the byte format alone, each measured against this install.
+
+- **The two sources are complementary; neither is sufficient.** The compiled archives are the
+  better data (typed events, resolved refs, the SI scripts), but a mission's `mis_anim.zbd`
+  compiles only the defs its `mis_anim.json` lists — C1/IA1 is 160 defs, all of them the eight
+  zeppelin files. **`zepstate` and `startanims` are never compiled into any archive**; they stay
+  zrdr readers the engine loads at runtime. So a player has to merge both, preferring compiled
+  on collision (keyed by anchor name + animation name, which is exactly how the extraction names
+  its files: `<name>-<anim_name>.json`).
+- **Reader op keys and compiled event tags are the same vocabulary under a spelling change.**
+  SNAKE_CASE → PascalCase converts one to the other exactly, across the whole event set
+  (`OBJECT_ACTIVE_STATE` → `ObjectActiveState`, `OBJECT_MOTION_SI_SCRIPT` →
+  `ObjectMotionSiScript`, `FBFX_COLOR_FROM_TO` → `FbfxColorFromTo`, `IF`/`ELSEIF`/`ENDIF` →
+  `If`/`Elseif`/`Endif`). Only the payload *field* names need per-kind mapping — and upstream
+  spells the target field inconsistently per event type (`node` on ObjectActiveState/
+  ObjectTranslateState, `name` on ObjectRotateState/ObjectMotionFromTo).
+- **A support-array `ptr` IS the flat gamez node index — this is the correct binding.**
+  Verified exactly: **136,048 references across all 8 chapters' `cam_anim` + every `mis_anim`
+  resolve to a node whose name matches**, with the only apparent exceptions being the fork's own
+  reversible `~N` duplicate-name suffixes (which the event names carry too, so lookups still
+  hit). Events name their target as a *string*, which is ambiguous in the world — C1 has a
+  `caboose` (the real consist, a child of the world root) and a `caboose.flt` (an unrelated rail-
+  yard instance under a different parent), and name matching drives both, putting one of them
+  somewhere wrong. A def's `objects`/`nodes` arrays are therefore its **symbol table**: resolve
+  the event's name through them to get the exact index. Reader-sourced defs have no such table
+  and keep the wildcard name matching (`ftank0*`, `s_build**`, `air_gen#`).
+- **Event scheduling** (inferred from the data, not stated by the format): each event's optional
+  `start` is `{offset, time}` with `offset` ∈ `Animation` (since the animation started) /
+  `Sequence` (since this sequence started) / `Event` (since the **previous event completed**);
+  an absent `start` — 174,938 of the install's events — is `Event + 0`, i.e. as soon as the
+  previous event finishes. The discriminating case is the C1 train: each car's sequence is
+  `[ObjectMotionSiScript, Loop{-1}]` with no start offsets, and only "after the previous event
+  completes" turns that into the surveyed ~327 s track loop instead of a zero-length infinite
+  loop. A definition's sequences run **concurrently** — the train drives its four cars from four
+  sibling `Initial` sequences, each with its own script and its own loop.
+- **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** mech3ax reads the
+  file's `(w, x, y, z)` float order straight into a `#[repr(C)] struct Quaternion {x, y, z, w}`,
+  so in the emitted JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real
+  `z` = json `w`**. Byte-identical round-trip is unaffected (the bytes never change meaning), so
+  nothing on the mech3ax side reveals it. Verified on the C1 passenger engine: under that remap
+  every base quaternion is unit-norm and the yaw tracks the frame-to-frame chord heading to ~1°
+  (frame 1 quat-yaw −33.11° against a chord of −43.12°, spanned by the frame's own −0.0505 rad/s
+  rate); read literally the values are not even normalised. Undo the shift at the parse boundary.
 - One plan-evidence correction: the `ANIMATION_PATH` key in `mis_anim.json` is the
   **directory** the engine resolves anim sources from (`..\data\c1\ia1\zrdr\zeps`), not a
   waypoint-motion primitive; no waypoint-path op exists in any C1 reader — path motion is

@@ -1,0 +1,891 @@
+using System;
+using System.Collections.Generic;
+using System.Linq;
+using System.Text.RegularExpressions;
+using Godot;
+
+namespace CrimsonSkies.Mech3;
+
+/// <summary>
+/// The animation engine: binds an <see cref="AnimProgram"/> to a built world and executes
+/// it. Replaces the start-state-only applier this project had before (Run-2 item 8), whose
+/// node resolution and INACTIVE semantics it keeps verbatim — those are user-verified and
+/// were never the limitation.
+///
+/// At world build it performs the same four bootstrap passes as before:
+///  1. every anchored definition's RESET_STATE (base states — hides the `destroyed`
+///     building/vehicle variants the gamez stores overlaid on their healthy twins),
+///  2. ACTIVATION ON_STARTUP definitions (zepstate.json — the per-mission object roster),
+///  3. the mission's startanims.json NEW_GAME_START animations, in order,
+///  4. a logged safety net hiding any still-visible `destroyed` subtree nothing covered.
+///
+/// The difference is that 2 and 3 now *run* rather than being posed at their end state: a
+/// definition becomes a live instance with a clock, so hangar doors swing open over their
+/// authored 9 s and the C1 train drives its 327 s SI-script track loop. Anything the engine
+/// cannot yet act on is counted per event kind and reported once, never fatal — that is
+/// what lets the remaining event types land incrementally without reshaping this class.
+///
+/// "Inactive" = hidden AND non-collidable (crashing into an invisible zeppelin would be
+/// worse than the visual bug). Definitions resolve to built nodes by their ORIGINAL gamez
+/// names (SceneBuilder stores them in the `cs_name` meta — Godot mangles duplicate sibling
+/// names, so Node.Name is unreliable).
+/// </summary>
+public sealed partial class AnimRuntime : Node
+{
+    /// <summary>Original-name metadata key SceneBuilder stamps on every built Node3D.</summary>
+    public const string NameMeta = "cs_name";
+
+    /// <summary>Flat gamez node-index metadata key SceneBuilder stamps on every built
+    /// Node3D — the exact binding compiled definitions reference (see
+    /// <see cref="AnimDefinition.NodeRefs"/>).</summary>
+    public const string IndexMeta = "cs_index";
+
+    /// <summary>ANIMATION_ROOT_NAME matches above this count are generic per-object roots
+    /// ('healthy' appears 217× in C1) — those defs belong to game objects (planes, zeppelin
+    /// parts), not to world nodes. The genuine building templates lift ≤ 9 instances.</summary>
+    private const int MaxRootLift = 16;
+
+    private readonly List<(Node3D Node, string SrcName)> _index = new();
+    private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
+    private readonly List<AnimInstance> _instances = new();
+    private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
+    private Node3D _root = null!;
+    private AnimProgram _program = null!;
+
+    private int _opsApplied, _opsUnresolved;
+
+    /// <summary>Live animation instances currently running (diagnostics).</summary>
+    public int ActiveInstances => _instances.Count;
+
+    /// <summary>
+    /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
+    /// node to add to the scene tree (it advances live instances in _Process). Add it to the
+    /// world root; it holds no state that survives a session teardown.
+    /// </summary>
+    public static AnimRuntime Apply(Node3D worldRoot, AnimProgram program)
+    {
+        var runtime = new AnimRuntime { Name = "AnimRuntime" };
+        runtime.Bootstrap(worldRoot, program);
+        return runtime;
+    }
+
+    /// <summary>--debug-anim: log every live motion's target and pose once a second, so a
+    /// headless run can verify that (say) the train actually drives its loop.</summary>
+    public bool DebugMotions;
+
+    private void Bootstrap(Node3D worldRoot, AnimProgram program)
+    {
+        var sw = System.Diagnostics.Stopwatch.StartNew();
+        _root = worldRoot;
+        _program = program;
+        IndexWorld(worldRoot);
+        long indexMs = sw.ElapsedMilliseconds;
+
+        // Pass 1: base states. Anchored defs only — a def whose NAME matches nothing in this
+        // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare
+        // names like 'destroyed'.
+        int anchored = 0;
+        foreach (var def in program.Defs)
+        {
+            var anchors = Anchors(def);
+            if (anchors.Count == 0)
+                continue;
+            anchored++;
+            if (def.ResetState != null)
+                foreach (var anchor in anchors)
+                    ApplyInstant(def.ResetState.Events, def, anchor);
+        }
+        long resetMs = sw.ElapsedMilliseconds;
+
+        // Pass 2: ON_STARTUP definitions run for real (zepstate's roster is instantaneous
+        // ObjectActiveStates, so this still settles on frame 0 for those).
+        int startupRun = 0;
+        foreach (var def in program.Defs.Where(d => d.OnStartup))
+            foreach (var anchor in Anchors(def))
+            {
+                Start(def, anchor);
+                startupRun++;
+            }
+
+        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order.
+        var ran = new List<string>();
+        var missing = new List<string>();
+        foreach (var animName in program.StartAnims)
+        {
+            var matches = program.ByAnimName(animName);
+            if (matches.Count == 0)
+            {
+                missing.Add(animName);
+                continue;
+            }
+            ran.Add(animName);
+            foreach (var def in matches)
+            {
+                var anchors = Anchors(def);
+                if (anchors.Count == 0)
+                    anchors.Add(null); // global resolution: the def names world nodes directly
+                foreach (var anchor in anchors)
+                {
+                    if (def.ResetState != null)
+                        ApplyInstant(def.ResetState.Events, def, anchor);
+                    Start(def, anchor);
+                }
+            }
+        }
+
+        // Pass 4: safety net for destroyed-variant subtrees no definition covered.
+        var netHidden = HideUncoveredDestroyed();
+
+        GD.Print($"anim: {program.Defs.Count} defs ({program.CompiledCount} compiled, " +
+                 $"{program.ReaderCount} reader), {program.ScriptPoolCount} SI scripts; " +
+                 $"{anchored} anchored, {_opsApplied} state ops applied, {_opsUnresolved} unresolved");
+        GD.Print($"anim: {startupRun} ON_STARTUP + {ran.Count} start anims running, " +
+                 $"{_instances.Count} live instance(s), {_motions.Count} live motion(s) " +
+                 $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
+                 $"start {sw.ElapsedMilliseconds - resetMs} ms]");
+        if (ran.Count > 0 || missing.Count > 0)
+            GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
+                     (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
+        if (netHidden.Count > 0)
+            GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
+                     string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
+        ReportUnhandled();
+    }
+
+    private readonly Dictionary<int, Node3D> _byIndex = new();
+
+    private void IndexWorld(Node3D worldRoot)
+    {
+        void Walk(Node3D n)
+        {
+            var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
+            _index.Add((n, srcName));
+            if (n.HasMeta(IndexMeta))
+                _byIndex.TryAdd((int)n.GetMeta(IndexMeta), n);
+            foreach (var child in n.GetChildren())
+                if (child is Node3D c)
+                    Walk(c);
+        }
+        Walk(worldRoot);
+    }
+
+    // ---- live execution ----
+
+    public override void _Process(double delta)
+    {
+        float dt = (float)delta;
+        // Motions advance ONCE per frame, here — not from the sequence runners, which would
+        // apply dt once per running sequence and run the train at 4× speed.
+        TickMotions(dt);
+        if (DebugMotions)
+            LogMotions(dt);
+        // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
+        for (int i = _instances.Count - 1; i >= 0; i--)
+        {
+            var inst = _instances[i];
+            inst.Advance(this, dt);
+            if (inst.Finished)
+                _instances.RemoveAt(i);
+        }
+    }
+
+    /// <summary>Starts a definition on one anchor (null = resolve its node names globally),
+    /// running every sequence that is not ACTIVATION ON_CALL. Re-starting a def that is
+    /// already live on the same anchor restarts it, matching CALL_ANIMATION semantics.</summary>
+    public void Start(AnimDefinition def, Node3D? anchor)
+    {
+        // CALL_ANIMATION chains are data, and the data can (and in some chapters does) form
+        // cycles: A calls B calls A. Starting an instance fires its t=0 events immediately,
+        // so an unguarded cycle recurses until the stack dies. Bound the depth instead —
+        // legitimate chains in this install are 2–3 deep.
+        if (_startDepth >= MaxStartDepth)
+        {
+            Count("CallAnimation(depth limit)");
+            return;
+        }
+        Stop(def.AnimName, anchor);
+        var inst = new AnimInstance(def, anchor);
+        foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
+            inst.Runners.Add(new SequenceRunner(seq));
+        if (inst.Runners.Count == 0)
+            return;
+        _instances.Add(inst);
+        // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
+        // active-state roster) settle during the build rather than one frame later.
+        _startDepth++;
+        try
+        {
+            inst.Advance(this, 0f);
+        }
+        finally
+        {
+            _startDepth--;
+        }
+        if (inst.Finished)
+            _instances.Remove(inst);
+    }
+
+    private const int MaxStartDepth = 8;
+    private int _startDepth;
+
+    /// <summary>Stops every live instance of an animation name (optionally only on one
+    /// anchor). Used by STOP_ANIMATION and by restart-on-call.</summary>
+    public void Stop(string? animName, Node3D? anchor = null)
+    {
+        if (string.IsNullOrEmpty(animName))
+            return;
+        _instances.RemoveAll(i =>
+            string.Equals(i.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase)
+            && (anchor == null || i.Anchor == anchor));
+    }
+
+    /// <summary>Applies a list of events with no clock — the RESET_STATE path, where every
+    /// op is a base state and timed motions collapse to their end pose.</summary>
+    private void ApplyInstant(List<AnimEvent> events, AnimDefinition def, Node3D? anchor)
+    {
+        foreach (var ev in events)
+            Dispatch(ev, def, anchor, instant: true, out _);
+    }
+
+    // ---- the dispatch table ----
+
+    /// <summary>
+    /// Executes one event. Returns the event's duration in seconds via
+    /// <paramref name="duration"/> — 0 for an instantaneous state change, the run time for a
+    /// timed motion, the script length for an SI script. The sequence runner uses it to
+    /// decide when the next event is due.
+    /// Returns false only for control-flow events the runner must interpret itself.
+    /// </summary>
+    private bool Dispatch(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool instant, out float duration)
+    {
+        duration = 0f;
+        switch (ev.Kind)
+        {
+            case "ObjectActiveState":
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    SetSubtreeActive(t, ev.Data.Bool("state"));
+                    _opsApplied++;
+                }
+                return true;
+
+            case "ObjectTranslateState":
+                foreach (var t in Targets(ev, def, anchor))
+                    PoseTranslate(t, ev.Data.Vec3("state"), ev.Data.Bool("relative"));
+                return true;
+
+            case "ObjectRotateState":
+                foreach (var t in Targets(ev, def, anchor))
+                    PoseRotate(t, ev.Data.Vec3("state"));
+                return true;
+
+            case "ObjectScaleState":
+                foreach (var t in Targets(ev, def, anchor))
+                    PoseScale(t, ev.Data.Vec3("state"));
+                return true;
+
+            case "ObjectMotionFromTo":
+            {
+                float runTime = ev.Data.Num("run_time") ?? 0f;
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    var tween = FromToMotion.Create(this, t, ev.Data, runTime);
+                    if (tween == null)
+                        continue;
+                    if (instant || runTime <= 0f)
+                        tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
+                    else
+                        AddMotion(tween);
+                    _opsApplied++;
+                }
+                duration = instant ? 0f : runTime;
+                return true;
+            }
+
+            case "ObjectMotionSiScript":
+            {
+                int slot = (int)(ev.Data.Num("index") ?? 0f);
+                var script = _program.ScriptFor(def, slot);
+                if (script == null)
+                {
+                    Count("ObjectMotionSiScript(no script)");
+                    return true;
+                }
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    var playback = new ScriptPlayback(t, script);
+                    if (instant)
+                        playback.Seek(0f); // pose at the script's first frame
+                    else
+                        AddMotion(playback);
+                    _opsApplied++;
+                    duration = Mathf.Max(duration, script.Duration);
+                }
+                return true;
+            }
+
+            // Control flow is the runner's business, not the table's.
+            case "Loop":
+            case "If":
+            case "Elseif":
+            case "Else":
+            case "Endif":
+                return false;
+
+            case "CallSequence":
+                if (ev.Data.Str("name") is { } seqName)
+                    CallSequence(def, anchor, seqName);
+                return true;
+
+            case "StopSequence":
+                return true; // handled by the runner owning the sequence; nothing global to do
+
+            case "CallAnimation":
+                if (ev.Data.Str("name") is { } callName)
+                    foreach (var target in _program.ByAnimName(callName))
+                        Start(target, anchor);
+                return true;
+
+            case "StopAnimation":
+            case "InvalidateAnimation":
+                Stop(ev.Data.Str("name"));
+                return true;
+
+            default:
+                // Sound / puffer / light / opacity / texture-cycle / FBFX / camera and the
+                // rest: dispatched, counted, and reported once per kind. Adding a handler is
+                // a case above and nothing else.
+                Count(ev.Kind);
+                return true;
+        }
+    }
+
+    private void CallSequence(AnimDefinition def, Node3D? anchor, string name)
+    {
+        var seq = def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (seq == null)
+        {
+            Count("CallSequence(missing)");
+            return;
+        }
+        var inst = _instances.FirstOrDefault(i => i.Def == def && i.Anchor == anchor);
+        if (inst == null)
+            return;
+        inst.Runners.Add(new SequenceRunner(seq));
+    }
+
+    private void Count(string kind) =>
+        _unhandled[kind] = _unhandled.TryGetValue(kind, out var n) ? n + 1 : 1;
+
+    private void ReportUnhandled()
+    {
+        if (_unhandled.Count == 0)
+            return;
+        var top = _unhandled.OrderByDescending(kv => kv.Value).Take(12)
+            .Select(kv => $"{kv.Key}×{kv.Value}");
+        GD.Print($"anim: {_unhandled.Count} event kind(s) not yet acted on: {string.Join(", ", top)}"
+                 + (_unhandled.Count > 12 ? ", …" : ""));
+    }
+
+    // ---- active motions ----
+
+    private readonly List<IAnimMotion> _motions = new();
+
+    /// <summary>A motion that owns a node's pose over time (an SI script playback or a
+    /// from→to tween). The runtime ticks them centrally so a node driven by two motions
+    /// resolves to the later one deterministically.</summary>
+    private interface IAnimMotion
+    {
+        Node3D Target { get; }
+        bool Finished { get; }
+        void Tick(float dt);
+        void Seek(float t);
+    }
+
+    private float _debugClock;
+
+    // --debug-anim: one line per live motion per second. Headless verification that things
+    // actually move (and by how much) without flying a camera at them.
+    private void LogMotions(float dt)
+    {
+        _debugClock += dt;
+        if (_debugClock < 1f)
+            return;
+        _debugClock = 0f;
+        if (_motions.Count == 0)
+        {
+            GD.Print("anim/debug: no live motions");
+            return;
+        }
+        foreach (var m in _motions.Take(12))
+        {
+            var t = m.Target;
+            var name = t.HasMeta(NameMeta) ? t.GetMeta(NameMeta).AsString() : t.Name.ToString();
+            var p = t.GlobalPosition;
+            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0})");
+        }
+        if (_motions.Count > 12)
+            GD.Print($"anim/debug: … and {_motions.Count - 12} more");
+    }
+
+    /// <summary>Registers a motion, replacing any motion already driving the same node. An
+    /// object has exactly one motion in the original, and the data relies on it: C1/IA1's
+    /// startanims run `hangar3_doors` (doors to ±50) and then `mp_hangar3_open` (the same
+    /// doors to ±25), where the later one is meant to win. Without this both tween the same
+    /// node every frame and the outcome depends on list order.</summary>
+    private void AddMotion(IAnimMotion motion)
+    {
+        _motions.RemoveAll(m => m.Target == motion.Target);
+        _motions.Add(motion);
+    }
+
+    /// <summary>Advances every live motion. Called from the instance walk each frame.</summary>
+    private void TickMotions(float dt)
+    {
+        for (int i = _motions.Count - 1; i >= 0; i--)
+        {
+            _motions[i].Tick(dt);
+            if (_motions[i].Finished)
+                _motions.RemoveAt(i);
+        }
+    }
+
+    /// <summary>Plays a compiled SI script onto a node: per-frame cubics for translation and
+    /// the half-angle quaternion composition for rotation (docs/formats/anim-definitions.md).
+    /// Loops when the owning sequence loops — the runner restarts it.</summary>
+    private sealed class ScriptPlayback : IAnimMotion
+    {
+        public Node3D Target { get; }
+        private readonly SiScript _script;
+        private float _t;
+
+        public ScriptPlayback(Node3D target, SiScript script)
+        {
+            Target = target;
+            _script = script;
+            Seek(0f);
+        }
+
+        public bool Finished => _t >= _script.Duration;
+
+        public void Tick(float dt) => Seek(_t + dt);
+
+        public void Seek(float t)
+        {
+            _t = t;
+            if (_script.FrameAt(Mathf.Min(t, _script.Duration)) is not { } frame)
+                return;
+            float dt = Mathf.Max(0f, t - frame.StartTime);
+            var basis = Target.Transform.Basis;
+            var origin = Target.Transform.Origin;
+            if (frame.Rotate != null)
+                basis = new Basis(frame.Rotate.At(dt));
+            if (frame.Translate != null)
+                origin = frame.Translate.At(dt);
+            if (frame.Scale != null)
+                basis = basis.Scaled(frame.Scale.At(dt));
+            Target.Transform = new Transform3D(basis, origin);
+        }
+    }
+
+    /// <summary>An OBJECT_MOTION_FROM_TO tween: linear over the authored run time, in the
+    /// node's own parent frame, offset from its authored rest pose (a missing FROM means
+    /// "from wherever it is now").</summary>
+    private sealed class FromToMotion : IAnimMotion
+    {
+        public Node3D Target { get; private init; } = null!;
+        private Transform3D _rest;
+        private Vector3? _tFrom, _tTo, _rFrom, _rTo, _sFrom, _sTo;
+        private float _t, _runTime;
+
+        public bool Finished => _t >= _runTime;
+
+        public static FromToMotion? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
+        {
+            var m = new FromToMotion
+            {
+                Target = target,
+                _rest = rt.RestOf(target),
+                _runTime = Mathf.Max(runTime, 0f),
+            };
+            (m._tFrom, m._tTo) = Channel(data, "translate");
+            (m._rFrom, m._rTo) = Channel(data, "rotate");
+            (m._sFrom, m._sTo) = Channel(data, "scale");
+            return m._tTo != null || m._rTo != null || m._sTo != null ? m : null;
+        }
+
+        private static (Vector3?, Vector3?) Channel(AnimData data, string name)
+        {
+            var ch = data.Obj(name);
+            if (ch == null)
+                return (null, null);
+            return (ch.Has("from") ? ch.Vec3("from") : null,
+                    ch.Has("to") ? ch.Vec3("to") : null);
+        }
+
+        public void Tick(float dt) => Seek(_t + dt);
+
+        public void Seek(float t)
+        {
+            _t = t;
+            float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
+            var basis = _rest.Basis;
+            var origin = _rest.Origin;
+            if (_tTo is { } tTo)
+                origin = _rest.Origin + (_tFrom ?? Vector3.Zero).Lerp(tTo, u);
+            if (_rTo is { } rTo)
+            {
+                var deg = (_rFrom ?? Vector3.Zero).Lerp(rTo, u);
+                basis = _rest.Basis * Basis.FromEuler(
+                    new Vector3(Mathf.DegToRad(deg.X), Mathf.DegToRad(deg.Y), Mathf.DegToRad(deg.Z)),
+                    EulerOrder.Yxz);
+            }
+            if (_sTo is { } sTo)
+                basis = basis.Scaled((_sFrom ?? Vector3.One).Lerp(sTo, u));
+            Target.Transform = new Transform3D(basis, origin);
+        }
+    }
+
+    // ---- instances and sequence timing ----
+
+    /// <summary>One running definition: its anchor plus a runner per active sequence. The
+    /// sequences of a definition run CONCURRENTLY — the C1 train drives its four cars from
+    /// four sibling sequences, each with its own SI script and its own loop.</summary>
+    private sealed class AnimInstance
+    {
+        public readonly AnimDefinition Def;
+        public readonly Node3D? Anchor;
+        public readonly List<SequenceRunner> Runners = new();
+
+        public AnimInstance(AnimDefinition def, Node3D? anchor)
+        {
+            Def = def;
+            Anchor = anchor;
+        }
+
+        public bool Finished => Runners.Count == 0;
+
+        public void Advance(AnimRuntime rt, float dt)
+        {
+            for (int i = Runners.Count - 1; i >= 0; i--)
+            {
+                Runners[i].Advance(rt, this, dt);
+                if (Runners[i].Done)
+                    Runners.RemoveAt(i);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Executes one sequence's event list on a clock.
+    ///
+    /// Scheduling (inferred from the data, recorded in docs/formats/anim-definitions.md):
+    /// an event's <c>start</c> gives an origin and a delay — "Animation" from the animation
+    /// start, "Sequence" from this sequence's start, "Event" from the previous event's
+    /// COMPLETION. An absent <c>start</c> is "Event + 0", i.e. as soon as the previous
+    /// event finishes. That reading is what makes the C1 train work: its sequences are
+    /// [ObjectMotionSiScript, Loop{-1}] with no start offsets, and only "after the previous
+    /// event completes" turns that into the surveyed ~327 s track loop rather than a
+    /// zero-length infinite loop.
+    /// </summary>
+    private sealed class SequenceRunner
+    {
+        private readonly AnimSequence _seq;
+        private int _pc;              // next event index
+        private float _clock;         // seconds since this sequence started
+        private float _due;           // when the next event fires
+        private bool _done;
+        private int _loopsLeft = -2;  // -2 = no loop seen yet
+
+        public SequenceRunner(AnimSequence seq) => _seq = seq;
+
+        public bool Done => _done;
+
+        public void Advance(AnimRuntime rt, AnimInstance inst, float dt)
+        {
+            _clock += dt;
+            // Guard against a zero-length sequence looping forever within one frame.
+            int fired = 0;
+            while (!_done && _pc < _seq.Events.Count && _clock >= _due && fired++ < 256)
+            {
+                var ev = _seq.Events[_pc];
+                if (rt.Dispatch(ev, inst.Def, inst.Anchor, instant: false, out float duration))
+                {
+                    _pc++;
+                    _due = NextDue(ev, duration);
+                    continue;
+                }
+                // Control flow.
+                switch (ev.Kind)
+                {
+                    case "Loop":
+                        if (_loopsLeft == -2)
+                            _loopsLeft = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
+                        if (_loopsLeft == 0)
+                        {
+                            _done = true;
+                            break;
+                        }
+                        if (_loopsLeft > 0)
+                            _loopsLeft--;
+                        _pc = 0;
+                        _clock = 0f;
+                        _due = 0f;
+                        break;
+                    case "If":
+                    case "Elseif":
+                        // Conditions are gameplay state (ANIM_HEALTH, RANDOM_WEIGHT, …) that
+                        // an at-rest world build cannot evaluate. Skip the branch body rather
+                        // than guessing — a wrong guess silently poses objects incorrectly.
+                        rt.Count($"{ev.Kind}(skipped branch)");
+                        _pc = SkipBranch(_pc);
+                        break;
+                    case "Else":
+                        _pc = SkipBranch(_pc);
+                        break;
+                    case "Endif":
+                        _pc++;
+                        break;
+                    default:
+                        _pc++;
+                        break;
+                }
+            }
+            if (_pc >= _seq.Events.Count)
+                _done = true;
+        }
+
+        private static float? CountOf(AnimEvent ev) => ev.Data.Num("Count");
+
+        private float NextDue(AnimEvent ev, float duration) => ev.StartOffset switch
+        {
+            // "Animation"/"Sequence" are absolute against their origin; this runner's clock
+            // is the sequence clock, and an instance starts all its sequences together, so
+            // the two coincide for every case in the shipped data.
+            "Animation" or "Sequence" => ev.StartTime,
+            _ => _clock + duration + ev.StartTime,
+        };
+
+        // Advances past the body of a branch to the matching Else/Elseif/Endif, honouring nesting.
+        private int SkipBranch(int from)
+        {
+            int depth = 0;
+            for (int i = from + 1; i < _seq.Events.Count; i++)
+            {
+                switch (_seq.Events[i].Kind)
+                {
+                    case "If": depth++; break;
+                    case "Endif":
+                        if (depth == 0) return i + 1;
+                        depth--;
+                        break;
+                    case "Else":
+                    case "Elseif":
+                        if (depth == 0) return i;
+                        break;
+                }
+            }
+            return _seq.Events.Count;
+        }
+    }
+
+    // ---- node resolution (unchanged from the start-state applier) ----
+
+    /// <summary>World nodes a definition anchors to: NAME matches (wildcards = one per
+    /// building/vehicle instance); else ANIMATION_ROOT_NAME matches lifted to their parent
+    /// (the instance root, so sibling healthy/destroyed both resolve locally — needed where
+    /// instance roots have free names: `m_build**` instances are `apbuild01.flt`…).</summary>
+    private List<Node3D?> Anchors(AnimDefinition def)
+    {
+        // Multi-target NAME1 definitions (zeppelin nacelles/turrets) parse with an empty
+        // NAME; they animate per-object sub-parts and are object-wiring scope — never anchor
+        // them (their generic ROOT names would anchor them onto every building in the world).
+        if (string.IsNullOrEmpty(def.Name))
+            return new List<Node3D?>();
+        var anchors = FindAll(def.Name, null).Cast<Node3D?>().ToList();
+        if (anchors.Count == 0 && def.RootName != null)
+        {
+            var roots = FindAll(def.RootName, null);
+            if (roots.Count > 0 && roots.Count <= MaxRootLift)
+                anchors = roots
+                    .Select(n => n.GetParent() as Node3D)
+                    .Where(p => p != null)
+                    .Distinct()
+                    .ToList();
+        }
+        return anchors;
+    }
+
+    /// <summary>The world nodes one event targets. Reader-sourced events may carry a
+    /// parent→child path; compiled events name a single node (under "node" or "name",
+    /// which upstream spells inconsistently per event type).</summary>
+    private List<Node3D> Targets(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        // Compiled definitions carry a symbol table binding each referenced name to an exact
+        // gamez node index — always prefer it. Name matching resolves C1's `caboose` to the
+        // real consist AND to an unrelated `caboose.flt` in the rail yard, and drives both.
+        if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } refName
+            && def.NodeRefs.TryGetValue(refName, out int nodeIndex))
+        {
+            if (_byIndex.TryGetValue(nodeIndex, out var bound))
+                return new List<Node3D> { bound };
+            // The index is valid data but that node was not built (LOD levels the builder
+            // drops, skipped subtrees). Not an error, and not something to name-match around.
+            _opsUnresolved++;
+            return new List<Node3D>();
+        }
+
+        var path = new List<string>();
+        if (ev.Data.List("node_path") is { } nodePath)
+        {
+            foreach (var p in nodePath)
+                if (p is string s)
+                    path.Add(s);
+        }
+        else if ((ev.Data.Str("node") ?? ev.Data.Str("name")) is { } single)
+        {
+            path.Add(single);
+        }
+        if (path.Count == 0)
+            return new List<Node3D>();
+        var targets = ResolvePath(path, anchor, def.LocalNodesOnly);
+        if (targets.Count == 0)
+            _opsUnresolved++;
+        return targets;
+    }
+
+    // NAME paths: resolve the first element in scope (falling back to global for
+    // non-local defs), then each further element inside the previous matches.
+    private List<Node3D> ResolvePath(List<string> path, Node3D? scope, bool localOnly)
+    {
+        var candidates = FindAll(path[0], scope);
+        if (candidates.Count == 0 && scope != null && !localOnly)
+            candidates = FindAll(path[0], null);
+        for (int i = 1; i < path.Count && candidates.Count > 0; i++)
+        {
+            var next = new List<Node3D>();
+            foreach (var c in candidates)
+                next.AddRange(FindAll(path[i], c).Where(n => n != c));
+            candidates = next;
+        }
+        return candidates;
+    }
+
+    private List<Node3D> FindAll(string pattern, Node3D? scope)
+    {
+        var match = Matcher(pattern);
+        var result = new List<Node3D>();
+        foreach (var (node, srcName) in _index)
+        {
+            // Defs may name a node without its model-file suffix ('ap_radiotwr' for the
+            // gamez node 'ap_radiotwr.flt') — try both.
+            var matches = match(srcName)
+                || (srcName.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) && match(srcName[..^4]));
+            if (matches && (scope == null || node == scope || scope.IsAncestorOf(node)))
+                result.Add(node);
+        }
+        return result;
+    }
+
+    // Wildcard NAME → predicate: '*' (and the '**' template form) match any run of
+    // characters, '#' a run of digits ('air_gen#' covers 'air_gen'). Plain names compare
+    // exactly (case-insensitive, like every reader name lookup).
+    private Func<string, bool> Matcher(string pattern)
+    {
+        if (_matcherCache.TryGetValue(pattern, out var cached))
+            return cached;
+        Func<string, bool> match;
+        if (pattern.Contains('*') || pattern.Contains('#'))
+        {
+            var re = new Regex("^" + Regex.Escape(pattern).Replace("\\*", ".*").Replace("\\#", "[0-9]*") + "$",
+                RegexOptions.IgnoreCase | RegexOptions.CultureInvariant);
+            match = re.IsMatch;
+        }
+        else
+        {
+            match = s => s.Equals(pattern, StringComparison.OrdinalIgnoreCase);
+        }
+        return _matcherCache[pattern] = match;
+    }
+
+    // ---- state application ----
+
+    /// <summary>The node's authored pose, remembered the first time anything moves it, so
+    /// every pose op stays an offset from the rest pose rather than compounding.</summary>
+    private Transform3D RestOf(Node3D node)
+    {
+        if (!_rest.TryGetValue(node, out var rest))
+            _rest[node] = rest = node.Transform;
+        return rest;
+    }
+
+    private void PoseTranslate(Node3D target, Vector3 offset, bool relative)
+    {
+        var rest = RestOf(target);
+        target.Position = relative ? target.Position + offset : rest.Origin + offset;
+        _opsApplied++;
+    }
+
+    private void PoseRotate(Node3D target, Vector3 degrees)
+    {
+        var rest = RestOf(target);
+        target.Basis = rest.Basis * Basis.FromEuler(
+            new Vector3(Mathf.DegToRad(degrees.X), Mathf.DegToRad(degrees.Y), Mathf.DegToRad(degrees.Z)),
+            EulerOrder.Yxz);
+        _opsApplied++;
+    }
+
+    private void PoseScale(Node3D target, Vector3 scale)
+    {
+        if (scale.LengthSquared() < 1e-9f)
+            return;
+        var rest = RestOf(target);
+        target.Basis = rest.Basis.Scaled(scale);
+        _opsApplied++;
+    }
+
+    // INACTIVE = invisible and non-collidable, the whole subtree; ACTIVE re-enables both.
+    private static void SetSubtreeActive(Node3D node, bool active)
+    {
+        node.Visible = active;
+        SetCollidersEnabled(node, active);
+    }
+
+    private static void SetCollidersEnabled(Node node, bool enabled)
+    {
+        if (node is CollisionShape3D shape)
+            shape.Disabled = !enabled;
+        foreach (var child in node.GetChildren())
+            SetCollidersEnabled(child, enabled);
+    }
+
+    // Any still-visible node named like a destroyed variant that no definition touched:
+    // hide it and report — each name is a data-coverage gap (a def we failed to anchor).
+    // Match 'destroyed' only: a '_dest' suffix rule proved WRONG — C1's `ref_tank_dest` is
+    // the parent GROUP of the five healthy harbor refuel tanks ("destructible", not
+    // "destroyed"), and hiding it wiped the visible tanks (user-reported).
+    private List<string> HideUncoveredDestroyed()
+    {
+        var hidden = new List<string>();
+        foreach (var (node, srcName) in _index)
+        {
+            if (!srcName.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (!node.Visible || HasHiddenAncestor(node))
+                continue;
+            SetSubtreeActive(node, false);
+            hidden.Add(srcName);
+        }
+        return hidden;
+    }
+
+    private bool HasHiddenAncestor(Node3D node)
+    {
+        for (var p = node.GetParent() as Node3D; p != null && p != _root; p = p.GetParent() as Node3D)
+            if (!p.Visible)
+                return true;
+        return false;
+    }
+}

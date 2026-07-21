@@ -84,7 +84,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
 5. ☑ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (done 2026-07-21, see section 5 — all 1090 scripts of all 61 archives frame-decode byte-exactly; the "failure variant" never existed, and the rotate cubics are half-angle offsets composed `exp(v)⊗base`)
 6. ☑ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install (done 2026-07-21, see section 6 — test.py `--- ALL OK ---`, all 61 archives byte-identical through the real zip pipeline)
-7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup (**skipped for now by user decision 2026-07-21** — Track A started first; revisit after)
+7. ☑ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks), docs + backlog cleanup (**done 2026-07-21** — planned and executed as its own run, `docs/PLAN-anim-playback.md`: a generic animation engine rather than SI-script playback alone)
 
 **Track A — `gamez.zbd`/`planes.zbd` (do second):**
 8. ☑ Recover the deleted `cs/` module from `7f592ec~1` as porting reference (done 2026-07-21, see section 8 — worktree at `tools/mech3ax-cs-ref`, inventory verified, 13 wiring files outside `cs/` catalogued)

@@ -19,12 +19,13 @@
         rimage.zbd        -> textures  -> .zip
         texture.zbd       -> textures  -> .zip
         rtexture*.zbd     -> textures  -> .zip
-        cam_anim.zbd      -> SKIPPED (supported by the fork, but nothing consumes it yet)
-        mis_anim.zbd      -> SKIPPED (   "                                           "  )
+        cam_anim.zbd      -> anim      -> .zip
+        mis_anim.zbd      -> anim      -> .zip
 
     Anim archives (cam_anim/mis_anim) round-trip byte-identically in the fork since
-    2026-07-21, but no part of the Godot project reads them yet (revival-plan item 7,
-    SI-script playback, is deferred), so they are still reported and skipped.
+    2026-07-21 and are extracted like everything else, but no part of the Godot
+    project reads the output yet (revival-plan item 7, SI-script playback, is
+    deferred).
 
 .PARAMETER Source
     Root of the game's ZBD tree. Default: CrimsonSkiesGame\ZBD next to this script.
@@ -100,7 +101,7 @@ function Get-ExtractPlan([string] $BaseName) {
         '^rimage$'      { return @{ Mode = "textures"; Ext = ".zip"  } }
         '^texture$'     { return @{ Mode = "textures"; Ext = ".zip"  } }
         '^rtexture\d+$' { return @{ Mode = "textures"; Ext = ".zip"  } }
-        '^(cam_anim|mis_anim)$' { return $null }  # unsupported for CS
+        '^(cam_anim|mis_anim)$' { return @{ Mode = "anim"; Ext = ".zip"  } }
         default         { return "UNKNOWN" }
     }
 }
@@ -201,7 +202,7 @@ Write-Host ""
 Write-Host "Done." -ForegroundColor Cyan
 Write-Host "  extracted:  $extracted"
 Write-Host "  up to date: $upToDate"
-Write-Host "  skipped:    $skipped (cam_anim/mis_anim unsupported for CS)"
+Write-Host "  skipped:    $skipped"
 if ($Unzip)              { Write-Host "  unzipped:   $unzipped" }
 if ($transformNotes -gt 0) {
     Write-Host "  transform-precision notes: $transformNotes (informational -- see the comment in this script)" -ForegroundColor DarkGray

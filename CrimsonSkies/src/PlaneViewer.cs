@@ -1,4 +1,4 @@
-using System;
+﻿using System;
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
@@ -158,6 +158,14 @@ public partial class PlaneViewer : Node3D
     private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
     private bool _scenarioExplicit;    // --scenario= given (so --stunt doesn't override it)
     private bool _stunt;               // --stunt: stunt-flying mode (= --fly + stunt_flying spawns + StuntMission)
+    // --freecam: spectator mode (anim-playback plan item 1) — the live chapter world (sky,
+    // weather, edge continuation, animations) with NO aircraft, observed from a free-flying
+    // camera. The testing view for animation work: park in front of a moving object and watch.
+    private bool _freecam;
+    private SpectatorCamera? _spectator;
+    // --debug-anim: log every live animation motion once a second (headless verification
+    // that the train/doors actually move, without flying a camera at them).
+    private bool _debugAnim;
     private bool _debugDzPaths;        // --debug-dzpaths: build the dzpaths route ribbons (debug-only geometry)
     private bool _debugScoreboard;     // --debug-scoreboard: force-complete the stunt run to screenshot the results board
     // --debug-livery[=N]: open the livery lab panel (hidden by default) and optionally step
@@ -256,6 +264,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _chapterGiven = true; hasContentArg = true; }
             else if (arg == "--fly") { _fly = true; hasContentArg = true; }
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
+            else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
+            else if (arg == "--debug-anim") _debugAnim = true;
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
             else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
             else if (arg == "--debug-dzpaths") _debugDzPaths = true;
@@ -306,6 +316,14 @@ public partial class PlaneViewer : Node3D
             if (!_scenarioExplicit)
                 _scenario = "stunt_flying";
         }
+        // --freecam is the spectator world view: not flight (no aircraft) and not the parked-
+        // plane viewer. It is the most specific of the three modes, so it wins outright when
+        // combined — asking for a plane-less world AND a plane is a contradiction either way.
+        if (_freecam && (_fly || _viewerMode))
+        {
+            GD.Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--viewer/--damage");
+            _fly = _stunt = _viewerMode = _damageLab = false;
+        }
         // Flight is the default for any content arg; --viewer opts out into the static
         // inspection view. Asking for both is a contradiction — the explicit --viewer wins,
         // since a bare --fly is now just the default spelled out.
@@ -314,11 +332,11 @@ public partial class PlaneViewer : Node3D
             GD.Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
             _fly = _stunt = false;
         }
-        if (hasContentArg && !_viewerMode)
+        if (hasContentArg && !_viewerMode && !_freecam)
             _fly = true;
         // The static viewer shows a chapter world when asked for one, else the parked plane.
-        // Flight always needs the world built.
-        _worldMode = _fly || (_viewerMode && _chapterGiven);
+        // Flight and the spectator view always need the world built.
+        _worldMode = _fly || _freecam || (_viewerMode && _chapterGiven);
         // A --plane= list of several aircraft states the player count on its own (item 6's
         // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
         // different planes); an explicit --players= still wins.
@@ -378,7 +396,7 @@ public partial class PlaneViewer : Node3D
                 GD.Print($"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = _fly ? 62 : 50, Far = 40000f };
+        _camera = new Camera3D { Fov = _fly || _freecam ? 62 : 50, Far = 40000f };
         AddChild(_camera);
 
         // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
@@ -403,7 +421,7 @@ public partial class PlaneViewer : Node3D
     {
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
-        _camera.Fov = _fly ? 62 : 50;
+        _camera.Fov = _fly || _freecam ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_fly ? _players : 1);
@@ -465,21 +483,29 @@ public partial class PlaneViewer : Node3D
                     GD.Print($"clutter: no templates for {_chapter} ({interpPath})");
                 }
 
-                // Mission start states (anim-state engine part 1): replay the mission's
-                // animation base/start states onto the built world — hides the destroyed
-                // building variants (coplanar flicker), the zeppelins/trains this mission
-                // deactivates (zepstate.json), and poses the startanims end states
-                // (hangar doors open). Uses the same three zrdr scopes the original
-                // compiles into mis_anim.zbd: shared + chapter + mission.
+                // Animations: bind the mission's animation program to the built world and run
+                // it. Base states first (hides the destroyed building variants behind their
+                // healthy twins, and the zeppelins/trains this mission deactivates), then the
+                // ON_STARTUP definitions and the mission's startanims — which now *play*
+                // rather than being posed at their end state, so hangar doors swing and the
+                // C1 train drives its SI-script track loop. The program merges the compiled
+                // cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
+                // the three zrdr scopes (the only source of zepstate/startanims).
                 var chapterZrdrPath = PreferUnzipped(Path.Combine(repoRoot, "extracted", _chapter, "zrdr.zip"));
-                MissionState.Apply(_plane, zrdrPath, chapterZrdrPath, missionZrdrPath);
+                var (chapterAnimPath, missionAnimPath) =
+                    AnimProgram.ArchivePaths(repoRoot, _chapter, _mission);
+                var animProgram = AnimProgram.Load(zrdrPath, chapterZrdrPath, missionZrdrPath,
+                    chapterAnimPath, missionAnimPath);
+                var animRuntime = AnimRuntime.Apply(_plane, animProgram);
+                animRuntime.DebugMotions = _debugAnim;
+                _plane.AddChild(animRuntime);
 
                 // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
                 // chapter's clutter) that follows the plane past the map boundary, so the world
                 // continues indefinitely under the fog like the original's tile-reload grid
                 // (see MapEdgeExtender). On in --fly and in static weathered views (--sky-zone,
                 // for edge-verification shots); off for plain orbit viewing (honest data view).
-                if (_fly || _skyZoneExplicit)
+                if (_fly || _freecam || _skyZoneExplicit)
                 {
                     _edgeExtender = builder.CreateEdgeExtender(clutterBuilder);
                     if (_edgeExtender != null)
@@ -488,7 +514,7 @@ public partial class PlaneViewer : Node3D
                         GD.Print("map edge: rolling mirrored-tile window active");
                     }
                 }
-                if (_fly || _skyZoneExplicit)
+                if (_fly || _freecam || _skyZoneExplicit)
                 {
                     // The original skydome, anchored to the camera each frame. Scaled up so
                     // plain depth testing keeps it behind everything: a camera-centered dome
@@ -613,6 +639,28 @@ public partial class PlaneViewer : Node3D
             {
                 _deckCenter = ComputeAabb(cloudDeck).GetCenter();
                 AssignCloudDecks(cloudDeck);
+            }
+
+            // Spectator mode (--freecam): the live world with no aircraft at all, observed from
+            // a free-flying camera. It starts where the mission would have spawned the player
+            // (or wherever --campos/--spawn-at put it), so the interesting part of the map is
+            // already in view rather than a corner of empty sea.
+            if (_freecam)
+            {
+                var freecamSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                var (camPos, camLookAt) = ChooseSpawn(freecamSpawns, missionZrdrPath,
+                    ChooseSpawnBase(freecamSpawns), 0, "");
+                if (_camPos is { } cp) camPos = cp;
+                if (_lookAt is { } la) camLookAt = la;
+                _spectator = new SpectatorCamera(_camera, camPos, camLookAt)
+                {
+                    // A scripted --screenshot run wants the frame clean of the overlay.
+                    ShowReadout = _screenshotPath == null,
+                };
+                _worldRoot!.AddChild(_spectator);
+                what += " + freecam";
+                GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
+                         "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed");
             }
 
             if (_fly)
@@ -916,7 +964,9 @@ public partial class PlaneViewer : Node3D
             return false;
         }
 
-        if (!_fly)
+        // Only the static views frame their subject; flight and the spectator camera place
+        // their own eye (FrameCamera would yank the freecam back to the world's AABB orbit).
+        if (!_fly && !_freecam)
             FrameCamera();
 
         // Node-name labels (T) — in BOTH the viewer and flight: reading a misplaced object's
@@ -1664,8 +1714,8 @@ public partial class PlaneViewer : Node3D
             PrintCameraPose();
             return;
         }
-        if (_fly)
-            return; // the FlightController owns the camera; no orbit controls
+        if (_fly || _freecam)
+            return; // the FlightController / SpectatorCamera owns the camera; no orbit controls
         switch (@event)
         {
             case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
@@ -1811,10 +1861,24 @@ public partial class PlaneViewer : Node3D
     /// FrameCamera consumes. In orbit mode the look-at is the framed point (_orbitCenter); in
     /// --fly it is a point one unit ahead along the view ray — either reproduces the same
     /// framing (FrameCamera reconstructs pitch/yaw from the pos→look-at direction).</summary>
+    /// <summary>How far ahead of a free-look camera F11 places the printed --lookat point
+    /// (metres). Only the direction matters to every consumer; the distance is about surviving
+    /// the 3-decimal rounding of the printed args.</summary>
+    private const float PoseLookAtDistance = 100f;
+
     private void PrintCameraPose()
     {
         var pos = _camera.GlobalPosition;
-        var lookAt = _fly ? pos - _camera.GlobalTransform.Basis.Z : _orbitCenter;
+        // Free-look modes have no framed point, so the look-at is projected along the view
+        // direction. Both flight and the spectator camera (--freecam) are free-look; only the
+        // static orbit view has a real pivot. Before 2026-07-21 --freecam fell into the orbit
+        // branch and printed _orbitCenter, which it never sets — every pose aimed at the world
+        // origin. Projected a long way out because the args round to 3 decimals: at world
+        // coordinates in the thousands, a 1 m offset quantises the reconstructed direction to
+        // ~0.06°, which is visible when the pose is pasted back.
+        var lookAt = _fly || _freecam
+            ? pos - _camera.GlobalTransform.Basis.Z * PoseLookAtDistance
+            : _orbitCenter;
         GD.Print($"camera pose: --campos={Vec3Arg(pos)} --lookat={Vec3Arg(lookAt)}");
     }
 

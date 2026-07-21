@@ -692,3 +692,80 @@ Claude Code** (PR bodies, issues, comments, writeups, not just the initial submi
 bodies carry the disclosure above their technical content; commits already carried
 `Co-Authored-By: Claude`; issue #3's opening post predated the rule, so a follow-up disclosure
 comment was posted to that thread before either PR reached a reviewer.
+
+## 2026-07-21 — Animation playback + spectator camera (revival-plan item 7)
+
+The payoff for the whole mech3ax fork effort: the compiled `cam_anim`/`mis_anim` archives are
+now consumed, and the world animates. Planned as its own run in `docs/PLAN-anim-playback.md`
+after a format-analysis pass over all 61 extracted archives.
+
+**Analysis findings that shaped the design** (all in `docs/formats/anim-definitions.md`):
+
+- Extraction was already wired (the working-tree `ExtractAssets.ps1` change); all 61 archives
+  were already extracted and unpacked under `extracted/`.
+- **The two sources are complementary, not redundant.** A mission's `mis_anim.zbd` compiles
+  only the defs its `mis_anim.json` lists — C1/IA1 is 160 defs, all eight zeppelin files —
+  and `zepstate`/`startanims` are **never compiled into any archive**. So the reader path
+  could not be replaced, only merged with. Compiled wins on collision.
+- **Reader op keys and compiled event tags are one vocabulary**: SNAKE_CASE → PascalCase maps
+  exactly across the whole event set, so both front-ends normalize into one model mechanically.
+- **A support ref's `ptr` IS the flat gamez node index** — verified exactly on **136,048
+  references across all 8 chapters**, the only apparent exceptions being the fork's own
+  reversible `~N` duplicate-name suffixes. This is the correct binding and it matters: C1 has
+  a `caboose` (the real consist under the world root) and an unrelated `caboose.flt` in the
+  rail yard, and name matching drove **both**, putting one somewhere wrong. Each def's
+  `objects`/`nodes` arrays are its symbol table. `SceneBuilder` now stamps `cs_index` alongside
+  `cs_name` for it.
+- **Event scheduling** is `start.offset` ∈ Animation/Sequence/Event + time, with an absent
+  `start` (174,938 of the install's events) meaning "when the previous event completes". The
+  discriminating case is the train: `[ObjectMotionSiScript, Loop{-1}]` with no offsets is a
+  327 s loop only under that reading. A def's sequences run **concurrently** — the train drives
+  its four cars from four sibling sequences.
+- **JSON trap: the `.zan` rotate quaternion's field labels are shifted**, because mech3ax reads
+  the file's `(w,x,y,z)` into a `#[repr(C)] {x,y,z,w}` struct. Invisible to the byte round-trip,
+  fatal to playback. Verified by remapping and checking the C1 engine's quaternions are
+  unit-norm and its yaw tracks the frame-to-frame chord heading to ~1°.
+
+**Landed:** `src/Mech3/CompiledAnim.cs` (compiled front-end + SI scripts, lazily loaded; event
+payloads a generic property bag rather than 35 DTOs), `src/Mech3/AnimDefs.cs` (rewritten as the
+zrdr front-end onto the same model), `src/Mech3/AnimProgram.cs` (merge + script resolution),
+`src/Mech3/AnimRuntime.cs` (the engine — bootstrap passes, instance clocks, event scheduling,
+control flow, dispatch table). `src/Mech3/MissionState.cs` absorbed and deleted, its node
+resolution and INACTIVE semantics carried over verbatim. Plus `src/Flight/SpectatorCamera.cs`
+and `--freecam` (built first, as the testing vehicle) and `--debug-anim`.
+
+**Verified:** the C1 train drives its four-car consist from the parked position in correct
+order and spacing; the hangar-3 doors swing over their authored 9 s; the C1 road vehicles run
+their `OBJECT_MOTION_FROM_TO` chains — all via the headless `--debug-anim` pose log. **The end
+state provably matches the old code**: a late-frame hangar view differs from the pre-change
+baseline by **8 px of 230,400 (0.00%)** while an early frame differs by 1.16% — the transition
+is real and the destination identical. All 8 chapters build with zero errors; the mode battery
+(fly/stunt/viewer/damage/2P/4P-race/menu) is clean; static `--viewer` is byte-identical (md5).
+Load time is unchanged (1785 ms vs a 1685 ms baseline — an alarming first-run 8.1 s turned out
+to be a cold OS file cache on 630 freshly written JSON files).
+
+Two bugs caught during the work, both from reading the output rather than the code: motions
+were being ticked once per running sequence (the train would have run at 4× speed), and two
+start anims legitimately drive the same hangar doors, so motions now follow one-per-node
+last-wins. `CallAnimation` chains are depth-capped because the data can cycle.
+
+**Deliberately not done, with reasons recorded:** `ObjectMotion` (7,442 uses) is the
+debris-scatter primitive and every use sits in a destruction sequence reachable only by
+`WeaponHit`/`ON_CALL` — substantial work, no observable effect at mission start. `If`/`Elseif`
+branches are **skipped, not guessed**: their conditions are gameplay state a world build has no
+value for, and a wrong guess silently poses objects incorrectly. Nine event kinds (puffers,
+sounds, lights, opacity, texture cycling, FBFX, camera) dispatch and are counted but not yet
+acted on — each is one `case`, listed in `backlog.md`. One unexplained delta is written down
+rather than rounded off: the safety net hides 54 uncovered `destroyed` subtrees where the old
+code hid 53 (no visible difference — the net catches it either way).
+
+**Same-day fix (user report): F11 camera pose was wrong in `--freecam`.** `PrintCameraPose`
+branched on `_fly` alone, so the spectator camera fell into the orbit branch and printed
+`_orbitCenter` — which `--freecam` never sets, because it skips `FrameCamera`. Every pose
+therefore aimed at the world origin. Both free-look modes now project the look-at along the
+view direction, 100 m out rather than 1 m: the printed args round to 3 decimals, and at world
+coordinates in the thousands a 1 m offset quantises the reconstructed direction to ~0.06°.
+Verified by round-trip: a requested look-at direction and the printed one normalise to the
+identical unit vector (delta length exactly 100.0 m), and pasting the printed pose back
+reproduces the view to 10 px of 230,400 (0.004% — the residual is the animated world moving
+between the two runs, not the camera).
