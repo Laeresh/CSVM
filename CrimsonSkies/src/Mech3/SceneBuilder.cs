@@ -26,7 +26,13 @@ public sealed class SceneBuilder
     private readonly Func<string, bool>? _billboardTexture;
     private readonly Func<string, bool>? _glowTexture;
     private readonly Func<string, ImageTexture?, ImageTexture?>? _textureSubstitute;
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided), Material> _materialCache = new();
+    private readonly IReadOnlyDictionary<int, Vector2>? _scrollOverrides;
+    // Keyed by scroll rate as well as the usual four, because a scrolling model can share its
+    // material with non-scrolling geometry (C1B's `con_scroll` shares oildock1.tif with five
+    // static dock models) and even with a model scrolling at a DIFFERENT rate (C1B's three
+    // wakefronts all use wakefront1.tif at 1.0 / 0.7 / 0.7 u/s). Non-scrolling surfaces all
+    // key on (0,0), so the common path's cache behaviour is exactly what it was.
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided, float ScrollU, float ScrollV), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -50,6 +56,11 @@ vec3 csky_srgb_to_linear(vec3 c) {
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
+
+    /// <summary>Models built with a non-zero UV scroll rate, from either source (the model's own
+    /// <c>texture_scroll</c> or the boot script). Logged per world build: it is the one-line
+    /// evidence that a chapter animates exactly the surfaces the data says and no others.</summary>
+    public int ScrollingModelCount { get; private set; }
 
     /// <param name="fullbright">Render unshaded, like the original engine's world pass:
     /// texture × baked vertex color, ignoring scene lights. Used for world geometry.</param>
@@ -80,13 +91,21 @@ vec3 csky_srgb_to_linear(vec3 c) {
     /// decal — per plane instance, so the shared archive cache is never mutated. The
     /// substitute must keep the original's alpha class (opaque vs cutout vs soft), since the
     /// blend/scissor decision is already made from the archive's classification.</param>
+    /// <param name="scrollOverrides">Per-MODEL UV scroll rates (units/second) that replace the
+    /// model's own <see cref="GameZMesh.TextureScroll"/>. This is where the interp boot script's
+    /// <c>Object3DSetScroll</c> arrives: the verb writes the selected node's model scroll field —
+    /// which is why a chapter's <c>tex_fx.gw</c> rates are already baked into its gamez while the
+    /// per-mission ones are not — so a per-model table is the engine's own granularity. See
+    /// <see cref="MissionSetup.ScrollByModel"/> and <c>docs/formats/interp.md</c>.</param>
     public SceneBuilder(GameZ gamez, TextureArchive textures, bool fullbright = false,
         bool generateCollision = false, Func<string, bool>? blendTexture = null,
         Func<string, bool>? billboardTexture = null, bool cullBackfaces = false,
         Func<string, bool>? glowTexture = null,
-        Func<string, ImageTexture?, ImageTexture?>? textureSubstitute = null)
+        Func<string, ImageTexture?, ImageTexture?>? textureSubstitute = null,
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null)
     {
         _textureSubstitute = textureSubstitute;
+        _scrollOverrides = scrollOverrides;
         _gamez = gamez;
         _textures = textures;
         _fullbright = fullbright;
@@ -335,6 +354,14 @@ void fragment() {
             groups[gi].Polys.Add(poly);
         }
 
+        // The model's UV animation, if it has one — the boot script's rate where a mission set
+        // one, else the model's own field (see EffectiveScroll). Only the bias path carries it:
+        // every scrolling model in this install is ModelType "Default", so no glow flare or
+        // cylindrical facade needs it, and those two caches stay keyed as they were.
+        var scroll = EffectiveScroll(mesh, meshIndex);
+        if (scroll != Vector2.Zero)
+            ScrollingModelCount++;
+
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
@@ -345,11 +372,25 @@ void fragment() {
                 EmitPolygon(st, mesh, poly, offset);
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis)
-                : GetMaterial(materialIndex, priority, rank, doubleSided));
+                : GetMaterial(materialIndex, priority, rank, doubleSided, scroll));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
     }
+
+    /// <summary>
+    /// The UV scroll rate (units/second) for one model: the caller's per-model override if it
+    /// has one, else the model's own <c>texture_scroll</c> field. The two are the same setting
+    /// read at two different times — the engine's <c>Object3DSetScroll</c> writes this field, so
+    /// the chapter-level <c>tex_fx.gw</c> rates are already baked into the shipped gamez (C1's
+    /// <c>h_zone1scroll</c> = 0.07 in both places, C1B's wakefronts 0.7/1.0, its
+    /// <c>con_scroll</c> −1.0) while the per-mission ones can only be applied at load, which is
+    /// why C1's waterfall carries {0,0} in the gamez and still scrolls at −0.4 v/s in game.
+    /// </summary>
+    private Vector2 EffectiveScroll(GameZMesh mesh, int meshIndex) =>
+        _scrollOverrides != null && _scrollOverrides.TryGetValue(meshIndex, out var rate)
+            ? rate
+            : mesh.TextureScroll;
 
     // True if any of the mesh's polygons is skinned with a billboard (cloud-sprite) texture.
     private bool UsesBillboardTexture(GameZMesh mesh)
@@ -528,13 +569,14 @@ void fragment() {
     private const int SurfaceRankCap = 5;
     public const float NodeOrderBias = 5e-8f;
 
-    private Material GetMaterial(int materialIndex, int priority, int rank, bool doubleSided)
+    private Material GetMaterial(int materialIndex, int priority, int rank, bool doubleSided,
+        Vector2 scroll = default)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, doubleSided);
+        var key = (materialIndex, priority, rank, doubleSided, scroll.X, scroll.Y);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided);
+        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided, scroll);
         _materialCache[key] = mat;
         return mat;
     }
@@ -593,7 +635,8 @@ void fragment() {
         Cycler.Add(mat, frames, src.CycleSpeed, src.CycleLooping, src.TextureName ?? "?");
     }
 
-    private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided)
+    private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided,
+        Vector2 scroll)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -626,7 +669,7 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor);
-            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor);
+            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor, scroll);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -657,11 +700,14 @@ void fragment() {
     // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
-    private ShaderMaterial BiasMaterial(int priority, int rank, bool doubleSided, ImageTexture? tex, Color? color, bool blend, bool scissor)
+    private ShaderMaterial BiasMaterial(int priority, int rank, bool doubleSided, ImageTexture? tex,
+        Color? color, bool blend, bool scissor, Vector2 scroll = default)
     {
+        // Only a textured surface can scroll its UVs (a Colored material has no sampler).
+        bool scrolls = tex != null && scroll != Vector2.Zero;
         var mat = new ShaderMaterial
         {
-            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided),
+            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided, scrolls),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         mat.SetShaderParameter("depth_bias", bias);
@@ -669,12 +715,16 @@ void fragment() {
             mat.SetShaderParameter("albedo_tex", tex);
         if (color is { } c)
             mat.SetShaderParameter("albedo_color", c);
+        if (scrolls)
+            mat.SetShaderParameter("scroll_rate", scroll);
         return mat;
     }
 
-    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided)
+    private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
+        bool scroll = false)
     {
-        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0);
+        int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
+            | (scroll ? 32 : 0);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -745,7 +795,18 @@ vec3 csky_light_spill(vec3 world_pos, vec3 normal) {
             // texture set is already max-res, rtexture2/4/6/8 are downscaled quality tiers and
             // rtexture14 == base). Anisotropic sharpens the receding ground without new assets.
             sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
-        else
+        // UV animation (the model's texture_scroll / the boot script's Object3DSetScroll): the
+        // waterfalls' falling sheet, the boats' wake fronts, the oil-dock conveyor and the
+        // daytime sky layer. Emitted only for surfaces that actually scroll, so every other
+        // material's shader text is byte-for-byte what it always was. `repeat_enable` above is
+        // what makes the offset wrap instead of clamping at the UV edge.
+        //
+        // TIME wraps at Godot's rendering/limits/time/time_rollover_secs (3600 by default), and
+        // every rate in this install (0.07 / 0.4 / 0.5 / 0.7 / 1.0) times 3600 is a whole number
+        // of texture repeats, so the wrap lands on the identical frame — no visible jump.
+        if (scroll)
+            sb.AppendLine("uniform vec2 scroll_rate = vec2(0.0);");
+        if (!textured)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
         // Fullbright world only: the DX7 fixed-function pipeline multiplied texture × baked
         // vertex colour (D3DTOP_MODULATE) in GAMMA (sRGB) space; we render in linear space, so
@@ -783,9 +844,9 @@ void fragment() {{");
         // The surface's own albedo is kept separately from the modulated result: a point light's
         // spill is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
-        sb.AppendLine(textured
-            ? "    vec4 base_col = texture(albedo_tex, UV);"
-            : "    vec4 base_col = albedo_color;");
+        sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
+            : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * TIME);"
+            : "    vec4 base_col = texture(albedo_tex, UV);");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
         if (!shaded)

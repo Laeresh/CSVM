@@ -1478,3 +1478,80 @@ Hollywood landmark, and never having noticed it is exactly what `support\c2\ia1.
 predicts. Confirmation is "nothing looks wrong in our build", not a side-by-side against the
 original, so the door stays open on the smaller props (C3's boats/trucks/parked cars) if
 anything ever looks thin there.
+
+## 2026-07-22 — `texture_scroll` rendering: the waterfalls flow (follow-ups plan item 4)
+
+The last item of `docs/PLAN-anim-rendering-followups.md`. `GameZMesh.TextureScroll` had been
+parsed since 2026-07-21 and consumed nowhere, so every UV-animated surface in the game
+rendered as a frozen still: the C1 and C4 waterfalls, the boat wake fronts, the oil-dock
+conveyor, the daytime skydome's moving sky layer.
+
+**The survey came first, as the plan required, and it answered both of its open questions
+plus one it had not asked.**
+
+- *"Confirm the material-sharing collision actually occurs before designing around it."* It
+  does, in both possible forms. C1B's `con_scroll` (−1.0 u/s) shares `oildock1.tif` with five
+  **static** dock models, so an unkeyed material would slide the whole dock; and C1B's three
+  wake fronts are one `wakefront1.tif` at **two different rates** (`eb_wakefront` 1.0,
+  `wakefront_left`/`_right` 0.7), so a boolean "does it scroll" key would not have been
+  enough either. The material cache key therefore carries the rate itself.
+- *"The gamez field and the boot script are two sources that must share one renderer path."*
+  They are not merely two sources — they are **the same field written at two different
+  times**, and the data says so plainly. The rates in the chapter-level `tex_fx.gw` scripts
+  are already baked into the shipped gamez models, value for value (C1's `h_zone1scroll`
+  0.07; C1B's `con_scroll` −1.0, `eb_wakefront` 1.0, both `wakefront_*` 0.7), while the
+  per-mission ones are not (the six C1/C4 waterfall leaves are `{0,0}` in the gamez). That is
+  exactly what a verb writing the *model's* scroll field produces: a chapter script runs once
+  per chapter and can be baked, a mission script cannot, because one gamez serves every
+  mission. So the override table is keyed by **model index**, which is the engine's own
+  granularity — and every scroll target in this install is a model used by exactly one node,
+  so per-model and per-node cannot disagree here anyway.
+- **Not asked, and wrong in this repo's own docs:** `h_zone1scroll` is not "a hangar
+  glass-roof sky reflection". It is a child of `horizon/zone1` — the **daytime skydome's
+  scrolling sky layer** (`sky2.tif`, 17.5 km across at y≈1070), only built under
+  `--sky-zone=zone1`. `docs/formats/gamez.md` and CLAUDE.md are corrected.
+
+**Landed:** `SceneBuilder.EffectiveScroll` (override else the model's field) feeding a
+`scroll_rate` uniform and `texture(albedo_tex, UV + scroll_rate * TIME)`; the material cache
+key gains the rate; a `scroll` bit in the shader-variant key so **non-scrolling materials
+emit byte-identical shader text**. `MissionSetup.ScrollByModel` resolves the script's
+statements to model indices *before* the world build (the rate must be known while the
+material is created, so this cannot ride the existing bootstrap pass), and
+`Object3DSetScroll` moves out of the "not acted on" report into `N texture scroll(s) set at
+build`. `WorldBuilder` passes the table through; `PlaneViewer` loads the setup script one
+step earlier and logs `texture scroll: N model(s) animating UVs`.
+
+**Verified.** The proof had to separate the scroll from the splash puffers already animating
+at the same place, so every check is a burst at one camera against the *pre-change build*:
+
+- **C1 waterfall** (boot script, −0.4 v/s), 0.5 s apart: baseline changes 12–17k px confined
+  to y[540..697] — the mist at the base and nothing else; with the fix, 63–91k px spanning
+  y[117..709], the whole falls sheet from the lip down.
+- **C4 waterfall** (same source, three of them): baseline 13,935 px in y[601..719]; with the
+  fix 109,257 px in y[83..719]. Direction and rate confirmed by cross-correlation — best
+  vertical alignment **+24 px downward** over 0.5 s, against ≈29 px predicted from the
+  model's own UVs (v spans 0..4 over the quad). Baseline aligns at 0 px with error exactly
+  0.00, i.e. provably static.
+- **C1 daytime sky layer** (gamez field, 0.07 u/s), 5 s apart: baseline **0 px changed**;
+  with the fix 51,156 px in a horizontal band y[347..435] across the full width.
+- **The material split works and does not break flipbooks**: `wakefront1.tif` both cycles and
+  scrolls at two rates, and C1B's cycler summary goes 7 → 8 animated materials with
+  `wakefront1.tif` listed **twice** — one ShaderMaterial per rate, each registered with the
+  `TextureCycler`, which is also the mechanism that keeps `con_scroll`'s rate off the five
+  static dock models.
+- **Scope**: the per-build count matches the data survey exactly — C1 2 (3 with
+  `--sky-zone=zone1`), C1B 4, C4 6, and **no line at all** for C1C/C2/C2B/C3/C5, which carry
+  no scroll from either source. Nothing else can scroll by construction: a zero rate produces
+  the same shader text as before.
+- **Regressions**: all 8 chapters `--freecam` with zero errors; static views byte-identical
+  (md5) for C1/C1B/C1C/C2/C2B/C4 **and the plane viewer** (planes.zbd has zero non-zero
+  `texture_scroll` models, so aircraft are unaffected by data); C5 differs by 1 px at the
+  same-build noise floor. **C3's 35,250 px / max-delta-3 difference is pre-existing and not
+  ours** — the baseline build flips between the identical two states run to run (measured:
+  run1==run2, run2 vs run3 = the same 35,250 px signature), which is its water flipbook
+  landing a frame apart. Full mode battery (fly/stunt/viewer/damage/2P/4P race/menu/C4 fly)
+  error-free.
+
+One detail worth keeping: `TIME` wraps at Godot's `time_rollover_secs` (3600), and every rate
+in this install (0.07 / 0.4 / 0.5 / 0.7 / 1.0) times 3600 is a whole number of texture
+repeats, so the wrap lands on the identical frame and no seam is visible.

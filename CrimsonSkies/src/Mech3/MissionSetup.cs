@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Globalization;
 using System.IO;
 using System.Linq;
 using System.Text.Json;
@@ -43,7 +44,8 @@ public sealed class MissionSetup
     private readonly List<Op> _ops = new();
     private readonly Dictionary<string, int> _unapplied = new(StringComparer.Ordinal);
     private readonly List<string> _unresolved = new();
-    private int _activated, _deactivated;
+    private readonly List<string> _scrollUnresolved = new();
+    private int _activated, _deactivated, _scrollOps;
 
     /// <summary>The interp script this was read from, for logging.</summary>
     public string ScriptName { get; private init; } = "";
@@ -111,6 +113,67 @@ public sealed class MissionSetup
     }
 
     /// <summary>
+    /// The script's <c>Object3DSetScroll</c> statements, resolved to gamez <b>model</b> indices →
+    /// UV scroll rate in units/second. Handed to the world build (see
+    /// <see cref="SceneBuilder"/>'s <c>scrollOverrides</c>) rather than applied in
+    /// <see cref="Apply"/>, because a scroll rate has to be known while the material is created:
+    /// a scrolling model can share its material with static geometry, so the rate is part of the
+    /// material cache key.
+    ///
+    /// <para>Per <b>model</b>, not per node, because that is where the engine keeps it: the same
+    /// rates the chapter-level <c>tex_fx.gw</c> sets are already baked into the shipped gamez
+    /// models' own <c>texture_scroll</c> field (C1's <c>h_zone1scroll</c> 0.07, C1B's wakefronts
+    /// 0.7/1.0, its <c>con_scroll</c> −1.0 — all identical in both places), while the per-mission
+    /// ones are not, which is exactly what a verb that writes the model's field would produce.
+    /// Every scroll target in this install is a model used by exactly one node, so the two
+    /// granularities cannot disagree here.</para>
+    ///
+    /// <para>Only the plain <c>FindNode</c> form is resolved. A modelless group selection
+    /// (C4's <c>tex_fx.gw</c> names <c>waterfall01</c>, which has no model of its own) matches
+    /// nothing and is counted — unobservable either way, since every C4 mission script then sets
+    /// that waterfall's two leaves directly.</para>
+    /// </summary>
+    public IReadOnlyDictionary<int, Vector2> ScrollByModel(GameZ gamez)
+    {
+        var map = new Dictionary<int, Vector2>();
+        foreach (var op in _ops)
+        {
+            if (op.Verb != "Object3DSetScroll" || op.Target == null)
+                continue;
+            _scrollOps++;
+            // `on|off <u> <v>`; off means "this model does not scroll", which still needs an
+            // entry so it overrides the model's own field. (All 75 uses in this install are on.)
+            var rate = Vector2.Zero;
+            if (op.Args.Length >= 3 && op.Args[0] == "on"
+                && float.TryParse(op.Args[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float u)
+                && float.TryParse(op.Args[2], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+                rate = new Vector2(u, v);
+            int hits = 0;
+            if (op.Sub == null)
+                foreach (var node in gamez.Nodes)
+                {
+                    if (node.MeshIndex < 0 || !NameMatches(node.Name, op.Target))
+                        continue;
+                    map[node.MeshIndex] = rate; // order matters, last write wins
+                    hits++;
+                }
+            if (hits == 0)
+                _scrollUnresolved.Add(op.Sub == null ? op.Target : $"{op.Target}/{op.Sub}");
+        }
+        return map;
+    }
+
+    // A script name matches a gamez node name case-insensitively, with the model-file suffix
+    // optional on either side — the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
+    // the node 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
+    private static bool NameMatches(string nodeName, string scriptName) =>
+        nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
+        || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
+
+    private static string Strip(string s) =>
+        s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
+
+    /// <summary>
     /// Applies the script to a built world. <paramref name="resolve"/> maps a gamez name (plus an
     /// optional scope node for the FindSubNode form) to the built nodes; <paramref name="setActive"/>
     /// switches a subtree on or off. Both are supplied by <see cref="AnimRuntime"/> so this reuses
@@ -131,6 +194,11 @@ public sealed class MissionSetup
                 // indistinguishable here and keeps one code path. 12 uses, all C3.
                 case "DeleteTree":
                     SetActive(op, false);
+                    break;
+                // Acted on, but at world-build time rather than here — the rate is part of the
+                // material cache key, so it has to be known before the material exists. See
+                // ScrollByModel.
+                case "Object3DSetScroll":
                     break;
                 default:
                     // Everything else is parsed, counted and reported rather than guessed at —
@@ -179,6 +247,11 @@ public sealed class MissionSetup
         var s = $"mission setup: {ScriptName} — {_deactivated} node(s) deactivated";
         if (_activated > 0)
             s += $", {_activated} activated";
+        if (_scrollOps > 0)
+            s += $", {_scrollOps} texture scroll(s) set at build"
+                 + (_scrollUnresolved.Count > 0
+                     ? $" ({_scrollUnresolved.Count} matched no model: {string.Join(", ", _scrollUnresolved.Distinct())})"
+                     : "");
         if (_unresolved.Count > 0)
             s += $"; {_unresolved.Count} name(s) not in the built world ("
                  + string.Join(", ", _unresolved.Distinct().Take(6))

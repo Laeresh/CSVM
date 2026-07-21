@@ -503,7 +503,16 @@ public partial class PlaneViewer : Node3D
             Node3D? cloudDeck = null; // the world's cloudlayer overcast (copied per player below)
             if (_worldMode)
             {
-                var builder = new WorldBuilder(gamez, textures, collision: _fly);
+                // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw):
+                // which of the chapter's entities this mission shows, and which of its surfaces
+                // animate their UVs. Loaded before the build because the scroll rates are part of
+                // the material cache key (see MissionSetup.ScrollByModel); the entity half is
+                // applied afterwards, as the animation runtime's bootstrap pass 0.
+                var missionSetup = MissionSetup.Load(interpPath, _chapter, _mission);
+                if (missionSetup == null)
+                    GD.Print($"mission setup: no script for {_chapter}/{_mission} ({interpPath})");
+                var builder = new WorldBuilder(gamez, textures, collision: _fly,
+                    scrollOverrides: missionSetup?.ScrollByModel(gamez));
                 _plane = builder.Build("world1"); // every chapter has exactly one world node
                 // The original's material texture flipbooks (animated water/surf/wake/splash and
                 // the walking crowd). Parented to the world so a session teardown takes it too.
@@ -560,12 +569,6 @@ public partial class PlaneViewer : Node3D
                 // holding the TextureArchive: a puffer bakes its atlas at construction, and
                 // `textures` is disposed when this build scope ends. Cleared right after the
                 // bootstrap so a later request is reported instead of hitting a closed zip.
-                // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw):
-                // which of the chapter's entities this mission actually shows. Applied as the
-                // runtime's bootstrap pass 0 — see MissionSetup.
-                var missionSetup = MissionSetup.Load(interpPath, _chapter, _mission);
-                if (missionSetup == null)
-                    GD.Print($"mission setup: no script for {_chapter}/{_mission} ({interpPath})");
                 var animRuntime = new AnimRuntime
                 {
                     DebugMotions = _debugAnim,
@@ -633,6 +636,9 @@ public partial class PlaneViewer : Node3D
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
+                // Read after the domes, since C1's daytime sky layer is a horizon child.
+                if (builder.ScrollingModelCount > 0)
+                    GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
                 what = $"chapter {_chapter} world";
             }
             else

@@ -1,4 +1,5 @@
 using System;
+using System.Collections.Generic;
 using Godot;
 
 namespace CrimsonSkies.Mech3;
@@ -95,6 +96,10 @@ public sealed class WorldBuilder
     public int MeshInstanceCount => _scene.MeshInstanceCount;
     public int ColliderCount => _scene.ColliderCount;
 
+    /// <summary>Models animating their UVs — see <see cref="SceneBuilder.ScrollingModelCount"/>.
+    /// Read after Build (and after BuildHorizon, which is where C1's daytime sky layer is).</summary>
+    public int ScrollingModelCount => _scene.ScrollingModelCount;
+
     /// <summary>The cloudlayer deck as a separate node so the caller can make it follow the
     /// player (see PlaneViewer): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its
@@ -103,7 +108,12 @@ public sealed class WorldBuilder
 
     /// <param name="collision">Attach static colliders to solid geometry so the flight
     /// loop can raycast against terrain and buildings. Off for static viewing.</param>
-    public WorldBuilder(GameZ gamez, TextureArchive textures, bool collision = false)
+    /// <param name="scrollOverrides">Per-model UV scroll rates from the mission's interp boot
+    /// script (<see cref="MissionSetup.ScrollByModel"/>). Null leaves every model on its own
+    /// gamez <c>texture_scroll</c> field, which is what a chapter with no scroll statements
+    /// gets either way.</param>
+    public WorldBuilder(GameZ gamez, TextureArchive textures, bool collision = false,
+        IReadOnlyDictionary<int, Vector2>? scrollOverrides = null)
     {
         _gamez = gamez;
         _textures = textures;
@@ -113,7 +123,8 @@ public sealed class WorldBuilder
         // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
         _scene = new SceneBuilder(gamez, textures, fullbright: true,
             generateCollision: collision, blendTexture: IsCloudOrSkyTexture,
-            billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture);
+            billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture,
+            scrollOverrides: scrollOverrides);
         _scene.Cycler = Cycler;
     }
 

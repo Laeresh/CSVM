@@ -19,7 +19,9 @@ screenshot at the specific location the report came from.
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
 2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
 3. ☑ Mission-spawned entity rosters (`hk_zep`, CTF props) **(done 2026-07-22 — the premise was wrong; it is the interp boot script, not a roster)**
-4. ☐ `texture_scroll` rendering **(premise updated 2026-07-22: `Object3DSetScroll` in the boot scripts is a second, authoritative source — see item 3)**
+4. ☑ `texture_scroll` rendering **(done 2026-07-22 — the two "sources" are one field written at two times; the waterfalls flow)**
+
+**All four items are landed. This plan is complete.**
 
 **Dependency note:** items 1 and 2 are the two halves of one visible payoff — `AnimRuntime`
 currently *skips* every `If`/`Elseif` branch (item 1), and even once a branch runs, its
@@ -402,3 +404,22 @@ frames) — confirm the reflection/texture visibly shifts frame to frame at the 
 Confirm NO other scrolling regression: every other textured surface in a full 8-chapter
 regression must render motionless across the same multi-frame burst (a UV scroll leaking onto
 a shared non-scrolling material would show up exactly this way).
+
+**LANDED 2026-07-22.** Full detail in `docs/HISTORY.md`; decode in
+`docs/formats/interp.md` + `docs/formats/gamez.md`.
+
+The collision check the plan demanded first **did** find collisions, in both possible forms:
+C1B's `con_scroll` shares `oildock1.tif` with five *static* dock models, and its three wake
+fronts are one `wakefront1.tif` at *two different rates* (1.0 / 0.7). So the material cache
+key carries the rate itself — a boolean would not have sufficed.
+
+The bigger finding is that the two "sources" are **one field written at two different times**.
+The chapter-level `tex_fx.gw` rates are already baked into the shipped gamez models, value for
+value; only the per-mission ones are not, because one gamez serves every mission. That is
+exactly what a verb writing the *model's* scroll field produces, so the override table is
+keyed by model index — the engine's own granularity.
+
+Two corrections to this repo's own docs fell out of it: `h_zone1scroll` is not "a hangar
+glass-roof sky reflection" but the **daytime skydome's scrolling sky layer** (`horizon/zone1`,
+only built under `--sky-zone=zone1`), and the C1 waterfall's `{0,0}` gamez field never meant
+its surface was still.

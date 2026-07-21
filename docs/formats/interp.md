@@ -87,7 +87,7 @@ that selection.
 |---|---:|---|
 | `FindNode <name>` | 1215 | Select a node by gamez name (the `.flt` suffix is used interchangeably) |
 | `NodeSetActive on\|off` | 1125 | Activate / deactivate the selection's subtree |
-| `Object3DSetScroll on\|off <u> <v>` | 68 | **Set a texture scroll rate** on the selection — see below |
+| `Object3DSetScroll on\|off <u> <v>` | 68 | **Set a texture scroll rate** on the selection's model — see below |
 | `WorldPartitionSetActive on\|off <x1> <z1> <x2> <z2>` | 25 | Toggle a rectangular region of the partition grid (C3 only) |
 | `Object3DTranslate <x> <y> <z>` | 14 | Reposition the selection |
 | `Quit` | 13 | End of script — always the last line (C4/C5 scripts only) |
@@ -111,10 +111,10 @@ Semantics worth knowing:
   -0.000000`, i.e. π on Y) that only make sense as radians. No mission this project defaults
   to uses either verb, so the question has not had to be settled.
 
-## `Object3DSetScroll` — texture scrolling is set here, not in the gamez
+## `Object3DSetScroll` — the second source of texture scrolling
 
-The gamez material carries a `texture_scroll` field, but the boot scripts *also* set scroll
-rates at load time, and the two do not agree. C1's own `ia1.gw` ends with:
+The gamez *model* carries a `texture_scroll` field ([gamez.md](gamez.md)), and the boot
+scripts also set scroll rates at load time. C1's own `ia1.gw` ends with:
 
 ```
 FindNode wf01_water
@@ -124,8 +124,30 @@ Object3DSetScroll on 0.0 -0.4
 ```
 
 — so the C1 waterfall scrolls its texture at −0.4 v/second even though its gamez
-`texture_scroll` is `{0,0}`. Any work on scrolling surfaces has to read both sources: 68
-uses live in mission scripts and 7 more in the chapter `tex_fx.gw` scripts.
+`texture_scroll` is `{0,0}`. All 75 uses (68 in mission scripts, 7 in the chapter
+`tex_fx.gw` scripts) are the `on` form; no script ever turns a scroll off.
+
+**The verb writes the selected node's MODEL scroll field.** That is the reading the data
+forces, and it explains why the two sources disagree only where they must:
+
+| Where the statement lives | In the shipped gamez? |
+|---|---|
+| chapter `tex_fx.gw` (7 uses) | **Yes — identical values.** C1's `h_zone1scroll` is 0.07 in both; C1B's `con_scroll` −1.0, `eb_wakefront` 1.0, `wakefront_left`/`_right` 0.7. |
+| per-mission `<mission>.gw` (68 uses) | **No** — the six C1/C4 waterfall leaves are `{0,0}` in the gamez. |
+
+A chapter-level script runs once per chapter, so its writes could be (and were) baked into
+the chapter's saved gamez; a per-mission script cannot be, because one gamez serves every
+mission. Only the mission-level statements therefore have to be applied at load, and the
+chapter-level ones are pure redundancy in this install — the single statement that is *not*
+redundant, C4/`tex_fx.gw`'s `waterfall01 0.0 -0.5`, names a group node with no model of its
+own, and every C4 mission script then sets that waterfall's two leaves to −0.4 directly. So
+it is unobservable whether the verb also recurses into a subtree.
+
+Consumed since 2026-07-22: `MissionSetup.ScrollByModel` resolves each statement to a gamez
+model index and hands the table to the world build, because the rate has to be known while
+the material is created (a scrolling model can share its material with static geometry — see
+`SceneBuilder`'s cache key in `docs/architecture.md`). Every scroll target in this install is
+a model used by exactly one node, so per-model and per-node granularity cannot disagree here.
 
 ## Relationship to the animation definitions
 
