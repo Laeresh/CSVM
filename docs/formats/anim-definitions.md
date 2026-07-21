@@ -108,11 +108,12 @@ spawns/objectives/AI at engine level, not the world build.
 The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
 scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
 (`tools/mech3ax`, plan `docs/PLAN-mech3ax-cs-revival.md`) has implemented them in
-`crates/anim/src/cs/`: the container (item 3, 2026-07-20) and the full semantic
-`AnimDef` + event decode (item 4, 2026-07-21) round-trip **byte-identically on all 61
-archives of this install**; only the SI-script frame data is still carried as raw bytes
-(item 5) and the CLI is not wired yet (item 6). Everything below is byte-verified against
-this install.
+`crates/anim/src/cs/`: the container (item 3, 2026-07-20), the full semantic
+`AnimDef` + event decode (item 4, 2026-07-21), and the SI-script frame decode (item 5,
+2026-07-21) round-trip **byte-identically on all 61 archives of this install** with no
+raw regions left except the per-axis spline coefficient blocks (kept as bytes by
+upstream's own MW/PM convention; their semantics are decoded below). Only the CLI is not
+wired yet (item 6). Everything below is byte-verified against this install.
 
 **Why they matter:** the vehicle motion (`OBJECT_MOTION_SI_SCRIPT`) references `.zan`
 spline scripts that exist **nowhere as loose files** — they are compiled only into these
@@ -212,31 +213,41 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   17 (rare; firetrucks/flak), 18 (nearly all defs), 21, 22 (nearly all defs), 23
   (camera/intro defs). The fork stores the raw dword (`flags_raw`) since the unknown bits
   make reconstruction impossible.
-- **SI-script pool** (the part item 9 needs): back-to-back records of
-  `{source path\0, object name\0, frames…}`. Frame = `{flags u32: 1=translate, 2=rotate,
-  4=scale; start f32, end f32}` + one **19-float block per set flag**. Translate block
-  (verified): `base Vec3` + 4 floats `(0, avgVel x,y,z)` + per-axis `{value, c1, c2, c3}`
-  where `component(t) = value + c1·t + c2·t² + c3·t³`, `t` seconds since frame start —
-  verified exact against each next frame's base value and C1-continuous (next frame's `c1`
-  = previous frame's exit derivative). Rotate block: starts with a unit quaternion
-  `(w,x,y,z)`; the remaining 15 floats are **confirmed by mech3ax's own `RotateDataC`**
-  (2026-07-20): `delta Vec3` + three per-axis 16-byte spline blocks — the same shape as
-  translate, with the quaternion in place of translate's `base Vec3 + unk f32`. mech3ax
-  round-trips the spline blocks as preserved bytes (`Bytes<16>`) without interpreting the
-  cubics. The frame structs (`FrameC` 12 B; translate/rotate/scale data 76 B each) match CS
-  byte-for-byte (`tr_passengine1`: flags=3, start=0, end≈3.636 s). The 2026-07-18 survey's
-  "no header struct / how are records delimited" question was **resolved by the fork's
-  structural stage (item 3): the pool IS PM's format verbatim** — all 28-byte `SiScriptC`
-  headers first (name lengths, `spline_interp` — true in CS, false in PM —, `frame_count`,
-  `script_data_len`), then each script's names + frame data, sizes declared exactly. Which
-  scripts belong to which def is declared too: the def's u32 list (above) holds its pool
-  indices, and each e12 event names its slot in that list.
-- **Validation state:** record delimiting is exact via the `SiScriptC` headers (byte-
-  identical round-trip with the frame data preserved raw). The earlier flags-driven frame
-  walker interpreted **24 of C1's 48 scripts byte-exactly** — including all four train
-  scripts and both fueltrucks (every vehicle motion) — with contiguous monotonic times; the
-  camera/`cpilot_eject` scripts still need their frame-data variant decoded (fork plan
-  item 5, now a bounded question since each script's exact extent is known). Train data: 4 scripts
+- **SI-script pool (fully decoded, fork plan item 5, 2026-07-21):** all 28-byte
+  `SiScriptC` headers first (name pointers/lengths, `spline_interp`, `frame_count`,
+  `script_data_len` — PM's format verbatim), then per script `{source path\0, object
+  name\0, frames…}` with names exactly `strlen+1` (single nul, no garbage) and sizes
+  declared exactly. `spline_interp` is a **real per-script bool** in CS (usually true;
+  15 of the install's 1090 scripts carry false; PM: always false). Which scripts belong
+  to which def is declared too: the def's u32 list (above) holds its pool indices, and
+  each e12 event names its slot in that list. Frame = `{flags u32: 1=translate, 2=rotate,
+  4=scale; start f32, end f32}` + one **76-byte block per set flag** (`flags=0` frames
+  exist — 8,596 of 76,845 frames — and carry no blocks; this is what broke the 2026-07-18
+  sentinel-guessing walker). Translate block (verified): `base Vec3` + 4 floats
+  `(0, avgVel x,y,z)` + per-axis `{value, c1, c2, c3}` where `component(t) = value + c1·t
+  + c2·t² + c3·t³`, `t` seconds since frame start, constant term = the base component
+  (absolute) — verified exact against each next frame's base value and C1-continuous;
+  the u32 at offset 12 is usually 0 but carries garbage in places (preserved). **Rotate
+  block (decoded 2026-07-21):** `base quaternion (w,x,y,z)` + `delta Vec3` + the same
+  three per-axis `{value, c1, c2, c3}` cubic blocks, but **relative and in half-angle
+  radians**: the constant term is 0 (the cubics give each axis's half-angle offset from
+  the frame's base), `delta` = the cubic's average rate over the frame
+  (`f(dt)/dt`), and the rotation at time `t` composes **in the parent frame** as
+  `q(t) = exp((fx,fy,fz)(t)) ⊗ base` (quaternion exponential of the half-angle vector,
+  left-multiplied). Discriminated against right-multiplication and all Euler orders on
+  every consecutive rotate-frame pair of the install: 53,515/60,411 pairs close the next
+  frame's base to <1e-5 under L-exp (57,675 <1e-3); no competing hypothesis comes close.
+  Residuals are compiler fit error on fast rotations (the M01/M02 ladder-climb scripts,
+  ~1° over 60 ms frames) plus one script with **uninitialized spline memory**
+  (`pfighter11.zan`, C1/M04 — coefficients like 1.7e+27; its base quaternions still march
+  smoothly, so bases are authoritative and splines only interpolate within a frame — and
+  the reason spline blocks must stay raw bytes for round-trip, which is also upstream's
+  own MW/PM choice). Scale block: translate's shape (rare — 477 frames set scale).
+- **Validation state:** the fork's semantic decode round-trips **all 61 archives
+  byte-identically** with every one of the install's **1090 scripts frame-decoded**
+  (76,845 frames). The 2026-07-18 survey's "24 of 48 C1 scripts fail to parse" was an
+  artifact of not knowing the record delimiting (resolved by the headers + flags=0
+  frames); no camera/`cpilot_eject` frame-data variant exists. Train data: 4 scripts
   (`tr_passengine1/tankercar1/boxcar1/caboose1.zan`) × 90 frames × ~3.64 s (= 40 ticks at
   `SCRIPT_FRAME_RATE` 11), total ~327 s per loop, starting at the parked consist position
   `(−6943…−6961, 128, −5456…−5412)` and covering a ~3.9 × 2.2 km track loop — all

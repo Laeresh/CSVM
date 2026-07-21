@@ -82,7 +82,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 2. ☑ Study `crates/anim/src/{mw,pm,rc}` as the porting template; write down what's shared (`common/`) vs per-game (done 2026-07-20, see section 2 — incl. byte-verification against the real C1 `cam_anim.zbd`)
 3. ☑ Implement `crates/anim/src/cs/` container + def-list + info block, byte-region-correct (garbage-preserving) round-trip (done 2026-07-20, see section 3 — round-trip verified **byte-identical on all 61 archives**, exceeding the planned C1-only bar)
 4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
-5. ☐ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (partly pre-answered by item 4: the def's u32 list = its pool indices, e12 events name their slot, and the `SiScriptC` headers delimit every record exactly — only the frame-data *content* of the camera/eject variant remains)
+5. ☑ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (done 2026-07-21, see section 5 — all 1090 scripts of all 61 archives frame-decode byte-exactly; the "failure variant" never existed, and the rotate cubics are half-angle offsets composed `exp(v)⊗base`)
 6. ☐ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install
 7. ☐ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks/`cpilot_eject`), docs + backlog cleanup
 
@@ -333,6 +333,41 @@ hole.
 
 **Verify:** all 48 of C1's SI scripts parse byte-exactly to the next record; full-archive
 round-trip byte-identical.
+
+**DONE 2026-07-21** (fork commit `916c3d2`, exceeding the planned C1-only bar again:
+**all 1090 scripts across all 61 archives frame-decode byte-exactly**, and the semantic
+round-trip stays byte-identical on all 61). Both "known gaps" dissolved on measurement:
+
+- **The camera/`cpilot_eject` parse-failure variant never existed.** With the
+  `SiScriptC`-declared `frame_count`/`script_data_len` (item 3's delimiting), the plain
+  flags-driven frame walk — `{flags, start, end}` + one 76-byte block per set flag —
+  consumes every script's data exactly. The 2026-07-18 failures were the sentinel-guessing
+  walker tripping over **flags=0 frames** (8,596 of the install's 76,845 frames are a bare
+  12-byte header with no data blocks). No extra sub-record, no second format.
+- **The rotate block is decoded, beyond the planned bar** (upstream itself never
+  interpreted the spline cubics): the three per-axis `{value, c1, c2, c3}` blocks are
+  cubics in **half-angle radians relative to the frame's base quaternion** (constant term
+  0, vs translate's absolute cubics whose constant = the base component), `delta` = the
+  cubic's average rate, and composition is **left-multiplication in the parent frame**:
+  `q(t) = exp((fx,fy,fz)(t)) ⊗ base`. Hypothesis race across every consecutive
+  rotate-frame pair of the install (60,411 pairs): L-exp closes 53,515 pairs to <1e-5 /
+  57,675 to <1e-3; right-multiplication and all six Euler orders are decisively worse.
+  Residuals: cubic fit error on fast rotations (ladder-climb scripts, ~1° per 60 ms
+  frame) and `pfighter11.zan` (C1/M04), which carries **uninitialized spline memory**
+  (coefficients up to 1.7e+27) while its per-frame base quaternions stay smooth — bases
+  are authoritative, splines only interpolate within a frame, and this is why the spline
+  blocks must remain raw bytes for byte-identical round-trip (also upstream's MW/PM
+  choice; the semantics live in the docs + module comment for item 7's playback).
+
+Implementation: `cs/mod.rs` dropped `SiScriptRaw` for the shared API `SiScript` type
+(names + `read_si_script_frames`/`write_si_script_frames`, PM's exact machinery;
+`SiScriptCsC.spline_interp` became `Bool32` — a real per-script bool in CS, 15 scripts
+false). Name fields verified install-wide as exactly `strlen+1`, so the PM-style
+write reconstructs them byte-identically. Survey scripts: `.scratch/cs_anim_siprobe*.py`
+(1–5) in the main repo. Verified: 61/61 byte-identical with `CS_ANIM_DIR`; full
+workspace suite green; clippy clean on the crate (remaining warnings are pre-existing in
+`mech3ax-api-types`); docs updated (`docs/formats/anim-definitions.md` SI-script pool +
+validation sections).
 
 ## 6. CLI wiring + verification
 

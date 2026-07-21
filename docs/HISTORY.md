@@ -382,3 +382,39 @@ region (item 5).
 Format page updated the same turn (`docs/formats/anim-definitions.md` — compiled-archives
 section rewritten as decoded fact). Next: item 5 (SI-script frame decode — now a bounded
 question) then item 6 (CLI wiring + test.py).
+
+## 2026-07-21 — mech3ax fork: CS SI-script frame decode complete (plan item 5)
+
+`tools/mech3ax` stage 3 (fork commit `916c3d2`): the SI-script pool's frame data — the
+last raw region of the CS anim decode — is now semantically decoded through the shared
+machinery (`SiScript` API type + PM's `read_si_script_frames`/`write_si_script_frames`).
+**All 1090 scripts across all 61 archives frame-decode byte-exactly, and the 61/61
+byte-identical round-trip holds.** Both of the item's "known gaps" dissolved on
+measurement (probes `.scratch/cs_anim_siprobe*.py`):
+
+- **The 24/48 camera/`cpilot_eject` "parse-failure variant" never existed.** With the
+  header-declared `frame_count`/`script_data_len`, the plain flags-driven walk consumes
+  every script exactly; the 2026-07-18 failures were the survey's sentinel-guessing
+  walker tripping over **flags=0 frames** (8,596 of 76,845 frames are a bare 12-byte
+  header with no translate/rotate/scale blocks).
+- **Rotate-block semantics decoded, beyond upstream's own bar** (mech3ax never
+  interpreted the cubics): the per-axis `{value, c1, c2, c3}` blocks are cubics in
+  **half-angle radians relative to the frame's base quaternion** (constant term 0;
+  translate's cubics are absolute with constant = base component), `delta` = the cubic's
+  average rate over the frame, and composition is left-multiplied quaternion exponential
+  in the parent frame: `q(t) = exp((fx,fy,fz)(t)) ⊗ base`. A hypothesis race over all
+  60,411 consecutive rotate-frame pairs of the install: L-exp closes 53,515 to <1e-5
+  (57,675 to <1e-3); right-multiplication and all six Euler orders decisively lose.
+  Residuals: cubic fit error on fast rotations (~1° per 60 ms ladder-climb frame) and
+  `pfighter11.zan` (C1/M04) carrying **uninitialized spline memory** (coefficients to
+  1.7e+27) under smooth base quaternions — bases are authoritative, splines interpolate
+  within a frame only, and this is why spline blocks stay raw bytes (upstream's MW/PM
+  choice too). Playback math for item 7 lives in the docs + module comment.
+- `spline_interp` turned out to be a real per-script bool in CS (15 of 1090 false; PM:
+  always false); name fields verified install-wide as exactly `strlen+1`, so the
+  PM-style write reconstructs them byte-identically.
+
+Verified: `cargo test` with `CS_ANIM_DIR` 61/61 byte-identical; full workspace suite
+green; clippy clean on the crate. Docs updated same turn (`docs/formats/
+anim-definitions.md` SI-pool + validation sections, plan item 5 DONE, CLAUDE.md format
+table). Next: item 6 (CLI wiring + test.py CS anim skip flip).
