@@ -1216,6 +1216,11 @@ second; observed wrapping correctly at the authored rates (`wakefront x5 @12` f1
 **Verified:** all 8 chapters zero errors with their cycle counts logged; plane viewer
 byte-identical (md5); fly / stunt / 4P race / menu / damage lab clean.
 
+**User-confirmed in game 2026-07-21: the boat wakes and surf animate correctly.** That closes
+the one gap the headless checks could not: the high-contrast cycles are visibly right, so the
+mechanism is confirmed end-to-end and not merely by the frame-index log. The open-water shimmer
+remains subtle by design and is not a useful test target.
+
 **Two related findings.** C1's refinery gas flare is *not* a flipbook - `flame01` is a static
 `fire101.tif` billboard whose only animation is the `LIGHT_STATE` range flicker landed earlier
 today, so that flicker already is the flame's flicker. And the `EFFECTS` reader
