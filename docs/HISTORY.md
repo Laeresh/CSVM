@@ -484,3 +484,82 @@ Track B's item 7 (consume anim in this project) skipped for now by user decision
 No code written yet (both items are reference/analysis by design). Next: item 10 — the
 actual port, starting with the field-set comparison of CS's old 435-line `node.rs` /
 625-line `world/data.rs` against the unified `Node`/`World` API types.
+
+## 2026-07-21 — mech3ax fork Track A items 10–12: Crimson Skies gamez/planes revival
+
+**The CS `gamez.zbd`/`planes.zbd` support upstream deleted in `7f592ec` is back in the
+fork, and every archive of this install round-trips byte-identically — including
+`planes.zbd`, which closes the 72-byte diff this project has carried as a known nit since
+2026-07-14.** Fork commit `df16d8e`. Items 10 (port), 11 (CLI) and 12 (verification)
+landed together, because the CLI and `test.py` were what made the port verifiable at all.
+
+**The port targets the unified API, as item 9 scoped it.** No `GameZDataCs`/`NodeCs`
+revival: CS maps onto the shared `GameZ`/`Node`/`NodeData` types, with CS-only fields added
+as optional (absent for MW/PM/RC). New code is `crates/gamez/src/gamez/cs/` (`mod.rs`
+header + top-level read/write, `models.rs`, `fixup.rs`, `nodes/{read,write}.rs`, `data/`
+plus the nine per-chapter texture-pointer tables ported verbatim) and `cs` submodules under
+the by-kind node dirs (`nodes/node/cs/`, `nodes/world/cs/`, `nodes/light/cs/`,
+`nodes/camera/cs.rs`). **CS's lod, window, display and object3d node data reuse the shared
+readers unchanged** — a real saving over the deleted module, which carried bespoke copies
+of all four. The old `TextureName` dedupe/redupe machinery is gone entirely, as item 9
+predicted (materials reference textures by index now).
+
+CS divergences that needed new API surface:
+
+- **`GameZMetadata.model_slots`** — the CS model array interleaves live models with free
+  slots. Rather than force `Vec<Option<Model>>` on all four games (what the old CS code
+  did), `models` stays a dense `Vec<Model>` and this records each model's original array
+  slot; node model indices are remapped dense↔slot on read and write.
+- **`ModelFlags::HARDWARE_RENDER`** — MW/PM/RC *synthesise* this on write from the model
+  type, but CS sets it independently of the model type, so it has to be stored.
+  `write_model_info_cs` skips the synthesis. This was the second data-driven failure the
+  round-trip test caught (`0x107` read back as `0x187`).
+- **`ModelFlags::UNK8`** (bit 8, CS-only; the first failure the test caught — PM's flag
+  set stops at bit 7), **`Node.field040`**, **`World.flags`**,
+  **`World.virt_partition_min_x`/`_min_z`** (PM hardcodes 1, CS varies),
+  **`World.child_value`**, **`WorldPtrs.children_ptr`**, **`NodeFlags::UNK12`**.
+- **`Partition.x`/`z` widened `u8` → `i16`** — CS carries partial partition values (x ==
+  −1 with z a real index) that `u8` cannot represent. This is the one change visible in
+  the other games' JSON, though their values are unaffected.
+- `GameZMetadata.node_last_free` carries CS's header slot 32, which is the **light node
+  index** (hardcoded 2338 for `planes.zbd`), per item 9 point 6.
+
+**The 72-byte `planes.zbd` diff was never CS-specific — it was a general `Ascii`
+asymmetry.** `to_str_suffix` decodes `prefix\0suffix\0` by restoring a period at the
+**first** zero, but `from_str_suffix` re-encoded by converting the **last** period. Those
+agree for ordinary names (`foo.tif`), and disagree whenever the stored suffix itself
+contains a period: `planes.zbd` has 18 such names, e.g. `bldhwk_cowling\0.tif\0`, which
+decodes to `bldhwk_cowling..tif` and was re-encoded as `bldhwk_cowling.\0tif\0` — the
+"swapped `\0`/`.`" the old note described. Added `Ascii::from_str_suffix_first` as the true
+inverse of the decode and used it from the CS texture writer only, so MW/PM/RC output is
+untouched. 18 names × 4 bytes = the 72 bytes exactly.
+
+**Also fixed here, pre-existing and unrelated to this port:** `metadata-gen` panicked
+during type resolution — Track B item 4 added `NodeBelowAlt`, `AnimHealthRange`, `NamePtr`
+and `NamePadPtr` but never registered them (item 6 registered only some of its new types).
+Confirmed pre-existing by stashing this port's changes and reproducing on a clean tree. The
+generator now completes for both the C# and Python backends. (Its output dirs must exist
+but not the `AutoGen`/`autogen` leaves — it uses `create_dir`, not `create_dir_all`.)
+
+**Verified:** in-memory round-trip **9/9 byte-identical** (`cargo test` with
+`CS_GAMEZ_DIR` pointed at the install's `ZBD` — new `roundtrip_real_archives` test,
+skipped when unset so a data-less CI stays green); `test.py` **`--- ALL OK ---`** on the
+full install through the real `unzbd cs gamez` → `rezbd cs gamez` zip pipeline, which also
+exercises the JSON serialization layer (`test_gamez`'s CS skip replaced with a
+`gamez.zbd`/`planes.zbd` glob pair); every other suite unchanged (sounds/interp/messages/
+reader/textures, and the anim suite still 61/61, i.e. Track B is undisturbed); full
+workspace `cargo test` green; manual CLI round-trip on C1 md5-identical; `cargo clippy`
+**below baseline** (49 vs 52 warnings on the touched crates, none in the new CS files —
+the `Partition` widening made 8 existing `.into()` conversions no-ops, now removed).
+
+**Downstream note for plan item 13 (the extraction cutover):** the fork's JSON is
+deliberately **not** shape-compatible with the pinned v0.6.1 output the Godot project reads
+today. `nodes.json` was a tagged union per node (`{"World": {…}}`) and is now a flat `Node`
+with the variant under a `data` key and several fields renamed (`node_index`→`index`,
+`parent`/`children`→`parent_indices`/`child_indices`, `unk040`→`field040`);
+`textures.json` was `{original, renamed}` and is now `{name}`, which makes
+`TextureArchive`'s `.-N` duplicate-rename workaround unnecessary; `metadata.json` lost
+`texture_ptrs` and gained `model_slots`. So item 13 is a port of `src/Mech3/GameZ.cs` +
+`TextureArchive.cs` with viewer smoke tests, not a binary swap — which is exactly the
+conservatism that item already called for. Nothing in the remake changes until then: it
+still runs on the pinned v0.6.1 binary.

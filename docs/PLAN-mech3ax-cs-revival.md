@@ -89,10 +89,10 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 **Track A — `gamez.zbd`/`planes.zbd` (do second):**
 8. ☑ Recover the deleted `cs/` module from `7f592ec~1` as porting reference (done 2026-07-21, see section 8 — worktree at `tools/mech3ax-cs-ref`, inventory verified, 13 wiring files outside `cs/` catalogued)
 9. ☑ Diff the common gamez/nodes infra between `7f592ec~1` and current `HEAD` to scope the port (done 2026-07-21, see section 9 — the port targets a unified `GameZ`/`Node` API + relocated by-kind node modules; `TextureName` rename machinery obsolete)
-10. ☐ Port `cs` gamez/nodes code onto the current `pm`-based architecture (mesh/model/node code, per-chapter texture fixup tables, reactivate `VERSION_CS`)
-11. ☐ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG
-12. ☐ Verify byte-identical round-trip against the real install (reactivate `test.py`'s CS gamez skip); stretch goal: fix the known 72-byte `planes.zbd` cosmetic diff
-13. ☐ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build, once verified byte-identical
+10. ☑ Port `cs` gamez/nodes code onto the current `pm`-based architecture (done 2026-07-21, see section 10 — all 9 archives byte-identical)
+11. ☑ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG (done 2026-07-21, folded into section 10)
+12. ☑ Verify byte-identical round-trip against the real install (done 2026-07-21 — `test.py` `--- ALL OK ---`; **the 72-byte `planes.zbd` stretch goal is also fixed**, see section 10)
+13. ☐ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (see section 10's "Downstream impact")
 14. ☐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication)
 
 ---
@@ -591,6 +591,78 @@ handling or was subsumed by the general refactor). Reactivate `VERSION_CS = 42` 
 
 **Verify:** compiles clean against current `HEAD`; `cargo clippy` clean (the codebase clearly
 holds this bar — `2c5a61c "Clippy lints"` is in the recent history).
+
+**DONE 2026-07-21** (items 10–12 landed together, since the CLI and `test.py` were needed to
+verify the port at all). **All nine archives of this install round-trip byte-identically** —
+the eight chapter `gamez.zbd` *and* `planes.zbd`, both in-memory (`cargo test` with
+`CS_GAMEZ_DIR`) and through the real `unzbd cs gamez` → `rezbd cs gamez` zip pipeline
+(`test.py` `--- ALL OK ---`, which also exercises the JSON layer).
+
+**The port is onto the unified types, as item 9 specified** — no `GameZDataCs`/`NodeCs`
+revival. New code: `crates/gamez/src/gamez/cs/` (`mod.rs` header + top-level read/write,
+`models.rs`, `fixup.rs`, `nodes/{read,write}.rs`, `data/` + the nine per-chapter texture
+tables, ported verbatim) and `cs` submodules under the by-kind node dirs
+(`nodes/node/cs/`, `nodes/world/cs/`, `nodes/light/cs/`, `nodes/camera/cs.rs`). CS's
+**lod, window, display and object3d node data reuse the shared readers unchanged** — a
+real saving over the old module, which had bespoke copies of all of them.
+
+CS divergences that needed new API surface (all optional, absent for MW/PM/RC):
+- **`GameZMetadata.model_slots`** — the CS model array interleaves live models with free
+  slots. `models` stays a dense `Vec<Model>` (so every consumer is unaffected) and this
+  records each model's original slot; node model indices are remapped dense↔slot on
+  read/write. This replaced the old code's `Vec<Option<Model>>`, which would have forced
+  the sparse array on all four games.
+- **`Node.field040`** (live value in CS, asserted zero elsewhere), **`World.flags`**,
+  **`World.virt_partition_min_x`/`_min_z`** (PM hardcodes 1; CS varies),
+  **`World.child_value`**, **`WorldPtrs.children_ptr`**, **`NodeFlags::UNK12`**,
+  **`ModelFlags::UNK8`**.
+- **`ModelFlags::HARDWARE_RENDER`** — MW/PM/RC synthesise this on write from the model
+  type; CS sets it independently, so it must be stored. `write_model_info_cs` skips the
+  synthesis.
+- **`Partition.x`/`z` widened `u8` → `i16`** (a change visible to the other games' JSON,
+  though their values are unaffected): CS carries partial/bogus partition values, e.g. x
+  == −1 with z a real index, which `u8` cannot hold. `GameZMetadata.node_last_free`
+  carries CS's header slot 32, which is the light node index (2338 for planes), per item
+  9 point 6.
+
+**The 72-byte `planes.zbd` diff (item 12's stretch goal) is fixed, and it was not
+CS-specific.** `Ascii::to_str_suffix` decodes `prefix\0suffix\0` by restoring a period at
+the **first** zero, but `from_str_suffix` re-encoded by converting the **last** period —
+asymmetric whenever the stored suffix itself contains a period. `planes.zbd` has 18 such
+names (`bldhwk_cowling\0.tif\0` decodes to `bldhwk_cowling..tif`, which the last-period
+rule re-encoded as `bldhwk_cowling.\0tif\0`). Added `Ascii::from_str_suffix_first` as the
+true inverse and used it from the CS texture writer only, leaving MW/PM/RC untouched.
+
+**Also fixed here (pre-existing fork breakage, not caused by this port):**
+`metadata-gen` panicked during type resolution — Track B item 4 added `NodeBelowAlt`,
+`AnimHealthRange`, `NamePtr` and `NamePadPtr` but never registered them (item 6 registered
+only some of its new types). Confirmed pre-existing by stashing this port's changes. The
+generator now runs clean for both the C# and Python backends.
+
+**Verified:** in-memory round-trip 9/9 byte-identical; `test.py` `--- ALL OK ---` on the
+full install (every other suite — sounds/interp/messages/reader/textures/anim — unchanged);
+full workspace `cargo test` green (including the anim 61/61 round-trip, i.e. Track B is
+undisturbed); manual `unzbd`/`rezbd` CLI round-trip on C1 md5-identical; `cargo clippy`
+**below** baseline (49 vs 52 warnings on the touched crates — no warnings at all in the new
+CS files; the `Partition` widening let 8 now-useless `.into()` conversions be removed);
+`metadata-gen` runs clean.
+
+**Downstream impact — read this before item 13.** The fork's extraction JSON is
+deliberately **not** shape-compatible with the pinned v0.6.1 output this project currently
+consumes, because the port targets the unified API:
+- `nodes.json` was a tagged union per node (`{"World": {…}}`, `{"Object3d": {…}}`); it is
+  now a flat `Node` with the variant under a `data` key, and the per-variant fields
+  (`node_index`, `parent`, `children`, `unk040`…) have moved or been renamed
+  (`index`, `parent_indices`, `child_indices`, `field040`).
+- `textures.json` was `{original, renamed}`; it is now just `{name}` — the `.-N` dedupe/
+  redupe machinery is gone, since materials reference textures by index (item 9 point 3).
+  **The Godot `TextureArchive`'s duplicate-rename workaround becomes unnecessary**, but
+  only once the pipeline is cut over.
+- `metadata.json` lost `texture_ptrs` (now in the per-campaign table) and gained
+  `model_slots`.
+So item 13 is a port of `CrimsonSkies/src/Mech3/GameZ.cs` + `TextureArchive.cs`, not a
+binary swap, and it must be done as its own change with viewer smoke tests — exactly the
+conservatism item 13 already asks for.
 
 ## 11. CLI wiring
 
