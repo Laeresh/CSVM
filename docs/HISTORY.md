@@ -3282,3 +3282,39 @@ drain would need a bound against a self-calling sequence. Recorded in `backlog.m
 Touched `CSVM/src/Mech3/WorldSounds.cs`, `CSVM/src/Mech3/AnimProgram.cs`,
 `CSVM/src/Mech3/AnimRuntime.cs`, `CSVM/src/PlaneViewer.cs`, `docs/architecture.md`,
 `docs/verification.md`, `backlog.md`.
+
+---
+
+## 2026-07-22 — Backlog hygiene: closed entries leave, follow-ups get promoted
+
+**Convention set by the user**, now recorded in `CLAUDE.md`: a `FIXED`/closed entry does not stay
+in `backlog.md`. Its record belongs here in `HISTORY.md`, its traps in `verification.md` /
+`architecture.md`. **If closing it leaves follow-up work, that follow-up becomes its own new entry
+with a `⚠ Traps` section.** The failure mode being designed out: an open thread buried inside a
+section headed `FIXED` is invisible to anyone scanning headings for work.
+
+Applied to the two sections this affected:
+
+- **`## C1: the police siren` (FIXED) — removed.** Its record is the entry above; its instrument
+  trap is `verification.md` §4; its implementation detail is the `WorldSounds` bullet in
+  `architecture.md`. Replaced by **`## The one-frame CallSequence dispatch lag`**, the genuine
+  follow-up that was buried inside it — `CallSequence` appends to `AnimInstance.Runners` while
+  `Advance` walks descending, so *every* called sequence's first event fires a frame late, not
+  just the siren's. Traps recorded: the descending walk is deliberate (`AnimRuntime.cs:250`), a
+  same-pass drain needs a bound against self-calling sequences, and the bootstrap emitter census
+  cannot measure any of it.
+- **`## C1/M04: the pirate zeppelin`** — the decision was closed (fix rejected, artifact accepted)
+  but the work was not. Promoted to **`## Cutscene player — the missing consumer`**, carrying the
+  evidence forward as input rather than as a record: the `piratezep.zan.json` decode (48 frames,
+  uniform straight line, 15.67 s), the 13-mission `startanims` survey, and the `letterbox` /
+  `CALLBACK` linkage. Four traps stated up front, including the rejected skip-at-bootstrap fix
+  (kept explicitly so nobody re-derives it and thinks it is new) and "do not lower the zeppelin".
+
+**A real mistake, caught and corrected in the same session.** Rewriting the siren entry earlier
+today used a script that replaced from its heading to the *next* `##` heading — and found none,
+because the entire cutscene investigation had been appended underneath the siren section without a
+heading of its own. It replaced through EOF and **deleted ~76 lines of decoded evidence**, which
+was then committed and pushed (`b862111`). Recovered verbatim from `bbc5f59` and restructured
+above. Two lessons worth more than the incident: **a section-replacing edit must assert what it is
+about to remove**, not assume a heading terminates it; and content appended without a heading is
+load-bearing but structurally invisible — the promotion above gives all of it real headings.

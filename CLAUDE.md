@@ -84,7 +84,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `docs/verification.md` — how to verify a change here, and how the instruments lie. Read before measuring anything.
 - `docs/HISTORY.md` — chronological development log: every landed change with its verification details. Append a dated entry when work lands.
 - `docs/plans/` — completed plans, each banner-marked `COMPLETE` with its date; kept for their evidence and recorded dead ends, read as history. **A plan sitting in `docs/` rather than in here is live** — see "Current status" for which is active when more than one is present.
-- `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; delete when landed.
+- `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; **delete when landed — a `FIXED`/closed entry does not stay here.** Its record belongs in `docs/HISTORY.md`; its traps in `docs/verification.md` or `docs/architecture.md`. **If closing it leaves follow-up work, that follow-up becomes its own new entry with a `⚠ Traps` section** naming the rejected fixes and the misleading instruments — an open thread buried inside a section headed `FIXED` is invisible to anyone scanning for work.
 - `OriginalScreenshots/` — user-captured reference shots + videos from the original game. **Git-ignored in full since 2026-07-22** (was committed until then). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
 ## Godot project (`CSVM/`)
