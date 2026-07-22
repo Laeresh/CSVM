@@ -767,17 +767,37 @@ sub-pixel gap opens along it. That predicts all of it: seams exactly on surface 
 hairline width, and the colour being whatever lies behind rather than a variation of the surface
 in front.
 
-**Cheapest decisive test:** force `depth_bias` and `node_bias` to 0 and re-render both poses. If
-the hairlines vanish, it is the bias-as-scale; if they persist, fall back to the vertex-colour
-reading below. Note this cannot be done from the CLI today — the mesh lab has no bias override —
-so it needs a temporary edit or a new debug switch.
+**❌ DISPROVEN by the user, 2026-07-22 — the bias is NOT the cause.** They ran the decisive test
+directly: zeroed the bias (`bias *= 0.0f` after it is computed in `GetMaterial`) *and* commented
+out `VERTEX *= 1.0 - (depth_bias + node_bias);` entirely. **The hairlines persist**, reproduced at
+a fresh C3 pose (`--campos=-3614.727,98.809,-4639.714 --lookat=-3658.603,8.952,-4640.51`). Since
+commenting that line removes both `depth_bias` and the `node_bias` instance uniform from the
+vertex path, the whole bias mechanism is ruled out, not just part of it.
 
-**If confirmed, do NOT just reduce the constants.** They exist to resolve coplanar draw order and
-item 11 measured that this renderer's depth-resolution floor is ≈1e-6 of view distance, with
-`SurfaceRankBias` (2e-6) sitting right at it and `NodeOrderBias` (5e-8) already 20× *below* it.
-Shrinking the bias to close the seams would re-open the z-fighting it was added to fix. The real
-fix is likely a different bias mechanism — a depth-only offset that does not move vertices
-laterally — rather than a smaller scale.
+That is **two** disproven mechanisms for this artifact now (the other was `MapEdgeExtender`
+mirroring, killed by the C4 pose being mid-map). Both were plausible, both predicted the
+observations, both were wrong. **Stop proposing mechanisms and start measuring** — see the
+handoff framing below.
+
+**What any surviving explanation still has to account for:** a **tan** hairline crossing **blue
+water** in the C4 capture. A vertex-colour, normal or lighting seam on a flat water surface could
+only shift the water's own shade, so either something behind is visible through a gap, or the
+water's own texture is being sampled wrongly at the tile edge.
+
+**Untested leads, in rough order of prior probability — none of these are findings:**
+1. **Texture sampling at tile edges.** Bilinear filtering across a tile's UV boundary with REPEAT
+   wrap blends the edge texel against the *opposite* edge of the texture, which produces exactly
+   hairline seams on a tile grid and can show a colour from elsewhere in the atlas/texture. Cheap
+   to test: switch the sampler to CLAMP or inset the UVs by half a texel.
+2. **Mip level discontinuity** at tile boundaries (adjacent tiles picking different mips).
+3. **Genuine gaps in the source geometry** — T-junctions or unwelded tile edges in the original
+   data. Testable by dumping the tile-boundary vertices and checking they coincide exactly.
+4. **Vertex-colour discontinuity** across the shared edge (the earlier C3-only reading below).
+5. The `cull_front` + 100%-double-sided interaction at shared edges.
+
+The seams in the newest C3 capture appear to lie on a **regular grid**, which is evidence for
+1–3 (tile-boundary effects) over 4–5 (per-polygon shading effects). Confirm the grid period
+against the terrain tile size before trusting that impression.
 
 **Related, and possibly the same bug:** the `--no-fog` flag added 2026-07-22 is the tool for
 inspecting this, since fog otherwise washes the seams out at distance.
