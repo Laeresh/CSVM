@@ -153,8 +153,23 @@ cache-key rule, and the 2026-07-21 billboard/facade findings). Anything the inde
 architecture.md does not moves *into* architecture.md before the line is trimmed. This is the
 slowest item in the plan and the only one that can lose information; budget it accordingly.
 
-**Verify:** index under 9 KB; per-module spot-check that every fact cut is findable in
-architecture.md; `git diff` reviewed bullet-by-bullet rather than in bulk.
+**Verify** — use the two-stage check item 2 arrived at, because the weak version is genuinely
+misleading:
+
+1. **Token check (automated, cheap).** Extract the distinctive tokens from each deleted span —
+   backticked identifiers, paths, and multi-digit numbers — and confirm each appears somewhere in
+   the docs corpus (`docs/**/*.md` + `backlog.md`, not HISTORY alone; item 2 found 14 of 450
+   tokens "missing" from HISTORY that were correctly living in `formats/rof.md`, `formats/
+   strings.md` and `backlog.md`). Target: zero absent.
+2. **Hand-read for open claims (the one that actually matters).** The token check **cannot** catch
+   the failure mode that nearly bit item 2: three items — the TUNE list, the owed playtests, and
+   C3's missing `cloud1`/`cloud2` — had every token present elsewhere while the *claim that they
+   were still open work* existed nowhere but the text being deleted. Token presence proves a fact
+   is written down; it does not prove the same claim is made. So read each bullet for statements
+   of the form "still open / not yet / pending / left to the user" and re-home those by hand
+   before deleting.
+
+Plus: index under 9 KB, and `git diff` reviewed bullet-by-bullet rather than in bulk.
 
 ## 4. Format support status → `docs/formats/extraction.md`
 
