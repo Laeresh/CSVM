@@ -3898,3 +3898,40 @@ places things".
 **Found and NOT fixed on the way:** the engine ignores the gamez node `active` flag entirely
 (`GameZ` never parses `flags.active`) — see `backlog.md`, including why it must not be fixed while
 item 3 is open.
+
+## 2026-07-23 — Polish-4 cross-item integration regression (items 1, 2, 4, 5, 7 together)
+
+Each polish-4 item was verified by a separate agent against **its own base**, so until now no run
+had exercised them together. Items 2 and 4 were the real risk: both touch the animation /
+placement path, item 2 changing the pose a tween writes and item 4 deciding presence from where a
+node ends up. Item 5 was a second, subtler risk — its hangar anchor keys on a transformless node,
+which is exactly the shape item 4's sweep looks for.
+
+**8-chapter `--freecam` (`--no-pads --mute --frames=90`): all 8 rendered, ZERO Godot-level errors**
+(`^(ERROR|SCRIPT ERROR|USER ERROR|WARNING|USER WARNING):`). Item 4's sweep reproduces its
+independently measured numbers exactly in the combined build:
+
+| Chapter | switched off | restored | net |
+|---|---|---|---|
+| C1, C1B, C2B, C3, C4 | — | — | — |
+| C1C | 3 (`piratezep`, `blackswanzep`, `workersvoyagezep`) | 0 | 3 |
+| C2 | 35 | **17** (yachts 1–4, sailboats 1–3, studebakers 1–10) | 18 |
+| C5 | 2 (`piratezep`, `sprucegoose`) | 0 | 2 |
+
+The C2 restore firing is what proves the hide-then-restore half works end-to-end under item 2's
+changed tween poses — the restored set is precisely the `OBJECT_MOTION_FROM_TO`-driven vehicles.
+
+**Item 5 survives item 4's sweep** (`--stunt --chapter=C2`, 0 errors): `sghangar` still anchors at
+(−5770.4, 23.5, −5623.9) on its 2 door leaves, 9 zones load, and the other 8 sit at their own
+positions (`dz2` Ramses Tomb (−6033,26,−3844), `dz3` Seastack, `dz4` Bridge-North Spar). Safe by
+construction rather than by luck: `IsParkedAtOrigin` requires the built AABB to *straddle* the
+world origin, and the hangar's geometry is 8 km away — but it is the exact cross-item interaction
+nobody had tested, so it was worth measuring rather than reasoning about.
+
+**⚠ Instrument note — the first pass of this regression manufactured its own errors.** Grepping
+the logs for `ERROR` reported 2 hits in C1 and 1 in most other chapters, which read as a real
+regression. They were PowerShell `NativeCommandError` wrappers: in PS 5.1, redirecting a native
+executable's stderr wraps each line in an ErrorRecord, so the *redirection* creates the word
+ERROR. Godot's own diagnostics are line-anchored (`ERROR:`, `SCRIPT ERROR:`), and anchoring the
+pattern took all 8 chapters to zero. Same family as the existing rule about grepping the full
+stderr — **match the tool's own output format, not a substring that its transport also emits.**
