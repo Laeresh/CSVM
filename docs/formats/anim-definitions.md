@@ -149,11 +149,12 @@ holds, so restarting would freeze the 2 s door at its first frame for as long as
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 
-Playback ops seen and deferred: `OBJECT_MOTION` (continuous spin),
-`OBJECT_ADD_CHILD`/`OBJECT_DELETE_CHILD` (reparenting), `SOUND`/`SOUND_NODE`,
-`OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`, `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
-`FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
-(`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below.)
+Playback ops seen and deferred: `OBJECT_MOTION` (continuous spin), `OBJECT_DELETE_CHILD`,
+`SOUND` (the one-shot form — see below), `OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`,
+`OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`, `FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
+(`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
+`SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
+three-event triple".)
 
 `CALL_ANIMATION` dispatched from the start but **ignored its target node** until 2026-07-21 —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing
@@ -279,6 +280,74 @@ put ~1,740 calls/second through `AnimRuntime.ResolveOne`'s full-world fallback s
 nodes against a regex matcher, ~12M comparisons/second) and cost ~7 ms/frame on its own. The
 name is what identifies the target, so the resolution is cached per light and only redone when
 the name changes.
+
+## `SOUND_NODE` is a three-event triple — the world's ambient audio
+
+Implemented 2026-07-22 (`src/Mech3/WorldSounds.cs`). This is the waterfall roar, the train, the
+firetruck and police sirens, the zeppelin nacelle engines, the fire crackle and the cockpit
+warning beeper.
+
+**`SOUND` and `SOUND_NODE` are different animals, and only one of them is ambient world audio.**
+Surveyed across the whole install:
+
+| | `SOUND_NODE` | `SOUND` |
+|---|---|---|
+| events | 1,244 | 6,091 |
+| distinct names | **10** | 87 |
+| all present in `sounds.json` | yes (10/10) | no (21 missing) |
+| `3D` | 10/10 | 41/87 |
+| `LOOPED` | 9/10 (`snd_freighter` is the exception) | 3/87 |
+| activation | 951 `OnCall`, **293 `OnStartup`** | 4,378 `OnCall`, 1,650 `WeaponHit`, **8 `OnStartup`** |
+
+So `SOUND_NODE` is a small, fully-resolvable set of looping positional emitters bound to nodes,
+and `SOUND` is one-shot combat/destruction audio — gated behind weapon hits this project has no
+weapons to produce, and 21 of its names are not plain `sounds.json` entries at all but
+`DYNAMIC_WEIGHTS` groups (`air_mixed_exp_sg` picks one of five `snd_exp_hit*` at random) needing
+their own decode. That is why the ambient half landed and the one-shot half did not.
+
+**The reader spells one emitter as three consecutive events**, which is the whole shape of the
+feature:
+
+```
+SOUND_NODE          ["NAME", ["snd_waterfall"]]                        -- declare the emitter
+OBJECT_ACTIVE_STATE ["NAME", ["snd_waterfall"], "STATE", ["ACTIVE"]]   -- switch it on
+OBJECT_ADD_CHILD    ["PARENT_CHILD", ["waterfall01", "snd_waterfall"]] -- attach it to a world node
+```
+
+The middle event is an ordinary `OBJECT_ACTIVE_STATE` whose NAME is a **sounds.json definition,
+not a gamez node** — letting it fall through to the normal node resolution scans the world for
+`snd_waterfall`, finds nothing, and books an unresolved op. The third is what positions the
+emitter.
+
+**The compiled form carries the same three facts inline** — `{name, active_state, translate}` —
+but only sometimes: `translate` is an `AtNode` on **379** events and null on exactly **865**, and
+865 is also exactly the number of `OBJECT_ADD_CHILD` events that attach a sound definition
+(`snd_zepengine`→`spin` alone is 849). The two counts matching to the event is what proves
+`SOUND_NODE` and the sound three-quarters of `OBJECT_ADD_CHILD` are **one mechanism**, which is
+why they had to land together — and it is the concrete form of the dependency noted when
+`OBJECT_ADD_CHILD` was withdrawn ("it is mostly the positioning layer for sound emitters, so it
+should follow `SOUND`, not precede it").
+
+Two field traps:
+
+- **Compiled `active_state` is a JSON boolean**, where `PUFFER_STATE`'s identically-named field is
+  numeric. Reading it with a number accessor returns null for `true`, and an absent-means-leave-
+  alone default then leaves every emitter in the world switched off. That is exactly what it did
+  until the headless log showed 38 correctly-placed emitters all reading "off".
+- **The reader form carries no `active_state` at all** (its ACTIVE is the next event), so absent
+  must mean "leave alone" and not `?? 0` = OFF — the same shape as the bug that silently killed
+  the C1 waterfall's splash puffers.
+
+**Reader-only coverage is dormant.** Of 252 reader `SOUND_NODE` definitions across the chapters,
+231 have a compiled twin (compiled wins in `AnimProgram`), and all 21 that do not — `sprucegoose`/
+`g_enginesound`, `locklear_gasbag`, the zep nacelles — are `ON_CALL`, which the bootstrap never
+reaches. So the reader triple path is implemented and correct by construction but is not
+exercised in a default session, the same status `NODE_UNDERCOVER` has.
+
+**An emitter is silent while its host is not visible in tree**, the same rule the point lights
+use: C1/IA1 deactivates both multiplayer zeppelins, so 36 of its 38 emitters are built and
+stopped, and only the waterfall and the train sound. That is also what makes the counts safe —
+C5 builds 108 emitters and plays none.
 
 ## The mission zrdr scope is a LIBRARY, not a manifest
 

@@ -195,6 +195,23 @@ public static class AnimDefs
             case "CallAnimation":
                 AddCallTarget(data, fields);
                 break;
+            case "ObjectAddChild":
+            case "ObjectDeleteChild":
+                // The reader writes one PARENT_CHILD pair where the compiled event has separate
+                // `parent`/`child` fields. Without this the sound-emitter attachment — the
+                // reader's third event in the SOUND_NODE triple — carries neither name.
+                if (fields.TryGetValue("PARENT_CHILD", out var pair) && pair is { Count: >= 2 })
+                {
+                    if (pair[0] is string parent) data["parent"] = parent;
+                    if (pair[1] is string child) data["child"] = child;
+                }
+                break;
+            case "SoundNode":
+                // Deliberately no active_state default. The reader's SOUND_NODE only declares the
+                // emitter; its ACTIVE arrives as the next event in the triple. Defaulting the
+                // absent field to 0 here would spell "declare it, then immediately switch it off"
+                // — the exact shape of the bug that silently killed the waterfall's puffers.
+                break;
         }
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.

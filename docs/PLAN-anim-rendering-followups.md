@@ -204,6 +204,27 @@ Remaining kinds after this pass (C1 bootstrap counts): `ObjectMotion`×73,
 `ObjectOpacityState`×58, `SoundNode`×38, `ObjectAddChild`×38, `Callback`×8,
 `ObjectCycleTexture`×1.
 
+### `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` — LANDED 2026-07-22
+
+Both leave the list; C1 is now `ObjectMotion`×73, `ObjectOpacityState`×58, `Callback`×8,
+`ObjectCycleTexture`×1. New module `src/Mech3/WorldSounds.cs`; decode in
+`docs/formats/anim-definitions.md` ("`SOUND_NODE` is a three-event triple"), full verification in
+`docs/HISTORY.md`.
+
+The plan treated `Sound`/`SoundNode` as one item. **The survey split it:** `SOUND_NODE` is 10
+names, all in sounds.json, all `3D`, 9/10 `LOOPED`, 293 uses `OnStartup` — looping positional
+ambience, and it landed. `SOUND` is 87 names of one-shot, 4,378 `OnCall` + 1,650 `WeaponHit`
+against 8 `OnStartup`, 21 of them `DYNAMIC_WEIGHTS` groups needing a further decode — combat audio
+this project cannot currently trigger, and it did **not** land.
+
+`OBJECT_ADD_CHILD` came with it rather than after it: compiled `SoundNode.translate` is null on
+exactly 865 events and `OBJECT_ADD_CHILD` attaches a sound definition on exactly 865 — the same
+events. That is the concrete form of the dependency noted when `OBJECT_ADD_CHILD` was withdrawn.
+Its *other* uses (cutscene machinery, mission entities) remain unimplemented and still counted.
+
+**Remaining for item 2 after this:** `ObjectMotion` (largest, 73–220 per chapter),
+`ObjectOpacityState`, `Callback`, `ObjectCycleTexture`, and the one-shot `Sound`.
+
 **`EFFECTS` is node-keyed, not texture-keyed — settled 2026-07-21 (user observation).** This
 decides the design and was worth the check: `flame01` (the refinery gas flare, node 2998 under
 `vent1` → `refinery.flt`) and `mb_spinflame` (the 3-poly muzzle burst) both render **material

@@ -60,6 +60,23 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
+- **Degenerate zeppelin node transforms (found 2026-07-22, pre-existing).** On C1/M04 some
+  zeppelin animation nodes carry an astronomically large world basis: `gasbag3` reads a global
+  origin of ~(4.6e27, -4.8e28, 4.0e29) with basis X ~(0.36, -2.5e24, -2.9e27), and one
+  `rock_zeppelin` instance the same — while *sibling instances of the same node names* are
+  perfectly sane (`rock_zeppelin` at (-5248, 200, -5208), identity basis). The chain enters
+  between `rock_zeppelin` and `gasbag3`; local transforms all along it look normal, so the blowup
+  is in an inherited basis, not a local one. **Verified pre-existing** by probing the build from
+  *before* the ambient-sound work, with no sound code present — the sound path only reads
+  transforms and was simply the first consumer to look at one (its emitter reported a position of
+  1e29). Currently harmless-by-accident: nothing else reads those nodes, and `WorldSounds`
+  silences a host whose pose has blown up and logs it. Worth chasing because it means some
+  animation is writing a garbage transform, which could bite anything that later reads those
+  nodes. Start at whatever poses `move_zeppelin`/`tilt_zeppelin`/`rock_zeppelin` in a mission
+  where the zeppelins are visible (C1/M04 reproduces; C1/IA1 does not, because it deactivates
+  them). Candidates: a repeated relative `PoseTranslate`/`PoseRotate` accumulating, or an
+  SI-script/`ObjectScaleState` applied to an already-scaled parent.
+
 ## Feature backlog
 
 - **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`

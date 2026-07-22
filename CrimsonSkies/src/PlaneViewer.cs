@@ -497,6 +497,15 @@ public partial class PlaneViewer : Node3D
             var sw = Stopwatch.StartNew();
             var gamez = GameZ.Load(gamezPath);
             using var textures = new TextureArchive(texturesPath);
+            // Opened before the world build rather than with the flight audio below, because the
+            // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
+            // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
+            // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
+            bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
+            using var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+            var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
+            if (!mute && !haveSounds)
+                GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
             int meshInstances;
             int colliders = 0;
             string what;
@@ -579,6 +588,15 @@ public partial class PlaneViewer : Node3D
                     // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the
                     // session so a teardown drops the previous world's lights.
                     Lights = _worldLights = new WorldLights(),
+                    // The world's ambient SOUND_NODE emitters. Null when muted or soundless, which
+                    // makes the whole feature inert rather than half-built.
+                    Sounds = soundDefs != null && sounds != null
+                        ? new WorldSounds(soundDefs)
+                        {
+                            Loader = d => sounds.Find(d.WavName, d.Looped),
+                            Debug = _debugAnim,
+                        }
+                        : null,
                     // PLAYER_RANGE conditions measure from the player. Player 1's camera is
                     // the honest answer in every mode this project has (chase cam in flight,
                     // the free camera in --freecam, the orbit eye in a static view), and it
@@ -587,8 +605,20 @@ public partial class PlaneViewer : Node3D
                         ? cam.GlobalPosition
                         : Vector3.Zero,
                 };
+                // The emitter pool has to be in the tree before the bootstrap builds into it.
+                if (animRuntime.Sounds is { } worldSounds)
+                {
+                    _worldRoot.AddChild(worldSounds);
+                    worldSounds.SetListener(() => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                        ? cam.GlobalPosition : Vector3.Zero);
+                }
                 animRuntime.Bind(_plane, animProgram);
                 animRuntime.PufferFactory = null;
+                // Same rule as the puffer factory: the zip handle dies with this build scope. The
+                // decoded streams stay cached in WorldSounds, so an emitter created later reusing
+                // a name already heard still works.
+                if (animRuntime.Sounds is { } builtSounds)
+                    builtSounds.Loader = null;
                 _plane.AddChild(animRuntime);
 
                 // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
@@ -777,11 +807,6 @@ public partial class PlaneViewer : Node3D
                              $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
                     return loaded;
                 }
-                bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
-                using var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
-                var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
-                if (!mute && !haveSounds)
-                    GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
                 // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
                 float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
                 // The launchscreen's join flow binds the pads (item 6); a CLI launch derives them

@@ -213,6 +213,13 @@ public sealed partial class AnimRuntime : Node
             GD.Print($"anim: {_lights.Count} point light(s), {on} lit at startup: " +
                      string.Join(", ", _lights.Keys.Select(k => k.Name).Distinct().Take(10)));
         }
+        // Reported on their own line rather than through Count(), which is the "not yet acted on"
+        // channel: filing a working feature there would report it as a missing one.
+        if (_soundEmitters.Count > 0 || _soundsUnknown > 0 || _soundsAfterBuild > 0)
+            GD.Print($"anim: {_soundEmitters.Count} ambient sound emitter(s): " +
+                     string.Join(", ", Sounds?.Names ?? Enumerable.Empty<string>()) +
+                     (_soundsUnknown > 0 ? $" [{_soundsUnknown} unknown to sounds.json]" : "") +
+                     (_soundsAfterBuild > 0 ? $" [{_soundsAfterBuild} requested with no audio session]" : ""));
         if (netHidden.Count > 0)
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
@@ -248,6 +255,7 @@ public sealed partial class AnimRuntime : Node
         TickMotions(dt);
         TickPuffers(dt);
         TickLights(dt);
+        Sounds?.Tick();
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -339,6 +347,17 @@ public sealed partial class AnimRuntime : Node
         switch (ev.Kind)
         {
             case "ObjectActiveState":
+                // A SOUND_NODE emitter is switched on by an ordinary OBJECT_ACTIVE_STATE naming
+                // it — the reader spells the whole thing as a three-event triple (declare the
+                // emitter, activate it, attach it to a world node). The name is a sounds.json
+                // definition, NOT a gamez node, so letting it fall through to Targets() would
+                // scan the world for it, find nothing and book it as an unresolved op.
+                if (SoundEmitter(ev, anchor) is { } emitterHandle)
+                {
+                    Sounds!.SetActive(emitterHandle, ev.Data.Bool("state"));
+                    _opsApplied++;
+                    return true;
+                }
                 foreach (var t in Targets(ev, def, anchor))
                 {
                     SetSubtreeActive(t, ev.Data.Bool("state"));
@@ -459,8 +478,19 @@ public sealed partial class AnimRuntime : Node
                 HandleLightAnimation(ev, anchor, instant);
                 return true;
 
+            case "SoundNode":
+                HandleSoundNode(ev, def, anchor);
+                return true;
+
+            case "ObjectAddChild":
+                // Only the sound-emitter three-quarters of this event is acted on — see
+                // HandleAddChild. Everything else it does still counts as unhandled.
+                if (!HandleAddChild(ev, def, anchor))
+                    Count(ev.Kind);
+                return true;
+
             default:
-                // Sound / light / opacity / texture-cycle / FBFX / camera and the
+                // One-shot Sound / opacity / texture-cycle / FBFX / camera and the
                 // rest: dispatched, counted, and reported once per kind. Adding a handler is
                 // a case above and nothing else.
                 Count(ev.Kind);
@@ -564,6 +594,114 @@ public sealed partial class AnimRuntime : Node
             var xform = node.GlobalTransform;
             puffer.SustainAt(xform.Origin, xform.Basis, dt);
         }
+    }
+
+    // ---- SOUND_NODE (+ the sound half of OBJECT_ADD_CHILD) ----
+
+    /// <summary>The world's ambient 3D emitters. Null in a muted or soundless session, in which
+    /// case SOUND_NODE is tracked and reported but nothing is built.</summary>
+    public WorldSounds? Sounds;
+
+    // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
+    // identifies the *instance* of the definition, so C1's four firetrucks each get their own
+    // siren rather than sharing one. It cannot be keyed by host node the way puffers are — in the
+    // reader's triple the emitter is declared BEFORE anything says where it goes.
+    private readonly Dictionary<(string Name, Node3D? Anchor), object> _soundEmitters = new();
+    private int _soundsUnknown, _soundsAfterBuild;
+
+    /// <summary>
+    /// The emitter an event's NAME refers to, or null when the name isn't one this definition
+    /// declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
+    /// ordinary node events elsewhere — address a sound emitter without either handler having to
+    /// guess from the name whether `snd_waterfall` is a node or a sound.
+    /// </summary>
+    private object? SoundEmitter(AnimEvent ev, Node3D? anchor)
+    {
+        if (Sounds == null || ev.Data.Str("name") is not { } name)
+            return null;
+        return _soundEmitters.TryGetValue((name, anchor), out var handle) ? handle : null;
+    }
+
+    /// <summary>
+    /// Declares (and for the compiled form, places and starts) one ambient emitter.
+    ///
+    /// The two front-ends spell this differently and both are handled here. A reader def writes a
+    /// three-event triple — <c>SOUND_NODE{snd_waterfall}</c>, <c>OBJECT_ACTIVE_STATE{snd_waterfall,
+    /// ACTIVE}</c>, <c>OBJECT_ADD_CHILD{waterfall01, snd_waterfall}</c> — so this event only
+    /// declares, and the other two arrive as their own dispatches. A compiled event carries
+    /// <c>active_state</c> and <c>translate</c> inline, but only sometimes: measured install-wide,
+    /// <c>translate</c> is an <c>AtNode</c> on 379 events and null on exactly 865 — and 865 is also
+    /// exactly the number of <c>OBJECT_ADD_CHILD</c> events that attach a sound definition. The two
+    /// halves are one mechanism, which is why they land together.
+    /// </summary>
+    private void HandleSoundNode(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (ev.Data.Str("name") is not { } name)
+            return;
+        if (Sounds == null)
+        {
+            _soundsAfterBuild++;
+            return;
+        }
+
+        var key = (name, anchor);
+        if (!_soundEmitters.TryGetValue(key, out var handle))
+        {
+            // Re-assertion must be a no-op, not a second emitter: the data keeps its definitions
+            // alive with `[SOUND_NODE, …, Loop{-1}]` exactly as it does for puffers.
+            if (Sounds.Create(name) is not { } created)
+            {
+                _soundsUnknown++;
+                return;
+            }
+            handle = created;
+            _soundEmitters[key] = handle;
+            _opsApplied++;
+        }
+
+        // AT_NODE — the compiled form's own placement. Absent in the reader form and in the 865
+        // compiled events that leave it to OBJECT_ADD_CHILD.
+        if (ev.Data.Obj("translate")?.Union() is { Tag: "AtNode", Value: Dictionary<string, object?> at })
+        {
+            var atData = new AnimData(at);
+            if (atData.Str("name") is { } hostName && ResolveOne(hostName, def, anchor) is { } host)
+                Sounds.Attach(handle, host, atData.Vec3("pos"));
+        }
+        // The reader form carries no active_state at all (its ACTIVE comes as the next event), so
+        // an absent field must mean "leave it alone" rather than the `?? 0` = OFF that silently
+        // killed the C1 waterfall's puffers when PUFFER_STATE had no reader normalizer.
+        //
+        // Note the compiled field is a JSON **boolean** here, where PUFFER_STATE's same-named field
+        // is numeric — reading it with Num() alone returns null for `true` and leaves every emitter
+        // in the world switched off, which is exactly what it did until the --debug-anim log showed
+        // 38 correctly-placed emitters all reading "off".
+        if (ev.Data.Has("active_state"))
+            Sounds.SetActive(handle, ev.Data.Bool("active_state") || ev.Data.Num("active_state") >= 1f);
+    }
+
+    /// <summary>
+    /// The sound-emitter case of OBJECT_ADD_CHILD: attach a declared emitter to the world node
+    /// that positions it. Returns false for every other use, which stays counted as unhandled.
+    ///
+    /// This is deliberately only the sound subset. Surveying all 1,152 <c>ObjectAddChild</c> events
+    /// found 865 (75%) attach sound *definitions* rather than nodes (<c>snd_zepengine</c>→spin
+    /// alone is 849), ~148 are cutscene machinery for cutscenes this project does not have, and the
+    /// rest are mission-cutscene entities. So the general reparenting form has nothing to act on
+    /// here, and the one form that does is this one.
+    /// </summary>
+    private bool HandleAddChild(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (Sounds == null || ev.Data.Str("child") is not { } child)
+            return false;
+        if (!_soundEmitters.TryGetValue((child, anchor), out var handle))
+            return false;
+        if (ev.Data.Str("parent") is not { } parentName)
+            return false;
+        if (ResolveOne(parentName, def, anchor) is not { } host)
+            return false;
+        Sounds.Attach(handle, host);
+        _opsApplied++;
+        return true;
     }
 
     // ---- LIGHT_STATE / LIGHT_ANIMATION ----

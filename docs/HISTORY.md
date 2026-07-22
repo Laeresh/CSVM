@@ -1555,3 +1555,69 @@ at the same place, so every check is a burst at one camera against the *pre-chan
 One detail worth keeping: `TIME` wraps at Godot's `time_rollover_secs` (3600), and every rate
 in this install (0.07 / 0.4 / 0.5 / 0.7 / 1.0) times 3600 is a whole number of texture
 repeats, so the wrap lands on the identical frame and no seam is visible.
+
+## 2026-07-22 — Ambient world audio: `SOUND_NODE` (+ the sound half of `OBJECT_ADD_CHILD`)
+
+`docs/PLAN-anim-rendering-followups.md` item 2, continued. The world now has ambient sound: the
+C1 and C4 waterfalls roar, the C1 train sounds as it drives its track loop, and the sirens /
+zeppelin nacelle engines / fire crackle / warning beeper are all live wherever their host is on
+the field. `src/Mech3/WorldSounds.cs` (new) owns the emitters; `AnimRuntime` gained the
+`SoundNode` handler plus the sound cases of `ObjectActiveState` and `ObjectAddChild`, and
+`AnimDefs` gained the reader normalizers for `PARENT_CHILD` and `SOUND_NODE`.
+
+**The survey decided the scope, before any code.** `SOUND` and `SOUND_NODE` read as one feature
+in the plan; measured across the install they are not. `SOUND_NODE` is **10 distinct names**,
+every one present in `sounds.json`, every one `3D`, 9 of 10 `LOOPED` with a RANGE, and 293 of its
+uses are `OnStartup` — looping positional ambience. `SOUND` is 87 names of one-shot, 4,378
+`OnCall` + 1,650 `WeaponHit` (combat this project has no weapons to trigger) against just 8
+`OnStartup`, and 21 of its names are not plain sounds.json entries at all but `DYNAMIC_WEIGHTS`
+groups needing a further decode. So the ambient half is small, fully resolvable and audible
+today, and the one-shot half is deferred rather than half-built.
+
+**`SOUND_NODE` and `OBJECT_ADD_CHILD` turned out to be one mechanism**, which is why they landed
+together. The reader writes a **three-event triple** — `SOUND_NODE` declares the emitter,
+`OBJECT_ACTIVE_STATE` switches it on, `OBJECT_ADD_CHILD` attaches it to the world node that gives
+it a position — where the middle event's NAME is a sounds.json definition, not a gamez node. The
+compiled form carries the same facts inline, but its `translate` is an `AtNode` on **379** events
+and null on exactly **865** — and 865 is exactly the number of `OBJECT_ADD_CHILD` events that
+attach a sound definition. That the two counts match to the event is the proof. It is also the
+concrete form of the dependency recorded when `OBJECT_ADD_CHILD` was withdrawn in 2026-07-21
+("mostly the positioning layer for sound emitters, so it should follow `SOUND`, not precede it").
+
+**One real bug, caught by the headless log rather than by listening.** The compiled `active_state`
+is a JSON **boolean**, where `PUFFER_STATE`'s identically-named field is numeric. Read with a
+number accessor it returns null for `true`, and the (correct) absent-means-leave-alone default
+then left every emitter in the world switched off — 38 correctly-placed, correctly-hosted, silent
+emitters. Both forms are now read.
+
+**Verified:** C1 builds **38** emitters, exactly matching the 38 `SoundNode` dispatches, and both
+`SoundNode×38` and `ObjectAddChild×38` leave the "not yet acted on" list (8 kinds → 6) — every
+C1 `ObjectAddChild` was a sound attachment. State ops go 4054 → 4130, i.e. +76 = 38 emitters + 38
+attachments, with `unresolved` unchanged at 126. `snd_waterfall` plays at its correct world
+position and `snd_train`'s emitter **moves between log lines** (-6934,128,-5479 → -6914,128,-5521),
+riding the SI-script loop. All 8 chapters build with **zero errors**; the static plane viewer is
+**byte-identical** (md5); the full mode battery (fly / stunt / viewer+damage / 4P race / 2P mixed /
+menu / mute / static C4) is clean; `--perf` holds the 60 fps vsync cap on both C1 and C5.
+
+**The visibility gate is what makes the counts harmless.** An emitter is silenced while its host
+is not visible in tree — the rule the point lights already use. C1/IA1 deactivates both
+multiplayer zeppelins, so 36 of its 38 emitters are built and stopped and only the waterfall and
+the train sound; C4 plays 3 of 87; **C5 plays 0 of 108**. The positive case checks out too:
+C1/M04, the mission that shows its zeppelins, is where a `snd_zepengine` actually plays.
+
+**A pre-existing defect surfaced and was NOT fixed here.** That same M04 emitter first reported a
+position of ~(13, 3.8e28, 4.6e29). Probing the parent chain put the blowup between
+`rock_zeppelin` and `gasbag3`, and probing the **pre-sound build directly** reproduced it with no
+sound code present: `gasbag3` reads a global basis of ~1e27 while sibling instances of the same
+node names are perfectly sane. The sound path only *reads* transforms, so it could not have
+caused this — it is simply the first consumer to look at one. A degenerate host is now silenced
+and logged as such rather than mispositioned; the underlying transform bug is in `backlog.md`.
+
+**Reader-only coverage is dormant and honestly so:** of 252 reader `SOUND_NODE` definitions, 231
+have a compiled twin (compiled wins), and all 21 that do not are `ON_CALL`, which the bootstrap
+never reaches. The reader triple path is correct by construction but unexercised in a default
+session — the same status `NODE_UNDERCOVER` carries.
+
+**Open:** nobody has *listened* to this yet. Mix levels, the RANGE→`UnitSize`/`MaxDistance` curve,
+and whether splitscreen's per-pane cameras each act as an audio listener (Godot's default when no
+`AudioListener3D` exists) all need a user A/B — the last one is the only structural unknown.
