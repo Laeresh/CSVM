@@ -243,8 +243,27 @@ any chapter. So the spin landed; the ballistic and scale halves are counted, not
 decelerating ramp, and random spread all fit the data, and 589 of 590 reachable events leave it
 zero. Counted as `ObjectMotion(rotation delta)`, like `Object3DRotate`'s ambiguous angle unit.
 
-**Remaining for item 2 after this:** `ObjectOpacityState`, `Callback`, `ObjectCycleTexture`, and
-the one-shot `Sound` — all small, and all mostly unreachable without weapons.
+**Remaining for item 2 after this — triaged 2026-07-22, and it is now ONE kind.** Every remaining
+kind was probed at its dispatch site across C1/C3/C4/C5 (def, anchor, resolved target count,
+payload) rather than judged by its count in the report:
+
+| Kind | Reachable without weapons? | Evidence |
+|---|---|---|
+| `ObjectOpacityState` (+ `ObjectOpacityFromTo`) | **YES — this is the remaining work** | 683 dispatches, **zero unresolvable**. C1 sets `cloudparent` to opacity **0.6** from an `ON_STARTUP` `LOOP{-1}`; C5 sets `wl_glw` to 0.4 and `cfglow`; C3/C4 drive the barrage balloons (`bont*`/`balloon_t*`/`tether*`) and `bhf_support*`. |
+| `Callback` | no | ×8 every chapter, all `def=camera1`, **unanchored** — cutscene camera notifications, and there are no cutscenes. |
+| `ObjectCycleTexture` | no | ×1–2, all `node=taildamage` with **`targets=0`** — never resolves. Already build-time in `GaugeCluster`. |
+| one-shot `Sound` | no | ×1 (C3), `snd_waterfall`, **`targets=0`** — names a sound *definition*, and that waterfall already sounds via `SOUND_NODE`. |
+
+The three unreachable kinds moved to `backlog.md` under "Blocked / deferred" with this evidence,
+so item 2 finishes when `OBJECT_OPACITY_STATE` lands.
+
+**One thing that changes the shape of that work:** C1's `cloudparent` — the largest and most
+visible case — is **reader-only** (`extracted/C1/zrdr/clouds.zrd.json`, no compiled counterpart),
+and `AnimDefs` has no `ObjectOpacityState` normalizer, so those events currently arrive carrying
+neither `state` nor `opacity`. Unlike `OBJECT_MOTION`'s normalizer (which measured inert), this
+one is **load-bearing** — without it the headline case silently does nothing. The reader spells
+state as a token with an optional value: `STATE ["ON", 0.6]`, against compiled's
+`{state: bool, opacity: float}`.
 
 **`EFFECTS` is node-keyed, not texture-keyed — settled 2026-07-21 (user observation).** This
 decides the design and was worth the check: `flame01` (the refinery gas flare, node 2998 under
