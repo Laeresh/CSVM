@@ -363,6 +363,16 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **The repo path contains a space, and a launch that mis-quotes it fails in a way that looks like
+  the game is broken.** `Z:\Crimson Skies` splits on the space when passed through
+  `Start-Process -ArgumentList @("--path", "$wt\CSVM", …)`, so **every run in a batch aborts
+  instantly** with no frame rendered — which reads as "the build is broken" or "the scripted input
+  does nothing", not as a quoting bug. This is the same family as the already-recorded
+  comma-splitting gotcha (`--campos=-5466,120,-5136` arriving as `System.Object[]`): quote the
+  argument. Use the call operator (`& "path\to.exe" arg1 arg2`), which quotes correctly, rather
+  than switching tooling. **The tell is that the failure is instant and identical across every
+  run** — a real rendering or logic fault varies with the scene. (2026-07-23; this cost an item-6
+  session, which mistook it for a harness problem and started rewriting the harness.)
 - **A `tri_strip` polygon's index list is not an outline**, and treating it as one manufactures
   geometry that does not exist. Reading each polygon's raw `vertex_indices` as a closed loop gave
   a 16-index strip box a bogus Newell normal and a bogus plane, which "proved" that C5's node 1777
