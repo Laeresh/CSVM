@@ -3371,3 +3371,102 @@ reported. All 20 deleted; `git branch --list` is back to `main` alone, and a re-
 The general lesson: **a cleanup switch scoped to "things this run just touched" no-ops precisely
 when the mess is oldest.** `-Force` made it worse by suppressing the prompt that would have shown
 an empty plan.
+
+---
+
+## 2026-07-22 — Backlog hygiene: the polish-3 landings and the disproven entries leave
+
+**A sweep, not a change** — no source file was touched. Polish run 3 completed earlier the same
+day and `backlog.md` still carried the entries it had closed, which is exactly the failure mode
+`CLAUDE.md`'s "delete when landed" rule exists to prevent, and which had already cost two agent
+sessions once (see the C3 record below). Ten entries removed, four corrected, three re-homed.
+
+**Removed as landed** — each has a dated entry above; the backlog is not a second copy of it:
+
+| Entry | Closed by |
+|---|---|
+| Animated world vehicles | `PLAN-anim-playback.md`, 2026-07-21 (struck through since, never deleted) |
+| mech3ax upstream PR — the 72-byte `planes.zbd` diff | revival-plan item 12 fixed it 2026-07-21; item 14 resolved 2026-07-22 (CS stays in the fork, PR closed) |
+| Degenerate zeppelin node transforms | polish-3 item 9 — the unread `spline_interp` flag |
+| C4's cloud deck does not follow the plane | polish-3 item 4 — structural deck detection |
+| Tail collision boxes swallow the outboard wings | polish-3 item 10 |
+| C1 police / mafia / traffic cars stop after one route | polish-3 item 8 — `LOOP_COUNT 0` means infinite |
+| A generic way to find billboard sprites | polish-3 item 5 — `SceneBuilder.ClassifyBillboard` |
+| Billboards should generally have no collision | polish-3 item 5 |
+
+**Removed as disproven.** The **C5 `csky_fog_on` shader warning** entry described a warning that
+**does not exist** — polish-3 item 5 looked for it across an 8-chapter run and logged none, because
+the two shader families never share a `GeometryInstance3D`. The real, *latent* index disagreement
+survives as a residual entry under "Feature backlog", which is where it belongs; the duplicate
+claiming a live C5 warning is gone. Its side note ("`WorldBuilder.DisableFog` is dead code") was
+stale too — that method was deleted the same day.
+
+**Removed as not-a-bug.** *"World renders into only the upper-left quadrant at the world origin"* —
+exact projective geometry; the full reasoning was already recorded in the polish-3 planning entry
+above (2026-07-22, "Selection turned up four stale backlog entries", item 1) and is not repeated
+here. Only its transferable half was missing, and is now `verification.md` rule 15: an artifact
+landing on exact half-viewport boundaries is usually the camera pose, not the renderer.
+
+**The C3 coast z-fight record, preserved here because the backlog was its only home.** Reported
+and fixed the same day by `6c592c2` (per-mission entity setup), bisected at the user's own pose
+(`--campos=-5931.403,149.271,-3292.775 --lookat=-5933.68,66.417,-3348.722`, `--shots=5
+--jitter=0.006`):
+
+| commit | C3 coast flicker |
+|---|---|
+| `10f48f8` (parent — before per-mission setup) | **4.87%** |
+| `6c592c2` "World: per-mission entity setup — the interp boot script, not a roster" | **0.09%** |
+| `b83252c` (then-current main) | **0.09%** |
+
+A **54× reduction**, and nothing since moved it. Mechanism: `MissionSetup` runs the mission `.gw`
+script's `NodeSetActive`/`DeleteTree`, so duplicate overlapping entities stop being drawn — remove
+the duplicates, remove the depth fight. **The lesson outlives the bug and is now
+`verification.md` rule 14:** the entry carried "user-confirmed as real z-fighting" while the fix
+landed the same day, so polish-3 items 3 and 11 both chased an already-fixed symptom, and item 11's
+honest "0.41%, barely flickers" reading was the fix showing through rather than a mis-aimed camera.
+*When a report and a fix share a date, `git log` the interval before writing code* — and when you
+fix something incidentally, go back and close the entry it fixed.
+
+**Closed by measurement, not by inference: "C3 trees standing in the water."** Its recorded cause
+was the beach z-fight above, and a polish-3 note even said "the palms stand on sand" — but that was
+a *flicker* reading, and this symptom is a **static wrong-winner a jitter metric cannot see**
+(the entry itself said so). So it was checked directly rather than inferred. Rendered at both
+recorded poses plus 8 more across five separate beaches, including a waterline eye-height view
+looking inland from 22 m out over the water — the exact angle at which a losing sand band reads as
+trees in the sea. **Every view shows the same intact stack: water → surf → wide sand → palms →
+jungle**, with the palms inland on fully-drawn sand casting shadows onto it
+(`.scratch/c3_waterline_eye_E.png`).
+
+The flicker numbers there looked alarming at first (6.7% at a low oblique, 15.3% at the waterline)
+and are the useful part of the exercise: **a `--jitter=0` control kept 6.4% and 14.4% of it**, at
+an amplitude of ≤12/255. That is the C3 water flipbook, not depth — a genuine sand↔water flip is a
+delta of ~100+ (sand ≈ 215,190,150 vs water ≈ 45,95,105). `verification.md` §7's C3 row now carries
+that measurement, because "~35,250 px at max delta 3" badly understates what open water does to a
+jitter burst. Note the coplanarity itself is **unchanged and intrinsic** — 86 of the 102
+`cliff1_sandtrans` polygons still sit at exactly Y = 0.0, on the sea plane. What `6c592c2` removed
+was the *duplicate* entities that made the tie ambiguous; if this ever recurs, that is the place to
+look, not the clutter placement. The trap that entry existed to prevent — "do not fix this by
+dropping submerged palms", which would delete correct content — already lives on as
+`verification.md` rule 8.
+
+**Corrected rather than removed.** Four entries had stale cross-references into completed plans:
+`OBJECT_OPACITY_STATE` described as "scheduled work" (it landed 2026-07-22); partition visibility
+citing "the polish-run-3 fix" as a workaround (that fix was measured to change nothing and no cheap
+substitute is known); the C5 z-fight open question described as "scheduled as item 3" (item 3 closed
+as disproven); and the C1/M04 ambient-audio playtest telling the listener that a
+`world pose is degenerate` line was **expected** — it is now a regression, since item 9's fix has
+`snd_zepengine` playing at a finite pose. That last one is the sharpest argument for this sweep:
+a stale backlog does not merely waste time, it tells a tester to ignore a real fault.
+
+**Re-homed, not deleted.** The `## Milestone 2 polish run 3 — candidate scope` section is gone —
+a heading named after a completed plan is stale scaffolding — and its three surviving items moved
+to sections that describe them: the C1–C4 weather-zone question and "fine-tune fog and environment"
+to "Open fidelity questions", "better mission states" to "Feature backlog". Also refreshed: the
+file header still said **"No plan is active"** (`PLAN-M3-weapons.md` is), the "Open bugs" preamble
+still asserted that every entry under it had been checked and none were fixed, and the C1 ambient-
+audio listening notes predated the police-siren fix, so they named two emitters where three now
+sound.
+
+`backlog.md` 65 KB → 53 KB. No code changed, so there is nothing to regression-test; the
+verification that matters is that every deleted entry's record exists above and every surviving
+cross-reference resolves.

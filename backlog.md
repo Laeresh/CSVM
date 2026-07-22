@@ -1,7 +1,7 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. **No plan is active**;
-completed plans are in `docs/plans/`. Per-item history/diagnosis
+Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
+`docs/PLAN-M3-weapons.md`**; completed plans are in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -10,18 +10,6 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Blocked / deferred
 
-- ~~**Animated world vehicles**~~ — **LANDED 2026-07-21** (`docs/plans/PLAN-anim-playback.md`, revival-plan
-  item 7): the C1 train drives its SI-script track loop, the road vehicles run their
-  `OBJECT_MOTION_FROM_TO` chains and the hangar doors swing, via the generic `AnimRuntime`.
-  `PufferState` landed the same day (the train's steam plume, waterfall mist — user-confirmed
-  in-game), including two follow-up bugs found and fixed the same day: a reader-def dedupe gap
-  that let a duplicate `waterfall01` instance re-kill the splash puffers every frame, and the
-  `AT_NODE` spread offset being parsed nowhere (silently dropped on 862 of 4387 PUFFER_STATE
-  events install-wide) — the mist sat on one point instead of spreading across the falls until
-  fixed. **Everything else this entry originally listed (the remaining event kinds, `If`/
-  `Elseif` evaluation, mission-spawned entity rosters, `texture_scroll`) is now scheduled in
-  `docs/plans/PLAN-anim-rendering-followups.md`** (2026-07-21, 4 independent session-sized items with
-  goal/evidence/approach/verify each) — see that plan rather than this entry for current detail.
 - **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
   so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
@@ -48,11 +36,6 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
     inventing our own trigger, which is a fidelity guess rather than a data-driven port.
   - **If resumed:** the placement half already works — `CALL_ANIMATION`'s target parameter landed
     2026-07-21 and is the mechanism that puts a template at a site. Build the template pool first.
-- **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
-  `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
-  lossless; folded into `docs/plans/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
-  the gamez revival is already touching) / item 14 (its own small upstream PR if not already
-  folded into the gamez PR).
 - **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
   RunGame.ps1/RunDev.ps1) once tools/godot ships a Godot bundling **SDL ≥ 3.4.4**: the bundled
   SDL (3.2.28 up to Godot 4.7.1) hard-freezes the engine when a >255-button DirectInput device
@@ -62,21 +45,14 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
-- ~~**Degenerate zeppelin node transforms**~~ — **FIXED 2026-07-22** (polish-3 item 9). The cause
-  was `SiScript.SplineInterp` being parsed and then read by nothing, so the 15 scripts that set
-  `spline_interp: false` had their *uninitialised* spline coefficient blocks evaluated as cubics.
-  C1/M04's `piratezep.zan` decodes a scale constant term of `(0.0, 4.259e27, 4.611e27)` — a
-  singular basis that propagates down the whole zeppelin chain. Neither of this entry's two
-  guessed candidates was right, and neither was the plan's (`ScriptPlayback` compounding scale).
-  See `docs/HISTORY.md` 2026-07-22 and the `CompiledAnim.cs` bullet in `docs/architecture.md`.
-
 - **`SpinMotion` re-seeds its rest pose from an already-spun pose (found 2026-07-22, deliberately
   not fixed).** `SpinMotion` captures `_rest = target.Transform.Basis` from the CURRENT pose at
   construction, and the idempotence guard in `Dispatch` matches only on identical
   `(rate, runTime)`. `zeppelin_rocksleft` fires five events with five different rate/runtime pairs
   at the same `rock_zeppelin`, so each replacement motion anchors to wherever the previous one
   left the node, and a looping call drifts. It is **bounded** — rotation is orthonormal, so this
-  can never produce the 1e27 blowup it was originally suspected of — but the drift is real.
+  can never produce the 1e27 blowup it was originally suspected of (that was the unread
+  `spline_interp` flag, fixed 2026-07-22 — see `docs/HISTORY.md`) — but the drift is real.
   **Not fixed because both candidate fixes risk a visible regression to cure an invisible one,
   and the data does not adjudicate:** (a) seeding from `RestOf` would discard a deliberately-posed
   starting orientation on all 590 spins in the install — C1/M05's `random_prop` poses `propstill`
@@ -104,21 +80,8 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   **Pick these up when the thing they depend on exists** — weapons for `SOUND`, a cutscene player
   for `Callback` — not before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
-  The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, is scheduled work and
-  stays in the plan, not here.
-
-- ~~**World renders into only the upper-left quadrant at the world origin**~~ — **NOT A BUG,
-  closed 2026-07-22.** It is exact projective geometry. C1's World area is
-  `left=-12288, top=-12288, right=0, bottom=0`: the world origin *is* the map's corner, and all
-  terrain lies at x ≤ 0, z ≤ 0. At `--campos=0,30,420 --lookat=0,0,0`, `FrameCamera` derives yaw 0
-  (`PlaneViewer.cs:1751`), so camera-right is exactly world +X. The plane x=0 contains the camera
-  and therefore projects to the exact vertical centre line; the line (t,0,0) passes through the
-  lookat target parallel to camera-right and projects to the exact horizontal centre line. Terrain
-  fills the upper-left quadrant with two hard half-viewport edges — no clipping involved. The
-  splitscreen theory is dead too: `PlaneViewer.cs:1123-1128` early-returns for 1P and never builds
-  a rig, `SplitScreen` clamps to 2–4 (`SplitScreen.cs:104-110`), and there is no other
-  `SubViewport` in `CSVM/src`. The surrounding void is unfilled because `MapEdgeExtender` is
-  deliberately off in plain `--viewer` (`PlaneViewer.cs:629`, "honest data view").
+  The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, landed 2026-07-22
+  (`docs/HISTORY.md`) — which is why it is not in this table.
 
 - **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
   `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
@@ -143,9 +106,10 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   diagnosing the C5 ground z-fight). The interp language has **`WorldPartitionSetActive`**
   (25 uses). The original selects between a coarse `world1`-child ground sheet and the fine
   partition-referenced tiles at runtime; we draw both unconditionally
-  (`WorldBuilder.cs:155`, `:157-159`). The polish-run-3 fix is a draw-priority workaround, not
-  this. Implementing it properly = cell-resident tracking with pop risk and an 8-chapter
-  regression — Milestone 3 work, but now motivated by evidence rather than a hunch.
+  (`WorldBuilder.cs:155`, `:157-159`). Polish run 3 proposed a draw-priority workaround instead
+  (item 3) and it was **measured to change nothing** (35.77% → 35.79%), so no cheap substitute for
+  this system is known. Implementing it properly = cell-resident tracking with pop risk and an
+  8-chapter regression — Milestone 3 work, but now motivated by evidence rather than a hunch.
 
 - **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
@@ -162,10 +126,11 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Open bugs (moved from NOTES.md 2026-07-22)
 
-The user's running issue list. **Each was checked against the code on 2026-07-22 — none of them
-were already fixed**, so the whole list is live. Where that check pinned the cause it is recorded
-here so it is not re-derived; where it did not, the item says so rather than guessing. Paths are
-relative to the Godot project's `src/`.
+The user's running issue list, **swept again 2026-07-22 after polish run 3** — the six entries that
+had landed, been disproven, or been measured gone were deleted (their records are in
+`docs/HISTORY.md`), so what is below is live. Where the check pinned a cause it is recorded here so
+it is not re-derived; where it did not, the item says so rather than guessing. Paths are relative
+to the Godot project's `src/`.
 
 ### Flight & damage
 
@@ -175,100 +140,13 @@ relative to the Godot project's `src/`.
   plane descends wings-level-nosed. The only code that rotates the nose toward world-down is the
   stall block, gated on `Speed < StallSpeedFrac × FdSpeed`. Wants a small attitude torque in the
   knife-edge branch, **not** a tweak to the existing path terms.
-- **Tail collision boxes swallow the outboard wings (Bloodhawk).** `PlaneCollider.cs` classifies
-  everything aft of `TailStartFrac` (0.7 × length) **at full span** as `tail`; the refinement pass
-  that splits that slab keeps the name, so the outboard strips stay `tail`, and `PlaneDamage.cs`
-  maps `tail => tail` with no |x| test. Wing hits score as tail damage. The fix is an |x| test in
-  the refinement's naming, not a `TailStartFrac` change. (Distinct from the accepted canard-tip
-  limit already noted in `docs/HISTORY.md`.)
 
 ### Environment
 
-- **C4's cloud deck does not follow the plane.** The follow mechanism works (`PlaneViewer`
-  re-anchors `rig.Deck` to the camera X/Z each frame, fed by `WorldBuilder.CloudDeck`), but the
-  deck is selected by texture prefix **`cloudlayer`** only (`WorldBuilder.cs:77-78`), so
-  `CloudDeck` is null in C4, the deck stays world-fixed, and `IsCloudSpriteTexture` additionally
-  billboards it as a sprite. C4's weather *does* define the band (`CLOUD_COVER TOP 1100 /
-  BOTTOM 1000`), so the `HasCloudBand` guard is not the blocker.
-  **Correction 2026-07-22: the deck is NOT `cloudtrans`.** `srock-cloudtrans` skins 35 models of
-  96–422 vertices with dy 162–533 m — cloud-shrouded **rock terrain**, which must stay solid.
-  C4's real deck is **`Sky1.tif`**: 144 parentless partition-referenced nodes `g1720..g1863`, each
-  a single 4-vertex flat 1024×1024 quad at **y = 1050** — the same signature as C1's `cloudlayer`
-  deck (144 nodes, 1024², y = 960). Decks exist only in C1/C1C/C2B (`cloudlayer`) and C4 (`Sky1`).
-  **The trap:** `Sky1.tif` is the *skydome* in C1/C1B/C1C/C2/C2B/C3 (2 nodes under `horizon/zone2`)
-  and the *deck* in C4, so widening the predicate to `sky*` is only safe because `Build` skips the
-  `horizon` subtree — an implicit dependency. Wants a structural test, not a name test. Scheduled
-  as polish-run-3 item 4.
-- **C3 massive z-fighting at the beach** — `--campos=-6151.614,136.079,-3198.714
-  --lookat=-6150.76,135.796,-3199.151`. **User-confirmed 2026-07-22 as real z-fighting, and the
-  correct resolution is known: the beach should draw over the water.** That makes this the one
-  z-fight case where the target surface is *not* in doubt — unlike the C5 ground case below, where
-  "which surface should win" is still the blocking question. Undiagnosed as to why the two are
-  coplanar. A frame rendered at that pose (`.scratch/c3_whatisthis.png`, 2026-07-22) shows the
-  sand/surf boundary with hard polygon-stepped edges and one clean triangular wedge; it is a single
-  frame, so it does not by itself separate depth flips from a static alpha-cutoff artifact — use
-  `--shots=5 --jitter=0.006` (sub-pixel dither; the 0.15° default moves the camera far too much to
-  isolate depth flips) before assuming the mottling and the hard edges are the same fault.
-  **Do not fix by raising the bias constants globally** — see the C5 entry below for why.
-  **Measured 2026-07-22 (polish-3 item 11): this pose barely flickers at all.** `--shots=5
-  --jitter=0.006` there gives **0.41%** of pixels flipping (vs C5's 35.96% and C1B's 30.95% on
-  the same instrument), the beach is continuously visible, and the palms stand on sand
-  (`.scratch/zf_c3_base_00.png`). Whatever the user is seeing at this shoreline is therefore
-  **not** a per-frame depth flip at this camera — it is either a *static* wrong-winner (the
-  water consistently over the sand, which a jitter-flip metric cannot see at all) or it needs
-  a different camera. **Get a fresh capture or a pose from the user before diagnosing further**;
-  the pose recorded here does not reproduce a flicker to measure against.
-
-  **✅ RESOLVED 2026-07-22 — this was fixed by `6c592c2` and the entry was stale.** The user
-  reported the flicker gone and guessed the cause was the per-mission entity setup. Bisected and
-  confirmed at their own fresh pose (`--campos=-5931.403,149.271,-3292.775
-  --lookat=-5933.68,66.417,-3348.722`), measured with `--shots=5 --jitter=0.006`:
-
-  | commit | C3 coast flicker |
-  |---|---|
-  | `10f48f8` (parent — before per-mission setup) | **4.87%** |
-  | `6c592c2` "World: per-mission entity setup — the interp boot script, not a roster" | **0.09%** |
-  | `b83252c` (current main) | **0.09%** |
-
-  A **54× reduction at the commit that applied the interp boot script**, and nothing since has
-  moved it. Mechanism: `MissionSetup` runs the chapter/mission `.gw` script's
-  `NodeSetActive`/`DeleteTree`, so duplicate overlapping entities that had all been drawn
-  coplanar stop being drawn. Remove the duplicates, remove the depth fight.
-
-  **The lesson is about the backlog, not the bug.** This entry carried "user-confirmed
-  2026-07-22 as real z-fighting" while the fix landed *the same day*, so two separate agent
-  sessions (polish-3 items 3 and 11) spent effort chasing an already-fixed symptom, and item 11's
-  0.41% reading — correctly measured, correctly reported as "barely flickers" — was the fix
-  showing through, not a mis-aimed camera. **When a report and a fix share a date, check the
-  commit order before scheduling work.**
-- **C3 trees standing in the water** (same camera pose) — **diagnosed 2026-07-22 as the SAME BUG
-  as the beach z-fight above, not a clutter placement fault. Merged; scheduled as polish-run-3
-  item 7.** The palms are visible in the original and are *supposed* to be there (user-confirmed
-  2026-07-22). What fails is that the water wins the depth fight against the beach, so the sand
-  they stand on vanishes and they read as growing out of the sea. **Do not "fix" this by dropping
-  submerged palms** — an earlier draft of the plan proposed exactly that (`y > waterLevel` guard in
-  `Clutter.PlaceOnTriangle`, which has no Y or water test today), and it would have deleted correct
-  content while leaving the actual z-fight untouched. Measurement behind the merge:
-  `cliff1_sandtrans.tif` (C3's only clutter template ground, node idx 3232 → ground 3240, 6
-  `palmtree1.flt` decorations) covers 102 world polygons, **86 of them perfectly flat at exactly
-  Y = 0.0** — and Y = 0.0 *is* the C3 sea plane, shared coplanar with `wtr00000` ×1565 (material
-  220, `soil: "Water"`), `shore2` ×1027, `shore1` ×487, `cliff1_watertrans2` ×177, `sand128` ×140.
-  So ~84% of the palm-bearing sand band is coplanar with the sea, which is why the symptom is
-  map-wide rather than a few stray trees. A fix must leave the clutter instance count unchanged.
-- **C5 shader warning: `More than one material in instance export the same instance shader uniform
-  'csky_fog_on', but they do it with different indices.`** (`instance_uniforms.cpp:62`.) Cause
-  found: `csky_fog_on` is an instance uniform declared in two independent shaders at different
-  slots — `SceneBuilder.cs` declares it at index **1** (after `instance uniform float node_bias`),
-  `Clutter.cs` at index **0** (its shader declares no other instance uniform). Only the first wins,
-  so clutter fog can silently read the wrong slot. Fix = force matching indices across every shader
-  that declares it. Related but already handled: the `csky_opacity`-must-follow-`csky_fog_on`
-  ordering regression (`docs/HISTORY.md`), and the billboard/cloud shader deliberately omitting the
-  uniform. Side note found while checking: `WorldBuilder.DisableFog` is now dead code — its only
-  call site is commented out.
 - **C5 IA1 has a zeppelin sunk in the ground** — `--campos=235.618,1471.759,94.103
-  --lookat=237.62,1371.833,97.39`. Undiagnosed. **Not** the degenerate-transform fault that entry
-  above used to speculate about: that was the unread `spline_interp` flag (fixed 2026-07-22), and
-  all 15 affected scripts are C1 and C4 only — **C5 ships none**, so this is a separate bug.
+  --lookat=237.62,1371.833,97.39`. Undiagnosed. **Not** the degenerate-transform fault this was
+  once attributed to: that was the unread `spline_interp` flag (fixed 2026-07-22), and all 15
+  affected scripts are C1 and C4 only — **C5 ships none**, so this is a separate bug.
 - **C1B z-fighting** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
   **30.95% of pixels flip** at `--shots=5 --jitter=0.006` (measured 2026-07-22, polish-3 item 11 —
   the most severe of the three recorded z-fight poses after C5's 35.96%). **It is a CROSS-NODE
@@ -288,15 +166,6 @@ relative to the Godot project's `src/`.
 
 ### Animation
 
-- **C1 police / mafia / traffic cars drive their route once and stop; the original loops them.**
-  Cause found: `AnimRuntime.cs` reads the loop count and treats **0 as "stop immediately"**
-  (`_loopsLeft = … ; if (_loopsLeft == 0) { _done = true; break; }`). Every C1 traffic def ships
-  `Loop { "Count": 0 }` — verified across `police_car-police_chase`, `mafia-mafia_move1`,
-  `black_car1-black_move1`, `car_go_home-car_go_home_start`, `car_loop1-car_loop1_start` — while
-  genuinely-endless defs (docklights, firetrucks, `red_police-police_lights`) use `-1`. So
-  **`Count: 0` almost certainly means "infinite" in the original** (note the name `car_loop1`).
-  Changing that mapping is a one-line fix but touches every def install-wide — verify no
-  currently-terminating animation ships `Count: 0` and relies on stopping.
 - **Some C1 animated-object rotations are wrong (cars)** — evidence:
   `crimsonskies_2026-07-21_23-14-29-724.png`. Undiagnosed.
 
@@ -318,45 +187,12 @@ relative to the Godot project's `src/`.
 
 - **C2 stunt mode: the Seaplane Hangar objective sits at the wrong position.**
 
-## Milestone 2 polish run 3 — candidate scope (from NOTES.md)
-
-Grouped by the user as a prospective third polish run. Not a plan — write one when it is scheduled.
-
-- **A generic way to find billboard sprites** — **mostly already done; rescoped 2026-07-22.** The
-  data-driven rule landed 2026-07-21: `GameZ.cs:479-482` exposes `ModelType`/`FacadeMode`,
-  consumed at `SceneBuilder.cs:446-459` (spherical) and `:468-470` (cylindrical). The example this
-  entry originally named — "some face the camera only about X/Y (the harbour refinery flames)" —
-  **is the case that already works**. What actually remains is consolidation: the classifier is
-  split across two `private` methods, `Clutter.SpriteInfo` uses an independent 1-poly/4-vert/flat-Z
-  shape heuristic, and `WorldBuilder.IsFlareSpriteNode` still gates collision on poly-count +
-  texture name. Scheduled as polish-run-3 item 5.
-- **Billboards should generally have no collision.** Tree collision is a nice touch but the
-  original does not have it. **Confirmed 2026-07-22, and the counter-evidence was a misreading:**
-  `Clutter.cs:33-35` and `docs/formats/clutter.md:54` both justify collidable trees with
-  "`spruce_destroy` anims exist". The actual data strings are
-  `..\data\common\zrdr\**planes**\spruce_destroy1.zrd` (C2/M01) and `spruce_destroy2.zrd`
-  (C5/M03) — the **Spruce Goose**, Howard Hughes' flying boat and the C2/M01 mission object, whose
-  folder siblings are `sprucegoose-fly_the_goose`, `free_the_goose`, `goose_cooked`,
-  `goose_down_lwing`, `spruce_enginedest`. **There is no spruce-*tree* animation in the install.**
-  Both doc claims need correcting, not just the code. User decision 2026-07-22: remove tree
-  collision outright (not behind a flag); `cblock` city-block **buildings keep** collision, being
-  real 3D meshes rather than cards. Scheduled as polish-run-3 item 5.
-- **Determine which weather/sky zone each chapter and mission actually uses.** **C5 is
-  answered — `zone1`** (user A/B 2026-07-22: you can see across the city in the original, which
-  `zone3`'s 50–250 m fog and 300 m clip make impossible). The remake already renders it and the
-  fallback is stable — all 8 C5 missions list `ZONE1` first — recorded in
-  `docs/formats/weather.md` and `Weather.ResolveZone`. **Still open for C1–C4**, all of which
-  define `zone2` and resolve to themselves, so they render a plausible answer either way and
-  this is a fidelity question rather than a bug. **C1 is the one worth doing first:** it is the
-  only chapter whose own scripts disagree (`load.gw` → `zone2_cloud_floor`, `tex_fx.gw` →
-  `h_zone1scroll`), and its two zones are genuinely different skies (zone2 = moon/stars night,
-  zone1 = day haze).
-- **Fine-tune fog and environment** — method: record video from spawn points flying straight for a
-  fixed number of seconds, in both engines, and compare.
-- **Better mission states.** There is still a lot of difference between our maps and the original's.
-  May need a pipeline to diff them, or to crack the mission loading states properly.
-
 ## Feature backlog
+
+- **Better mission states.** There is still a lot of difference between our maps and the
+  original's. May need a pipeline to diff them, or to crack the mission loading states properly.
+  (`MissionSetup`'s interp boot script, landed 2026-07-22, closed the largest single gap and
+  incidentally fixed the C3 coast z-fight — but it is a boot script, not the full state model.)
 
 - **M3-deferred gun mechanics — firing heat and cannon jam** (scoped out of
   `docs/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
@@ -447,9 +283,6 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   milestone") — they are the obvious input if this is picked up.
 - **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
   "Known divergences"; these are the leftovers):
-  - *(Resolved 2026-07-20 by the rework onto the original's own region masks: achromatic
-    regions now paint, and slot order is read from the data instead of ranked by area. See
-    "What the rework fixed" in `docs/formats/paint.md`.)*
   - **The paint UI's "Shade" column** is unmodelled — three Colour *and* three Shade
     dropdowns exist in the UI, only three colours in the data. We ramp black → colour.
   - **A livery picker in the launchscreen.** Selection is CLI-only (`--paint=`); flight
@@ -494,6 +327,16 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 ## Open fidelity questions (answerable by testing the original)
+
+- **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
+  2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).
+  **Still open for C1–C4**, all of which define `zone2` and resolve to themselves, so they render a
+  plausible answer either way and this is a fidelity question rather than a bug. **C1 is the one
+  worth doing first:** it is the only chapter whose own scripts disagree (`load.gw` →
+  `zone2_cloud_floor`, `tex_fx.gw` → `h_zone1scroll`), and its two zones are genuinely different
+  skies (zone2 = moon/stars night, zone1 = day haze).
+- **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
+  fixed number of seconds, in both engines, and compare.
 
 - **Patrol boat: which HP governs?** (from `docs/PLAN-M3-weapons.md` C23, 2026-07-22.) The boat
   is described by two systems that **agree on the damage-stage fractions and disagree on total
@@ -589,14 +432,15 @@ scripted screenshot.
   interactive playtest beyond scripted verification.
 - **The ambient world sounds have never been listened to** (`SOUND_NODE`, landed 2026-07-22). Mix
   levels and the `RANGE` → `UnitSize`/`MaxDistance` curve are TUNE. Where to listen:
-  1. **C1 free flight** — the waterfall and the train are the only two emitters that sound there.
-     The waterfall is at roughly (-7868, 0, -3449) with a 1500 m range; the train moves, so it
-     should pan and fade as it runs its loop.
+  1. **C1 free flight** — the waterfall, the train, and (since the loader-lifetime fix of
+     2026-07-22) `snd_police` riding the police car along its route. The waterfall is at roughly
+     (-7868, 0, -3449) with a 1500 m range; the train and the police car both move, so both should
+     pan and fade as they run their loops.
   2. **C4** — three waterfalls.
   3. **C1/M04** (`--freecam --chapter=C1 --mission=M04`) is where a zeppelin engine actually plays.
-     A `sound: … silenced — its host node's world pose is degenerate` line there is **expected and
-     logged**, not a new fault — it is the pre-existing 1e27 transform bug (see "Degenerate zeppelin
-     node transforms" above).
+     It was silenced by the degenerate-transform bug until 2026-07-22; since that fix
+     `snd_zepengine`'s host reports a finite pose and **plays**, so a `sound: … silenced — its host
+     node's world pose is degenerate` line there is now a **regression**, not the expected state.
 
   `--debug-anim` prints every emitter's host, distance, range and playing state once a second, which
   separates a placement problem from an activation one.
@@ -705,8 +549,8 @@ objects). Confirmed cause: the depth bias is proportional to view distance
 > all 8 chapters), and the `terrain` node flag is set on every partition root and no World
 > child, so "partition-referenced" is readable straight from the data.
 
-**Open question — answered 2026-07-22, scheduled as polish-run-3 item 3; see the box above,
-which supersedes the answer.**
+**Open question — answered 2026-07-22 and then acted on as polish-run-3 item 3, which was closed
+as disproven with no code landed; see the box above, which supersedes the answer.**
 
 *Is it a stray LOD tile?* **No.** The coarse sheet is node 1777 `g4683` (34 polys, 2048 × 11264,
 `brick1`/`cblock1`), a **direct child of `world1`**; the fine ground is partition-referenced.

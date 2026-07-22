@@ -124,6 +124,28 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     nothing else is there, check what the map is keyed on — anything it cannot distinguish is
     exactly what can hide in it.**
 
+14. **Before scheduling work from a bug report, check whether a fix already landed — compare the
+    report's date against the commit log, not against your memory of the file.** The C3 coast
+    z-fight was reported and *fixed the same day*: `6c592c2` (per-mission entity setup) took it
+    from 4.87% to 0.09% flicker, a 54× reduction, as a side effect of running the mission's own
+    `NodeSetActive`/`DeleteTree` and thereby not drawing duplicate coplanar entities. But the
+    backlog entry still carried "user-confirmed as real z-fighting", so **two** later agent
+    sessions (polish-3 items 3 and 11) spent their budget chasing an already-fixed symptom — and
+    item 11's honest "this pose barely flickers, 0.41%" reading was *the fix showing through*, mis-
+    read as a mis-aimed camera. A backlog entry is a claim with a timestamp, not a live query.
+    **When a report and a fix share a date, `git log` the interval before writing any code**; and
+    when you fix something incidentally, go back and close the entry it fixed (this project's rule
+    that a closed entry leaves `backlog.md` exists precisely to keep the list queryable).
+15. **A symptom at a hand-picked camera pose can be exact geometry rather than a defect.** "The
+    world renders into only the upper-left quadrant" — two hard edges meeting at the exact centre
+    of the viewport, which reads unmistakably as clipping or a stray `SubViewport` — was the
+    correct picture: C1's world `area` is x,z ∈ [-12288, 0], so the world **origin is the map's
+    corner**, and a camera at `--campos=0,30,420 --lookat=0,0,0` derives yaw 0, putting the plane
+    x=0 on the vertical centre line and the line (t,0,0) on the horizontal one. Nothing was
+    clipped. **Before debugging a suspiciously axis-aligned artifact, check whether the camera
+    pose is special** — an artifact that lands on exact half-viewport boundaries is usually
+    projection, not rendering.
+
 ## 1. Before you trust a screenshot diff
 
 - **The default `--freecam` camera is not deterministic.** The spawn is a random pick per launch,
@@ -356,7 +378,7 @@ Quick reference — if your diff lands here, suspect noise first:
 | **`--fly` / `--stunt`, any pose** | **Useless for screenshot diffs — same-build floor measured 30–84% of pixels** (2026-07-22). The plane flies, the chase camera follows and the animations advance, so frame N is a different moment every run. Use `--viewer`/`--freecam` with `--campos`/`--lookat` for any A/B; use `--fly` only for counts and log lines |
 | `--freecam` default camera | Random spawn pick per launch — pin with `--spawn=N` or `--campos`/`--lookat` |
 | Precipitation (C1C/C2B/C4) | Self-animating from `TIME`; ~5–6% frame difference, same magnitude same-build-vs-same-build |
-| C3 water flipbook | Baseline flips between two states run to run (~35,250 px at max delta 3) |
+| C3 water flipbook | Baseline flips between two states run to run (~35,250 px at max delta 3). **Over open water it is far larger than that**: measured 2026-07-22 at a waterline view of the C3 east beach, **14.4% of pixels** move with the camera frozen (`--jitter=0`), amplitude ≤12/255. So a jitter burst there reads ~15% and almost none of it is depth. Separate the two with a `--jitter=0` control, and note the amplitude — a real sand↔water depth flip is a delta of ~100+ (sand ≈ 215,190,150 vs water ≈ 45,95,105), not 12 |
 | Bootstrap `unresolved` op count | Varies with `RandomWeight` dice (C1/M05: 100–107) |
 | Damage-lab fire trails | 413–479 px between runs on a single tree |
 | Liveries in flight | `--fly`/`--stunt` randomise per player per load — pin with `--paint-seed=N` |
