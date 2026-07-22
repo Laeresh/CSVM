@@ -206,6 +206,18 @@ The measuring tool has been the bug more often than is comfortable:
   a confident C4 result in a chapter the change provably cannot touch. **Flip the one line under
   test, build, run, flip back**; and before comparing, confirm what the baseline build actually
   contained (`git diff --stat` immediately before the build, not after the run).
+- **Restoring a file by copy can make `dotnet build` a silent no-op, so the "fix" build is the
+  baseline.** MSBuild decides staleness by timestamp, and `Copy-Item` (like `cp -p`, and unlike
+  an editor write) gives the destination the **source's** `LastWriteTime`. Copying a saved-aside
+  `WorldBuilder.cs` back over the baseline restored a file *older* than the DLL just built from
+  the baseline (13:52:58 vs 13:55:12); `dotnet build` reported success in 0.9 s having compiled
+  nothing, and Godot loaded the baseline assembly. The screenshot came out pixel-identical to
+  baseline and read exactly as "the change does nothing" — the same signature as a real no-op.
+  **Assert the build is fresh from inside the running program, not from the build log:** what
+  caught this was a new `GD.Print` line being absent from stderr. Every A/B that flips a file
+  needs one such marker, or a `touch` on the restored file. `git checkout HEAD -- <path>` is
+  safe for the other direction (it writes a current mtime); `git stash` is banned here for the
+  separate reason in the bullet above.
 - **A regression test that has never been seen to fail proves nothing.** Reverting one guard
   still passed, because a second guard was silently doing the work.
 - **A passing screenshot that would pass identically with a no-op is not a test.** The livery lab

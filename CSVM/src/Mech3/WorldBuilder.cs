@@ -38,6 +38,12 @@ public sealed class WorldBuilder
     // The cloud SPRITES only: cloud1/cloud2 are soft vertical cards (2D billboards), while
     // 'cloudlayer' is the flat horizontal deck sheet — which must stay flat, not billboard.
     // These face the camera; SceneBuilder recenters their quads so they pivot correctly.
+    //
+    // Must stay complementary to the deck (see FindCloudDeck below) or the deck tiles would
+    // spin to face the camera. It is, across all 8 chapters: the two deck textures in this
+    // install are 'cloudlayer.tif' (excluded explicitly) and C4's 'Sky1.tif' (does not start
+    // with "cloud"), so C4's deck was never billboarded even while it went unrecognised — the
+    // symptom there was purely that it did not follow the plane.
     private static bool IsCloudSpriteTexture(string tex) =>
         tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
         && !tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase);
@@ -70,12 +76,126 @@ public sealed class WorldBuilder
         && _gamez.Meshes[n.MeshIndex].Polygons.Count == 1
         && MeshUsesTexture(n, IsFlareTexture);
 
-    // The horizontal 'cloudlayer' deck (the opaque overcast ceiling/floor) as opposed to the
-    // cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so PlaneViewer can
-    // make it follow the player. In C1 it is 144 top-level 1024-unit tiles at y=960 covering
-    // the whole map (each a partition-referenced Object3d leaf).
-    private bool IsCloudLayerDeckNode(GameZNode n) => MeshUsesTexture(n,
-        tex => tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase));
+    // The horizontal overcast DECK — the sheet covering the whole map at one altitude, as
+    // opposed to the cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so
+    // PlaneViewer can make it follow the player. In C1 it is 144 top-level 1024-unit tiles at
+    // y=960 covering the whole map (each a partition-referenced Object3d leaf).
+    //
+    // Classified STRUCTURALLY, not by texture (polish-3 item 4, 2026-07-22). The old rule was
+    // the texture prefix 'cloudlayer', which is right for C1/C1C/C2B and misses C4 entirely:
+    // C4's deck is skinned Sky1.tif (144 parentless partition-referenced nodes g1720..g1863,
+    // each a single flat 1024x1024 quad at y=1050 — bit-for-bit C1's signature at y=960), so
+    // CloudDeck came back null there and the deck stayed world-fixed as the plane flew on.
+    //
+    // Widening the texture rule to 'sky*' is NOT the fix, and not for the reason the plan gave
+    // (that it leans on Build skipping 'horizon'). 'skywal*' is a BUILDING texture inside the
+    // world walk — 33 C4 nodes (the sky-city pods), 4 in C1/C2/C3, 2 in C1B — and three C4
+    // terrain roots carry a skywal01 polygon alongside their cliff/rail/bridge ones. A 'sky*'
+    // rule would drag those solid terrain chunks into the deck and make them follow the player.
+    //
+    // The structural signature instead: a walk root whose model is ONE flat horizontal quad,
+    // bucketed with its co-altitude peers, where the bucket's footprint covers the World node's
+    // own 'area' rect. Measured over all 8 chapters (2026-07-22):
+    //
+    //   C1 / C1C / C2B   cloudlayer.tif  144 tiles  y=960   coverage 1.000
+    //   C4               Sky1.tif        144 tiles  y=1050  coverage 1.000
+    //   every other flat-tile bucket in the install (C2 water + resblock, C4 water,
+    //   C5 water + cblock1/2/3)                             coverage <= 0.098
+    //
+    // A 10x margin either side of the 0.5 threshold. C1B and C3 have no flat-tile bucket at all
+    // and correctly resolve no deck. Note the deck is NOT identifiable by sitting above the
+    // world: C4's tallest non-tile root reaches y=1490, well over its own deck at 1050.
+    private const float DeckCoverageFraction = 0.5f;
+
+    // Walk-root indices belonging to the deck; filled by FindCloudDeck before the walk.
+    private readonly HashSet<int> _deckNodes = new();
+
+    // True when the node's model is one flat horizontal quad, reporting its altitude and its
+    // world-space x/z footprint. Deck tiles carry no transform ("Initial"), but a null Local is
+    // treated as identity anyway, so a placed tile would still be measured where it sits.
+    private bool FlatTile(GameZNode n, out float altitude, out float x0, out float z0,
+        out float x1, out float z1)
+    {
+        altitude = x0 = z0 = x1 = z1 = 0f;
+        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
+            return false;
+        var mesh = _gamez.Meshes[n.MeshIndex];
+        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
+            return false;
+        var xf = n.Local ?? Transform3D.Identity;
+        var first = xf * mesh.Vertices[0];
+        x0 = x1 = first.X;
+        z0 = z1 = first.Z;
+        for (int i = 1; i < 4; i++)
+        {
+            var v = xf * mesh.Vertices[i];
+            if (Mathf.Abs(v.Y - first.Y) > 0.001f)
+                return false; // tilted — a wall or a ramp, not a deck tile
+            x0 = Mathf.Min(x0, v.X);
+            x1 = Mathf.Max(x1, v.X);
+            z0 = Mathf.Min(z0, v.Z);
+            z1 = Mathf.Max(z1, v.Z);
+        }
+        altitude = first.Y;
+        return true;
+    }
+
+    /// <summary>Picks the deck out of the world's flat-quad roots: bucket them by altitude
+    /// (1 m buckets — a deck's tiles are exactly coplanar) and take the bucket whose footprint
+    /// covers at least <see cref="DeckCoverageFraction"/> of the map. Tiles are clipped to the
+    /// map rect and their areas summed rather than unioned; the decks are non-overlapping grids
+    /// and the margin over every other bucket is 10x, so the approximation cannot flip a
+    /// verdict here.</summary>
+    private void FindCloudDeck(GameZNode world, List<int> roots)
+    {
+        _deckNodes.Clear();
+        if (!world.HasArea)
+            return;
+        float mapW = Mathf.Abs(world.AreaRight - world.AreaLeft);
+        float mapH = Mathf.Abs(world.AreaBottom - world.AreaTop);
+        if (mapW <= 0f || mapH <= 0f)
+            return;
+        float mapLeft = Mathf.Min(world.AreaLeft, world.AreaRight);
+        float mapRight = Mathf.Max(world.AreaLeft, world.AreaRight);
+        float mapTop = Mathf.Min(world.AreaTop, world.AreaBottom);
+        float mapBottom = Mathf.Max(world.AreaTop, world.AreaBottom);
+
+        var buckets = new Dictionary<int, (float Area, List<int> Nodes)>();
+        var seen = new HashSet<int>();
+        foreach (var idx in roots)
+        {
+            if (idx < 0 || idx >= _gamez.Nodes.Count || !seen.Add(idx))
+                continue;
+            var n = _gamez.Nodes[idx];
+            if (SkipWorldNode(n) || !FlatTile(n, out float y, out float x0, out float z0,
+                    out float x1, out float z1))
+                continue;
+            float w = Mathf.Min(x1, mapRight) - Mathf.Max(x0, mapLeft);
+            float h = Mathf.Min(z1, mapBottom) - Mathf.Max(z0, mapTop);
+            if (w <= 0f || h <= 0f)
+                continue; // wholly outside the map rect
+            int key = Mathf.RoundToInt(y);
+            var slot = buckets.TryGetValue(key, out var got) ? got : (0f, new List<int>());
+            slot.Item1 += w * h;
+            slot.Item2.Add(idx);
+            buckets[key] = slot;
+        }
+
+        float best = DeckCoverageFraction * mapW * mapH;
+        foreach (var (alt, slot) in buckets)
+            if (slot.Area > best)
+            {
+                best = slot.Area;
+                _deckNodes.Clear();
+                foreach (var idx in slot.Nodes)
+                    _deckNodes.Add(idx);
+                _deckAltitude = alt;
+                _deckCoverage = slot.Area / (mapW * mapH);
+            }
+    }
+
+    private int _deckAltitude;
+    private float _deckCoverage;
 
     // True if any of the node's own-mesh polygons is skinned with a texture matching the predicate.
     private bool MeshUsesTexture(GameZNode n, Func<string, bool> match)
@@ -100,10 +220,10 @@ public sealed class WorldBuilder
     /// Read after Build (and after BuildHorizon, which is where C1's daytime sky layer is).</summary>
     public int ScrollingModelCount => _scene.ScrollingModelCount;
 
-    /// <summary>The cloudlayer deck as a separate node so the caller can make it follow the
+    /// <summary>The overcast deck as a separate node so the caller can make it follow the
     /// player (see PlaneViewer): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its
-    /// original altitude; null if the world has no cloudlayer geometry.</summary>
+    /// original altitude; null if the world has no map-covering deck (C1B/C2/C3/C5).</summary>
     public Node3D? CloudDeck { get; private set; }
 
     /// <param name="collision">Attach static colliders to solid geometry so the flight
@@ -152,16 +272,20 @@ public sealed class WorldBuilder
         // the player; everything else goes into the static world root.
         var deck = new Node3D { Name = "cloud_deck" };
 
-        foreach (var childIndex in world.Children)
-            Add(root, deck, childIndex);
+        var roots = new List<int>(world.Children);
         if (world.PartitionNodes != null)
-            foreach (var idx in world.PartitionNodes)
-                Add(root, deck, idx);
+            roots.AddRange(world.PartitionNodes);
+
+        FindCloudDeck(world, roots);
+        foreach (var idx in roots)
+            Add(root, deck, idx);
 
         if (deck.GetChildCount() > 0)
         {
             root.AddChild(deck);
             CloudDeck = deck;
+            GD.Print($"cloud deck: {deck.GetChildCount()} tiles at y={_deckAltitude} "
+                     + $"({_deckCoverage:P0} of the map)");
         }
 
         _builtWorld = world;
@@ -190,7 +314,7 @@ public sealed class WorldBuilder
         var node = _gamez.Nodes[nodeIndex];
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode);
         if (built != null)
-            (IsCloudLayerDeckNode(node) ? deck : root).AddChild(built);
+            (_deckNodes.Contains(nodeIndex) ? deck : root).AddChild(built);
     }
 
     /// <summary>

@@ -2581,3 +2581,91 @@ this session's `git stash pop` returned the item-9 session's `AnimRuntime.cs`/`C
 WIP. It was detected immediately, their commit was put back with `git stash store`, their files
 were reverted here, and no measurement was taken from the mixed tree. **Do not use `git stash`
 in a worktree session** — keep work in the working tree or in a local commit on the branch.
+
+## 2026-07-22 — Polish-3 item 4: the cloud deck is picked structurally, and C4 finally has one
+
+**The bug.** C4's overcast deck never followed the plane. `WorldBuilder` selected the deck by
+texture prefix `cloudlayer`, so `CloudDeck` came back **null** in C4, PlaneViewer had nothing to
+re-anchor, and the sheet stayed world-fixed while the plane flew out from under it. Baseline
+`--players=2` run, which is the only place the old build reported the verdict at all
+(`deck=own`/`deck=none`): C1 own, C1B none, C1C own, C2 none, C2B own, C3 none, **C4 none**,
+C5 none.
+
+**The plan's core evidence held exactly.** C4's deck is `Sky1.tif`: 144 parentless
+partition-referenced nodes `g1720..g1863`, each a single 4-vertex flat 1024×1024 quad at
+y=1050 — bit-for-bit C1's `cloudlayer` signature at y=960 (both `model_type=Default`,
+`facade_mode=CylindricalY`, `transform=Initial`, 1 polygon). Confirmed against the extraction
+for all 8 chapters.
+
+**Two of its claims did not.**
+
+1. **"Widening the predicate to `sky*` is only safe because `Build` skips the `horizon`
+   subtree."** It would not have been safe at all, and `horizon` is beside the point.
+   `skywal*` is a **building** texture *inside* the world walk: 33 C4 nodes (the sky-city
+   `pod2_*`/`pod6_*` structures), 4 in C1/C2/C3, 2 in C1B (`racmplx`, `rabdr`). Worse, at the
+   level the classifier actually runs — the root of each walked subtree — three C4 **terrain**
+   roots carry a `skywal01` polygon alongside their cliff / `rr_tracks` / `trestlegirder` ones.
+   A `sky*` rule would have moved those three solid terrain chunks into the cloud deck and made
+   them follow the player.
+2. **"`IsCloudSpriteTexture` additionally billboards it as a sprite."** It does not and never
+   did. That predicate requires the prefix `cloud`; `Sky1.tif` does not start with `cloud`, and
+   the tiles are `model_type=Default`, not `Facade`. C4's deck was rendered flat and correctly
+   the whole time — the only symptom was that it did not follow. No change was needed there and
+   none was made.
+
+**The fix — coverage, not names.** `FindCloudDeck` runs a pre-pass over the walk roots before
+`Add`. `FlatTile` accepts a root whose model is one flat horizontal quad (1 polygon, 4 vertices,
+all four transformed corners at one Y); those are bucketed by altitude in 1 m buckets, each
+tile clipped to the World node's own `area` rect, and the bucket covering ≥ 50 %
+(`DeckCoverageFraction`) of the map becomes the deck. The margin is not close:
+
+| chapter | bucket | tiles | altitude | coverage |
+|---|---|---|---|---|
+| C1 / C1C / C2B | `cloudlayer.tif` | 144 | 960 | **1.000** |
+| C4 | `Sky1.tif` | 144 | 1050 | **1.000** |
+| C5 | `wtr00000` / `cblock1` / `cblock2` / `cblock3` | 25 / 46 / 12 / 17 | 0 / 5 | ≤ 0.098 |
+| C2 | `wtr00000` / `resblock2` / `resblock_trans2` | 1 / 2 / 2 | 0 / 8 | ≤ 0.003 |
+| C4 | `wtr00000` | 2 | 517 | 0.002 |
+| C1B, C3 | — no flat-tile bucket at all — | | | |
+
+A 10× margin either side of the threshold, which is why summing clipped tile areas instead of
+unioning them cannot flip a verdict. Deliberately **not** used as the discriminator: altitude
+(it would be a magic number, and C4's tallest non-tile root reaches y=1490 — *above* its own
+deck at 1050, so "the thing above the world" is not what a deck is), and texture name.
+
+**Corroboration that the deck-follow is right for C4.** The follow code parks the deck at the
+`CLOUD_COVER` band centre. C4's band is `TOP 1100 / BOTTOM 1000` → centre **1050**, which is
+*exactly* the altitude the data already put the deck at, so the vertical placement is a no-op
+there and only the X/Z tracking is new. (C1 960 vs centre 1047, C1C 960 vs 1082.5, C2B 960 vs
+1024 all do get lifted.) An exact value, not a magnitude — `docs/verification.md` rule 6.
+
+**Verification.**
+
+- **8-chapter regression, baseline vs fix** (`--fly --players=2`, the deck verdict + counts):
+  only C4 moved, `deck=none` → `deck=own`. Mesh-instance and collider counts **identical** in
+  all 8 (C1 3524/2565, C1B 3164/1451, C1C 3033/1752, C2 2074/1871, C2B 2773/1354, C3 2442/2361,
+  C4 4277/2529, C5 4791/4372). Zero errors either side. C1B/C2/C3/C5 still resolve **no** deck —
+  the specific failure mode being watched for (a newly-matched skydome) did not occur.
+- **The follow itself**, `--freecam --chapter=C4`, camera above the deck looking down, two
+  poses: **A** = map centre; **B** = x=+8000, i.e. 8000 m beyond the map's east edge
+  (`area` x ∈ [-12288, 0]) and so outside the deck's *authored* footprint. Baseline at B shows
+  the map-edge extender's mirrored terrain; the fix shows the deck occluding it —
+  **100.00 % of pixels changed, max delta 146**, against a same-build noise floor of 4.00 %
+  (fix) / 62.45 % (baseline, precipitation over textured terrain). At pose A the two builds
+  differ by 0.10 % / max delta 3, inside the fix's own 0.10 % floor — correct, because that
+  view down was already full-fog gray with or without the deck. A world-fixed deck cannot be
+  overhead at x=+8000; it was.
+- **Not billboarded:** an edge-on shot 150 m under the deck at the same outside-the-map position
+  reads as a flat ceiling receding into fog, and the predicate provably cannot match `Sky1.tif`.
+- New `cloud deck: N tiles at y=… (…% of the map)` log line — the only single-player-visible
+  signal that a deck resolved (`deck=own/none` is splitscreen-only). Shown able to report
+  failure: it prints in C1/C1C/C2B/C4 and is silent in C1B/C2/C3/C5.
+
+**Measurement trap, now `docs/verification.md` §5.** Restoring the fix over the baseline with
+`Copy-Item` made `dotnet build` a **silent no-op**: `Copy-Item` preserves the *source's*
+`LastWriteTime`, the restored `.cs` was older than the already-built DLL (13:52:58 vs 13:55:12),
+MSBuild judged the project up to date, and Godot loaded the **baseline** assembly. The run
+produced a frame pixel-identical to baseline and read exactly as "the fix does nothing". What
+caught it was the new log line being *absent* — a build-freshness assertion that a screenshot
+alone would never have provided. `git checkout HEAD -- <path>` was used for the reverse
+direction and is safe (it writes a fresh mtime); `git stash` was not used anywhere.

@@ -26,7 +26,7 @@ instruments that mislead.
 1. ☑ `--data-root=` / `CSVM_DATA_ROOT` — let a git worktree run the game **(done 2026-07-22 — verified end-to-end against a real detached worktree with no `extracted/` and no `tools/`: byte-identical render, `docs/HISTORY.md`)**
 2. ☑ Weather zones: C5 loads no fog at all; make the zone table data-driven **(done 2026-07-22 — C5's default now resolves `zone2`→`zone1`, byte-identical to the old build's explicit `--sky-zone=zone1`; 8-chapter regression clean; `docs/HISTORY.md`)**
 3. ❌ ~~C5 ground z-fighting — coarse/fine draw priority~~ **(2026-07-22: premise DISPROVEN, no code landed — the prescribed fix was implemented and measured to change nothing, 35.77% → 35.79%. `g4683` z-fights its OWN coplanar polygon pairs within one material group. Rescoped as item 11.)**
-4. ☐ C4 cloud deck does not follow the plane
+4. ☑ C4 cloud deck does not follow the plane **(done 2026-07-22 — the deck is now picked structurally: the flat-quad root bucket whose footprint covers ≥50% of the World `area`. C4 resolves 144 tiles @y=1050 covering 100%; the other 7 chapters' deck verdicts and mesh/collider counts are unchanged. Two plan claims corrected: `sky*` would NOT have been safe — `skywal*` skins buildings and terrain inside the world walk — and the deck was never billboarded. `docs/HISTORY.md`)**
 5. ☐ One billboard classifier; billboards and clutter lose collision
 6. ☐ `cblock*` 3D city-block clutter (C2/C5 missing buildings) — **needs item 5 first**
 7. ⤳ C3 beach z-fighting — **folded into item 11**, same suspected mechanism

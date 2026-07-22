@@ -107,7 +107,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props local Z, rotor local Y).
 - `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (local X ailerons/elevators, local Y rudders).
 - `src/Mech3/WingLights.cs` — single source of truth for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
-- `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud/sky by texture, camera-anchored skydome, edge extender.
+- `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck by map coverage, camera-anchored skydome, edge extender.
 - `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter continuing the world past the map edge, per camera.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates (trees/bushes) onto matching-textured terrain as billboarded MultiMesh sprites.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's alternating list.
@@ -234,7 +234,7 @@ for CS — do not use it as the reference.)
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 
-**Next step: work the active plan** (items 1, 2, 8, 9 and 10 landed 2026-07-22; item 3 was investigated and **deliberately not landed** — its premise was disproven, see the plan). Separately, **the owed playtests** remain the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest". The plan's closing section adds one more user-owned task: the weather-zone A/B against the original, which the data cannot settle.
+**Next step: work the active plan** (items 1, 2, 4, 8, 9 and 10 landed 2026-07-22; item 3 was investigated and **deliberately not landed** — its premise was disproven, see the plan). Separately, **the owed playtests** remain the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest". The plan's closing section adds one more user-owned task: the weather-zone A/B against the original, which the data cannot settle.
 
 **Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
 
