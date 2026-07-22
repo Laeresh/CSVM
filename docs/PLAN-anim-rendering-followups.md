@@ -225,6 +225,27 @@ Its *other* uses (cutscene machinery, mission entities) remain unimplemented and
 **Remaining for item 2 after this:** `ObjectMotion` (largest, 73–220 per chapter),
 `ObjectOpacityState`, `Callback`, `ObjectCycleTexture`, and the one-shot `Sound`.
 
+### `OBJECT_MOTION`'s rotation half — LANDED 2026-07-22
+
+The zeppelin nacelle props turn. `ObjectMotion` drops from 73–220 per chapter to ×1; C1 is now
+`ObjectOpacityState`×58, `Callback`×8, `ObjectCycleTexture`×1. New `AnimRuntime.SpinMotion`;
+decode in `docs/formats/anim-definitions.md` ("`OBJECT_MOTION` is two ops sharing one event"),
+full verification in `docs/HISTORY.md`.
+
+**The survey halved the kind before any code was written**, the same way it split `SOUND_NODE`
+from `SOUND`. `OBJECT_MOTION` does two unrelated jobs — 3,521 rotation-only spins against 3,807
+ballistic-debris events (gravity/bounce) and 114 scale ramps — and **that split is exactly the
+reachability boundary**: all 590 `ON_STARTUP` uses are rotation-only, every ballistic use is
+`ON_CALL`/`WEAPON_HIT`. The runtime bears it out with zero `ObjectMotion(ballistic)` dispatches in
+any chapter. So the spin landed; the ballistic and scale halves are counted, not half-simulated.
+
+`delta` (the second rate triple) is **not decoded and deliberately not guessed** — acceleration,
+decelerating ramp, and random spread all fit the data, and 589 of 590 reachable events leave it
+zero. Counted as `ObjectMotion(rotation delta)`, like `Object3DRotate`'s ambiguous angle unit.
+
+**Remaining for item 2 after this:** `ObjectOpacityState`, `Callback`, `ObjectCycleTexture`, and
+the one-shot `Sound` — all small, and all mostly unreachable without weapons.
+
 **`EFFECTS` is node-keyed, not texture-keyed — settled 2026-07-21 (user observation).** This
 decides the design and was worth the check: `flame01` (the refinery gas flare, node 2998 under
 `vent1` → `refinery.flt`) and `mb_spinflame` (the 3-poly muzzle burst) both render **material

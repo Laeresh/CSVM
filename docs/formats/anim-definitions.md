@@ -65,6 +65,50 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z], `RELATIVE` | **Absolute** position in the node's parent frame (see below). `RELATIVE` is `false` in all 1143 uses in this install. |
 | `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame, **radians**. `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
 | `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). |
+| `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the unreached `GRAVITY`/`TRANSLATION`/`BOUNCE_SEQUENCE`/`SCALE` channels | Steady spin about the node's **own** axes at `initial` rad/s (deg/s in the reader), endless without `RUN_TIME`. The zeppelin nacelle props. See "`OBJECT_MOTION` is two ops sharing one event". |
+
+### `OBJECT_MOTION` is two ops sharing one event
+
+`OBJECT_MOTION` is the original's rigid-body descriptor, and its 7,442 uses split cleanly into
+two jobs that have nothing to do with each other. Surveyed across all 8 chapters, 2026-07-22:
+
+| Shape | Count | What it is |
+|---|---:|---|
+| `XYZ_ROTATION` only (± `RUN_TIME`) | 3,521 | A **steady spin** about the node's own axes. |
+| `+ GRAVITY`/`TRANSLATION[_RANGE]`/`FORWARD_ROTATION`/`BOUNCE_SEQUENCE` | 3,807 | **Ballistic debris** thrown by a kill. |
+| `SCALE` only | 114 | A scale ramp (`ballflare`, the explosion flare, 65→75 over 1.75 s). |
+
+**The split is exactly the reachability boundary.** All 590 `ON_STARTUP` uses are
+rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, which needs weapons this project
+does not have. So the rotation half is implemented (`AnimRuntime.SpinMotion`) and the other two
+stay counted — confirmed at runtime, where **no chapter reports a single `ObjectMotion(ballistic)`
+dispatch** and the whole residual is one `ballflare` scale ramp per chapter.
+
+What the reachable spins are: 576 of 590 are zeppelin nacelle propellers — `spin` at −40°/s and
+`counterspin` at +30°/s about local Z, counter-rotating — plus rotating signage (`ammosign`,
+`jsign` at 24°/s about Y) and a few `prop`/`rotor` pairs. The companion `propoff` sequence
+deactivates the static `propstill` disc and activates the `spin`/`counterspin` blur meshes: the
+same static-disc-vs-blur-layer split `PlaneBuilder` already does for the player's own aircraft.
+
+**Units diverge between the front-ends, as usual.** The reader writes one flat six-number list
+in **degrees/second**, `XYZ_ROTATION [0, 0, -40, 0, 0, 0]` = initial triple then delta triple;
+the compiled form nests it as `{initial:{x,y,z}, delta:{x,y,z}}` in **radians/second**
+(−0.6981317 = −40°). Converted once in `AnimDefs.Spin`, the same way `PLAYER_RANGE` (m vs m²)
+and `ANIMATION_LOD` (`HIGH` vs `2`) are.
+
+**`initial` is a rate, not a pose** — the question worth settling, since `delta` is zero in 589
+of the 590 reachable events, which would make them all *static* under a pose reading. The
+autogyro's destruction tumble writes `XYZ_ROTATION [55, 20, -175, 0, 0, 0]` on a wreck falling
+under `GRAVITY [COMPLEX, DO_INTERSECTIONS]`; a falling wreck with a fixed pose is not a thing,
+and the sequences are named `spin_rotor`. Verified in flight: the rendered prop advances
+−40.5°/−81.0° at 1 s/2 s, i.e. exactly the authored −40°/s.
+
+**`delta` is NOT decoded and is deliberately not guessed.** It reads as acceleration on a blown
+chassis (`+15°/s` added to a 30°/s spin), as a *decelerating* ramp on `chuteman_sway`
+(initial `(-10,0,10)`, delta `(+10,0,-10)`, `RUN_TIME` 2 — a parachutist swaying back), and
+could equally be a random spread, which this data uses elsewhere. Nothing reachable needs it, so
+it is counted as `ObjectMotion(rotation delta)` and reported — the same call `Object3DRotate`'s
+ambiguous angle unit got in `interp.md`.
 
 ### Transform channels are absolute, and rotations are radians
 
@@ -149,12 +193,13 @@ holds, so restarting would freeze the 2 s door at its first frame for as long as
 No `RESET_STATE` in either source contains control flow (verified across the install), so the
 instantaneous base-state pass never has to interpret a branch.
 
-Playback ops seen and deferred: `OBJECT_MOTION` (continuous spin), `OBJECT_DELETE_CHILD`,
+Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
 `SOUND` (the one-shot form — see below), `OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`,
 `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`, `FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
 (`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
-three-event triple".)
+three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 — see "OBJECT_MOTION is
+two ops in one" — leaving only its ballistic and scale halves, both unreachable.)
 
 `CALL_ANIMATION` dispatched from the start but **ignored its target node** until 2026-07-21 —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing

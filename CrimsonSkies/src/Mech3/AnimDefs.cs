@@ -176,6 +176,22 @@ public static class AnimDefs
                 AddFromTo(data, fields, "rotate", "ROTATE_FROM", "ROTATE_TO");
                 AddFromTo(data, fields, "scale", "SCALE_FROM", "SCALE_TO");
                 break;
+            case "ObjectMotion":
+                // The reader writes one flat six-number XYZ_ROTATION in DEGREES per second
+                // ([0,0,-40,0,0,0] = the zeppelin prop's -40°/s about local Z); the compiled
+                // form splits it into {initial,delta} sub-objects in RADIANS. Same
+                // reader↔compiled unit divergence as PLAYER_RANGE (m vs m²) and ANIMATION_LOD
+                // (HIGH vs 2) — converted once, here, so handlers never see two conventions.
+                // Measured inert today: removing this case leaves every chapter's live-motion
+                // count identical, because every reachable OBJECT_MOTION is compiled. It is
+                // kept because a reader-only def silently carrying none of its own fields is
+                // exactly how PUFFER_STATE killed the C1 waterfall and SOUND_NODE would have
+                // muted every emitter — a missing case here fails silently, never loudly.
+                if (Spin(fields, "XYZ_ROTATION") is { } spin)
+                    data["xyz_rotation"] = spin;
+                if (Num(fields, "RUN_TIME") is { } motionRun)
+                    data["run_time"] = motionRun;
+                break;
             case "PufferState":
                 AddPufferState(data, fields);
                 break;
@@ -474,6 +490,30 @@ public static class AnimDefs
             return null;
         return new Dictionary<string, object?>(StringComparer.Ordinal)
             { ["x"] = x, ["y"] = y, ["z"] = z };
+    }
+
+    // OBJECT_MOTION's XYZ_ROTATION: six numbers, [initial xyz, delta xyz], degrees/second in
+    // the reader against radians/second compiled. Rebuilt into the compiled form's nested
+    // {initial:{x,y,z}, delta:{x,y,z}} so AnimRuntime reads one shape from both front-ends.
+    private static Dictionary<string, object?>? Spin(
+        Dictionary<string, List<object?>?> fields, string key)
+    {
+        if (!fields.TryGetValue(key, out var v) || v is not { Count: >= 6 })
+            return null;
+        var n = new float[6];
+        for (int i = 0; i < 6; i++)
+        {
+            if (AnimData.AsNum(v[i]) is not { } f)
+                return null;
+            n[i] = Mathf.DegToRad(f);
+        }
+        return new Dictionary<string, object?>(StringComparer.Ordinal)
+        {
+            ["initial"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                { ["x"] = n[0], ["y"] = n[1], ["z"] = n[2] },
+            ["delta"] = new Dictionary<string, object?>(StringComparer.Ordinal)
+                { ["x"] = n[3], ["y"] = n[4], ["z"] = n[5] },
+        };
     }
 
     /// <summary>SNAKE_CASE → PascalCase, the reader↔compiled vocabulary bridge.</summary>

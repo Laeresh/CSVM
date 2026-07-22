@@ -398,6 +398,59 @@ public sealed partial class AnimRuntime : Node
                 return true;
             }
 
+            case "ObjectMotion":
+            {
+                // OBJECT_MOTION is the original's rigid-body descriptor, and it spans two very
+                // different jobs. Rotation-only events are steady spins — zeppelin nacelle
+                // props (`spin`/`counterspin`, ∓40°/30°/s counter-rotating) and rotating
+                // signage — and every one of the 590 OnStartup events install-wide is exactly
+                // that shape. The rest pair rotation with GRAVITY/TRANSLATION/BOUNCE_SEQUENCE:
+                // ballistic debris thrown by a kill, reachable only from OnCall/WeaponHit,
+                // which this project has no weapons to fire. So the spin lands and the
+                // ballistic half stays counted rather than half-simulated.
+                bool ballistic = ev.Data.Has("gravity") || ev.Data.Has("translation")
+                                 || ev.Data.Has("translation_range") || ev.Data.Has("bounce_sequence")
+                                 || ev.Data.Has("forward_rotation");
+                if (ev.Data.Obj("xyz_rotation") is not { } spin)
+                {
+                    Count(ballistic ? "ObjectMotion(ballistic)" : ev.Kind);
+                    return true;
+                }
+                if (ballistic)
+                    Count("ObjectMotion(ballistic part)");
+
+                var rate = spin.Vec3("initial");
+                // `delta` is a second rate triple whose meaning the data does not settle: it
+                // reads as acceleration on a blown-up chassis and as a decelerating ramp on
+                // `chuteman_sway`, and could equally be a random spread. 589 of the 590
+                // reachable events leave it zero, so it is reported, not guessed — the same
+                // call Object3DRotate's ambiguous angle unit got in MissionSetup.
+                if (!spin.Vec3("delta").IsZeroApprox())
+                    Count("ObjectMotion(rotation delta)");
+                if (rate.IsZeroApprox())
+                    return true;
+
+                float spinFor = ev.Data.Num("run_time") ?? 0f;
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    // Re-assertion is idempotent. These sit inside `Loop{-1}` sequences, so an
+                    // already-turning prop would otherwise be rebuilt every frame — each rebuild
+                    // re-reading rest from the current pose and restarting the clock at 0, which
+                    // advances one frame's worth of angle and then throws it away. The prop would
+                    // sit almost still while looking, in the logs, perfectly driven.
+                    if (_motions.Any(m => m.Target == t && m is SpinMotion s && s.Matches(rate, spinFor)))
+                        continue;
+                    var motion = new SpinMotion(t, rate, spinFor);
+                    if (instant)
+                        motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
+                    else
+                        AddMotion(motion);
+                    _opsApplied++;
+                }
+                duration = instant ? 0f : spinFor;
+                return true;
+            }
+
             case "ObjectMotionSiScript":
             {
                 int slot = (int)(ev.Data.Num("index") ?? 0f);
@@ -1149,10 +1202,15 @@ public sealed partial class AnimRuntime : Node
             var t = m.Target;
             var name = t.HasMeta(NameMeta) ? t.GetMeta(NameMeta).AsString() : t.Name.ToString();
             var p = t.GlobalPosition;
+            // Rotation as well as position: a spin (OBJECT_MOTION) turns a prop in place, so a
+            // position-only line is identical every second whether or not it is actually
+            // running. The euler triple is what makes that verifiable headlessly.
+            var r = t.Transform.Basis.GetEuler() * (180f / Mathf.Pi);
             // Visibility matters as much as position here: a correctly-animated node inside a
             // subtree the mission deactivated moves perfectly and renders nothing.
             bool shown = t.IsVisibleInTree();
-            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
+            GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) "
+                     + $"rot ({r.X:0.0}, {r.Y:0.0}, {r.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
         }
         if (_motions.Count > 12)
             GD.Print($"anim/debug: … and {_motions.Count - 12} more");
@@ -1242,6 +1300,56 @@ public sealed partial class AnimRuntime : Node
     /// A missing FROM means "from the rest pose" (absolute channels) or "from no offset"
     /// (delta channels).
     /// </summary>
+    /// <summary>A steady spin about the node's own axes at a fixed rate (OBJECT_MOTION's
+    /// XYZ_ROTATION), which is what turns the zeppelin nacelle props and the rotating signs.
+    /// Endless unless the event gave a RUN_TIME — 580 of the 590 reachable spins are endless,
+    /// so `Finished` staying false forever is the normal case, not a leak. Rotation is applied
+    /// about the LOCAL axes like every other prop in this project (PropAnimator does the same
+    /// for the player's aircraft), and accumulated from a stored rest pose rather than
+    /// integrated per frame so a long session cannot drift.</summary>
+    private sealed class SpinMotion : IAnimMotion
+    {
+        public Node3D Target { get; }
+        private readonly Basis _rest;
+        private readonly Vector3 _rate; // radians/second, local axes
+        private readonly float _runTime; // 0 = endless
+        private float _t;
+
+        public SpinMotion(Node3D target, Vector3 rate, float runTime)
+        {
+            Target = target;
+            _rest = target.Transform.Basis;
+            _rate = rate;
+            _runTime = runTime;
+            Seek(0f);
+        }
+
+        public bool Finished => _runTime > 0f && _t >= _runTime;
+
+        /// <summary>Whether an incoming registration is this same spin, so a looping sequence
+        /// re-asserting it can be left alone instead of restarted.</summary>
+        public bool Matches(Vector3 rate, float runTime) =>
+            _rate.IsEqualApprox(rate) && Mathf.IsEqualApprox(_runTime, runTime);
+
+        public void Tick(float dt) => Seek(_t + dt);
+
+        public void Seek(float t)
+        {
+            _t = _runTime > 0f ? Mathf.Min(t, _runTime) : t;
+            var a = _rate * _t;
+            // Applied X→Y→Z about the local axes. Order is only observable when two axes spin
+            // at once, which nothing reachable in this install does (every reached event is
+            // single-axis); recheck this if a multi-axis spin ever turns up looking wrong.
+            var b = _rest;
+            if (a.X != 0f) b = b.Rotated(b.X.Normalized(), a.X);
+            if (a.Y != 0f) b = b.Rotated(b.Y.Normalized(), a.Y);
+            if (a.Z != 0f) b = b.Rotated(b.Z.Normalized(), a.Z);
+            var xf = Target.Transform;
+            xf.Basis = b;
+            Target.Transform = xf;
+        }
+    }
+
     private sealed class FromToMotion : IAnimMotion
     {
         public Node3D Target { get; private init; } = null!;

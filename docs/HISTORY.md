@@ -1621,3 +1621,60 @@ session — the same status `NODE_UNDERCOVER` carries.
 **Open:** nobody has *listened* to this yet. Mix levels, the RANGE→`UnitSize`/`MaxDistance` curve,
 and whether splitscreen's per-pane cameras each act as an audio listener (Godot's default when no
 `AudioListener3D` exists) all need a user A/B — the last one is the only structural unknown.
+
+## 2026-07-22 — `OBJECT_MOTION`: the world's propellers turn (plan item 2, continued)
+
+`docs/PLAN-anim-rendering-followups.md` item 2's largest remaining kind. The zeppelin nacelle
+propellers now spin — counter-rotating pairs at the authored ∓40°/+30°/s — as does the rotating
+signage. New `AnimRuntime.SpinMotion`; decode in `docs/formats/anim-definitions.md`.
+
+**The survey set the scope before any code was written, and it cut the kind in half.**
+`OBJECT_MOTION` is the original's rigid-body descriptor and its 7,442 uses do two unrelated jobs:
+3,521 are rotation-only (a steady spin), 3,807 pair rotation with `GRAVITY`/`TRANSLATION`/
+`BOUNCE_SEQUENCE` (ballistic debris from a kill), 114 are a scale ramp. **That split is exactly
+the reachability boundary** — all 590 `ON_STARTUP` uses are rotation-only, and every ballistic use
+is `ON_CALL`/`WEAPON_HIT`, which needs weapons this project does not have. So the spin landed and
+the other two stay counted rather than half-simulated. The runtime confirms the survey was right:
+across all 8 chapters **not one `ObjectMotion(ballistic)` dispatch occurs**, and the entire
+residual is a single `ballflare` explosion-flare scale ramp per chapter.
+
+**The decode question that mattered was whether `initial` is a rate or a pose**, since `delta` is
+zero in 589 of the 590 reachable events — under a pose reading every one of them would be static.
+The reader form settled it: the autogyro's destruction tumble writes `XYZ_ROTATION [55,20,-175,
+0,0,0]` on a wreck falling under `GRAVITY [COMPLEX, DO_INTERSECTIONS]`, and a falling wreck with a
+fixed pose is not a thing. Units diverge between front-ends as usual — reader degrees/s against
+compiled radians/s (`[0,0,-40,…]` ↔ `-0.6981317`), converted once in `AnimDefs.Spin`, the same
+way `PLAYER_RANGE` (m vs m²) and `ANIMATION_LOD` (`HIGH` vs `2`) are.
+
+**`delta` is deliberately NOT decoded.** It reads as acceleration on a blown chassis, as a
+*decelerating* ramp on `chuteman_sway` (initial `(-10,0,10)`, delta `(+10,0,-10)`, `RUN_TIME` 2),
+and could equally be a random spread. Nothing reachable needs it, so it is counted and reported —
+the same call `Object3DRotate`'s ambiguous angle unit got.
+
+**Verified.** `ObjectMotion` drops from 73/97/96/97/96/97/170/220 per chapter to ×1, and live
+motions rise by exactly the number of state ops gained: C1 17→41 (+24 ops), C4 **0→25** (+25),
+C5 15→43 (+28) — C4 had no live motion at all before this. Rates are exact in flight: the rendered
+prop reads −40.5°/−81.0° at 1 s/2 s and its counter-rotating partner +30.4°/+60.8°, i.e. the
+authored ∓40°/+30°/s. **The decisive shot is a two-frame A/B 0.5 s apart on a C1/MP3 nacelle:
+66,279 px change (7.19%, bbox tight on the prop) where the pre-change build at the identical
+camera changes exactly 0** — so the motion is the spin and nothing else in frame. Static plane
+viewer **byte-identical** (md5); 8 chapters zero errors; full mode battery (fly/stunt/viewer/
+damage/4P race/menu/static-C4) clean; `--perf` holds the 60 fps vsync cap on both C1 and C5.
+
+**Host visibility gates this the same way it gates the ambient sounds**, and it is why the win is
+smaller than the counts suggest: C4's 25 spins are all on deactivated zeppelins (`HIDDEN` in the
+pose log). C1/MP3 — the two-zeppelin multiplayer map — is where 15 of them are actually on screen.
+
+**`--debug-anim`'s motion line now prints rotation as well as position.** A spin turns in place,
+so the position-only line was identical every second whether or not it was running; this feature
+was not headlessly verifiable without it.
+
+**The `AnimDefs` reader normalizer is measurably inert and kept anyway** — removing it leaves every
+chapter's live-motion count unchanged, because every reachable `OBJECT_MOTION` is compiled. It is
+in because a reader-only def silently carrying none of its own fields is precisely how
+`PUFFER_STATE` killed the C1 waterfall and how `SOUND_NODE` would have muted every emitter: a
+missing case there fails silently, never loudly. Recorded as inert in the code comment so nobody
+reads it as load-bearing.
+
+**Remaining for item 2:** `ObjectOpacityState` (58 on C1), `Callback` (×8 every chapter),
+`ObjectCycleTexture` (×1–2), and the one-shot `Sound`.
