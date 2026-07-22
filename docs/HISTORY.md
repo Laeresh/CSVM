@@ -2011,3 +2011,46 @@ not verify it. When archiving a plan, check the checklist for surviving `☐`/`�
 archived plan whose banner and checklist disagree is worse than an un-archived one, because the
 banner discourages reading far enough to find the disagreement. A repo-wide sweep for unchecked
 items across `docs/plans/` now returns zero.
+
+## 2026-07-22 — Open-source licensing: GPL-3.0-or-later, CC BY 4.0 for the format docs
+
+The repo had no `LICENSE` and no root `README.md` — for a project whose whole legal posture is
+"public open-source under the XWVM model", both were load-bearing gaps.
+
+**The binding constraint, checked first:** upstream mech3ax is **EUPL-1.2**, a copyleft licence.
+The fork must stay EUPL — not a choice. But the engine is legally independent of it:
+`CrimsonSkies.csproj` has zero `PackageReference`s, no Mech3DotNet, no `using Mech3`; it reads
+extraction *output* (JSON/zip) at runtime, and a tool's output is not a derivative of the tool.
+So the repo licence was a free choice, not an inherited one.
+
+**Chosen: GPL-3.0-or-later** for code. Three reasons, in weight order: (1) it is the
+reimplementation-genre convention — OpenMW, OpenRA, ScummVM, OpenRCT2, OpenTTD — so contributor
+expectations match and code can flow between those projects; (2) the EUPL-1.2 Appendix explicitly
+lists GPL-2.0/3.0 and AGPL-3.0 as compatible, so if fork code is ever vendored into the engine the
+combination is distributable under GPL-3.0 — **MIT would have foreclosed that permanently**, since
+EUPL code cannot be relicensed permissively; (3) the durable value here is reverse-engineering
+knowledge, and copyleft keeps derivatives open rather than letting someone ship a closed build.
+
+**`docs/formats/` split out under CC BY 4.0.** The 17 format pages are the most reusable output of
+this project, and formats are facts. Permissive docs can be picked up by projects that cannot touch
+GPL code — including upstream mech3ax itself, or a future CS tool by someone else. The split is
+stated in both `README.md` and `docs/formats/README.md` so it is unambiguous where it applies.
+
+Licence texts were **downloaded verbatim** from gnu.org and creativecommons.org rather than typed —
+a hand-transcribed licence is a mangled licence. Both were verified head and tail after download
+(35,149 B / 18,657 B, genuine text, not error pages).
+
+Also created the root `README.md` (there was none): status, getting started, format-docs pointer,
+the **not-affiliated-with-Microsoft / no-assets-distributed** disclaimer, the licence section, and
+the AI-assistance disclosure the standing rule requires of outward-facing text.
+
+**Public home set the same day:** <https://github.com/Laeresh/CSVM> (`origin`, already tracking
+`main`). That closed the one gap the licence work left open — CC BY requires an attribution target,
+and until the repo had a public URL there was nothing to name. Both `README.md` and
+`docs/formats/README.md` now attribute to **CSVM** with that link, and the root README is titled
+for the repo name rather than a generic description.
+
+**The transferable point:** the licence is not what protects this project legally. The IP exposure
+is Microsoft's copyright and trademarks, and that is handled by the XWVM model — no assets in the
+repo, runtime read of the player's own install, explicit disclaimer. The licence governs what
+*downstream users* may do with the code, which is a separate question that copyleft answers well.

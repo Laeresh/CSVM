@@ -80,3 +80,11 @@ round-trip status: [extraction.md](extraction.md).
 `ExtractRof.ps1` (repo root) covers the non-ZBD half of the install: the `.rof` UI resource
 archives and the `langui.dll` string table, into `extracted\rof\`. These are decoded by this
 project rather than by mech3ax — see [rof.md](rof.md) and [strings.md](strings.md).
+
+## License
+
+This directory is licensed under **Creative Commons Attribution 4.0 International**
+([LICENSE](LICENSE)) — deliberately more permissive than the GPL-3.0-or-later covering the
+rest of the repository, so these findings can be reused by any project whatever its own
+license. Attribute to **CSVM** (<https://github.com/Laeresh/CSVM>). The rest of the repository,
+including the code that reads these formats, remains GPL-3.0-or-later.
