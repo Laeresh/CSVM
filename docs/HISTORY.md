@@ -2369,3 +2369,72 @@ followed, both of which cost a re-run:
   the baseline") arriving through a new door: the baseline was not merely stale, it was *someone
   else's working tree*. Confirm what the baseline build actually contains before comparing.
 
+## 2026-07-22 — Polish-3 item 9: the 1e29 zeppelin transforms were an unread `spline_interp` flag
+
+**Symptom.** C1/M04 logged `sound: 'snd_zepengine' silenced — its host node's world pose is
+degenerate ((-962.483, 3.81e28, 4.58e29))`, and `--debug-anim` showed `counterspin` sitting at
+`(4610951000000000000000000000, -5.87e28, -3.57e29)`. Known since the ambient-sound work and
+carried in `backlog.md` as a pre-existing defect.
+
+**What the plan predicted, and why it was wrong.** Item 9 diagnosed `ScriptPlayback.Seek` as the
+only non-rest-based transform writer: it read the *live* basis, so a frame carrying `scale` but no
+`rotate` multiplied its factor into an already-scaled basis every frame. The supporting numbers
+were excellent — 207 such frames across 12 scripts, 143 of them the C1 gasbags, `lkgasbag02`
+carrying `scale.base.x = 1.52`, and 1.52^150 ≈ 1e27 landing squarely on the reported magnitude.
+The plan also flagged, honestly, that it could not show this firing at bootstrap on M04. **That
+gap was the whole story.**
+
+**What it actually was.** `SiScript.SplineInterp` was parsed and then **read by nothing** — dead
+since the SI-script reader landed. On the **15 of 1,090** scripts that set `spline_interp: false`,
+the per-axis coefficient blocks are *uninitialised memory*, and we evaluated them as cubics
+anyway. C1/M04's `piratezep.zan` decodes a scale channel whose constant terms are
+`(0.0, 4.259e27, 4.611e27)`: a **singular** basis — one zero axis, two astronomical — inherited by
+every descendant along `piratezep → move_zeppelin → tilt_zeppelin → rock_zeppelin → gasbagN →
+engineN → spin`. That is the whole blowup, present in the very first `Seek(0)`, with no
+accumulation involved.
+
+**How it was pinned.** Not by magnitude but by an **exact value**: the script's scale constant is
+`4.6109513952913965e27` and the logged `counterspin` world X was `4610951000000000000000000000` —
+bit-identical. Before that, the first instrumentation attempt threw `ArithmeticException` out of
+`Basis.get_Scale()`, and the stack trace was worth more than the log line it failed to print: it
+placed the corruption inside `ScriptPlayback`'s **constructor during bootstrap**, which rules out
+per-frame compounding outright. The plan's 12 flagged scripts turn out to all be among the 15 —
+the file-level evidence agreed while the mechanism did not.
+
+**The decode.** Both non-spline rules were verified against the next frame's `base` across the
+whole non-spline set: translate/scale is `base + delta·dt` (worst relative error **1.8e-4**,
+float32 rounding), rotate is `exp(delta·dt) ⊗ base` (worst angular error **0.022°** over all 576
+rotate frame pairs, versus **21.6°** if `delta` is ignored and the base merely held). So `delta` is
+a per-second rate in both, and a non-spline frame is *exactly the degenerate cubic*
+`(base, delta, 0, 0)` — which is how it is implemented, resolved at parse time so `At(dt)` stays
+branch-free and the 1,075 spline scripts take a bit-identical path. Documented in
+`docs/formats/anim-definitions.md`, which previously recorded `pfighter11.zan`'s "uninitialized
+spline memory" as a one-off; it is one of the 15.
+
+**The plan's own fix still landed, with one correction.** `ScriptPlayback` really could compound,
+and that is fixed independently. But the prescribed shape — "store a rest like every sibling
+runner does" — would have regressed `piratezep`, which sets its orientation once in frame 0 and
+then ships 47 translate-only frames: **an absent channel means "hold the last value this script
+wrote", not "return to rest"**. The landed form keeps `_rot` (orthonormal), `_scale` and `_origin`
+as three separate running components seeded from `RestOf(target)`, making `Seek(t)` a pure
+function of `t` while preserving hold semantics.
+
+**`SpinMotion` logged, not fixed.** Its `_rest` is captured from the live pose and the idempotence
+guard matches only identical `(rate, runTime)`, so `zeppelin_rocksleft`'s five differing events
+drift. Bounded (orthonormal), so it was never a blowup candidate. Both candidate fixes risk a
+visible regression to cure an invisible one — seeding from `RestOf` would discard the deliberate
+pre-spin pose that C1/M05's `random_prop` sets on all 590 spins, and inheriting the previous
+motion's rest assumes an oscillation where a chained eased rock is equally plausible. Needs the
+original game; entry in `backlog.md`.
+
+**Verification.** Symptom reproduced on the unchanged build first, then cleared: C1/M04 goes from
+1 degenerate-pose line to **0**, `snd_zepengine`'s host `spin` reports a finite
+`(-5374, 1521, -1765)` and **plays**, and the pirate zeppelin now actually flies its authored
+intro path at ~1500 m instead of departing the float range. Full 8-chapter `--debug-anim`
+regression, base build vs fixed build: **every count identical** (gamez nodes, mesh instances,
+defs, SI scripts, anchored, state ops, unresolved, ON_STARTUP, live instances, live motions), zero
+real errors, zero degenerate lines. Renders byte-identical on 5 of 8 chapters; C1C/C2B/C4 differ by
+5.3%/7.5%/6.6% of pixels, which is **inside their own same-build noise floor** (measured
+5.0%/6.8%/7.6% — C4's base-vs-fixed delta is *lower* than its floor), i.e. the documented
+precipitation non-determinism in `docs/verification.md` §7 and not this change. Files:
+`CSVM/src/Mech3/CompiledAnim.cs`, `CSVM/src/Mech3/AnimRuntime.cs`.

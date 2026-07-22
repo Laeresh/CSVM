@@ -649,11 +649,39 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   every consecutive rotate-frame pair of the install: 53,515/60,411 pairs close the next
   frame's base to <1e-5 under L-exp (57,675 <1e-3); no competing hypothesis comes close.
   Residuals are compiler fit error on fast rotations (the M01/M02 ladder-climb scripts,
-  ~1° over 60 ms frames) plus one script with **uninitialized spline memory**
+  ~1° over 60 ms frames) plus scripts with **uninitialized spline memory**
   (`pfighter11.zan`, C1/M04 — coefficients like 1.7e+27; its base quaternions still march
   smoothly, so bases are authoritative and splines only interpolate within a frame — and
   the reason spline blocks must stay raw bytes for round-trip, which is also upstream's
   own MW/PM choice). Scale block: translate's shape (rare — 477 frames set scale).
+- **`spline_interp: false` means the spline blocks are GARBAGE, not merely unused
+  (2026-07-22).** The uninitialized-memory quirk above is not a one-off: `pfighter11.zan`
+  is simply one of the **15** `spline_interp: false` scripts, and *every* one of them
+  carries junk in its coefficient blocks — leftover pointers, frame times, whatever the
+  compiler's stack held. `piratezep.zan` (C1/M04) is the worst: its scale block's constant
+  terms are `(0.0, 4.259e27, 4.611e27)`, i.e. a **singular** basis with one zero axis and
+  two astronomical ones. Reading those bytes is not a slightly-wrong interpolation, it is a
+  destroyed transform, and it propagates to every descendant's world pose.
+  **A reader must branch on the flag**, and the non-spline form is plain linear motion from
+  the fields that *are* initialised:
+
+  | channel | `spline_interp: true` | `spline_interp: false` |
+  |---|---|---|
+  | translate / scale | cubic, constant term = `base` | `base + delta·dt` |
+  | rotate | `exp(cubic(dt)) ⊗ base`, constant term 0 | `exp(delta·dt) ⊗ base` |
+
+  Both rules were verified against the next frame's `base` over the whole non-spline set:
+  translate/scale worst relative error **1.8e-4** (float32 rounding), rotate worst angular
+  error **0.022°** over all 576 rotate frame pairs — versus **21.6°** if `delta` is ignored
+  and the base simply held. So `delta` is a per-second rate in both, and the non-spline
+  frame is *exactly the degenerate cubic* `(base, delta, 0, 0)` — which is how CSVM
+  implements it, keeping one branch-free evaluator (`SiVectorChannel.Parse`).
+
+  **The 15 are all one content family**, which is why this hid so long: the C1 `hkzep`
+  zeppelin set (`hk_zep`, `lkgasbag01`–`05`, `lkztailgasbag`, `noserotate`, `zfronthalf`,
+  `zbackhalf`), C1/M04's intro `piratezep` + `piratefighter`, and three C4 hookup cameras
+  (`bhmhookup_cam1`/`cam2`, `cghookupcam1`). Nothing else in the install sets the flag
+  false, so seven of eight chapters are completely unaffected by getting it wrong.
 - **Validation state:** the fork's semantic decode round-trips **all 61 archives
   byte-identically** with every one of the install's **1090 scripts frame-decoded**
   (76,845 frames) — since item 6 also through the real CLI zip pipeline (test.py

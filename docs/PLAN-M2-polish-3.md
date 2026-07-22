@@ -33,6 +33,9 @@ instruments that mislead.
 8. ☑ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops **(done 2026-07-22 — survey re-confirmed 26 events / 25 defs, all ground-vehicle routes; C1/C2/C3 traffic now loops at exactly its authored route period, no runaway; 8-chapter regression identical. One plan claim corrected: the `zrdr` scope has 703 `Loop` events, not zero — but none with `LOOP_COUNT 0`. `docs/HISTORY.md`)**
 9. ☐ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms
 10. ☑ Tail collision boxes swallow the outboard wings **(done 2026-07-22 — 9 boxes relabelled across 5 aircraft, every `*_rudder*` in the fleet untouched; scripted A/B turns one wingtip graze from `(tail→tail)` into `(wing→rightwing)` at identical vn/damage, `docs/HISTORY.md`)**
+8. ☐ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops
+9. ☑ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms **(done 2026-07-22 — the compounding was real and is fixed, but the 1e29 cause was something else: the unread `spline_interp` flag. See the item's closing note and `docs/HISTORY.md`)**
+10. ☐ Tail collision boxes swallow the outboard wings
 
 **Dependency notes.** Item 1 is an enabler — landing it first lets a second session in a
 worktree verify its own work, which every other item needs. Items 5 and 6 both rewrite parts
@@ -679,6 +682,33 @@ degenerate` line (that message is the current symptom, `WorldSounds`), and `gasb
 origin stays finite. 8-chapter `--debug-anim` regression for pose sanity. If the runtime step
 shows the blowup persists, **say so and keep the backlog entry open** rather than declaring it
 fixed on the strength of the static finding.
+
+### Outcome (2026-07-22) — the honest gap was the whole story
+
+The "honest gap" flagged above was the real signal, and the runtime step it prescribed is what
+found the bug. Both halves are recorded because the near-miss is instructive:
+
+- **The static diagnosis was wrong about the mechanism, right about the files.** `ScriptPlayback`
+  really did compound scale, and that is fixed — but it never produced the 1e29. The cause was
+  **`SiScript.SplineInterp`, parsed since the SI-script reader landed and read by nothing.** The
+  15 scripts that set `spline_interp: false` carry *uninitialised memory* in their coefficient
+  blocks, and we evaluated it. C1/M04's `piratezep.zan` decodes a scale constant term of
+  `(0.0, 4.259e27, 4.611e27)`: a singular basis, inherited by the whole
+  `piratezep → … → rock_zeppelin → gasbagN → engineN → spin` chain. **12 of the plan's 12 flagged
+  scripts are among those 15**, which is why the file-level evidence looked so convincing.
+- **What settled it was an exact value, not a magnitude.** The 1.52^150 ≈ 1e27 arithmetic fits the
+  observation and is a coincidence; the spline constant `4.6109513952913965e27` is *bit-identical*
+  to the blown-up node's reported world X. Logged as a transferable rule in `docs/verification.md`.
+- **The instrument's crash was the evidence.** The first probe threw out of `Basis.get_Scale()`,
+  proving the corruption already existed inside `ScriptPlayback`'s **constructor during
+  bootstrap** — which rules out per-frame accumulation outright.
+- **The prescribed fix shape needed one correction.** "Store a rest like every sibling runner
+  does" would regress `piratezep`, which sets its orientation in frame 0 and then ships 47
+  translate-only frames: an absent channel means "hold the last value written", not "return to
+  rest". The landed form keeps rotation, scale and origin as three separate running components
+  seeded from the rest pose, which is non-compounding *and* preserves hold semantics.
+- **`SpinMotion` was logged, not fixed** — see `backlog.md` for why both candidate fixes risk a
+  visible regression to cure an invisible one.
 
 ---
 

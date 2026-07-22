@@ -302,6 +302,12 @@ public sealed class SiScript
 {
     public string ScriptName = "";
     public string ObjectName = "";
+
+    /// <summary>False on 15 of the install's 1,090 scripts (the C1 `hkzep` zeppelin family,
+    /// C1/M04's intro pirate zeppelin + fighter, and three C4 hookup cameras). On those the
+    /// spline blocks are UNINITIALISED MEMORY and must never be evaluated; the frame is
+    /// `base + delta·dt` instead. Baked into the cubics at parse time — see
+    /// <see cref="SiVectorChannel.Parse"/>.</summary>
     public bool SplineInterp = true;
     public readonly List<SiFrame> Frames = new();
 
@@ -317,7 +323,7 @@ public sealed class SiScript
             SplineInterp = d.Bool("spline_interp", defaultValue: true),
         };
         foreach (var f in d.Objects("frames"))
-            script.Frames.Add(SiFrame.Parse(f));
+            script.Frames.Add(SiFrame.Parse(f, script.SplineInterp));
         return script;
     }
 
@@ -347,36 +353,45 @@ public sealed class SiFrame
     public SiRotateChannel? Rotate;
     public SiVectorChannel? Scale;
 
-    public static SiFrame Parse(AnimData d)
+    public static SiFrame Parse(AnimData d, bool spline)
     {
         var f = new SiFrame
         {
             StartTime = d.Num("start_time") ?? 0f,
             EndTime = d.Num("end_time") ?? 0f,
         };
-        if (d.Obj("translate") is { } tr) f.Translate = SiVectorChannel.Parse(tr);
-        if (d.Obj("rotate") is { } rot) f.Rotate = SiRotateChannel.Parse(rot);
-        if (d.Obj("scale") is { } sc) f.Scale = SiVectorChannel.Parse(sc);
+        if (d.Obj("translate") is { } tr) f.Translate = SiVectorChannel.Parse(tr, spline);
+        if (d.Obj("rotate") is { } rot) f.Rotate = SiRotateChannel.Parse(rot, spline);
+        if (d.Obj("scale") is { } sc) f.Scale = SiVectorChannel.Parse(sc, spline);
         return f;
     }
 }
 
 /// <summary>Translate/scale channel: absolute per-axis cubics whose constant term is the
-/// base component, so <c>Value(dt)</c> is the component itself.</summary>
+/// base component, so <c>Value(dt)</c> is the component itself. When the owning script is
+/// NOT spline-interpolated the spline blocks are uninitialised memory and must not be read —
+/// see <see cref="Parse"/>.</summary>
 public sealed class SiVectorChannel
 {
     public Vector3 Base;
     public Vector3 Delta;
     public SiCubic X, Y, Z;
 
-    public static SiVectorChannel Parse(AnimData d) => new()
+    /// <summary>A non-spline frame is exactly a degenerate cubic — <c>base + delta·dt</c> —
+    /// so the flag is resolved here and <see cref="At"/> stays branch-free.</summary>
+    public static SiVectorChannel Parse(AnimData d, bool spline)
     {
-        Base = d.Vec3("base"),
-        Delta = d.Vec3("delta"),
-        X = SiCubic.FromBase64(d.Str("spline_x")),
-        Y = SiCubic.FromBase64(d.Str("spline_y")),
-        Z = SiCubic.FromBase64(d.Str("spline_z")),
-    };
+        var b = d.Vec3("base");
+        var v = d.Vec3("delta");
+        return new SiVectorChannel
+        {
+            Base = b,
+            Delta = v,
+            X = spline ? SiCubic.FromBase64(d.Str("spline_x")) : new SiCubic(b.X, v.X, 0f, 0f),
+            Y = spline ? SiCubic.FromBase64(d.Str("spline_y")) : new SiCubic(b.Y, v.Y, 0f, 0f),
+            Z = spline ? SiCubic.FromBase64(d.Str("spline_z")) : new SiCubic(b.Z, v.Z, 0f, 0f),
+        };
+    }
 
     /// <summary>The vector at <paramref name="dt"/> seconds into the frame.</summary>
     public Vector3 At(float dt) => new(X.Eval(dt), Y.Eval(dt), Z.Eval(dt));
@@ -396,7 +411,7 @@ public sealed class SiRotateChannel
     public Vector3 Delta;
     public SiCubic X, Y, Z;
 
-    public static SiRotateChannel Parse(AnimData d)
+    public static SiRotateChannel Parse(AnimData d, bool spline)
     {
         var raw = d.Obj("base");
         // The shift: json (x,y,z,w) holds file (w,x,y,z).
@@ -410,13 +425,16 @@ public sealed class SiRotateChannel
             q = Quaternion.Identity;
         else
             q = q.Normalized();
+        // Non-spline: the half-angle vector is simply `delta·dt` (constant term 0, like every
+        // spline rotate cubic), so the same `exp(v) ⊗ base` composition serves both forms.
+        var delta = d.Vec3("delta");
         return new SiRotateChannel
         {
             Base = q,
-            Delta = d.Vec3("delta"),
-            X = SiCubic.FromBase64(d.Str("spline_x")),
-            Y = SiCubic.FromBase64(d.Str("spline_y")),
-            Z = SiCubic.FromBase64(d.Str("spline_z")),
+            Delta = delta,
+            X = spline ? SiCubic.FromBase64(d.Str("spline_x")) : new SiCubic(0f, delta.X, 0f, 0f),
+            Y = spline ? SiCubic.FromBase64(d.Str("spline_y")) : new SiCubic(0f, delta.Y, 0f, 0f),
+            Z = spline ? SiCubic.FromBase64(d.Str("spline_z")) : new SiCubic(0f, delta.Z, 0f, 0f),
         };
     }
 
