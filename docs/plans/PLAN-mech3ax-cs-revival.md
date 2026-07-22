@@ -95,7 +95,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 11. ☑ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG (done 2026-07-21, folded into section 10)
 12. ☑ Verify byte-identical round-trip against the real install (done 2026-07-21 — `test.py` `--- ALL OK ---`; **the 72-byte `planes.zbd` stretch goal is also fixed**, see section 10)
 13. ☑ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (done 2026-07-21, see section 13 — the Godot loaders read *either* shape, so the v0.6.1 rollback needs no code revert)
-14. ◐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication) — **preparation done 2026-07-21** (see section 14: two independent, individually-verified branches + PR bodies + a pre-PR discussion draft in `docs/plans/upstream-pr/`); **opening them is the user's step and has not happened — nothing is pushed**
+14. ☑ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication) — **preparation done 2026-07-21** (see section 14: two independent, individually-verified branches + PR bodies + a pre-PR discussion draft in `docs/plans/upstream-pr/`), then **resolved by decision 2026-07-22: CS support stays in the fork.** Upstream dropped CS for maintenance reasons, not architectural ones; the user closed the anim PR and the gamez PR was never opened. Both branches remain on `origin`. See `upstream-pr/README.md`.
 
 ---
 
@@ -849,7 +849,8 @@ gamez PR on it.
 (`origin`, via `GIT_SSH=plink` — the OpenSSH path fails because `~/.ssh/config` points GitHub
 at `~/.ssh/github`, which is an SSH2 *public* key; the working private key is `githubp.ppk` in
 Pageant). Issue [#3](https://github.com/TerranMechworks/mech3ax/issues/3) posted, and the
-AI-assistance disclosure follow-up posted to that thread. **The anim PR is open.** The gamez
+AI-assistance disclosure follow-up posted to that thread. **The anim PR is open** *(as of that
+date — the user closed it 2026-07-22, see below)*. The gamez
 PR is prepared and **deliberately held** pending upstream's answer on #3 — if the CS removal
 was architectural rather than bandwidth, it should not be opened at all.
 
@@ -860,3 +861,9 @@ commits already carried `Co-Authored-By: Claude`.
 
 **Remaining:** upstream's reply on #3, then either open the gamez PR or close the track and
 keep the fork; plus whatever review iteration the anim PR draws.
+
+**Resolved 2026-07-22 — the second branch of that sentence is what happened.** Upstream's answer
+(via conversation, not the thread) was that CS support was dropped because they could not maintain
+it — bandwidth, not architecture. The track was closed and the fork kept: the user closed the anim
+PR, the gamez PR was never opened, and both branches stay on `origin` as the fork's own history.
+Nothing is outstanding upstream. Fork maintenance now lives in `docs/tooling.md`.

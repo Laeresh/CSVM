@@ -1976,3 +1976,38 @@ directly and are reached through `tooling.md` — correct, but only a transitive
 apart from an orphan.
 
 No code change.
+
+## 2026-07-22 — The upstream anim PR was closed (the one thing the archive left open)
+
+The `docs/plans/upstream-pr/` archive was written stating explicitly that it *could not* settle
+what became of the anim PR: it had been opened before the fork decision, nothing recorded its
+fate, and the user owns upstream communication. **The user closed it after the decision.**
+Recorded now, which closes the last loose end of revival-plan item 14.
+
+Nothing of that package is outstanding upstream: the gamez PR was never opened, the anim PR is
+closed, and issue [#3](https://github.com/TerranMechworks/mech3ax/issues/3) stands as the
+discussion that settled it. Neither branch is withdrawn from the *fork* — `pr-cs-anim` and
+`pr-cs-gamez` both remain on `origin`, split by concern, and are what a future upstream attempt
+would reopen from.
+
+Writing it down surfaced three further contradictions in the archived revival plan, which is worth
+noting as a pattern: **the plan's completion banner and its own checklist disagreed.** The banner
+said "all 14 items", while item 14 was still marked `◐` and read "opening them is the user's step
+and has not happened — nothing is pushed" — false twice over by then. `docs/plans/PLAN-docs-cleanup.md`
+item 8 had called for marking it `☑ resolved by decision`, and that step was simply missed when the
+plan was archived. Section 14 also still asserted "**The anim PR is open**" in bold present tense,
+and closed on a "**Remaining:** upstream's reply … plus whatever review iteration the anim PR
+draws" that no longer described anything pending.
+
+Fixed by marking item 14 `☑` with the outcome, dating the present-tense assertion inline rather
+than rewriting the 2026-07-21 snapshot around it, and appending a "Resolved 2026-07-22" paragraph
+recording that the second branch of that Remaining sentence is what happened. Also repointed the
+archive's fork-maintenance reference from CLAUDE.md's removed "The mech3ax fork" section to
+`docs/tooling.md`, and flagged the intro's "nothing has been pushed or opened" as as-written
+2026-07-21, since the status table two paragraphs below it says the opposite.
+
+**The transferable lesson:** a `COMPLETE` banner is a claim about a checklist, and adding one does
+not verify it. When archiving a plan, check the checklist for surviving `☐`/`◐` markers — an
+archived plan whose banner and checklist disagree is worse than an un-archived one, because the
+banner discourages reading far enough to find the disagreement. A repo-wide sweep for unchecked
+items across `docs/plans/` now returns zero.

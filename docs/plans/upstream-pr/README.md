@@ -11,15 +11,18 @@
 > upstream commits merged *into* the fork if and when they appear. Upstream is dormant: its
 > latest commit is `cbb838f` (rc3, 2025-11-17), and `upstream/main` is currently **0 commits
 > ahead** of the fork's `main` (verified 2026-07-22). The live fork-maintenance procedure is in
-> CLAUDE.md under "The mech3ax fork".
+> [`docs/tooling.md`](../../tooling.md) under "The mech3ax fork".
 >
 > These files are **kept, not deleted**: `pr-1-anim.md` and `pr-2-gamez.md` remain the best
 > existing description of what each branch actually contains, which is what a future upstream
 > revival — or anyone reading the fork — would need.
 >
-> **One thing this archive does not settle:** the anim PR was *opened* before the decision (see
-> the status table below). What became of it afterwards is not recorded here, and is the user's
-> call, since they own all upstream communication.
+> **The anim PR was opened before the decision, and the user closed it after** (confirmed
+> 2026-07-22). So nothing of this package is outstanding upstream: the gamez PR was never opened,
+> the anim PR is closed, and issue [#3](https://github.com/TerranMechworks/mech3ax/issues/3)
+> stands as the discussion that settled it. Neither branch is withdrawn from the *fork* — both
+> `pr-cs-anim` and `pr-cs-gamez` remain on `origin`, split by concern, and are what a future
+> upstream attempt would reopen from.
 >
 > The AI-assistance disclosure rule below is **not** archived with this package — it is
 > project-wide and now lives in CLAUDE.md's top block.
@@ -27,7 +30,8 @@
 Prepared 2026-07-21. These are the **ready-to-open** upstream contributions for the work in
 `docs/plans/PLAN-mech3ax-cs-revival.md`. Per the project's division of labor (CLAUDE.md), the code
 here is prepared for the user, who owns all upstream/community communication — **nothing has
-been pushed or opened**.
+been pushed or opened**. *(As written 2026-07-21, before the branches were pushed and the anim PR
+opened; the status table below is the accurate record.)*
 
 Target: [TerranMechworks/mech3ax](https://github.com/TerranMechworks/mech3ax), base
 `0.7.0-rc3` (`cbb838f`). Fork remote: `git@github.com:Laeresh/mech3ax.git` (`origin`).
@@ -50,8 +54,8 @@ uncontroversial one without waiting on the discussion the other may need.
 |---|---|
 | Pre-PR question to upstream | **posted** — [#3](https://github.com/TerranMechworks/mech3ax/issues/3) |
 | AI-assistance disclosure on #3 | **posted** (the issue itself predated the rule) |
-| Anim PR (`pr-cs-anim`) | **opened** |
-| GameZ PR (`pr-cs-gamez`) | **prepared, deliberately held** pending upstream's answer on #3 |
+| Anim PR (`pr-cs-anim`) | **opened** — *and closed by the user 2026-07-22 after the fork decision* |
+| GameZ PR (`pr-cs-gamez`) | **prepared, deliberately held** pending upstream's answer on #3 — *never opened; superseded by the fork decision* |
 
 Both branches are pushed to the fork. Holding the gamez PR is the intended sequence, not an
 oversight: if upstream answers #3 with "architectural", that PR shouldn't be opened at all.
