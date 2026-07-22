@@ -539,6 +539,16 @@ scripted screenshot.
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
   real flight (the thresholds need states normal play actually reaches).
 - **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B a dive against the original.
+- **Knife-edge nose sag (polish-4 item 6, landed 2026-07-23)** — `KnifeNoseSag` **0.07 rad (≈4°)**,
+  the bound the nose settles to at full knife-edge, and `KnifeNoseRate` **0.2 rad/s**, how fast it
+  gets there. Both `FlightModel.cs`. Presence and direction are proven by scripted test; **magnitude
+  is not and cannot be** — it needs the original at the controls. Measured at the landed values:
+  nose −0° → **−4°**, settled path −6° → **−10°**, sink 11.8 → **19.4 m/s**, 398 → **634 m** lost in
+  35 s. Three things to judge in the cockpit: (1) does a −4° nose / −10° path / ~19 m/s sink feel
+  like the original's knife-edge; (2) **steep wings-level climbs are also affected** — a full-pull
+  zoom loses ~11° of apex — because `knife = 1 − |up·Y|` grows with pure pitch at zero bank, so if
+  that nose-heaviness feels wrong the fix is **gating on actual bank instead of `1−wingVert`**, a
+  code change rather than a retune; (3) stall-into-knife-edge recovery should not feel "doubled".
 - **Stunt mode** — `DzRadius` **15 m — user-tuned by hand 2026-07-22, and this is the current
   value** (an earlier "30 m, tightened from 60" note here was stale; the source is right).
   **Still wanted: a per-zone radius from the data, because one global constant does not fit** —

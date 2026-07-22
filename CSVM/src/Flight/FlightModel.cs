@@ -17,7 +17,9 @@ public struct FlightInput
 /// only when the plane is fast enough AND the wings carry vertically (lift ∝
 /// speed² × |up·Y|, so knife-edge flight is near-ballistic and a slow plane
 /// sinks), and the arcade handling is the flight path chasing the nose
-/// (alignment lag). Below stall speed the nose is additionally pulled toward
+/// (alignment lag). In a knife-edge the nose itself also sags to a bounded angle
+/// below the horizon, so the plane noses down as it sinks rather than descending
+/// wings-level-nosed. Below stall speed the nose is additionally pulled toward
 /// world-down and cannot be raised over the horizon. Thrust vs drag (quadratic
 /// + linear blend) gives the level-speed equilibrium at fd_speed. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
@@ -50,6 +52,25 @@ public sealed class FlightModel
     private const float KnifeAlignFloor = 0.35f;  // TUNE: fraction of the nose-chase that survives at 90°
                                                   // bank — the chase is the lift force turning the velocity,
                                                   // so it weakens with wing verticality (deeper knife-edge sag)
+    private const float KnifeNoseSag = 0.07f;     // TUNE: rad (≈4°) the NOSE settles below the horizon at full
+                                                  // knife-edge. This is a BOUND, not a rate, and it has to be:
+                                                  // the path chases the nose, so an unbounded nose-down term
+                                                  // (toward world-down, or weathervaning onto the path) has no
+                                                  // equilibrium at all — nose and path descend together at
+                                                  // (g/v)·K/(K+align) forever and the plane spirals in. Bounding
+                                                  // the nose bounds the path with it. The sag also carries into
+                                                  // the path roughly 1:1 for that same reason, so this value is
+                                                  // not free: 0.07 (4° nose) settles the path at exactly the
+                                                  // −10° `docs/HISTORY.md` records as the designed knife-edge
+                                                  // sink, where 0.14 (8° nose) took it to −13°.
+    private const float KnifeNoseRate = 0.2f;     // TUNE: rad/s toward that sag at full knife-edge, ×(1−wingVert)
+                                                  // — exactly 0 wings-level or inverted, so cruise is untouched by
+                                                  // construction. A RATE CAP, not an exponential approach: an
+                                                  // exponential's rate scales with the displacement, which at a
+                                                  // +62° stalled-zoom nose came out ~32°/s — rivalling the 33°/s
+                                                  // full elevator, and it measurably rewrote the stall recovery
+                                                  // (nose +62°→+28°, wv 0.47→0.88). Clamped to the remaining
+                                                  // angle so it approaches the sag and stops, never overshoots.
     private const float LowSpeedDragBlend = 0.35f;// TUNE: fraction of the drag that is linear in speed. A pure
                                                   // v² curve dies off so fast below cruise that a throttled-back
                                                   // plane barely decelerated (user report); the linear share
@@ -147,6 +168,54 @@ public sealed class FlightModel
                     float angle = Mathf.Asin(Mathf.Clamp(noseAfter.Y, -1f, 1f))
                                 - Mathf.Asin(Mathf.Clamp(capY, -1f, 1f));
                     Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
+                }
+            }
+        }
+
+        // knife-edge nose sag: with the wings vertical they carry nothing, and the nose
+        // falls as well as the flight path — the original drops it, we used to descend
+        // wings-level-nosed because BOTH knife-edge terms (liftFrac and the nose-chase)
+        // act on VelocityDir and nothing ever touched Attitude. Same great-circle
+        // rotation about nose×down as the stall drop, so it is attitude-independent and
+        // adds no twist about the nose; at 90° bank that axis is the plane's own up, i.e.
+        // this reads as the body YAW that top rudder is flown to cancel — which is exactly
+        // the real knife-edge control the pilot now has to hold.
+        //
+        // It targets a BOUNDED elevation rather than chasing world-down or the flight path.
+        // Both of those are unbounded and neither settles: the path chases the nose
+        // (`align`, below), so a nose that keeps falling drags the path down with it and
+        // the pair spirals into the ground instead of reaching the sag equilibrium.
+        //
+        // Sits here — after the stall block, before the translation — so `nose`, `wingVert`,
+        // the thrust direction and the nose-chase all read one consistent attitude this
+        // frame. It can only ever LOWER the nose (skipped once the nose is at or below the
+        // target), and it is **off entirely while stalled**: below stall speed the stall
+        // block owns the nose outright, so gating on `!stalled` is what makes the
+        // interaction the plan warned about provably empty rather than merely benign.
+        // (Measured: WITHOUT the gate, an exponential approach reached ~32°/s at a +62°
+        // nose and moved the stalled zoom apex to +28°, wv 0.47→0.88. The two never
+        // pulled against each other — both drive the nose down — but they compounded,
+        // which is its own kind of wrong. WITH the gate the stalled phase itself is
+        // untouched; a stall-into-knife-edge run still differs slightly overall, by ~4°
+        // at the apex, because the *pre*-stall banked zoom is legitimately in scope for
+        // this term, and converges to within 1° after recovery.)
+        if (!stalled)
+        {
+            float knife = 1f - Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
+            if (knife > 1e-4f)
+            {
+                var noseKnife = -Attitude.Z;
+                float noseElev = Mathf.Asin(Mathf.Clamp(noseKnife.Y, -1f, 1f));
+                float sagTarget = -KnifeNoseSag * knife;
+                if (noseElev > sagTarget + 1e-5f)
+                {
+                    var axis = noseKnife.Cross(Vector3.Down);
+                    if (axis.LengthSquared() > 1e-8f)
+                    {
+                        float angle = Mathf.Min(KnifeNoseRate * knife * dt,
+                                                noseElev - sagTarget);
+                        Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
+                    }
                 }
             }
         }

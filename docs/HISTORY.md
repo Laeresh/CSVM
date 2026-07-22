@@ -3935,3 +3935,80 @@ executable's stderr wraps each line in an ErrorRecord, so the *redirection* crea
 ERROR. Godot's own diagnostics are line-anchored (`ERROR:`, `SCRIPT ERROR:`), and anchoring the
 pattern took all 8 chapters to zero. Same family as the existing rule about grepping the full
 stderr — **match the tool's own output format, not a substring that its transport also emits.**
+
+## 2026-07-23 — Polish-4 item 6: the nose sags in a knife-edge, and the dead soft-tree branch goes
+
+Two unrelated changes, landed separately. **Both were written by one agent, whose verification the
+user judged untrustworthy mid-run; the work was backed out of `main` and re-verified independently
+before landing.** That second pass is most of the value here — it confirmed the mechanics, quantified
+a scope deviation the first pass had buried, found a side effect it under-described, and **disproved
+a claim it had made about the user**.
+
+### The knife-edge term
+
+Both knife-edge terms in `FlightModel` acted on `VelocityDir`, and nothing ever wrote `Attitude`, so
+a sustained knife-edge descended wings-level-**nosed**. A great-circle rotation now walks the nose
+toward a bounded target elevation `−KnifeNoseSag × knife`, rate-capped at `KnifeNoseRate × knife`,
+reusing the stall drop's own pattern (attitude-independent, no twist about the nose), gated entirely
+off while stalled and able only to lower the nose.
+
+**Measured** (C1, `--hold=0,1,0,0.5@0.55;0,0,0,0.5`, 35 s, `--no-pads --mute`; determinism proven
+first by two identical baseline runs diffing to zero):
+
+| | baseline | item 6 |
+|---|---|---|
+| nose | −0° flat | **−4°**, flat, from the first sample |
+| path settled | −6° | **−10°** |
+| sink rate | 11.8 m/s | **19.4 m/s (+64%)** |
+| altitude lost, 35 s | 398 m | 634 m |
+| level cruise | — | **identical, 25/25 lines** |
+
+**Two properties the implementation must keep, both measured rather than reasoned.** The target is a
+**bound, not a direction**: a nose falling freely toward world-down has no equilibrium, because the
+path chases the nose and the coupled pair descends together forever. And the approach is a **rate
+cap, not an exponential**: an exponential's rate scales with displacement and reached ~32°/s at a
++62° stalled-zoom nose, rewriting stall recovery.
+
+**⚠ Scope deviation, accepted by the user.** The sag carries into the path **1:1** (settled −6° − 4°
+= −10°). The plan required the path to be unchanged; that is unachievable by construction, not by
+sloppiness. The constant was instead sized so the settled path lands on the −10° `HISTORY.md:39`
+records as the designed knife-edge sink — noting that in that record −10° was the *transient* and −6°
+the settled value, so this is a defensible reading, not a proven one.
+
+**⚠ It is not only a knife-edge term.** `knife = 1 − |up·Y|` grows with pure pitch at **zero bank**
+(0.5 at 60° pitch). A wings-level full-pull zoom loses ~11° of apex (+81° → +70°); the hands-off
+climb-forever artifact erodes at ~4.6°/s; loops still complete, 1.4% slower. The original commit
+described this as affecting the *banked* zoom — zero bank suffices. If unwanted, the fix is gating on
+actual bank rather than `1−wingVert`, a code change and not a retune.
+
+**Not carried forward:** the original commit's claim that a stall-into-knife-edge "converges to
+within 1° after recovery" did **not** reproduce — the recovery dives settle ~9° apart and stay there,
+because the pre-stall zoom is itself reshaped and a hands-off dive has no attractor. Not a bug, but
+not a fact either. The stall gate rests on code structure (the whole block sits inside `if
+(!stalled)`) plus absence of anomaly, not on an isolated measurement: this model only stalls out of a
+zoom, so a scripted stall at wv≈0 could not be constructed.
+
+Both constants are on the TUNE list. The user accepted the trade-offs and will tune from flight.
+
+### The soft-tree branch, and a false claim about the user
+
+`FlightController` carried a branch for colliders named `clutter_col` — 2.5 HP, ×0.92 speed, plow
+through, never a direct crash, plus an exemption in the un-embed scan. Nothing builds that name any
+more, so it is dead and is now removed along with `TreeDamage` and `TreeSpeedFactor`.
+
+**The original commit's history was false, and it is worth recording why.** It asserted that "no
+collider in the engine has **ever** carried that name", and concluded that the user's confirmed
+7-tree forest plow (2026-07-19, Run-2 item 10) had been "flying through sprites that were never
+solid". `git grep` at `a795548~1` shows `Clutter.cs:541` and `MapEdgeExtender.cs:270` both built
+`StaticBody3D { Name = "clutter_col" }`, live from the forest-trees landing (2026-07-17) until
+`a795548` (2026-07-22, *"billboards and clutter lose collision"* — itself a recorded user decision).
+**The branch was live when the user flew it; the plow was the branch working exactly as designed.**
+Trees are intangible *now*; they were soft *then*. The deletion is correct — the branch died at
+`a795548` — but an agent came within one commit of overwriting a correct user observation with a
+plausible-sounding reconstruction, in the commit message and in `docs/architecture.md` both.
+
+**Verified:** deletion-only build vs baseline, two scripted collision runs (rolling wingtip → graze
+vn 24.1 → damage → un-embed → destroyed; dive → crash vn 93.4), exercising every path the branch
+touched — all collision and telemetry lines identical, diff 0. The stale-build loophole was closed
+with a **binary marker**: the string literal `"clutter_col"` compiles into the DLL only while the
+branch exists, and was confirmed present in the baseline DLL and absent in the deletion DLL.
