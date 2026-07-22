@@ -47,10 +47,38 @@ fixed world-space X/Z grid of its authored period instead (authored density ever
 seam-consistent across polygons), planting each decoration at the polygon's interpolated
 surface height.
 
-**Non-sprite decorations:** C2/C5 city-block templates (`cblock1`, …) carry 3D building
-meshes as decorations, not sprite quads — a different placement system the remake skips
-(logged once per template).
+**Sprite vs non-sprite is in the data, not the shape.** A decoration is a billboard card
+iff its model carries `model_type: "Facade"` — the original engine's own billboard flag
+(see [gamez.md](gamez.md) and the `FacadeMode` axis values). Every tree/bush/palm
+decoration in the install is `Facade` + `CylindricalY`, one polygon, four vertices, flat
+in local Z; every 3D building decoration is `model_type: "Default"` with 2–27 polygons.
+**Do not classify on `facade_mode` alone** — the 3D building decorations carry a *stale*
+`CylindricalY` in that field while being `Default`, so the type is the discriminator.
 
-Trees are collidable in the original (`spruce_destroy` anims exist; destruction is
-weapons-era behavior). The map-edge continuation carries the border tiles' clutter along
+**Non-sprite decorations:** C2's `filmblock*`/`resblock*`/`parklot*` and C5's `cblock*`
+city-block templates carry 3D building meshes as decorations, not sprite quads — a
+different placement system the remake skips (logged once per template). Their *sprite*
+decorations are still placed: C5's `cblock*` templates each ship `lightpole` (CylindricalY)
+posts and `poleflare` (SphericalY) glows, 139,388 sprites in total.
+
+## Clutter is not collidable
+
+**Corrected 2026-07-22.** This page previously stated:
+
+> Trees are collidable in the original (`spruce_destroy` anims exist; destruction is
+> weapons-era behavior).
+
+**That was a misreading of the data.** The only two `spruce_destroy` strings in the whole
+install are `..\data\common\zrdr\planes\spruce_destroy1.zrd` (C2/M01) and
+`..\data\common\zrdr\planes\spruce_destroy2.zrd` (C5/M03) — in the **`planes\`** directory.
+Reading the files settles it: they define `g_engine*` animations with `prop_part`, `spin` /
+`counterspin`, `snd_propstart` and engine puffers. This is the **Spruce Goose**, Howard
+Hughes' flying boat and the C2/M01 mission object, whose folder siblings are
+`sprucegoose-fly_the_goose`, `free_the_goose`, `goose_cooked` and `spruce_enginedest`.
+
+**There is no spruce-*tree* animation, and no tree-destruction animation of any kind,
+anywhere in the install.** The remake therefore gives clutter no collider at all (user
+decision, 2026-07-22) — consistent with every other billboard, which is a flat card whose
+collider would be a phantom wall wherever the card happens to be facing. The map-edge
+continuation carries the border tiles' clutter along, likewise without collision
 (see [world-structure.md](world-structure.md)).

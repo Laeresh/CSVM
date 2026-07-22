@@ -305,6 +305,43 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
 
 ## Feature backlog
 
+- **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.**
+  - **`csky_fog_on` instance-uniform index disagrees between the two shaders.** `Clutter`'s
+    shader declares it at index 0; `SceneBuilder.GetBiasShader` declares `node_bias` first so
+    it lands at index 1. Godot merges instance-uniform mappings across the materials on one
+    `GeometryInstance3D`, and a disagreement silently drops fog on the losing surfaces — the
+    2026-07-17 unfogged-hilltops bug. **Verified latent, not live:** clutter renders through
+    `MultiMeshInstance3D` + `MaterialOverride` and never shares an instance with a
+    `SceneBuilder` material, and an 8-chapter run logs **no** `instance_uniforms.cpp` warning
+    at all. Padding Clutter's shader with an unused `node_bias` was tried and reverted — it
+    enforces nothing, since the next shared uniform still has to be added to both shaders by
+    hand. **The real fix is a shared ordered-preamble constant emitted by both**, which means
+    editing `GetBiasShader` and re-running the full regression (it changes every world
+    material's shader text). Until then the invariant is: declare any new instance uniform
+    LAST, in both shaders — documented at both declaration sites.
+  - **`PlaneViewer.cs`'s `InstanceShaderParams` omits `csky_opacity`**, so a duplicated
+    splitscreen cloud deck loses any animated `OBJECT_OPACITY_STATE` opacity. Noted by the
+    plan, untouched here (different file/owner). Arguably the more real of the two uniform
+    defects.
+  - **`FlightController`'s soft-tree collision branch is now dead code.**
+    `hitName.EndsWith("clutter_col")` at `:565` and `:649` can never match — clutter builds no
+    `StaticBody3D` at all since collision was removed. Inert (the name simply never matches),
+    left in place because that file belongs to another module's owner. Delete with the
+    `TreeDamage` constant when someone is next in there.
+  - **C5's `poleflare` clutter renders with the wrong billboard axis.** The `cblock*` templates
+    ship `lightpole` (`CylindricalY`) posts *and* `poleflare` (`SphericalY`) glows — 33,682 of
+    each in `cblock1` alone. `ClutterBuilder.Kind` carries no per-kind billboard mode, so every
+    kind goes through the one Y-axis shader: the glows spin upright instead of facing the camera,
+    and they get the SUNLIGHT night dim a light source should be exempt from. Now *detectable*
+    (the shared `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means
+    giving `Kind` a billboard mode and a second material path, and it changes how 139,388 C5
+    sprites look with no reference shot to check against — so it needs an original-game A/B.
+  - **Static collider probe is off by 6 (C4) and 11 (C5).** `.scratch/probe_exempt.py`
+    replicates the world walk and reproduces the runtime collider counts *exactly* in 6 of 8
+    chapters, but predicts slightly more billboard exemptions than the game applies in those
+    two. The safety conclusion is unaffected (the probe's candidate list is a superset and
+    contains nothing solid), but the gap is unexplained rather than benign-by-proof.
+
 - **Skybox colour grading.** No tint, grade or tonemap is applied to the skydome anywhere —
   `WorldBuilder.BuildHorizon` only disables shadows, billboards the moon and disables light
   range-fade, and the `WorldEnvironment` sets background/ambient only. The dome does get the shared

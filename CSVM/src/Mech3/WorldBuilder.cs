@@ -14,7 +14,6 @@ public sealed class WorldBuilder
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
     private readonly SceneBuilder _scene;
-    private readonly bool _collision;
     private GameZNode? _builtWorld; // the World node of the last Build (for CreateEdgeExtender)
 
     // Non-scenery world content: 'horizon' is the original skydome (built separately via
@@ -64,17 +63,50 @@ public sealed class WorldBuilder
         || tex.Contains("fire", StringComparison.OrdinalIgnoreCase)
         || tex.Contains("flame", StringComparison.OrdinalIgnoreCase);
 
-    // Rendered but not solid: the plane should fly through cloud/sky geometry and lamp
-    // flare/fire sprites, not crash into them. Terrain, water, buildings, zeppelins, trains
-    // stay solid. The flare exemption mirrors SceneBuilder.IsGlowSpriteMesh (single-poly
-    // sprite quads only) — geometry that merely CONTAINS a flare poly stays collidable.
+    // Rendered but not solid: the plane should fly through cloud/sky geometry and through
+    // every billboard sprite, not crash into them. Terrain, water, buildings, zeppelins and
+    // trains stay solid.
     private bool NoCollisionNode(GameZNode n) =>
-        MeshUsesTexture(n, IsCloudOrSkyTexture) || IsFlareSpriteNode(n);
+        MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
 
-    private bool IsFlareSpriteNode(GameZNode n) =>
-        n.MeshIndex >= 0 && n.MeshIndex < _gamez.Meshes.Count
-        && _gamez.Meshes[n.MeshIndex].Polygons.Count == 1
-        && MeshUsesTexture(n, IsFlareTexture);
+    // `IsCloudOrSkyTexture`'s `sky*` prefix is right for the blend rule but WRONG for
+    // collision, because `skywal*` is a BUILDING WALL texture, not sky (found 2026-07-22).
+    // `MeshUsesTexture` matches if ANY polygon carries the texture, so one `skywal01` face
+    // was making a whole structure phantom: C4's sky-city `pod2_hi` (73 polys, 107×88×125 m)
+    // and `pod6_hi` (143 polys), `g74` (64 polys, 395×135×275 m), and C1/C1B/C2/C3's `g456`
+    // (181 polys, 113×49×102 m), `racmplx` and `rabdr` — every one of them mixing `skywal*`
+    // with unmistakable building textures (`jim_floor01`, `jim_rail1`, `jim_roof01`,
+    // `bhfbuild03`, `flaghut2`, `flagstand`). The player could fly straight through them.
+    //
+    // Narrowed HERE rather than in `IsCloudOrSkyTexture` on purpose: that predicate is shared
+    // with the cloud alpha-blend rule and MapEdgeExtender's ground-tile filter, and this is a
+    // collision-only defect. C4's real deck is 144 `Sky1.tif` quads, which still match and
+    // stay exempt; the skydome is a separate build that opts out wholesale anyway.
+    private static bool IsNonSolidSkyTexture(string tex) =>
+        IsCloudOrSkyTexture(tex)
+        && !tex.StartsWith("skywal", StringComparison.OrdinalIgnoreCase);
+
+    // A billboard is a flat card the engine turns toward the camera — it has no solid side to
+    // hit, and its collider is a phantom wall wherever the card happens to be facing. Asking
+    // the gamez model itself (SceneBuilder.ClassifyBillboard) replaced a poly-count + texture-
+    // name heuristic on 2026-07-22: that rule exempted only single-polygon *flare*-textured
+    // quads, so a tree card or any multi-poly facade was fully solid. No Facade model in the
+    // install exceeds 3 polygons, so this cannot exempt real geometry — in particular C2/C5's
+    // `cblock*` city-block buildings are ModelType "Default" and keep their collision.
+    //
+    // The classifier is per MESH and this predicate is per NODE, hence the MeshIndex hop; the
+    // exemption is inherited by the whole subtree (see SceneBuilder.BuildSubtree).
+    private bool IsBillboardNode(GameZNode n)
+    {
+        if (n.MeshIndex < 0 || n.MeshIndex >= _gamez.Meshes.Count)
+            return false;
+        var mesh = _gamez.Meshes[n.MeshIndex];
+        return SceneBuilder.ClassifyBillboard(mesh) is { } kind
+            ? kind != SceneBuilder.BillboardKind.None
+            // Legacy v0.6.1 extraction: no ModelType, so keep the old flare-sprite rule
+            // rather than guessing — this is the exact set that was exempt before.
+            : mesh.Polygons.Count == 1 && MeshUsesTexture(n, IsFlareTexture);
+    }
 
     // The horizontal overcast DECK — the sheet covering the whole map at one altitude, as
     // opposed to the cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so
@@ -237,7 +269,6 @@ public sealed class WorldBuilder
     {
         _gamez = gamez;
         _textures = textures;
-        _collision = collision;
         // Clouds are the only cloud*/sky* surfaces with an alpha channel, so this blend rule
         // touches only them; the opaque Sky1.tif skydome walls and cloudlayer deck are unaffected.
         // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
@@ -299,12 +330,13 @@ public sealed class WorldBuilder
     /// the video evidence). Call after Build (and after the chapter's clutter build, so the
     /// extension grows the same trees); add the returned node to the world root and drive
     /// its Update(cameraPos) each frame. Null when the world carries no area/partition grid
-    /// or no recognizable ground tiles. Extension ground + clutter are collidable exactly
-    /// when the WorldBuilder was created with collision.
+    /// or no recognizable ground tiles. Extension ground is collidable exactly when the
+    /// WorldBuilder was created with collision (it shares this SceneBuilder); extension
+    /// clutter is never collidable, like the map's own clutter.
     /// </summary>
     public MapEdgeExtender? CreateEdgeExtender(ClutterBuilder? clutter = null) =>
         _builtWorld == null ? null
-            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, _collision, clutter);
+            : MapEdgeExtender.Create(_gamez, _scene, _builtWorld, clutter);
 
 
     private void Add(Node3D root, Node3D deck, int nodeIndex)
@@ -350,7 +382,11 @@ public sealed class WorldBuilder
         DisableShadows(built);
         BillboardMoon(built);
         DisableLightRangeFade(built);
-       // DisableFog(built);
+        // NOT opted out of fog (user change with the 2026-07-17 fog remodel, and the
+        // cylinder model is what makes that correct): high dome fragments stay clear via the
+        // FOG_ALTITUDE fade, while the horizon band fogs toward the same gray as the terrain
+        // fog wall. The `csky_fog_on = 0` walk this used to call was deleted 2026-07-22 —
+        // it had been dead since that change.
         return built;
     }
 
@@ -493,14 +529,4 @@ public sealed class WorldBuilder
             DisableShadows(child);
     }
 
-    // Opt the skydome out of distance fog (SceneBuilder's csky_fog_on instance uniform): it
-    // is a camera-anchored backdrop ~22 km out, far past FOG_FAR, so fog would paint the whole
-    // sky solid FOG_COLOR. Harmless on the moon/stars (StandardMaterial3D — they ignore it).
-    private static void DisableFog(Node node)
-    {
-        if (node is MeshInstance3D mi)
-            mi.SetInstanceShaderParameter("csky_fog_on", 0f);
-        foreach (var child in node.GetChildren())
-            DisableFog(child);
-    }
 }

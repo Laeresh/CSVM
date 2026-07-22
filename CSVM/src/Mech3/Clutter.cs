@@ -30,9 +30,20 @@ namespace CSVM.Mech3;
 /// draw call), a hand-rolled Y-axis-billboard shader (upright, spins toward the camera —
 /// the source quads are single one-sided cards, so the original must do the same),
 /// fullbright like the rest of the world, alpha-scissor cutout, and the same cylindrical
-/// distance fog as SceneBuilder's world shader. Collision (flight only) is one static
-/// trimesh of two crossed quads per decoration — trees are hittable, like the original
-/// (spruce_destroy anims exist; destruction itself is dogfight-milestone work).</para>
+/// distance fog as SceneBuilder's world shader.</para>
+///
+/// <para><b>Clutter is NOT collidable</b> (user decision, 2026-07-22). It used to get a
+/// crossed-quad trimesh per sprite, justified by a claim that "trees are hittable like the
+/// original, `spruce_destroy` anims exist". <b>That was a misreading and the anims are not
+/// trees.</b> The two strings in the data are
+/// <c>..\data\common\zrdr\planes\spruce_destroy{1,2}.zrd</c> — the <c>planes\</c> folder —
+/// and the file's contents are an aircraft's engine/propeller destruction sequence
+/// (<c>g_engine*</c>, <c>prop_part</c>, <c>spin</c>/<c>counterspin</c>,
+/// <c>snd_propstart</c>, engine puffers). This is the <b>Spruce Goose</b>, Howard Hughes'
+/// flying boat and the C2/M01 mission object. There is no spruce-<i>tree</i> animation
+/// anywhere in the install, and no tree-destruction animation of any kind. A billboard has
+/// no solid side to hit anyway — its collider is a phantom wall wherever the card happens to
+/// be facing — which is the same reason every gamez billboard is exempt in WorldBuilder.</para>
 /// </summary>
 public sealed class ClutterBuilder
 {
@@ -46,9 +57,11 @@ public sealed class ClutterBuilder
 
     /// <summary>One decoration kind of the last Build, exported for the map-edge
     /// extension (see MapEdgeExtender): the shared sprite mesh + billboard material
-    /// (safe to reuse across MultiMesh instances), the quad extents for the crossed-quad
-    /// collision, and every planted world position. The extender mirrors these positions
-    /// past the map edge so the forest continues out there, as in the original.</summary>
+    /// (safe to reuse across MultiMesh instances), the quad extents, and every planted
+    /// world position. The extender mirrors these positions past the map edge so the
+    /// forest continues out there, as in the original. <c>Width</c> is still needed after
+    /// the 2026-07-22 collision removal — it sizes the MultiMesh's ExtraCullMargin, since
+    /// the billboard shader swings vertices outside the static AABB.</summary>
     public sealed class KindExport
     {
         public string Texture = "";
@@ -114,8 +127,8 @@ public sealed class ClutterBuilder
 
     /// <summary>Builds the clutter for the given template names; null when nothing was
     /// placed (no templates, or none of their ground textures appear in the world).
-    /// <paramref name="collision"/> adds the crossed-quad trimesh (flight mode).</summary>
-    public Node3D? Build(IReadOnlyList<string> templateNames, bool collision, string worldName = "world1")
+    /// Never collidable — see the class remarks.</summary>
+    public Node3D? Build(IReadOnlyList<string> templateNames, string worldName = "world1")
     {
         var templates = new Dictionary<string, Template>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in templateNames)
@@ -151,11 +164,7 @@ public sealed class ClutterBuilder
             }
         Summary = string.Join(", ", parts);
         ExportedKinds = exported.Count > 0 ? exported : null;
-        if (InstanceCount == 0)
-            return null;
-        if (collision)
-            root.AddChild(BuildCollision(templates));
-        return root;
+        return InstanceCount == 0 ? null : root;
     }
 
     // A template subtree: root → ground node (first descendant with a mesh; its texture
@@ -264,15 +273,19 @@ public sealed class ClutterBuilder
         return period < 1f ? null : (tex, period, new Vector2(min.X, min.Z));
     }
 
-    // Only genuine sprite cards billboard: a single textured quad, flat in its local Z
-    // (every tree/bush/palm template decoration is one). 3D decorations (C2's filmblock
-    // buildings, 7 polys / 64 m deep) don't fit the billboard path and are skipped.
+    // Only genuine sprite cards billboard. Since 2026-07-22 that question is answered by the
+    // gamez model itself, through the shared SceneBuilder.ClassifyBillboard — the same rule
+    // the renderer and the collision exemption use — instead of this file's own shape guess.
+    // The two agree exactly on the shipped data: every template decoration is either a
+    // Facade (1 polygon, 4 vertices, flat in local Z) or a Default 3D building (2-27
+    // polygons), so placement counts are unchanged, but the data now says WHY rather than
+    // the geometry hinting at it. 3D decorations (C2's filmblock buildings, C5's cblock
+    // city blocks — 7 polys / 64 m deep) still don't fit the billboard path and are skipped.
     private (string Texture, float Width, float Height)? SpriteInfo(int meshIndex)
     {
         var mesh = _gamez.Meshes[meshIndex];
         var tex = FirstTexture(mesh);
-        if (tex == null || mesh.Vertices.Count == 0
-            || mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
+        if (tex == null || mesh.Vertices.Count == 0 || !IsSpriteCard(mesh))
             return null;
         Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
         foreach (var v in mesh.Vertices)
@@ -280,9 +293,29 @@ public sealed class ClutterBuilder
             min = min.Min(v);
             max = max.Max(v);
         }
-        if (max.Z - min.Z > 0.1f * Mathf.Max(max.X - min.X, max.Y - min.Y))
-            return null;
         return (tex, max.X - min.X, max.Y - min.Y);
+    }
+
+    // Any billboard kind counts as a placeable card: C1's trees/bushes are CylindricalY, and
+    // C5's cblock templates additionally carry SphericalY `poleflare` glows beside their
+    // CylindricalY `lightpole` posts. Both are one-quad cards and both are placed, which is
+    // exactly what the old shape test did.
+    private static bool IsSpriteCard(GameZMesh mesh)
+    {
+        if (SceneBuilder.ClassifyBillboard(mesh) is { } kind)
+            return kind != SceneBuilder.BillboardKind.None;
+
+        // Legacy v0.6.1 extraction (no ModelType): keep the original shape heuristic, or a
+        // rollback tree would place no clutter at all.
+        if (mesh.Polygons.Count != 1 || mesh.Vertices.Count != 4)
+            return false;
+        Vector3 min = mesh.Vertices[0], max = mesh.Vertices[0];
+        foreach (var v in mesh.Vertices)
+        {
+            min = min.Min(v);
+            max = max.Max(v);
+        }
+        return max.Z - min.Z <= 0.1f * Mathf.Max(max.X - min.X, max.Y - min.Y);
     }
 
     private string? FirstTexture(GameZMesh mesh)
@@ -423,6 +456,20 @@ public sealed class ClutterBuilder
         global uniform vec3 csky_fog_color;
         global uniform vec2 csky_fog_range;
         global uniform vec2 csky_fog_alt;
+        // ⚠ `csky_fog_on` is instance-uniform index 0 HERE but index 1 in SceneBuilder's bias
+        // shader, which declares `node_bias` first. Godot assigns these indices by declaration
+        // order within each shader and merges the mapping across every material on one
+        // GeometryInstance3D, so two shaders that disagree silently drop fog on the losing
+        // surfaces — the 2026-07-17 unfogged-hilltops bug (docs/architecture.md, SceneBuilder).
+        //
+        // Checked 2026-07-22: the mismatch is LATENT, not live. Clutter renders through
+        // MultiMeshInstance3D + MaterialOverride and never shares an instance with a
+        // SceneBuilder material, and an 8-chapter run logs no `instance_uniforms.cpp` warning
+        // at all. Padding this shader with an unused `node_bias` to line the indices up was
+        // tried and dropped: it enforces nothing (the next shared instance uniform still has to
+        // be added to both shaders by hand) while adding a uniform this shader cannot use. The
+        // enforcing fix is a preamble constant shared with GetBiasShader, which belongs with
+        // that shader. Until then: **declare any new instance uniform LAST, in both shaders.**
         instance uniform float csky_fog_on = 1.0;
         global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (item 6)
 
@@ -513,44 +560,6 @@ public sealed class ClutterBuilder
         var arrayMesh = new ArrayMesh();
         st.Commit(arrayMesh);
         return arrayMesh;
-    }
-
-    // ---------------------------------------------------------------- collision
-
-    /// <summary>Collision triangles of the last Build (0 unless collision was on).</summary>
-    public int ColliderTriangles { get; private set; }
-
-    // One static trimesh for ALL clutter: two crossed vertical quads per decoration
-    // (the billboard has no fixed facing, so the cross approximates it from any
-    // approach). BackfaceCollision like the world colliders, so the probe ray can't
-    // slip through from behind.
-    private StaticBody3D BuildCollision(Dictionary<string, Template> templates)
-    {
-        var faces = new List<Vector3>();
-        foreach (var template in templates.Values)
-            foreach (var kind in template.Kinds)
-            {
-                float w = kind.Width * 0.5f, h = kind.Height;
-                foreach (var pos in kind.Instances)
-                {
-                    AddQuad(faces, pos + new Vector3(-w, 0, 0), pos + new Vector3(w, 0, 0), h);
-                    AddQuad(faces, pos + new Vector3(0, 0, -w), pos + new Vector3(0, 0, w), h);
-                }
-            }
-        ColliderTriangles = faces.Count / 3;
-        var body = new StaticBody3D { Name = "clutter_col" };
-        body.AddChild(new CollisionShape3D
-        {
-            Shape = new ConcavePolygonShape3D { Data = faces.ToArray(), BackfaceCollision = true },
-        });
-        return body;
-    }
-
-    private static void AddQuad(List<Vector3> faces, Vector3 baseA, Vector3 baseB, float height)
-    {
-        var up = new Vector3(0, height, 0);
-        faces.Add(baseA); faces.Add(baseB); faces.Add(baseB + up);
-        faces.Add(baseA); faces.Add(baseB + up); faces.Add(baseA + up);
     }
 
     private static string Sanitize(string name)
