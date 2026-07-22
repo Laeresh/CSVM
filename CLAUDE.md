@@ -72,6 +72,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
+- `CleanScratch.ps1` — sweeps `.scratch/` probe artifacts; `-WhatIf`/`-OlderThanDays`/`-Keep`, spares `*.bundle`/`*.worktree-backup` backups.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — deep per-module implementation notes for `CSVM/src`. **Read a module's bullet before changing it.**

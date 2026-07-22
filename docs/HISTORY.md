@@ -2096,3 +2096,29 @@ same terrain, fog, HUD, compass tape, gauge cluster and livery.
 clean compile is only evidence if the compiler is *able* to fail on the thing you broke. It cannot
 fail on comment encoding, so it said nothing. Running the game took one command and said
 everything.
+
+## 2026-07-22 — `CleanScratch.ps1`: sweeping `.scratch/` without eating the backups
+
+`.scratch/` had reached **322 files / 206 MB** with no sweep tool, so it only ever grew. Added a
+root script alongside the other `*.ps1` helpers: `-WhatIf`/`-Confirm` via `SupportsShouldProcess`,
+`-OlderThanDays N` for an age-bounded pass, `-Keep <patterns>` to spare specific captures, `-Force`
+to skip the prompt. It prunes directories the sweep empties (deepest-first so parents collapse) and
+is scoped to `$PSScriptRoot\.scratch`, so it cannot wander outside.
+
+**The part that needed a judgement call: not everything in `.scratch/` is probe output.** The
+folder also held `pre-rewrite-backup.bundle` (71 MB of pre-history-rewrite repo state) and
+`backlog.md.worktree-backup` — safety nets deliberately parked somewhere git-ignored. A naive
+"delete everything in scratch" script destroys those. So `*.bundle` and `*.worktree-backup` are
+protected by default, listed under "Keeping" with their reason so their survival is visible rather
+than assumed, and `-IncludeBackups` is the explicit opt-out.
+
+That default is pattern-based, and a pattern cannot tell a live backup from a stale one: asked
+afterwards, `backlog.md.worktree-backup` turned out to be **byte-identical to the tracked
+`backlog.md`** (same SHA256, `git diff --no-index` silent) and therefore disposable — the content
+is in git anyway via `c575f7b`. `-Keep '*.bundle' -IncludeBackups` is the combination that drops
+the stale copy while still guarding the bundle. Whether the bundle's history is itself redundant
+against a remote is unverified.
+
+Verified with `-WhatIf` in three modes against the real directory, deleting nothing: default spares
+2 and targets 320 files / 134 MB; `-OlderThanDays 2` spares all 322 (every artifact was <2 days
+old); `-Keep '*.py','*.md'` spares 22. No sweep has actually been run yet.
