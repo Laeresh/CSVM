@@ -298,7 +298,6 @@ public partial class PlaneViewer : Node3D
 
     public override void _Ready()
     {
-       
         var projectDir = ProjectSettings.GlobalizePath("res://");
         _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
 

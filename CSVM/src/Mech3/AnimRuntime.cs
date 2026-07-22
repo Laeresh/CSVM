@@ -2037,13 +2037,21 @@ public sealed partial class AnimRuntime : Node
     // Whether this mesh's shader actually reads the opacity parameter. Setting an instance
     // parameter a shader does not declare is silently a no-op in Godot, so without this check
     // the "no alpha path" tally could never fire and would be a lie rather than a diagnostic.
+    //
+    // ⚠ Tests for the USE (`SceneBuilder.OpacityTerm`, i.e. " * csky_opacity"), not the uniform
+    // NAME. Until 2026-07-23 those were equivalent — the uniform was declared exactly in the
+    // variants that multiplied by it — but the declaration has since moved into the shared
+    // ordered preamble (csky_instance_uniforms.gdshaderinc), so it is now present in shaders
+    // with no alpha path at all. Testing the name would report true for every one of them.
+    // Testing the include line would be worse still: the declaration is no longer textually in
+    // `sh.Code`, so a name test would report FALSE everywhere and quietly invert this tally.
     private static bool HasOpacityPath(GeometryInstance3D g)
     {
         if (g is not MeshInstance3D mi || mi.Mesh is not { } mesh)
             return false;
         for (int i = 0; i < mesh.GetSurfaceCount(); i++)
             if (mesh.SurfaceGetMaterial(i) is ShaderMaterial { Shader: { } sh }
-                && sh.Code.Contains(SceneBuilder.OpacityParam, StringComparison.Ordinal))
+                && sh.Code.Contains(SceneBuilder.OpacityTerm, StringComparison.Ordinal))
                 return true;
         return false;
     }

@@ -652,7 +652,11 @@ public sealed partial class MeshLab : Node
 shader_type spatial;
 render_mode skip_vertex_transform, {mode};
 uniform float depth_bias = 0.0;
-instance uniform float node_bias = 0.0;
+// The shared ordered instance-uniform block — this shader reads only node_bias, but it must
+// declare the canonical order like every other (see csky_instance_uniforms.gdshaderinc). A
+// diagnostic that disagrees with the shipped renderer is worse than useless: MeshLab's whole
+// contract is that its vertex stage is SceneBuilder's verbatim.
+#include ""res://shaders/csky_instance_uniforms.gdshaderinc""
 uniform int normal_mode = 0;
 {(textured
     ? "uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;"

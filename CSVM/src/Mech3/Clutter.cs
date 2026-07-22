@@ -585,33 +585,25 @@ public sealed class ClutterBuilder
         render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
 
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
-        global uniform vec3 csky_fog_color;
-        global uniform vec2 csky_fog_range;
-        global uniform vec2 csky_fog_alt;
-        // ⚠ `csky_fog_on` is instance-uniform index 0 HERE but index 1 in SceneBuilder's bias
-        // shader, which declares `node_bias` first. Godot assigns these indices by declaration
-        // order within each shader and merges the mapping across every material on one
-        // GeometryInstance3D, so two shaders that disagree silently drop fog on the losing
-        // surfaces — the 2026-07-17 unfogged-hilltops bug (docs/architecture.md, SceneBuilder).
-        //
-        // Checked 2026-07-22: the mismatch is LATENT, not live. Clutter renders through
-        // MultiMeshInstance3D + MaterialOverride and never shares an instance with a
-        // SceneBuilder material, and an 8-chapter run logs no `instance_uniforms.cpp` warning
-        // at all. Padding this shader with an unused `node_bias` to line the indices up was
-        // tried and dropped: it enforces nothing (the next shared instance uniform still has to
-        // be added to both shaders by hand) while adding a uniform this shader cannot use. The
-        // enforcing fix is a preamble constant shared with GetBiasShader, which belongs with
-        // that shader. Until then: **declare any new instance uniform LAST, in both shaders.**
-        instance uniform float csky_fog_on = 1.0;
-        global uniform float csky_world_light = 1.0; // per-mission SUNLIGHT dimming (item 6)
 
-        // DX7 gamma-space vertex modulate — see SceneBuilder.SrgbToLinearFn (trees share the
-        // world's baked-lighting model; kept inline so this shader stays self-contained).
-        vec3 csky_srgb_to_linear(vec3 c) {
-            vec3 higher = pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
-            vec3 lower = c * (1.0 / 12.92);
-            return mix(higher, lower, step(c, vec3(0.04045)));
-        }
+        // Fog globals + csky_world_light, and the DX7 gamma-space vertex modulate (trees share
+        // the world's baked-lighting model). Both were duplicated verbatim from SceneBuilder
+        // until 2026-07-23; they are now single-sourced files.
+        #include "res://shaders/csky_atmosphere.gdshaderinc"
+        #include "res://shaders/csky_srgb.gdshaderinc"
+
+        // The shared ORDERED instance-uniform block. This shader reads only `csky_fog_on`, but
+        // it must declare the whole block in the canonical order: Godot assigns instance-uniform
+        // indices by declaration order within each shader and merges the mapping across every
+        // material on one GeometryInstance3D, so two shaders that disagree silently read each
+        // other's slots — the 2026-07-17 unfogged-hilltops bug, when `csky_fog_on` was index 0
+        // here and index 1 in SceneBuilder's bias shader.
+        //
+        // An earlier attempt hand-padded this shader with an unused `node_bias` and was dropped
+        // because it enforced nothing — the next shared uniform still had to be added to both
+        // shaders by hand. The include is that fix done structurally: there is one declaration
+        // site, so the orders cannot drift apart. Never declare an instance uniform below this.
+        #include "res://shaders/csky_instance_uniforms.gdshaderinc"
 
         void vertex() {
             vec3 origin = MODEL_MATRIX[3].xyz;
@@ -629,8 +621,7 @@ public sealed class ClutterBuilder
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
             ALBEDO = col.rgb * csky_world_light;
             vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-            float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
-                * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));
+            float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);
             ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);
             ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;

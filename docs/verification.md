@@ -551,3 +551,22 @@ Before calling a change verified:
     Corollary: this near-miss came from applying rule 1 (check the plan's premise) correctly and
     then trusting an incomplete instrument. **Verifying a premise needs its own able-to-fail check**
     — here, "does my census find the events I already know exist?" would have caught it in one step.
+
+23. **A shader change alters shader-COMPILE cost, which shifts every `TIME`-driven animation by a
+    frame — and the resulting screenshot diff is indistinguishable from a rendering regression.**
+    Verifying the shader-include refactor (2026-07-23) A/B'd six pinned `--viewer` poses. Four came
+    out byte-identical; **C1B's water pose reported 18.32% of pixels changed**, which is a large,
+    specific, reproducible number and read as a real regression in the water shader. It was not.
+    The same build captured at `--frames=120` vs `--frames=121` gives **18.32%, max delta 9/255** —
+    *the identical figures*, to the pixel. The refactor moved four blocks into `.gdshaderinc`
+    files, Godot spent slightly different time compiling them, and frame 120 therefore landed one
+    frame of UV-scroll phase later. The land in the same frame was untouched; only the scrolling
+    water moved, which is what localising the diff showed and what named the cause.
+    **Two rules.** First: **before believing a screenshot A/B, measure the pose's sensitivity to
+    ±1 frame on ONE build** — that is a different control from the same-build determinism check
+    (which passed here: both builds were bit-stable at a fixed frame count, so determinism proved
+    nothing about frame *alignment*). Second: **`TIME`-driven surfaces make a pose unusable for
+    A/B unless the frame budget is provably equal**, and any change to shader text, load order or
+    asset count can move that budget. Prefer poses with no scroll/flipbook for A/B, or diff
+    against a ±1-frame window rather than a single capture. Note this is rule 2's noise floor in a
+    dimension nobody measures: the floor was 0 for repeated runs and 18.32% for one frame of drift.

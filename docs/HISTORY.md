@@ -4135,3 +4135,77 @@ deliberately mis-ordered control to show the regression can fail, and carries a 
 instance-uniform-buffer question (`SceneBuilder`'s `OpacityUniform` docstring says emitting it into
 opaque variants would put them "on the instance-uniform buffer that Run-2 item 2 had to enlarge for
 C4/C5"). That claim needs measuring before any preamble emits four uniforms everywhere.
+
+## 2026-07-23 — Polish-4 item 10 Part A: the shared shader preamble, as `.gdshaderinc` files
+
+The enforcing fix the `Clutter.cs` comment had been asking for since 2026-07-17, done as **real
+shader files** rather than a C# const string (user's call, and the better one: a const string
+single-sources the *text* but still lets each shader decide whether and where to emit it — and for
+the instance-uniform block, that decision is exactly the bug).
+
+**Load-bearing question, answered first:** Godot resolves `#include` in a `Shader` whose `Code` is
+assigned **at runtime** from C#, not only in a `.gdshader` loaded from disk. Probed by declaring a
+uniform inside an include and reading it back through `GetShaderUniformList()` — it appeared,
+identically to an inline control. Worth recording that the *obvious* probe was useless: a
+deliberately unresolvable include produced **no Godot error at all**, so "no shader errors in
+stderr" cannot distinguish a working include from a broken one. The uniform list can.
+
+**Four files in `CSVM/shaders/`:** `csky_instance_uniforms` (the ordered instance-uniform block),
+`csky_srgb` (the DX7 gamma-space vertex modulate), `csky_atmosphere` (fog globals, `csky_world_light`
+and the `csky_fog_amount` helper) and `csky_lights` (the `LIGHT_STATE` spill). Before this, the
+sRGB function was copy-pasted into four shaders and the fog globals + fog expression into four each.
+All include-guarded. **The combinatorial parts stay generated in C#** — `render_mode` and the
+blend/scissor/scroll/clamp/shaded variants are 128 shader variants, not one file. This is a hybrid
+by design, not a half-finished migration.
+
+**The ordering rule, and its exception.** Every shader that declares *any* instance uniform now
+takes the whole preamble in canonical order (`node_bias`, `csky_fog_on`, `csky_light_fade`,
+`csky_opacity`), so the indices agree structurally. **The opaque sprite variants deliberately do
+not**: Godot allocates a fixed 16-vec4 block per instance carrying any instance uniform, so a
+shader with none keeps its instances off that buffer entirely — and C5 alone stamps ~139k billboard
+sprites. Adding uniforms to a shader that already carries one is free; giving one to a shader that
+carries none is not. That also retires the `OpacityUniform` docstring's claim that omitting
+`csky_opacity` kept opaque *bias* materials off the buffer: those always declared `node_bias` and
+`csky_fog_on`, so they were on it regardless. Measured: 8 chapters, **zero** `instance_uniforms`
+warnings, including C4 and C5.
+
+**Caught before it landed:** `AnimRuntime.HasOpacityPath` decided "does this shader read opacity?"
+by string-scanning `sh.Code` for `csky_opacity`. Moving the declaration into an include would have
+made that scan find nothing — silently inverting the diagnostic to "no alpha path" everywhere —
+and declaring it via the preamble would have made a name-scan report *true* everywhere instead.
+It now tests `SceneBuilder.OpacityTerm` (`" * csky_opacity"`), i.e. the **use**, which is what its
+own comment always claimed it meant. Behaviour is unchanged: the term is still emitted exactly in
+the blend/scissor variants.
+
+**Verified — six pinned `--viewer` poses, A/B against HEAD:**
+
+| pose | result |
+|---|---|
+| C5 city (world bias, clutter, lights, billboards) | **byte-identical** |
+| C1 spawn | **byte-identical** |
+| plane viewer (the shaded variant) | **byte-identical** (md5 `F1290254…`, unchanged since before item 9) |
+| mesh lab (its own shader) | **byte-identical** |
+| C2 spawn | 99.720% identical; 0.280% of pixels differ by exactly **1/255** |
+| C1B water | 18.32% — **and this was the instrument, not the change** |
+
+C2's residual is float reassociation from the fog expression becoming a function call: no pixel
+moves more than one LSB, well under the project's `>3` flicker threshold.
+
+**C1B is the finding worth keeping, and it is now `docs/verification.md` rule 23.** 18.32% of
+pixels changed on the water pose, which read as a real water-shader regression. It was not: the
+same build captured at `--frames=120` vs `--frames=121` gives **18.32%, max delta 9/255 — the
+identical figures**. Moving blocks into include files changed Godot's shader-compile cost, so frame
+120 landed one frame of UV-scroll phase later. Localising the diff is what named it: only the
+scrolling water moved, the land in the same frame was untouched. Note the same-build determinism
+check *passed* on both builds (bit-stable at a fixed frame count) and proved nothing about frame
+*alignment* — a different control was needed.
+
+**Not verifiable, and saying so is the answer:** the plan asked for a deliberately mis-ordered
+preamble to prove the regression can catch mis-ordering. **That control cannot fire today.** The
+index-collision hazard only manifests when two disagreeing shaders share one `GeometryInstance3D`,
+and the plan itself established that never happens in this build (Clutter renders through
+`MultiMeshInstance3D` + `MaterialOverride`) — which is why the bug is latent. Mis-ordering the
+preamble would therefore render identically, and a passing regression would mean nothing. What
+*is* verified is that the enforcement is structural rather than behavioural: there is now exactly
+one declaration site, so there is no second order to drift from. The mechanism itself is not
+re-derived here — it is inherited from the real 2026-07-17 unfogged-hilltops incident.

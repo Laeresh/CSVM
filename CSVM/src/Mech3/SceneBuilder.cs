@@ -49,16 +49,27 @@ public sealed class SceneBuilder
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
     private Shader? _lightShader;
 
-    // sRGB EOTF (Godot's exact texture-linearization curve) for the DX7 gamma-space vertex
-    // modulate on the fullbright world/cloud shaders — see the usage in GetBiasShader. Also
-    // duplicated verbatim in Clutter's shader (trees share the world's baked-lighting model).
-    internal const string SrgbToLinearFn = @"
-vec3 csky_srgb_to_linear(vec3 c) {
-    vec3 higher = pow((c + vec3(0.055)) * (1.0 / 1.055), vec3(2.4));
-    vec3 lower = c * (1.0 / 12.92);
-    // per component: c <= 0.04045 -> linear toe, else the power curve
-    return mix(higher, lower, step(c, vec3(0.04045)));
-}";
+    // Shared shader source lives in res://shaders/*.gdshaderinc, pulled in by Godot's shader
+    // preprocessor. Verified 2026-07-23 that #include resolves in a Shader whose Code is assigned
+    // at RUNTIME from C#, not only in a .gdshader loaded from disk — the probe declared a uniform
+    // inside the include and read it back through GetShaderUniformList().
+    //
+    // Why files rather than C# const strings: these blocks are shared by four independently
+    // generated shaders (this one, the cloud billboards, the cylindrical facades, and Clutter's
+    // trees), and three of them were copy-pasted duplicates before 2026-07-23. A const string
+    // single-sources the text but still lets each shader choose whether and where to emit it;
+    // for the instance-uniform block that choice is exactly the bug (see the ordering contract in
+    // csky_instance_uniforms.gdshaderinc). The combinatorial parts — render_mode, the
+    // blend/scissor/scroll/clamp variants — stay generated here, because they are 128 shader
+    // variants rather than one file.
+    internal const string InstanceUniformsInclude =
+        "#include \"res://shaders/csky_instance_uniforms.gdshaderinc\"";
+    internal const string SrgbInclude =
+        "#include \"res://shaders/csky_srgb.gdshaderinc\"";
+    internal const string AtmosphereInclude =
+        "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
+    internal const string LightsInclude =
+        "#include \"res://shaders/csky_lights.gdshaderinc\"";
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
@@ -240,15 +251,25 @@ vec3 csky_srgb_to_linear(vec3 c) {
     /// to 0.4). Per-instance rather than per-material because materials are cached and shared
     /// — two nodes on one material can be told different opacities, and unlike a scroll rate
     /// this one changes at runtime, so it cannot live in the cache key the way texture_scroll
-    /// does. Emitted ONLY into shader variants that already write ALPHA (blend/scissor/glow):
-    /// an opaque variant has no alpha path to multiply, adding one would move it into the
-    /// transparent pass, and every opaque target the data touches asks for opacity 1.0 anyway.
-    /// That keeps opaque materials' shader text byte-identical and keeps these off the
-    /// instance-uniform buffer that Run-2 item 2 had to enlarge for C4/C5.</summary>
-    private const string OpacityUniform =
-        "instance uniform float csky_opacity = 1.0;";
-
-    private const string OpacityTerm = " * csky_opacity";
+    /// does.
+    /// <para><b>Declaration and use came apart on 2026-07-23</b> (item 10 Part A). The
+    /// <i>declaration</i> now lives in the shared ordered preamble
+    /// (<c>csky_instance_uniforms.gdshaderinc</c>), so every shader that carries any instance
+    /// uniform declares it — that is what makes the indices agree. The <i>use</i>, this term, is
+    /// still emitted ONLY into variants that already write ALPHA: an opaque variant has no alpha
+    /// path to multiply, and adding one would move it into the transparent pass. Declaring the
+    /// uniform does not create an alpha path, so nothing moved passes.</para>
+    /// <para>The old note that omitting the declaration kept opaque materials "off the
+    /// instance-uniform buffer that Run-2 item 2 had to enlarge for C4/C5" does not apply to the
+    /// bias shader: it always declares <c>node_bias</c> and <c>csky_fog_on</c>, so those
+    /// instances were already on that buffer, and Godot's per-instance allocation is a fixed
+    /// 16-vec4 block regardless of how many uniforms a shader declares. It DOES still apply to
+    /// the opaque sprite variants, which declare nothing — and those deliberately do not take
+    /// the preamble.</para>
+    /// <para>⚠ <see cref="AnimRuntime"/> tests for this term, not the uniform name: since the
+    /// declaration is now everywhere, only the term distinguishes a shader that actually reads
+    /// opacity.</para></summary>
+    internal const string OpacityTerm = " * csky_opacity";
 
     public const string OpacityParam = "csky_opacity";
 
@@ -258,8 +279,10 @@ render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
 uniform float size_scale = 1.0;   // data unk08 (0 -> 1)
 uniform float max_size_px = 30.0; // data unk64
 uniform float range_far = 0.0;    // data unk68/unk52; 0 = no distance fade
-instance uniform float csky_light_fade = 1.0; // 0 = skydome stars (no range fade)
-instance uniform float csky_opacity = 1.0; // OBJECT_OPACITY_STATE
+#include ""res://shaders/csky_instance_uniforms.gdshaderinc""
+// ^ reads csky_light_fade (0 = skydome stars, no range fade) and csky_opacity
+//   (OBJECT_OPACITY_STATE); node_bias and csky_fog_on come along unused, which is the
+//   price of one shared ordered block and costs nothing per instance.
 void vertex() {
     float dist = max(length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz), 1.0);
     // A fixed world diameter projected to pixels, clamped: far lights stay visible
@@ -885,55 +908,16 @@ void fragment() {
             sb.Append(", unshaded");
         sb.AppendLine(";");
         sb.AppendLine("uniform float depth_bias = 0.0;");
-        sb.AppendLine("instance uniform float node_bias = 0.0;"); // per-node draw-order tie-break
-        // Distance fog (weather.json FOG_COLOR/FOG_RANGES/FOG_ALTITUDE): globals set once per
-        // flight so all world + aircraft surfaces share them without per-material updates; no-op
-        // ranges when not flying. The original's fog volume is a vertical CYLINDER around the
-        // camera, not a sphere: only horizontal (x/z) distance fogs, scaled by an altitude
-        // fade-out — full fog below FOG_ALTITUDE.x, none above FOG_ALTITUDE.y — so the overcast
-        // deck / anything at sky altitude overhead stays clear instead of graying out
-        // (user-diagnosed; corroborated by zone1's altitudes 970→1047 = exactly cloud-band
-        // bottom → whiteout-band centre). The camera-anchored skydome still opts out per
-        // instance (csky_fog_on = 0) — its below-horizon skirt sits at low altitude ~22 km out
+        // The shared ordered instance-uniform block. This shader always carries instance
+        // uniforms (node_bias, csky_fog_on), so it always takes the full preamble — see the
+        // contract in the .gdshaderinc itself. The camera-anchored skydome opts out of fog per
+        // instance (csky_fog_on = 0): its below-horizon skirt sits at low altitude ~22 km out
         // and would otherwise fog solid gray.
-        sb.AppendLine("global uniform vec3 csky_fog_color;");
-        sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog), horizontal metres
-        sb.AppendLine("global uniform vec2 csky_fog_alt;");   // fragment altitude: full fog below x, fades to none at y
-        sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
-        if (blend || scissor)
-            sb.AppendLine(OpacityUniform);
-        // Per-mission world brightness from the weather's SUNLIGHT (item 6): the fullbright world
-        // is dimmed by this scalar before fog, matching the original's ambient+diffuse lighting of
-        // the baked-vertex world. Fullbright only — shaded (plane) surfaces are lit for real.
+        sb.AppendLine(InstanceUniformsInclude);
+        // Distance fog + the per-mission SUNLIGHT dimming.
+        sb.AppendLine(AtmosphereInclude);
         if (!shaded)
-        {
-            sb.AppendLine("global uniform float csky_world_light = 1.0;");
-            // The animated world's point lights (LIGHT_STATE). The world is unshaded, so a real
-            // Godot light contributes nothing to it — the original's DX7 point lights modulated
-            // the same baked vertex lighting this shader reads, i.e. what they do is spill onto
-            // nearby geometry. Packed as a 2×N data texture because global uniforms cannot be
-            // arrays; see WorldLights for the layout. csky_light_count = 0 skips the loop, which
-            // is what keeps an unlit world bit-identical to the pre-lights renderer.
-            sb.AppendLine("global uniform sampler2D csky_light_data;");
-            sb.AppendLine("global uniform int csky_light_count;");
-            sb.AppendLine(@"
-// Measured with --perf on C1's harbour (16 lights live): this loop costs nothing worth
-// optimising — the whole viewport's GPU time is 0.26 ms with lights on. An earlier
-// bounding-sphere early-out here was removed as unmeasurable complexity; the real cost of
-// LIGHT_STATE was always C# (see AnimRuntime's host-resolution cache).
-vec3 csky_light_spill(vec3 world_pos, vec3 normal) {
-    vec3 spill = vec3(0.0);
-    for (int i = 0; i < csky_light_count; i++) {
-        vec4 pr = texelFetch(csky_light_data, ivec2(0, i), 0); // xyz = position, w = range max
-        vec4 cr = texelFetch(csky_light_data, ivec2(1, i), 0); // rgb = linear colour, a = range min
-        vec3 to_light = pr.xyz - world_pos;
-        float dist = length(to_light);
-        float ndl = max(dot(normal, to_light / max(dist, 0.0001)), 0.0);
-        spill += cr.rgb * ndl * (1.0 - smoothstep(cr.a, pr.w, dist));
-    }
-    return spill;
-}");
-        }
+            sb.AppendLine(LightsInclude); // LIGHT_STATE spill — fullbright passes only
         if (textured)
             // Anisotropic mipmap filtering: the world is viewed at grazing angles from the
             // air, where plain isotropic mipmap selection blurs the ground to mush (the C5
@@ -964,7 +948,7 @@ vec3 csky_light_spill(vec3 world_pos, vec3 normal) {
         // (shadows/AO — 30% of the C1 world's corners). Linearising the vertex colour before
         // the (already-linear) texture multiply reproduces the gamma-space product. (item 6.)
         if (!shaded)
-            sb.AppendLine(SrgbToLinearFn);
+            sb.AppendLine(SrgbInclude);
         // Normal sign — aircraft only; the fullbright world never reads NORMAL. Our source
         // normals point to the polygon's visible side, and that side is the CCW loop, which is
         // Godot's BACK face (the reason single-sided surfaces use cull_front above). So every
@@ -1030,8 +1014,7 @@ void fragment() {{");
             sb.AppendLine("    vec3 light_n = normalize(-(INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);");
             sb.AppendLine("    ALBEDO += base_col.rgb * csky_light_spill(fog_world, light_n);");
         }
-        sb.AppendLine("    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))");
-        sb.AppendLine("        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+        sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
@@ -1073,16 +1056,17 @@ void fragment() {{");
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
-        // Same global distance-fog params as GetBiasShader's world shader. No csky_fog_on
-        // instance uniform — clouds always fog, and omitting it keeps the sprites off the
-        // instance-uniform buffer (see the Run-2 item-2 buffer note).
-        sb.AppendLine("global uniform vec3 csky_fog_color;");
-        sb.AppendLine("global uniform vec2 csky_fog_range;");
-        sb.AppendLine("global uniform vec2 csky_fog_alt;");
-        sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        // Same global distance-fog params as GetBiasShader's world shader. Clouds always fog,
+        // so this shader never reads csky_fog_on — and an OPAQUE cloud sprite therefore declares
+        // no instance uniform at all, which deliberately keeps it off the instance-uniform buffer
+        // (see the Run-2 item-2 buffer note, and the warning in csky_instance_uniforms.gdshaderinc).
+        sb.AppendLine(AtmosphereInclude);
+        // The alpha-writing variants already carry csky_opacity, i.e. they are on that buffer
+        // regardless — so they take the shared ordered preamble and agree on indices with every
+        // other shader, at no additional cost.
         if (blend || scissor)
-            sb.AppendLine(OpacityUniform);
-        sb.AppendLine(SrgbToLinearFn); // DX7 gamma-space vertex modulate (world/cloud pass)
+            sb.AppendLine(InstanceUniformsInclude);
+        sb.AppendLine(SrgbInclude); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(@"
 void vertex() {
     // Camera-facing billboard keeping the instance scale (Godot's billboard_keep_scale, by
@@ -1101,8 +1085,7 @@ void fragment() {
     // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
     // distance + the fragment-altitude fade.
     vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
-        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
         // darker at night — it's what lights the scene). Clouds ride the world brightness.
         sb.AppendLine(glow
@@ -1146,14 +1129,15 @@ void fragment() {
             sb.Append(", blend_mix, depth_draw_never");
         sb.AppendLine(";");
         sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;");
-        sb.AppendLine("global uniform vec3 csky_fog_color;");
-        sb.AppendLine("global uniform vec2 csky_fog_range;");
-        sb.AppendLine("global uniform vec2 csky_fog_alt;");
-        if (!glow)
-            sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        // csky_world_light arrives with the atmosphere include and is READ only when !glow
+        // (a light source does not dim with the mission's SUNLIGHT); declaring it either way
+        // costs nothing, since a global uniform is project-wide rather than per-instance.
+        sb.AppendLine(AtmosphereInclude);
+        // Only the alpha-writing variants carry an instance uniform at all, so only they take
+        // the preamble — an opaque facade stays off the instance-uniform buffer entirely.
         if (blend || scissor)
-            sb.AppendLine(OpacityUniform);
-        sb.AppendLine(SrgbToLinearFn);
+            sb.AppendLine(InstanceUniformsInclude);
+        sb.AppendLine(SrgbInclude);
         // Fixed axis + the plane the camera direction is measured in: Y keeps world-up fixed
         // and spins in XZ (Clutter's tree technique); X keeps the local-right axis fixed and
         // spins in YZ (a horizontal pipe's flame/muzzle flash facing the camera around its
@@ -1176,8 +1160,7 @@ void vertex() {{
 void fragment() {{
     vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
     vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-    float fog_amt = smoothstep(csky_fog_range.x, csky_fog_range.y, distance(fog_world.xz, CAMERA_POSITION_WORLD.xz))
-        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
+    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         sb.AppendLine(glow
             ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
             : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
