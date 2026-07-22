@@ -3755,3 +3755,146 @@ set, but neither is machine-checkable here.
 `Texture2D.GetImage()` returns null, so the capture block NREs every frame and the process never
 quits (a 206 MB stderr log in ~10 minutes). Screenshot runs must be windowed. Unrelated to this
 change; recorded in `backlog.md`.
+
+## 2026-07-22 — `FromToMotion`: an absent channel HOLDS, it does not reset to the rest pose (polish-4 item 2)
+
+`AnimRuntime.FromToMotion.Create` seeded its pose from `RestOf(target)`, so **every
+translate-only `OBJECT_MOTION_FROM_TO` event rewrote the node's orientation back to the shipped
+gamez transform.** It now seeds three separate components — orthonormal rotation, scale, origin —
+from the node's **live** transform at the instant the event fires. That is the rule
+`ScriptPlayback` already documented ("an ABSENT channel means hold the last value this script
+wrote, not return to rest", proven on C1/M04's `piratezep`) and the rule `AnimDefs.AddFromTo`'s own
+in-code comment has always claimed ("a missing FROM means from wherever the object currently is —
+left absent so the handler reads the live pose"). The handler simply never did it.
+
+Components rather than one transform, for `ScriptPlayback`'s reason: it keeps `Seek(t)` a pure
+function of `t`, and a rotate channel can no longer silently discard the node's scale (the old code
+did `basis = Euler(...)`, dropping it). Seeded **once per event** rather than re-read per frame, so
+a tween cannot compound into itself. A non-finite or singular live basis falls back to the rest
+pose rather than poisoning every later event on that node.
+
+**Survey that justified it (run before any code).** Across all 5 chapters' `cam_anim`/`mis_anim`:
+1,802 `OBJECT_MOTION_FROM_TO` events, of which **883 carry no rotate channel**. Simulating each
+sequence's rotation state and comparing against the gamez rest transform, **89 of those (26 nodes)
+hold a value that differs from rest** — C1's traffic and firetrucks, C2's ten studebakers, its
+sailboats and yachts. Longest divergent leg: `sailboat1`'s **300 s** held 180° out.
+
+**Measurement.** C1/IA1, `--freecam --debug-anim`, 900 frames ≈ 118 s of sim, `LogMotions`' `Take(12)`
+cap temporarily raised (the trap the `AnimRuntime` bullet records — the looping cars fall off the
+printed list otherwise) and a temporary elapsed-time probe line; both removed before commit.
+Baseline built by `git checkout HEAD -- <path>` + re-applying only the probe, verified by
+`git diff --stat` showing **5 insertions / 1 deletion** immediately before the baseline build.
+Reported as **median heading error against direction of travel** (the vehicle models' local forward
+is +X — deduced from the chase's 45° yaw on a leg travelling (+33, 0, −34), confirmed by
+`police_car`'s child bbox being long in X and narrow in Z), excluding samples where the car moved
+< 1 unit (heading undefined) or > 120 units (the `Loop` restart teleport) between 1 Hz samples:
+
+| node | before | after |
+|---|---|---|
+| `mafia` — **unaffected control** | **0.0°** | **0.0°** |
+| `black_car1` | **90.0°** | **0.0°** |
+| `truck1` | 90.0° | 1.9° |
+| `car_loop1` | 62.1° | 0.0° |
+| `car_go_home` | 49.4° | 0.0° |
+| `police_car` | 0.0° (mean 4.1) | 0.0° (mean 2.1) |
+| `suspect` | 0.0° (mean 5.0) | 0.0° (mean 1.4) |
+
+`black_car1` is the cleanest case in the install: its whole def is one `ROTSTATE y=180°` plus a
+single 16 s translate-only leg in an infinite `Loop`, so it drove **exactly sideways for its entire
+life**, 90.0° off on every sample. `suspect`'s 27 s park went from the rest 0° to the authored
+−110°, and both chase cars now hold 45° through the opening 2 s diagonal.
+
+`firetruck1-6`, `hauler1` and `flatbed1` are in the survey's divergent set but are **not live in
+C1/IA1** (they sit in `OnCall` `deploy_firetrucks` sequences), so they are covered by the data
+survey and by construction, not by measurement — stated rather than implied.
+
+**8-chapter `--freecam` regression: all 96 structural count cells identical** (nodes, mesh
+instances, colliders, uv-clamped surfaces, defs, anchored, state ops, unresolved, live instances,
+live motions, puffers, point lights × 8 chapters), zero Godot errors, warnings unchanged. That is
+the *correct* outcome and not an inert change: this alters the pose a tween writes, not which
+events fire or how many ops dispatch — and the same counters were shown able to move by item 1
+earlier the same day (C1 4136→4132). Mode battery clean: `--fly`, `--stunt`, `--viewer`, 4-player
+`--stunt --players=4`.
+
+**Disproven before implementing — the plan's headline symptom was wrong.** The plan asserted the
+police car's **17 s straight** "runs entirely at the authored rest orientation" and named it the
+longest, most visible damage. It is true but harmless: that leg's held value is **0°, which equals
+`police_car`'s and `suspect`'s authored rest** (both ship `rotate: {0,0,0}`), so it renders
+identically before and after — and the measurement confirms it, 0.0° in both runs. The real damage
+is the opening **2 s diagonal** (must hold 45°) and `suspect`'s **27 s park** (must hold −110°).
+The mechanism the plan traced was exactly right; the symptom it picked to demonstrate it was not.
+
+**Found and NOT fixed.** Every `*_delta` channel is dead code — see `backlog.md`.
+
+## 2026-07-22 — Polish-4 item 4: entities the mission never places no longer render on the map corner
+
+**Reported symptom.** C5 Instant Action shows a zeppelin buried in the ground, seen from
+`--campos=235.618,1471.759,94.103 --lookat=237.62,1371.833,97.39`.
+
+**Traced mechanism (the plan's account was right, and much too narrow).** A chapter gamez holds
+every mission's content, and the chapter's *build* script — `support\<ch>\load.gw` in
+`extracted/interp.json` — loads each vehicle with a bare `LoadGameGen` + `AddChild %worldName%`
+and **no placement at all**. So every zeppelin, car, boat, train car and aeroplane in the install
+starts life parked at the world origin with gamez `transform: "Initial"`; `GameZ.ParseTransform`
+correctly leaves `GameZNode.Local` null, `SceneBuilder` correctly assigns no transform, and the
+subtree builds at its parent's origin. Every chapter's world `area` is x,z ∈ [−N, 0], so that
+origin is the **map's corner** — hence "buried in the ground" (the ground there is
+`MapEdgeExtender`'s mirrored continuation).
+
+A mission then either switches the entity off (its own `.gw` setup script) or places it (an
+ON_STARTUP `OBJECT_TRANSLATE_STATE` — C3/IA1's `cgzepstate` puts `cargozep1` at
+(−12412.9, 134.0, −10424.8) — or an `OBJECT_MOTION_FROM_TO`). Retail data misses some.
+
+**Scope is wider than the plan stated, in two directions.**
+
+1. **C5 is not the only chapter.** The plan says "C5's `ia1.gw` is the only IA1 setup script in the
+   install that does not switch off `piratezep`" — **C1C's does not either** (its `ia1.gw` is four
+   lines and names only `multiplayer1zep`/`multiplayer2zep`), leaving `piratezep`, `blackswanzep`
+   and `workersvoyagezep` on the corner. The plan's list of chapters that *do* deactivate it
+   (C1, C1B, C2, C2B, C3, C4) simply omits C1C.
+2. **It is not a zeppelin bug.** Surveying all 8 chapters for world-build roots that are both
+   transformless and geometrically wrapped around their own origin gives **122 candidates, every
+   one a vehicle and not one terrain node**. In C5/IA1 the unhandled pair is `piratezep` +
+   `sprucegoose`; in **C2/IA1 it is 16 police/security cars, `kidnapcar` and `fuel_truck01`** and
+   no zeppelin at all.
+
+**Fix** (`WorldBuilder.HideUnplacedEntities` / `RestorePlacedEntities`, called from `PlaneViewer`
+straight after `AnimRuntime.Bind` and then polled once a second). After the animation bootstrap —
+i.e. after the interp setup script (pass 0) and the ON_STARTUP definitions have run — any world
+walk root that is *still* visible, *still* sitting exactly on the world origin, and whose built
+geometry AABB strictly straddles that origin in x and z, is switched off (invisible **and**
+non-collidable, mirroring `AnimRuntime`'s own INACTIVE handling). Anything that later moves off
+the origin is restored.
+
+**Verified.** Recorded pose before/after: zeppelin present → gone, terrain unchanged. Full
+8-chapter enumeration of every parked candidate's visibility and position at 5 s, baseline vs fix:
+
+| Chapter | Visible **before** | Visible **after** | Switched off |
+|---|---|---|---|
+| C1 | `passenger_trengine`, `tanker_car`, `box_car`, `caboose` (all placed, ≈(−6870, 128, −5580)) | identical | — |
+| C1B | none | none | — |
+| C1C | **`piratezep`, `blackswanzep`, `workersvoyagezep` — all at origin** | none | **3** |
+| C2 | yacht1–4, sailboat1–3, `rocket`, studebaker1–10 (all placed) **+ `fuel_truck01`, `security9`, `kidnapcar`, `security1–6`, `police1–9` at origin** | yacht1–4, sailboat1–3, `rocket`, studebaker1–10 — same positions | **18** |
+| C2B | none | none | — |
+| C3 | `cargozep1` @ (−12412.9, 134.0, −10424.8) | identical | — |
+| C4 | none | none | — |
+| C5 | `agyrobus` @ ≈(−7420, 281, −11711) **+ `piratezep`, `sprucegoose` at origin** | `agyrobus` only | **2** |
+
+**Nothing that was correctly placed disappeared, in any chapter.** C3's `zepbridge1`/`zepbridge2`
+and C4's/C5's `zepdock` never enter the candidate set at all: they carry identity transforms but
+their geometry is authored in world coordinates far from the origin, so the AABB test excludes
+them. That is exactly the "parked zeppelins that are supposed to be at their gamez position" risk
+the plan flagged, and it is handled by construction rather than by a name list. C2 shows both
+halves working: **35 switched off at bootstrap, 17 restored** within the first second as their
+FromTo motions started, leaving the 18 genuinely unplaced. Zero new errors in the 8-chapter
+regression; C1's one warning (`AnimRuntime.ReportLateSoundFailure`) is pre-existing and reproduces
+with the sweep disabled. Modes exercised clean: `--fly --chapter=C1`, `--stunt --chapter=C2`,
+`--viewer --plane=player_bhawk`, `--fly --chapter=C5 --players=2`.
+
+**Two traps hit and recorded** as `docs/verification.md` rules 16 and 17: the `child_bbox` frame
+error (464 false hits vs 122 real ones), and "after bootstrap" not being "after everything that
+places things".
+
+**Found and NOT fixed on the way:** the engine ignores the gamez node `active` flag entirely
+(`GameZ` never parses `flags.active`) — see `backlog.md`, including why it must not be fixed while
+item 3 is open.

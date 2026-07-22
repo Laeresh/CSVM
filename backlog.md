@@ -166,6 +166,45 @@ unscheduled.
   appending, which manufactured a bogus "16,576 errors in C1B" reading before it was spotted (the
   same class as `docs/verification.md`'s foreign-Godot rule, self-inflicted).
 
+- **`OBJECT_MOTION_FROM_TO`'s `*_delta` channels are silently dropped — all 26 of them.**
+  `FromToMotion.Channel` reads a channel as `data.Obj(name)` and then looks for `from`/`to` keys.
+  The absolute channels ship that shape (919/919 `rotate`, 401/401 `translate`, 663/663 `scale` all
+  carry both ends). **The delta channels do not**: the compiled form ships them as a bare
+  `{x, y, z}` vector — 15 `translate_delta`, 6 `rotate_delta`, 5 `scale_delta` install-wide — so
+  `Channel` returns `(null, null)` for every one and the delta is dropped. The reader front-end
+  (`AnimDefs.AddFromTo`) emits no delta channel at all. So the handler's delta arithmetic has
+  **never executed**. Found 2026-07-22 while landing polish-4 item 2; deliberately not folded in,
+  because it changes behaviour on 26 events and needs its own regression.
+  ⚠ **Traps.** Do **not** "fix" it by making `Channel` fall back to `Vec3` without first deciding
+  what a bare vector *means* — a `{from,to}` pair is a tween; a bare vector is most plausibly the
+  `to` with an implied zero `from`, but that is a guess, and inventing semantics is this project's
+  most-repeated trap. Read `docs/formats/anim-definitions.md` and the 26 actual payloads first.
+  The `FromToMotion` docstring now says deltas compose on the HELD pose, which is coherent with the
+  hold rule but **has never been observed**, precisely because they are dead — whoever revives them
+  owns confirming that. And a live one is the only way `Seek`'s `rot *= Euler(...)` / `scale *= ...`
+  lines get exercised at all, so a regression that never reaches one proves nothing about them.
+- **The gamez node `active` flag is never read.** `GameZ` parses no node flags at all (`flags` is
+  touched only for *polygon* flags, `GameZ.cs:278`), so `flags.active` — the shipped on/off state
+  each node was saved with — is ignored and every node is built visible. That flag is the gamez
+  record of the build script's own `NodeSetActive off`: C2's `load.gw` switches `piratezep` off
+  right after loading it, which is exactly why C2's `piratezep` is the one zeppelin in the install
+  shipped `active: false`. **Measured population — small, which is why this has never been
+  noticed:** nodes shipped inactive per chapter are C1 13, C1B 2, C1C 2, C2 3, C2B 2, C3 6, C4 6,
+  C5 2, and of those only **four are world-build roots**: C1 `fuel_truck01`/`fuel_truck02`,
+  C2 `piratezep`, C3 `barracuda`. All four are currently masked by something else (a mission setup
+  script, or polish-4 item 4's unplaced sweep), so there is no *known* visible symptom — but the
+  masking is coincidental, and C2/M01–M03 do not name `piratezep` in their setup scripts at all, so
+  C2 is where a symptom would surface first.
+  ⚠ **Traps.** **Do not fix this while the item-3 fidelity question is open** (C1 IA1 oil tanks
+  already destroyed at spawn, under "Open fidelity questions"): C1's `fuel_truck01`/`fuel_truck02`
+  are shipped inactive and that investigation turns on whether those trucks are present in IA1 —
+  honouring the flag would hide them and silently change the very thing it is blocked on testing.
+  The flag is **not** a fix for the item-4 symptom and must not be confused with it: C5's
+  `piratezep` ships `active: true`. And do not extend this to other node flags without a survey —
+  `terrain` in particular is **not** a visibility flag, it marks world-space map geometry, and is
+  what separates C3's `zepbridge1/2` and C4/C5's `zepdock` (identity transform, geometry already in
+  world coordinates, correctly drawn) from the zeppelin vehicles.
+
 ## Feature backlog
 
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the

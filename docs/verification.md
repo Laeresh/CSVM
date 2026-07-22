@@ -161,6 +161,38 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     the artifact before believing the metric.** Compare rule 4 (a metric going to zero is not the
     outcome being right) — this is its mirror image, and the same discipline answers both.
 
+17. **A bounding box stored in a file is in the node's own frame; the one your predicate needs is
+    usually in the world's.** Diagnosing the origin-parked entities (polish-4 item 4, 2026-07-22)
+    needed "does this node's geometry wrap the world origin". Read off the gamez `child_bbox`, that
+    query returned **464** world-build roots across 8 chapters, nearly all terrain — because
+    `child_bbox` is *local*, so a placed tile's box is centred on its own origin and contains
+    (0,0,0) by construction. Taken from the built subtree in world space the same query returns
+    **122**, every one a vehicle. The two differ by a factor of four and by their entire meaning.
+    **Before testing a position predicate against stored bounds, check which frame the file stores
+    them in** — rule 9's lesson (compute the thing, not a proxy for it) in a different coordinate
+    system.
+
+18. **"After bootstrap" is not "after everything that places things".** The same item's first
+    implementation swept once, immediately after the animation bootstrap, reasoning that every
+    placement mechanism had by then run. Two had not: `OBJECT_MOTION_FROM_TO` registers a motion
+    that moves the node over the following *seconds*, and an OnCall definition can start one at any
+    time. The sweep therefore switched off 35 C2/IA1 entities — four yachts, three sailboats, ten
+    studebakers, the rocket, and C1's train cars — that were merely *not yet* where they were
+    going, and **it looked completely correct at the instant it ran**. When a check asks "did
+    anything place this", make sure the answer cannot still be "not yet": prefer a reversible
+    action plus a recheck over a one-shot verdict, and note that deferring by a fixed delay only
+    moves the constant rather than removing it.
+
+19. **A plan that traces the right mechanism can still name the wrong symptom — and the symptom is
+    what you will measure.** Polish-4 item 2's mechanism (`FromToMotion` resetting to rest) was
+    exactly right, and its demonstration case was not: the plan's "17-second straight, the longest
+    and most visible leg" holds 0°, which *equals* `police_car`'s authored rest, so it is the one
+    leg in that sequence the bug cannot affect. Measuring where the plan pointed would have
+    produced a clean "no change" and read as a **disproof of a real bug**. **Before measuring where
+    a plan points, check that the pointed-at case can actually discriminate** — here one line of
+    the shipped `nodes.json` (`police_car` rotate `{0,0,0}`) settled it in advance, before any code
+    was written.
+
 ## 1. Before you trust a screenshot diff
 
 - **The default `--freecam` camera is not deterministic.** The spawn is a random pick per launch,
@@ -301,6 +333,11 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **`Assembly.Location` is empty under Godot's Mono loader**, so the obvious build-freshness probe
+  (`File.GetLastWriteTime(typeof(X).Assembly.Location)`) throws `ArgumentException: The path is
+  empty`. Worse, when it throws from inside `_Process` it silently kills *all* per-frame debug
+  logging for the run — which reads exactly like "the change did nothing". Use an explicit literal
+  build tag that you flip together with the code under test (2026-07-22, polish-4 item 2).
 - **Your own orphaned process is a foreign Godot** (2026-07-22). The rule below warns about
   *another agent's* concurrent Godot; the same thing happens to a single agent working alone. A
   background regression task that outlives its tool call keeps launching Godot and writing to the
