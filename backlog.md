@@ -207,6 +207,14 @@ relative to the Godot project's `src/`.
   `--shots=5 --jitter=0.006` (sub-pixel dither; the 0.15° default moves the camera far too much to
   isolate depth flips) before assuming the mottling and the hard edges are the same fault.
   **Do not fix by raising the bias constants globally** — see the C5 entry below for why.
+  **Measured 2026-07-22 (polish-3 item 11): this pose barely flickers at all.** `--shots=5
+  --jitter=0.006` there gives **0.41%** of pixels flipping (vs C5's 35.96% and C1B's 30.95% on
+  the same instrument), the beach is continuously visible, and the palms stand on sand
+  (`.scratch/zf_c3_base_00.png`). Whatever the user is seeing at this shoreline is therefore
+  **not** a per-frame depth flip at this camera — it is either a *static* wrong-winner (the
+  water consistently over the sand, which a jitter-flip metric cannot see at all) or it needs
+  a different camera. **Get a fresh capture or a pose from the user before diagnosing further**;
+  the pose recorded here does not reproduce a flicker to measure against.
 - **C3 trees standing in the water** (same camera pose) — **diagnosed 2026-07-22 as the SAME BUG
   as the beach z-fight above, not a clutter placement fault. Merged; scheduled as polish-run-3
   item 7.** The palms are visible in the original and are *supposed* to be there (user-confirmed
@@ -236,7 +244,17 @@ relative to the Godot project's `src/`.
   above used to speculate about: that was the unread `spline_interp` flag (fixed 2026-07-22), and
   all 15 affected scripts are C1 and C4 only — **C5 ships none**, so this is a separate bug.
 - **C1B z-fighting** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
-  Undiagnosed; same caution about the bias constants.
+  **30.95% of pixels flip** at `--shots=5 --jitter=0.006` (measured 2026-07-22, polish-3 item 11 —
+  the most severe of the three recorded z-fight poses after C5's 35.96%). **It is a CROSS-NODE
+  fight**: raising `NodeOrderBias` from 5e-8 to 2e-6 — a control that changes nothing but the
+  cross-node draw-order term — collapses it to **2.35%**. A within-surface (per-polygon)
+  tie-break leaves it at 31.00%, i.e. does nothing. Same caution about the bias constants: that
+  control is a diagnosis, **not a landable fix** — the same constant takes C5 from 35.96% to
+  41.69%, because the node-index span is thousands and a step big enough to beat the
+  depth-resolution floor spans tens of priority levels. The real fix has to make the bias
+  *dense over the nodes that actually conflict* rather than uniform over all of them; see the C5
+  entry for the resolution-floor measurement that makes this the shape of every remaining z-fight
+  here.
 - **Some oil tanks are already destroyed at spawn in C1 IA1, next to the Bloodhawk hangar.**
   Undiagnosed — likely a mission-setup or animation-bootstrap pass applying a destroyed state
   variant that the original does not.
@@ -483,8 +501,50 @@ objects). Confirmed cause: the depth bias is proportional to view distance
 (`VERTEX *= 1.0 - (depth_bias + node_bias)`), so coplanar surfaces sharing a draw priority get
 `rank × 2e-6` ≈ 0.16 mm at ~80 m. A 100× bias drops the flicker to 0.01%.
 
-> **⚠ SUPERSEDED 2026-07-22 (second measurement pass) — the "coarse vs fine" answer below is
-> wrong, and the draw-priority fix it prescribes was implemented, measured, and reverted.**
+> **⚠⚠ SUPERSEDED AGAIN 2026-07-22 (third measurement pass, polish-3 item 11) — the
+> "`g4683` fights ITSELF" answer in the box below is ALSO wrong. Read this box first.**
+>
+> **`g4683` has no self-overlapping polygons at all.** The "8 pairs exactly coplanar at y = 5,
+> overlapping by up to 768 × 512" figure came from an **AABB** overlap test, and an AABB
+> overlap is not an area overlap. Clipping the actual outlines (Sutherland-Hodgman, true
+> polygon∩polygon area) gives **zero** overlap for every pair in the mesh. Worked example —
+> its polygons 3 and 4, the pair whose bounding boxes overlap most:
+>
+> ```
+> poly3  (-9600,-3712) (-9472,-3712) (-9216,-4096) (-10240,-4096)
+> poly4  (-9600,-3712) (-10240,-4096) (-10240,-3584) (-9600,-3584)
+> ```
+>
+> They **share the edge (-9600,-3712)→(-10240,-4096) exactly** and lie on opposite sides of
+> it. They abut; they are a tiled ground surface, which is what this data mostly is.
+>
+> **The real mechanism at this pose is cross-node, and it is a resolution problem, not an
+> ordering problem.** Nine *different* World-child nodes stack coplanar `cblock*` ground at
+> y = 5 inside the repro footprint — nodes 1777 (`g4683`), 1799, 1800, 1801, 1813, 1814, 1822,
+> 1823, 1837, priorities 0 and −10. The priority −10 ones separate cleanly (10 × 2e-4). The
+> priority-0 ones are separated only by `node_bias`, and the measured depth-resolution floor at
+> this view is **≈1e-6 of view distance** (bracketed directly: a per-polygon depth ramp of 2e-7
+> moves the flip rate 35.96% → 33.20%, one of 2e-6 moves it to 0.37%). `NodeOrderBias` is
+> **5e-8 — twenty times below that floor**, so sibling nodes 36–60 indices apart get a
+> separation of 1.8–3.0e-6 that straddles the floor, and nodes 1822 vs 1823 (delta 1 → 5e-8)
+> can never separate at all. That is why the flicker is partial rather than total.
+>
+> **Do not "fix" this by raising `NodeOrderBias`.** Measured: raising it to 2e-6 takes C5 from
+> 35.96% to **41.69% (worse)** — the node-index span is thousands, so a step large enough to
+> beat the floor spans tens of priority levels and scrambles the authored layering. (It does
+> take **C1B from 30.95% to 2.35%**, which is good evidence C1B's fight is cross-node too, but
+> it is not a landable fix.)
+>
+> **Also corrected: "the 35.77% baseline is largely grazing-angle mipmap/aniso resampling" is
+> false.** A pure depth-ordering change — the 2e-6 per-polygon ramp, which alters nothing but
+> depth and leaves the projected position identical by construction — took the same pose to
+> 0.37%. So ≤0.4% of it is resampling and ~35.6% really was depth flipping. What that ramp
+> does *visually*, however, is float the coarse sheet in front of the detailed city
+> (`.scratch/cmp_c5_after.png`) — the flicker goes away because the wrong surface wins, which
+> is `docs/verification.md` rule 4 in its purest form.
+>
+> **The per-polygon within-surface tie-break was implemented properly and lands nothing.** See
+> `docs/HISTORY.md` 2026-07-22 (item 11) for the implementation and why it was reverted.
 >
 > **This is `g4683` z-fighting ITSELF, not the coarse sheet against the partition ground.**
 > Hiding `g4683` alone drops the repro pose's flicker to 0.19%; hiding all 7 coarse sheets

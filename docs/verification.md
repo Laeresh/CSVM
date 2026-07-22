@@ -47,12 +47,14 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    "confirmed: the sheets fight the partition ground". Both halves of that reading were
    wrong. Hiding *only* `g4683` gave the identical 0.19%, and the flicker was that single
    mesh's **own** polygons — five same-material coplanar pairs sharing one surface and
-   therefore one depth bias. The control was also confounded: removing the sheet removed the
-   only textured surface in the near field, so it deleted the grazing-angle mipmap/aniso
-   resampling noise along with the depth flips, and *most of that 35.77% was never a depth
-   fight at all* (per-polygon ordering, which changes nothing but depth, moved it only to
-   21.92%). **Isolate down to the single node before naming a culprit, and prefer a control
-   that changes only the suspected mechanism over one that removes the geometry.**
+   therefore one depth bias. **⚠ That replacement diagnosis was ALSO wrong, and so is the
+   "mostly resampling" claim this rule used to end on — see rules 9 and 10.** `g4683` has no
+   self-overlapping polygons (the pairs abut, they do not overlap), and the pose's flicker is
+   nine *different* World-child nodes stacking coplanar ground. What survives from this rule is
+   its method, and it is the part worth keeping: **isolate down to the single node before naming
+   a culprit, and prefer a control that changes only the suspected mechanism over one that
+   removes the geometry.** Applied honestly, that method is also what caught the second wrong
+   answer — hiding a node tells you a node *participates*, never what it participates *with*.
 8. **A measurement that locates the geometry still does not tell you which surface is at fault.**
    C3's "trees standing in the water" was measured precisely — 86 of the 102 `cliff1_sandtrans`
    polygons sit at exactly Y = 0.0, coplanar with the sea plane — and that correct number
@@ -63,6 +65,40 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    read as if it had answered "what is wrong". **Before fixing a coplanar-surface bug, establish
    which surface the original draws on top — that is a separate question from where they
    overlap.** Compare rule 4, which is the same trap reached from the other direction.
+9. **A bounding-box overlap is not an overlap.** The C5 ground z-fight has now been diagnosed
+   three times and got a different wrong answer each time; the third one — `g4683` "carries 8
+   pairs of its own polygons exactly coplanar at y = 5, overlapping by up to 768 × 512 units" —
+   rested entirely on an **AABB** intersection test. Clipping the real outlines
+   (Sutherland-Hodgman, true polygon ∩ polygon area) gives **zero** overlap for every pair in
+   that mesh: they are tiled ground quads that *share an edge exactly* and lie on opposite sides
+   of it. The same substitution inflated an install-wide survey from **0.6–1.6% of polygons to
+   9–26%**, a 15× error that would have justified a far more invasive fix than the data supports.
+   Two triangles tiling one rectangle have identical bounding boxes and no shared area at all.
+   **When the hypothesis is "these two surfaces overlap", compute the overlap, not the boxes** —
+   and expect game terrain to be mostly *abutting* coplanar tiles, which an AABB test reports as
+   a conflict everywhere.
+10. **"The rest is instrument noise" is a claim that needs its own control.** Rule 7 recorded that
+    most of the C5 repro pose's 35.77% flip rate was "grazing-angle mipmap/aniso resampling, not
+    depth flips". It was not. A control that changes **only** depth — a per-polygon depth ramp,
+    which leaves every projected position identical by construction — took the same pose to
+    **0.37%**. So ≤0.4% was resampling and ~35.6% was genuinely depth flipping; the earlier
+    "21.92%, so the rest must be noise" reading was a *step-size* artifact of a ramp too small to
+    win the depth test, mistaken for a floor. **A residual you have not driven to zero is not
+    evidence of a floor.** Drive it with a control that isolates the mechanism; if you cannot, say
+    the floor is unmeasured rather than inferring it from wherever your change happened to stop.
+    Note also what that successful control *looked like*: 0.37% flicker, achieved by floating the
+    coarse sheet in front of the detailed city — rule 4 again. The number and the picture
+    disagreed, and the picture was right.
+11. **Know your instrument's resolution before you tune a constant to fit under it.** This
+    renderer's depth bias is a fraction of view distance, and the fraction below which two
+    coplanar surfaces stop separating was never measured until 2026-07-22: it is **≈1e-6** at the
+    C5 repro view (bracketed by ramp steps of 2e-7 → 33.20% and 2e-6 → 0.37%). `NodeOrderBias` is
+    **5e-8**, i.e. twenty times below its own resolution — so the cross-node tie-break the
+    `SceneBuilder` bullet describes is *inoperative* for any pair of nodes closer than ~40 indices,
+    and has been since it was written. Three separate z-fight reports are downstream of that one
+    unmeasured number. **A tuning constant whose effect has never been bracketed is a guess, and
+    a hierarchy of them (priority ≫ surface rank ≫ node order) can be silently inverted or
+    silently truncated at any level.**
 
 ## 1. Before you trust a screenshot diff
 

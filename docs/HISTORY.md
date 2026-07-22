@@ -2581,3 +2581,81 @@ this session's `git stash pop` returned the item-9 session's `AnimRuntime.cs`/`C
 WIP. It was detected immediately, their commit was put back with `git stash store`, their files
 were reverted here, and no measurement was taken from the mixed tree. **Do not use `git stash`
 in a worktree session** — keep work in the working tree or in a local commit on the branch.
+
+## 2026-07-22 — polish-3 item 11: per-polygon within-surface tie-break — DISPROVEN, nothing landed
+
+**Outcome: no engine change.** The mechanism this item was written around does not exist in the
+data, the fix built on it changes nothing at any of the three reported z-fight poses, and it was
+reverted. What the session did produce is the first measurement of this renderer's
+depth-resolution floor, which reframes all three reports as one problem and explains why two
+previous diagnoses of the same bug were both wrong.
+
+**The premise, and why it is false.** Item 11 rested on "C5's `g4683` (node 1777) carries 8 pairs
+of its own polygons exactly coplanar at y=5, overlapping by up to 768×512 units". That is an
+**AABB** overlap. Clipping the real outlines (Sutherland-Hodgman, true polygon ∩ polygon area)
+gives **zero** overlap for every pair in that mesh. The worst-overlapping pair of bounding boxes:
+
+```
+poly3  (-9600,-3712) (-9472,-3712) (-9216,-4096) (-10240,-4096)
+poly4  (-9600,-3712) (-10240,-4096) (-10240,-3584) (-9600,-3584)
+```
+
+They **share the edge (-9600,-3712)→(-10240,-4096) exactly** and lie on opposite sides of it —
+abutting ground tiles, which is what most of this terrain is. Install-wide the same substitution
+inflates the count of genuinely conflicting polygons from **0.6–1.6% to 9–26%**, a 15× error.
+Recorded as `docs/verification.md` rule 9.
+
+**The fix was built properly anyway, and moves nothing.** Per-polygon rank delivered to the
+shader in `UV2.x`, restricted by the area test to polygons with a genuine coplanar overlapping
+sibling in the same surface, applied as a **pushback on the loser** (`- poly_bias * UV2.x`) so no
+polygon is ever pulled toward the camera and nothing can newly occlude anything. Instrumented and
+shown able to fire: 270 polygons ranked in C5. Measured with `--shots=5 --jitter=0.006`, flip
+threshold 8/255, run-to-run noise floor **0 px** (same build twice gave bit-identical 331,380 px):
+
+| pose | before | after |
+|---|---|---|
+| C5 `g4683` repro | 35.96% | **35.96%** |
+| C3 beach | 0.41% | **0.41%** |
+| C1B | 30.95% | **31.00%** |
+
+8-chapter regression: identical gamez node and mesh-instance counts, zero errors, no visible
+change. Largest genuine pixel delta was C3's 15,864 px — invisible stipple along the shoreline.
+C2B's apparent 24,148 px was **precipitation noise**: same-build-vs-same-build gives 24,117 px at
+max delta 1. Load time unaffected (the test runs once per unique mesh behind the mesh cache, and
+only 2.6k–10.6k polygon pairs per chapter survive the plane+AABB reject to reach the area clip).
+
+**The "35.77% → 21.92%" result that motivated the item was a step-size artifact.** A *blanket*
+per-polygon ramp is a global bias bump, not a tie-break. At 2e-7 it reaches 33.20%; at 2e-6 it
+reaches **0.37%** — by floating the coarse sheet in front of the detailed night city, i.e. the
+known-wrong surface wins (`.scratch/cmp_c5_after.png`; `docs/verification.md` rule 4). The 21.92%
+was a ramp too small to win the depth test, read as a noise floor. This also corrects rule 7's
+"most of the 35.77% is grazing-angle mipmap/aniso resampling": a control that changes only depth
+took it to 0.37%, so ≤0.4% was resampling and ~35.6% really was depth flipping. New rule 10.
+
+**What the session actually found — the depth-resolution floor, measured for the first time.**
+The ramp brackets it: **≈1e-6 of view distance** is the smallest bias that separates two coplanar
+surfaces at this view. Against the constants in `SceneBuilder`: `DepthBiasPerLevel` 2e-4 is far
+above it, `SurfaceRankBias` 2e-6 sits at it, and **`NodeOrderBias` 5e-8 is twenty times below
+it** — so the cross-node draw-order tie-break the architecture doc describes has been inoperative
+for any node pair closer than ~40 indices since it was written. New rule 11.
+
+**The real mechanism for all three poses is cross-node.** Nine *different* World-child nodes stack
+coplanar `cblock*` ground at y=5 in the C5 repro footprint (1777 `g4683`, 1799, 1800, 1801, 1813,
+1814, 1822, 1823, 1837). The priority −10 members separate cleanly (10 × 2e-4); the priority-0
+members sit 36–60 indices apart (1.8–3.0e-6, straddling the floor) and 1822/1823 sit 1 index apart
+(5e-8, hopeless) — which is why the flicker is partial rather than total. Confirming control:
+`NodeOrderBias` 5e-8 → 2e-6, which changes nothing but the cross-node term, takes **C1B from
+30.95% to 2.35%**. It is a diagnosis and **not a landable fix** — the same constant takes C5 to
+**41.69%, worse**, because the node-index span is thousands and any step that beats the floor
+covers tens of priority levels and scrambles the authored layering.
+
+**C3's recorded pose does not reproduce a flicker at all** — 0.41%, beach continuously visible,
+palms standing on sand. Either the shoreline fault is a *static* wrong-winner (which a
+jitter-flip metric cannot see) or the recorded pose is not where the user saw it. Flagged in
+`backlog.md` as needing a fresh capture rather than another diagnosis session.
+
+**Next step if this is picked up again:** make the cross-node bias **dense over the nodes that
+actually conflict** rather than uniform over all of them — rank coplanar-overlapping node groups
+against each other and spend the available range on them, with the floor above as the budget.
+That is a scene-graph analysis, not a constant. Do not re-try a within-surface tie-break, and do
+not raise a global constant.
