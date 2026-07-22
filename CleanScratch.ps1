@@ -53,8 +53,15 @@
     Also remove worktrees with uncommitted changes. Destroys uncommitted work.
 
 .PARAMETER PruneBranches
-    After removing worktrees, delete the branches they left behind that are
-    already merged into main. Unmerged branches are always kept.
+    Delete every local branch already merged into main, except main itself, the
+    branch you are on, and any branch checked out in a worktree being kept.
+    Unmerged branches are always kept -- `git branch -d` refuses them.
+
+    This is deliberately NOT limited to branches removed in the same run. Agent
+    worktrees leave their branches behind, and those outlive the worktree by any
+    number of sweeps; scoping the prune to "worktrees removed just now" made the
+    switch silently do nothing whenever the directories had already been cleaned
+    up, which is the common case.
 
 .PARAMETER Force
     Skip the confirmation prompt.
@@ -198,6 +205,36 @@ if ($isGitRepo) {
     }
 }
 
+# --- Branches left behind by worktrees -------------------------------------
+# Enumerated from the branch list, NOT from the worktrees removed in this run:
+# a branch outlives its worktree by any number of sweeps, so scoping it to
+# "removed just now" made -PruneBranches silently no-op once the directories had
+# already been cleaned up by hand.
+#
+# Safe by construction: `git branch -d` refuses to delete anything not merged, so
+# a branch carrying unique commits survives regardless of what is listed here.
+$brDoomed = [System.Collections.Generic.List[string]]::new()
+
+if ($PruneBranches -and $isGitRepo) {
+    # Branches held by worktrees we are KEEPING cannot be deleted; ones held by
+    # worktrees being removed become deletable, so they stay in the list.
+    $heldByKept = @{}
+    foreach ($s in $wtSpared) {
+        if ($s.WT.Branch) { $heldByKept[$s.WT.Branch] = $true }
+    }
+
+    $currentBranch = (& git -C $PSScriptRoot rev-parse --abbrev-ref HEAD)
+    foreach ($line in @(& git -C $PSScriptRoot branch --merged main)) {
+        $b = $line.TrimStart('*', '+', ' ').Trim()
+        if (-not $b)                     { continue }
+        if ($b -eq 'main')               { continue }
+        if ($b -eq $currentBranch)       { continue }
+        if ($b -like '(*')               { continue }   # detached HEAD placeholder
+        if ($heldByKept.ContainsKey($b)) { continue }
+        $brDoomed.Add($b)
+    }
+}
+
 $doomedBytes = ($doomed | Measure-Object Length -Sum).Sum
 if (-not $doomedBytes) { $doomedBytes = 0 }
 
@@ -237,7 +274,12 @@ if ($wtDoomed.Count -gt 0) {
     }
 }
 
-if ($doomed.Count -eq 0 -and $wtDoomed.Count -eq 0) {
+if ($brDoomed.Count -gt 0) {
+    Write-Host "Branches: deleting $($brDoomed.Count) merged into main" -ForegroundColor Cyan
+    foreach ($b in $brDoomed) { Write-Host "  $b" }
+}
+
+if ($doomed.Count -eq 0 -and $wtDoomed.Count -eq 0 -and $brDoomed.Count -eq 0) {
     Write-Host "Nothing to delete." -ForegroundColor Green
     exit 0
 }
@@ -250,6 +292,7 @@ if (-not $Force -and -not $WhatIfPreference) {
     $what = @()
     if ($doomed.Count -gt 0)   { $what += "$($doomed.Count) file(s), $(Format-Size $doomedBytes)" }
     if ($wtDoomed.Count -gt 0) { $what += "$($wtDoomed.Count) worktree(s)" }
+    if ($brDoomed.Count -gt 0) { $what += "$($brDoomed.Count) branch(es)" }
     # A non-interactive host (scheduled task, CI, an agent shell) cannot prompt and
     # throws here. Fail CLOSED with an actionable message rather than a raw .NET
     # exception -- deleting on the grounds that nobody could be asked is the wrong
@@ -322,24 +365,31 @@ if ($isGitRepo -and -not $WhatIfPreference) {
     $null = & git -C $PSScriptRoot worktree prune
 }
 
-# --- Branches the worktrees left behind ------------------------------------
-# Removing a worktree never deletes its branch, so committed work always
-# survives this script. `git branch -d` refuses anything unmerged, which is the
-# safety property that makes -PruneBranches reasonable to offer at all.
+# --- Delete the merged branches --------------------------------------------
+# Runs AFTER worktree removal so a branch that was checked out a moment ago is
+# now free. `git branch -d` refuses anything unmerged, so this cannot lose work.
 $brDeleted = 0
 $brKept    = [System.Collections.Generic.List[string]]::new()
 
-if ($wtBranches.Count -gt 0) {
+foreach ($b in $brDoomed) {
+    $null = & git -C $PSScriptRoot rev-parse --verify --quiet "refs/heads/$b"
+    if ($LASTEXITCODE -ne 0) { continue }
+    if (-not $PSCmdlet.ShouldProcess($b, "Delete branch")) { continue }
+    $out = & git -C $PSScriptRoot branch -d $b
+    if ($LASTEXITCODE -eq 0) {
+        $brDeleted++
+    } else {
+        $brKept.Add($b)
+        Write-Warning "Could not delete branch ${b}: $out"
+    }
+}
+
+# Branches left behind by worktrees removed this run, when -PruneBranches was not
+# asked for -- reported so they do not accumulate unnoticed.
+if (-not $PruneBranches -and $wtBranches.Count -gt 0) {
     foreach ($b in $wtBranches) {
-        $exists = & git -C $PSScriptRoot rev-parse --verify --quiet "refs/heads/$b"
-        if ($LASTEXITCODE -ne 0) { continue }
-        if ($PruneBranches) {
-            if (-not $PSCmdlet.ShouldProcess($b, "Delete branch")) { continue }
-            $out = & git -C $PSScriptRoot branch -d $b
-            if ($LASTEXITCODE -eq 0) { $brDeleted++ } else { $brKept.Add($b) }
-        } else {
-            $brKept.Add($b)
-        }
+        $null = & git -C $PSScriptRoot rev-parse --verify --quiet "refs/heads/$b"
+        if ($LASTEXITCODE -eq 0) { $brKept.Add($b) }
     }
 }
 

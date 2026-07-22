@@ -3357,3 +3357,17 @@ script whose whole job is deletion.
 
 **Verified** by `-WhatIf` (found all 10, deleted nothing), then a real run: 10 worktree entries
 cleared, `git worktree list` back to the main checkout, all 10 branches deliberately untouched.
+
+**Follow-up the same day — `-PruneBranches` was broken on arrival.** It collected candidates only
+from worktrees removed *in the same run*, so once the directories had already been cleaned up (the
+common case, and exactly the user's) the list was empty and the switch **silently did nothing**.
+Fixed to enumerate `git branch --merged main` independently, excluding `main`, the current branch,
+and any branch held by a worktree being kept. This also surfaced that the leftovers were **20
+branches, not 10** — a `worktree-agent-*` set exists alongside the `polish3-item*` ones, and the
+original implementation could never have seen it because those were not the branches its worktrees
+reported. All 20 deleted; `git branch --list` is back to `main` alone, and a re-run is a clean
+`Nothing to delete`.
+
+The general lesson: **a cleanup switch scoped to "things this run just touched" no-ops precisely
+when the mess is oldest.** `-Force` made it worse by suppressing the prompt that would have shown
+an empty plan.
