@@ -81,7 +81,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `docs/HISTORY.md` — chronological development log: every landed change with its verification details. Append a dated entry when work lands.
 - `docs/plans/` — completed plans, each banner-marked `COMPLETE` with its date; kept for their evidence and recorded dead ends, read as history. **A plan sitting in `docs/` rather than in here is the active one** — right now there is none.
 - `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; delete when landed.
-- `OriginalScreenshots/` — user-captured reference shots from the original game (committed; no bulk asset data). Reference videos in `Videos/` are git-ignored — ask the user if one is missing.
+- `OriginalScreenshots/` — user-captured reference shots + videos from the original game. **Git-ignored in full since 2026-07-22** (was committed until then). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
 ## Godot project (`CSVM/`)
 

@@ -24,8 +24,11 @@ Desktop.ini
 *.swp
 CopyToOneDrive.ps1
 
-# Reference videos of the original game (large binaries — referenced by docs, not committed)
-/OriginalScreenshots/Videos/
+# Reference captures of the original game — screenshots and videos alike.
+# Kept locally and referenced by docs/backlog by filename; never committed.
+# (The Videos/ subfolder was already ignored; 2026-07-22 this widened to the
+# whole folder, and the previously-tracked screenshots were untracked.)
+/OriginalScreenshots/
 
 # Claude Code scratch/probe artifacts
 .scratch/
