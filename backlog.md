@@ -268,6 +268,19 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   **User-confirmed 2026-07-22 as visibly missing building clutter in both C2 and C5.**
 - **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
+- **Make the asset roots configurable so a git worktree can run the game** (raised 2026-07-22).
+  `PlaneViewer.cs:275` hardcodes `_repoRoot = <godot project>/..` and derives every asset path from
+  it (`extracted/planes.zip`, `extracted/<ch>/gamez.zip`, `extracted/rof`, …). Since `/extracted/`,
+  `/CrimsonSkiesGame/` and `/tools/` are git-ignored, a worktree checkout has none of them — so a
+  second Claude Code session in `claude --worktree <name>` can edit code and docs but cannot build,
+  run, `--screenshot=` or extract, which removes the project's main verification instrument. Fix:
+  a `--data-root=` arg (or a `CSVM_DATA_ROOT` env var) overriding `_repoRoot` for asset lookup only,
+  defaulting to today's behaviour. Then a worktree session points at the primary tree's `extracted/`
+  and verifies normally. Small and self-contained on the Godot side — one field and its arg parse.
+  The `.ps1` scripts derive `$RepoRoot` the same way and would want the same override to launch from
+  a worktree, but extraction itself only ever needs to run once in the primary tree.
+  Rejected alternative: junctioning the three directories into each worktree — worktree removal
+  follows links, and the targets are the retail install and hours of extraction output.
 
 - **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
   every zone freezes at the finish showing their placing while the field flies on. It matches
