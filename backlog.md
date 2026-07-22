@@ -113,12 +113,9 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 - **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
   "Known divergences"; these are the leftovers):
-  - **Achromatic paint regions.** A hue window cannot see a paint region with no hue, so the
-    Bloodhawk's outer wing panels stay gray where the original paints them black. Needs a
-    per-texture value-band rule (hand-authored per aircraft) or a better region key.
-  - **Slot order.** Regions are assigned to colour slots by area; validated only on the
-    Bloodhawk, and even there the reference cannot separate slots 2 and 3 (both white under
-    Fortune Hunters).
+  - *(Resolved 2026-07-20 by the rework onto the original's own region masks: achromatic
+    regions now paint, and slot order is read from the data instead of ranked by area. See
+    "What the rework fixed" in `docs/formats/paint.md`.)*
   - **The paint UI's "Shade" column** is unmodelled — three Colour *and* three Shade
     dropdowns exist in the UI, only three colours in the data. We ramp black → colour.
   - **A livery picker in the launchscreen.** Selection is CLI-only (`--paint=`); flight

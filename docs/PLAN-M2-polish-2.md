@@ -473,7 +473,14 @@ drive the train; implement what the data actually defines, no invented traffic.
 debug pause (P) freezes it with everything else; frame cost negligible; missions without
 vehicle anims are unchanged.
 
-**DEFERRED (2026-07-18, user decision):** the survey (documented in
+**DEFERRED (2026-07-18, user decision) — and since RESOLVED: the deferral below is history.**
+The "mech3ax extension" it waits for was built in this project's fork (`unzbd cs anim`,
+2026-07-21, byte-identical on all 61 archives of this install), `ExtractAssets.ps1` extracts
+both anim archives, and the animation engine drives the train from that data. See
+`docs/formats/extraction.md` and `docs/architecture.md`'s `AnimRuntime.cs` bullet. Original
+text follows unchanged:
+
+the survey (documented in
 `docs/formats/anim-definitions.md` § "Compiled anim archives") found the train's motion is
 `OBJECT_MOTION_SI_SCRIPT` whose `.zan` spline scripts exist **only compiled inside the
 chapter's `cam_anim.zbd`** — an archive mech3ax does not extract for CS (and the plan's

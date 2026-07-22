@@ -141,8 +141,8 @@ So the engine cannot be doing an index-range palette swap. Whatever table it use
 > summing to 255**. That is a direct answer to "how the engine identifies a region", and it is
 > per *pattern* — which also answers "what a pattern actually varies" below. Full decode in
 > [rof.md](rof.md); `ExtractRof.ps1` writes each mask out as `<SKIN>_mask.png` (R/G/B = slots
-> 1/2/3). **The sections below describing hue windows document what the remake does today,
-> which predates this find** — see "Superseded" at the bottom.
+> 1/2/3). **The remake was reworked onto these masks on 2026-07-20** — the hue-window sections
+> below describe the approach they replaced; see "Superseded" at the bottom.
 
 ### What the regions actually look like
 
