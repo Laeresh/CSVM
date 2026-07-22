@@ -734,3 +734,71 @@ re-shoot the original at the repro pose (`--campos=-9533.178,76.319,-3367.413
 --lookat=-9451.281,28.148,-3398.597`) — or, cheaper, identify the coarse quad's node in our scene
 and check whether it is a LOD sibling that should have been culled, which would settle the "why is
 it coplanar at all" half without needing the original at all.
+
+## C1/M04: the pirate zeppelin flies above the overcast and is never visible
+
+**User-reported 2026-07-22** ("there should be a pirate zeppelin flying on the map but it isn't
+visible; the other zeppelin on the field is correct"). **Not a rendering or transform bug** — it
+builds, renders complete (gun, crane, panels, doors, `counterspin`) and flies. Verified by putting
+the freecam on it: `--freecam --chapter=C1 --mission=M04 --campos=-5358,1505,-2200
+--lookat=-5358,1505,-1810 --no-fog`.
+
+**It is simply above the clouds.** `--debug-anim` logs successive positions
+(-5358, **1505**, -1810) → (-5472, **1523**, -1956) → (-5620, **1546**, -2146): moving *and
+climbing*. C1's cloud band is `TOP 1124 / BOTTOM 970` with the opaque `cloudlayer` deck geometry
+at **y = 960**, and the player spawns at y ≈ 110. So the deck occludes it from below at every
+point on its path, and C1's zone2 fog (1000–4000 m) finishes the job.
+
+**Leading explanation — we bootstrap a cutscene animation as gameplay.** M04's start-anim list is
+`[pzep_engines_start, train_on_track, mission_intro_animation]`, and polish-3 item 9 traced the
+zeppelin's motion to `scene1 → ObjectMotionSiScript{name: "piratezep", index: 1}` — i.e. the
+**intro cutscene's** choreography, on the chain
+`piratezep → move_zeppelin → tilt_zeppelin → rock_zeppelin → gasbag3`. That item's report even
+described the fix as "the pirate zeppelin now flies its authored **intro** path". This project has
+no cutscene player, so the cinematic trajectory runs as if it were the mission's gameplay state.
+In the original the intro plays as a cutscene and gameplay presumably starts with the zeppelin at
+a visible altitude.
+
+**Before fixing, establish which of these it is** — they need different answers and a screenshot
+cannot tell them apart:
+1. The cutscene path is correct and we should simply *not* run `mission_intro_animation` at
+   startup (it is a `camera1`-anchored def full of `Callback` events, already triaged as
+   cutscene-only — see the `CALLBACK` entry above).
+2. The path is right but our *starting* pose is wrong, so it climbs from the wrong place.
+3. The original really does fly it above the overcast and the user is remembering a different
+   mission or a later phase.
+
+Ask the user what altitude the zeppelin appears at in the original before touching anything.
+**Do not "fix" it by lowering the zeppelin** — that is content invention, the same trap as the C3
+palms.
+
+## C1: the police siren never sounds — a named sibling sequence is never dispatched
+
+**User-reported 2026-07-22** (heard the waterfall and the train in C1/IA1, but not the police car).
+**Confirmed and narrowed.**
+
+The car itself is fine: `anim/debug: police_car at (-6868.4, 128.0, -5930.1) … visible`, driving
+its route (and looping since polish-3 item 8).
+
+The sound is not: `--debug-anim` reports
+**`anim: 38 ambient sound emitter(s): snd_waterfall, snd_zepengine, snd_train`** — 38 emitters
+built across only **three distinct names**, and `snd_police` is not one of them. So the emitter is
+never created, which is why nothing plays.
+
+**Why, most likely.** `extracted/C1/cam_anim/police_car-police_chase.json` is `activation:
+OnStartup` and its `SoundNode { name: "snd_police", active_state: true }` sits inside a sequence
+named **`siren_police`**. Its sequence list is `['start_walkin', 'siren_police', 'start_walkin']`
+— **every sequence is named**. Compare a working emitter,
+`passenger_trengine-train_on_track.json`, whose sequences are `['', '', 'steamplume', '', '', '']`
+— **mostly unnamed**. That points at `AnimRuntime` running the unnamed/default sequence on
+activation while **named sibling sequences wait for an explicit call that never comes**.
+
+**Verify that before implementing** — it is a hypothesis about the runtime, not a measurement.
+Check how `SequenceRunner` selects which sequence to run on activation, and count install-wide how
+many `SoundNode`/other events sit in named-but-uncalled sequences; if the count is large this is a
+systemic gap rather than one missing siren. Note `snd_police` is **not** a gamez node — but
+neither are `snd_train` or `snd_waterfall`, which work, so that is not the discriminator.
+
+**Instrument note:** `--mute` suppresses the audio session entirely and the emitter report then
+reads `0 ambient sound emitter(s) [38 requested with no audio session]`, which looks exactly like
+"the emitters are broken". Drop `--mute` when investigating audio.
