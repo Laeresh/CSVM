@@ -2581,3 +2581,97 @@ this session's `git stash pop` returned the item-9 session's `AnimRuntime.cs`/`C
 WIP. It was detected immediately, their commit was put back with `git stash store`, their files
 were reverted here, and no measurement was taken from the mixed tree. **Do not use `git stash`
 in a worktree session** — keep work in the working tree or in a local commit on the branch.
+
+## 2026-07-22 — Polish-3 item 5: one billboard classifier; billboards and clutter lose collision
+
+Two halves plus a live bug found mid-item. **Net rendering change: none** — every screenshot
+sits at or below its same-build noise floor, and C5 (the one fully deterministic pose, 0 px
+floor across repeated runs) is exactly byte-identical.
+
+**(a) One classifier.** The billboard rule was already data-driven (2026-07-21) but split
+across two private `SceneBuilder` methods, with `ClutterBuilder` running an independent
+1-poly/4-vert/flat-Z shape heuristic and `WorldBuilder` gating collision on poly-count plus
+texture name. It is now `public static SceneBuilder.BillboardKind? ClassifyBillboard(GameZMesh)`
+(`None`/`Spherical`/`CylindricalY`/`CylindricalX`), consumed by all four call sites. It returns
+**null** when the extraction carries no `ModelType`, which is how the per-caller legacy
+fallbacks are preserved — they encode genuinely different intents and folding them together
+would silently change what a v0.6.1 rollback tree renders. `BuildMesh` was deliberately left
+byte-identical: `GetCylindricalAxis` still returns the private `CylAxis` that keys the shader
+caches, now derived from `BillboardKind`.
+
+Cross-check that made the clutter switch safe: every clutter template decoration in the install
+is either a 1-polygon `Facade` (tree/bush/palm/lightpole card) or a 2–27-polygon `Default` (3D
+building), so the data rule and the old shape rule agree exactly — clutter counts are unchanged
+in all 8 chapters (C1 9,303 · C3 371 · C4 88,630 · C5 139,388). Note the trap the survey
+confirms: the 3D building decorations carry a **stale** `facade_mode: CylindricalY` while being
+`model_type: Default`, so the *type* must be the discriminator.
+
+**(b) Clutter and billboards lose collision.** The plan's premise held and is now recorded in
+`docs/formats/clutter.md`: `Clutter.cs` and that page both justified tree collision with
+"`spruce_destroy` anims exist", but the two strings are
+`..\data\common\zrdr\planes\spruce_destroy{1,2}.zrd` — the **`planes\`** folder — and the files
+define `g_engine*` anims with `prop_part`, `spin`/`counterspin`, `snd_propstart` and engine
+puffers. That is the **Spruce Goose**, the C2/M01 mission object. There is no spruce-*tree*
+animation, and no tree-destruction animation of any kind, in the install. Both doc claims
+corrected. Clutter collision removed outright (user decision): −37,212 collision triangles in
+C1, −354,520 in C4, −557,552 in C5, plus the `MapEdgeExtender` mirror.
+
+**(c) Live bug found and fixed: `skywal*` is a building texture, not sky.** Handed over from the
+item-4 session and verified here against the data. `NoCollisionNode` exempted anything matching
+`IsCloudOrSkyTexture` (`cloud*`/`sky*`), and `MeshUsesTexture` matches if *any* polygon carries
+the texture — so one `skywal01` face made whole structures phantom: C4's `pod2_hi` (73 polys,
+107×88×125 m), `pod6_hi` (143 polys), `g74` (64 polys, **395×135×275 m**), and C1/C1B/C2/C3's
+`g456` (181 polys, 113×49×102 m), `racmplx`, `rabdr` — each mixing `skywal*` with `jim_floor01`,
+`jim_rail1`, `jim_roof01`, `bhfbuild03`, `flaghut2`, `flagstand`. Fixed by narrowing the
+**collision** predicate only (`IsNonSolidSkyTexture` = `IsCloudOrSkyTexture && !skywal*`), not
+the shared `IsCloudOrSkyTexture`, which also drives the cloud alpha-blend and `MapEdgeExtender`'s
+ground-tile filter — so rendering is provably untouched and C4's 144 `Sky1.tif` deck quads stay
+exempt.
+
+**Collider counts, the two deltas reported separately** (they move in opposite directions and
+would otherwise mask each other):
+
+| chapter | baseline | Δ billboards | Δ `skywal` | final |
+|---|---|---|---|---|
+| C1 | 2565 | −157 | +4 | 2412 |
+| C1B | 1451 | −21 | +2 | 1432 |
+| C1C | 1752 | −19 | 0 | 1733 |
+| C2 | 1871 | −27 | +4 | 1848 |
+| C2B | 1354 | −19 | 0 | 1335 |
+| C3 | 2361 | −47 | +4 | 2318 |
+| C4 | 2529 | −28 | **+44** | 2545 |
+| C5 | 4372 | −119 | 0 | 4253 |
+
+A static probe replicating the world walk reproduces the runtime counts **exactly in 6 of 8
+chapters** (off by 6 in C4 and 11 in C5 — unexplained residual, stated rather than papered
+over), and lists every node that loses collision: all 1–2-polygon cards ≤29.8 m — streetlight
+poles, stands, zeppelin cables, rail signal lamps, water-tower details, muzzle flashes,
+distant-plane sprites, seagulls, workmen. No terrain, no building, no ship.
+
+**Also landed:** `WorldBuilder.DisableFog` deleted as dead code (its only call site had been
+commented out since the 2026-07-17 fog remodel), and `docs/architecture.md` corrected — it
+described the method as "disabled by an early `return`", which it never had.
+
+**Deliberately NOT landed: the `csky_fog_on` instance-uniform alignment.** The index
+disagreement is real (`Clutter` 0, `SceneBuilder` 1) but **verified latent, not live**: the two
+families never share a `GeometryInstance3D`, and an 8-chapter run logs no `instance_uniforms.cpp`
+warning at all — so the plan's "confirm the C5 warning is gone" could not be satisfied, because
+there is no such warning. Padding Clutter's shader with an unused `node_bias` to align the
+indices was implemented, measured and reverted: it enforces nothing (the next shared uniform
+still has to be added to both shaders by hand) while adding a uniform the shader cannot use. The
+enforcing fix is a preamble constant shared with `GetBiasShader`, which belongs with that shader;
+logged in `backlog.md`, and the invariant is documented at both declarations.
+
+**Verification.** 8-chapter `--fly` regression: mesh-instance counts identical in all 8, clutter
+counts identical, zero engine errors, no shader warnings. All 11 aircraft build clean in
+`--viewer`. Mode battery clean: fly / stunt / viewer / freecam / 2P split / 4P stunt race /
+damage lab. Screenshot A/B against a same-build noise floor measured over three runs per pose —
+C5 0 px floor and 0 px signal; C1 14 px floor, 14 px signal; C3 and C4 at their known
+water-flipbook and precipitation floors.
+
+**Measurement lessons (both now in `docs/verification.md`).** `--fly` is useless as a
+screenshot-diff instrument — its same-build floor measured **30–84% of pixels** because the
+plane, camera and animations all advance; the first A/B run with it produced numbers that looked
+like a signal and meant nothing. And a *concurrently running* Godot from another agent's worktree
+silently corrupted this session's captures: one screenshot never wrote and another came out at
+1/7 the file size, which read as a code fault until the stray processes were spotted.

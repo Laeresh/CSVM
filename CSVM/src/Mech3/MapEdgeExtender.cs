@@ -30,8 +30,9 @@ namespace CSVM.Mech3;
 /// crosses a cell boundary: ~a dozen cells added/freed per crossing, each a cheap build
 /// (ground leaves share SceneBuilder's mesh/shape caches; clutter shares the main build's
 /// sprite mesh + material). Unlike the original's visible reload pop, the window is sized
-/// one ring past the fog wall, so the creep never shows. Ground and clutter are collidable
-/// exactly when the real world is; float precision is no concern at these ranges (a 10-min
+/// one ring past the fog wall, so the creep never shows. Extension ground is collidable
+/// exactly when the real world is; extension clutter is never collidable, matching the map's
+/// own clutter (see ClutterBuilder). Float precision is no concern at these ranges (a 10-min
 /// flight ≈ 50 km; float keeps sub-centimeter precision past 100 km — no recenter needed).</para>
 /// </summary>
 public sealed partial class MapEdgeExtender : Node3D
@@ -43,7 +44,6 @@ public sealed partial class MapEdgeExtender : Node3D
 
     private readonly GameZ _gamez;
     private readonly SceneBuilder _scene;
-    private readonly bool _collision;
     private readonly float _x0, _z0, _tileX, _tileZ;
     private readonly int _cols, _rows;
     // Per source cell: its ground-tile nodes (with the accumulated ancestor transform —
@@ -60,12 +60,11 @@ public sealed partial class MapEdgeExtender : Node3D
     /// <summary>Extension cells currently instantiated (diagnostics).</summary>
     public int LiveCellCount => _live.Count;
 
-    private MapEdgeExtender(GameZ gamez, SceneBuilder scene, GameZNode world, bool collision,
+    private MapEdgeExtender(GameZ gamez, SceneBuilder scene, GameZNode world,
         IReadOnlyList<ClutterBuilder.KindExport>? clutter)
     {
         _gamez = gamez;
         _scene = scene;
-        _collision = collision;
         _clutter = clutter;
         _x0 = world.AreaLeft;
         _z0 = world.AreaTop;
@@ -81,12 +80,12 @@ public sealed partial class MapEdgeExtender : Node3D
     /// if any) lets the extension grow the same trees the map grows — the original shows
     /// clutter on the continued terrain (see the class doc video evidence).</summary>
     internal static MapEdgeExtender? Create(GameZ gamez, SceneBuilder scene, GameZNode world,
-        bool collision, ClutterBuilder? clutter)
+        ClutterBuilder? clutter)
     {
         if (!world.HasArea || world.PartitionCols <= 0 || world.PartitionRows <= 0
             || world.AreaRight <= world.AreaLeft || world.AreaBottom <= world.AreaTop)
             return null;
-        var ext = new MapEdgeExtender(gamez, scene, world, collision, clutter?.ExportedKinds);
+        var ext = new MapEdgeExtender(gamez, scene, world, clutter?.ExportedKinds);
         ext.ScanTiles(world);
         if (ext._tiles.Count == 0)
             return null;
@@ -234,7 +233,6 @@ public sealed partial class MapEdgeExtender : Node3D
             list.Add(mirror * pos);
         }
 
-        List<Vector3>? faces = _collision ? new List<Vector3>() : null;
         foreach (var (kindIndex, positions) in byKind)
         {
             var kind = _clutter![kindIndex];
@@ -254,33 +252,7 @@ public sealed partial class MapEdgeExtender : Node3D
                 ExtraCullMargin = kind.Width, // the billboard shader swings verts outside the AABB
                 Name = $"clutter_{kindIndex}",
             });
-            if (faces != null)
-            {
-                float w = kind.Width * 0.5f, h = kind.Height;
-                foreach (var pos in positions)
-                {
-                    AddQuad(faces, pos + new Vector3(-w, 0, 0), pos + new Vector3(w, 0, 0), h);
-                    AddQuad(faces, pos + new Vector3(0, 0, -w), pos + new Vector3(0, 0, w), h);
-                }
-            }
         }
-
-        if (faces is { Count: > 0 })
-        {
-            var body = new StaticBody3D { Name = "clutter_col" };
-            body.AddChild(new CollisionShape3D
-            {
-                Shape = new ConcavePolygonShape3D { Data = faces.ToArray(), BackfaceCollision = true },
-            });
-            cell.AddChild(body);
-        }
-    }
-
-    private static void AddQuad(List<Vector3> faces, Vector3 baseA, Vector3 baseB, float height)
-    {
-        var up = new Vector3(0, height, 0);
-        faces.Add(baseA); faces.Add(baseB); faces.Add(baseB + up);
-        faces.Add(baseA); faces.Add(baseB + up); faces.Add(baseA + up);
     }
 
     // ---------------------------------------------------------------- source scan

@@ -426,27 +426,62 @@ void fragment() {
         return false;
     }
 
+    /// <summary>How the original engine spins one model toward the camera: not at all, fully
+    /// (a light-source glow), or about one fixed axis (an upright tree card, a flame on a
+    /// horizontal pipe). This is the gamez model's OWN classification, not a guess of ours.</summary>
+    public enum BillboardKind { None, Spherical, CylindricalY, CylindricalX }
+
+    /// <summary>
+    /// The one billboard rule, read straight from the gamez model (2026-07-21 decode,
+    /// consolidated here 2026-07-22). Every caller that needs to know "is this a flat card
+    /// the engine turns toward the camera?" goes through this — the two rendering paths
+    /// below, the world's collision exemption (<c>WorldBuilder.NoCollisionNode</c>) and the
+    /// clutter template's sprite-vs-3D-decoration split (<c>ClutterBuilder</c>).
+    ///
+    /// <para><b>Returns null when the extraction carries no <c>ModelType</c></b> — a legacy
+    /// v0.6.1 tree, where these fields do not exist at all. Null means "no data, apply your
+    /// own fallback": the callers' fallbacks differ because they encode different intents
+    /// (a flare texture name for the glow path, a flat-quad shape for clutter), and folding
+    /// them together here would silently change what a legacy tree renders. See the
+    /// GameZ.cs bullet in docs/architecture.md for the two extraction shapes.</para>
+    ///
+    /// <para><b><c>ModelType=="Facade"</c> is the discriminator, NOT <c>FacadeMode</c>
+    /// alone.</b> A Default-typed model can carry a stale <c>FacadeMode</c>: C1's multi-poly
+    /// <c>flare_green</c> "strings" are Default/CylindricalY and must stay static (as one
+    /// sprite they would swing around a shared centroid), and every 3D city-block building
+    /// in C2/C5's clutter templates is Default/CylindricalY too. Gating on the type first is
+    /// what excludes both without a polygon-count guess. Surveyed across all 8 chapters:
+    /// no Facade model anywhere exceeds 3 polygons, so this can never catch real geometry.</para>
+    /// </summary>
+    public static BillboardKind? ClassifyBillboard(GameZMesh mesh)
+    {
+        if (mesh.ModelType == null)
+            return null; // legacy extraction — caller falls back
+        if (mesh.ModelType != "Facade")
+            return BillboardKind.None;
+        return mesh.FacadeMode switch
+        {
+            "SphericalY" => BillboardKind.Spherical,
+            "CylindricalY" => BillboardKind.CylindricalY,
+            "CylindricalX" => BillboardKind.CylindricalX,
+            _ => BillboardKind.None,
+        };
+    }
+
     // A glow flare SPRITE — the lamp/beacon light quads (refinery_flare 16 m, gen_flare_yellow
     // 4 m, docklight_flare, litehsflare, …): billboards fully toward the camera, never
-    // night-dimmed (it's a light source, not lit scenery).
+    // night-dimmed (it's a light source, not lit scenery). That is the Spherical case of
+    // ClassifyBillboard minus the cloud sprites, which are the OTHER SphericalY family and
+    // are routed through _billboardTexture instead.
     //
-    // The real discriminator is the gamez model's own data (2026-07-21): every Facade model
-    // whose FacadeMode is "SphericalY" and isn't a cloud sprite is one of these — verified
-    // across all 8 chapters, where that bucket is cloud1/cloud2 (the OTHER SphericalY case,
-    // handled separately via _billboardTexture) plus flare/lamp/muzzle-flash/ammo-tip/splash
-    // sprites and nothing else. This supersedes the former single-polygon + texture-name-
-    // "flare" heuristic, which is now the LEGACY fallback for a v0.6.1 extraction (no
-    // ModelType data at all): that heuristic under-matched (fire101.tif's refinery flame
-    // doesn't contain "flare" and was rendered as static, non-billboarded geometry) and
-    // relied on a single-polygon restriction that data now explains directly — C1's 11
-    // multi-poly `flare_green` "strings" (which must NOT billboard as one sprite, or they'd
-    // swing around a shared centroid) carry ModelType "Default", not "Facade", even though
-    // they still carry a leftover FacadeMode value; gating on ModelType=="Facade" first is
-    // what correctly excludes them without a polygon-count guess.
+    // The legacy branch (single polygon + a "flare"-ish texture name) is what a v0.6.1
+    // extraction gets. It under-matches — fire101.tif's refinery flame carries no "flare" in
+    // its name and rendered as static geometry — which is exactly why the data-driven rule
+    // above replaced it; it is kept only so the documented v0.6.1 rollback still works.
     private bool IsGlowSpriteMesh(GameZMesh mesh)
     {
-        if (mesh.ModelType != null)
-            return mesh.ModelType == "Facade" && mesh.FacadeMode == "SphericalY" && !UsesBillboardTexture(mesh);
+        if (ClassifyBillboard(mesh) is { } kind)
+            return kind == BillboardKind.Spherical && !UsesBillboardTexture(mesh);
 
         // Legacy fallback (no ModelType data in this extraction).
         if (_glowTexture == null || mesh.Polygons.Count != 1)
@@ -458,16 +493,19 @@ void fragment() {
         return tex != null && _glowTexture(tex);
     }
 
-    // Y-axis or X-axis cylindrical billboard: the mesh spins about one fixed world axis to
-    // face the camera on the other two, like a tree card or a flame that should stay upright
-    // (as opposed to SphericalY's full camera-facing rotation). Same ModelType=="Facade" gate
-    // as IsGlowSpriteMesh; None on a legacy extraction (no per-axis fallback existed before,
-    // so nothing regresses — these meshes simply rendered static, as they always did).
+    // The rendering-side spelling of ClassifyBillboard's two cylindrical cases: the mesh
+    // spins about one fixed world axis to face the camera on the other two, so a tree card or
+    // a flame stays upright instead of tipping over like a light glow. Kept as its own enum
+    // because it also keys the shader/material caches below. None on a legacy extraction (no
+    // per-axis fallback ever existed — those meshes rendered static, as they always did).
     private enum CylAxis { None, Y, X }
 
-    private static CylAxis GetCylindricalAxis(GameZMesh mesh) =>
-        mesh.ModelType != "Facade" ? CylAxis.None :
-        mesh.FacadeMode switch { "CylindricalY" => CylAxis.Y, "CylindricalX" => CylAxis.X, _ => CylAxis.None };
+    private static CylAxis GetCylindricalAxis(GameZMesh mesh) => ClassifyBillboard(mesh) switch
+    {
+        BillboardKind.CylindricalY => CylAxis.Y,
+        BillboardKind.CylindricalX => CylAxis.X,
+        _ => CylAxis.None,
+    };
 
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).

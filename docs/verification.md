@@ -179,6 +179,19 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **Another agent's Godot, running concurrently, corrupts your captures** (2026-07-22). In a
+  parallel-worktree session a second Godot was launching continuously from another agent's tree:
+  one screenshot in this session's set **never wrote at all** and another came out at **1/7 the
+  normal file size**, which read as a code fault in the change under test. `Get-Process
+  *Godot*` showed strangers with new PIDs each time. Before believing a broken or oddly-sized
+  capture, check for foreign Godot processes and re-run; raise `--frames` so the warm-up survives
+  the contention.
+- **A restore that preserves mtime makes `dotnet build` a no-op, so you measure the OLD dll.**
+  `Copy-Item` keeps the source's timestamp, MSBuild sees nothing newer, and Godot happily runs
+  the previous build — producing a frame identical to baseline that reads as "the change does
+  nothing" (hit by the item-4 session, 2026-07-22). Whenever you A/B by swapping files, prove the
+  new binary is the one running: a log line that only the new code can emit is the cheapest check
+  (item 5 used the disappearance of clutter's `", N collision tris"` suffix).
 - **`dotnet build` cannot fail on script encoding corruption, so it is not evidence about it.**
   A bulk rewrite mangled every UTF-8 multi-byte sequence in 3 source files; `dotnet build` returned
   0 warnings / 0 errors because the damage sat in comments, which the C# compiler happily compiles
@@ -243,6 +256,7 @@ Quick reference — if your diff lands here, suspect noise first:
 
 | Surface | Behaviour |
 |---|---|
+| **`--fly` / `--stunt`, any pose** | **Useless for screenshot diffs — same-build floor measured 30–84% of pixels** (2026-07-22). The plane flies, the chase camera follows and the animations advance, so frame N is a different moment every run. Use `--viewer`/`--freecam` with `--campos`/`--lookat` for any A/B; use `--fly` only for counts and log lines |
 | `--freecam` default camera | Random spawn pick per launch — pin with `--spawn=N` or `--campos`/`--lookat` |
 | Precipitation (C1C/C2B/C4) | Self-animating from `TIME`; ~5–6% frame difference, same magnitude same-build-vs-same-build |
 | C3 water flipbook | Baseline flips between two states run to run (~35,250 px at max delta 3) |

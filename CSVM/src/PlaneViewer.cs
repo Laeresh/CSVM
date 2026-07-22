@@ -565,17 +565,18 @@ public partial class PlaneViewer : Node3D
 
                 // Clutter: forest trees / river bushes. The chapter's boot script names the
                 // templates; ClutterBuilder stamps them onto every matching-textured world
-                // polygon (see Clutter.cs). Solid in flight, like the original.
+                // polygon (see Clutter.cs). Never solid — a billboard has no side to hit
+                // (user decision, 2026-07-22; the "trees are hittable" justification rested
+                // on a misread of `spruce_destroy`, which is the Spruce Goose).
                 ClutterBuilder? clutterBuilder = null;
                 var clutterNames = ClutterBuilder.TemplateNames(interpPath, _chapter);
                 if (clutterNames.Count > 0)
                 {
                     clutterBuilder = new ClutterBuilder(gamez, textures);
-                    if (clutterBuilder.Build(clutterNames, collision: _fly) is { } clutter)
+                    if (clutterBuilder.Build(clutterNames) is { } clutter)
                     {
                         _plane.AddChild(clutter);
-                        GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites ({clutterBuilder.Summary})" +
-                                 (_fly ? $", {clutterBuilder.ColliderTriangles} collision tris" : ""));
+                        GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites ({clutterBuilder.Summary})");
                     }
                 }
                 else
