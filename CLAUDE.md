@@ -238,7 +238,7 @@ Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds —
 
 **Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
 
-- **C5 ground z-fighting** — it is **our depth-bias replication**, not the map-edge extender and not entity rosters (both ruled out by measurement). Do **not** simply raise the bias constants: that makes a coarse low-resolution quad win over the detailed night-city ground, which is probably the wrong surface.
+- **C5 ground z-fighting** — it is **our depth-bias replication**, not the map-edge extender and not entity rosters (both ruled out by measurement). **Corrected 2026-07-22:** it is *one* mesh (`g4683`) fighting **itself** — same-material coplanar polygons share a surface and so share one depth bias — not a coarse sheet against the partition ground; the world-child-vs-partition rank was implemented, measured to change nothing, and reverted. Do **not** simply raise the bias constants. Full diagnosis in `backlog.md`.
 - **C3 references `cloud1`/`cloud2`**, which its own `texture.zbd` does not ship — a retail-data gap, true in both extraction trees. The one-line fix is deliberately left to the user because it trades away the magenta "this is our bug" signal for those names.
 
 **Everything else unscheduled** — blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.

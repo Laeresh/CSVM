@@ -41,7 +41,19 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    *files* (all 12 of its scripts are among the 15 the real bug affects) for the wrong reason —
    agreement on where is not agreement on why. See rule 7 below for the same trap in space
    rather than in arithmetic.
-7. **A measurement that locates the geometry still does not tell you which surface is at fault.**
+7. **"Hide one side and the artifact goes away" does not prove which two surfaces were
+   fighting — and it does not prove they were two surfaces at all.** Hiding C5's coarse
+   ground sheets collapsed the repro pose's flicker from 35.77% to 0.19%, which reads as
+   "confirmed: the sheets fight the partition ground". Both halves of that reading were
+   wrong. Hiding *only* `g4683` gave the identical 0.19%, and the flicker was that single
+   mesh's **own** polygons — five same-material coplanar pairs sharing one surface and
+   therefore one depth bias. The control was also confounded: removing the sheet removed the
+   only textured surface in the near field, so it deleted the grazing-angle mipmap/aniso
+   resampling noise along with the depth flips, and *most of that 35.77% was never a depth
+   fight at all* (per-polygon ordering, which changes nothing but depth, moved it only to
+   21.92%). **Isolate down to the single node before naming a culprit, and prefer a control
+   that changes only the suspected mechanism over one that removes the geometry.**
+8. **A measurement that locates the geometry still does not tell you which surface is at fault.**
    C3's "trees standing in the water" was measured precisely — 86 of the 102 `cliff1_sandtrans`
    polygons sit at exactly Y = 0.0, coplanar with the sea plane — and that correct number
    licensed a wrong fix: drop the submerged palms with a `y > waterLevel` guard. But the palms
