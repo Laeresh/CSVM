@@ -1906,6 +1906,67 @@ public partial class PlaneViewer : Node3D
         _camera.LookAt(_orbitCenter, Vector3.Up);
     }
 
+    // ---- Focus mute (polish-4 item 7) ------------------------------------------------------
+    //
+    // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
+    // AudioServer *master-bus* mute rather than a factor threaded through the audio code,
+    // because there are two entirely independent audio paths and only one of them has any
+    // gain plumbing at all:
+    //   - Flight.FlightAudio  — own-plane engine/whine/rattle loops (has MixGain) plus the
+    //     crash and prop one-shots, which deliberately bypass MixGain ("one-shots stay global").
+    //   - Mech3.WorldSounds   — the ambient SOUND_NODE 3D emitters, whose VolumeDb comes
+    //     straight from the sound def. No MixGain, no shared gate, nothing to multiply.
+    // A `MixGain = 0` mute would therefore leave the whole animated world audible, and would
+    // also have to be un-set to exactly the right per-player value on the way back.
+    //
+    // The bus mute has a second property the item specifically wants: it does not touch
+    // FlightAudio's state at all. The engine loop keeps Playing, `_engineRamp` stays at 1, and
+    // FlightAudio.Update keeps writing the throttle curve into VolumeDb every frame while
+    // muted — so on focus-in the loop is already at its correct level and does NOT re-ramp
+    // from the -60f a fresh AudioStreamPlayer is constructed with (FlightAudio.cs:79), which
+    // is what stopping/restarting the players would have caused.
+    //
+    // `--mute` is unrelated and cannot be reused for this: it is a load-time switch that
+    // simply never constructs FlightAudio/WorldSounds, so there is nothing to toggle.
+    private bool _focusMuted;
+
+    /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
+    /// and everything (both audio paths) is on it by default.</summary>
+    private const int MasterBus = 0;
+
+    public override void _Notification(int what)
+    {
+        // The APPLICATION_* pair, not the WM_WINDOW_* pair: the application-level notifications
+        // are what a real focus change delivers here. Measured on Windows 11 / Godot 4.7 while
+        // implementing this (2026-07-22): another app taking the foreground sends 1005
+        // (WM_WINDOW_FOCUS_OUT) then 2017 (APPLICATION_FOCUS_OUT), and coming back sends 2016
+        // then 1004. Note that *minimising* the window from another process delivers neither —
+        // only the mouse enter/exit pair — so a manual test must alt-tab, not minimise.
+        // Godot 4's constants are longs; _Notification hands us an int.
+        if (what == (int)NotificationApplicationFocusOut)
+        {
+            SetFocusMuted(true);
+        }
+        else if (what == (int)NotificationApplicationFocusIn)
+        {
+            SetFocusMuted(false);
+        }
+    }
+
+    /// <summary>Mutes/unmutes the master bus on window focus. Idempotent — the notification can
+    /// arrive more than once — and it only ever clears a mute it set itself, so it cannot stomp
+    /// on a mute from anywhere else.</summary>
+    private void SetFocusMuted(bool muted)
+    {
+        if (_focusMuted == muted)
+        {
+            return;
+        }
+        _focusMuted = muted;
+        AudioServer.SetBusMute(MasterBus, muted);
+        GD.Print(muted ? "focus: lost — audio muted" : "focus: regained — audio restored");
+    }
+
     public override void _UnhandledInput(InputEvent @event)
     {
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
