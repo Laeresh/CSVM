@@ -1,7 +1,7 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. The **active** plan is
-`docs/plans/PLAN-docs-cleanup.md`; completed plans are in `docs/plans/`. Per-item history/diagnosis
+Everything known-but-not-scheduled, so it survives between polish runs. **No plan is active**;
+completed plans are in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -109,8 +109,125 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   half-viewport boundary is not a terrain edge, so something is clipping. Worth a look before
   trusting any screenshot taken from an unusual camera.
 
+## Open bugs (moved from NOTES.md 2026-07-22)
+
+The user's running issue list. **Each was checked against the code on 2026-07-22 — none of them
+were already fixed**, so the whole list is live. Where that check pinned the cause it is recorded
+here so it is not re-derived; where it did not, the item says so rather than guessing. Paths are
+relative to the Godot project's `src/`.
+
+### Flight & damage
+
+- **Knife-edge only sinks; the nose should also drop slightly.** `FlightModel.cs` scales the
+  velocity-chase rate by `KnifeAlignFloor` and zeroes the lift fraction at 90° bank — both act on
+  `VelocityDir` (the flight *path*), not on `Attitude`, so the path sags below the nose and the
+  plane descends wings-level-nosed. The only code that rotates the nose toward world-down is the
+  stall block, gated on `Speed < StallSpeedFrac × FdSpeed`. Wants a small attitude torque in the
+  knife-edge branch, **not** a tweak to the existing path terms.
+- **Tail collision boxes swallow the outboard wings (Bloodhawk).** `PlaneCollider.cs` classifies
+  everything aft of `TailStartFrac` (0.7 × length) **at full span** as `tail`; the refinement pass
+  that splits that slab keeps the name, so the outboard strips stay `tail`, and `PlaneDamage.cs`
+  maps `tail => tail` with no |x| test. Wing hits score as tail damage. The fix is an |x| test in
+  the refinement's naming, not a `TailStartFrac` change. (Distinct from the accepted canard-tip
+  limit already noted in `docs/HISTORY.md`.)
+
+### Environment
+
+- **C4's cloud deck does not follow the plane.** The follow mechanism works (`PlaneViewer`
+  re-anchors `rig.Deck` to the camera X/Z each frame, fed by `WorldBuilder.CloudDeck`), but the
+  deck is selected by texture prefix **`cloudlayer`** only, and C4's gamez ships `cloudtrans`
+  instead (C4 textures: `cloud1`, `cloud2`, `cloudtrans`; C1 has `cloudlayer`). So `CloudDeck` is
+  null in C4, the deck stays world-fixed, and `IsCloudSpriteTexture` — which excludes only
+  `cloudlayer` — additionally billboards it as a sprite. C4's weather *does* define the band
+  (`CLOUD_COVER TOP 1100 / BOTTOM 1000`), so the `HasCloudBand` guard is not the blocker.
+- **C3 massive z-fighting at the beach** — `--campos=-6151.614,136.079,-3198.714
+  --lookat=-6150.76,135.796,-3199.151`. **User-confirmed 2026-07-22 as real z-fighting, and the
+  correct resolution is known: the beach should draw over the water.** That makes this the one
+  z-fight case where the target surface is *not* in doubt — unlike the C5 ground case below, where
+  "which surface should win" is still the blocking question. Undiagnosed as to why the two are
+  coplanar. A frame rendered at that pose (`.scratch/c3_whatisthis.png`, 2026-07-22) shows the
+  sand/surf boundary with hard polygon-stepped edges and one clean triangular wedge; it is a single
+  frame, so it does not by itself separate depth flips from a static alpha-cutoff artifact — use
+  `--shots=5 --jitter=0.006` (sub-pixel dither; the 0.15° default moves the camera far too much to
+  isolate depth flips) before assuming the mottling and the hard edges are the same fault.
+  **Do not fix by raising the bias constants globally** — see the C5 entry below for why.
+- **C3 trees standing in the water** (same camera pose). Undiagnosed — likely `Clutter.cs` stamping
+  a tree template onto a terrain texture that also covers shoreline/sea tiles.
+- **C5 shader warning: `More than one material in instance export the same instance shader uniform
+  'csky_fog_on', but they do it with different indices.`** (`instance_uniforms.cpp:62`.) Cause
+  found: `csky_fog_on` is an instance uniform declared in two independent shaders at different
+  slots — `SceneBuilder.cs` declares it at index **1** (after `instance uniform float node_bias`),
+  `Clutter.cs` at index **0** (its shader declares no other instance uniform). Only the first wins,
+  so clutter fog can silently read the wrong slot. Fix = force matching indices across every shader
+  that declares it. Related but already handled: the `csky_opacity`-must-follow-`csky_fog_on`
+  ordering regression (`docs/HISTORY.md`), and the billboard/cloud shader deliberately omitting the
+  uniform. Side note found while checking: `WorldBuilder.DisableFog` is now dead code — its only
+  call site is commented out.
+- **C5 IA1 has a zeppelin sunk in the ground** — `--campos=235.618,1471.759,94.103
+  --lookat=237.62,1371.833,97.39`. Undiagnosed. Possibly related to the degenerate zeppelin node
+  transforms entry above (that one reproduces on C1/M04), but not yet shown to be the same fault.
+- **C1B z-fighting** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
+  Undiagnosed; same caution about the bias constants.
+- **Some oil tanks are already destroyed at spawn in C1 IA1, next to the Bloodhawk hangar.**
+  Undiagnosed — likely a mission-setup or animation-bootstrap pass applying a destroyed state
+  variant that the original does not.
+- **The bowl sign flashes in the original**, but ours disables and re-enables it instead.
+
+### Animation
+
+- **C1 police / mafia / traffic cars drive their route once and stop; the original loops them.**
+  Cause found: `AnimRuntime.cs` reads the loop count and treats **0 as "stop immediately"**
+  (`_loopsLeft = … ; if (_loopsLeft == 0) { _done = true; break; }`). Every C1 traffic def ships
+  `Loop { "Count": 0 }` — verified across `police_car-police_chase`, `mafia-mafia_move1`,
+  `black_car1-black_move1`, `car_go_home-car_go_home_start`, `car_loop1-car_loop1_start` — while
+  genuinely-endless defs (docklights, firetrucks, `red_police-police_lights`) use `-1`. So
+  **`Count: 0` almost certainly means "infinite" in the original** (note the name `car_loop1`).
+  Changing that mapping is a one-line fix but touches every def install-wide — verify no
+  currently-terminating animation ships `Count: 0` and relies on stopping.
+- **Some C1 animated-object rotations are wrong (cars)** — evidence:
+  `crimsonskies_2026-07-21_23-14-29-724.png`. Undiagnosed.
+
+### HUD & audio
+
+- **Crash damage display blinks fully red.** `GaugeCluster.cs` blinks a zone for `DamageBlinkTime`
+  on `OnPartDamage` and picks the red variant at `frac <= RedAt`, but the only caller is a graze
+  hit — `FlightController.Crash()` touches audio, fireball, breakup and visibility and never calls
+  into `Gauges`. So the all-red state is not a crash behaviour being mis-fired; it is the ordinary
+  damage path left latched. Check what the original shows on a crash before wiring anything.
+- **Gauge needles are the wrong shape** — they come from the game's own HUD textures. Could be
+  drawn procedurally instead in a future Hi-Def mode.
+- **No mute when the window loses focus.** Nothing in `src` handles
+  `NOTIFICATION_APPLICATION_FOCUS_OUT` / window focus, and there is no `AudioServer` or bus gate —
+  `FlightAudio.cs` only sets per-player `VolumeDb`. Related open question already recorded in
+  `docs/HISTORY.md`: whether pad reads should be gated on focus project-wide. Decide both together.
+
+### Mission logic
+
+- **C2 stunt mode: the Seaplane Hangar objective sits at the wrong position.**
+
+## Milestone 2 polish run 3 — candidate scope (from NOTES.md)
+
+Grouped by the user as a prospective third polish run. Not a plan — write one when it is scheduled.
+
+- **A generic way to find billboard sprites.** Multiple further billboard instances exist beyond
+  the ones handled today: some face the camera fully, some only about X/Y (the harbour refinery
+  flames). Today's detection is per-case; this wants one rule.
+- **Billboards should generally have no collision.** Tree collision is a nice touch but the
+  original does not have it.
+- **Determine which weather/sky zone each chapter and mission actually uses.**
+- **Fine-tune fog and environment** — method: record video from spawn points flying straight for a
+  fixed number of seconds, in both engines, and compare.
+- **Better mission states.** There is still a lot of difference between our maps and the original's.
+  May need a pipeline to diff them, or to crack the mission loading states properly.
+
 ## Feature backlog
 
+- **Skybox colour grading.** No tint, grade or tonemap is applied to the skydome anywhere —
+  `WorldBuilder.BuildHorizon` only disables shadows, billboards the moon and disables light
+  range-fade, and the `WorldEnvironment` sets background/ambient only. The dome does get the shared
+  per-mission scalar dim `csky_world_light`, which is brightness, not grading. The decoded
+  per-mission cloud tints are parsed and deliberately parked (`Weather.cs`, "unused this
+  milestone") — they are the obvious input if this is picked up.
 - **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`
   "Known divergences"; these are the leftovers):
   - *(Resolved 2026-07-20 by the rework onto the original's own region masks: achromatic
@@ -148,6 +265,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   engine-side light-state toggle to pick one variant).
 - **C2/C5 `cblock*` city-block clutter templates** (non-quad 3D decorations) detected +
   skipped — only flat sprite cards billboard today (C2 palms work, city blocks don't).
+  **User-confirmed 2026-07-22 as visibly missing building clutter in both C2 and C5.**
 - **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
 
@@ -167,6 +285,9 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 - **Map-edge continuation**: ours alternately *reflects* the border tiles (seam-free by
   construction); the original likely plain-repeats them, possibly sharing the edge vertex row.
   A/B an asymmetric border feature in the original; one-line swap in `MapEdgeExtender.MirrorAxis`.
+  **User observation (2026-07-22): the tile borders do match, so it may not be mirrored — and the
+  original may extend by more than one tile.** Both are testable in the same A/B: an asymmetric
+  border feature settles mirroring, and counting tiles out to the fade settles the extent.
 - **Compass north convention**: north = −Z is assumed (one-line flip in FlightController's
   heading feed); drum projection constants + nearest-tick sampling pending A/B.
 - **Crossed `pdpN_h` numbering** (bloodhawk/firebrand/brigand data quirk): does the *original*
@@ -232,6 +353,24 @@ scripted screenshot.
   `--debug-anim`.
 - **The labs are mouse-driven** (`--viewer`: damage on H, livery on L, mesh on M) and have had no
   interactive playtest beyond scripted verification.
+- **The ambient world sounds have never been listened to** (`SOUND_NODE`, landed 2026-07-22). Mix
+  levels and the `RANGE` → `UnitSize`/`MaxDistance` curve are TUNE. Where to listen:
+  1. **C1 free flight** — the waterfall and the train are the only two emitters that sound there.
+     The waterfall is at roughly (-7868, 0, -3449) with a 1500 m range; the train moves, so it
+     should pan and fade as it runs its loop.
+  2. **C4** — three waterfalls.
+  3. **C1/M04** (`--freecam --chapter=C1 --mission=M04`) is where a zeppelin engine actually plays.
+     A `sound: … silenced — its host node's world pose is degenerate` line there is **expected and
+     logged**, not a new fault — it is the pre-existing 1e27 transform bug (see "Degenerate zeppelin
+     node transforms" above).
+
+  `--debug-anim` prints every emitter's host, distance, range and playing state once a second, which
+  separates a placement problem from an activation one.
+- **Splitscreen ambient audio may be mixed once per pane — the one structural unknown.** With no
+  `AudioListener3D`, Godot makes each pane's camera a listener, so a 2P/4P session may mix every
+  3D emitter 2–4×. **If ambient audio sounds loud or doubled in splitscreen but fine solo, that is
+  the cause, not the mix levels** — and the fix is an explicit listener, not a gain tweak. Needs a
+  splitscreen A/B (and therefore the two controllers this machine does not have).
 
 ## C3 ships gamez references to textures its texture.zbd does not contain
 
@@ -267,3 +406,19 @@ over the detailed night-city ground, which is likely backwards. Why is that coar
 coplanar with the fine city at all — is it a coarse LOD tile that SceneBuilder's nearest-LOD
 selection should have dropped? — and which does the original draw on top? Answer that before
 touching the constants; a bias bump alone would lock in the wrong surface across all chapters.
+
+**Reference material for that open question (added 2026-07-22, user-confirmed as being about this
+issue):** `OriginalScreenshots/C5 IA1 Terrain.png`, `…Terrain2.png`, `…Terrain3.png` — original-game
+captures (dgVoodoo) of C5 IA1 at night: one low pass looking down between buildings, one horizon
+view across the city, one high overhead of the whole city ground. In all three the ground reads as
+the **fine-detail city-block surface** — lit windows, street strips, per-block variation — with no
+large flat low-resolution quad visible over it. That is evidence for "the detailed ground wins",
+i.e. the bias-bump direction is indeed backwards.
+
+**Do not treat that as settled yet.** Two limits: a still cannot show z-fighting (which is
+temporal), and none of the three poses is matched to our repro camera, so we are comparing
+different views of the same map rather than the same view in two engines. To make it conclusive,
+re-shoot the original at the repro pose (`--campos=-9533.178,76.319,-3367.413
+--lookat=-9451.281,28.148,-3398.597`) — or, cheaper, identify the coarse quad's node in our scene
+and check whether it is a LOD sibling that should have been culled, which would settle the "why is
+it coplanar at all" half without needing the original at all.
