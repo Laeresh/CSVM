@@ -10,7 +10,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Blocked / deferred
 
-- ~~**Animated world vehicles**~~ — **LANDED 2026-07-21** (`docs/PLAN-anim-playback.md`, revival-plan
+- ~~**Animated world vehicles**~~ — **LANDED 2026-07-21** (`docs/plans/PLAN-anim-playback.md`, revival-plan
   item 7): the C1 train drives its SI-script track loop, the road vehicles run their
   `OBJECT_MOTION_FROM_TO` chains and the hangar doors swing, via the generic `AnimRuntime`.
   `PufferState` landed the same day (the train's steam plume, waterfall mist — user-confirmed
@@ -20,7 +20,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   events install-wide) — the mist sat on one point instead of spreading across the falls until
   fixed. **Everything else this entry originally listed (the remaining event kinds, `If`/
   `Elseif` evaluation, mission-spawned entity rosters, `texture_scroll`) is now scheduled in
-  `docs/PLAN-anim-rendering-followups.md`** (2026-07-21, 4 independent session-sized items with
+  `docs/plans/PLAN-anim-rendering-followups.md`** (2026-07-21, 4 independent session-sized items with
   goal/evidence/approach/verify each) — see that plan rather than this entry for current detail.
 - **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
@@ -50,7 +50,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
     2026-07-21 and is the mechanism that puts a template at a site. Build the template pool first.
 - **mech3ax upstream PR** (cosmetic): planes.zbd round-trip differs by 72 bytes — swapped
   `\0`/`.` garbage past the null terminator in fixed-width texture-name fields. Semantically
-  lossless; folded into `docs/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
+  lossless; folded into `docs/plans/PLAN-mech3ax-cs-revival.md` item 12 (stretch goal, same code
   the gamez revival is already touching) / item 14 (its own small upstream PR if not already
   folded into the gamez PR).
 - **Drop the `SDL_JOYSTICK_DIRECTINPUT=0` launch-script workaround** (set 2026-07-19 in
@@ -80,7 +80,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   SI-script/`ObjectScaleState` applied to an already-scaled parent.
 
 - **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
-  one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/PLAN-anim-rendering-followups.md`
+  one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
   item 2 after `OBJECT_MOTION` landed). All three still dispatch at bootstrap, so the counts in
   the "not yet acted on" report look like open work — **they are not**. Each was probed at the
   dispatch site across C1/C3/C4/C5 (def, anchor, resolved target count, payload), and each fails

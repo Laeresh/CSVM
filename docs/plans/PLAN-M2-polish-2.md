@@ -1,5 +1,7 @@
 # Milestone 2 Polish Plan — Run 2
 
+**COMPLETE — 2026-07-19 — all 13 items (item 9 deferred to acklog.md by decision, then resolved 2026-07-21 by the fork's anim support).** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
 Working plan for NOTES.md's "Milestone 2 Polishing Run 2" section plus the three still-open
 "Issues" bullets (dive sound, skybox color grading, turn rates), in the agreed implementation
 order. Each item lists its goal, the data/code evidence it rests on, the approach, and how it

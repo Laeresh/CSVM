@@ -513,7 +513,7 @@ spawns/objectives/AI at engine level, not the world build.
 
 The binary archives upstream mech3ax does not support for CS. Surveyed 2026-07-18 while
 scoping the anim-playback engine (Run-2 item 9); since then the project's mech3ax fork
-(`tools/mech3ax`, plan `docs/PLAN-mech3ax-cs-revival.md`) has implemented them in
+(`tools/mech3ax`, plan `docs/plans/PLAN-mech3ax-cs-revival.md`) has implemented them in
 `crates/anim/src/cs/`: the container (item 3, 2026-07-20), the full semantic
 `AnimDef` + event decode (item 4, 2026-07-21), and the SI-script frame decode (item 5,
 2026-07-21) round-trip **byte-identically on all 61 archives of this install** with no
@@ -680,7 +680,7 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
 ## Consuming the extraction (playback, 2026-07-21)
 
 Everything above is about *decoding* the archives. This section is what the Godot side needed
-in order to **run** them (`docs/PLAN-anim-playback.md`, revival-plan item 7) — four facts that
+in order to **run** them (`docs/plans/PLAN-anim-playback.md`, revival-plan item 7) — four facts that
 are not visible from the byte format alone, each measured against this install.
 
 - **The two sources are complementary; neither is sufficient.** The compiled archives are the

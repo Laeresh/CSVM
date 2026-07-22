@@ -1,5 +1,7 @@
 # Milestone 2 Polish Plan
 
+**COMPLETE — 2026-07-17 — all 8 items.** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
 Working plan for the not-yet-done items in NOTES.md's "Milestone 2 Polishing" section,
 in the agreed implementation order. Each item lists its goal, the data/code evidence it
 rests on, the approach, and how it gets verified. Statuses: ☐ open · ◐ in progress · ☑ done.

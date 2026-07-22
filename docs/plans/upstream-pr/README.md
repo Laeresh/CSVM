@@ -1,7 +1,31 @@
 # Upstream PR package (mech3ax CS revival, plan item 14)
 
+> **ARCHIVED — 2026-07-22. The premise below no longer holds.**
+>
+> This package was written to land the CS work upstream in TerranMechworks/mech3ax. The user
+> then spoke with the mech3ax developer, which answered the question `pr-0-discussion.md` was
+> drafted to ask: **upstream removed Crimson Skies support because they could not maintain it —
+> bandwidth, not architecture.**
+>
+> **The agreed outcome is that the CS work stays in the user's fork** (`Laeresh/mech3ax`), with
+> upstream commits merged *into* the fork if and when they appear. Upstream is dormant: its
+> latest commit is `cbb838f` (rc3, 2025-11-17), and `upstream/main` is currently **0 commits
+> ahead** of the fork's `main` (verified 2026-07-22). The live fork-maintenance procedure is in
+> CLAUDE.md under "The mech3ax fork".
+>
+> These files are **kept, not deleted**: `pr-1-anim.md` and `pr-2-gamez.md` remain the best
+> existing description of what each branch actually contains, which is what a future upstream
+> revival — or anyone reading the fork — would need.
+>
+> **One thing this archive does not settle:** the anim PR was *opened* before the decision (see
+> the status table below). What became of it afterwards is not recorded here, and is the user's
+> call, since they own all upstream communication.
+>
+> The AI-assistance disclosure rule below is **not** archived with this package — it is
+> project-wide and now lives in CLAUDE.md's top block.
+
 Prepared 2026-07-21. These are the **ready-to-open** upstream contributions for the work in
-`docs/PLAN-mech3ax-cs-revival.md`. Per the project's division of labor (CLAUDE.md), the code
+`docs/plans/PLAN-mech3ax-cs-revival.md`. Per the project's division of labor (CLAUDE.md), the code
 here is prepared for the user, who owns all upstream/community communication — **nothing has
 been pushed or opened**.
 

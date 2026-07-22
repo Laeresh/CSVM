@@ -1,5 +1,7 @@
 # Milestone 2.5 — First Prototype
 
+**COMPLETE — 2026-07-19 — all 7 items.** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
 Working plan for the first *playable* build: the original's **Stunt Flying** instant-action
 mode (fly through all Danger Zones, timed), a controller/keyboard launchscreen
 (mode → chapter → plane), and 2–4-player splitscreen as the closing, explicitly cuttable

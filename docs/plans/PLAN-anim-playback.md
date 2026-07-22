@@ -1,6 +1,8 @@
 # Animation playback — consuming the compiled anim archives (revival-plan item 7)
 
-Working plan for `docs/PLAN-mech3ax-cs-revival.md` **item 7** ("consume in this project"),
+**COMPLETE — 2026-07-21 — all 7 items.** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
+Working plan for `docs/plans/PLAN-mech3ax-cs-revival.md` **item 7** ("consume in this project"),
 planned 2026-07-21 after a format-analysis pass over all 61 extracted archives. Same format
 as the other plans: ordered items with goal / evidence / approach / verification, statuses
 ☐ open · ◐ in progress · ☑ done.
@@ -162,7 +164,7 @@ and are user-verified.
   start.
   **SUPERSEDED 2026-07-21** — this reading was wrong. A survey of all 16,195 conditions in the
   install found ten kinds and every one of them answerable; all ten now evaluate. See
-  `docs/PLAN-anim-rendering-followups.md` item 1 and `docs/formats/anim-definitions.md`.
+  `docs/plans/PLAN-anim-rendering-followups.md` item 1 and `docs/formats/anim-definitions.md`.
 - **The safety net hides 54 uncovered `destroyed` subtrees, where the old code hid 53.** One
   more definition's coverage moved when compiled defs replaced their reader twins. No visible
   difference (the net exists for exactly this and hides it either way), but it is one

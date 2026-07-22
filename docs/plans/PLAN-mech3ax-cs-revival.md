@@ -1,5 +1,7 @@
 # mech3ax fork — reviving Crimson Skies `gamez`/`planes` + adding `cam_anim`/`mis_anim`
 
+**COMPLETE — 2026-07-22 — all 14 items; item 14 resolved by decision, CS support stays in the fork (see `upstream-pr/README.md`).** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
 Working plan for `tools/mech3ax` (the user's fork, cloned 2026-07-20 from
 `git@github.com:Laeresh/mech3ax.git`, no `upstream` remote yet). Two format tracks, planned
 together because they're both "the CS gap in mech3ax" from the outside, but they're
@@ -84,7 +86,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 4. ☑ Decode the `AnimDef` record fields + op dispatch table against `docs/formats/anim-definitions.md`'s known reader-JSON schema (done 2026-07-21, see section 4 — full semantic decode into the shared API types, 61/61 byte-identical, `hangar3_doors` oracle-matched)
 5. ☑ Decode the SI-script rotate block; resolve the 24/48-script camera/`cpilot_eject` parse-failure variant (done 2026-07-21, see section 5 — all 1090 scripts of all 61 archives frame-decode byte-exactly; the "failure variant" never existed, and the rotate cubics are half-angle offsets composed `exp(v)⊗base`)
 6. ☑ Wire CLI (`unzbd`/`rezbd` `anim` command), README/CHANGELOG, reactivate `test.py`'s CS anim skip, verify byte-identical round-trip on the full install (done 2026-07-21, see section 6 — test.py `--- ALL OK ---`, all 61 archives byte-identical through the real zip pipeline)
-7. ☑ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks), docs + backlog cleanup (**done 2026-07-21** — planned and executed as its own run, `docs/PLAN-anim-playback.md`: a generic animation engine rather than SI-script playback alone)
+7. ☑ Consume in this project — extraction wiring, `OBJECT_MOTION_SI_SCRIPT` playback (train/trucks), docs + backlog cleanup (**done 2026-07-21** — planned and executed as its own run, `docs/plans/PLAN-anim-playback.md`: a generic animation engine rather than SI-script playback alone)
 
 **Track A — `gamez.zbd`/`planes.zbd` (do second):**
 8. ☑ Recover the deleted `cs/` module from `7f592ec~1` as porting reference (done 2026-07-21, see section 8 — worktree at `tools/mech3ax-cs-ref`, inventory verified, 13 wiring files outside `cs/` catalogued)
@@ -93,7 +95,7 @@ format page (`gamez.md` already documents the JSON shape mech3ax produces — th
 11. ☑ Wire CLI (`gamez_cs`, `planes` routing), README/CHANGELOG (done 2026-07-21, folded into section 10)
 12. ☑ Verify byte-identical round-trip against the real install (done 2026-07-21 — `test.py` `--- ALL OK ---`; **the 72-byte `planes.zbd` stretch goal is also fixed**, see section 10)
 13. ☑ Cut this project's extraction pipeline from the pinned v0.6.1 binary to the fork build — **bigger than "swap the binary": the fork's JSON shape is deliberately different** (done 2026-07-21, see section 13 — the Godot loaders read *either* shape, so the v0.6.1 rollback needs no code revert)
-14. ◐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication) — **preparation done 2026-07-21** (see section 14: two independent, individually-verified branches + PR bodies + a pre-PR discussion draft in `docs/upstream-pr/`); **opening them is the user's step and has not happened — nothing is pushed**
+14. ◐ Prepare upstream PR(s), split by concern, coordinated with the user (who owns upstream communication) — **preparation done 2026-07-21** (see section 14: two independent, individually-verified branches + PR bodies + a pre-PR discussion draft in `docs/plans/upstream-pr/`); **opening them is the user's step and has not happened — nothing is pushed**
 
 ---
 
@@ -836,7 +838,7 @@ and cannot be verified here — no MW/PM/RC installs).
 check that the split changed no behaviour: `git diff df16d8e cs-anim` (pre-split tip vs.
 re-integration) is **one reordered CHANGELOG line** — the code trees are identical.
 
-**Deliverables** in `docs/upstream-pr/`: `README.md` (branch table, split rationale,
+**Deliverables** in `docs/plans/upstream-pr/`: `README.md` (branch table, split rationale,
 verification, push commands), `pr-0-discussion.md` (the cheap pre-PR question to upstream —
 was the CS removal bandwidth or architecture? — which determines how much polish the gamez PR
 deserves), `pr-1-anim.md` and `pr-2-gamez.md` (ready-to-paste PR bodies, first line = title).

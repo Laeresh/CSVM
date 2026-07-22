@@ -83,10 +83,10 @@ Keep the format fact in CLAUDE.md and the measurement lesson in verification.md.
 4. ☑ Format support status → `docs/formats/extraction.md` **(done 2026-07-22 — CLAUDE.md 52,677 → 49,374 bytes; matrix + round-trip notes + the two-shapes table + the plane-data inventory moved, listed in `formats/README.md`. Four stale claims fixed en route: the `cam_anim` row's "Remaining: item 7 … skipped", `formats/README.md`'s "unsupported by mech3ax", `ExtractAssets.ps1`'s own docstring, and CLAUDE.md's "still reported+skipped" — the extractor *does* run mode `anim` and the animation engine *does* read the output. Also corrected "13 pages" → 17 and added the two pages the list had never carried.)**
 5. ☑ User args → `docs/cli.md`, compact table stays **(done 2026-07-22 — CLAUDE.md 49,374 → 36,662 bytes; all 43 flag entries moved verbatim as bullets, so nothing was reworded. CLAUDE.md keeps the CLI-inversion rule (a behavioural fact, not a reference entry), a 14-row table of the day-to-day set, and the in-flight keys. Verified: all 47 distinct flag names present in `docs/cli.md`, 149/149 tokens present.)**
 6. ☑ Fix the stale claims and internal contradictions **(done 2026-07-22 — all six table rows plus five more found during items 3–5: `architecture.md`'s "one unit ahead" F11 look-at vs the code's `PoseLookAtDistance = 100f`; its superseded `IsGlowSpriteMesh` "single-polygon all-flare meshes ONLY" paragraph; `formats/README.md`'s "cam_anim/mis_anim unsupported by mech3ax"; `ExtractAssets.ps1`'s "no part of the Godot project reads the output yet"; CLAUDE.md's "`extracted/rof/` … nothing in the Godot project loads it yet" (PatternLibrary reads it). Also `paint.md`'s own internal contradiction — a lead-in saying the hue-window sections "document what the remake does today" while the same file's "What the rework fixed" says otherwise — and the two `backlog.md` paint follow-ups that rework resolved. Verified: every surviving hit of `hue-window` / `not yet reworked` / `doesn't extract` / `deferred to its own session` is inside HISTORY, this plan, or text explicitly banner-marked superseded.)**
-7. ☐ Repo layout: collapse the completed PLAN descriptions (−4 KB)
-8. ☐ Archive the completed plans into `docs/plans/`
-9. ☐ Retire `docs/upstream-pr/`; record the fork-maintenance policy that replaced it
-10. ☐ Guardrail: size budget + "index, not narrative" rule
+7. ☑ Repo layout: collapse the completed PLAN descriptions **(done 2026-07-22 — six entries, 4.1 KB, → one line. They were pure duplication: the status section's own table already lists every plan with scope and date.)**
+8. ☑ Archive the completed plans into `docs/plans/` **(done 2026-07-22 — all six `git mv`'d with a `COMPLETE — <date>` banner reading "history, not current state"; `docs/` now holds exactly one plan, which is the signal. 52 path references rewritten across 9 files, all verified to resolve. Fixed a pre-existing broken link: `backlog.md` already cited `docs/plans/PLAN-M2.5-prototype.md` before the directory existed.)**
+9. ☑ Retire `docs/plans/upstream-pr/`; record the fork-maintenance policy **(done 2026-07-22 — archived with a banner recording the outcome and why the premise lapsed; PR bodies kept deliberately. Replaced by a "The mech3ax fork" section in CLAUDE.md: remotes, branch roles, sync procedure, upstream dormant. State verified against the fork rather than taken from this plan — all three CS branches are on `origin`, `upstream/main...main` is 0/0. The disclosure rule moved to CLAUDE.md's top block. One thing left explicitly unsettled in the archive: the anim PR was opened before the decision, and what became of it is the user's call, not something to assert.)**
+10. ☑ Guardrail: size budget + "index, not narrative" rule **(done 2026-07-22 — top block extended with the ~35 KB budget, the one-line module-entry shape rule generalised to "don't restate a list another file indexes", and the status-section rule as a hard one. Applied it immediately: the duplicated 17-page formats table folded into a pointer to `formats/README.md`, per user request. Final: **CLAUDE.md 35,105 bytes**, under budget; every one of the 33 docs files verified reachable from it.)**
 
 ---
 
@@ -273,9 +273,9 @@ banner under the title. Update every reference by path — `CLAUDE.md`, `docs/HI
 
 **Verify:** `grep -rn "docs/PLAN-" ` returns no path that does not exist.
 
-## 9. Retire `docs/upstream-pr/`; record the fork-maintenance policy
+## 9. Retire `docs/plans/upstream-pr/`; record the fork-maintenance policy
 
-**Goal:** the whole `docs/upstream-pr/` package (4 files, 22 KB) was written on a premise that no
+**Goal:** the whole `docs/plans/upstream-pr/` package (4 files, 22 KB) was written on a premise that no
 longer holds — that these branches get opened as PRs against TerranMechworks. Replace it with the
 policy that actually governs the fork now.
 
@@ -286,7 +286,7 @@ fork already has the right plumbing: `origin` = `git@github.com:Laeresh/mech3ax.
 
 **Approach:**
 
-- Move `docs/upstream-pr/` to `docs/plans/upstream-pr/` and add a status banner recording the
+- Move `docs/plans/upstream-pr/` to `docs/plans/upstream-pr/` and add a status banner recording the
   outcome: what was prepared, why it was not pursued, and the conversation that settled it. The PR
   bodies are **not** deleted — they are the best existing description of what each branch contains,
   which is exactly what a future upstream revival (or a fork reader) would need.
@@ -297,9 +297,9 @@ fork already has the right plumbing: `origin` = `git@github.com:Laeresh/mech3ax.
   this is a check-occasionally, not a routine.
 - **Preserve the standing disclosure rule.** "Every outward-facing communication about this work
   discloses that it was done with the help of Claude Code" currently lives inside the
-  `docs/upstream-pr/` bullet, which is about to stop existing. It is a project-wide rule and must
+  `docs/plans/upstream-pr/` bullet, which is about to stop existing. It is a project-wide rule and must
   move to the top block of `CLAUDE.md`, not vanish with its host.
-- Rewrite CLAUDE.md's `docs/upstream-pr/` Repo-layout entry (currently "the **ready-to-open**
+- Rewrite CLAUDE.md's `docs/plans/upstream-pr/` Repo-layout entry (currently "the **ready-to-open**
   upstream contribution package" plus a held-PR status) to one line pointing at the archive.
 
 **Risk surfaced while checking this — now resolved (2026-07-22).** `cs-anim`, which CLAUDE.md
@@ -343,7 +343,7 @@ way to every subsystem; check the byte count against the budget.
 - **Item 3 is the only one that can lose information**, because CLAUDE.md is newer than
   architecture.md in several places. It is gated on item 1 and requires a per-module diff, not a
   bulk cut.
-- **Items 8 and 9 break paths.** `docs/PLAN-*.md` and `docs/upstream-pr/*` are cited from
+- **Items 8 and 9 break paths.** `docs/PLAN-*.md` and `docs/plans/upstream-pr/*` are cited from
   `CLAUDE.md`, `docs/HISTORY.md` and `backlog.md`. Grep every reference before moving.
 - **Item 9 must not drop the disclosure rule** — it is project-wide but currently lives inside the
   bullet being retired.

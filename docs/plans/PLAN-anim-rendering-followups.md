@@ -1,5 +1,7 @@
 # Animation/rendering follow-ups (post-billboard-fix backlog)
 
+**COMPLETE — 2026-07-22 — all 4 items.** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Statements below are as-written at the time — read them as history, not as current state.
+
 Four independent, separately-completable items found while chasing the user's C1/IA1
 rendering reports on 2026-07-21 (waterfall mist, billboard axes, signal-bridge flares — all
 landed the same day; see `docs/HISTORY.md`). Each item below is scoped to fit in its own
