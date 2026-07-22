@@ -3318,3 +3318,42 @@ was then committed and pushed (`b862111`). Recovered verbatim from `bbc5f59` and
 above. Two lessons worth more than the incident: **a section-replacing edit must assert what it is
 about to remove**, not assume a heading terminates it; and content appended without a heading is
 load-bearing but structurally invisible — the promotion above gives all of it real headings.
+
+---
+
+## 2026-07-22 — `CleanScratch.ps1` also sweeps agent worktrees, and stops asking twice
+
+**Two problems, one script.**
+
+**1. The double confirmation.** `[CmdletBinding(ConfirmImpact = 'High')]` plus the script's own
+`PromptForChoice` meant a sweep asked twice — once for the whole plan, then again **per item**,
+because at `High` impact `$PSCmdlet.ShouldProcess` prompts on its own against the default
+`$ConfirmPreference = 'High'`. A 132-file sweep therefore ended in `[J] Ja [A] Ja, alle …`.
+Changed to `ConfirmImpact = 'Medium'`, which leaves `-WhatIf` and an explicit `-Confirm` working
+while `ShouldProcess` stops prompting unasked. Verified: a `-Force` run now calls `ShouldProcess`
+11 times with no prompt.
+
+**2. Worktrees accumulated forever.** Subagents run in git worktrees under `.claude/worktrees/`,
+which is git-ignored — so nothing ever swept them. Ten survived one plan, each a full checkout,
+and they added ~30 false hits to every repo-wide grep (they did exactly that during this
+session's own doc work, which is what surfaced it).
+
+**Parsed from `git worktree list --porcelain`, not from the folder listing**, because the two
+disagree in precisely the case that matters: a worktree whose directory was deleted by hand still
+has git metadata and reports as `prunable`. A folder listing misses those entirely — and that was
+the live state here, all 10 having been removed manually.
+
+**Safety rules, in order:** only paths under `.claude/worktrees/` are ever considered (never the
+main checkout, never the one the script runs from); a worktree with uncommitted changes is spared
+and reported unless `-IncludeDirtyWorktrees`; and removal never touches branches, so committed
+work always survives. Leftover branches are listed, and `-PruneBranches` deletes only the merged
+ones via `git branch -d`, which refuses unmerged branches by design.
+
+**3. Non-interactive hosts now fail closed with a usable message.** Without `-Force`,
+`PromptForChoice` throws in a scheduled task / CI / agent shell. It previously surfaced as a raw
+.NET exception; it now prints "Cannot prompt in a non-interactive host — nothing deleted" and
+points at `-Force` / `-WhatIf`. Deleting because nobody could be asked is the wrong default for a
+script whose whole job is deletion.
+
+**Verified** by `-WhatIf` (found all 10, deleted nothing), then a real run: 10 worktree entries
+cleared, `git worktree list` back to the main checkout, all 10 branches deliberately untouched.
