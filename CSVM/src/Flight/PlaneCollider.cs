@@ -100,7 +100,8 @@ public sealed class PlaneCollider
         // boxes end exactly at their boundaries — a giant wing-root triangle can't
         // drag the wing box to the centerline just because one corner pokes across.
         // tail = everything aft of tailStartZ (full width: fins, stabilizers, twin
-        // booms — outboard pieces sit in both tail and wing, harmless); wing =
+        // booms — outboard pieces sit in both tail and wing, and the refined pieces
+        // that land outboard are RELABELLED wing afterwards, see Relabel); wing =
         // everything outboard of the wing band; fuselage = the narrow central band
         // ahead of the tail.
         var tail = ClipAxis(tris, 2, tailStartZ, keepGreater: true);
@@ -119,8 +120,44 @@ public sealed class PlaneCollider
         clusters.AddRange(WingClusters(wing));
         var parts = new List<Part>();
         foreach (var (name, cluster) in Refine(clusters))
-            AddBox(parts, name, cluster);
+            AddBox(parts, Relabel(name, cluster, wingBand), cluster);
         return parts.Count > 0 ? new PlaneCollider(parts) : null;
+    }
+
+    /// <summary>Corrects the label of a refined <c>tail</c> piece that is really wing
+    /// geometry (Run-3 item 10). The tail region is clipped on z ALONE, at full span,
+    /// so on a swept or trailing-edge-heavy plane its outboard slabs are the wing's
+    /// trailing edge rather than the empennage — the Bloodhawk's two flat 4.9 × 0.4
+    /// strips are literally its <c>leftwing</c> / <c>rightwing</c> nodes. Refinement
+    /// splits that slab but propagates the region name verbatim, and
+    /// <see cref="PlaneDamage.MapStruckPart"/>'s <c>"tail"</c> arm is the only one
+    /// that ignores the impact point, so a wingtip strike 4 m off-centre subtracted
+    /// HP from the tail. Renaming here rather than side-splitting in PlaneDamage is
+    /// the right seam: the half-span is known here, and MapStruckPart would otherwise
+    /// need a widened signature.
+    ///
+    /// A piece is wing when its box lies wholly on one side of the centerline (so
+    /// every impact inside it maps to the correct side) AND its center is outboard of
+    /// the same WingBandFrac threshold that defines wing geometry in the first place.
+    /// Applied AFTER refinement, so each final box is judged on its own extent — a
+    /// piece renamed mid-refinement could be cut again into an inboard remainder.
+    ///
+    /// Twin-boom / twin-fin designs are the risk case, since their booms genuinely
+    /// ARE tail at outboard |x|. Measured across all 11 player aircraft: every
+    /// <c>*_rudder*</c> node in the fleet sits inside a box this rule leaves alone —
+    /// the Devastator's and Firebrand's fins at |x| 3.03 fall in their planes' centre
+    /// tail box, and the Kestrel's twin fins sit at |x| 1.98 against a 2.58 m band.
+    /// What moves is only aileron and wing-panel geometry (Devastator
+    /// <c>l/r_aileron2</c>, Bloodhawk <c>leftwing</c>/<c>rightwing</c>, Firebrand
+    /// <c>l/r_aileron1</c>, Fury's wingtip damage panels, and the autogyro's overhead
+    /// rotor — which the class doc already calls that plane's wing).</summary>
+    private static string Relabel(string name, List<Tri> tris, float wingBand)
+    {
+        if (name != "tail" || tris.Count == 0)
+            return name;
+        var box = Enclose(tris);
+        bool oneSide = box.Position.X > 0f || box.End.X < 0f;
+        return oneSide && Mathf.Abs(box.GetCenter().X) > wingBand ? "wing" : name;
     }
 
     /// <summary>Splits the wing triangles at the widest chord (z) gap: a canard

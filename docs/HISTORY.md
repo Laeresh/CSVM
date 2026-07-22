@@ -2221,3 +2221,76 @@ clutter instance count to be *unchanged*. Worth recording as a general lesson: a
 ("86 of 102 sand polygons are at exactly Y=0, coplanar with the sea") correctly located the
 geometry but said nothing about which surface was at fault, and the plausible-looking fix
 pointed at the wrong one.
+
+---
+
+## 2026-07-22 — Run-3 item 10: tail collision boxes no longer swallow the outboard wings
+
+**The bug.** `PlaneCollider` clips its tail region on **z alone, at full span** (`TailStartFrac`
+0.7), where the wing and fuselage paths also clip on axis 0. The volume-guided refinement pass
+then splits that full-span slab but propagates the region name verbatim, so the Bloodhawk's two
+flat 4.9 x 0.4 m outboard strips — geometrically the swept wing trailing edge, and in the model
+literally the nodes named `leftwing` / `rightwing` — arrived at `PlaneDamage.MapStruckPart`
+called `tail`. That is the one arm of the map which ignores `localImpact` entirely, so clipping
+a hangar corner with a wingtip 4 m off-centre subtracted HP from the tail. Distinct from the
+accepted canard-tip limit recorded earlier.
+
+**The fix** (`PlaneCollider.Relabel`, one file). After refinement, each final box is re-judged:
+a `tail` piece becomes `wing` when its box lies **wholly on one side of the centerline** (so
+every impact inside it maps to the correct side in `MapStruckPart`) **and** its centre is
+outboard of the same `WingBandFrac` threshold that defines wing geometry in the first place.
+Renaming at the collider rather than side-splitting in `PlaneDamage` is the structurally right
+seam — the half-span is known here, and `MapStruckPart` would otherwise have needed a widened
+signature. Applied *after* refinement, not during, so a piece cannot be renamed and then cut
+again into an inboard remainder.
+
+**The risk case was measured, not argued.** Twin-boom and twin-fin aircraft genuinely *are*
+tail at outboard |x|, so a blanket rule could have reclassified real empennage. Instrument: a
+temporary probe dumping every collider box (name, size, centre) alongside every visible mesh
+node's AABB in the plane-root frame, for all 11 player aircraft, matched by volume overlap.
+Result — the flipped boxes contain **only** wing geometry (`l/r_aileron2` on the Devastator,
+`leftwing`/`rightwing` plus `l/r_aileron1` on the Bloodhawk, `l/r_aileron1` on the Firebrand,
+the Fury's wingtip `pdp*_h` damage panels, and the autogyro's overhead rotor — which
+`PlaneCollider`'s own class doc already calls that plane's wing). **Every `*_rudder*` node in
+the fleet sits in a box the rule leaves alone:** the Devastator's and Firebrand's fins at
+|x| 3.03 fall inside their planes' centre tail box, and the Kestrel's twin fins sit at |x| 1.98
+against a 2.58 m band. The autogyro's single flip is the thinnest margin in the fleet (1.68 vs
+1.62 m) and is worth knowing if `WingBandFrac` is ever retuned.
+
+**Per-aircraft collider-name comparison** (9 boxes moved of 87; sizes and centres bit-identical
+before and after, which is what proves the change is label-only):
+
+| aircraft | halfSpan | wingBand | tail -> wing | note |
+|---|---|---|---|---|
+| Devastator `player_pfighter` | 5.46 | 1.91 | 2 (cx +-4.24) | `l/r_aileron2`; twin rudders at +-3.03 stay in the centre tail box |
+| Bloodhawk `player_bhawk` | 5.80 | 2.03 | 2 (cx +-3.34) | the reported case — `leftwing`/`rightwing` nodes |
+| Firebrand `player_fbrand` | 9.46 | 3.31 | 2 (cx -6.31 / +6.49) | `l/r_aileron1`; twin rudders stay centre |
+| Fury `player_fury` | 5.49 | 1.92 | 2 (cx +-3.36) | wingtip `pdp*_h` damage panels |
+| Autogyro `player_autogyro` | 4.62 | 1.62 | 1 (cx +1.68) | the overhead rotor; thinnest margin |
+| Brigand, Hellhound, Kestrel, Peacemaker, Balmoral, Warhawk | | | **0** | unchanged |
+
+**Verification.**
+- Mesh-lab box overlay (`--viewer --plane=player_bhawk --debug-mesh=boxes`, top-down): the wide
+  magenta *tail*-coloured band spanning both wings is gone; the strips draw cyan (leftwing) and
+  orange (rightwing), and only the centre box stays magenta. The overlay colours boxes by
+  `MapStruckPart`, so it shows the mapped damage part, not the raw label.
+- **Scripted flight A/B, the decisive one.** C1, Bloodhawk, `--spawn-at` low over the map with
+  `--hold=0,1,0,0.5` (continuous roll -> knife-edge wingtip drag), swept over five spawn
+  altitudes. At y=188 the same graze reports `graze (tail->tail)` before and
+  `graze (wing->rightwing)` after, at **identical** vn 2.2 m/s, dmg 0.1 and hp 19.9/20 — the
+  physics did not move, only the attribution. Every other logged line is identical between the
+  two builds, including the `tail->tail` grazes and the `CRASH ... (tail)` lines at other
+  altitudes: real tail hits still score tail. Only one of the five altitudes discriminated at
+  all, which is now recorded as a rule in `docs/verification.md`.
+- All 11 aircraft rendered in plain `--viewer` are **byte-identical** (md5) before and after —
+  correct, since the overlay is off by default and only labels changed. The overlay-on shots
+  *did* differ, so the instrument was shown able to report a difference.
+- Mode battery, zero errors in each: `--fly`, `--stunt`, `--viewer`, `--viewer --damage`,
+  4-player `--stunt --players=4`, `--freecam --chapter=C5`. The Kestrel's three tail boxes
+  (0.5x1.9x3.8 / 3.9x0.3x1.7 / 0.5x1.9x3.8) survive intact in the stunt run's collider log.
+
+**The plan's evidence was correct in full** — line numbers, the 4.9 x 0.4 measurement, the
+single-axis clip, the verbatim name propagation and the `MapStruckPart` asymmetry all held up.
+One thing it implied that is not true: the strips are not *entirely* outboard (the Bloodhawk's
+run from |x| 0.88 out to 5.80, crossing the 2.03 m wing band), so an "entirely outboard" test
+would have matched nothing. The box **centre** against the wing band is the test that works.

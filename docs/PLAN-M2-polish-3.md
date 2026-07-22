@@ -32,7 +32,7 @@ instruments that mislead.
 7. ☐ C3 beach z-fighting — the beach must draw over the water (the "palms in the sea" report)
 8. ☐ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops
 9. ☐ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms
-10. ☐ Tail collision boxes swallow the outboard wings
+10. ☑ Tail collision boxes swallow the outboard wings **(done 2026-07-22 — 9 boxes relabelled across 5 aircraft, every `*_rudder*` in the fleet untouched; scripted A/B turns one wingtip graze from `(tail→tail)` into `(wing→rightwing)` at identical vn/damage, `docs/HISTORY.md`)**
 
 **Dependency notes.** Item 1 is an enabler — landing it first lets a second session in a
 worktree verify its own work, which every other item needs. Items 5 and 6 both rewrite parts
