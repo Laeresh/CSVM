@@ -301,6 +301,16 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **Your own orphaned process is a foreign Godot** (2026-07-22). The rule below warns about
+  *another agent's* concurrent Godot; the same thing happens to a single agent working alone. A
+  background regression task that outlives its tool call keeps launching Godot and writing to the
+  same log paths, and **`Start-Process -Wait` returning exit 0 does not mean the run ended** — the
+  console wrapper exits while the real Godot child lives on. This manufactured a "16,576 errors in
+  C1B" result for a change that provably cannot touch world building. **Before re-running a
+  harness, kill by command line, not by name** (`Get-CimInstance Win32_Process | Where CommandLine
+  -like '*<your worktree>*'`) so other agents' instances survive, and confirm zero of yours remain
+  before believing the next measurement. See also the `--headless` + `--screenshot` hang in
+  `backlog.md`, which is one way to create such an orphan without noticing.
 - **Another agent's Godot, running concurrently, corrupts your captures** (2026-07-22). In a
   parallel-worktree session a second Godot was launching continuously from another agent's tree:
   one screenshot in this session's set **never wrote at all** and another came out at **1/7 the
@@ -380,6 +390,15 @@ These need the user, and saying so is the correct outcome — not a gap to paper
   plus the CLI-equivalent path; this machine has one pad.
 - **Skilled flying.** A full 5-zone stunt run is not blind-scriptable; the user closed it.
 - **Live keypresses.** R-restart is verified by construction.
+- **Window focus is NOT on this list — it is scriptable after all** (corrected 2026-07-22).
+  Alt-tabbing in and out was assumed to need a human; it does not. `AttachThreadInput` +
+  `SetForegroundWindow` from PowerShell drives real `APPLICATION_FOCUS_IN`/`OUT` notifications at a
+  live game, which is how the focus mute was verified. Two catches: a plain `SetForegroundWindow`
+  from a background script is **silently no-opped by the Windows foreground lock** (it reports
+  success while the foreground never moves, reading as "the notification never fires"), and
+  **minimising the window from another process delivers no focus notification at all** — only the
+  mouse enter/exit pair. What stays unverifiable is the usual: whether the result is *audible*, and
+  whether a held stick feels dead.
 - **Fidelity against the original.** "Nothing looks wrong in our build" is not a side-by-side.
   Grade the evidence honestly: the user not knowing C2 *had* a Spruce Goose is mild positive
   evidence, not mere absence of complaint.

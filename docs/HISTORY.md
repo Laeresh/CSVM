@@ -3676,3 +3676,82 @@ the geometry you can see"), item 4 wants a **presence decision** (treat the obje
 common helper would only be the AABB-of-subtree walk, which is 20 lines and already exists in a third
 form in `NodeLabels.cs`. `GeometryAnchor` was kept private to `StuntMission.cs` precisely so the two
 items could not collide while being worked in parallel worktrees.
+
+## 2026-07-22 — Focus mute, and the pad-read-on-focus question closed (polish-4 item 7)
+
+**The mute.** Alt-tabbing away now silences the game and alt-tabbing back restores it, via the
+project's first `_Notification` override (`PlaneViewer`). `NOTIFICATION_APPLICATION_FOCUS_OUT` /
+`_IN` toggle `AudioServer.SetBusMute(0, …)` and log `focus: lost — audio muted, pad reads gated` /
+`focus: regained — audio restored, pad reads live`, so a manual alt-tab test is one glance at the
+console.
+
+**Why the master bus and not `MixGain`.** There are two independent audio paths and only one has
+any gain plumbing. `FlightAudio` has `MixGain`, but its crash and prop one-shots deliberately
+bypass it ("one-shots stay global", HISTORY 2026-07-19); `WorldSounds`' ambient `SOUND_NODE`
+emitters take `VolumeDb` straight from the sound def with **no** `MixGain` and no shared gate at
+all. A `MixGain` mute would have left the whole animated world audible. Nothing in `CSVM/src` ever
+sets `AudioStreamPlayer.Bus`, so Master (index 0) carries everything. `--mute` was not reusable: it
+is a *load-time* switch that simply never constructs `FlightAudio`/`WorldSounds`.
+
+**The regression the item named did not materialise, and was measured rather than argued.** The
+worry was that the engine loop would resume by re-ramping from the `-60f` a fresh
+`AudioStreamPlayer` is constructed with (`FlightAudio.cs:79`). The bus mute never touches
+`FlightAudio` at all — the loop stays `Playing`, `_engineRamp` stays 1, and `Update` keeps writing
+the throttle curve into `VolumeDb` while muted. A temporary probe read the engine player on every
+focus transition: `playing=True volDb=-13.98 pitch=0.778 ramp=1.000`, identical before, during and
+after, across two cycles. The same probe printed `volDb=-60.00 ramp=0.000` at startup, so it was
+demonstrably capable of showing the failure (verification rule 5).
+
+**How it was verified without a human at the keyboard.** Focus in/out is an interactive event, so
+the test drove it: launch a live C1 flight windowed, then steal the foreground with a scripted
+`AttachThreadInput` + `SetForegroundWindow` (a plain `SetForegroundWindow` from a background script
+is silently no-opped by the Windows foreground lock — it reported success and the foreground never
+moved, which read as "the notification never fires"). Two clean cycles, `2017` → mute, `2016` →
+unmute, `AudioServer.IsBusMute(0)` confirmed each way, zero errors.
+
+**Two facts worth keeping** (Windows 11 / Godot 4.7): the notifications that actually arrive are
+the **APPLICATION_** pair (2016/2017), delivered alongside the WM_WINDOW_ pair (1004/1005) when
+another application takes the foreground; and **minimising the window from another process
+delivers neither of them** — only `WM_MOUSE_ENTER`/`EXIT`. So a manual test must alt-tab, not
+click minimise, and a scripted one must steal the foreground rather than minimise.
+
+**The pad half — landed as its own commit, and vetoable.** `docs/HISTORY.md:795-803` recorded the
+open question of whether pad reads should be gated on window focus project-wide. They now are:
+`PlaneViewer`'s focus notification sets `Pads.Focused`, and `Pads.For()` returns nothing while
+`InputBlocked`. This is a behaviour change some players will not want (running windowed with a
+pad), so it is its own commit and reverting it leaves the mute fully intact.
+
+**The plan's proposed choke point was wrong, twice.** It named `Pads.Connected()` as "the natural
+choke point". (a) It **misses the flight path**: `Pads.For(bound)` returns an explicitly bound
+player's pads without ever consulting `Connected()`, and every splitscreen or menu-launched player
+has a binding — the exact case the item exists to fix would have gone straight through. (b) It
+**breaks the roster**: `Connected()` answers "which pads exist", not "which may be read".
+`LaunchMenu.SyncDevices` reads it to drop a player *whose pad disconnected*, so an empty roster
+while unfocused would un-join every joined player, and `PlaneViewer.AssignPads` reads it once at
+session build, so alt-tabbing during a chapter load would have left the session pad-less until
+relaunch. **A pad that is merely unfocused has not gone away.** The gate therefore went on `For()`
+and `Connected()` stayed ungated; `SpectatorCamera`'s three read loops moved from `Connected()` to
+`For(null)`, and `MenuInput`'s raw reads now go through `CSVM.Pads.For(Pads)` while its `Pads`
+field stays the player's *binding*. `JoinPressed` carries the gate inline (it is static and has no
+binding to pass). Coverage is complete by construction: every `Input.GetJoyAxis` /
+`IsJoyButtonPressed` call in `CSVM/src` sits inside a `Pads.For(…)` loop, `JoinPressed` excepted.
+
+`Pads.Focused` **defaults to true and fails open**, so headless runs and any window that never
+gains focus behave exactly as before — no scripted-verification path changes. Only pads need the
+gate: Godot releases held keys on focus loss, while joypads are polled from SDL regardless of it.
+
+**Pad-half evidence.** With a real pad connected, across two driven focus cycles the roster held at
+1 while both `For(null)` and `For(new[]{0})` went 1 → 0 → 1 — i.e. the *bound* path is gated too,
+which is precisely what the plan's suggestion would have missed. Launchscreen smoke test still
+shows P1 as "keyboard + pad 0" (the roster half staying ungated). 8-chapter `--freecam` regression:
+exit 0 and zero errors in all eight (C1's single hit is the documented `--mute` "no audio session"
+warning for `snd_police`).
+
+**Left to the user.** That the muted output is actually *inaudible*, and that a physically held
+stick produces no motion while alt-tabbed. The second follows by construction from an empty read
+set, but neither is machine-checkable here.
+
+**Also hit, and pre-existing:** `--headless` + `--screenshot` is broken — the dummy renderer's
+`Texture2D.GetImage()` returns null, so the capture block NREs every frame and the process never
+quits (a 206 MB stderr log in ~10 minutes). Screenshot runs must be windowed. Unrelated to this
+change; recorded in `backlog.md`.
