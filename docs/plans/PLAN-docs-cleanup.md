@@ -1,5 +1,7 @@
 # Documentation cleanup — shrink CLAUDE.md back to an index
 
+**COMPLETE — 2026-07-22 — all 10 items.** Archived to `docs/plans/`; kept for its evidence, measurements and dead ends. Result: CLAUDE.md **162 KB → 35 KB** with no unique fact deleted, and 13 stale claims corrected. Statements below are as-written at the time — read them as history, not as current state.
+
 `CLAUDE.md` has grown to **162 KB (~40k tokens)**, loaded into every session. It is supposed to be
 "the compact, authoritative index of project context" (its own top block), but two sections are
 **77%** of the file and both have become narrative logs rather than index entries. Along the way

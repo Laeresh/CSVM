@@ -1772,7 +1772,7 @@ No code change. Nothing was deleted from `HISTORY.md`.
 
 ## 2026-07-22 — CLAUDE.md back to an index: the module index (docs-cleanup plan items 1-3)
 
-`docs/PLAN-docs-cleanup.md` items 1-3. The file loaded into every session had reached **162 KB**;
+`docs/plans/PLAN-docs-cleanup.md` items 1-3. The file loaded into every session had reached **162 KB**;
 two sections were 77% of it and both had become narrative logs rather than index entries.
 
 **Item 1 — backfill (no HISTORY entry was written at the time).** A set-diff of module paths

@@ -1,7 +1,7 @@
 # Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. The **active** plan is
-`docs/PLAN-docs-cleanup.md`; completed plans are in `docs/plans/`. Per-item history/diagnosis
+`docs/plans/PLAN-docs-cleanup.md`; completed plans are in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
