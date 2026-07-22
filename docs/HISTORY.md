@@ -1941,3 +1941,38 @@ reachable from it by path; all 52 plan references resolve.
 that one session deferred and another landed without ever revisiting the deferral note.
 
 No code change.
+
+## 2026-07-22 — `docs/tooling.md`: the pipeline, the launch scripts and the fork leave CLAUDE.md
+
+Follow-up to the docs-cleanup plan, on the user's read of the result. Two observations, both
+correct: the "The mech3ax fork" section added during item 9 is **reference material for a tool that
+already works** — remotes and a sync procedure nobody needs loaded every session — and **Repo
+layout never got the one-line treatment** the module index did, still carrying four essay-length
+entries.
+
+**CLAUDE.md 35,204 -> 28,104 bytes**, now well under its own 35 KB budget.
+
+New `docs/tooling.md` holds everything *around* the project rather than in it: the `extracted/`
+workdir layout (including the unpacked-sibling preference and why `rtexture*`/`rimage` are
+deliberately not loaded), `ExtractAssets.ps1`'s per-type mode table and its two output-handling
+details, `ExtractRof.ps1`, the two launch scripts plus the `SDL_JOYSTICK_DIRECTINPUT=0`
+controller-freeze workaround, `tools/`, and the fork's remotes / branch roles / sync procedure.
+
+Repo layout is now one line per entry and doubles as the routing table to each docs page — which
+is what that section should have been all along, since a repo layout *is* an index.
+
+**Worth recording as a verification note.** The token check caught two genuine losses that the
+one-line rewrite had dropped: `CrimsonSkiesGame/ZBD/` and
+`CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`. The second is the **only** record anywhere of
+where the cutscenes live — nothing consumes them yet, so no code would have failed and nothing
+would have surfaced it. Compressing prose to one line is exactly where paths get paraphrased away
+("cutscenes are plain MPGs"), and a fact with no consumer has no other alarm. Both restored;
+127/127 tokens then present.
+
+Also added a transitive reachability check, which is the right shape for this file now that it
+routes rather than restates: start at CLAUDE.md, follow every doc reference, confirm all 34 files
+under `docs/` are reachable. Four (`plans/upstream-pr/*`) are no longer named by CLAUDE.md
+directly and are reached through `tooling.md` — correct, but only a transitive check can tell that
+apart from an orphan.
+
+No code change.
