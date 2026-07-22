@@ -2122,3 +2122,102 @@ against a remote is unverified.
 Verified with `-WhatIf` in three modes against the real directory, deleting nothing: default spares
 2 and targets 320 files / 134 MB; `-OlderThanDays 2` spares all 322 (every artifact was <2 days
 old); `-Keep '*.py','*.md'` spares 22. No sweep has actually been run yet.
+
+---
+
+## 2026-07-22 — Milestone 2 polish run 3 planned; item 1 (`--data-root=`) landed
+
+**The plan.** `docs/PLAN-M2-polish-3.md` (active): ten items chosen from `backlog.md` against
+the user's criteria — feasibility, little or no user input, a preference for long-running work.
+Items needing a playtest, two controllers, or a fidelity judgement the data cannot settle were
+deliberately excluded.
+
+**Selection turned up four stale backlog entries**, all corrected in `backlog.md` in the same
+turn so they are not re-chased:
+
+1. **"World renders into only the upper-left quadrant at the world origin" is not a bug.** C1's
+   World area is `left/top = -12288, right/bottom = 0` — the world origin *is* the map's corner,
+   so all terrain lies at x ≤ 0, z ≤ 0. From `--campos=0,30,420 --lookat=0,0,0`, `FrameCamera`
+   derives yaw 0, camera-right is exactly world +X, the x=0 plane projects to the vertical centre
+   line and the line (t,0,0) to the horizontal one. Two hard half-viewport edges, no clipping.
+   The splitscreen theory is dead: 1P never builds a rig (`PlaneViewer.cs:1123-1128`) and there is
+   no other `SubViewport` in `CSVM/src`.
+2. **"A generic way to find billboard sprites" is largely already done** — the data-driven
+   `ModelType`/`FacadeMode` classifier landed 2026-07-21, *including* the cylindrical case the
+   entry named as missing (the harbour refinery flames). Rescoped to consolidation.
+3. **C4's cloud deck is `Sky1.tif`, not `cloudtrans`.** `srock-cloudtrans` skins 35 models of
+   96–422 vertices with dy 162–533 m — cloud-shrouded rock *terrain*, which must stay solid. The
+   real deck is 144 parentless 1024² quads at y = 1050. Trap for the obvious fix: `Sky1.tif` is
+   the *skydome* in six other chapters.
+4. **The C5 coarse quad is not a stray LOD tile.** `world1`'s 105 children and the 471
+   partition-referenced roots are exactly disjoint, and neither side sits under an `Lod` node, so
+   the nearest-LOD rule could never have dropped either. We draw both because the original selects
+   between them via partition visibility (`WorldPartitionSetActive`, 25 interp uses).
+
+**And it turned up one live bug and three undocumented mechanisms**, all logged:
+
+- **C5 has been flying with no fog and no sunlight model at all.** `Weather.cs:166` iterates a
+  hardcoded `{ "ZONE1", "ZONE2" }`, but C5 ships `ZONE1` + **`ZONE3`** in all 8 missions, so its
+  dict is never populated and `Fog("zone2")` falls through to `NoFog` (near/far 1e8/1e9,
+  fullbright). `--sky-zone=zone3` cannot rescue it either. Scheduled as item 2.
+- **`zone_id` on every gamez node** — `-1` = always, `1`/`2`/`3` = that zone only; both zones span
+  the whole map, so they are alternative world variants, not regions. Never read anywhere in
+  `CSVM/src`; per-chapter counts recorded in `backlog.md`.
+- **`FogState` exists as an animation event** — one occurrence install-wide (C1/M04 intro
+  cutscene camera, `drop_fog`), carrying fog parameters inline rather than naming a zone. It is
+  the only evidence that weather is scriptable at all.
+- **The documented justification for collidable clutter trees was a misreading.** `Clutter.cs` and
+  `docs/formats/clutter.md` both cite "`spruce_destroy` anims exist"; the actual strings are
+  `..\data\common\zrdr\**planes**\spruce_destroy{1,2}.zrd` — the **Spruce Goose**, the C2/M01
+  flying-boat mission object, alongside `sprucegoose-fly_the_goose`, `goose_cooked`,
+  `spruce_enginedest`. There is no spruce-*tree* animation in the install. User decision: remove
+  tree collision outright; `cblock` buildings keep it.
+
+**Coarse/fine ground measurement (item 3's evidence).** Rasterising each C5 coarse `world1`-child
+ground sheet on a 64-unit grid against fine partition-tile coverage: `g4632` 97.8%, `g4683` 78.4%,
+`g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%, `g4428` 8.8%, `g14550` **0.0%** — **72% overall, so
+culling them would leave 28% of their footprint with no ground at all.** That rules out the
+obvious "hide the coarse quad" fix and makes it a draw-priority problem instead. Two traps for
+anyone re-measuring: a naive "large flat quad" filter also catches the `fvol*` **fog volumes**
+(10 in C1, 14 in C5, at altitude), and `zone_id` does not separate the pair — both are `zone_id=1`.
+
+### Item 1 — `--data-root=` / `CSVM_DATA_ROOT` (landed)
+
+**Why first:** `/extracted/`, `/CrimsonSkiesGame/` and `/tools/` are git-ignored, so a
+`claude --worktree` checkout has none of them. A worktree session could edit code and docs but
+never build, run, `--screenshot=` or verify — removing this project's main verification
+instrument, and with it any hope of working the other nine items in parallel.
+
+**What landed.** One `_dataRoot` field in `PlaneViewer.cs`, resolved *before* the main arg loop
+(every base path derives from it), with precedence `--data-root=` > `CSVM_DATA_ROOT` > repo root,
+and a one-line log when it differs from the repo root. All 9 asset paths repointed; `_repoRoot`
+stays for anything genuinely about the repo. `RunGame.ps1`/`RunDev.ps1` additionally fall back to
+`CSVM_DATA_ROOT` to locate `tools/godot`, so a single `$env:CSVM_DATA_ROOT` makes a worktree fully
+runnable with no flag — Godot inherits the environment, so nothing needs forwarding.
+
+**Verified end-to-end against a real worktree**, not just the flag. `git worktree add --detach`
+produced a checkout confirmed to have no `extracted/` and no `tools/`; with `CSVM_DATA_ROOT` set
+it built and rendered, logging `data root: Z:\Crimson Skies (repo root …\wt-test)`. Baseline,
+`--data-root=`, and the worktree run all produced **byte-identical PNGs** (sha256
+`64a150bbfcf1d420…`). Worktree removed afterwards. Full 8-chapter regression: 0 errors, all 8
+screenshots saved.
+
+**Two gotchas worth keeping.** Screenshot paths are relative to the *Godot project dir*
+(`CSVM/`), not the repo root — use absolute paths in scripted runs, or the PNG lands somewhere
+surprising and the save can fail outright. And `RunGame.ps1`/`RunDev.ps1` forward `$args`
+verbatim, so PowerShell splits any comma-bearing argument into an array:
+`--campos=-5466,120,-5136` arrives as `System.Object[]` and throws deep inside the arg parse.
+Quote them. Both are pre-existing, neither is caused by this change, and both cost time here.
+
+**Plan correction the same day (user, 2026-07-22): item 7 was scoped wrong.** It was written as
+"C3 clutter planted in the sea", to be fixed with a `y > waterLevel` guard dropping submerged
+palms. That was backwards — **the palms are visible in the original and are supposed to be
+there.** What fails is that the water wins the depth fight against the beach, so the sand
+vanishes and the palms read as growing out of the sea; the palms are a symptom, not the fault.
+The guard would have deleted correct content while leaving the real bug untouched. Item 7 is now
+"the beach must draw over the water", **merged with the pre-existing C3 beach z-fighting backlog
+entry** — same geometry, same camera pose, one bug — and its verification now requires the
+clutter instance count to be *unchanged*. Worth recording as a general lesson: a measurement
+("86 of 102 sand polygons are at exactly Y=0, coplanar with the sea") correctly located the
+geometry but said nothing about which surface was at fault, and the plausible-looking fix
+pointed at the wrong one.

@@ -99,15 +99,45 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, is scheduled work and
   stays in the plan, not here.
 
-- **World renders into only the upper-left quadrant when the camera sits at the world origin**
-  (noticed 2026-07-22 while verifying `OBJECT_OPACITY_STATE`; **pre-existing** — reproduced on the
-  pre-change build). `--viewer --chapter=C1 --campos=0,30,420 --lookat=0,0,0` draws terrain, sea
-  and cloud sprites only in the left ~640 x top ~360 px, the rest showing bare skydome gradient,
-  with a hard rectangular edge at exactly half width and half height. Reads like a 4P splitscreen
-  pane with one player. The origin is outside C1's playable area (its airfield is near
-  -5466,-5136), so nothing normally looks from there and it has never mattered — but an exact
-  half-viewport boundary is not a terrain edge, so something is clipping. Worth a look before
-  trusting any screenshot taken from an unusual camera.
+- ~~**World renders into only the upper-left quadrant at the world origin**~~ — **NOT A BUG,
+  closed 2026-07-22.** It is exact projective geometry. C1's World area is
+  `left=-12288, top=-12288, right=0, bottom=0`: the world origin *is* the map's corner, and all
+  terrain lies at x ≤ 0, z ≤ 0. At `--campos=0,30,420 --lookat=0,0,0`, `FrameCamera` derives yaw 0
+  (`PlaneViewer.cs:1751`), so camera-right is exactly world +X. The plane x=0 contains the camera
+  and therefore projects to the exact vertical centre line; the line (t,0,0) passes through the
+  lookat target parallel to camera-right and projects to the exact horizontal centre line. Terrain
+  fills the upper-left quadrant with two hard half-viewport edges — no clipping involved. The
+  splitscreen theory is dead too: `PlaneViewer.cs:1123-1128` early-returns for 1P and never builds
+  a rig, `SplitScreen` clamps to 2–4 (`SplitScreen.cs:104-110`), and there is no other
+  `SubViewport` in `CSVM/src`. The surrounding void is unfilled because `MapEdgeExtender` is
+  deliberately off in plain `--viewer` (`PlaneViewer.cs:629`, "honest data view").
+
+- **We ignore `zone_id` entirely** (found 2026-07-22). Every gamez node carries a `zone_id`:
+  `-1` = always rendered, `1`/`2`/`3` = only when that zone is active. Both zones span the **whole
+  map** spatially, so they are alternative world variants, not regions. Per-chapter node counts
+  (`-1` / zone1 / zone2 / zone3): C1 3529/2666/869/—, C1B 3500/2101/2/—, C1C 4181/146/1317/—,
+  C2 4189/766/1/—, C2B 3338/149/1414/—, C3 3759/1647/2/—, C4 5330/802/2157/—, C5 9734/1555/—/149.
+  So C1B, C2 and C3 are effectively single-zone (1–2 nodes in the second); C1C, C2B and C4 are
+  zone2-dominant; C1 and C5 zone1-dominant. **Nothing in `CSVM/src` reads the field** — we render
+  every zone's geometry at once. Plausible source of artifacts; not yet shown to cause a specific
+  one (checked and ruled out for the C5 ground z-fight, where both surfaces are `zone_id=1`).
+
+- **Partition visibility is a real runtime system we do not implement** (found 2026-07-22 while
+  diagnosing the C5 ground z-fight). The interp language has **`WorldPartitionSetActive`**
+  (25 uses). The original selects between a coarse `world1`-child ground sheet and the fine
+  partition-referenced tiles at runtime; we draw both unconditionally
+  (`WorldBuilder.cs:155`, `:157-159`). The polish-run-3 fix is a draw-priority workaround, not
+  this. Implementing it properly = cell-resident tracking with pop risk and an 8-chapter
+  regression — Milestone 3 work, but now motivated by evidence rather than a hunch.
+
+- **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
+  changed mid-mission by animation, but the data uses it exactly once install-wide:
+  `extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]` —
+  `FogState { name: "drop_fog", color 0.69/0.69/0.69, altitude 10000–11000, range 1000–1500 }`.
+  It carries fog parameters **inline** and matches neither C1 zone, so it is an ad-hoc third fog
+  state on the intro cutscene camera, not a zone selector. Relevant because it is the only
+  evidence that weather is scriptable at all; zone *selection* still appears to happen engine-side
+  in the binary (same shape as the `fire2` trigger the user searched the disassembly for).
 
 ## Open bugs (moved from NOTES.md 2026-07-22)
 
@@ -135,11 +165,19 @@ relative to the Godot project's `src/`.
 
 - **C4's cloud deck does not follow the plane.** The follow mechanism works (`PlaneViewer`
   re-anchors `rig.Deck` to the camera X/Z each frame, fed by `WorldBuilder.CloudDeck`), but the
-  deck is selected by texture prefix **`cloudlayer`** only, and C4's gamez ships `cloudtrans`
-  instead (C4 textures: `cloud1`, `cloud2`, `cloudtrans`; C1 has `cloudlayer`). So `CloudDeck` is
-  null in C4, the deck stays world-fixed, and `IsCloudSpriteTexture` — which excludes only
-  `cloudlayer` — additionally billboards it as a sprite. C4's weather *does* define the band
-  (`CLOUD_COVER TOP 1100 / BOTTOM 1000`), so the `HasCloudBand` guard is not the blocker.
+  deck is selected by texture prefix **`cloudlayer`** only (`WorldBuilder.cs:77-78`), so
+  `CloudDeck` is null in C4, the deck stays world-fixed, and `IsCloudSpriteTexture` additionally
+  billboards it as a sprite. C4's weather *does* define the band (`CLOUD_COVER TOP 1100 /
+  BOTTOM 1000`), so the `HasCloudBand` guard is not the blocker.
+  **Correction 2026-07-22: the deck is NOT `cloudtrans`.** `srock-cloudtrans` skins 35 models of
+  96–422 vertices with dy 162–533 m — cloud-shrouded **rock terrain**, which must stay solid.
+  C4's real deck is **`Sky1.tif`**: 144 parentless partition-referenced nodes `g1720..g1863`, each
+  a single 4-vertex flat 1024×1024 quad at **y = 1050** — the same signature as C1's `cloudlayer`
+  deck (144 nodes, 1024², y = 960). Decks exist only in C1/C1C/C2B (`cloudlayer`) and C4 (`Sky1`).
+  **The trap:** `Sky1.tif` is the *skydome* in C1/C1B/C1C/C2/C2B/C3 (2 nodes under `horizon/zone2`)
+  and the *deck* in C4, so widening the predicate to `sky*` is only safe because `Build` skips the
+  `horizon` subtree — an implicit dependency. Wants a structural test, not a name test. Scheduled
+  as polish-run-3 item 4.
 - **C3 massive z-fighting at the beach** — `--campos=-6151.614,136.079,-3198.714
   --lookat=-6150.76,135.796,-3199.151`. **User-confirmed 2026-07-22 as real z-fighting, and the
   correct resolution is known: the beach should draw over the water.** That makes this the one
@@ -151,8 +189,20 @@ relative to the Godot project's `src/`.
   `--shots=5 --jitter=0.006` (sub-pixel dither; the 0.15° default moves the camera far too much to
   isolate depth flips) before assuming the mottling and the hard edges are the same fault.
   **Do not fix by raising the bias constants globally** — see the C5 entry below for why.
-- **C3 trees standing in the water** (same camera pose). Undiagnosed — likely `Clutter.cs` stamping
-  a tree template onto a terrain texture that also covers shoreline/sea tiles.
+- **C3 trees standing in the water** (same camera pose) — **diagnosed 2026-07-22 as the SAME BUG
+  as the beach z-fight above, not a clutter placement fault. Merged; scheduled as polish-run-3
+  item 7.** The palms are visible in the original and are *supposed* to be there (user-confirmed
+  2026-07-22). What fails is that the water wins the depth fight against the beach, so the sand
+  they stand on vanishes and they read as growing out of the sea. **Do not "fix" this by dropping
+  submerged palms** — an earlier draft of the plan proposed exactly that (`y > waterLevel` guard in
+  `Clutter.PlaceOnTriangle`, which has no Y or water test today), and it would have deleted correct
+  content while leaving the actual z-fight untouched. Measurement behind the merge:
+  `cliff1_sandtrans.tif` (C3's only clutter template ground, node idx 3232 → ground 3240, 6
+  `palmtree1.flt` decorations) covers 102 world polygons, **86 of them perfectly flat at exactly
+  Y = 0.0** — and Y = 0.0 *is* the C3 sea plane, shared coplanar with `wtr00000` ×1565 (material
+  220, `soil: "Water"`), `shore2` ×1027, `shore1` ×487, `cliff1_watertrans2` ×177, `sand128` ×140.
+  So ~84% of the palm-bearing sand band is coplanar with the sea, which is why the symptom is
+  map-wide rather than a few stray trees. A fix must leave the clutter instance count unchanged.
 - **C5 shader warning: `More than one material in instance export the same instance shader uniform
   'csky_fog_on', but they do it with different indices.`** (`instance_uniforms.cpp:62`.) Cause
   found: `csky_fog_on` is an instance uniform declared in two independent shaders at different
@@ -209,11 +259,25 @@ relative to the Godot project's `src/`.
 
 Grouped by the user as a prospective third polish run. Not a plan — write one when it is scheduled.
 
-- **A generic way to find billboard sprites.** Multiple further billboard instances exist beyond
-  the ones handled today: some face the camera fully, some only about X/Y (the harbour refinery
-  flames). Today's detection is per-case; this wants one rule.
+- **A generic way to find billboard sprites** — **mostly already done; rescoped 2026-07-22.** The
+  data-driven rule landed 2026-07-21: `GameZ.cs:479-482` exposes `ModelType`/`FacadeMode`,
+  consumed at `SceneBuilder.cs:446-459` (spherical) and `:468-470` (cylindrical). The example this
+  entry originally named — "some face the camera only about X/Y (the harbour refinery flames)" —
+  **is the case that already works**. What actually remains is consolidation: the classifier is
+  split across two `private` methods, `Clutter.SpriteInfo` uses an independent 1-poly/4-vert/flat-Z
+  shape heuristic, and `WorldBuilder.IsFlareSpriteNode` still gates collision on poly-count +
+  texture name. Scheduled as polish-run-3 item 5.
 - **Billboards should generally have no collision.** Tree collision is a nice touch but the
-  original does not have it.
+  original does not have it. **Confirmed 2026-07-22, and the counter-evidence was a misreading:**
+  `Clutter.cs:33-35` and `docs/formats/clutter.md:54` both justify collidable trees with
+  "`spruce_destroy` anims exist". The actual data strings are
+  `..\data\common\zrdr\**planes**\spruce_destroy1.zrd` (C2/M01) and `spruce_destroy2.zrd`
+  (C5/M03) — the **Spruce Goose**, Howard Hughes' flying boat and the C2/M01 mission object, whose
+  folder siblings are `sprucegoose-fly_the_goose`, `free_the_goose`, `goose_cooked`,
+  `goose_down_lwing`, `spruce_enginedest`. **There is no spruce-*tree* animation in the install.**
+  Both doc claims need correcting, not just the code. User decision 2026-07-22: remove tree
+  collision outright (not behind a flag); `cblock` city-block **buildings keep** collision, being
+  real 3D meshes rather than cards. Scheduled as polish-run-3 item 5.
 - **Determine which weather/sky zone each chapter and mission actually uses.**
 - **Fine-tune fog and environment** — method: record video from spawn points flying straight for a
   fixed number of seconds, in both engines, and compare.
@@ -268,20 +332,6 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   **User-confirmed 2026-07-22 as visibly missing building clutter in both C2 and C5.**
 - **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
-- **Make the asset roots configurable so a git worktree can run the game** (raised 2026-07-22).
-  `PlaneViewer.cs:275` hardcodes `_repoRoot = <godot project>/..` and derives every asset path from
-  it (`extracted/planes.zip`, `extracted/<ch>/gamez.zip`, `extracted/rof`, …). Since `/extracted/`,
-  `/CrimsonSkiesGame/` and `/tools/` are git-ignored, a worktree checkout has none of them — so a
-  second Claude Code session in `claude --worktree <name>` can edit code and docs but cannot build,
-  run, `--screenshot=` or extract, which removes the project's main verification instrument. Fix:
-  a `--data-root=` arg (or a `CSVM_DATA_ROOT` env var) overriding `_repoRoot` for asset lookup only,
-  defaulting to today's behaviour. Then a worktree session points at the primary tree's `extracted/`
-  and verifies normally. Small and self-contained on the Godot side — one field and its arg parse.
-  The `.ps1` scripts derive `$RepoRoot` the same way and would want the same override to launch from
-  a worktree, but extraction itself only ever needs to run once in the primary tree.
-  Rejected alternative: junctioning the three directories into each worktree — worktree removal
-  follows links, and the targets are the retail install and hours of extraction output.
-
 - **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
   every zone freezes at the finish showing their placing while the field flies on. It matches
   the solo run's freeze and makes the placing unmissable, but it parks a player with nothing
@@ -414,11 +464,25 @@ objects). Confirmed cause: the depth bias is proportional to view distance
 (`VERTEX *= 1.0 - (depth_bias + node_bias)`), so coplanar surfaces sharing a draw priority get
 `rank × 2e-6` ≈ 0.16 mm at ~80 m. A 100× bias drops the flicker to 0.01%.
 
-**Open question before fixing:** raising the bias makes a large flat low-resolution quad win
-over the detailed night-city ground, which is likely backwards. Why is that coarse quad drawn
-coplanar with the fine city at all — is it a coarse LOD tile that SceneBuilder's nearest-LOD
-selection should have dropped? — and which does the original draw on top? Answer that before
-touching the constants; a bias bump alone would lock in the wrong surface across all chapters.
+**Open question — ANSWERED 2026-07-22, and scheduled as polish-run-3 item 3.**
+
+*Is it a stray LOD tile?* **No.** The coarse sheet is node 1777 `g4683` (34 polys, 2048 × 11264,
+`brick1`/`cblock1`), a **direct child of `world1`**; the fine ground is partition-referenced.
+`world1`'s 105 children and the 471 partition roots are **exactly disjoint** (intersection = 0),
+and neither side sits under an `Lod` node — so `SceneBuilder.cs:132-134`'s nearest-LOD rule could
+never have dropped either. We draw both because the original selects between them at runtime via
+partition visibility (`WorldPartitionSetActive`, 25 uses in interp), which we do not implement.
+
+*Which should win?* **The fine ground — but the coarse sheets must not be culled.** Rasterising
+each C5 coarse sheet on a 64-unit grid against fine-tile coverage: `g4632` 97.8%, `g4683` 78.4%,
+`g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%, `g4428` 8.8%, `g14550` **0.0%** — **72% total, so
+hiding them would leave 28% of their footprint with no ground at all.** The fix is therefore a
+*draw-priority* change (world-children ground ranks below partition ground), not a visibility one:
+the detailed city wins where both exist, the coarse sheet still draws where it is alone.
+
+*Caution for anyone re-measuring:* a naive "large flat quad" filter also catches the `fvol*`
+**fog volumes** (10 in C1, 14 in C5, at altitude) — exclude them by name. And `zone_id` does not
+explain the pair: both surfaces are `zone_id=1`.
 
 **Reference material for that open question (added 2026-07-22, user-confirmed as being about this
 issue):** `OriginalScreenshots/C5 IA1 Terrain.png`, `…Terrain2.png`, `…Terrain3.png` — original-game

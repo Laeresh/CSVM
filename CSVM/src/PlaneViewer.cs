@@ -258,6 +258,10 @@ public partial class PlaneViewer : Node3D
     // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
     // each (re)build and recomputes the chapter-dependent gamez/texture/mission paths from _chapter.
     private string _repoRoot = "";
+    // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
+    // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
+    // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
+    private string _dataRoot = "";
     private string _planesGamezPath = "";  // extracted/planes.zip — the aircraft models (always this)
     private string _zrdrPath = "";
     private string _soundsPath = "";
@@ -273,12 +277,24 @@ public partial class PlaneViewer : Node3D
        
         var projectDir = ProjectSettings.GlobalizePath("res://");
         _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
-        var planesGamezPath = Path.Combine(_repoRoot, "extracted", "planes.zip");
-        _zrdrPath = Path.Combine(_repoRoot, "extracted", "zrdr.zip");
-        _soundsPath = Path.Combine(_repoRoot, "extracted", "soundsh.zip");
-        _interpPath = Path.Combine(_repoRoot, "extracted", "interp.json");
-        _messagesPath = Path.Combine(_repoRoot, "extracted", "messages.json");
-        _rofPath = Path.Combine(_repoRoot, "extracted", "rof");
+
+        // Resolved before the main arg loop below, because every base path is derived from it.
+        // Precedence: --data-root= beats CSVM_DATA_ROOT beats the repo root.
+        _dataRoot = _repoRoot;
+        var dataRootEnv = OS.GetEnvironment("CSVM_DATA_ROOT");
+        if (!string.IsNullOrEmpty(dataRootEnv)) _dataRoot = Path.GetFullPath(dataRootEnv);
+        foreach (var arg in OS.GetCmdlineUserArgs())
+            if (arg.StartsWith("--data-root="))
+                _dataRoot = Path.GetFullPath(arg["--data-root=".Length..]);
+        if (_dataRoot != _repoRoot)
+            GD.Print($"data root: {_dataRoot} (repo root {_repoRoot})");
+
+        var planesGamezPath = Path.Combine(_dataRoot, "extracted", "planes.zip");
+        _zrdrPath = Path.Combine(_dataRoot, "extracted", "zrdr.zip");
+        _soundsPath = Path.Combine(_dataRoot, "extracted", "soundsh.zip");
+        _interpPath = Path.Combine(_dataRoot, "extracted", "interp.json");
+        _messagesPath = Path.Combine(_dataRoot, "extracted", "messages.json");
+        _rofPath = Path.Combine(_dataRoot, "extracted", "rof");
 
         // A content-selecting arg (--plane/--chapter/--fly/--stunt/--viewer/--damage/--screenshot)
         // builds directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
@@ -330,6 +346,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--spawn-at=")) _spawnAt = ParseVec3(arg["--spawn-at=".Length..]);
             else if (arg.StartsWith("--spawn-dir=")) _spawnDir = ParseVec3(arg["--spawn-dir=".Length..]);
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
+            else if (arg.StartsWith("--data-root=")) { /* resolved before this loop — every base path derives from it */ }
             else if (arg.StartsWith("--gamez=")) { _gamezPath = arg["--gamez=".Length..]; _gamezOverridden = true; }
             else if (arg.StartsWith("--textures=")) { _texturesPath = arg["--textures=".Length..]; _texturesOverridden = true; }
             else if (arg.StartsWith("--zrdr=")) { _zrdrPath = arg["--zrdr=".Length..]; _zrdrOverridden = true; }
@@ -481,16 +498,16 @@ public partial class PlaneViewer : Node3D
         // The build body reads the base paths as plain locals (unchanged from when this was inline
         // in _Ready); the chapter-dependent paths are recomputed here so a new launchscreen chapter
         // selection takes effect on rebuild.
-        string repoRoot = _repoRoot, zrdrPath = _zrdrPath, soundsPath = _soundsPath,
+        string dataRoot = _dataRoot, zrdrPath = _zrdrPath, soundsPath = _soundsPath,
             interpPath = _interpPath, messagesPath = _messagesPath, planesGamezPath = _planesGamezPath;
         bool mute = _mute, debugCollision = _debugCollision;
 
         string texturesPath = _texturesOverridden ? _texturesPath
-            : PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, "texture.zip"));
+            : PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, "texture.zip"));
         string gamezPath = _gamezOverridden ? _gamezPath
-            : _worldMode ? PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, "gamez.zip"))
+            : _worldMode ? PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, "gamez.zip"))
             : _planesGamezPath;
-        var missionZrdrPath = PreferUnzipped(Path.Combine(_repoRoot, "extracted", _chapter, _mission, "zrdr.zip"));
+        var missionZrdrPath = PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, _mission, "zrdr.zip"));
 
         try
         {
@@ -569,9 +586,9 @@ public partial class PlaneViewer : Node3D
                 // C1 train drives its SI-script track loop. The program merges the compiled
                 // cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
                 // the three zrdr scopes (the only source of zepstate/startanims).
-                var chapterZrdrPath = PreferUnzipped(Path.Combine(repoRoot, "extracted", _chapter, "zrdr.zip"));
+                var chapterZrdrPath = PreferUnzipped(Path.Combine(dataRoot, "extracted", _chapter, "zrdr.zip"));
                 var (chapterAnimPath, missionAnimPath) =
-                    AnimProgram.ArchivePaths(repoRoot, _chapter, _mission);
+                    AnimProgram.ArchivePaths(dataRoot, _chapter, _mission);
                 var animProgram = AnimProgram.Load(zrdrPath, chapterZrdrPath, missionZrdrPath,
                     chapterAnimPath, missionAnimPath);
                 // The runtime builds PUFFER_STATE emitters through this factory rather than

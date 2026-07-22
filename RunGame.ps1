@@ -34,13 +34,22 @@ $ErrorActionPreference = "Stop"
 $RepoRoot   = $PSScriptRoot
 $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
-$GodotExe   = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
+
+# tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
+# tree named by CSVM_DATA_ROOT -- the same env var PlaneViewer reads for extracted/, so one
+# `$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'` makes a worktree fully runnable. Godot inherits
+# the environment, so nothing has to be forwarded on the command line.
+$GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
+$GodotExe = Join-Path $RepoRoot $GodotRel
+if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
+    $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
+}
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
 }
 if (-not (Test-Path $GodotExe)) {
-    throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup."
+    throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup. In a git worktree, set `$env:CSVM_DATA_ROOT to the primary tree."
 }
 
 Write-Host "Building CSVM..." -ForegroundColor Cyan

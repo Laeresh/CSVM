@@ -27,6 +27,16 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    front*.
 5. **A clean compile, a passing test, or an unchanged number is not evidence** unless you have
    seen it able to fail. See §5.
+6. **A measurement that locates the geometry still does not tell you which surface is at fault.**
+   C3's "trees standing in the water" was measured precisely — 86 of the 102 `cliff1_sandtrans`
+   polygons sit at exactly Y = 0.0, coplanar with the sea plane — and that correct number
+   licensed a wrong fix: drop the submerged palms with a `y > waterLevel` guard. But the palms
+   are in the original and are *supposed* to be there; the water was winning the depth fight
+   against the beach, and the fix would have deleted correct content while leaving the real bug
+   untouched (caught by the user, 2026-07-22). The measurement answered "where", and was then
+   read as if it had answered "what is wrong". **Before fixing a coplanar-surface bug, establish
+   which surface the original draws on top — that is a separate question from where they
+   overlap.** Compare rule 4, which is the same trap reached from the other direction.
 
 ## 1. Before you trust a screenshot diff
 

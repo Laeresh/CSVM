@@ -229,11 +229,11 @@ for CS — do not use it as the reference.)
 | `docs/plans/PLAN-anim-rendering-followups.md` | Conditions, lights, world setup, UV scroll, audio (4 items) | ✅ 2026-07-22 |
 | `docs/plans/PLAN-docs-cleanup.md` | Shrink this file back to an index (10 items) | ✅ 2026-07-22 |
 
-**No plan is active** — every plan file lives in `docs/plans/`, so the next plan written into `docs/` is by construction the single live document.
+**The active plan is [`docs/PLAN-M2-polish-3.md`](docs/PLAN-M2-polish-3.md)** (written 2026-07-22) — ten items chosen from `backlog.md` for feasibility, low user input and long-running scope. It sits in `docs/` rather than `docs/plans/`, which by this repo's convention makes it the single live document; move it to `docs/plans/` with a `COMPLETE` banner when every item lands.
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 
-**Next step: the owed playtests.** They are the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest".
+**Next step: work the active plan** (item 1 landed 2026-07-22). Separately, **the owed playtests** remain the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest". The plan's closing section adds one more user-owned task: the weather-zone A/B against the original, which the data cannot settle.
 
 **Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
 
