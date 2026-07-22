@@ -33,7 +33,7 @@ instruments that mislead.
 8. ☑ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops **(done 2026-07-22 — C1/C2/C3 traffic now loops at exactly its authored route period, no runaway; 8-chapter regression identical. One plan claim corrected: the `zrdr` scope has 703 `Loop` events, not zero — but none with `LOOP_COUNT 0`. `docs/HISTORY.md`)**
 9. ☑ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms **(done 2026-07-22 — the compounding was real and is fixed, but the 1e29 cause was something else: the unread `spline_interp` flag letting uninitialised memory be evaluated as spline coefficients. `docs/HISTORY.md`)**
 10. ☑ Tail collision boxes swallow the outboard wings **(done 2026-07-22 — 9 boxes relabelled across 5 aircraft, every `*_rudder*` in the fleet untouched; scripted A/B turns one wingtip graze from `(tail→tail)` into `(wing→rightwing)` at identical vn/damage. Plan claim corrected: the strips are not "outboard", they cross the wing band — the box *centre* test is what works. `docs/HISTORY.md`)**
-11. ☐ **Per-polygon within-surface draw-order tie-break** — the real mechanism behind items 3 and 7 (see below)
+11. ❌ ~~**Per-polygon within-surface draw-order tie-break**~~ **(2026-07-22: premise DISPROVEN, no code landed — `g4683` has no self-overlapping polygons; the "8 coplanar pairs" came from an AABB test and the real outlines share edges. Implemented properly anyway and measured to change nothing at all three poses. What it DID produce is the first measurement of this renderer's depth-resolution floor (~1e-6 of view distance), which shows `NodeOrderBias` is 20× too small and reframes all three z-fight reports as one cross-node resolution problem. See below.)**
 
 **Track record so far, and what it means for the remaining items.** Of the five items worked
 in wave 1, **three had materially wrong evidence in this plan**: item 3's mechanism was wrong
@@ -861,6 +861,67 @@ currently our best guess for how zone selection works at all.
 ---
 
 ## 11. Per-polygon within-surface draw-order tie-break
+
+> ### ❌ CLOSED 2026-07-22 — premise disproven, nothing landed. Read this box first.
+>
+> This is the **third** wrong mechanism for the same bug (item 3 was the first, this item's own
+> Evidence the second). It was implemented in full, measured, and reverted.
+>
+> **1. `g4683` does not fight itself.** The "8 pairs of its own polygons exactly coplanar at
+> y = 5, overlapping by up to 768 × 512 units" figure is an **AABB** overlap. Clipping the real
+> outlines (true polygon ∩ polygon area) gives **zero** overlap for every pair. Its polygons 3
+> and 4 — the worst-overlapping bounding boxes in the mesh — **share the edge
+> (−9600,−3712)→(−10240,−4096) exactly** and lie on opposite sides of it. They are tiled ground.
+> Install-wide the same substitution inflates the count of genuinely conflicting polygons from
+> 0.6–1.6% to 9–26% (`docs/verification.md` rule 9).
+>
+> **2. The fix was built anyway, correctly, and moves nothing.** Per-polygon rank delivered in
+> UV2.x, restricted by a Sutherland-Hodgman area test to polygons with a genuine coplanar
+> overlapping sibling in the same surface, applied as a **pushback on the loser** so nothing is
+> ever pulled toward the camera. Provably active (270 polygons in C5). Measured:
+>
+> | pose (`--shots=5 --jitter=0.006`) | before | after |
+> |---|---|---|
+> | C5 `g4683` repro | 35.96% | **35.96%** |
+> | C3 beach | 0.41% | **0.41%** |
+> | C1B | 30.95% | **31.00%** |
+>
+> 8-chapter regression: identical node/mesh counts, zero errors, no visible change (the largest
+> genuine pixel delta, C3's 15,864 px, is invisible stipple at the shoreline; C2B's apparent
+> 24,148 px is precipitation noise — same-build-vs-same-build gives 24,117).
+>
+> **3. The "35.77% → 21.92%" result that motivated this item was a step-size artifact.** A
+> *blanket* per-polygon ramp is just a global bias bump. At 2e-6 it takes the C5 pose to
+> **0.37%** — by floating the coarse sheet in front of the detailed city, i.e. the known-wrong
+> surface wins (`docs/verification.md` rule 4). At 2e-7 it reaches only 33.20%. The 21.92% was a
+> ramp too small to win the depth test, read as a noise floor.
+>
+> **4. What this item actually produced — the first measurement of the depth-resolution floor.**
+> That ramp brackets it: **≈1e-6 of view distance** is the smallest bias that separates two
+> coplanar surfaces at this view. `SurfaceRankBias` (2e-6) sits at the floor; **`NodeOrderBias`
+> (5e-8) is twenty times below it**, so the cross-node tie-break is inoperative for nodes closer
+> than ~40 indices — and has been since it was written.
+>
+> **5. The real mechanism, for all three poses: cross-node, and a resolution problem rather than
+> an ordering one.** Nine *different* World-child nodes stack coplanar `cblock*` ground at y = 5
+> in the C5 repro footprint (1777 `g4683`, 1799, 1800, 1801, 1813, 1814, 1822, 1823, 1837). The
+> priority −10 members separate cleanly; the priority-0 members sit 36–60 indices apart
+> (1.8–3.0e-6, straddling the floor) and 1822/1823 sit 1 index apart (5e-8, hopeless) — which is
+> why the flicker is partial. Confirming control: `NodeOrderBias` 5e-8 → 2e-6 takes **C1B from
+> 30.95% to 2.35%**. It is a diagnosis, **not a landable fix** — the same constant takes C5 to
+> **41.69% (worse)**, because the node span is thousands and any step beating the floor covers
+> tens of priority levels.
+>
+> **6. C3's recorded pose does not reproduce a flicker at all** (0.41%, beach visible, palms on
+> sand). Either it is a *static* wrong-winner, which a jitter-flip metric cannot see, or the
+> pose is wrong. **Ask the user for a fresh capture before spending another session on it.**
+>
+> **Next step, if this is picked up again:** make the cross-node bias **dense over the nodes that
+> actually conflict** instead of uniform over all of them — e.g. rank only coplanar-overlapping
+> node groups against each other and spend the available range on them. That is a scene-graph
+> analysis in `WorldBuilder`/`SceneBuilder`, not a constant, and it needs the resolution floor
+> above as its budget. Do **not** re-try a within-surface tie-break, and do **not** raise a
+> global constant.
 
 **Added 2026-07-22, replacing items 3 and 7.** Both were written around mechanisms that turned
 out to be wrong (item 3's coarse/fine model was implemented and measured to change nothing;
