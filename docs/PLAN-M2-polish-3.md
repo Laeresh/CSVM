@@ -25,26 +25,39 @@ instruments that mislead.
 
 1. ☑ `--data-root=` / `CSVM_DATA_ROOT` — let a git worktree run the game **(done 2026-07-22 — verified end-to-end against a real detached worktree with no `extracted/` and no `tools/`: byte-identical render, `docs/HISTORY.md`)**
 2. ☑ Weather zones: C5 loads no fog at all; make the zone table data-driven **(done 2026-07-22 — C5's default now resolves `zone2`→`zone1`, byte-identical to the old build's explicit `--sky-zone=zone1`; 8-chapter regression clean; `docs/HISTORY.md`)**
-3. ☐ C5 ground z-fighting — coarse/fine draw priority (+ 7 reference screenshots for the user)
+3. ❌ ~~C5 ground z-fighting — coarse/fine draw priority~~ **(2026-07-22: premise DISPROVEN, no code landed — the prescribed fix was implemented and measured to change nothing, 35.77% → 35.79%. `g4683` z-fights its OWN coplanar polygon pairs within one material group. Rescoped as item 11.)**
 4. ☐ C4 cloud deck does not follow the plane
 5. ☐ One billboard classifier; billboards and clutter lose collision
-6. ☐ `cblock*` 3D city-block clutter (C2/C5 missing buildings)
-7. ☐ C3 beach z-fighting — the beach must draw over the water (the "palms in the sea" report)
-8. ☑ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops **(done 2026-07-22 — survey re-confirmed 26 events / 25 defs, all ground-vehicle routes; C1/C2/C3 traffic now loops at exactly its authored route period, no runaway; 8-chapter regression identical. One plan claim corrected: the `zrdr` scope has 703 `Loop` events, not zero — but none with `LOOP_COUNT 0`. `docs/HISTORY.md`)**
-9. ☐ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms
-10. ☑ Tail collision boxes swallow the outboard wings **(done 2026-07-22 — 9 boxes relabelled across 5 aircraft, every `*_rudder*` in the fleet untouched; scripted A/B turns one wingtip graze from `(tail→tail)` into `(wing→rightwing)` at identical vn/damage, `docs/HISTORY.md`)**
-8. ☐ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops
-9. ☑ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms **(done 2026-07-22 — the compounding was real and is fixed, but the 1e29 cause was something else: the unread `spline_interp` flag. See the item's closing note and `docs/HISTORY.md`)**
-10. ☐ Tail collision boxes swallow the outboard wings
+6. ☐ `cblock*` 3D city-block clutter (C2/C5 missing buildings) — **needs item 5 first**
+7. ⤳ C3 beach z-fighting — **folded into item 11**, same suspected mechanism
+8. ☑ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops **(done 2026-07-22 — C1/C2/C3 traffic now loops at exactly its authored route period, no runaway; 8-chapter regression identical. One plan claim corrected: the `zrdr` scope has 703 `Loop` events, not zero — but none with `LOOP_COUNT 0`. `docs/HISTORY.md`)**
+9. ☑ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms **(done 2026-07-22 — the compounding was real and is fixed, but the 1e29 cause was something else: the unread `spline_interp` flag letting uninitialised memory be evaluated as spline coefficients. `docs/HISTORY.md`)**
+10. ☑ Tail collision boxes swallow the outboard wings **(done 2026-07-22 — 9 boxes relabelled across 5 aircraft, every `*_rudder*` in the fleet untouched; scripted A/B turns one wingtip graze from `(tail→tail)` into `(wing→rightwing)` at identical vn/damage. Plan claim corrected: the strips are not "outboard", they cross the wing band — the box *centre* test is what works. `docs/HISTORY.md`)**
+11. ☐ **Per-polygon within-surface draw-order tie-break** — the real mechanism behind items 3 and 7 (see below)
 
-**Dependency notes.** Item 1 is an enabler — landing it first lets a second session in a
-worktree verify its own work, which every other item needs. Items 5 and 6 both rewrite parts
-of `Clutter.cs` and are best done in that order (5 removes the collision path 6 would
-otherwise have to extend). **Items 3 and 7 are the same class of fix** — coplanar surfaces
-resolved by draw priority — so land 3 first and reuse its mechanism in 7 if it generalises; note
-that 7 pairs by material/soil rather than world-child vs partition, so it may need its own rank
-rule. Items 2 and 4 are `WorldBuilder`/`Weather` but touch disjoint code. Items 8, 9 and 10 are
-fully independent of everything.
+**Track record so far, and what it means for the remaining items.** Of the five items worked
+in wave 1, **three had materially wrong evidence in this plan**: item 3's mechanism was wrong
+outright, item 9's was an arithmetic coincidence (the real cause was elsewhere), and item 10's
+prescribed test would have matched nothing. In both bad cases the *supporting* evidence agreed
+while the mechanism did not — agreement on *where* is not agreement on *why*
+(`docs/verification.md` rules 6 and 7). **Treat every Evidence section below as a lead to verify,
+not a finding to implement. Landing no code with a correct disproof is a success here** — that is
+exactly what item 3 delivered, and it prevented a change that would have regressed two chapters.
+
+**Dependency notes (updated after wave 1).** Items 1, 2, 8, 9, 10 are landed; item 3 is closed
+as disproven. What remains: **item 6 needs item 5** (5 removes the collision path 6 would
+otherwise have to extend). **Item 11 subsumes items 3 and 7** — one mechanism, three or more
+z-fight reports. Items 4, 5 and 11 are logically independent but contend on files: 4 and 5 both
+edit `WorldBuilder.cs` predicates ~6 lines apart, and 5 and 11 both edit `SceneBuilder.cs`
+(5 in the classifier, 11 in `BuildMesh`). Give each a stated file ownership boundary when running
+them concurrently.
+
+**⚠ Worktree hazard, learned the hard way 2026-07-22.** `git stash` is **repo-global and shared
+across worktrees** — it lives in the common `.git` dir. Three of wave 1's five agents popped each
+other's stashes; one built a "baseline" from another agent's in-flight edits and manufactured a
+confident result in a chapter its change provably could not touch. **Never use `git stash` in a
+worktree session here.** Use a local commit on your branch, or a file copy. Recorded in
+`docs/verification.md`.
 
 ---
 
@@ -844,3 +857,64 @@ animation event — but the data uses it exactly once, on C1/M04's intro cutscen
 (`drop_fog`, range 1000–1500, altitude 10000–11000, matching neither C1 zone). If you see fog
 shift mid-mission anywhere else, that is evidence the zone is switched engine-side, which is
 currently our best guess for how zone selection works at all.
+
+---
+
+## 11. Per-polygon within-surface draw-order tie-break
+
+**Added 2026-07-22, replacing items 3 and 7.** Both were written around mechanisms that turned
+out to be wrong (item 3's coarse/fine model was implemented and measured to change nothing;
+item 7's clutter-placement model was corrected by the user). Item 3's investigation found what
+looks like the real one, and it plausibly covers several open z-fight reports at once.
+
+**Goal:** make coplanar polygons *within a single mesh surface* resolve by their draw order, the
+way the original does, instead of sharing one depth bias and fighting.
+
+**Evidence** (measured 2026-07-22 by item 3's investigation, and the one part of that item that
+survived):
+
+- `SceneBuilder.BuildMesh` groups polygons by **(material, priority, sidedness)**. Every polygon
+  in a group lands in one surface with **one shared depth bias**, so no node-level tie-break can
+  separate them.
+- C5's `g4683` (node 1777) carries **8 pairs of its own polygons exactly coplanar at y=5,
+  priority 0**, overlapping by up to 768×512 units; five of those pairs are on the same material
+  (`cblock1.tif`), so they land in the same surface. Polygons 0–7 sit exactly where the C5 repro
+  camera looks.
+- Hiding `g4683` alone collapses the repro flicker to the same 0.19% as hiding all seven coarse
+  sheets — it is that single mesh fighting itself, not two nodes fighting each other.
+- **A per-polygon draw-order rank moved the repro from 35.77% to 21.92%** — the only intervention
+  that moved it without deleting geometry.
+
+**Established format fact this rests on** (`CLAUDE.md`, "Format gotchas"): polygons carry a signed
+draw priority, and **equal priorities resolve by draw order, later wins** — polygon list order
+within a mesh. We honour that *across* nodes but not *within* a surface. That is the gap.
+
+**Approach.** Give each polygon within a surface a rank derived from its position in the polygon
+list, and fold that into the existing depth-bias path so later polygons win. The existing
+node-level bias must keep working — this is an additional, finer term, not a replacement.
+
+**Before writing code, establish the noise floor at the repro pose.** Item 3 measured that most
+of the 35.77% baseline is **grazing-angle mipmap/aniso resampling, not depth flips** — so 21.92%
+may already be at or near the floor, i.e. the per-polygon fix may have *solved* it. Run the same
+build twice at that pose with `--shots=5 --jitter=0.006` and get the floor first, or you cannot
+tell "fixed" from "improved" (`docs/verification.md` rules 2 and 7).
+
+**Then test the generalisation, which is the real prize.** The same shape may explain:
+- **C3's beach z-fight** (old item 7) — `--campos=-6151.614,136.079,-3198.714
+  --lookat=-6150.76,135.796,-3199.151`. 86 of `cliff1_sandtrans`'s 102 polygons sit at exactly
+  Y = 0.0, coplanar with the sea. **The beach must win** (user-confirmed twice). The palms are
+  correct content and must NOT be removed — **clutter instance count must not change.**
+- **C1B's z-fight** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
+- The **runway `lite*`/`ltout*`** state-variant quads in `backlog.md`, which still z-tie.
+
+Report which of these it fixes and which it does not. A fix for one that regresses another is
+worse than no fix.
+
+**Verify.** Same-build noise floor first, then before/after at all three poses above, all with
+`--shots=5 --jitter=0.006` (**sub-pixel**; the 0.15° default moves the camera far too much).
+Full 8-chapter regression — this touches every mesh in the game, so mesh/node counts must be
+identical and no chapter may gain new z-fighting. Watch `--perf`: a per-polygon term in the hot
+build path could cost load time.
+
+**If it does not work, say so and land nothing.** That is what item 3 did, and it was the right
+outcome.
