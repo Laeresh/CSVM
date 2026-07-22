@@ -3594,3 +3594,85 @@ nothing.** It appears on **56,750 `CallAnimation` events** install-wide (53,019 
 `wait_for_raw` connector slots. Nothing in `CSVM/src` references it. This is the `spline_interp`
 shape exactly: a field the extraction decodes faithfully and the runtime silently ignores. It is a
 separate mechanism from this item's off-by-one and was deliberately not folded in.
+
+## 2026-07-22 — Polish-4 item 5: the C2 stunt "Seaplane Hangar" objective sat at the world origin
+
+**The bug.** C2's first danger zone is not a `dzN` point marker. `extracted/C2/IA1/zrdr/ia.zrd.json`
+lists `dzones` as `[["dzpath1","sghangar"], ["dzpath2","dz2"], … ["dzpath9","dz9"]]` — the first
+entry names **`sghangar`, the Seaplane Hangar building itself** (C2 ships no `dz1`). `StuntMission`
+resolves a zone's position by looking the named node up in the chapter gamez and taking
+`WorldTransformOf(node).Origin`, and `sghangar`'s `transform` is the JSON *string* `"Initial"`, which
+`GameZ.ParseTransform` leaves as a null `GameZNode.Local`. Its parent chain is empty (it is a
+partition-placed subtree root, `parent = -1` — the plan predicted `world1`, which was wrong and does
+not change the outcome), so the accumulated transform is identity and the objective resolved to
+**(0, 0, 0)**, about 8 km from the hangar. Display text is a wholly independent `targets.json`
+lookup, which is why the symptom was a *correct label on a wrong point*:
+`sghangar: Danger Zone [Fly Through] - Seaplane Hangar @ (0,0,0)`.
+
+**The fix** (`StuntMission.GeometryAnchor`, one file). `Load` now takes
+`GeometryAnchor(worldGamez, node) ?? worldGamez.WorldTransformOf(node).Origin`. `GeometryAnchor`
+walks the named node's subtree collecting one world-space AABB per drawing node straight from
+`GameZ.Meshes[...].Vertices`, and **returns null when the subtree draws nothing** — which is every
+ordinary marker. That guard is what makes the change safe rather than clever: all **53** `dzN`
+nodes across C1/C1B/C2/C3/C4/C5 were measured to be childless `model_index -1` nodes, so the
+fallback provably cannot fire for any of them.
+
+**No parser change was needed.** The plan predicted this item would have to add `child_bbox` /
+`node_bbox` / `active_bbox` to `GameZNode`; it did not. The mesh vertices already give the same
+answer, following `NodeLabels.cs:217`'s precedent ("gamez origins are frequently nowhere near the
+geometry they draw"). Those three bbox fields remain **unparsed**.
+
+**Which point on the structure — the aperture, not the middle.** Every one of these zones carries
+`help_label = MSG_OBJ_FLYTHROUGH`, so the zone means the structure's opening. Where the subtree
+carries ≥2 door leaves (name contains `door`, the original's node naming used as the semantic layer
+exactly as `PropParts` / `ControlSurfaces` / `WingLights` / `DamageVisuals` already do) the anchor is
+the union centre of *those alone*. Measured from the models: `sgh_door1` spans x[−5760.4, −5706.6]
+and `sgh_door2` x[−5834.2, −5780.4], both at z ≈ −5623.9, y 8.0→38.9 — the two leaves are retracted
+either side of the front wall and leave a **20 m slit** centred on **(−5770.4, 23.5, −5623.9)**.
+`DzRadius` (15 m) about that point covers the whole slit in x (±10 needed) and essentially all of it
+in y, so you cannot thread the doors without scoring.
+
+**Corroborated by an independent source: `dzpath1`.** The `dzpathN` half of each `dzones` pair is
+read by nothing, and was decoded on the way (see the backlog entry). `dzpath1`'s second polygon is
+the hangar's **front aperture outline**, centred at (−5770.4, 23.5, −5622.0) — **1.9 m** from the
+door-leaf anchor, from a completely different piece of geometry. Two independent sources agreeing to
+under 2 m is what settled the choice.
+
+**The rejected alternative** is the whole-structure centre, (−5770.4, 23.5, −5496.6) — which is also
+what `child_bbox` would have given. The hangar is a **255 m through-tunnel** (both end walls are
+three triangles with an aperture between them), so that point sits 129 m deep inside it: reachable,
+but missable if entered off-centre from the open rear. Subtrees with **no** door pair still fall back
+to that whole-geometry centre.
+
+**Verification.**
+- **The one-line diff.** All 6 stunt chapters were run before and after and their per-zone position
+  log lines diffed: **exactly one line changed** — `sghangar … @ (0,0,0)` → `@ (-5770,23,-5624)` —
+  plus the new anchor log line. C1 (5 zones), C1B (5), C2's other 8, C3 (4), C4 (14) and C5 (17) are
+  byte-identical. The baseline was captured twice, before and after fast-forwarding the worktree onto
+  item 1's `1530bd5`, and was identical across that merge.
+- **Flown, not just placed.** A scripted straight-line run
+  (`--stunt --chapter=C2 --spawn-at=-5770.4,23.5,-5780 --spawn-dir=0,0,1 --hold=0,0,0,0.5`) logs
+  `stunt: completed sghangar — Danger Zone [Fly Through] - Seaplane Hangar (1/9)` as it passes the
+  doorway, and the plane passes the 20 m gap without colliding, which independently confirms the slit
+  is real and flyable. (It then flies the full 255 m interior and crashes into `o11/col` just past the
+  rear wall at z = −5362 — a separate world object, present on the baseline too.)
+- **The control that makes it a test.** The identical scripted run with the fallback flipped back off
+  logs **no completion at all** (`docs/verification.md` §5: a test never seen to fail proves nothing).
+- **Visual.** `.scratch/polish4-item5-marker-on-hangar.png` — the reticle and the
+  `Danger Zone [Fly Through] - Seaplane Hangar` label sit on the hangar's door opening at 775 ft.
+- **8-chapter surface.** C1C and C2B (no `ia.json`) still log
+  `--stunt: no danger zones for <ch>/IA1 — flying free` and build their worlds with zero errors.
+
+**Found on the way and NOT implemented** (backlog entry "Per-zone danger-zone extents"): `dzpathN` is
+not the "AI route ribbon" it was documented as. Each is a 3-polygon model — **polygon 0 is the
+approach/exit polyline, polygons 1 and 2 are the two gate outlines**, the aperture rings the zone is
+flown through. `dzpath1`'s polyline reads (−5668.1, 242.7, −5841.1) → … → (−5770.4, 28.5, −5622.0) →
+(−5770.5, 30.9, −5366.7) → …: the dive in, the thread, and the climb out.
+
+**Process note — no shared guard with item 4, deliberately.** Items 4 and 5 share the
+`"transform": "Initial"` → null `Local` → parent-origin mechanism, and the plan asked whoever went
+second whether one guard should serve both. It should not: item 5 wants a **position** ("anchor on
+the geometry you can see"), item 4 wants a **presence decision** (treat the object as absent). A
+common helper would only be the AABB-of-subtree walk, which is 20 lines and already exists in a third
+form in `NodeLabels.cs`. `GeometryAnchor` was kept private to `StuntMission.cs` precisely so the two
+items could not collide while being worked in parallel worktrees.

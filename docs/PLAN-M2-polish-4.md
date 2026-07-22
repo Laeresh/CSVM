@@ -41,7 +41,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done — keep this in sync as items
 2. ☐ **`FromToMotion` resets orientation to rest** — C1's cars drive mis-headed
 3. ⤳ ~~C1 IA1: oil tanks / fuel boxes already destroyed at spawn~~ **MOVED BACK TO `backlog.md` 2026-07-22, under "Open fidelity questions".** The premise inverted twice and then failed to close: our engine is **correct** per the shipped data (intact tanks, every run), the original's only route to a destroyed tank is **weapon damage via the fuel trucks**, and the user has confirmed **those trucks exist only in C1/M02**. So the reported IA1 sighting is most likely M02. **Blocked on user testing**, with the full traced mechanism and the three surviving explanations recorded in the backlog entry. **Nine items remain.**
 4. ☐ **C5 IA1: the sunk zeppelin** — `piratezep` at the world origin
-5. ☐ **C2 stunt: the Seaplane Hangar objective sits at (0,0,0)**
+5. ☑ **C2 stunt: the Seaplane Hangar objective sits at (0,0,0)** **(done 2026-07-22 — `StuntMission.GeometryAnchor` anchors a geometry-node zone on the aperture between its door leaves, (−5770.4, 23.5, −5623.9), and returns null for anything that draws nothing, so it provably cannot fire for the 53 ordinary `dzN` markers (all measured childless `model_index -1`). No parser change was needed — the plan predicted `child_bbox` parsing; mesh vertices gave the same answer. Corroborated independently by `dzpath1`'s gate polygon, 1.9 m away. Measured: exactly one position line changed across all 6 stunt chapters; flown through and scored; control run with the fallback off scores nothing. One plan detail was wrong and harmless — `sghangar`'s parent is −1, not `world1`. Decoded on the way: `dzpathN` is gate geometry, not a route ribbon → `backlog.md`. `docs/HISTORY.md`)**
 6. ☐ **Knife-edge: the nose should drop, not just the path** (+ delete the dead soft-tree branch)
 7. ☐ **Mute on focus loss** (+ settle the pad-read-on-focus question with it)
 8. ☐ **The full `player_plane_destruct` crash choreography** — surface variants, sparks, debris arcs
@@ -722,6 +722,13 @@ confirm the regression catches it).
 ---
 
 ## Corrections to `backlog.md` found while verifying this plan
+
+**✅ All three below were applied to `backlog.md` on 2026-07-22 — re-verified against the file, no
+action left.** Correction 1 needed no edit in the end: the crash-choreography entry had already been
+consumed into item 8 when it was scheduled, so the wrong claim no longer exists in `backlog.md`
+(the record of it survives in item 8's traps, which is where it is useful). Corrections 2 and 3 are
+live in the file at the "Static collider probe" and "Stunt mode" entries respectively. Kept below as
+the reasoning, not as an open to-do.
 
 Both were discovered by checking the backlog's claims against the code, and **should be applied to
 `backlog.md` whether or not the items are worked:**

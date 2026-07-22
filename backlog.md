@@ -436,15 +436,28 @@ scripted screenshot.
   value** (an earlier "30 m, tightened from 60" note here was stale; the source is right).
   **Still wanted: a per-zone radius from the data, because one global constant does not fit** —
   the user reports 15 m is too tight at some zones while 30 m was too loose at others, the loose
-  case being that you fly *around* the danger and still score it. **Concrete leads, not yet
-  checked:** the `dzones` ia.json record is only `[pathName, dzName]` (two strings, no size), so
-  any per-zone extent has to come off the marker node itself — `dzN` nodes carry a real
-  `RotateTranslateScale` (check whether the **scale** component is meaningful rather than
-  identity), and every gamez node also ships `node_bbox`/`child_bbox` (**not currently parsed into
-  `GameZNode` at all**). C2's `sghangar` proves the bbox route carries real extent. Check the
-  `dzpathN` companion too — it is named but nothing reads it. If none of that pans out, 15 m
-  stands as a tuned constant. Also: marker-HUD placement,
-  font and distance units; scoreboard fonts and placement.
+  case being that you fly *around* the danger and still score it. **The leads were all checked
+  2026-07-22 (polish-4 item 5) and the answer is `dzpathN`:**
+  - ✅ **`dzpathN` carries real gate geometry — this is the route.** It is not the "AI route
+    ribbon" it was documented as. Each is a 3-polygon model under `dzpaths`: **polygon 0 is the
+    approach/exit polyline** (7–8 points: dive-in → thread → climb-out), **polygons 1 and 2 are the
+    two gate outlines** — 3- to 18-point planar rings bracketing the thing you fly through.
+    Measured across all 54 zones in C1/C1B/C2/C3/C4/C5. So the implementation is either "cleared
+    when the plane crosses the prism between the two rings", or the cheaper "per-zone radius from
+    each ring's own extent".
+  - ❌ **`dzN`'s `RotateTranslateScale.scale` is a dead end** — measured **unit on all 53** markers.
+  - ❌ **`node_bbox`/`child_bbox` are a dead end for `dzN`** — measured **all-zero on all 53** (they
+    are `model_index -1` point nodes). They carry real values only on `sghangar`, the one
+    geometry-node zone, which is why that item did not need them either. Still unparsed into
+    `GameZNode`.
+  - ⚠ **Do not derive a marker position from its dzpath.** The tempting rule "the `dzN` marker sits
+    at the midpoint of the two gate centres" is **exact** on some zones (C2 dz7/8/9, C5 dz14/15, to
+    ≤0.04 m) and wildly wrong on others (**C1 dz2 is 826 m off**; C5 dz2 266 m; C1 dz1 225 m). The
+    markers are hand-placed. An *extent* is also a new concept for every consumer of the zone point
+    (`MarkerHud.cs:144,145,158,212`, `StuntMission`'s completion test).
+  - ⚠ **Do not retune `DzRadius` as part of this** — 15 m is the user's hand-tuned value.
+
+  Also: marker-HUD placement, font and distance units; scoreboard fonts and placement.
 - **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
 - **Aircraft brightness** — every aircraft got substantially brighter when the inverted-normal
