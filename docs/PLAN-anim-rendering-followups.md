@@ -17,20 +17,25 @@ screenshot at the specific location the report came from.
 ## Checklist
 
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
-2. ☑ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
+2. ☑ `LightState` + the remaining unacted-on event kinds **(done 2026-07-22 — point lights + material flipbooks + `CALL_ANIMATION` targets 2026-07-21, then `SOUND_NODE`, `OBJECT_MOTION` and `OBJECT_OPACITY_STATE`; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md`, and the last three kinds triaged as provable no-ops — `Callback` is cutscene-camera only, `ObjectCycleTexture` never resolves and is already build-time in `GaugeCluster`, the one-shot `Sound` names a definition rather than a node — evidence in `backlog.md`)**
 3. ☑ Mission-spawned entity rosters (`hk_zep`, CTF props) **(done 2026-07-22 — the premise was wrong; it is the interp boot script, not a roster)**
 4. ☑ `texture_scroll` rendering **(done 2026-07-22 — the two "sources" are one field written at two times; the waterfalls flow)**
 
-**All four items are landed. This plan is complete.**
+**All four items are landed. This plan is COMPLETE (2026-07-22).**
 
-**Dependency note:** items 1 and 2 are the two halves of one visible payoff — `AnimRuntime`
-currently *skips* every `If`/`Elseif` branch (item 1), and even once a branch runs, its
-payload is very often a `LightState` event the runtime doesn't act on yet (item 2). Landing
-item 1 alone will not change what the refinery or lighthouse look like — the branches will
-finally execute, but their `LightState` events will still no-op. Either do both in one
-session, or land item 1 first and confirm via `--debug-anim`-style logging that the branches
-are now taken (not skipped) before moving on, so item 2's session isn't debugging two things
-at once. Items 3 and 4 are fully independent of 1/2 and of each other.
+**Everything below this line is the plan as written on 2026-07-21, kept for its Evidence
+sections — the surveys and decode findings are still the reference for this subsystem. It is
+written in the present tense of that day and describes behaviour that has since been
+implemented; read it as history, not as a description of the current runtime.** What each item
+actually did on landing is in `docs/HISTORY.md`, and the resulting design is in
+`docs/architecture.md`'s `AnimRuntime.cs` bullet.
+
+**Dependency note (as written 2026-07-21):** items 1 and 2 were the two halves of one visible
+payoff — `AnimRuntime` then *skipped* every `If`/`Elseif` branch (item 1), and even once a
+branch ran, its payload was very often a `LightState` event the runtime did not act on
+(item 2). Landing item 1 alone would not change what the refinery or lighthouse looked like —
+the branches would finally execute, but their `LightState` events would still no-op. Items 3
+and 4 were fully independent of 1/2 and of each other.
 
 ---
 
