@@ -279,6 +279,12 @@ public sealed class WorldBuilder
         _scene.Cycler = Cycler;
     }
 
+    /// <summary>This world's shared scene builder — its mesh/material/shape caches and its
+    /// fullbright world materials. Handed to <see cref="ClutterBuilder"/> so the clutter's 3D
+    /// city-block decorations render as real world geometry (same shader, same fog, same depth
+    /// bias) instead of through the billboard path, and share the caches with the placed world.</summary>
+    internal SceneBuilder Scene => _scene;
+
     /// <summary>Drives the world's material texture flipbooks (animated water, surf, boat wakes,
     /// turbulence, the walking crowd). Built here so its frames resolve while the session's
     /// TextureArchive is open; the caller adds it to the scene tree. Empty on chapters whose

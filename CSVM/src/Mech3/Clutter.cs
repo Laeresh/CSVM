@@ -26,16 +26,27 @@ namespace CSVM.Mech3;
 /// is seam-consistent across adjacent polygons (one global grid), and plants every
 /// decoration at the polygon's interpolated surface height.</para>
 ///
-/// <para>Rendering: one MultiMeshInstance3D per decoration kind (all firtree1 share one
-/// draw call), a hand-rolled Y-axis-billboard shader (upright, spins toward the camera —
-/// the source quads are single one-sided cards, so the original must do the same),
-/// fullbright like the rest of the world, alpha-scissor cutout, and the same cylindrical
-/// distance fog as SceneBuilder's world shader.</para>
+/// <para><b>Two kinds of decoration, two rendering paths</b> (polish-3 item 6, 2026-07-22).
+/// The split is <see cref="SceneBuilder.ClassifyBillboard"/>, i.e. the gamez model's own
+/// <c>ModelType</c>:</para>
+/// <list type="bullet">
+/// <item><b>Facade → sprite.</b> One MultiMeshInstance3D per kind (all firtree1 share one
+/// draw call), a hand-rolled Y-axis-billboard shader (upright, spins toward the camera — the
+/// source quads are single one-sided cards, so the original must do the same), fullbright
+/// like the rest of the world, alpha-scissor cutout, and the same cylindrical distance fog as
+/// SceneBuilder's world shader. Never collidable.</item>
+/// <item><b>Default → 3D decoration.</b> C2's <c>filmblock*</c>/<c>resblock*</c> studio and
+/// residential buildings, its <c>parklot*</c> parked Studebakers, and C5's <c>cblock*</c> city
+/// blocks: genuine multi-polygon geometry up to 108 m tall. These are instanced through
+/// <see cref="SceneBuilder.SharedMesh"/> — the SAME mesh and materials the placed world uses,
+/// so they are fullbright, fogged and depth-biased identically and, being real meshes, cannot
+/// billboard. They keep their authored local basis, and they ARE collidable.</item>
+/// </list>
 ///
-/// <para><b>Clutter is NOT collidable</b> (user decision, 2026-07-22). It used to get a
-/// crossed-quad trimesh per sprite, justified by a claim that "trees are hittable like the
-/// original, `spruce_destroy` anims exist". <b>That was a misreading and the anims are not
-/// trees.</b> The two strings in the data are
+/// <para><b>Sprites are NOT collidable; 3D decorations are</b> (user decisions, 2026-07-22).
+/// Sprites used to get a crossed-quad trimesh each, justified by a claim that "trees are
+/// hittable like the original, `spruce_destroy` anims exist". <b>That was a misreading and the
+/// anims are not trees.</b> The two strings in the data are
 /// <c>..\data\common\zrdr\planes\spruce_destroy{1,2}.zrd</c> — the <c>planes\</c> folder —
 /// and the file's contents are an aircraft's engine/propeller destruction sequence
 /// (<c>g_engine*</c>, <c>prop_part</c>, <c>spin</c>/<c>counterspin</c>,
@@ -43,41 +54,64 @@ namespace CSVM.Mech3;
 /// flying boat and the C2/M01 mission object. There is no spruce-<i>tree</i> animation
 /// anywhere in the install, and no tree-destruction animation of any kind. A billboard has
 /// no solid side to hit anyway — its collider is a phantom wall wherever the card happens to
-/// be facing — which is the same reason every gamez billboard is exempt in WorldBuilder.</para>
+/// be facing — which is the same reason every gamez billboard is exempt in WorldBuilder.
+/// A city block is the opposite case on every count: it has real sides, it does not turn, and
+/// flying through a skyscraper is not something the original permits.</para>
 /// </summary>
 public sealed class ClutterBuilder
 {
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
+    private readonly SceneBuilder? _scene;
 
-    /// <summary>Total decoration sprites placed by the last Build.</summary>
+    /// <summary>Total decoration sprites (billboard cards) placed by the last Build.</summary>
     public int InstanceCount { get; private set; }
+    /// <summary>Total 3D decorations (city-block buildings, parked cars) placed by the last
+    /// Build. Zero on every chapter whose templates carry only sprites.</summary>
+    public int SolidCount { get; private set; }
+    /// <summary>Collision triangles built for the 3D decorations by the last Build (0 when
+    /// the build was not collidable).</summary>
+    public int SolidCollisionTriangles { get; private set; }
     /// <summary>Per-kind counts of the last Build, e.g. "firtree1.tif ×4980".</summary>
     public string Summary { get; private set; } = "";
 
     /// <summary>One decoration kind of the last Build, exported for the map-edge
-    /// extension (see MapEdgeExtender): the shared sprite mesh + billboard material
-    /// (safe to reuse across MultiMesh instances), the quad extents, and every planted
-    /// world position. The extender mirrors these positions past the map edge so the
-    /// forest continues out there, as in the original. <c>Width</c> is still needed after
-    /// the 2026-07-22 collision removal — it sizes the MultiMesh's ExtraCullMargin, since
-    /// the billboard shader swings vertices outside the static AABB.</summary>
+    /// extension (see MapEdgeExtender): the shared mesh (safe to reuse across MultiMesh
+    /// instances), the billboard material for a sprite kind, and every planted world
+    /// placement. The extender mirrors these past the map edge so the forest — and, in C5,
+    /// the city — continues out there, as in the original.
+    ///
+    /// <para><c>Placements</c> carries full transforms rather than positions (changed
+    /// 2026-07-22 with the 3D-decoration path): a sprite's is always identity-basis and the
+    /// billboard shader re-faces it from the instance origin, but a building's authored basis
+    /// is part of the placement and mirroring one means mirroring the whole transform.</para>
+    ///
+    /// <para><c>Material</c> is null for a solid kind: its mesh carries per-surface world
+    /// materials from SceneBuilder, so there is nothing to override. <c>Width</c> is only
+    /// meaningful for a sprite kind — it sizes the MultiMesh's ExtraCullMargin, since the
+    /// billboard shader swings vertices outside the static AABB.</para></summary>
     public sealed class KindExport
     {
         public string Texture = "";
         public ArrayMesh Mesh = null!;
-        public Material Material = null!;
+        public Material? Material;
+        public bool Solid;
+        public float NodeBias;      // solid kinds: the `node_bias` instance uniform value
         public float Width, Height;
-        public IReadOnlyList<Vector3> Positions = null!;
+        public IReadOnlyList<Transform3D> Placements = null!;
     }
 
     /// <summary>The decoration kinds of the last Build (null until Build placed something).</summary>
     public IReadOnlyList<KindExport>? ExportedKinds { get; private set; }
 
-    public ClutterBuilder(GameZ gamez, TextureArchive textures)
+    /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
+    /// and its fullbright world materials). Null disables that path and leaves only the
+    /// sprite one — which is what the pre-2026-07-22 behaviour was.</param>
+    public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null)
     {
         _gamez = gamez;
         _textures = textures;
+        _scene = scene;
     }
 
     /// <summary>Reads the chapter's boot script out of the interp extraction
@@ -107,15 +141,21 @@ public sealed class ClutterBuilder
         return names;
     }
 
-    // One decoration kind: every template instance of the same sprite mesh (all 13
+    // One decoration kind: every template instance of the same decoration mesh (all 13
     // firtree1 placements share mesh + texture), plus where it sits in each grid cell.
     private sealed class Kind
     {
         public int MeshIndex;
-        public string Texture = "";
-        public float Width, Height;              // sprite quad extents (collision shape)
-        public readonly List<Vector2> CellOffsets = new(); // XZ within the template cell [0, period)
-        public readonly List<Vector3> Instances = new();   // world positions (planted points)
+        public int NodeIndex;                    // a representative decoration node (draw order)
+        public string Label = "";                // texture (sprites) or node name (solids)
+        public bool Solid;                       // a 3D decoration, not a billboard card
+        public float Width, Height;              // sprite quad extents (sprites only)
+        // Where each decoration of this kind sits within one template cell. Origin XZ is
+        // relative to the ground quad's min corner, i.e. in [0, period); origin Y and the
+        // basis are the decoration node's own, and are used by the solid path only (a sprite
+        // is planted flat on the surface and re-faced by its shader — see PlaceOnTriangle).
+        public readonly List<Transform3D> CellPlacements = new();
+        public readonly List<Transform3D> Instances = new(); // world placements
     }
 
     private sealed class Template
@@ -126,9 +166,12 @@ public sealed class ClutterBuilder
     }
 
     /// <summary>Builds the clutter for the given template names; null when nothing was
-    /// placed (no templates, or none of their ground textures appear in the world).
-    /// Never collidable — see the class remarks.</summary>
-    public Node3D? Build(IReadOnlyList<string> templateNames, string worldName = "world1")
+    /// placed (no templates, or none of their ground textures appear in the world).</summary>
+    /// <param name="collision">Attach static colliders to the 3D decorations (the city-block
+    /// buildings and parked cars). Sprites are never collidable whatever this says — see the
+    /// class remarks. Off for static viewing, on in flight.</param>
+    public Node3D? Build(IReadOnlyList<string> templateNames, bool collision = false,
+        string worldName = "world1")
     {
         var templates = new Dictionary<string, Template>(StringComparer.OrdinalIgnoreCase);
         foreach (var name in templateNames)
@@ -142,29 +185,44 @@ public sealed class ClutterBuilder
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
         var exported = new List<KindExport>();
-        InstanceCount = 0;
+        var solidKinds = new List<Kind>();
+        InstanceCount = SolidCount = SolidCollisionTriangles = 0;
         foreach (var template in templates.Values)
             foreach (var kind in template.Kinds)
             {
                 if (kind.Instances.Count == 0)
                     continue;
-                var mmi = BuildKindInstance(kind);
+                var mmi = kind.Solid ? BuildSolidInstance(kind) : BuildKindInstance(kind);
+                if (mmi == null)
+                    continue;
                 root.AddChild(mmi);
                 exported.Add(new KindExport
                 {
-                    Texture = kind.Texture,
+                    Texture = kind.Label,
                     Mesh = (ArrayMesh)mmi.Multimesh!.Mesh,
-                    Material = mmi.MaterialOverride!,
+                    Material = mmi.MaterialOverride,
+                    Solid = kind.Solid,
+                    NodeBias = kind.NodeIndex * SceneBuilder.NodeOrderBias,
                     Width = kind.Width,
                     Height = kind.Height,
-                    Positions = kind.Instances,
+                    Placements = kind.Instances,
                 });
-                InstanceCount += kind.Instances.Count;
-                parts.Add($"{kind.Texture} ×{kind.Instances.Count}");
+                if (kind.Solid)
+                {
+                    SolidCount += kind.Instances.Count;
+                    solidKinds.Add(kind);
+                }
+                else
+                {
+                    InstanceCount += kind.Instances.Count;
+                }
+                parts.Add($"{kind.Label} ×{kind.Instances.Count}");
             }
+        if (collision && solidKinds.Count > 0)
+            BuildSolidCollision(root, solidKinds);
         Summary = string.Join(", ", parts);
         ExportedKinds = exported.Count > 0 ? exported : null;
-        return InstanceCount == 0 ? null : root;
+        return InstanceCount == 0 && SolidCount == 0 ? null : root;
     }
 
     // A template subtree: root → ground node (first descendant with a mesh; its texture
@@ -187,31 +245,58 @@ public sealed class ClutterBuilder
         var template = new Template { GroundTexture = info.Texture, Period = info.Period };
 
         var kinds = new Dictionary<int, Kind>();
-        // A template like C5's cblock1 has dozens of non-sprite (3D building) decorations;
-        // collect them and log ONE summary line rather than a warning per decoration.
+        // What is left in the skip list after polish-3 item 6 is only genuinely unusable:
+        // a decoration node with no mesh anywhere under it, or a sprite card whose material
+        // resolves no texture. The 3D building/car decorations that used to dominate this
+        // list now take the solid path below. Collected and logged as ONE summary line.
         List<string>? skipped = null;
         foreach (var childIndex in ground.Children)
         {
             var deco = _gamez.Nodes[childIndex];
-            var sprite = FirstWithMesh(deco, includeSelf: false);
-            if (sprite == null || SpriteInfo(sprite.MeshIndex) is not { } s)
+            var decoMesh = FirstWithMesh(deco, includeSelf: false);
+            if (decoMesh == null)
             {
                 (skipped ??= new List<string>()).Add(deco.Name);
                 continue;
             }
-            if (!kinds.TryGetValue(sprite.MeshIndex, out var kind))
+            // The local transform is relative to the ground quad; its XZ becomes the offset
+            // within the tiling cell. The basis and Y are kept whole for the solid path.
+            var local = deco.Local ?? Transform3D.Identity;
+            var cell = new Transform3D(local.Basis, new Vector3(
+                local.Origin.X - info.Min.X, local.Origin.Y, local.Origin.Z - info.Min.Y));
+
+            if (!kinds.TryGetValue(decoMesh.MeshIndex, out var kind))
             {
-                kinds[sprite.MeshIndex] = kind = new Kind
+                if (SpriteInfo(decoMesh.MeshIndex) is { } s)
                 {
-                    MeshIndex = sprite.MeshIndex,
-                    Texture = s.Texture,
-                    Width = s.Width,
-                    Height = s.Height,
-                };
+                    kind = new Kind
+                    {
+                        MeshIndex = decoMesh.MeshIndex,
+                        NodeIndex = decoMesh.Index,
+                        Label = s.Texture,
+                        Width = s.Width,
+                        Height = s.Height,
+                    };
+                }
+                else if (IsSolidDecoration(decoMesh.MeshIndex))
+                {
+                    kind = new Kind
+                    {
+                        MeshIndex = decoMesh.MeshIndex,
+                        NodeIndex = decoMesh.Index,
+                        Label = deco.Name,
+                        Solid = true,
+                    };
+                }
+                else
+                {
+                    (skipped ??= new List<string>()).Add(deco.Name);
+                    continue;
+                }
+                kinds[decoMesh.MeshIndex] = kind;
                 template.Kinds.Add(kind);
             }
-            var pos = deco.Local?.Origin ?? Vector3.Zero;
-            kind.CellOffsets.Add(new Vector2(pos.X - info.Min.X, pos.Z - info.Min.Y));
+            kind.CellPlacements.Add(cell);
         }
         if (skipped != null)
         {
@@ -224,7 +309,7 @@ public sealed class ClutterBuilder
             var shown = distinct.Count > 5
                 ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
                 : string.Join(", ", distinct);
-            GD.Print($"clutter: template '{name}' skipped {skipped.Count} non-sprite decoration(s) ({shown})");
+            GD.Print($"clutter: template '{name}' skipped {skipped.Count} unusable decoration(s) ({shown})");
         }
         return template.Kinds.Count > 0 ? template : null;
     }
@@ -273,14 +358,30 @@ public sealed class ClutterBuilder
         return period < 1f ? null : (tex, period, new Vector2(min.X, min.Z));
     }
 
+    // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
+    // filmblock/resblock buildings and parklot Studebakers, C5's cblock city blocks (2-27
+    // polygons, up to 108 m tall). Requires a SceneBuilder to render through — without one
+    // (the pre-2026-07-22 construction) these fall back to the skip list, which is exactly
+    // the old behaviour.
+    private bool IsSolidDecoration(int meshIndex)
+    {
+        if (_scene == null || meshIndex < 0 || meshIndex >= _gamez.Meshes.Count)
+            return false;
+        var mesh = _gamez.Meshes[meshIndex];
+        if (mesh.Polygons.Count == 0 || mesh.Vertices.Count == 0)
+            return false;
+        // Not a card by the shared rule (nulls — a legacy extraction — fall through to the
+        // shape heuristic in IsSpriteCard, which SpriteInfo already applied and rejected).
+        return !IsSpriteCard(mesh);
+    }
+
     // Only genuine sprite cards billboard. Since 2026-07-22 that question is answered by the
     // gamez model itself, through the shared SceneBuilder.ClassifyBillboard — the same rule
     // the renderer and the collision exemption use — instead of this file's own shape guess.
     // The two agree exactly on the shipped data: every template decoration is either a
     // Facade (1 polygon, 4 vertices, flat in local Z) or a Default 3D building (2-27
-    // polygons), so placement counts are unchanged, but the data now says WHY rather than
-    // the geometry hinting at it. 3D decorations (C2's filmblock buildings, C5's cblock
-    // city blocks — 7 polys / 64 m deep) still don't fit the billboard path and are skipped.
+    // polygons). Since polish-3 item 6 the Default ones are no longer skipped — they take
+    // the solid path (IsSolidDecoration above).
     private (string Texture, float Width, float Height)? SpriteInfo(int meshIndex)
     {
         var mesh = _gamez.Meshes[meshIndex];
@@ -422,9 +523,9 @@ public sealed class ClutterBuilder
                 for (int k = 0; k < template.Kinds.Count; k++)
                 {
                     var kind = template.Kinds[k];
-                    foreach (var off in kind.CellOffsets)
+                    foreach (var cell in kind.CellPlacements)
                     {
-                        float px = gx * p + off.X, pz = gz * p + off.Y;
+                        float px = gx * p + cell.Origin.X, pz = gz * p + cell.Origin.Z;
                         if (px < minX || px > maxX || pz < minZ || pz > maxZ)
                             continue;
                         // Barycentric in XZ: inside iff all weights share the area sign.
@@ -437,7 +538,14 @@ public sealed class ClutterBuilder
                         if (!seen.Add(key))
                             continue;
                         float y = (w0 * a.Y + w1 * b.Y + w2 * c.Y) / area2;
-                        kind.Instances.Add(new Vector3(px, y, pz));
+                        // A sprite is planted flat ON the surface: its basis and its authored
+                        // Y are both dropped, because its shader re-faces it from the instance
+                        // origin and its own mesh already carries the card's vertical extent.
+                        // A 3D decoration keeps both — the authored basis is its orientation,
+                        // and the Y is its height above the block's ground plane.
+                        kind.Instances.Add(kind.Solid
+                            ? new Transform3D(cell.Basis, new Vector3(px, y + cell.Origin.Y, pz))
+                            : new Transform3D(Basis.Identity, new Vector3(px, y, pz)));
                     }
                 }
     }
@@ -510,7 +618,7 @@ public sealed class ClutterBuilder
     // All instances of one kind as a single MultiMesh draw call.
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
-        var tex = _textures.Find(kind.Texture);
+        var tex = _textures.Find(kind.Label);
         var mat = new ShaderMaterial { Shader = _shader ??= new Shader { Code = ShaderCode } };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
@@ -522,7 +630,7 @@ public sealed class ClutterBuilder
             InstanceCount = kind.Instances.Count,
         };
         for (int i = 0; i < kind.Instances.Count; i++)
-            mm.SetInstanceTransform(i, new Transform3D(Basis.Identity, kind.Instances[i]));
+            mm.SetInstanceTransform(i, kind.Instances[i]);
 
         return new MultiMeshInstance3D
         {
@@ -530,8 +638,119 @@ public sealed class ClutterBuilder
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
             ExtraCullMargin = kind.Width, // the shader may swing verts outside the static AABB
-            Name = Sanitize(kind.Texture),
+            Name = Sanitize(kind.Label),
         };
+    }
+
+    // A 3D decoration kind: the SAME mesh and materials the placed world uses, drawn once per
+    // placement through a MultiMesh. Nothing here is a billboard — the world shader has no
+    // camera-facing term at all — so a 45 m city block stands still while a tree card beside
+    // it turns, which is the whole point of the split.
+    //
+    // `node_bias` is the world's cross-node draw-order tie-break (SceneBuilder). Every instance
+    // of a kind necessarily shares one value, since a MultiMesh has a single instance-uniform
+    // set; the decoration node's own gamez index is the honest choice and keeps these layered
+    // against the terrain the same way the placed world's nodes are against each other.
+    private MultiMeshInstance3D? BuildSolidInstance(Kind kind)
+    {
+        var mesh = _scene?.SharedMesh(kind.MeshIndex);
+        if (mesh == null)
+            return null;
+        var mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            Mesh = mesh,
+            InstanceCount = kind.Instances.Count,
+        };
+        for (int i = 0; i < kind.Instances.Count; i++)
+            mm.SetInstanceTransform(i, kind.Instances[i]);
+
+        var mmi = new MultiMeshInstance3D
+        {
+            Multimesh = mm,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            Name = Sanitize(kind.Label),
+        };
+        mmi.SetInstanceShaderParameter("node_bias", kind.NodeIndex * SceneBuilder.NodeOrderBias);
+        return mmi;
+    }
+
+    // Collision for the 3D decorations only (user decision, 2026-07-22): a city block is real
+    // geometry with real sides, unlike the sprite cards, which lost their colliders in item 5.
+    //
+    // Merged into one static trimesh per REGION rather than one body per building. C5 places
+    // ~80k of them, and 80k StaticBody3D nodes would swamp the broadphase and the scene tree
+    // alike; a single whole-map trimesh, the shape the old `clutter_col` used, goes the other
+    // way and hands the physics server one ~1.3M-triangle BVH. Regions are the middle: the
+    // broadphase culls to a region, the region's own BVH does the rest.
+    private const float CollisionRegion = 1024f;
+
+    private void BuildSolidCollision(Node3D root, List<Kind> kinds)
+    {
+        var regions = new Dictionary<(int, int), List<Vector3>>();
+        foreach (var kind in kinds)
+        {
+            var mesh = _gamez.Meshes[kind.MeshIndex];
+            var local = new List<Vector3>();
+            AppendTriangles(mesh, local);
+            if (local.Count == 0)
+                continue;
+            foreach (var xf in kind.Instances)
+            {
+                var key = (Mathf.FloorToInt(xf.Origin.X / CollisionRegion),
+                           Mathf.FloorToInt(xf.Origin.Z / CollisionRegion));
+                if (!regions.TryGetValue(key, out var tris))
+                    regions[key] = tris = new List<Vector3>();
+                foreach (var v in local)
+                    tris.Add(xf * v);
+            }
+        }
+        foreach (var (key, tris) in regions)
+        {
+            if (tris.Count == 0)
+                continue;
+            // Named so it does NOT end in "clutter_col": that suffix is FlightController's
+            // soft-tree branch (fly straight through, fixed damage), and a skyscraper is the
+            // opposite of soft.
+            var body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
+            body.AddChild(new CollisionShape3D
+            {
+                // Backface collision for the same reason SceneBuilder's world colliders use it:
+                // the source winding is inconsistent, so a one-sided trimesh lets raycasts
+                // through the down-wound faces.
+                Shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true },
+            });
+            root.AddChild(body);
+            SolidCollisionTriangles += tris.Count / 3;
+        }
+    }
+
+    // The mesh's triangles in its own local space, using the same fan/strip rule as
+    // SceneBuilder.EmitPolygon and PlaceOnMesh, so the collider matches what is drawn.
+    private static void AppendTriangles(GameZMesh mesh, List<Vector3> into)
+    {
+        foreach (var poly in mesh.Polygons)
+        {
+            int n = poly.VertexIndices.Count;
+            if (poly.TriangleStrip)
+            {
+                for (int i = 0; i + 2 < n; i++)
+                {
+                    into.Add(mesh.Vertices[poly.VertexIndices[i]]);
+                    into.Add(mesh.Vertices[poly.VertexIndices[i + 1]]);
+                    into.Add(mesh.Vertices[poly.VertexIndices[i + 2]]);
+                }
+            }
+            else
+            {
+                for (int i = 1; i + 1 < n; i++)
+                {
+                    into.Add(mesh.Vertices[poly.VertexIndices[0]]);
+                    into.Add(mesh.Vertices[poly.VertexIndices[i]]);
+                    into.Add(mesh.Vertices[poly.VertexIndices[i + 1]]);
+                }
+            }
+        }
     }
 
     // The sprite's own source geometry (verts + UVs, fan-triangulated) in local space:

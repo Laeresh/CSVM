@@ -365,10 +365,11 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
     plan, untouched here (different file/owner). Arguably the more real of the two uniform
     defects.
   - **`FlightController`'s soft-tree collision branch is now dead code.**
-    `hitName.EndsWith("clutter_col")` at `:565` and `:649` can never match — clutter builds no
-    `StaticBody3D` at all since collision was removed. Inert (the name simply never matches),
-    left in place because that file belongs to another module's owner. Delete with the
-    `TreeDamage` constant when someone is next in there.
+    `hitName.EndsWith("clutter_col")` at `:565` and `:649` can never match. Still true after
+    polish-3 item 6 gave the 3D city-block decorations collision: those bodies are named
+    `clutter_bld_<cx>_<cz>`, chosen precisely so they do NOT hit this branch — a skyscraper
+    must not be soft. Inert, left in place because that file belongs to another module's
+    owner. Delete with the `TreeDamage` constant when someone is next in there.
   - **C5's `poleflare` clutter renders with the wrong billboard axis.** The `cblock*` templates
     ship `lightpole` (`CylindricalY`) posts *and* `poleflare` (`SphericalY`) glows — 33,682 of
     each in `cblock1` alone. `ClutterBuilder.Kind` carries no per-kind billboard mode, so every
@@ -424,9 +425,21 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   skips them), `cockpit_engine_sound` (`*_cp` WAVs), `player_fuelleak` (0.85 threshold).
 - **Runway `lite*`/`ltout*` lights-on/off state-variant quads** still z-tie (needs an
   engine-side light-state toggle to pick one variant).
-- **C2/C5 `cblock*` city-block clutter templates** (non-quad 3D decorations) detected +
-  skipped — only flat sprite cards billboard today (C2 palms work, city blocks don't).
-  **User-confirmed 2026-07-22 as visibly missing building clutter in both C2 and C5.**
+- **Map-edge extension buildings are not collidable.** Polish-3 item 6 made the map's own
+  city blocks solid, but the mirrored continuation cells past the map edge carry their
+  buildings with no collider — a cell is built on the frame the camera crosses a boundary,
+  and merging its region trimesh there would be a visible hitch. Extension *ground* still
+  collides, so the failure mode is flying through an out-of-map building while the terrain
+  under it stops you. Never observed: those cells sit deep in the fog. Fix would be to build
+  the region shape on a worker thread and swap it in.
+- **C5's city-block collision costs +3.5 s of load** (`--fly` 3.9 → 7.4 s): 2,554,455
+  triangles of merged region trimesh for 79,306 buildings. **40% of those triangles are the
+  `cbNNdet01` meshes**, which sit at the exact same origin as their `cbNNa` sibling — so
+  colliding only one of each pair would nearly halve the cost. Not done because "det" is a
+  name heuristic with nothing in the data behind it, and the two are complementary halves of
+  one building (different footprints, different texture families), not a LOD pair. If this
+  ever needs to come down, the principled version is a per-building convex hull, not a name
+  match.
 - **Rail-over-transition z-nit**: one 6-poly rail patch NE of the C1 bridges sits below the
   draw-order tie-break's resolution.
 - **Finished-pilot behaviour in a splitscreen stunt race** (M2.5 item 7): a pilot who clears
