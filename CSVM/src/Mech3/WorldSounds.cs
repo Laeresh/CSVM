@@ -32,6 +32,15 @@ public sealed partial class WorldSounds : Node3D
     /// <see cref="SoundArchive"/> is disposed when the build scope ends. Decoded streams are
     /// cached below, so an emitter created later reusing a name already heard still works; only a
     /// genuinely new name after the build is reported rather than faulting on a closed zip.
+    ///
+    /// <para><b>The cache is not enough on its own — <see cref="Prewarm"/> is what makes this
+    /// safe (2026-07-22).</b> "A name already heard" only covers names some emitter happened to
+    /// create during bootstrap. Measured install-wide, <b>947 of 1,244</b> SOUND_NODE events sit
+    /// in Initial sequences of <c>OnCall</c>-activation defs, so they are first reached at
+    /// runtime — always after this field is nulled — and 386 of them name a sound that is never
+    /// in a cacheable position at all (<c>snd_fire1</c> ×363, <c>snd_beeper</c> ×16,
+    /// <c>snd_firetruck</c>, <c>snd_police</c>, …). Those failed silently. Prewarm decodes every
+    /// name the loaded program can ever ask for, while the archive is still open.</para>
     /// </summary>
     public Func<SoundDef, AudioStreamWav?>? Loader;
 
@@ -64,6 +73,35 @@ public sealed partial class WorldSounds : Node3D
                 if (seen.Add(e.Name))
                     yield return e.Name;
         }
+    }
+
+    /// <summary>
+    /// Decodes every named sound into the stream cache while <see cref="Loader"/> is still valid,
+    /// so an emitter created after the build scope closes finds its stream instead of failing.
+    /// Call once, immediately before nulling <see cref="Loader"/>.
+    ///
+    /// <para>Names unknown to sounds.json are skipped silently — the caller passes whatever the
+    /// animation program references, and the "unknown to sounds.json" census is
+    /// <see cref="AnimRuntime"/>'s job at the point of use, not this one's. Returns the number of
+    /// streams newly decoded, for the build log.</para>
+    /// </summary>
+    public int Prewarm(IEnumerable<string> names)
+    {
+        if (Loader == null)
+        {
+            return 0;
+        }
+        int decoded = 0;
+        foreach (var name in names)
+        {
+            if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
+            {
+                continue;
+            }
+            _streams[name] = Loader(def);
+            decoded++;
+        }
+        return decoded;
     }
 
     /// <summary>

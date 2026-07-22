@@ -784,111 +784,50 @@ Ask the user what altitude the zeppelin appears at in the original before touchi
 **Do not "fix" it by lowering the zeppelin** — that is content invention, the same trap as the C3
 palms.
 
-## C1: the police siren never sounds — a named sibling sequence is never dispatched
+## C1: the police siren — FIXED 2026-07-22 (the diagnosis this entry used to carry was wrong)
 
-**User-reported 2026-07-22** (heard the waterfall and the train in C1/IA1, but not the police car).
-**Confirmed and narrowed.**
+**Fixed.** `snd_police` now plays and tracks the car along its route. The cause was **not** what
+this entry previously said; the way it was wrong is the transferable part.
 
-The car itself is fine: `anim/debug: police_car at (-6868.4, 128.0, -5930.1) … visible`, driving
-its route (and looping since polish-3 item 8).
+**Real cause: sound-loader lifetime, not sequence dispatch.** `WorldSounds.Loader` is valid only
+during the world build; `PlaneViewer` nulls it once the `SoundArchive` zip scope closes
+(`PlaneViewer.cs:674`). After that, `Create` can only serve names already decoded into `_streams`.
+The siren's `SoundNode` is dispatched **one frame after bootstrap** — `CallSequence` appends to
+`AnimInstance.Runners` (`AnimRuntime.cs:998`) while `Advance` walks that list *descending*
+(`AnimRuntime.cs:1485`), so an appended runner sits at an index the loop has already passed. By
+the time it fires, the loader is gone and the stream is unobtainable.
 
-The sound is not: `--debug-anim` reports
-**`anim: 38 ambient sound emitter(s): snd_waterfall, snd_zepengine, snd_train`** — 38 emitters
-built across only **three distinct names**, and `snd_police` is not one of them. So the emitter is
-never created, which is why nothing plays.
+**Fix:** `WorldSounds.Prewarm(AnimProgram.SoundNodeNames())` decodes every name the loaded program
+can ever ask for, before the archive closes (2-4 streams per chapter).
 
-**Why, most likely.** `extracted/C1/cam_anim/police_car-police_chase.json` is `activation:
-OnStartup` and its `SoundNode { name: "snd_police", active_state: true }` sits inside a sequence
-named **`siren_police`**. Its sequence list is `['start_walkin', 'siren_police', 'start_walkin']`
-— **every sequence is named**. Compare a working emitter,
-`passenger_trengine-train_on_track.json`, whose sequences are `['', '', 'steamplume', '', '', '']`
-— **mostly unnamed**. That points at `AnimRuntime` running the unnamed/default sequence on
-activation while **named sibling sequences wait for an explicit call that never comes**.
+**The latent half was much larger than the reported bug.** Measured across 16,053 archive JSONs:
+**947 of 1,244** `SOUND_NODE` events sit in `Initial` sequences of `OnCall`-activation defs, so
+they are first reached at runtime - always after the loader dies - and **386** name a sound never
+in a cacheable position at all: **`snd_fire1` x363** (destruction fire crackle), `snd_beeper` x16,
+`snd_firetruck`, `snd_police`, `snd_train2`, `snd_freighter`, `snd_enginelooped`. All would have
+failed silently. **This mattered for M3:** `snd_fire1` is the weapons/destruction crackle, so the
+audio half of Milestone 3 was set to fail this exact way with no error.
 
-**Verify that before implementing** — it is a hypothesis about the runtime, not a measurement.
-Check how `SequenceRunner` selects which sequence to run on activation, and count install-wide how
-many `SoundNode`/other events sit in named-but-uncalled sequences; if the count is large this is a
-systemic gap rather than one missing siren. Note `snd_police` is **not** a gamez node — but
-neither are `snd_train` or `snd_waterfall`, which work, so that is not the discriminator.
+**Why the old diagnosis survived scrutiny.** It held that named sequences (`siren_police`) wait
+for a call that never comes. Refuted: the gate is `seq_state`, not the name (`CompiledAnim.cs:239`,
+`AnimRuntime.cs:288`) - a *named* `Initial` sequence runs at activation exactly like an unnamed
+one, which is how the car drives its route from a sequence called `start_walkin`. And the call does
+arrive: `police_car-police_chase.json` seq[2] event[1] is `CallSequence{siren_police}`, one of
+1,129 dispatches in a single C1 run. The install-wide count that hypothesis predicted came out
+**0** - there are 1,030 named-but-never-dispatched sequences (2,503 events) but **not one is a
+`SoundNode`**. What made it convincing was the `anim: 38 ambient sound emitter(s)` line, which is a
+**bootstrap snapshot** and cannot distinguish "never created" from "created later and failed".
+Recorded as a rule in `docs/verification.md` section 4.
 
-**Instrument note:** `--mute` suppresses the audio session entirely and the emitter report then
-reads `0 ambient sound emitter(s) [38 requested with no audio session]`, which looks exactly like
-"the emitters are broken". Drop `--mute` when investigating audio.
+**Also landed:** a post-census failure now warns once per name at the point of use
+(`AnimRuntime.ReportLateSoundFailure`), so the next instance of this is not invisible. Note the
+C1 census legitimately still reads 38 while 39 emitters exist - the siren's is created one frame
+after bootstrap, which is correct, not a leak.
 
-**Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
-The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked
-whether the jumps were AI waypoints. They are not:
-
-- `data-c1-m04-zrdr-introanm-pzep1-piratezep.zan.json` is **48 frames at exactly 1/3 s apart, a
-  uniform straight line**: each frame steps a constant (−13.4, +2.1, −17.3), from
-  (−5352, 1504, −1802) to (−5981, 1602, −2611) over **15.67 s** (≈66 units/s). Frame 0 and frame
-  47 carry translate+rotate+scale; all 46 between are translate-only. There is no dwell, no
-  branch and no waypoint structure anywhere in it — so the smooth phase is this script, and it
-  simply **ends**.
-- The jumps are therefore what happens *after* it runs out, and the dispatch graph says what
-  that is: `camera1-scene1` and `piratezep-scene2` **both call `letterbox`** — the cinematic
-  black-bars overlay — and `scene2` also calls `pfighter11` and `open_pzeplaunchdoors`, while
-  `piratezep-pzep_launch_player` calls `pz_open_hanger_doors` / `pz_deploy_hook` /
-  `pz_retract_hook`. That is the M04 **intro movie**: zeppelin flies in, cut, launch doors open,
-  a fighter launches.
-
-So each jump is a **hard cut between cutscene beats** — correct for a movie, nonsense as
-gameplay — and "then it's gone" is the last beat deactivating it. This raises the confidence on
-reading (1) above (do not bootstrap `mission_intro_animation` at startup) from "leading
-explanation" to "very likely", since the same def demonstrably drives `letterbox` too. **Check
-whether we are currently drawing letterbox bars in M04** — if so, that is the same bug with a
-much more visible symptom, and a good confirmation test.
-
-Still needs the user's answer on what the original shows during *gameplay* before anything is
-changed.
-
-**✅ User-confirmed 2026-07-22: "Yeah those are the cut scenes."** The open question above is
-settled — the intro choreography is not gameplay state, and bootstrapping it is the bug.
-
-**Scope, surveyed across all 53 missions' `startanims.zrd.json`: 13 bootstrap a cutscene def.**
-
-| def | missions |
-|---|---|
-| `generic_intro` | 12 — C1/M05, C1B/M03, C1C/M01, C2B/M04, C3/M01, C3/M02, C3/M05, C4/M01, C4/M02, C4/M04, C5/M01, C5/M04 |
-| `mission_intro_animation` | 1 — C1/M04 (the bespoke one) |
-
-**No `IA1` and no `MP` mission names one** — all 13 are `M0x` story missions, so this is invisible
-in instant action and multiplayer, which is what the project defaults to. That bounds the blast
-radius neatly and explains why it went unnoticed until someone flew `--mission=M04`.
-
-**Proposed fix:** skip those two def names when the animation bootstrap walks `startanims`, with
-the reason recorded in code (we have no cutscene player, so their choreography would otherwise run
-as world state). Small and data-driven — it is a name check against the start-anim list, not a new
-subsystem.
-
-**Verify by what disappears, not by what looks right:** in C1/M04 the pirate zeppelin should stop
-executing scene1's 15.7 s flight and the subsequent hard cuts, and any `letterbox` bars should
-stop being raised. Check the other 12 missions for *removed* motion too — `generic_intro` is
-shared, so it may currently be driving things nobody has looked at. An 8-chapter regression will
-not catch this: the default mission is IA1, which has no intro at all, so the regression is
-inert here by construction (`docs/verification.md` §3, "the change is inert by construction in
-that chapter").
-
-**❌ The "skip those two def names" fix above is REJECTED — user decision, 2026-07-22.** *"The M0x
-missions are campaign missions and we need those animations if we want to restore the campaign."*
-
-That is the charter's long-term direction (`CLAUDE.md`: full campaign remake), and the proposal
-above optimised for making M04 look right *today* at the cost of the choreography a campaign
-would need. `generic_intro` × 12 and `mission_intro_animation` × 1 are **assets, not noise** —
-they are the missions' authored intro movies, already decoded and already executing correctly.
-Deleting their bootstrap would throw away working capability to suppress a cosmetic symptom.
-
-**Reframed: this is not a bug to fix, it is a missing consumer.** The cutscene defs run because
-nothing tells them they are cutscenes; what is absent is a **cutscene player** that would own
-them — camera control, the `letterbox` bars, scene sequencing, and an end-of-cutscene handoff to
-gameplay. That is the same missing subsystem already blocking the `CALLBACK` event kind (see the
-"Animation event kinds that need weapons or cutscenes" entry above, where all 8 dispatches are
-`def=camera1`, unanchored, and were triaged as intro-cutscene notifications). **These two entries
-are the same dependency and should be picked up together.**
-
-**Until then, C1/M04's pirate zeppelin flying above the overcast is ACCEPTED as a known artifact**
-of running cutscene choreography with no cutscene player — not a defect to work around. Do not
-lower the zeppelin, do not suppress the def, and do not "fix" the letterbox bars if they appear.
-Anyone who lands a cutscene player should use M04 as its first test case: the data is fully
-decoded (scene1's 15.7 s uniform flight path, the hard cuts to scene2, `open_pzeplaunchdoors`,
-`pz_deploy_hook`/`pz_retract_hook`), so it is a ready-made end-to-end exercise.
+**Not done, deliberately - the one-frame lag itself.** Draining runners appended during the same
+pass was implemented and measured behaviour-neutral (one number moved across 8 chapters), but it
+is the wrong fix: it repairs the siren only because the loader happens to still be alive at that
+instant, and leaves the other 947 broken. The lag is a real oddity that may deserve its own fix
+later; it is not what silenced anything. If picked up: the descending walk is deliberate
+(`AnimRuntime.cs:250` - instances can be added mid-walk) and any same-pass drain needs a bound
+against a self-calling sequence.

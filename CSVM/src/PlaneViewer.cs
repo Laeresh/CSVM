@@ -669,9 +669,19 @@ public partial class PlaneViewer : Node3D
                 animRuntime.PufferFactory = null;
                 // Same rule as the puffer factory: the zip handle dies with this build scope. The
                 // decoded streams stay cached in WorldSounds, so an emitter created later reusing
-                // a name already heard still works.
+                // a name already heard still works — but "already heard" is not enough on its own.
+                // Most SOUND_NODE events are first reached at RUNTIME (an OnCall def, or a
+                // CallSequence that lands a frame after bootstrap, like C1's police siren), i.e.
+                // always after this line. So decode everything the program can ask for first.
                 if (animRuntime.Sounds is { } builtSounds)
+                {
+                    int prewarmed = builtSounds.Prewarm(animProgram.SoundNodeNames());
+                    if (prewarmed > 0)
+                    {
+                        GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
+                    }
                     builtSounds.Loader = null;
+                }
                 _plane.AddChild(animRuntime);
 
                 // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the

@@ -214,6 +214,16 @@ rotation ~57× too small and nothing visibly turned, while the system ran the wh
 
 The measuring tool has been the bug more often than is comfortable:
 
+- **A census printed once at startup cannot tell "never requested" from "requested later and
+  failed."** The `anim: N ambient sound emitter(s): …` line is emitted inside `Bootstrap`, so it
+  is a snapshot, not a running total. C1's police siren *is* dispatched, *is* found, and *does*
+  build an emitter — one frame after that line prints. Reading the snapshot as a complete census
+  gave a clean, specific, entirely wrong diagnosis ("the emitter is never created, because named
+  sequences are never dispatched") that survived a whole investigation because every check
+  performed agreed with it. **Ask what window the instrument covers before concluding from an
+  absence**, and where a subsystem can fail after its report, make the failure announce itself at
+  the point of use rather than inflating a counter nobody prints again.
+
 - **The wrong triangulation manufactured exactly the evidence the hypothesis predicted** — a
   Newell normal over a `triangle_strip`'s raw index list is meaningless and reported a false
   7–14% inversion rate on aircraft normals.

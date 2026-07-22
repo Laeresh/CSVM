@@ -3215,3 +3215,70 @@ deletes visible world content, which is strictly worse than drawing both.
 
 Touched `CSVM/src/Flight/Weather.cs`, `CSVM/src/PlaneViewer.cs`, `docs/formats/weather.md`,
 `backlog.md`, `CLAUDE.md`, and moved the plan.
+
+---
+
+## 2026-07-22 — C1's police siren sounds: the sound loader dies before most SOUND_NODEs are reached
+
+**Fixed, but not where the backlog said.** `snd_police` now plays and rides the police car along
+its route. The recorded diagnosis — "named sibling sequences are never dispatched" — was refuted.
+
+**The refutation.** The gate on a sequence is `seq_state`, not whether it has a name
+(`CompiledAnim.cs:239` sets `OnCallOnly` from `seq_state == "OnCall"`; `AnimRuntime.cs:288` runs
+`Where(s => !s.OnCallOnly)`). A *named* `Initial` sequence therefore runs at activation exactly
+like an unnamed one — which is how the car drives its route from a sequence called `start_walkin`.
+And the call does arrive: `police_car-police_chase.json` seq[2] event[1] is
+`CallSequence{siren_police}`, one of **1,129** CallSequence dispatches in a single C1 run. The
+count the hypothesis predicted came out **0**: across 16,053 archive JSONs there are 1,030
+named-but-never-dispatched sequences (2,503 events), and **not one of them is a `SoundNode`**.
+
+**The real cause is lifetime, not dispatch.** `WorldSounds.Loader` is valid only during the world
+build; `PlaneViewer.cs:674` nulls it when the `SoundArchive` zip scope closes, after which
+`Create` can serve only names already in `_streams`. The siren's `SoundNode` fires **one frame
+late** — `CallSequence` appends to `AnimInstance.Runners` (`:998`) while `Advance` walks that list
+descending (`:1485`), so the appended runner sits at an index the loop has already passed. One
+frame later the loader is gone. Probed directly on the unmodified build:
+`Create name=snd_police inDefs=True cached=False loaderNull=True` — the def is in sounds.json
+(`siren_police1.wav`, LOOPED/3D/RANGE 200–1200) and the WAV is in `extracted/soundsh`; the stream
+was simply unobtainable.
+
+**The reported bug was the small half.** Measured install-wide: **947 of 1,244** `SOUND_NODE`
+events sit in `Initial` sequences of `OnCall`-activation defs, so they are first reached at
+runtime — always after the loader dies. **386** name a sound never in a cacheable position at all:
+**`snd_fire1` ×363**, `snd_beeper` ×16, `snd_firetruck`, `snd_police`, `snd_train2`,
+`snd_freighter`, `snd_enginelooped`. Every one would have failed silently. `snd_fire1` is the
+destruction fire crackle, so **the audio half of Milestone 3 was set to fail this exact way**
+before a single weapon existed.
+
+**Fix.** `WorldSounds.Prewarm(AnimProgram.SoundNodeNames())` decodes every name the loaded program
+can reach — walking `OnCall` sequences and `ResetState` too, since the question is reachability,
+not what runs at bootstrap — before the archive closes. 2–4 streams per chapter; the whole install
+uses 10 distinct `SOUND_NODE` names, so the bound is trivial.
+
+**Verification.** 8-chapter regression (`--frames=200 --debug-anim --no-pads`): zero errors, zero
+late-failure warnings, live emitter names unchanged everywhere except C1, which gains
+`snd_police` (`sound: snd_police @ police_car pos (-6864, 128, -5935) … PLAYING`, tracking the car
+between log lines). Prewarm counts C1 4, C2 3, C4 3, others 2.
+
+**The C1 census legitimately still reads 38** while 39 emitters exist. That is correct, not a
+leak: the siren's emitter is created one frame after `Bootstrap` prints.
+
+**Which is the instrument trap worth keeping** (`docs/verification.md` §4). `anim: N ambient sound
+emitter(s): …` is printed inside `Bootstrap`, so it is a *snapshot* and cannot distinguish "never
+requested" from "requested later and failed". Read as a complete census it produced a clean,
+specific, entirely wrong diagnosis that survived a full investigation because every check
+performed agreed with it. A post-census failure now announces itself once per name at the point of
+use (`AnimRuntime.ReportLateSoundFailure`) rather than inflating a counter nobody prints again —
+`WorldSounds.cs:32-34` had already anticipated exactly this ("only a genuinely new name after the
+build is *reported* rather than faulting on a closed zip"); the safety valve existed but was never
+wired to a print site outside `Bootstrap`.
+
+**Deliberately not fixed: the one-frame lag.** Draining same-pass-appended runners was implemented
+and measured behaviour-neutral, but it is the wrong fix — it repairs the siren only because the
+loader happens to still be alive at that instant, and leaves the other 947 broken. The descending
+walk is deliberate (`AnimRuntime.cs:250`: instances can be added mid-walk), and any same-pass
+drain would need a bound against a self-calling sequence. Recorded in `backlog.md`.
+
+Touched `CSVM/src/Mech3/WorldSounds.cs`, `CSVM/src/Mech3/AnimProgram.cs`,
+`CSVM/src/Mech3/AnimRuntime.cs`, `CSVM/src/PlaneViewer.cs`, `docs/architecture.md`,
+`docs/verification.md`, `backlog.md`.

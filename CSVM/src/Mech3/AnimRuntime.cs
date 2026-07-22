@@ -220,6 +220,8 @@ public sealed partial class AnimRuntime : Node
                      string.Join(", ", Sounds?.Names ?? Enumerable.Empty<string>()) +
                      (_soundsUnknown > 0 ? $" [{_soundsUnknown} unknown to sounds.json]" : "") +
                      (_soundsAfterBuild > 0 ? $" [{_soundsAfterBuild} requested with no audio session]" : ""));
+        // Everything above is a bootstrap snapshot; from here on a failure reports itself.
+        _soundCensusPrinted = true;
         if (netHidden.Count > 0)
             GD.Print($"anim: safety net hid {netHidden.Count} uncovered destroyed subtree(s): " +
                      string.Join(", ", netHidden.Take(10)) + (netHidden.Count > 10 ? ", …" : ""));
@@ -683,6 +685,24 @@ public sealed partial class AnimRuntime : Node
     private readonly Dictionary<(string Name, Node3D? Anchor), object> _soundEmitters = new();
     private int _soundsUnknown, _soundsAfterBuild;
 
+    /// <summary>Set once <see cref="Bootstrap"/> has printed its emitter census. After this, a
+    /// failed SOUND_NODE is invisible unless reported at the point of use — which is exactly how
+    /// C1's police siren stayed silent undetected (2026-07-22): the census is a bootstrap
+    /// snapshot, so it cannot distinguish "never requested" from "requested later and failed".
+    /// Reported once per name, not per event: snd_fire1 alone has 363 sites.</summary>
+    private bool _soundCensusPrinted;
+    private readonly HashSet<string> _soundFailuresReported = new(StringComparer.OrdinalIgnoreCase);
+
+    private void ReportLateSoundFailure(string name, string why)
+    {
+        if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
+        {
+            return;
+        }
+        GD.PushWarning($"anim: SOUND_NODE '{name}' requested after the world build and {why} — "
+                       + "it will be silent for the rest of the session");
+    }
+
     /// <summary>
     /// The emitter an event's NAME refers to, or null when the name isn't one this definition
     /// declared. This is what lets OBJECT_ACTIVE_STATE and OBJECT_ADD_CHILD — both perfectly
@@ -715,6 +735,7 @@ public sealed partial class AnimRuntime : Node
         if (Sounds == null)
         {
             _soundsAfterBuild++;
+            ReportLateSoundFailure(name, "there is no audio session");
             return;
         }
 
@@ -726,6 +747,8 @@ public sealed partial class AnimRuntime : Node
             if (Sounds.Create(name) is not { } created)
             {
                 _soundsUnknown++;
+                ReportLateSoundFailure(name, "no stream could be resolved for it "
+                                             + "(unknown to sounds.json, or never prewarmed)");
                 return;
             }
             handle = created;
