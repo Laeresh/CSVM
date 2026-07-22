@@ -11,7 +11,13 @@ namespace CSVM.Flight;
 public sealed class StuntZone
 {
     public string DzName = "";        // dz1..dzN — the point marker (mesh_index -1) the sphere tests against
-    public string PathName = "";      // dzpath1..dzpathN — the AI/route ribbon (never rendered; --debug-dzpaths)
+    // dzpath1..dzpathN — never rendered (--debug-dzpaths). Decoded 2026-07-22: NOT just a route
+    // ribbon. Each is a 3-polygon model — polygon 0 is the approach/exit polyline, polygons 1 and 2
+    // are the two *gate outlines*, i.e. the aperture rings the zone is flown through. Read by
+    // nothing yet; the obvious use is a per-zone extent to replace the one global DzRadius, but the
+    // gates are NOT the marker point (measured: dzN sits at the gate midpoint on only some zones —
+    // exact on C2 dz7/dz8/dz9 and C5 dz14/dz15, 826 m off on C1 dz2 — so markers are hand-placed).
+    public string PathName = "";
     public Vector3 Position;          // world-space centre of the completion sphere
     public string Description = "";   // resolved, e.g. "Train Tunnel Mid"
     public string Category = "";      // resolved, e.g. "Danger Zone"
@@ -140,7 +146,7 @@ public sealed class StuntMission
             {
                 DzName = dzName,
                 PathName = pathName,
-                Position = worldGamez.WorldTransformOf(node).Origin,
+                Position = GeometryAnchor(worldGamez, node) ?? worldGamez.WorldTransformOf(node).Origin,
                 Description = messages.Get(t.Description),
                 Category = messages.Get(t.CategoryLabel),
                 Help = messages.Get(t.HelpLabel),
@@ -157,6 +163,109 @@ public sealed class StuntMission
         foreach (var z in zones)
             GD.Print($"  {z.DzName}: {z.MarkerText()} @ ({z.Position.X:0},{z.Position.Y:0},{z.Position.Z:0})");
         return new StuntMission(zones) { IntroLine = messages.Get(IntroMsgKey) };
+    }
+
+    /// <summary>The anchor point for a dzone whose ia.json record names a piece of world
+    /// <em>geometry</em> instead of a <c>dzN</c> point marker, or null when the node draws nothing
+    /// (every ordinary marker — the caller then keeps using the node's own world origin).
+    ///
+    /// A <c>dzN</c> marker is a childless <c>model_index -1</c> node whose
+    /// <c>RotateTranslateScale.translate</c> IS the zone point, so it has no geometry and takes the
+    /// null path. C2's first zone is instead <c>sghangar</c>, the Seaplane Hangar building itself,
+    /// whose <c>transform</c> is the JSON string <c>"Initial"</c> → <see cref="GameZNode.Local"/>
+    /// null → <see cref="GameZ.WorldTransformOf"/> resolves to (0,0,0), ~8 km from the hangar
+    /// (the label was right and the point was wrong). Gamez origins are routinely nowhere near the
+    /// geometry they draw — <c>NodeLabels</c> anchors on the mesh AABB centre for the same reason.
+    ///
+    /// <b>Which point on the structure.</b> These zones are all <c>MSG_OBJ_FLYTHROUGH</c>, so the
+    /// zone means the structure's <em>aperture</em>, not its middle. Where the structure carries a
+    /// matched pair of door leaves the gap between them is that aperture, so those are anchored on
+    /// alone: the hangar's <c>sgh_door1</c>/<c>sgh_door2</c> are retracted to either side of the
+    /// front wall leaving a 20 m slit centred on their union centre (−5770.4, 23.5, −5623.9), and
+    /// <see cref="DzRadius"/> = 15 m about that point covers the whole slit — you cannot thread the
+    /// doors without scoring. Independently corroborated by <c>dzpath1</c>, whose (otherwise unread)
+    /// second polygon is the front aperture outline, centred 1.9 m away at (−5770.4, 23.5, −5622.0).
+    /// The whole-structure centre would instead sit 129 m deep inside the hangar, reachable from the
+    /// open rear but missable off-centre. Structures with no door pair fall back to that centre.</summary>
+    private static Vector3? GeometryAnchor(GameZ gz, GameZNode node)
+    {
+        var worldXf = gz.WorldTransformOf(node);
+        var origin = worldXf.Origin;
+        var boxes = new List<(string Name, Aabb Box)>();
+        CollectMeshBoxes(gz, node, worldXf, boxes);
+        if (boxes.Count == 0)
+        {
+            return null; // an ordinary dzN point marker — all 53 in this install land here
+        }
+
+        int doorCount = 0;
+        foreach (var b in boxes)
+        {
+            if (IsDoorLeaf(b.Name))
+            {
+                doorCount++;
+            }
+        }
+        bool hasDoorPair = doorCount >= 2;
+
+        Aabb? merged = null;
+        foreach (var b in boxes)
+        {
+            if (hasDoorPair && !IsDoorLeaf(b.Name))
+            {
+                continue;
+            }
+            merged = merged == null ? b.Box : merged.Value.Merge(b.Box);
+        }
+        var anchor = merged!.Value.GetCenter();
+        // InvariantCulture: a German locale renders these with comma decimals, which turns an
+        // XYZ triple into six ambiguous numbers in the one log line that carries the evidence.
+        GD.Print(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "stunt: {0} is world geometry, not a dz marker — anchored on {1} at ({2:0.0}, {3:0.0}, {4:0.0}) "
+            + "instead of its node origin ({5:0.0}, {6:0.0}, {7:0.0})",
+            node.Name,
+            hasDoorPair ? $"the {doorCount} door leaves of its {boxes.Count} meshes"
+                        : $"all {boxes.Count} of its meshes",
+            anchor.X, anchor.Y, anchor.Z,
+            origin.X, origin.Y, origin.Z));
+        return anchor;
+    }
+
+    /// <summary>The original's own node naming is the semantic layer here, as it is for props,
+    /// control surfaces, wing flares and damage panels — a hangar/garage door leaf is named for
+    /// what it is (<c>sgh_door1</c>, <c>sgh_door2</c>).</summary>
+    private static bool IsDoorLeaf(string name) =>
+        name.Contains("door", StringComparison.OrdinalIgnoreCase);
+
+    /// <summary>World-space AABB of every mesh at or under <paramref name="node"/>, one entry per
+    /// drawing node so the caller can pick a subset by name. <paramref name="worldXf"/> is this
+    /// node's own world transform (children compose their <see cref="GameZNode.Local"/> onto it);
+    /// a null Local contributes identity, which is exactly why the hangar's parts are already in
+    /// world coordinates.</summary>
+    private static void CollectMeshBoxes(GameZ gz, GameZNode node, Transform3D worldXf,
+        List<(string Name, Aabb Box)> into)
+    {
+        if (node.MeshIndex >= 0 && node.MeshIndex < gz.Meshes.Count)
+        {
+            var verts = gz.Meshes[node.MeshIndex].Vertices;
+            if (verts.Count > 0)
+            {
+                var box = new Aabb(worldXf * verts[0], Vector3.Zero);
+                for (int i = 1; i < verts.Count; i++)
+                {
+                    box = box.Expand(worldXf * verts[i]);
+                }
+                into.Add((node.Name, box));
+            }
+        }
+        foreach (var ci in node.Children)
+        {
+            if (ci >= 0 && ci < gz.Nodes.Count)
+            {
+                var child = gz.Nodes[ci];
+                CollectMeshBoxes(gz, child, worldXf * (child.Local ?? Transform3D.Identity), into);
+            }
+        }
     }
 
     /// <summary>A second, independent run over the same Danger Zones (M2.5 item 7, splitscreen
