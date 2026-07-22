@@ -2173,13 +2173,26 @@ turn so they are not re-chased:
   `spruce_enginedest`. There is no spruce-*tree* animation in the install. User decision: remove
   tree collision outright; `cblock` buildings keep it.
 
-**Coarse/fine ground measurement (item 3's evidence).** Rasterising each C5 coarse `world1`-child
-ground sheet on a 64-unit grid against fine partition-tile coverage: `g4632` 97.8%, `g4683` 78.4%,
-`g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%, `g4428` 8.8%, `g14550` **0.0%** — **72% overall, so
-culling them would leave 28% of their footprint with no ground at all.** That rules out the
-obvious "hide the coarse quad" fix and makes it a draw-priority problem instead. Two traps for
-anyone re-measuring: a naive "large flat quad" filter also catches the `fvol*` **fog volumes**
-(10 in C1, 14 in C5, at altitude), and `zone_id` does not separate the pair — both are `zone_id=1`.
+**Coarse/fine ground measurement (item 3's evidence).** ⚠ **RETRACTED the same day — see the
+item 3 entry later in this file. Do not quote the figures in this paragraph.** Kept as written
+because the retraction is the point: this is what a confidently-stated wrong measurement looked
+like, and it went out in commit `a16cec0` as fact.
+
+~~Rasterising each C5 coarse `world1`-child ground sheet on a 64-unit grid against fine
+partition-tile coverage: `g4632` 97.8%, `g4683` 78.4%, `g4425` 33.3%, `g4631` 20.0%, `g4616`
+12.5%, `g4428` 8.8%, `g14550` **0.0%** — **72% overall, so culling them would leave 28% of their
+footprint with no ground at all.** That rules out the obvious "hide the coarse quad" fix and makes
+it a draw-priority problem instead.~~
+
+What went wrong: the method tested fine-tile *bounding-box* containment — axis-aligned boxes over
+swept terrain, far too crude a proxy. Independent rasterisation gives 18.2–81.4%, and `g14550`
+(claimed 0.0%) measures 18.2%. Only the weak conclusion survives — no sheet is fully covered, so
+culling leaves holes somewhere. The draw-priority fix this paragraph argued for was implemented
+and measured to change nothing (35.77% → 35.79%).
+
+Still valid from that measurement session, and worth keeping: a naive "large flat quad" filter
+also catches the `fvol*` **fog volumes** (10 in C1, 14 in C5, at altitude), and `zone_id` does not
+separate the coarse/fine pair — both are `zone_id=1`.
 
 ### Item 1 — `--data-root=` / `CSVM_DATA_ROOT` (landed)
 

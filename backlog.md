@@ -521,12 +521,17 @@ and neither side sits under an `Lod` node — so `SceneBuilder.cs:132-134`'s nea
 never have dropped either. We draw both because the original selects between them at runtime via
 partition visibility (`WorldPartitionSetActive`, 25 uses in interp), which we do not implement.
 
-*Which should win?* **The fine ground — but the coarse sheets must not be culled.** Rasterising
-each C5 coarse sheet on a 64-unit grid against fine-tile coverage: `g4632` 97.8%, `g4683` 78.4%,
-`g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%, `g4428` 8.8%, `g14550` **0.0%** — **72% total, so
-hiding them would leave 28% of their footprint with no ground at all.** The fix is therefore a
-*draw-priority* change (world-children ground ranks below partition ground), not a visibility one:
-the detailed city wins where both exist, the coarse sheet still draws where it is alone.
+*Which should win?* **The fine ground — but the coarse sheets must not be culled.** The
+"must not be culled" half stands. ~~Rasterising each C5 coarse sheet on a 64-unit grid against
+fine-tile coverage: `g4632` 97.8%, `g4683` 78.4%, `g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%,
+`g4428` 8.8%, `g14550` **0.0%** — **72% total**~~ — **RETRACTED 2026-07-22: these per-sheet
+figures do not reproduce** (independent rasterisation gives 18.2–81.4%; `g14550`, claimed 0.0%,
+measures 18.2%). The original method tested fine-tile *bounding-box* containment, an axis-aligned
+proxy far too crude for swept terrain. **Do not quote these numbers.** What survives is only the
+weaker claim that no sheet is fully covered, so culling would leave holes somewhere.
+~~The fix is therefore a *draw-priority* change (world-children ground ranks below partition
+ground)~~ — **also retracted: that fix was implemented and measured to change nothing** (35.77% →
+35.79%). See the superseding box above for the real mechanism.
 
 *Caution for anyone re-measuring:* a naive "large flat quad" filter also catches the `fvol*`
 **fog volumes** (10 in C1, 14 in C5, at altitude) — exclude them by name. And `zone_id` does not
