@@ -802,3 +802,30 @@ neither are `snd_train` or `snd_waterfall`, which work, so that is not the discr
 **Instrument note:** `--mute` suppresses the audio session entirely and the emitter report then
 reads `0 ambient sound emitter(s) [38 requested with no audio session]`, which looks exactly like
 "the emitters are broken". Drop `--mute` when investigating audio.
+
+**Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
+The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked
+whether the jumps were AI waypoints. They are not:
+
+- `data-c1-m04-zrdr-introanm-pzep1-piratezep.zan.json` is **48 frames at exactly 1/3 s apart, a
+  uniform straight line**: each frame steps a constant (−13.4, +2.1, −17.3), from
+  (−5352, 1504, −1802) to (−5981, 1602, −2611) over **15.67 s** (≈66 units/s). Frame 0 and frame
+  47 carry translate+rotate+scale; all 46 between are translate-only. There is no dwell, no
+  branch and no waypoint structure anywhere in it — so the smooth phase is this script, and it
+  simply **ends**.
+- The jumps are therefore what happens *after* it runs out, and the dispatch graph says what
+  that is: `camera1-scene1` and `piratezep-scene2` **both call `letterbox`** — the cinematic
+  black-bars overlay — and `scene2` also calls `pfighter11` and `open_pzeplaunchdoors`, while
+  `piratezep-pzep_launch_player` calls `pz_open_hanger_doors` / `pz_deploy_hook` /
+  `pz_retract_hook`. That is the M04 **intro movie**: zeppelin flies in, cut, launch doors open,
+  a fighter launches.
+
+So each jump is a **hard cut between cutscene beats** — correct for a movie, nonsense as
+gameplay — and "then it's gone" is the last beat deactivating it. This raises the confidence on
+reading (1) above (do not bootstrap `mission_intro_animation` at startup) from "leading
+explanation" to "very likely", since the same def demonstrably drives `letterbox` too. **Check
+whether we are currently drawing letterbox bars in M04** — if so, that is the same bug with a
+much more visible symptom, and a good confirmation test.
+
+Still needs the user's answer on what the original shows during *gameplay* before anything is
+changed.
