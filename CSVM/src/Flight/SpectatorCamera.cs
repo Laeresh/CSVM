@@ -148,10 +148,12 @@ public sealed partial class SpectatorCamera : Node
 
     // Any-pad reads, matching the project's phantom-device policy (never pads[0]): take the
     // largest-magnitude value across every connected pad, so idle/phantom devices read ~0.
+    // Through Pads.For(null) rather than Pads.Connected(): these are input *reads*, so they are
+    // gated on window focus as well as on --no-pads (polish-4 item 7).
     private static float PadAxis(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Pads.Connected())
+        foreach (int device in Pads.For(null))
         {
             float v = Input.GetJoyAxis(device, axis);
             if (Mathf.Abs(v) > Mathf.Abs(best))
@@ -163,7 +165,7 @@ public sealed partial class SpectatorCamera : Node
     private static float PadTrigger(JoyAxis axis)
     {
         float best = 0f;
-        foreach (int device in Pads.Connected())
+        foreach (int device in Pads.For(null))
             best = Mathf.Max(best, Input.GetJoyAxis(device, axis));
         return best;
     }
@@ -171,7 +173,7 @@ public sealed partial class SpectatorCamera : Node
     private static float PadButtonAxis()
     {
         bool up = false, down = false;
-        foreach (int device in Pads.Connected())
+        foreach (int device in Pads.For(null))
         {
             up |= Input.IsJoyButtonPressed(device, JoyButton.RightShoulder);
             down |= Input.IsJoyButtonPressed(device, JoyButton.LeftShoulder);

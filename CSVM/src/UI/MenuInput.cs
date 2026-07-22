@@ -111,7 +111,7 @@ public sealed class MenuInput
     /// real one somebody is holding.</summary>
     private int ScanActivePad()
     {
-        foreach (int pad in Pads)
+        foreach (int pad in CSVM.Pads.For(Pads))
         {
             if (Input.IsJoyButtonPressed(pad, JoyButton.A) ||
                 Input.IsJoyButtonPressed(pad, JoyButton.B) ||
@@ -139,10 +139,13 @@ public sealed class MenuInput
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
 
     /// <summary>Button pressed on ANY of this player's pads (a set of one for a joined player,
-    /// every unclaimed device for player 1).</summary>
+    /// every unclaimed device for player 1). Through <c>CSVM.Pads.For</c> rather than the
+    /// <see cref="Pads"/> field directly, so the read is gated on window focus and on
+    /// <c>--no-pads</c> (polish-4 item 7) — the field stays the player's <i>binding</i>, which
+    /// the join bookkeeping still needs while unfocused.</summary>
     private bool PadButton(JoyButton button)
     {
-        foreach (int pad in Pads)
+        foreach (int pad in CSVM.Pads.For(Pads))
             if (Input.IsJoyButtonPressed(pad, button))
                 return true;
         return false;
@@ -153,7 +156,7 @@ public sealed class MenuInput
     private float PadAxis(JoyAxis axis)
     {
         float v = 0f;
-        foreach (int pad in Pads)
+        foreach (int pad in CSVM.Pads.For(Pads))
         {
             float a = Input.GetJoyAxis(pad, axis);
             if (Mathf.Abs(a) > Mathf.Abs(v))
@@ -181,6 +184,8 @@ public sealed class MenuInput
 
     /// <summary>Whether an unbound pad is pressing Start — the join gesture. Static because the
     /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
-    /// edge-detects per device.</summary>
-    public static bool JoinPressed(int pad) => Input.IsJoyButtonPressed(pad, JoyButton.Start);
+    /// edge-detects per device. Gated like every other pad read, so nobody joins while the
+    /// window is in the background (polish-4 item 7).</summary>
+    public static bool JoinPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 }

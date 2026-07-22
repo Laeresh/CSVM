@@ -1953,9 +1953,9 @@ public partial class PlaneViewer : Node3D
         }
     }
 
-    /// <summary>Mutes/unmutes the master bus on window focus. Idempotent — the notification can
-    /// arrive more than once — and it only ever clears a mute it set itself, so it cannot stomp
-    /// on a mute from anywhere else.</summary>
+    /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
+    /// the notification can arrive more than once — and it only ever clears a mute it set itself,
+    /// so it cannot stomp on a mute from anywhere else.</summary>
     private void SetFocusMuted(bool muted)
     {
         if (_focusMuted == muted)
@@ -1964,7 +1964,16 @@ public partial class PlaneViewer : Node3D
         }
         _focusMuted = muted;
         AudioServer.SetBusMute(MasterBus, muted);
-        GD.Print(muted ? "focus: lost — audio muted" : "focus: regained — audio restored");
+        // Pad *reads* follow focus too (Pads.For / Pads.InputBlocked): a stick held or drifting
+        // while the player is alt-tabbed must not fly the plane, steer the free camera or scroll
+        // the launchscreen. The pad *roster* (Pads.Connected) deliberately does not follow focus
+        // — an unfocused pad has not disconnected; see the Pads class remarks. The keyboard needs
+        // no gate: Godot releases held keys on focus loss, while joypads are polled from SDL
+        // regardless of focus, which is the whole reason this exists.
+        Pads.Focused = !muted;
+        GD.Print(muted
+            ? "focus: lost — audio muted, pad reads gated"
+            : "focus: regained — audio restored, pad reads live");
     }
 
     public override void _UnhandledInput(InputEvent @event)
