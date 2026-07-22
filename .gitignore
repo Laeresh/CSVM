@@ -44,3 +44,4 @@ CopyToOneDrive.ps1
 NOTES.md# Python bytecode from analysis/ scripts
 __pycache__/
 *.pyc
+NOTES.md
