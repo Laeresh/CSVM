@@ -2127,7 +2127,7 @@ old); `-Keep '*.py','*.md'` spares 22. No sweep has actually been run yet.
 
 ## 2026-07-22 — Milestone 2 polish run 3 planned; item 1 (`--data-root=`) landed
 
-**The plan.** `docs/PLAN-M2-polish-3.md` (active): ten items chosen from `backlog.md` against
+**The plan.** `docs/plans/PLAN-M2-polish-3.md` (active at the time; archived 2026-07-22): ten items chosen from `backlog.md` against
 the user's criteria — feasibility, little or no user input, a preference for long-running work.
 Items needing a playtest, two controllers, or a fidelity judgement the data cannot settle were
 deliberately excluded.
@@ -2534,7 +2534,7 @@ fixed negative `node_bias` (`-DepthBiasPerLevel`), below every index-derived val
 16-polygons-per-partition-cell granularity) that matched exactly 7 nodes, all in C5. It built
 clean, 7 of 8 chapters stayed **byte-identical** (md5), and it changed **nothing** about the
 bug. It has been reverted; no code shipped. The corrected diagnosis is recorded in
-`backlog.md`, `docs/PLAN-M2-polish-3.md` item 3 (banner box) and `docs/verification.md` rule 6.
+`backlog.md`, `docs/plans/PLAN-M2-polish-3.md` item 3 (banner box) and `docs/verification.md` rule 6.
 
 **What it actually is.** At the plan's own repro pose, hiding `g4683` (node 1777) alone drops
 the flicker to 0.19% — the *identical* figure to hiding all seven sheets. `g4683` carries **8
@@ -3167,3 +3167,51 @@ which a texture discontinuity cannot produce because its two sides must differ.
 8-bit channel — a per-texel *ramp*, where the answer is a period rather than a level, is the
 instrument that works; and a flat-colour ID map cannot see a crack between two surfaces that share
 a texture, which needed a second probe keyed per surface.
+
+---
+
+## 2026-07-22 — C5's weather zone is settled: `zone1` (user A/B); polish-3 archived
+
+**The last user-gated item of `docs/PLAN-M2-polish-3.md` is answered**, so the plan moved to
+`docs/plans/PLAN-M2-polish-3.md` with a `COMPLETE` banner.
+
+**The answer: C5 = `zone1`.** The user flew C5/IA1 in the original and can see across the city.
+`ZONE3` fogs at **50–250 m** with a **300 m** clip, which would collapse the view into a 300 m
+bubble — so `zone3` is ruled out by direct observation, not by inference.
+
+**No behaviour change was needed, and that is the point.** The remake already renders `zone1`
+there: the `zone2` default matches nothing in C5 and `WeatherState.ResolveZone` falls back to the
+file's first zone. What changed is the *record* — until now the code and docs said the C5 choice
+was an unresolved guess awaiting an A/B, which invited someone to "fix" a fallback that was
+already right.
+
+**Verified the fallback is stable, not lucky.** Surveyed all 53 `weather.zrd.json` in the install:
+every one of C5's 8 missions lists `ZONE1` before `ZONE3`, so all 8 resolve to `zone1` — there is
+no C5 mission where the fallback picks differently. Confirmed at runtime:
+`weather: C5/IA1 has no 'zone2' (zones: zone1/zone3) — rendering 'zone1'`, fog 1500–2250,
+world light 1.00.
+
+**A latent hazard found and written down while checking this.** C5's weather.json lists `ZONE1`
+first but its **gamez `horizon` subtree lists `zone3` first**. Two independent "first zone"
+fallbacks over two different orderings could render the sky of one zone with the fog of another.
+They do not today, because `PlaneViewer.LoadWeather` (`:1638`) resolves against weather.json and
+passes the result into `BuildHorizon` (`:709`) — `BuildHorizon`'s own fallback is a no-op on that
+path and exists only for a mission with no weather.json. Recorded as a ⚠ in
+`docs/formats/weather.md` so the two are not "simplified" into disagreeing.
+
+**Also changed:** the fallback log line said `defines no 'zone2' … using 'zone1'`, which reads as
+a missing-data warning on every single C5 flight. It now reads `has no 'zone2' … rendering
+'zone1'` with a comment stating this is expected and confirmed-correct for C5.
+
+**Still open — C1–C4.** All four define `zone2` and resolve to themselves, so they render a
+plausible answer either way and this is a fidelity question rather than a bug. **C1 is worth
+doing first:** it is the only chapter whose own scripts disagree (`load.gw` names
+`zone2_cloud_floor`, `tex_fx.gw` names `h_zone1scroll`) and its two zones are genuinely different
+skies — zone2 moon/stars night vs zone1 day haze.
+
+**Not licensed by this answer:** hiding C5's 149 `zone3` *nodes*. The `zone_id` backlog entry now
+says so explicitly — a fog answer does not settle a geometry question, and a wrong guess there
+deletes visible world content, which is strictly worse than drawing both.
+
+Touched `CSVM/src/Flight/Weather.cs`, `CSVM/src/PlaneViewer.cs`, `docs/formats/weather.md`,
+`backlog.md`, `CLAUDE.md`, and moved the plan.

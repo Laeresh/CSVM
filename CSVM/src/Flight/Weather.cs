@@ -128,9 +128,17 @@ public sealed class WeatherState
     ///
     /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
     /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
-    /// The default deliberately stays <c>zone2</c> (user decision 2026-07-22): which zone a
-    /// mission actually flies is not in any reader, so picking C5's zone needs an A/B against
-    /// the original. See docs/formats/weather.md.</para></summary>
+    /// The default stays <c>zone2</c> (user decision 2026-07-22): which zone a mission actually
+    /// flies is in no reader file, so it is settled per chapter by A/B against the original.
+    ///
+    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest 2026-07-22.</b> The fallback already
+    /// lands there, so this is not a special case — but it is no longer an accident either, and
+    /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
+    /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
+    /// user flew C5/IA1 in the original and can see across the city, which its 50–250 m fog and
+    /// 300 m clip would make impossible. C1–C4 all define <c>zone2</c> and resolve to themselves;
+    /// their A/B is still open (C1 has conflicting script evidence).
+    /// See docs/formats/weather.md.</para></summary>
     public string ResolveZone(string requested) =>
         _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
 

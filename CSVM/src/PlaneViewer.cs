@@ -148,7 +148,8 @@ public partial class PlaneViewer : Node3D
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
     // The zone actually rendered: _skyZone when this mission defines it, otherwise the first
     // zone its weather.json does (WeatherState.ResolveZone). C5 ships zone1+zone3, so the
-    // zone2 default resolves to zone1 there; C1–C4 all define zone2 and resolve to themselves.
+    // zone2 default resolves to zone1 there — CONFIRMED correct by playtest 2026-07-22, not
+    // just a lucky fallback; C1–C4 all define zone2 and resolve to themselves.
     // Reassigned on every StartSession, so a menu rebuild never inherits the last chapter's.
     private string _activeZone = "zone2";
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
@@ -1642,8 +1643,11 @@ public partial class PlaneViewer : Node3D
             return;
         }
         if (!_activeZone.Equals(_skyZone, StringComparison.OrdinalIgnoreCase))
-            GD.Print($"weather: {_chapter}/{_mission} defines no '{_skyZone}' "
-                     + $"(zones: {string.Join("/", _weather.ZoneNames)}) — using '{_activeZone}'");
+            // Not a fault: a chapter that numbers its zones differently resolves here every
+            // flight. C5 (zone1/zone3) does so on all 8 missions, and zone1 is the confirmed
+            // correct choice there — so this must not read as a missing-data warning.
+            GD.Print($"weather: {_chapter}/{_mission} has no '{_skyZone}' "
+                     + $"(zones: {string.Join("/", _weather.ZoneNames)}) — rendering '{_activeZone}'");
     }
 
     /// <summary>Applies the loaded weather: sets the distance-fog global shader parameters for

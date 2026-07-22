@@ -108,6 +108,28 @@ answer needs an A/B against the original — C5 most of all, whose two candidate
 Note the identical `FOG_ALTITUDE`: in C1 the zones read as altitude bands (zone1 970–1047 at
 the cloud floor, zone2 4000–5000), but in C5 altitude cannot be what selects between them.
 
+#### C5 is settled: `zone1` (user A/B against the original, 2026-07-22)
+
+The user flew C5/IA1 in the original and **can see across the city**, which `ZONE3`'s 50–250 m
+fog and 300 m clip make impossible. So C5 = `zone1`, and the far-apart candidates above are no
+longer an open question.
+
+The remake already renders it: the `zone2` default matches nothing in C5 and
+`WeatherState.ResolveZone` falls back to the file's first zone, which is `ZONE1`. That is
+**stable, not lucky** — all 8 C5 missions list `ZONE1` before `ZONE3`, so every one resolves to
+`zone1`. Verified at runtime: `weather: C5/IA1 has no 'zone2' (zones: zone1/zone3) — rendering
+'zone1'`, fog 1500–2250.
+
+⚠ **Do not "simplify" the fallback into taking the horizon subtree's first zone instead.** The
+two orders disagree — C5's weather.json lists `ZONE1` first, its horizon lists `zone3` first
+(above) — so that change would silently render the sky of one zone with the fog of another.
+`PlaneViewer.LoadWeather` resolves against weather.json *first* and passes the result into
+`BuildHorizon`, which is what keeps the pair consistent; `BuildHorizon`'s own fallback is a
+no-op in that path and exists only for a mission with no weather.json at all.
+
+**Still open for C1–C4**, which all define `zone2` and resolve to themselves — C1 most of all,
+the one chapter whose own scripts disagree (`load.gw` → zone2, `tex_fx.gw` → zone1).
+
 ### Zone keys
 
 List-valued dict keys:

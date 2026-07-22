@@ -54,7 +54,7 @@ That is a deliberate boundary: the player's damage model (`PlaneDamage`, `Damage
 
 ## ⚠ Read this before implementing anything
 
-`docs/PLAN-M2-polish-3.md` records that **three of its five wave-1 items had materially wrong
+`docs/plans/PLAN-M2-polish-3.md` records that **three of its five wave-1 items had materially wrong
 evidence**, and that in both bad cases the *supporting* evidence agreed while the *mechanism*
 did not (`docs/verification.md` rules 6 and 7). This plan was written in one session and
 **four of its author's confident readings were disproven within that same session** — two by

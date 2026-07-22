@@ -133,8 +133,11 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   re-verified against `nodes.json`. **Blocked on the same unknown as the fog zone:** which zone a
   mission activates is in no file in the install (exhaustive negative result now written up in
   `docs/formats/weather.md`), so implementing this means *guessing what to hide* — and a wrong
-  guess deletes visible world content, which is strictly worse than drawing both. Wants the
-  user's zone A/B (plan's closing section) first.
+  guess deletes visible world content, which is strictly worse than drawing both. The user's
+  zone A/B has since answered **C5 = zone1** (2026-07-22), which would mean hiding C5's 149
+  `zone3` nodes — but that is exactly the guess-what-to-hide risk, and the *fog* answer does
+  not license a *geometry* change. C1–C4 are still unanswered. Do not act on this until the
+  remaining chapters are settled and there is a visible artifact it demonstrably fixes.
 
 - **Partition visibility is a real runtime system we do not implement** (found 2026-07-22 while
   diagnosing the C5 ground z-fight). The interp language has **`WorldPartitionSetActive`**
@@ -338,7 +341,16 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   Both doc claims need correcting, not just the code. User decision 2026-07-22: remove tree
   collision outright (not behind a flag); `cblock` city-block **buildings keep** collision, being
   real 3D meshes rather than cards. Scheduled as polish-run-3 item 5.
-- **Determine which weather/sky zone each chapter and mission actually uses.**
+- **Determine which weather/sky zone each chapter and mission actually uses.** **C5 is
+  answered — `zone1`** (user A/B 2026-07-22: you can see across the city in the original, which
+  `zone3`'s 50–250 m fog and 300 m clip make impossible). The remake already renders it and the
+  fallback is stable — all 8 C5 missions list `ZONE1` first — recorded in
+  `docs/formats/weather.md` and `Weather.ResolveZone`. **Still open for C1–C4**, all of which
+  define `zone2` and resolve to themselves, so they render a plausible answer either way and
+  this is a fidelity question rather than a bug. **C1 is the one worth doing first:** it is the
+  only chapter whose own scripts disagree (`load.gw` → `zone2_cloud_floor`, `tex_fx.gw` →
+  `h_zone1scroll`), and its two zones are genuinely different skies (zone2 = moon/stars night,
+  zone1 = day haze).
 - **Fine-tune fog and environment** — method: record video from spawn points flying straight for a
   fixed number of seconds, in both engines, and compare.
 - **Better mission states.** There is still a lot of difference between our maps and the original's.

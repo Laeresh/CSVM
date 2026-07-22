@@ -1,8 +1,17 @@
 # Milestone 2 polish run 3
 
-**ACTIVE PLAN** (written 2026-07-22). It sits in `docs/` rather than `docs/plans/`, which by
-this repo's convention makes it the single live plan. Move it to `docs/plans/` with a
-`COMPLETE` banner when every item lands.
+**✅ COMPLETE — 2026-07-22.** Eight of the ten items landed (1, 2, 4, 5, 6, 8, 9, 10); items 3
+and 11 are **closed as disproven**, with no code landed and their measurements recorded below so
+the dead ends are not re-chased. The last thing holding this plan in `docs/` was the user-owned
+weather-zone A/B; the user settled C5 = `zone1` on 2026-07-22 and it is now recorded in
+`docs/formats/weather.md` and in `Weather.ResolveZone`. Kept for its evidence and its dead ends,
+read as history.
+
+⚠ **What this plan did NOT fix:** the C5 / C1B / C3 ground z-fighting is still open. Three
+mechanisms were proposed and all three were measured wrong (item 3, item 11). Do not restart
+from this plan's hypotheses — start from `backlog.md`, which carries the surviving measurement:
+`NodeOrderBias` (5e-8) sits ~20× below this renderer's depth-resolution floor (~1e-6 of view
+distance), and raising the bias constants is measured to fix C1B while making C5 *worse*.
 
 Ten items selected from `backlog.md` on 2026-07-22 against three criteria the user set:
 **feasibility, little or no user input required, and a preference for long-running work.**
@@ -821,7 +830,16 @@ designs are the risk case, since their booms genuinely *are* tail at outboard |x
 
 ---
 
-## Task for the user — weather zone A/B (requested 2026-07-22)
+## Task for the user — weather zone A/B (requested 2026-07-22) — ☑ **C5 ANSWERED**
+
+> **Answered for C5 on 2026-07-22: `zone1`.** The user flew C5/IA1 in the original and can see
+> across the city — impossible under `zone3`'s 50–250 m fog and 300 m clip. The remake already
+> renders `zone1` there (the `zone2` default matches nothing and falls back to the file's first
+> zone), and that fallback is stable rather than lucky: **all 8 C5 missions list `ZONE1` before
+> `ZONE3`**. Recorded in `docs/formats/weather.md` and `Weather.ResolveZone`, so nobody
+> re-opens it or "fixes" the fallback toward `zone3`. **C1–C4 remain open** — see `backlog.md`;
+> they all define `zone2` and resolve to themselves, so they render *a* correct-shaped answer
+> either way and the A/B is a fidelity question, not a bug.
 
 **Not schedulable work; this needs the original game.** Item 2 leaves the default at `zone2`
 deliberately, because the data does not say which zone a mission flies (full negative result in
