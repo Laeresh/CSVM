@@ -62,6 +62,9 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 - **Division of labor:** Claude writes the Rust parsers, Godot code, and docs; the user reviews, playtests flight feel, and owns upstream/community communication.
 - **Git: commit to `main`.** This is a single-developer repo with no PR workflow, so **do not create a branch** when asked to commit — commit straight to `main`. The user will say so explicitly if a particular change should go on its own branch. Pushing is still never automatic: commit when asked, push only when asked.
 
+
+## Coding conventions
+- Never write braceless control-flow bodies. Always wrap the body of if, else if, else, for, foreach, while, and do in braces, even for a single statement — this prevents dangling-else and merge-conflict bugs.
 ## Repo layout
 
 One line each — **the extraction pipeline, the launch scripts and the mech3ax fork are in `docs/tooling.md`**; none of it is needed to write engine code.
