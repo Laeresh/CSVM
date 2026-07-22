@@ -78,7 +78,7 @@ Keep the format fact in CLAUDE.md and the measurement lesson in verification.md.
 ## Checklist
 
 1. ☑ Backfill the 3 undocumented modules into `docs/architecture.md` **(done 2026-07-22 — `CompiledAnim.cs`, `AnimProgram.cs`, `SpectatorCamera.cs`; set-diff now 63/63 empty both ways, so item 3 is unblocked)**
-2. ☐ Status section → current state + next step only (−58 KB)
+2. ☑ Status section → current state + next step only **(done 2026-07-22 — 65,166 → 2,993 bytes; 27 landed bullets deleted after per-bullet HISTORY verification, three open items migrated to `backlog.md`)**
 3. ☐ Module index → one line per module (−55 KB)
 4. ☐ Format support status → `docs/formats/extraction.md` (−3.6 KB)
 5. ☐ User args → `docs/cli.md`, compact table stays (−10 KB)

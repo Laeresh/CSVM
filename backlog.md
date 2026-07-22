@@ -1,10 +1,12 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. The **active** run's
-checklist lives in `docs/PLAN-M2-polish-2.md`; per-item history/diagnosis detail is in
-`docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets). The live list of
-hand-tuned constants awaiting playtest stays in CLAUDE.md → "Open TUNE items pending playtest".
-When an item gets scheduled into a plan, move it there; when it lands, delete it here.
+Everything known-but-not-scheduled, so it survives between polish runs. The **active** plan is
+`docs/PLAN-docs-cleanup.md`; completed plans are in `docs/plans/`. Per-item history/diagnosis
+detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
+verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
+constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
+out of CLAUDE.md on 2026-07-22, since CLAUDE.md's status section is current-state-and-next-step
+only. When an item gets scheduled into a plan, move it there; when it lands, delete it here.
 
 ## Blocked / deferred
 
@@ -191,11 +193,60 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
 
 ## TUNE constants pending playtest
 
-See CLAUDE.md → "Open TUNE items pending playtest" (kept there, next to current status):
-compass drum, fog range factor, flight-model constants + the item-12 per-axis
-`PitchTune`/`YawTune`/`RollTune` (calibrated 2026-07-19, feel A/B pending), control-surface
-angles/slew, cloud-puff opacity/density, wing-light flash duration, collision feel vs
-building corners, item-10 damage feel set, item-11 `WhineMixGain` 0.12.
+The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned constant that is
+plausible but unvalidated against the original — they need the user in the cockpit, not another
+scripted screenshot.
+
+- **Compass tape** — north = −Z convention (unverified vs the original; one-line flip in
+  `FlightController`'s heading line), plus `TileOverscan` / `RimGain` / the nearest-tick look.
+- **`fogRangeFactor` 2** — the halving predates the sRGB fog-colour fix, so re-A/B it in game.
+- **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`,
+  `LowSpeedDragBlend`, and the Run-2 item-12 per-axis `PitchTune` 0.75 / `YawTune` 1.32 /
+  `RollTune` 2.12. Those three are measurement-calibrated (2026-07-19) but the *feel* A/B is
+  pending — **especially the ~2.7× cut in pitch authority**, the largest single change to how the
+  aircraft handles.
+- **Control surfaces** — deflection angles and slew rate.
+- **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
+  than the original.
+- **Wing lights** — `FlashDuration`.
+- **Collision feel** — behaviour against building corners.
+- **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick, tree softness,
+  `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
+  real flight (the thresholds need states normal play actually reaches).
+- **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B a dive against the original.
+- **Stunt mode** — `DzRadius` 30 m (tightened from 60 on user feedback), marker-HUD placement,
+  font and distance units; scoreboard fonts and placement.
+- **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
+  feel, tag-gutter widths.
+- **Aircraft brightness** — every aircraft got substantially brighter when the inverted-normal
+  bug was fixed (2026-07-20); whether flight lighting now wants re-tuning against the reference
+  videos is unassessed.
+
+## Owed playtests (need hardware or a human at the controls)
+
+- **The M2.5 playtest pass.** Items 6 and 7 of `docs/plans/PLAN-M2.5-prototype.md` — the
+  launchscreen join flow and the splitscreen stunt race — rest on construction plus scripted
+  verification for everything needing **two controllers**, which this machine does not have.
+  Unverified at runtime: join / un-join, the lock race, per-pad flight binding, Esc-from-
+  splitscreen-to-menu, board fonts and placement, rematch feel. Also open as a *design*
+  question: should a finished pilot keep flying rather than freeze at the finish?
+- **`--freecam` interactive feel** — look sensitivity and the speed curve have never been
+  assessed by hand; the module was built entirely through scripted screenshots and
+  `--debug-anim`.
+- **The labs are mouse-driven** (`--viewer`: damage on H, livery on L, mesh on M) and have had no
+  interactive playtest beyond scripted verification.
+
+## C3 ships gamez references to textures its texture.zbd does not contain
+
+Surfaced 2026-07-21 during the extraction cutover and deliberately left alone. C3's gamez
+references `cloud1`/`cloud2`, which its own `texture.zbd` does not ship — a **retail-data gap**,
+true in both the v0.6.1 and fork extraction trees, so not something the cutover caused.
+
+The fix is a one-line addition to `TextureArchive.KnownAbsentFromGameData`, which would render
+them neutral gray instead of magenta. It is left to the user because it is a **visible** change
+and it deliberately gives up the magenta signal that means "our bug" for those two names — the
+project's convention is that magenta is diagnostic, so suppressing it is a judgement call, not a
+cleanup.
 
 ## C5 ground z-fighting — coarse quad coplanar with the detailed city ground
 
