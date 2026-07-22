@@ -45,7 +45,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done — keep this in sync as items
 6. ☐ **Knife-edge: the nose should drop, not just the path** (+ delete the dead soft-tree branch)
 7. ☑ **Mute on focus loss** (+ the pad-read-on-focus question, settled) **(done 2026-07-22 — `PlaneViewer._Notification`, the project's first, mutes the `AudioServer` master bus on `NOTIFICATION_APPLICATION_FOCUS_OUT` and unmutes on `_IN`. The engine-loop regression the item warned about cannot occur: the bus mute never touches `FlightAudio`, measured `volDb=-13.98 pitch=0.778 ramp=1.000` identically before/during/after two focus cycles, with the same probe shown able to print `-60.00` at startup. The pad half landed as a SEPARATE, user-vetoable commit (`78acbbc`). Found and corrected on the way: the plan's proposed choke point `Pads.Connected()` is the wrong one — it misses the flight path (`For(bound)` never consults it, and every splitscreen/menu player has a binding) and would break the launchscreen (`SyncDevices` reads the roster to drop *disconnected* players; `AssignPads` reads it at session build). Gate went on `Pads.For` instead, `Connected()` left as the ungated roster. Also found: `--headless` + `--screenshot` never terminates → `backlog.md`. `docs/HISTORY.md`)**
 8. ☐ **The full `player_plane_destruct` crash choreography** — surface variants, sparks, debris arcs
-9. ☐ **Conflict-local depth bias** — the surviving direction on C1B/C5 z-fighting
+9. ◐ **Conflict-local depth bias** — the surviving direction on C1B/C5 z-fighting **(RESEARCH DONE 2026-07-22, no code landed — and the item's inherited premise is now the FOURTH wrong mechanism retired. The "nine coplanar World-child nodes stack at y=5" reading is disproven: they are exactly coplanar and exactly same-priority, and they **tile** — 0.00 m² true polygon∩polygon area between every cross-node pair, plus an independent raster cross-check of 0 / 114,095 cells doubly covered. That is `verification.md` rule 9 (AABB ≠ overlap) costing this same bug a second wrong diagnosis. A software depth probe then found **the two recorded poses are two different bugs**: C5's 78.14%-of-frame conflict is `g4683` fighting ITSELF across its own surfaces, separated only by `SurfaceRankBias` (2e-6) — same node, so `node_bias` cancels and no per-node scheme can ever reach it; C1B's 36.33% is a single cross-node pair (743 `g28169` water over 716 `g28170` surf, index delta 27 → 1.35e-6). **The probe independently predicted the one previously-unexplained measured control** (`NodeOrderBias` 2e-6: C1B → 0.00%, C5 untouched — matching Godot's C1B 30.95%→2.35%, C5 35.96%→41.69% worse), which is the first account explaining both halves with one mechanism. Instrument + full findings preserved in `analysis/item9-depth-bias/`. **Next step is NOT to implement**: bracket the per-pair step first (see the ⚠ below), and get a C1B reference capture, because every scheme tested keeps water in front of surf.)**
 10. ☐ **Shader instance-uniform hygiene** — a shared ordered preamble, and `csky_opacity` in splitscreen
 
 ## Ground rules (carried from every prior plan here)
@@ -631,6 +631,46 @@ the real runtime system the original uses to pick between coarse and fine ground
 unconditionally (`WorldBuilder.cs:155`, `:157-159`). It stays in `backlog.md` under
 "Blocked / deferred" — implementing it is cell-resident tracking with pop risk and an 8-chapter
 regression, i.e. Milestone 3 work, not polish.
+
+> ## ⚠⚠ STOP — everything from here to the end of item 9 was written BEFORE the 2026-07-22
+> ## data analysis, and its central evidence is now DISPROVEN.
+>
+> **Read `analysis/item9-depth-bias/FINDINGS.md` first.** The "nine coplanar World-child nodes
+> stack at y = 5" claim below is another AABB reading: the nine **tile**, with 0.00 m² of true
+> polygon overlap between every cross-node pair (two independent methods). The text below is
+> retained only because the *constants*, the *poses* and the *disproven-list* remain accurate.
+>
+> **What replaced it, all measured:**
+> - **The two recorded poses are two different bugs.** No single fix can move both, which is
+>   exactly why all three previous attempts moved one and not the other.
+> - **C5 (78.14% of frame at risk): `g4683` fights ITSELF** — `cblock4` rank 1 over `cblock2`
+>   rank 0, and `cblock1` rank 2 over `cblock4` rank 1. Same node, same priority, different
+>   materials → different Godot surfaces. `node_bias` is identical on both sides and **cancels**.
+>   `SurfaceRankBias` (2e-6) is the entire separation. **A dense per-node rank cannot touch C5.**
+> - **C1B (36.33%): one cross-node pair** — node 743 `g28169`/`wtr00000` in front of node 716
+>   `g28170`/`srf0001`, index delta 27 → 1.35e-6, i.e. 1.35× the claimed floor. This *is* the
+>   half a dense rank fixes.
+> - **The probe reproduced the previously-unexplained control from data alone**: `NodeOrderBias`
+>   → 2e-6 gives C1B 0.00% and leaves C5 untouched, matching Godot's measured C1B 30.95%→2.35%
+>   and C5 35.96%→41.69%. First account that explains both halves with one mechanism.
+> - **The 1e-6 "floor" is not a safe denominator.** `SurfaceRankBias` = 2e-6 is *twice* it and is
+>   exactly the separation on 78% of a frame that still measures 35.96% flicker. The polish-3
+>   bracket measured a *cumulative* per-polygon ramp (~10× its step), not the per-pair step a
+>   tie-break needs. **The required per-pair step is > 2e-6 and has never been bracketed.**
+> - **The slot arithmetic, conditional on that:** longest conflict chain is 27/11/16/16/10/13/20/28
+>   (8/3/0/5/0/5/5/3 excluding the origin-parked pile). Budget = 2e-4 / step. At 5e-6 it fits
+>   comfortably; **at 1e-5 it does not** for C5 and C1.
+> - **Order matters if both land:** today 2–16% of cross-node conflicting pairs already resolve
+>   the wrong way round; raising `SurfaceRankBias` makes that worse and the dense rank makes it
+>   markedly better, so the dense rank goes first or they are sized together.
+>
+> **Do this before writing any code: (1) bracket the per-pair step — one constant, two poses;
+> (2) get a C1B reference capture at the repro pose.** On (2): water currently renders in front
+> of surf and **every** scheme tested keeps it there (all preserve node index order, 743 > 716),
+> so a bigger separation only makes the current winner win harder. If the original draws surf
+> over water, the flicker metric improves while the picture gets worse — rule 4's failure mode,
+> and the same shape as the C3 beach case. The data cannot settle it: "later node wins" is the
+> documented rule and it says water.
 
 **Approach — the recorded direction: make the bias dense over the nodes that actually conflict.**
 Instead of `node.Index * 5e-8` spanning thousands of indices, detect groups of coplanar same-priority

@@ -205,6 +205,32 @@ unscheduled.
   what separates C3's `zepbridge1/2` and C4/C5's `zepdock` (identity transform, geometry already in
   world coordinates, correctly drawn) from the zeppelin vehicles.
 
+- **`SurfaceRankCap` = 5 produces genuine zero-separation coplanar pairs.** 0.0–4.1% of built
+  meshes per chapter have more than 6 (material, priority) groups, so ranks 5+ all collapse onto
+  the same bias; the worst mesh has **32** groups (C4). In C5 that yields 4 measured coplanar
+  *overlapping* pairs with **exactly zero** separation, totalling 774,152 m² — `g4642`
+  (`cblock3` vs `cblock6`, 598,016 m²; `cblock1` vs `cblock4`, 102,400 m²), `g4622`, `g4674`.
+  None is at a recorded repro pose, so this is latent and second-order rather than the reported
+  bug — but it is a real hole in the tie-break, and it is **invisible to any node-level scheme**
+  because both sides share a node. Measured 2026-07-22, `analysis/item9-depth-bias/`.
+- **`node_bias` already spans 1.22–2.86 priority levels per chapter** (C1 1.77, C1B 1.40,
+  C1C 1.41, C2 1.24, C2B 1.22, C3 1.35, C4 2.07, **C5 2.86**). `docs/architecture.md` recorded
+  this as an accepted corner case ("a prio-0 node >~4000 indices later can out-bias a prio-1
+  overlay; no such pair observed in C1") — measured, the real span is **up to nearly three levels
+  and is the normal state of the chapter**, not a corner case. Consequence: today **2–16% of
+  cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
+  rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
+  (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
+- **C1B fidelity question, blocking any z-fighting fix: does surf draw over water?** At the C1B
+  repro pose `wtr00000.tif` (node 743) renders **in front of** `srf0001.tif` (node 716), and
+  **every** candidate bias scheme keeps it there, because all preserve node index order and
+  743 > 716. So a bigger separation does not change *which* surface wins — it makes the current
+  winner win harder, and the flicker metric improves while the picture may get worse (rule 4's
+  failure mode; same shape as the C3 beach case). **The data cannot settle it** — "later node
+  wins" is the documented rule and it says water. **Needs a reference capture of the original at
+  `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367` before any bias
+  change is judged.**
+
 ## Feature backlog
 
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the

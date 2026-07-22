@@ -77,6 +77,17 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    **When the hypothesis is "these two surfaces overlap", compute the overlap, not the boxes** —
    and expect game terrain to be mostly *abutting* coplanar tiles, which an AABB test reports as
    a conflict everywhere.
+
+   ⚠ **This substitution has now produced two different wrong answers on the same bug, the second
+   one written by people who had already read this rule** (2026-07-22). The claim "nine coplanar
+   World-child nodes stack at y = 5 in the C5 repro footprint" — carried into three documents as
+   established structural evidence — is the same error one level up: the nine **tile**, with
+   0.00 m² of true polygon ∩ polygon area between every cross-node pair, confirmed independently
+   by rasterisation (0 of 114,095 cells doubly covered). Only `g4683`'s own AABB spans several
+   tiles, which is where the "stack" reading came from. **Knowing this rule is not the same as
+   applying it to inherited evidence.** When a premise arrives pre-established from an earlier
+   session, check what it was computed *from* before building on it — a claim's age is not
+   evidence, and neither is the number of documents repeating it.
 10. **"The rest is instrument noise" is a claim that needs its own control.** Rule 7 recorded that
     most of the C5 repro pose's 35.77% flip rate was "grazing-angle mipmap/aniso resampling, not
     depth flips". It was not. A control that changes **only** depth — a per-polygon depth ramp,
@@ -333,6 +344,18 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **A `tri_strip` polygon's index list is not an outline**, and treating it as one manufactures
+  geometry that does not exist. Reading each polygon's raw `vertex_indices` as a closed loop gave
+  a 16-index strip box a bogus Newell normal and a bogus plane, which "proved" that C5's node 1777
+  overlapped buildings **2 km away by 6.8 million m²** (2026-07-22, item 9). Triangulate exactly
+  as `SceneBuilder.EmitPolygon` does before computing any planes or areas.
+- **A software re-implementation of the render path must clip at the near plane, not cull.** The
+  first version of item 9's depth probe *culled* triangles crossing the near plane, which silently
+  dropped precisely the large ground quads the camera was standing on and reported "minimum
+  relative gap 0.002, nothing is fighting" — a clean, precise, entirely wrong answer of the same
+  shape as the three previous diagnoses of that bug. **A probe that reports "no problem found"
+  needs the same able-to-fail control as one that reports a fix works** (rule 5): switching the
+  bias off took the same probe to 94.80% of frame coincident, which is what proved it could fire.
 - **`Assembly.Location` is empty under Godot's Mono loader**, so the obvious build-freshness probe
   (`File.GetLastWriteTime(typeof(X).Assembly.Location)`) throws `ArgumentException: The path is
   empty`. Worse, when it throws from inside `_Process` it silently kills *all* per-frame debug
