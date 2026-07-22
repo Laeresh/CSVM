@@ -69,8 +69,9 @@ public sealed class ClutterBuilder
     /// <summary>Total 3D decorations (city-block buildings, parked cars) placed by the last
     /// Build. Zero on every chapter whose templates carry only sprites.</summary>
     public int SolidCount { get; private set; }
-    /// <summary>Collision triangles built for the 3D decorations by the last Build (0 when
-    /// the build was not collidable).</summary>
+    /// <summary>Collision triangles built for the 3D decorations by the last Build (0 when the
+    /// build was not collidable). Since the shapes are shared this counts the DISTINCT
+    /// triangles — ~2.3k in C5, not the 2.55M the pre-2026-07-22 expansion produced.</summary>
     public int SolidCollisionTriangles { get; private set; }
     /// <summary>Per-kind counts of the last Build, e.g. "firtree1.tif ×4980".</summary>
     public string Summary { get; private set; } = "";
@@ -89,7 +90,14 @@ public sealed class ClutterBuilder
     /// <para><c>Material</c> is null for a solid kind: its mesh carries per-surface world
     /// materials from SceneBuilder, so there is nothing to override. <c>Width</c> is only
     /// meaningful for a sprite kind — it sizes the MultiMesh's ExtraCullMargin, since the
-    /// billboard shader swings vertices outside the static AABB.</para></summary>
+    /// billboard shader swings vertices outside the static AABB.</para>
+    ///
+    /// <para><c>CollisionShape</c> is the kind's SHARED collision shape, in the decoration
+    /// mesh's own local space — non-null only for a solid kind of a collidable build. Because
+    /// it is shared rather than pre-transformed, the extender can attach it to a mirrored
+    /// placement for the cost of one <c>BodyAddShape</c> call, which is what made extension
+    /// buildings collidable (2026-07-22 follow-up); merging a region trimesh at a boundary
+    /// crossing, the old shape of this code, could not be done without a hitch.</para></summary>
     public sealed class KindExport
     {
         public string Texture = "";
@@ -98,8 +106,12 @@ public sealed class ClutterBuilder
         public bool Solid;
         public float NodeBias;      // solid kinds: the `node_bias` instance uniform value
         public float Width, Height;
+        public Shape3D? CollisionShape;
         public IReadOnlyList<Transform3D> Placements = null!;
     }
+
+    // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
+    private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
 
     /// <summary>The decoration kinds of the last Build (null until Build placed something).</summary>
     public IReadOnlyList<KindExport>? ExportedKinds { get; private set; }
@@ -185,8 +197,11 @@ public sealed class ClutterBuilder
         var root = new Node3D { Name = "clutter" };
         var parts = new List<string>();
         var exported = new List<KindExport>();
+        var exportedMesh = new List<int>();   // parallel: each export's decoration MeshIndex
         var solidKinds = new List<Kind>();
         InstanceCount = SolidCount = SolidCollisionTriangles = 0;
+        SolidCollisionShapes = SolidCollisionInstances = 0;
+        _solidShapes = null;
         foreach (var template in templates.Values)
             foreach (var kind in template.Kinds)
             {
@@ -207,6 +222,7 @@ public sealed class ClutterBuilder
                     Height = kind.Height,
                     Placements = kind.Instances,
                 });
+                exportedMesh.Add(kind.MeshIndex);
                 if (kind.Solid)
                 {
                     SolidCount += kind.Instances.Count;
@@ -219,7 +235,15 @@ public sealed class ClutterBuilder
                 parts.Add($"{kind.Label} ×{kind.Instances.Count}");
             }
         if (collision && solidKinds.Count > 0)
+        {
             BuildSolidCollision(root, solidKinds);
+            // Hand each solid export its shared shape, so MapEdgeExtender can attach the same
+            // one to its mirrored placements past the map edge.
+            if (_solidShapes != null)
+                for (int i = 0; i < exported.Count; i++)
+                    if (exported[i].Solid && _solidShapes.TryGetValue(exportedMesh[i], out var s))
+                        exported[i].CollisionShape = s;
+        }
         Summary = string.Join(", ", parts);
         ExportedKinds = exported.Count > 0 ? exported : null;
         return InstanceCount == 0 && SolidCount == 0 ? null : root;
@@ -678,52 +702,100 @@ public sealed class ClutterBuilder
     // Collision for the 3D decorations only (user decision, 2026-07-22): a city block is real
     // geometry with real sides, unlike the sprite cards, which lost their colliders in item 5.
     //
-    // Merged into one static trimesh per REGION rather than one body per building. C5 places
-    // ~80k of them, and 80k StaticBody3D nodes would swamp the broadphase and the scene tree
-    // alike; a single whole-map trimesh, the shape the old `clutter_col` used, goes the other
-    // way and hands the physics server one ~1.3M-triangle BVH. Regions are the middle: the
-    // broadphase culls to a region, the region's own BVH does the rest.
+    // <b>Shapes are shared, not expanded</b> (2026-07-22 follow-up). Each distinct decoration
+    // MESH gets ONE <see cref="ConcavePolygonShape3D"/>, built once in the mesh's own local
+    // space; every placement then attaches that same shape to its region body with its own
+    // transform, via <see cref="PhysicsServer3D.BodyAddShape(Rid, Rid, Transform3D?, bool)"/>.
+    // That is what dissolves the objection the original comment here raised — "80k StaticBody3D
+    // nodes would swamp the broadphase and the scene tree" is true, but a shape attached to a
+    // body needs no scene-tree node of its own, so neither the node count nor the body count
+    // moves. The region body split is kept anyway: it bounds the bodies at ~200 and gives the
+    // crash log a locating name (`clutter_bld_<cx>_<cz>`).
+    //
+    // What this replaced: the first version transformed every vertex of every placement into
+    // world space and concatenated the lot into one giant trimesh per region — 2,554,455
+    // triangles in C5 from ~2,300 distinct ones, roughly 1,100x redundancy. Measured cost of
+    // that build, 2026-07-22: 3,796 ms, of which only 271 ms was the vertex transform and
+    // **3,403 ms was ConcavePolygonShape3D's BVH build** over 207 multi-hundred-thousand-triangle
+    // regions. Sharing the shapes deletes essentially all of it, because the BVHs being built
+    // are now ~40 triangles each.
+    //
+    // ⚠ These shapes are attached to the body's RID directly, NOT through CollisionShape3D
+    // children or CollisionObject3D's shape-owner API. The node therefore does not know about
+    // them, and any later call to a `ShapeOwner*` method on one of these bodies would run
+    // `CollisionObject3D::_update_shapes()`, which clears the body and re-adds only what the
+    // node knows — i.e. nothing. Do not mix the two APIs on these bodies.
     private const float CollisionRegion = 1024f;
+
+    /// <summary>Distinct collision shapes built by the last Build (one per decoration mesh).</summary>
+    public int SolidCollisionShapes { get; private set; }
+    /// <summary>Shape attachments made by the last Build — one per collidable 3D decoration.</summary>
+    public int SolidCollisionInstances { get; private set; }
 
     private void BuildSolidCollision(Node3D root, List<Kind> kinds)
     {
-        var regions = new Dictionary<(int, int), List<Vector3>>();
+        // One shape per distinct decoration mesh. Keyed by MeshIndex, which over-counts a
+        // little (C5 ships the same building model as up to 4 separate gamez meshes, one per
+        // template that uses it — 58 meshes for 32 distinct models), but at ~40 triangles a
+        // shape that is not worth a geometry hash.
+        var shapes = _solidShapes = new Dictionary<int, ConcavePolygonShape3D>();
+        var tris = new List<Vector3>();
         foreach (var kind in kinds)
         {
-            var mesh = _gamez.Meshes[kind.MeshIndex];
-            var local = new List<Vector3>();
-            AppendTriangles(mesh, local);
-            if (local.Count == 0)
+            if (shapes.ContainsKey(kind.MeshIndex))
                 continue;
+            tris.Clear();
+            AppendTriangles(_gamez.Meshes[kind.MeshIndex], tris);
+            if (tris.Count == 0)
+                continue;
+            // Backface collision for the same reason SceneBuilder's world colliders use it:
+            // the source winding is inconsistent, so a one-sided trimesh lets raycasts
+            // through the down-wound faces.
+            var shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true };
+            shapes[kind.MeshIndex] = shape;
+            SolidCollisionTriangles += tris.Count / 3;
+        }
+        SolidCollisionShapes = shapes.Count;
+        if (shapes.Count == 0)
+            return;
+
+        // The shapes are referenced by the physics server through their RIDs only, which does
+        // not keep the Godot Ref alive. Anchor them on the clutter root so their lifetime is
+        // the scene tree's — without this the GC can free a shape out from under live bodies.
+        var anchor = new Godot.Collections.Array();
+        foreach (var s in shapes.Values)
+            anchor.Add(s);
+        root.SetMeta(SharedShapeMeta, anchor);
+
+        var regions = new Dictionary<(int, int), StaticBody3D>();
+        foreach (var kind in kinds)
+        {
+            if (!shapes.TryGetValue(kind.MeshIndex, out var shape))
+                continue;
+            var shapeRid = shape.GetRid();
             foreach (var xf in kind.Instances)
             {
                 var key = (Mathf.FloorToInt(xf.Origin.X / CollisionRegion),
                            Mathf.FloorToInt(xf.Origin.Z / CollisionRegion));
-                if (!regions.TryGetValue(key, out var tris))
-                    regions[key] = tris = new List<Vector3>();
-                foreach (var v in local)
-                    tris.Add(xf * v);
+                if (!regions.TryGetValue(key, out var body))
+                {
+                    // Named so it does NOT end in "clutter_col": that suffix is
+                    // FlightController's soft-tree branch (fly straight through, fixed damage),
+                    // and a skyscraper is the opposite of soft.
+                    regions[key] = body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
+                    root.AddChild(body);
+                }
+                PhysicsServer3D.BodyAddShape(body.GetRid(), shapeRid, xf);
+                SolidCollisionInstances++;
             }
         }
-        foreach (var (key, tris) in regions)
-        {
-            if (tris.Count == 0)
-                continue;
-            // Named so it does NOT end in "clutter_col": that suffix is FlightController's
-            // soft-tree branch (fly straight through, fixed damage), and a skyscraper is the
-            // opposite of soft.
-            var body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
-            body.AddChild(new CollisionShape3D
-            {
-                // Backface collision for the same reason SceneBuilder's world colliders use it:
-                // the source winding is inconsistent, so a one-sided trimesh lets raycasts
-                // through the down-wound faces.
-                Shape = new ConcavePolygonShape3D { Data = tris.ToArray(), BackfaceCollision = true },
-            });
-            root.AddChild(body);
-            SolidCollisionTriangles += tris.Count / 3;
-        }
     }
+
+    /// <summary>Node metadata key under which a clutter root (or a map-edge extension cell)
+    /// holds the shared <see cref="ConcavePolygonShape3D"/>s its bodies reference by RID.
+    /// The physics server holds RIDs, not Refs — without this anchor the shapes would be
+    /// collected while bodies still point at them.</summary>
+    public const string SharedShapeMeta = "csvm_clutter_shapes";
 
     // The mesh's triangles in its own local space, using the same fan/strip rule as
     // SceneBuilder.EmitPolygon and PlaceOnMesh, so the collider matches what is drawn.
