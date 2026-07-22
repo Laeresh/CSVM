@@ -1769,3 +1769,66 @@ measurement can mislead goes to `docs/verification.md` as a transferable rule, n
 dated entry.
 
 No code change. Nothing was deleted from `HISTORY.md`.
+
+## 2026-07-22 — CLAUDE.md back to an index: the module index (docs-cleanup plan items 1-3)
+
+`docs/PLAN-docs-cleanup.md` items 1-3. The file loaded into every session had reached **162 KB**;
+two sections were 77% of it and both had become narrative logs rather than index entries.
+
+**Item 1 — backfill (no HISTORY entry was written at the time).** A set-diff of module paths
+between `CLAUDE.md` and `docs/architecture.md` returned three modules documented *only* in the
+index: `CompiledAnim.cs`, `AnimProgram.cs`, `SpectatorCamera.cs` — all from the 2026-07-21
+animation work, i.e. written after the 2026-07-18 split that created `architecture.md`. Bullets
+written for each; the set-diff is now empty in both directions (63/63), which is what unblocked
+item 3.
+
+**Item 2 — the status section (no HISTORY entry either).** 65,166 -> 2,993 bytes. 27 landed-work
+bullets deleted after per-bullet HISTORY verification; three genuinely-open items migrated to
+`backlog.md`. That section now holds current state + one next step, as its own preamble always
+claimed.
+
+**Item 3 — the module index.** 63 bullets averaging 1,030 chars (66.2 KB) -> 63 one-line entries
+averaging 136 chars (8.4 KB). `CLAUDE.md` **110,222 -> 52,677 bytes**.
+
+This is the only item in the plan that could lose information, because `CLAUDE.md` was *newer*
+than `architecture.md` in places, so it was done as a per-module diff rather than a bulk cut: each
+index bullet compared fact-by-fact against its architecture bullet, and anything the index knew
+that `architecture.md` did not was moved there **first**. 30 such facts, `architecture.md`
+193,744 -> 210,982 bytes. The substantial ones:
+
+- **SceneBuilder's data-driven billboard classification** (2026-07-21) — `IsGlowSpriteMesh` gating
+  on `ModelType=="Facade"` first, `SphericalY` vs the cylindrical single-axis billboard, and the
+  rule that cylindrical facades are *not* recentred on their quad centroid (the lighthouse-beam
+  orbit). `architecture.md` still described the superseded "single-polygon all-flare meshes ONLY"
+  heuristic as current; it is now marked as the legacy-tree fallback it became.
+- **PlanePainter's bottom-up `.BM` row order** (`h-1-y`) — the rule that keeps every livery from
+  mirroring along V, with its 55-pair edge-correlation evidence. Absent from `architecture.md`.
+- **WorldBuilder's `IsFlareTexture` widening** to `*fire*`/`*flame*`, and **GameZ's**
+  `ModelType`/`FacadeMode`/`TextureScroll` unified-shape fields.
+- **Puffer's `SustainAt`, `FromAnimEvent` and `AtNodeOffset`** (the whole 2026-07-21 block).
+- **AnimRuntime's** scheduling/dispatch, `SpinMotion`, the ten `If`/`Elseif` conditions, the poll
+  idiom, `LightState` and `PufferState` — this bullet was the one place `CLAUDE.md` was *longer*
+  than `architecture.md` (5,440 vs 3,793 chars), and most of that delta was real.
+- Smaller: TextureCycler's design rationale + the unwired `EFFECTS` reader, AnimDefs' `AddPufferState`
+  history, WorldSounds' three-event triple and the 379/865 split, MissionSetup's pass-0 ordering,
+  FlightModel's accepted arcade artifacts, PlaneCollider's Bloodhawk canard-tip limit.
+
+**Verified by the plan's two-stage check**, because the weak version is genuinely misleading:
+
+1. *Token check.* 697 distinct tokens (backticked identifiers, paths, multi-digit numbers) pulled
+   out of the 65,600-char deleted span and searched across `docs/**/*.md` + `backlog.md` +
+   `NOTES.md` + the new `CLAUDE.md`. 9 flagged, all confirmed as spelling variants of a fact that
+   *is* present (`Scale(control, reference = 1440)` spaced differently; the SI-script chain spelled
+   `event slot -> si_script_ids -> pool index -> SiScript`; "fuel leak" written `player_fuelleak`).
+   **0 genuinely absent.**
+2. *Hand-read for open claims.* The check that matters, since token presence proves a fact is
+   written down but not that the same *claim* is made. Every "still open / not yet / unwired /
+   stubbed / known limit / TUNE" statement in each deleted bullet was located and confirmed to
+   survive, by hand.
+
+**One contradiction found en route and fixed:** `architecture.md` said F11's free-look look-at is
+projected "one unit ahead along the view ray". `PlaneViewer.cs:1992` is
+`PoseLookAtDistance = 100f`, and `CLAUDE.md` said 100 m. The code is authoritative; the
+`architecture.md` claim was wrong and is corrected, along with the missing `--freecam` case.
+
+No code change.
