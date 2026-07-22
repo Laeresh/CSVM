@@ -239,6 +239,55 @@ byte-identical). Log line fires exactly once for C5 and never for the others.
 
 ## 3. C5 ground z-fighting — coarse/fine draw priority
 
+> ### ⚠ EVIDENCE BELOW IS SUPERSEDED — read this box first (measured 2026-07-22)
+>
+> **The stated cause is wrong, and the fix it prescribes does not fix the bug.** A session
+> implemented the coarse/fine draw-priority rule exactly as specified, measured it, and
+> reverted it. What the measurements actually show:
+>
+> **The repro pose's z-fight is `g4683` fighting ITSELF — one node, one mesh, its own
+> polygons.** It is not coarse-sheet-vs-partition-ground at all:
+>
+> | run at the repro pose (`--shots=5 --jitter=0.006`, flip threshold 8/255) | flip rate |
+> |---|---|
+> | unmodified build | 35.77% |
+> | **the coarse/fine node rank this item prescribes** | **35.79% (no effect)** |
+> | hide `g4616`+`g4425` (the two sheets nested inside `g4683`) | 35.79% (no effect) |
+> | **hide `g4683` alone** | **0.19%** |
+> | hide all 7 coarse sheets | 0.19% (identical — `g4683` is the whole effect) |
+> | give every POLYGON its own draw-order rank | **21.92%** |
+>
+> `g4683` (node 1777, 34 polygons over 2048 × 11264) carries **8 pairs of its own polygons
+> exactly coplanar at y = 5, same priority 0, overlapping by up to 768 × 512 units** — and
+> five of those pairs are the same material (`cblock1.tif`), so `BuildMesh` groups them into
+> one surface, where they receive an **identical** depth bias and can never be separated.
+> Polygons 0–7 sit at x ∈ [−10240, −9216], z ∈ [−4096, −3072]: exactly where the repro
+> camera looks. The fix direction is therefore a **per-polygon within-surface draw-order
+> tie-break**, not a node-level rank — `SurfaceRankBias` only separates *(material, priority)*
+> groups, and the original resolved equal-priority polygons by their order in the polygon list.
+>
+> **Also wrong in the evidence below:**
+> - **"Generalises to C1 (`a6`), C1C and C4 (`g1612`)" — no.** Across all 8 chapters only
+>   C1, C4 and C5 have *any* World-child mesh (1, 4 and 9). **C1C has none at all.** `a6` is
+>   the detailed airfield tile (27 polys, 5.15% relative height, its own internal priorities
+>   0/1/3); C4's `g1612` is a 477 m **cliff**, not a sheet. Demoting either would be a
+>   regression, so the rule is not general — it is C5-only, matching 7 nodes.
+> - **The coverage table's numbers did not reproduce.** An independent 64-unit rasterisation
+>   against partition-root meshes in the same Y band gives 18.2 / 26.1 / 26.6 / 37.0 / 44.5 /
+>   50.7 / 81.4 %, not 0.0–97.8 %. The *conclusion* survives — no sheet is 100% covered, so
+>   culling would still leave holes — but the per-sheet figures should not be quoted.
+> - **The seven "coarse-only" reference poses were not captured**, because the deliverable
+>   presumes the coarse/fine model that the measurements disprove.
+>
+> What *is* confirmed: World children and partition roots are exactly disjoint (intersection 0
+> in all 8 chapters), and the `terrain` node flag is set on every partition root and no World
+> child — so "partition-referenced" is directly readable from the data. Coarse/fine coplanar
+> overlap is real, but it is not what produces the reported flicker.
+>
+> **Item 3 stays OPEN.** Re-scope it as "same-material coplanar polygons within one mesh get
+> no draw-order tie-break", which is a `SceneBuilder.BuildMesh` change affecting all chapters
+> and needs its own regression pass. Nothing was landed.
+
 **Goal:** resolve the long-standing C5 ground z-fight in favour of the detailed city surface,
 **without** removing ground the player would otherwise fall through.
 

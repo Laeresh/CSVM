@@ -464,7 +464,36 @@ objects). Confirmed cause: the depth bias is proportional to view distance
 (`VERTEX *= 1.0 - (depth_bias + node_bias)`), so coplanar surfaces sharing a draw priority get
 `rank × 2e-6` ≈ 0.16 mm at ~80 m. A 100× bias drops the flicker to 0.01%.
 
-**Open question — ANSWERED 2026-07-22, and scheduled as polish-run-3 item 3.**
+> **⚠ SUPERSEDED 2026-07-22 (second measurement pass) — the "coarse vs fine" answer below is
+> wrong, and the draw-priority fix it prescribes was implemented, measured, and reverted.**
+>
+> **This is `g4683` z-fighting ITSELF, not the coarse sheet against the partition ground.**
+> Hiding `g4683` alone drops the repro pose's flicker to 0.19%; hiding all 7 coarse sheets
+> gives the *identical* 0.19%; and applying the world-child-vs-partition rank changes it not
+> at all (35.77% → 35.79%). `g4683` carries **8 pairs of its own polygons exactly coplanar at
+> y = 5, same priority 0, overlapping by up to 768 × 512** — five of them the same material
+> (`cblock1.tif`), so `BuildMesh` puts them in one surface with one shared depth bias and no
+> tie-break can reach them. Giving every polygon its own rank moves the flicker to 21.92%,
+> which is the only intervention that shifted it. **The real fix is a per-polygon
+> within-surface draw-order tie-break in `SceneBuilder.BuildMesh`** (`SurfaceRankBias` today
+> only separates *(material, priority)* groups; the original ordered equal-priority polygons
+> by their position in the polygon list).
+>
+> Two further corrections. **The rule does not generalise** — across all 8 chapters only C1,
+> C4 and C5 have any World-child mesh (1 / 4 / 9), **C1C has none**, `a6` is the detailed
+> airfield tile and C4's `g1612` is a 477 m cliff, so demoting them would regress. **The
+> coverage figures below did not reproduce**: an independent 64-unit rasterisation gives
+> 18.2–81.4%, not 0.0–97.8%. The conclusion *no sheet is 100% covered, so culling leaves
+> holes* survives; the per-sheet numbers should not be quoted. Also note the 35.77% baseline
+> is largely grazing-angle mipmap/aniso resampling, not depth flips — see
+> `docs/verification.md` rule 6.
+>
+> Still confirmed: World children and partition roots are exactly disjoint (intersection 0,
+> all 8 chapters), and the `terrain` node flag is set on every partition root and no World
+> child, so "partition-referenced" is readable straight from the data.
+
+**Open question — answered 2026-07-22, scheduled as polish-run-3 item 3; see the box above,
+which supersedes the answer.**
 
 *Is it a stray LOD tile?* **No.** The coarse sheet is node 1777 `g4683` (34 polys, 2048 × 11264,
 `brick1`/`cblock1`), a **direct child of `world1`**; the fine ground is partition-referenced.

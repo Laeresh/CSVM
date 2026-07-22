@@ -2221,3 +2221,61 @@ clutter instance count to be *unchanged*. Worth recording as a general lesson: a
 ("86 of 102 sand polygons are at exactly Y=0, coplanar with the sea") correctly located the
 geometry but said nothing about which surface was at fault, and the plausible-looking fix
 pointed at the wrong one.
+
+## 2026-07-22 — Polish run 3 item 3 investigated and NOT landed: the C5 ground z-fight is one mesh fighting itself
+
+Item 3 was scheduled as "coarse `world1`-child ground sheet coplanar with the fine
+partition-referenced city ground; fix by draw priority". That rule was implemented exactly as
+specified — a `SceneBuilder.BackgroundRank` predicate giving World-child coarse sheets one
+fixed negative `node_bias` (`-DepthBiasPerLevel`), below every index-derived value, plus a
+`WorldBuilder` classifier (flat to within 2% of span, and coarser than the fine ground's own
+16-polygons-per-partition-cell granularity) that matched exactly 7 nodes, all in C5. It built
+clean, 7 of 8 chapters stayed **byte-identical** (md5), and it changed **nothing** about the
+bug. It has been reverted; no code shipped. The corrected diagnosis is recorded in
+`backlog.md`, `docs/PLAN-M2-polish-3.md` item 3 (banner box) and `docs/verification.md` rule 6.
+
+**What it actually is.** At the plan's own repro pose, hiding `g4683` (node 1777) alone drops
+the flicker to 0.19% — the *identical* figure to hiding all seven sheets. `g4683` carries **8
+pairs of its own polygons exactly coplanar at y = 5, priority 0, overlapping by up to
+768 × 512 units**, five of them on the same material (`cblock1.tif`). `BuildMesh` groups
+polygons by *(material, priority, sidedness)*, so those five pairs land in **one surface with
+one shared depth bias** and no tie-break can separate them; the original ordered
+equal-priority polygons by their position in the polygon list. Polygons 0–7 occupy
+x ∈ [−10240, −9216], z ∈ [−4096, −3072] — exactly where the repro camera looks.
+
+| repro pose, `--shots=5 --jitter=0.006`, flip threshold 8/255 | flip rate |
+|---|---|
+| unmodified build | 35.77% |
+| the prescribed coarse/fine node rank | 35.79% (no effect) |
+| hide `g4616`+`g4425` (both nested inside `g4683`) | 35.79% (no effect) |
+| hide `g4683` alone | 0.19% |
+| hide all 7 coarse sheets | 0.19% (identical) |
+| one draw-order rank per POLYGON | 21.92% |
+
+**Three further corrections to the plan's evidence.** (1) *"Generalises to C1 (`a6`), C1C and
+C4 (`g1612`)"* — no. Only C1, C4 and C5 have any World-child mesh at all (1 / 4 / 9); **C1C
+has none**; `a6` is the detailed airfield tile (27 polys, 5.15% relative height, internal
+priorities 0/1/3) and `g1612` is a 477 m cliff, so demoting either would regress. (2) The
+coverage table did not reproduce — an independent 64-unit rasterisation gives 18.2–81.4%, not
+0.0–97.8%; the *conclusion* (no sheet fully covered, culling would leave holes) survives, the
+per-sheet numbers should not be quoted. (3) The seven "coarse-only" reference captures were
+not produced, because they presume the disproven model.
+
+**Confirmed and reusable:** World children and partition roots are exactly disjoint
+(intersection 0 in all 8 chapters), and the `terrain` node flag is set on **every** partition
+root and **no** World child — so "partition-referenced" is readable straight from the data
+without walking the partition grid.
+
+**Measurement lesson (now `docs/verification.md` rule 6).** "Hide one side and the artifact
+goes away" proved neither which two surfaces were fighting nor that there were two. It was
+also a confounded control: removing the sheet removed the only textured surface in the near
+field, deleting the grazing-angle mipmap/aniso resampling noise along with the depth flips —
+most of that 35.77% was never a depth fight, which is why the only intervention that changed
+anything (per-polygon ordering, which alters nothing but depth) reached just 21.92%.
+
+**Process note — `git stash` is shared across worktrees.** The stash stack lives in the common
+`.git` dir, not per-worktree, so concurrent agent sessions push and pop each other's entries:
+this session's `git stash pop` returned the item-9 session's `AnimRuntime.cs`/`CompiledAnim.cs`
+WIP. It was detected immediately, their commit was put back with `git stash store`, their files
+were reverted here, and no measurement was taken from the mixed tree. **Do not use `git stash`
+in a worktree session** — keep work in the working tree or in a local commit on the branch.
