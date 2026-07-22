@@ -649,11 +649,36 @@ regression, i.e. Milestone 3 work, not polish.
 > a faithful artifact**. The instinct to "fix" the number was the error; the constant staying at
 > 5e-8 is why C1B still looks like the original.
 >
-> **What survives:** only the C5 half — `g4683`'s within-node surface conflict, reachable solely
-> through `SurfaceRankBias`, and **only if C5's flicker is itself absent from the original**,
-> which is unconfirmed. Do not touch it until that is settled: the C5 reference captures
-> (`OriginalScreenshots/C5 IA1 Terrain*.png`) are stills at unmatched poses, and **a still cannot
-> show z-fighting** — that limitation is already recorded below and applies with full force here.
+> **What survives: C5 only — and it is NOT a depth-bias bug either. FIFTH mechanism, user
+> observation 2026-07-22:**
+>
+> > "C5 seems to be a real defect. What I can see in the original is that there is some kind of LOD
+> > mechanism where the ground texture changes from completely dark with some points to a brighter
+> > illuminated street. It corresponds to going from `cblock1_2.png` (bright lights but lower
+> > resolution) to `cblock1_1.png` to `cblock1.png`. **I could not find `cblock[4-6].png` in C5 IA1
+> > in the original.**"
+>
+> Line that against the measurement: our 78.14% conflict is `cblock4` over `cblock2` over
+> `cblock1`, **all coplanar inside `g4683`**. If the original draws only the `cblock1` family
+> there, then we are **rendering ground variants the original never draws**, and the flicker is a
+> *symptom* of drawing 2–3 layers where the original draws 1 — selected at runtime by a mechanism
+> we do not implement.
+>
+> **⛔ Therefore do NOT raise `SurfaceRankBias`, even though it measures perfectly.** Scheme 1
+> takes C5 to 0.00% — by picking a winner among surfaces that should not be co-rendered at all.
+> The metric would be flawless and the picture still wrong: `docs/verification.md` rule 4 exactly,
+> and rule 8 (a measurement that locates the geometry has not told you which surface is at fault).
+> **Every "fix" this item has ever proposed is now known to be papering over a missing system.**
+>
+> **The real lead is already in `backlog.md` and was mis-filed as unrelated:** partition visibility
+> (`WorldPartitionSetActive`, 25 uses in `extracted/interp.json`) — *"the real runtime system the
+> original uses to pick between coarse and fine ground, and we draw both unconditionally"*
+> (`WorldBuilder.cs:155`, `:157-159`). Item 9's own "Related but NOT this item" note named the
+> answer and set it aside. Investigation in progress → `analysis/item9-depth-bias/CBLOCK-LOD.md`.
+>
+> Note this also dissolves the old "the coarse sheets must not be culled, no sheet is fully covered
+> so culling leaves holes" objection: runtime LOD **selection** is not culling, and a variant that
+> is not selected leaves no hole because its replacement is drawn.
 >
 > ## ⚠⚠ Everything from here to the end of item 9 was written BEFORE the 2026-07-22
 > ## data analysis, and its central evidence is now DISPROVEN.

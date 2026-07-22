@@ -103,14 +103,27 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   not license a *geometry* change. C1–C4 are still unanswered. Do not act on this until the
   remaining chapters are settled and there is a visible artifact it demonstrably fixes.
 
-- **Partition visibility is a real runtime system we do not implement** (found 2026-07-22 while
-  diagnosing the C5 ground z-fight). The interp language has **`WorldPartitionSetActive`**
-  (25 uses). The original selects between a coarse `world1`-child ground sheet and the fine
-  partition-referenced tiles at runtime; we draw both unconditionally
-  (`WorldBuilder.cs:155`, `:157-159`). Polish run 3 proposed a draw-priority workaround instead
-  (item 3) and it was **measured to change nothing** (35.77% → 35.79%), so no cheap substitute for
-  this system is known. Implementing it properly = cell-resident tracking with pop risk and an
-  8-chapter regression — Milestone 3 work, but now motivated by evidence rather than a hunch.
+- **⬆ PROMOTED 2026-07-22 — partition / ground-variant visibility is a real runtime system we do
+  not implement, and it is now the prime suspect for the C5 ground z-fight rather than a
+  side-note.** The interp language has **`WorldPartitionSetActive`** (25 uses). The original
+  selects between ground variants at runtime; we draw them **all, unconditionally**
+  (`WorldBuilder.cs:155`, `:157-159`).
+  **What promoted it (user observation, 2026-07-22):** in the original, C5 IA1's ground runs an
+  LOD chain — `cblock1_2` (bright lights, lower resolution) → `cblock1_1` → `cblock1`, reading as
+  dark-with-points changing to a brightly-lit street — and **`cblock[4-6]` do not appear in C5 IA1
+  at all**. Our measured 78.14%-of-frame conflict at the repro pose is `cblock4` over `cblock2`
+  over `cblock1`, all coplanar inside node `g4683`. **So we are rendering ground variants the
+  original never draws, and the "z-fighting" is a symptom of drawing 2–3 layers where it draws 1.**
+  ⚠ **Do NOT "fix" the C5 flicker with `SurfaceRankBias`.** It measures perfectly — scheme 1 takes
+  the pose to 0.00% — by choosing a winner among surfaces that should not be co-rendered at all.
+  Flawless metric, wrong picture (`docs/verification.md` rules 4 and 8). Four earlier mechanisms
+  were retired chasing this as a depth problem; it is not one. Full evidence and the committed
+  instrument: `analysis/item9-depth-bias/` (`FINDINGS.md`, `CBLOCK-LOD.md`).
+  Note this also **dissolves the old objection** that the coarse sheets cannot be culled because no
+  sheet is fully covered: runtime LOD *selection* is not culling, and an unselected variant leaves
+  no hole because its replacement is drawn. Polish run 3's draw-priority workaround (item 3)
+  measured no change (35.77% → 35.79%), consistent with the whole depth framing being wrong.
+  Implementing it properly = cell-resident tracking with pop risk and an 8-chapter regression.
 
 - **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
