@@ -204,6 +204,25 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     the shipped `nodes.json` (`police_car` rotate `{0,0,0}`) settled it in advance, before any code
     was written.
 
+20. **Confirm the symptom is a DEFECT before you spend anything diagnosing it — "is this in the
+    original?" is the cheapest question in this project and it is routinely skipped.** The C1B
+    z-fighting pose consumed **three failed diagnoses and a full data-analysis session** before
+    the user said, in one sentence, that the original z-fights there too (2026-07-22). It was
+    never a bug. Every measurement taken against it was sound; the entire enterprise was
+    misdirected, and the sharpest evidence was misread in exactly the wrong direction — the
+    measured `NodeOrderBias` control taking C1B from 30.95% to 2.35% looked like the most
+    promising lead in the file, when it was actually **1.4 percentage points from erasing a
+    faithful artifact**. This is a remake: a symptom is only a defect if it *differs from the
+    original*, and "it looks wrong to me" is not that comparison. **Before scheduling work from a
+    bug report, establish that the original does not do the same thing** — ask the user, or shoot
+    the original at the repro pose. Compare rule 4 (a metric going to zero is not the outcome
+    being right): here, driving the metric to zero would have been the defect.
+
+    Corollary, and the reason this rule is worth its length: **the more effort already sunk into
+    a symptom, the less likely anyone is to re-ask whether it is one.** Item 9's premise was
+    re-derived four times; "is this actually wrong?" was asked zero times in four sessions.
+    Inherited symptoms need the same audit as inherited evidence (rule 9's note).
+
 ## 1. Before you trust a screenshot diff
 
 - **The default `--freecam` camera is not deterministic.** The spawn is a random pick per launch,

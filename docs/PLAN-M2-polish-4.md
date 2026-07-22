@@ -632,7 +632,30 @@ unconditionally (`WorldBuilder.cs:155`, `:157-159`). It stays in `backlog.md` un
 "Blocked / deferred" — implementing it is cell-resident tracking with pop risk and an 8-chapter
 regression, i.e. Milestone 3 work, not polish.
 
-> ## ⚠⚠ STOP — everything from here to the end of item 9 was written BEFORE the 2026-07-22
+> ## 🛑 C1B IS NOT A BUG — user ruling, 2026-07-22: **"C1B z-fighting is not a bug. It's in the
+> ## original."**
+>
+> The C1B repro pose reproduces the **original game's own** z-fighting. It is a fidelity target,
+> not a defect, and our replication was already correct there.
+>
+> **This closes the whole conflict-local-bias direction, not just one pose.** Per the analysis
+> below, C1B was the *only* half a dense per-node rank could fix; C5's conflict is one node
+> fighting its own surfaces, where `node_bias` is identical on both sides and cancels. With C1B
+> ruled authentic, the dense-rank scheme has nothing left to fix and **must not be implemented** —
+> it would drive C1B away from the original.
+>
+> Everything the earlier measurements implied is now inverted: `NodeOrderBias` 5e-8 → 2e-6 taking
+> C1B from 30.95% to 2.35% was never an improvement, it was **1.4 percentage points from erasing
+> a faithful artifact**. The instinct to "fix" the number was the error; the constant staying at
+> 5e-8 is why C1B still looks like the original.
+>
+> **What survives:** only the C5 half — `g4683`'s within-node surface conflict, reachable solely
+> through `SurfaceRankBias`, and **only if C5's flicker is itself absent from the original**,
+> which is unconfirmed. Do not touch it until that is settled: the C5 reference captures
+> (`OriginalScreenshots/C5 IA1 Terrain*.png`) are stills at unmatched poses, and **a still cannot
+> show z-fighting** — that limitation is already recorded below and applies with full force here.
+>
+> ## ⚠⚠ Everything from here to the end of item 9 was written BEFORE the 2026-07-22
 > ## data analysis, and its central evidence is now DISPROVEN.
 >
 > **Read `analysis/item9-depth-bias/FINDINGS.md` first.** The "nine coplanar World-child nodes

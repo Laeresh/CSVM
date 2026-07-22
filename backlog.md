@@ -221,15 +221,16 @@ unscheduled.
   cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
   rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
   (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
-- **C1B fidelity question, blocking any z-fighting fix: does surf draw over water?** At the C1B
-  repro pose `wtr00000.tif` (node 743) renders **in front of** `srf0001.tif` (node 716), and
-  **every** candidate bias scheme keeps it there, because all preserve node index order and
-  743 > 716. So a bigger separation does not change *which* surface wins — it makes the current
-  winner win harder, and the flicker metric improves while the picture may get worse (rule 4's
-  failure mode; same shape as the C3 beach case). **The data cannot settle it** — "later node
-  wins" is the documented rule and it says water. **Needs a reference capture of the original at
-  `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367` before any bias
-  change is judged.**
+- **✅ CLOSED 2026-07-22 by user ruling — C1B z-fighting is NOT a bug: "it's in the original."**
+  The C1B repro pose reproduces the original game's own z-fighting, so our replication there is
+  already correct and **must not be "fixed"**. This retires the open question that sat here (does
+  surf draw over water at that pose — moot: the original z-fights, so neither surface stably
+  wins), and it retires the **dense conflict-rank scheme entirely**, because C1B was the only
+  half that scheme could fix (C5's conflict is within one node, where `node_bias` cancels).
+  **Do not raise `NodeOrderBias`** — now for a stronger reason than before: the measured
+  5e-8 → 2e-6 control taking C1B 30.95% → 2.35% was never an improvement, it was 1.4 points from
+  erasing a faithful artifact. Kept as a closed entry rather than deleted because three separate
+  sessions have tried to fix this pose. Evidence: `analysis/item9-depth-bias/`.
 
 ## Feature backlog
 
