@@ -142,6 +142,10 @@ public sealed class WorldBuilder
     // Walk-root indices belonging to the deck; filled by FindCloudDeck before the walk.
     private readonly HashSet<int> _deckNodes = new();
 
+    // Entities the chapter parks at the world origin awaiting placement (see
+    // HideUnplacedEntities): the gamez node and the subtree we built for it.
+    private readonly List<(GameZNode Node, Node3D Built)> _parkedAtOrigin = new();
+
     // True when the node's model is one flat horizontal quad, reporting its altitude and its
     // world-space x/z footprint. Deck tiles carry no transform ("Initial"), but a null Local is
     // treated as identity anyway, so a placed tile would still be measured where it sits.
@@ -352,7 +356,165 @@ public sealed class WorldBuilder
         var node = _gamez.Nodes[nodeIndex];
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode);
         if (built != null)
+        {
+            if (IsParkedAtOrigin(node, built))
+                _parkedAtOrigin.Add((node, built));
             (_deckNodes.Contains(nodeIndex) ? deck : root).AddChild(built);
+        }
+    }
+
+    /// <summary>
+    /// True when this walk root is an ENTITY parked at the world origin rather than map
+    /// geometry: it carries no transform of its own (gamez <c>"Initial"</c> — see
+    /// <see cref="GameZ.ParseTransform"/>, which leaves <see cref="GameZNode.Local"/> null,
+    /// so the subtree builds at its parent's origin, and every walk root's parent is the
+    /// identity World node), AND its geometry wraps around that origin.
+    ///
+    /// <para>Both halves are needed and the second one is the load-bearing half. Roughly 300
+    /// roots per chapter carry no transform — nearly all of them terrain, whose vertices are
+    /// already in world coordinates and therefore sit out in the map rather than around the
+    /// origin. Measured across all 8 chapters, adding the "wraps the origin" test cuts 340/154/
+    /// 316/252/304/436/344/411 transformless roots down to 21/7/6/47/5/15/8/13, and **every one
+    /// of those 122 is a vehicle** — zeppelins, cars, boats, train cars, the Spruce Goose, an
+    /// autogyro bus, life rings — with `terrain=false` on all 122 and no terrain node anywhere
+    /// in the set. ⚠ Do NOT try this test on the gamez `child_bbox` field instead: that box is
+    /// in the node's LOCAL frame, so every placed terrain tile trivially contains its own
+    /// origin and the same query returns 464 hits, nearly all terrain.</para>
+    /// </summary>
+    private static bool IsParkedAtOrigin(GameZNode node, Node3D built)
+    {
+        if (node.Local != null)
+            return false; // authored somewhere specific; wherever that is, it is not "unplaced"
+        var aabb = SubtreeAabb(built, Transform3D.Identity);
+        if (aabb == null)
+            return false; // no geometry at all (empty group node) — nothing to draw either way
+        var box = aabb.Value;
+        // Strictly straddling the origin in x and z. Map geometry never does: every chapter's
+        // world `area` is x,z in [-N, 0], so the origin is the map's CORNER and real terrain
+        // only ever touches it, never surrounds it.
+        return box.Position.X < 0f && box.End.X > 0f
+            && box.Position.Z < 0f && box.End.Z > 0f;
+    }
+
+    /// <summary>Union of the subtree's mesh AABBs, expressed in <paramref name="xf"/>'s frame.
+    /// Null when the subtree draws nothing. Computed from the built meshes rather than read
+    /// from the tree so it does not depend on the world being in the scene tree yet.</summary>
+    private static Aabb? SubtreeAabb(Node3D node, Transform3D xf)
+    {
+        Aabb? total = null;
+        if (node is MeshInstance3D { Mesh: not null } mi)
+        {
+            total = xf * mi.GetAabb();
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is not Node3D c3d)
+                continue;
+            if (SubtreeAabb(c3d, xf * c3d.Transform) is { } sub)
+                total = total?.Merge(sub) ?? sub;
+        }
+        return total;
+    }
+
+    /// <summary>
+    /// Switches off the entities nothing ever placed. Call once AFTER the animation runtime's
+    /// bootstrap (<c>AnimRuntime.Bind</c>), which is what runs the mission's interp setup script
+    /// and its ON_STARTUP definitions — i.e. every mechanism that legitimately places or hides
+    /// one of these. Returns the names switched off.
+    ///
+    /// <para><b>Why this exists.</b> A chapter gamez holds every mission's content, and the
+    /// chapter's build script (<c>support\&lt;ch&gt;\load.gw</c> in <c>interp.json</c>) loads each
+    /// vehicle with a bare <c>LoadGameGen</c> + <c>AddChild &lt;worldName&gt;</c> and no placement
+    /// whatsoever — so every zeppelin, car, boat and train car in the install starts life parked
+    /// at the world origin. A mission then either switches it off (its <c>.gw</c> setup script) or
+    /// places it (an ON_STARTUP <c>ObjectTranslateState</c>, e.g. C3/IA1's <c>cgzepstate</c> puts
+    /// <c>cargozep1</c> at (-12412.9, 134.0, -10424.8)). Retail data misses a few: C5/IA1 switches
+    /// off nine zeppelins but not <c>piratezep</c>, and C1C/IA1's four-line script leaves three.
+    /// Those render as a heap of vehicles at the map corner — the reported "sunk zeppelin".</para>
+    ///
+    /// <para><b>Why the test is post-bootstrap.</b> Being still at the origin once every placement
+    /// mechanism has run IS the definition of unplaced, so this cannot fight the data: anything the
+    /// setup script hid is already invisible and is skipped, anything an ON_STARTUP
+    /// OBJECT_TRANSLATE_STATE moved is no longer at the origin and is skipped (C3/IA1's
+    /// <c>cargozep1</c> is the worked example). It also needs no list of zeppelin names —
+    /// C2/IA1's real population here is police cars and boats, not a zeppelin at all.</para>
+    ///
+    /// <para><b>⚠ This is only half the rule — <see cref="RestorePlacedEntities"/> is the other
+    /// half, and without it this method is WRONG.</b> A large class of entities is placed by
+    /// OBJECT_MOTION_FROM_TO rather than by a translate: a motion over time, which at bootstrap has
+    /// only been REGISTERED, so its target is still sitting on the origin here and is
+    /// indistinguishable from unplaced content. Measured: on its own this sweep switched off 35
+    /// entities in C2/IA1, among them four yachts, three sailboats and ten studebakers that drive
+    /// away perfectly well a moment later, plus C1's <c>tanker_car</c>/<c>box_car</c>/<c>caboose</c>
+    /// and C2's <c>rocket</c>. Hence hide-then-restore: everything suspicious goes off immediately
+    /// (so none of it is ever seen), and anything that subsequently MOVES is put back.</para>
+    ///
+    /// <para>Deciding it from the animation program instead was tried and abandoned as too
+    /// fragile: sparing the anchors of ON_STARTUP / <c>startanims</c> definitions still misses the
+    /// train cars (driven by events inside a definition anchored on <c>passenger_trengine</c>, not
+    /// on themselves) and C2's rocket, would need the CallAnimation graph walked transitively, and
+    /// could not spare index-referenced targets at all. Watching where the node actually ends up
+    /// needs none of that and cannot disagree with the runtime.</para>
+    /// </summary>
+    public List<string> HideUnplacedEntities()
+    {
+        _hiddenUnplaced.Clear();
+        var hidden = new List<string>();
+        foreach (var (node, built) in _parkedAtOrigin)
+        {
+            if (!GodotObject.IsInstanceValid(built) || !built.Visible)
+                continue; // the mission's setup script already switched it off
+            if (!built.Transform.Origin.IsZeroApprox())
+                continue; // an ON_STARTUP translate placed it — this is real, shown content
+            built.Visible = false;
+            SetCollidersEnabled(built, false);
+            _hiddenUnplaced.Add((node, built));
+            hidden.Add(node.Name);
+        }
+        return hidden;
+    }
+
+    // What HideUnplacedEntities switched off, still awaiting the verdict below.
+    private readonly List<(GameZNode Node, Node3D Built)> _hiddenUnplaced = new();
+
+    /// <summary>
+    /// The other half of <see cref="HideUnplacedEntities"/>: restores anything that has since moved
+    /// off the world origin, because moving is proof that a definition owns it after all. Call
+    /// repeatedly (PlaneViewer polls it once a second) — an entity leaves the origin whenever its
+    /// motion happens to start, and for an OnCall definition that can be at any time, so there is
+    /// no deadline after which it is safe to stop asking. Costs one vector compare per node still
+    /// hidden, and each one drops out of the list for good once restored.
+    /// </summary>
+    public List<string> RestorePlacedEntities()
+    {
+        var restored = new List<string>();
+        for (int i = _hiddenUnplaced.Count - 1; i >= 0; i--)
+        {
+            var (node, built) = _hiddenUnplaced[i];
+            if (!GodotObject.IsInstanceValid(built))
+            {
+                _hiddenUnplaced.RemoveAt(i);
+                continue;
+            }
+            if (built.Transform.Origin.IsZeroApprox())
+                continue; // still parked — leave it switched off
+            built.Visible = true;
+            SetCollidersEnabled(built, true);
+            _hiddenUnplaced.RemoveAt(i);
+            restored.Add(node.Name);
+        }
+        return restored;
+    }
+
+    // Mirrors AnimRuntime's own INACTIVE handling: invisible AND non-collidable, so the player
+    // cannot hit a zeppelin that is not being drawn. Kept local rather than reaching into
+    // AnimRuntime's private helper to keep this change off that file.
+    private static void SetCollidersEnabled(Node node, bool enabled)
+    {
+        if (node is CollisionShape3D shape)
+            shape.Disabled = !enabled;
+        foreach (var child in node.GetChildren())
+            SetCollidersEnabled(child, enabled);
     }
 
     /// <summary>

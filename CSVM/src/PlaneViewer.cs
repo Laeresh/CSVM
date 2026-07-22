@@ -230,6 +230,10 @@ public partial class PlaneViewer : Node3D
     private string _menuStartScreen = ""; // --menu=<mode|chapter|plane>: open the menu on that screen (screenshot aid)
     private bool _inSession;       // a world is currently built
     private WorldLights? _worldLights; // the session's LIGHT_STATE point lights (see WorldLights)
+    // The world whose origin-parked entities are still being watched, and the poll accumulator.
+    // See WorldBuilder.HideUnplacedEntities / RestorePlacedEntities.
+    private WorldBuilder? _unplacedWatch;
+    private double _unplacedRecheck;
     private bool _perf;            // --perf: log the CPU/GPU frame-time split once a second
     private double _perfClock;
     private int _perfFrames;
@@ -683,6 +687,21 @@ public partial class PlaneViewer : Node3D
                     builtSounds.Loader = null;
                 }
                 _plane.AddChild(animRuntime);
+
+                // Every mechanism that places or hides a world entity has now run (the mission's
+                // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
+                // anything still sitting on the world origin is content this mission never placed
+                // — the chapter build script parks every vehicle there (see
+                // WorldBuilder.HideUnplacedEntities). Retail data leaves a few switched on:
+                // C5/IA1's piratezep is the reported "zeppelin buried in the ground".
+                // Switched off immediately so none of it is ever seen; _Process then polls
+                // RestorePlacedEntities, which puts back anything a time-based motion moves.
+                _unplacedWatch = builder;
+                if (builder.HideUnplacedEntities() is { Count: > 0 } unplaced)
+                {
+                    GD.Print($"world: {unplaced.Count} unplaced entit(y/ies) left at the origin, "
+                             + "switched off: " + string.Join(", ", unplaced));
+                }
 
                 // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
                 // chapter's clutter) that follows the plane past the map boundary, so the world
@@ -1393,6 +1412,9 @@ public partial class PlaneViewer : Node3D
         // frame between teardown and the new runtime's first tick.
         _worldLights?.Dispose();
         _worldLights = null;
+        // Stop polling the torn-down world's origin-parked entities (their nodes are going away).
+        _unplacedWatch = null;
+        _unplacedRecheck = 0.0;
         _rigs.Clear();
         _split = null;
         _camera.Current = true;
@@ -2034,6 +2056,23 @@ public partial class PlaneViewer : Node3D
     {
         if (_perf)
             ReportPerf(delta);
+        // Entities switched off as unplaced (see WorldBuilder.HideUnplacedEntities) that have
+        // since been moved off the world origin are put back: a motion starting is the proof
+        // that a definition owns them. Polled rather than deferred once, because an OnCall
+        // definition can start its motion at any time. Goes quiet for good once the list drains.
+        if (_unplacedWatch != null)
+        {
+            _unplacedRecheck += delta;
+            if (_unplacedRecheck >= 1.0)
+            {
+                _unplacedRecheck = 0.0;
+                if (_unplacedWatch.RestorePlacedEntities() is { Count: > 0 } restored)
+                {
+                    GD.Print($"world: {restored.Count} entit(y/ies) moved off the origin after all, "
+                             + "restored: " + string.Join(", ", restored));
+                }
+            }
+        }
         // Everything below is anchored to *a* camera, so it runs once per rig — one in single
         // player, one per pane in splitscreen (each on that player's own visual layer).
         foreach (var rig in _rigs)
