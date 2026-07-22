@@ -1526,7 +1526,22 @@ public sealed partial class AnimRuntime : Node
                 {
                     case "Loop":
                         if (_loopsLeft == -2)
-                            _loopsLeft = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
+                        {
+                            int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
+                            // An AUTHORED count of 0 means INFINITE, not "stop immediately"
+                            // (2026-07-22). Surveyed across the whole install: 26 Loop events
+                            // in 25 defs ship Count 0, and every one of them is a ground-vehicle
+                            // route (C1's police/mafia/black_car/truck traffic, C2's and C3/M02's
+                            // studebakers) whose Loop is the LAST event of its sequence — the
+                            // original drives these continuously. Nothing that must terminate
+                            // uses it: no door, gate, one-shot, bomb or explosion def, and the
+                            // reader/zrdr scope has 703 Loop events with zero Count 0. Reading it
+                            // as "stop" made each car drive its route once and freeze.
+                            // Normalise here rather than at the test below, so the test keeps
+                            // meaning "a finite loop has run out" — that is the only way a
+                            // positive count can ever terminate.
+                            _loopsLeft = authored == 0 ? -1 : authored;
+                        }
                         if (_loopsLeft == 0)
                         {
                             _done = true;

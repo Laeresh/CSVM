@@ -716,6 +716,19 @@ are not visible from the byte format alone, each measured against this install.
   completes" turns that into the surveyed ~327 s track loop instead of a zero-length infinite
   loop. A definition's sequences run **concurrently** — the train drives its four cars from four
   sibling `Initial` sequences, each with its own script and its own loop.
+- **`LOOP` has two spellings of "infinite": `-1` and `0`** (decoded 2026-07-22). `-1` is the
+  common one; `0` is *not* "run zero more times". Across the compiled `cam_anim`/`mis_anim` of the
+  whole install the count distribution is **`-1` × 2,919, `0` × 26, positive N × 530**, and all 26
+  zeros sit in 25 defs that are, without exception, **ground-vehicle route animations** — C1's
+  `police_car`/`mafia`/`black_car1`/`truck1`/`car_loop1`/`car_go_home`, C2's ten `studebaker*`,
+  C3/M02's nine `stude_move*`. Every one is `activation: OnStartup`, and in every one the `LOOP`
+  is the **last event of its sequence**, over a body of `ObjectMotionFromTo` legs carrying explicit
+  from/to (so a replay re-seats the car at the route start). Nothing that must terminate uses it:
+  no door, gate, one-shot, hangar, bomb or explosion def carries `Count: 0`. Reading `0` as "stop"
+  makes every car in the game drive its route once and freeze.
+  **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
+  (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
+  at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
 - **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** mech3ax reads the
   file's `(w, x, y, z)` float order straight into a `#[repr(C)] struct Quaternion {x, y, z, w}`,
   so in the emitted JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real

@@ -30,7 +30,7 @@ instruments that mislead.
 5. ☐ One billboard classifier; billboards and clutter lose collision
 6. ☐ `cblock*` 3D city-block clutter (C2/C5 missing buildings)
 7. ☐ C3 beach z-fighting — the beach must draw over the water (the "palms in the sea" report)
-8. ☐ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops
+8. ☑ `Loop { Count: 0 }` means infinite — C1 traffic drives its route once and stops **(done 2026-07-22 — survey re-confirmed 26 events / 25 defs, all ground-vehicle routes; C1/C2/C3 traffic now loops at exactly its authored route period, no runaway; 8-chapter regression identical. One plan claim corrected: the `zrdr` scope has 703 `Loop` events, not zero — but none with `LOOP_COUNT 0`. `docs/HISTORY.md`)**
 9. ☐ `ScriptPlayback` compounds scale — the 1e29 zeppelin transforms
 10. ☐ Tail collision boxes swallow the outboard wings
 
