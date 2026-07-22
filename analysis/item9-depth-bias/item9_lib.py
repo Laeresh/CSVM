@@ -10,7 +10,19 @@ polygon field `priority` (not unk04), node field `child_indices` (flat list posi
 """
 import json, math, os, sys
 
-ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+def _find_root(start):
+    """Walk up from this file until a directory containing `extracted/` is found.
+    (These scripts were written in `.scratch/` and later committed one level deeper,
+    under `analysis/item9-depth-bias/`, so a fixed number of dirname() calls breaks.)"""
+    d = os.path.dirname(os.path.abspath(start))
+    for _ in range(6):
+        if os.path.isdir(os.path.join(d, "extracted")):
+            return d
+        d = os.path.dirname(d)
+    return os.path.dirname(os.path.dirname(os.path.abspath(start)))
+
+
+ROOT = _find_root(__file__)
 EX = os.path.join(ROOT, "extracted")
 CHAPTERS = ["C1", "C1B", "C1C", "C2", "C2B", "C3", "C4", "C5"]
 

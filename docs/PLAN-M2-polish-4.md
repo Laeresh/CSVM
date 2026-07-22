@@ -670,15 +670,46 @@ regression, i.e. Milestone 3 work, not polish.
 > and rule 8 (a measurement that locates the geometry has not told you which surface is at fault).
 > **Every "fix" this item has ever proposed is now known to be papering over a missing system.**
 >
-> **The real lead is already in `backlog.md` and was mis-filed as unrelated:** partition visibility
-> (`WorldPartitionSetActive`, 25 uses in `extracted/interp.json`) — *"the real runtime system the
-> original uses to pick between coarse and fine ground, and we draw both unconditionally"*
-> (`WorldBuilder.cs:155`, `:157-159`). Item 9's own "Related but NOT this item" note named the
-> answer and set it aside. Investigation in progress → `analysis/item9-depth-bias/CBLOCK-LOD.md`.
+> ### ✅ MECHANISM FOUND 2026-07-23 — the fifth framing was right, and this is the answer
 >
-> Note this also dissolves the old "the coarse sheets must not be culled, no sheet is fully covered
-> so culling leaves holes" objection: runtime LOD **selection** is not culling, and a variant that
-> is not selected leaves no hole because its replacement is drawn.
+> **The polygon flag mech3ax calls `unk3` (raw `0x0800`) is the original's OpenFlight *subface*
+> mark** — "this face is coplanar with and contained in the face beneath it; draw it on top" — and
+> **`support\init.gw` line 22 applies `GameGenSetSubfacePriorityOffset 1` to it globally, for every
+> mission in the game**, beside `SetCoplanarTolerance`/`SetBFETolerance`/`SetInverseZTolerance`.
+> **`grep unk3 CSVM/src` returns zero hits: we parse it nowhere.**
+>
+> So `cblock4/5/6` are not a day set and not a distance LOD — they are the **base** ground, and
+> `cblock1/2/3` are subfaces laid on it. **Measured:** 25.85M m² of C5 ground is subface-over-base;
+> we render **66.5% of it inverted and 5.6% exactly tied**. At the repro pose the base `cblock4`
+> wins **144,817 px (62.8% of frame)** where the original shows the subface. Applying the flag
+> takes the pose **78.14% → 0.00%** and `cblock4` to **16 px**, with the **C1B and C3 poses
+> byte-identical** (no `unk3` polygons participate at either).
+>
+> **The falsifiable prediction held exactly:** a subface is *contained*, never partial — coverage
+> of each flagged polygon is **bimodal**, 196 at exactly 100%, 251 at ~0%, exactly one in between.
+> `cblock6` is **100.000%** covered by `cblock3`. Corroborating: every `unk3` texture across the
+> install is overlay-shaped (`terpat01/03/04` = **ter**rain **pat**ch, `cliff*_trans*`, `river1/3`,
+> `wtr00000`, `pier`), and the original screenshots show only the near-black night blocks — the
+> daylit base (3× the mean luminance) appears nowhere.
+>
+> **C1B has ZERO `unk3` polygons in the entire chapter** — an independent, data-side corroboration
+> of the user's "C1B is not a bug" ruling: the original authored no resolution there either, so it
+> z-fought too. The fix provably cannot perturb it.
+>
+> **Ruled out with data, all of it:** `WorldPartitionSetActive` is **C3-only** (all 25 uses) and
+> coordinate-based — **this plan's own "the real runtime system…" claim was wrong for C5**; `Lod`
+> nodes cover 3250 C5 nodes but none of the cblock ground; `cycle` is null on all seven materials;
+> `zone_set` is 1 on both sides.
+>
+> **Fix: 3 edits, ~10 lines, no new parser and NO bias-constant changes.** Parse `flags.unk3` in
+> `GameZ.cs:278` (absent-when-false — use `TryGetProperty` with a `false` default), add `Subface`
+> to the surface group key at `SceneBuilder.cs:386` (and the material cache chain), add
+> `bias += subface ? SubfaceBias : 0f` at `:841`. **Use 0.5 of a priority level (1e-4), not the
+> original's literal 1 level** — priority 1 is genuinely authored (955 C5 polygons) and a full
+> level would make a subface tie with a real overlay; 0.5 measures identically. ⚠ **The regression
+> risk is rank shifting, not the fix itself**: splitting a group changes every later group's rank
+> and therefore its bias, so the 8-chapter `--freecam` surface/mesh-count regression is the check
+> that matters. Full evidence: `analysis/item9-depth-bias/CBLOCK-LOD.md`.
 >
 > ## ⚠⚠ Everything from here to the end of item 9 was written BEFORE the 2026-07-22
 > ## data analysis, and its central evidence is now DISPROVEN.

@@ -223,6 +223,20 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     re-derived four times; "is this actually wrong?" was asked zero times in four sessions.
     Inherited symptoms need the same audit as inherited evidence (rule 9's note).
 
+21. **A brightness or resolution difference between two coplanar layers is not evidence of a
+    day/night or LOD variant pair.** C5's `cblock4/5/6` are 4× lower resolution and 3× brighter
+    than `cblock1/2/3` and look exactly like a daylit or distant LOD set — which is how they were
+    read, by two sessions and by a user observation, and it is why the search went to partition
+    visibility and LOD nodes. They are neither. They are the **base** ground under an authored
+    **subface**, and the appearance difference is a red herring that had to be *disproved by
+    geometry* — identical 256 m UV scale, identical y-plane, all-white vertex colours, and
+    100.000% containment — before the real mechanism (the unparsed `unk3` subface flag, applied by
+    the original's own `GameGenSetSubfacePriorityOffset`) became visible. **When two layers look
+    like variants of each other, test the geometry relationship before the appearance
+    relationship**: "which is on top and does one contain the other" is decidable from the data,
+    while "which one looks like daytime" is not. Compare rule 9 — the containment test is the same
+    exact-clipping discipline, used to *establish* a relationship rather than to refute one.
+
 ## 1. Before you trust a screenshot diff
 
 - **The default `--freecam` camera is not deterministic.** The spawn is a random pick per launch,

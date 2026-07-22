@@ -103,27 +103,15 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   not license a *geometry* change. C1–C4 are still unanswered. Do not act on this until the
   remaining chapters are settled and there is a visible artifact it demonstrably fixes.
 
-- **⬆ PROMOTED 2026-07-22 — partition / ground-variant visibility is a real runtime system we do
-  not implement, and it is now the prime suspect for the C5 ground z-fight rather than a
-  side-note.** The interp language has **`WorldPartitionSetActive`** (25 uses). The original
-  selects between ground variants at runtime; we draw them **all, unconditionally**
-  (`WorldBuilder.cs:155`, `:157-159`).
-  **What promoted it (user observation, 2026-07-22):** in the original, C5 IA1's ground runs an
-  LOD chain — `cblock1_2` (bright lights, lower resolution) → `cblock1_1` → `cblock1`, reading as
-  dark-with-points changing to a brightly-lit street — and **`cblock[4-6]` do not appear in C5 IA1
-  at all**. Our measured 78.14%-of-frame conflict at the repro pose is `cblock4` over `cblock2`
-  over `cblock1`, all coplanar inside node `g4683`. **So we are rendering ground variants the
-  original never draws, and the "z-fighting" is a symptom of drawing 2–3 layers where it draws 1.**
-  ⚠ **Do NOT "fix" the C5 flicker with `SurfaceRankBias`.** It measures perfectly — scheme 1 takes
-  the pose to 0.00% — by choosing a winner among surfaces that should not be co-rendered at all.
-  Flawless metric, wrong picture (`docs/verification.md` rules 4 and 8). Four earlier mechanisms
-  were retired chasing this as a depth problem; it is not one. Full evidence and the committed
-  instrument: `analysis/item9-depth-bias/` (`FINDINGS.md`, `CBLOCK-LOD.md`).
-  Note this also **dissolves the old objection** that the coarse sheets cannot be culled because no
-  sheet is fully covered: runtime LOD *selection* is not culling, and an unselected variant leaves
-  no hole because its replacement is drawn. Polish run 3's draw-priority workaround (item 3)
-  measured no change (35.77% → 35.79%), consistent with the whole depth framing being wrong.
-  Implementing it properly = cell-resident tracking with pop risk and an 8-chapter regression.
+- **`WorldPartitionSetActive` — ⛔ CORRECTED 2026-07-23. This entry used to claim it was "the real
+  runtime system the original uses to pick between coarse and fine ground", and that claim is
+  FALSE.** Measured: **all 25 uses are `support\c3\*.gw` — C3 only** — and it takes rectangle
+  coordinates, not node names. It never appears in any C5 script, so it cannot be the mechanism in
+  the chapter that actually has the bug. It was briefly promoted to "prime suspect" for the C5
+  ground z-fight on 2026-07-22 and that promotion was wrong; the real mechanism is the **subface
+  flag** (next entry). Kept as a correction rather than deleted because the wrong claim was
+  repeated across three documents. Whatever `WorldPartitionSetActive` does for C3 is still
+  unimplemented and still undescribed — but it is a C3 question, not a ground-LOD one.
 
 - **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
@@ -244,6 +232,29 @@ unscheduled.
   5e-8 → 2e-6 control taking C1B 30.95% → 2.35% was never an improvement, it was 1.4 points from
   erasing a faithful artifact. Kept as a closed entry rather than deleted because three separate
   sessions have tried to fix this pose. Evidence: `analysis/item9-depth-bias/`.
+
+- **Authored `_1`/`_2` mip levels are ignored; we box-filter our own instead.** 52–91 base textures
+  per chapter ship hand-authored half- and quarter-resolution levels (`cblock1`, `cblock1_1`,
+  `cblock1_2`), referenced by **no gamez material**, and `TextureArchive.cs:100` generates its own
+  mips by box filter. The authored levels keep **0.35–1.12% of pixels above luminance 128** where a
+  box filter keeps **0.00%** — i.e. the artist preserved the street lights at distance and our
+  filter averages them into the dark. This is precisely the user's observation of the original
+  going "dark with some points → brighter illuminated street" with distance (2026-07-22).
+  Measured 2026-07-23, `analysis/item9-depth-bias/CBLOCK-LOD.md` §1b.
+- **`materials` is a per-polygon LIST and `SceneBuilder` reads only `[0]`.** 352 C5 polygons carry
+  a **second textured pass** with its own independent UVs: `z3_foggrad`/`foggrad8x64` fog gradients
+  (142), `buildingspotlighted` (34), `fadedsign01-03`, `nypd`, `clock`, and plane logos. A whole
+  second-texture-pass feature is silently dropped. Measured 2026-07-23, same report §3.
+- **`zone_set` is parsed by nothing** (`grep zone_set CSVM/src` → 0 hits). It is a **per-polygon**
+  weather-zone membership list (C5 uses 1 and 3). Not a ground selector — that was checked and
+  ruled out — but a real unparsed field, and the per-polygon granularity is interesting given
+  weather zones are otherwise handled per chapter.
+- **Open question, do NOT act on it from the subface report:** `cblock4/5/6` carry their own
+  **disjoint** clutter building templates (`cb12a`–`cb24a`) versus `cblock1/2/3`'s
+  (`cb00a`–`cb11a`). That is most likely *why* a fully-buried base ground layer exists at all. Once
+  the subface fix lands, the base layer will be correctly hidden while **its clutter presumably
+  still spawns** — check whether C5 draws doubled buildings, but treat this as a question, not a
+  finding (the report flags it as an open question, not a measurement).
 
 ## Feature backlog
 
