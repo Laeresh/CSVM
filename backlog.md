@@ -215,6 +215,29 @@ relative to the Godot project's `src/`.
   water consistently over the sand, which a jitter-flip metric cannot see at all) or it needs
   a different camera. **Get a fresh capture or a pose from the user before diagnosing further**;
   the pose recorded here does not reproduce a flicker to measure against.
+
+  **✅ RESOLVED 2026-07-22 — this was fixed by `6c592c2` and the entry was stale.** The user
+  reported the flicker gone and guessed the cause was the per-mission entity setup. Bisected and
+  confirmed at their own fresh pose (`--campos=-5931.403,149.271,-3292.775
+  --lookat=-5933.68,66.417,-3348.722`), measured with `--shots=5 --jitter=0.006`:
+
+  | commit | C3 coast flicker |
+  |---|---|
+  | `10f48f8` (parent — before per-mission setup) | **4.87%** |
+  | `6c592c2` "World: per-mission entity setup — the interp boot script, not a roster" | **0.09%** |
+  | `b83252c` (current main) | **0.09%** |
+
+  A **54× reduction at the commit that applied the interp boot script**, and nothing since has
+  moved it. Mechanism: `MissionSetup` runs the chapter/mission `.gw` script's
+  `NodeSetActive`/`DeleteTree`, so duplicate overlapping entities that had all been drawn
+  coplanar stop being drawn. Remove the duplicates, remove the depth fight.
+
+  **The lesson is about the backlog, not the bug.** This entry carried "user-confirmed
+  2026-07-22 as real z-fighting" while the fix landed *the same day*, so two separate agent
+  sessions (polish-3 items 3 and 11) spent effort chasing an already-fixed symptom, and item 11's
+  0.41% reading — correctly measured, correctly reported as "barely flickers" — was the fix
+  showing through, not a mis-aimed camera. **When a report and a fix share a date, check the
+  commit order before scheduling work.**
 - **C3 trees standing in the water** (same camera pose) — **diagnosed 2026-07-22 as the SAME BUG
   as the beach z-fight above, not a clutter placement fault. Merged; scheduled as polish-run-3
   item 7.** The palms are visible in the original and are *supposed* to be there (user-confirmed
@@ -649,3 +672,31 @@ re-shoot the original at the repro pose (`--campos=-9533.178,76.319,-3367.413
 --lookat=-9451.281,28.148,-3398.597`) — or, cheaper, identify the coarse quad's node in our scene
 and check whether it is a LOD sibling that should have been culled, which would settle the "why is
 it coplanar at all" half without needing the original at all.
+
+## C3 coast: dark polygon-edge outlines and uneven shoreline brightness
+
+**Reported by the user 2026-07-22, and proven PRE-EXISTING the same day** — not a regression from
+polish run 3. Pose: `--campos=-5931.403,149.271,-3292.775 --lookat=-5933.68,66.417,-3348.722`.
+
+Two symptoms, possibly one cause:
+- **Dark outlines along mesh boundaries** on the sand. They persist with the mesh lab's wireframe
+  **off**, so they are in the shading, not an overlay — and they align with polygon edges.
+- **Uneven lighting across the shoreline**, brightness varying in patches over the sand.
+
+**Proof it is pre-existing:** the pre-merge build (`a16cec0`) and post-merge main render this exact
+pose **byte-identically — 0 of 921,600 pixels differ**, and both log the same
+`weather [zone2] … world light 0,99`. Nothing in items 2/8/9/10 touched it. It became *noticeable*
+because `6c592c2` removed the coast flicker that had been masking it (see the resolved C3 z-fight
+entry above) — a fixed bug revealing an older one underneath.
+
+**Leading hypothesis, unverified:** the per-corner `vertex_colors` baked-lighting/AO mask
+(`CLAUDE.md` "Format gotchas" — 70% pure white, 30% darker, multiplied in gamma space via
+`SrgbToLinearFn`). If adjacent terrain polygons do not agree on the colour at a shared edge, the
+discontinuity reads as a dark seam, and the same mechanism at tile scale reads as patchy
+brightness. **Verify before acting** — this plan's track record on plausible mechanisms is 3 wrong
+out of 5, and the neighbouring `docs/verification.md` rules 6–8 are all about exactly this trap.
+
+Diagnostic starting points: the mesh lab's `--debug-mesh=color=provenance` (cyan/blue = normals
+from file, orange/red = flat fallback) and `wire=seams`; probe captures at
+`.scratch/c3_probe_*.png`. Worth checking whether C3's shoreline meshes are among the 45% the lab
+reports as flat-shaded, and whether the seams follow material boundaries or node boundaries.
