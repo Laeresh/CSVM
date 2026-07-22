@@ -208,12 +208,17 @@ unscheduled.
 
 - **`SurfaceRankCap` = 5 produces genuine zero-separation coplanar pairs.** 0.0–4.1% of built
   meshes per chapter have more than 6 (material, priority) groups, so ranks 5+ all collapse onto
-  the same bias; the worst mesh has **32** groups (C4). In C5 that yields 4 measured coplanar
-  *overlapping* pairs with **exactly zero** separation, totalling 774,152 m² — `g4642`
-  (`cblock3` vs `cblock6`, 598,016 m²; `cblock1` vs `cblock4`, 102,400 m²), `g4622`, `g4674`.
-  None is at a recorded repro pose, so this is latent and second-order rather than the reported
-  bug — but it is a real hole in the tie-break, and it is **invisible to any node-level scheme**
-  because both sides share a node. Measured 2026-07-22, `analysis/item9-depth-bias/`.
+  the same bias; the worst mesh has **32** groups (C4). It is a real hole in the tie-break, and it
+  is **invisible to any node-level scheme** because both sides share a node. Measured 2026-07-22,
+  `analysis/item9-depth-bias/`.
+  **⚠ Partly overtaken 2026-07-23 — re-measure before acting.** The four C5 pairs this entry used
+  to cite as its evidence (774,152 m² across `g4642` — `cblock3` vs `cblock6`, `cblock1` vs
+  `cblock4` — plus `g4622` and `g4674`) are all **subface-over-base pairs**, and the subface fix
+  now separates them by half a priority level, which is 50× the rank step and cannot be collapsed
+  by the cap. The *cap* is unchanged and the structural hole is unchanged, but **this entry no
+  longer has a measured example**: the surviving cases are whatever zero-separation pairs remain
+  once subfaces are excluded, and that number has not been re-measured. Do not quote the old
+  774,152 m² figure — it is now the area the fix resolved, not the area at risk.
 - **`node_bias` already spans 1.22–2.86 priority levels per chapter** (C1 1.77, C1B 1.40,
   C1C 1.41, C2 1.24, C2B 1.22, C3 1.35, C4 2.07, **C5 2.86**). `docs/architecture.md` recorded
   this as an accepted corner case ("a prio-0 node >~4000 indices later can out-bias a prio-1
@@ -625,28 +630,6 @@ them neutral gray instead of magenta. It is left to the user because it is a **v
 and it deliberately gives up the magenta signal that means "our bug" for those two names — the
 project's convention is that magenta is diagnostic, so suppressing it is a judgement call, not a
 cleanup.
-
-## C5 / C1B ground z-fighting — SCHEDULED, see `docs/PLAN-M2-polish-4.md` item 9
-
-**Moved out of this file 2026-07-22.** All three z-fight reports (C5's coarse-quad pose, C1B, and
-the C3 beach pose that no longer reproduces) are **one cross-node depth-resolution problem**, and
-the whole investigation — the surviving measurements, the three superseded diagnoses, the
-structural facts about `world1` children vs partition roots, the retracted coverage figures, the
-`fvol*` and `zone_id` cautions, and the `OriginalScreenshots/C5 IA1 Terrain*.png` reference
-captures — now lives in **`docs/PLAN-M2-polish-4.md` item 9**, which is where the work is
-scheduled.
-
-**The two things worth knowing without opening the plan:**
-
-1. **Do NOT "fix" this by raising the bias constants.** Measured: `NodeOrderBias` 5e-8 → 2e-6 takes
-   C1B from 30.95% to **2.35%** and C5 from 35.96% to **41.69% (worse)**. That control is a
-   diagnosis, not a landable fix.
-2. **This bug has been diagnosed wrong three times.** The traps it produced are permanent and are
-   recorded in `docs/verification.md` (rules 4, 7, 9 and 11 are all written from it) and in
-   `docs/HISTORY.md` (2026-07-21 and 2026-07-22 entries). Read those before re-measuring.
-
-C3's coast is **fixed** — `6c592c2`'s per-mission entity setup took it 4.87% → 0.09%. Do not
-re-chase it.
 
 ## Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`)
 

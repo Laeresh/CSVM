@@ -35,7 +35,10 @@ public sealed class SceneBuilder
     // ClampUv is part of the key because it selects a different sampler wrap mode, and two
     // surfaces on the same material can disagree about it (a 0..1 mapped tile and a tiling
     // one share plenty of textures) — see UvsWithinUnitSquare.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv), Material> _materialCache = new();
+    // Subface is part of the key for the same reason Priority is: it selects a different depth
+    // bias, and one material legitimately skins both roles (C5's cblock1/2/3 appear 236/91/52
+    // times as a plain face and 96/121/98 times as a subface over the cblock4/5/6 base).
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -371,23 +374,24 @@ void fragment() {
             _meshPivotCache[meshIndex] = offset;
         }
 
-        // One Godot surface per (material, draw priority, sidedness): polygons of
+        // One Godot surface per (material, draw priority, subface, sidedness): polygons of
         // different priority need different materials (the priority becomes a depth
-        // bias — see GetMaterial), and SHOW_BACKFACE polygons need a different cull
+        // bias — see GetMaterial), a subface takes an extra bias on top of its priority
+        // (SubfaceBias), and SHOW_BACKFACE polygons need a different cull
         // mode when backface culling is on. Groups are kept in first-occurrence order
         // = the original's within-mesh draw order; the group's rank is the
         // equal-priority tie-break (later polygons drew over earlier ones — e.g. the
         // tile meshes' roads and shoreline blends over their base grass).
-        var groups = new List<(int Material, int Priority, bool DoubleSided, List<GameZPolygon> Polys)>();
-        var groupIndex = new Dictionary<(int, int, bool), int>();
+        var groups = new List<(int Material, int Priority, bool Subface, bool DoubleSided, List<GameZPolygon> Polys)>();
+        var groupIndex = new Dictionary<(int, int, bool, bool), int>();
         foreach (var poly in mesh.Polygons)
         {
             bool doubleSided = !_cullBackfaces || poly.ShowBackface;
-            var key = (poly.MaterialIndex, poly.Priority, doubleSided);
+            var key = (poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided);
             if (!groupIndex.TryGetValue(key, out int gi))
             {
                 groupIndex[key] = gi = groups.Count;
-                groups.Add((poly.MaterialIndex, poly.Priority, doubleSided, new List<GameZPolygon>()));
+                groups.Add((poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, new List<GameZPolygon>()));
             }
             groups[gi].Polys.Add(poly);
         }
@@ -403,7 +407,7 @@ void fragment() {
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
-            var (materialIndex, priority, doubleSided, polys) = groups[rank];
+            var (materialIndex, priority, subface, doubleSided, polys) = groups[rank];
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
@@ -417,7 +421,7 @@ void fragment() {
                 ClampedSurfaceTotal++;
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis)
-                : GetMaterial(materialIndex, priority, rank, doubleSided, scroll, clampUv));
+                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -591,7 +595,7 @@ void fragment() {
         var tex = texName != null ? Resolve(texName) : null;
         Material mat = tex != null
             ? BillboardMaterial(tex, blend: true, scissor: false, glow: true)
-            : GetMaterial(materialIndex, 0, 0, true);
+            : GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true);
         _glowMaterialCache[materialIndex] = mat;
         return mat;
     }
@@ -623,7 +627,7 @@ void fragment() {
         }
         else
         {
-            mat = GetMaterial(materialIndex, 0, 0, true);
+            mat = GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true);
         }
         _cylindricalMaterialCache[key] = mat;
         return mat;
@@ -696,15 +700,24 @@ void fragment() {
     private const float SurfaceRankBias = 2e-6f;
     private const int SurfaceRankCap = 5;
     public const float NodeOrderBias = 5e-8f;
+    // The OpenFlight SUBFACE offset (GameZPolygon.Subface): a face marked coplanar-with-and-
+    // contained-in the one beneath it draws on top of it. The original applies ONE WHOLE
+    // priority level to this — `GameGenSetSubfacePriorityOffset 1` in support\init.gw, global
+    // to every mission. We deliberately apply HALF a level instead: priority 1 is a genuinely
+    // authored value (955 C5 polygons, 2207 in C1), and a full level would make a subface tie
+    // with a real priority-1 overlay. Measured across every subface/base overlap in C5, 0.5 and
+    // 1.0 of a level resolve identically (25,732,146 m² front / 120,999 behind either way), so
+    // the smaller offset is free. Still 50x SurfaceRankBias and 2000x NodeOrderBias.
+    private const float SubfaceBias = DepthBiasPerLevel * 0.5f;
 
-    private Material GetMaterial(int materialIndex, int priority, int rank, bool doubleSided,
+    private Material GetMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
         Vector2 scroll = default, bool clampUv = false)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, doubleSided, scroll.X, scroll.Y, clampUv);
+        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided, scroll, clampUv);
+        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv);
         _materialCache[key] = mat;
         return mat;
     }
@@ -763,7 +776,7 @@ void fragment() {
         Cycler.Add(mat, frames, src.CycleSpeed, src.CycleLooping, src.TextureName ?? "?");
     }
 
-    private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided,
+    private Material BuildMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
         Vector2 scroll, bool clampUv = false)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
@@ -797,14 +810,14 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor);
-            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor, scroll, clampUv);
+            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
         }
 
         var color = src?.Color ?? Colors.White;
-        return BiasMaterial(priority, rank, doubleSided, null, color, blend: color.A < 1f, scissor: false);
+        return BiasMaterial(priority, rank, subface, doubleSided, null, color, blend: color.A < 1f, scissor: false);
     }
 
     private StandardMaterial3D NewStandard(Color? albedoColor = null)
@@ -828,7 +841,7 @@ void fragment() {
     // A ShaderMaterial that mirrors NewStandard's look but pulls the geometry toward the
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
-    private ShaderMaterial BiasMaterial(int priority, int rank, bool doubleSided, ImageTexture? tex,
+    private ShaderMaterial BiasMaterial(int priority, int rank, bool subface, bool doubleSided, ImageTexture? tex,
         Color? color, bool blend, bool scissor, Vector2 scroll = default, bool clampUv = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
@@ -839,6 +852,8 @@ void fragment() {
                 scrolls, clampUv && tex != null),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
+        if (subface)
+            bias += SubfaceBias;
         mat.SetShaderParameter("depth_bias", bias);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);

@@ -283,6 +283,11 @@ public sealed class GameZ
                 // identified it as SHOW_BACKFACE — accept both spellings.
                 poly.ShowBackface = (pf.TryGetProperty("unk2", out var bf) || pf.TryGetProperty("show_backface", out bf))
                     && bf.ValueKind == JsonValueKind.True;
+                // OpenFlight SUBFACE ("unk3", raw bit 0x0800): this face is coplanar with and
+                // contained in the face beneath it, and draws on top of it. Serialized with
+                // skip_serializing_if bool_false by both mech3ax trees, so it is ABSENT when
+                // false — TryGetProperty with a false default is required.
+                poly.Subface = pf.TryGetProperty("unk3", out var sf) && sf.ValueKind == JsonValueKind.True;
                 // Draw-priority layer. mech3ax v0.6.1 emits it as "unk04"; upstream has
                 // since identified and renamed it to "priority" — accept both spellings.
                 if (p.TryGetProperty("unk04", out var pr) || p.TryGetProperty("priority", out pr))
@@ -512,6 +517,12 @@ public sealed class GameZPolygon
     // (terrain-transition patches, road/shadow decals, plane logos, cockpit gauge
     // needles up to 49), <0 drawn behind (skydome walls -49, zeppelin gasbags -10).
     public int Priority;
+    // OpenFlight SUBFACE ("unk3"): coplanar with, and contained in, the face beneath —
+    // draw on top of it. The original applies one whole priority level to it globally
+    // (`GameGenSetSubfacePriorityOffset 1` in support\init.gw); see SceneBuilder's
+    // SubfaceBias. Carried by terrain patches (terpat*), cliff/river transitions, piers
+    // and C5's cblock street layer — 658 polygons in C5, none at all in C1B.
+    public bool Subface;
 }
 
 public sealed class GameZMaterial

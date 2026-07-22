@@ -4012,3 +4012,82 @@ vn 24.1 → damage → un-embed → destroyed; dive → crash vn 93.4), exercisi
 touched — all collision and telemetry lines identical, diff 0. The stale-build loophole was closed
 with a **binary marker**: the string literal `"clutter_col"` compiles into the DLL only while the
 branch exists, and was confirmed present in the baseline DLL and absent in the deletion DLL.
+
+## 2026-07-23 — Polish-4 item 9: the C5 ground z-fight was the unparsed OpenFlight SUBFACE flag
+
+**The sixth mechanism, and the first right one.** This bug had five wrong diagnoses across four
+sessions (coarse-sheet-vs-partition-ground; `g4683` fighting its own polygons on an AABB overlap;
+the per-polygon within-surface tie-break; "nine coplanar World-child nodes stack at y=5", also an
+AABB reading; and a day/night-or-LOD variant set). All five shared an assumption the item's own
+title carried — that this was a **depth-precision** problem, fixable by a bias constant. It was
+not. **No bias constant was changed, and none should be.**
+
+Polygon flag `unk3` (raw `0x0800`) is the OpenFlight **SUBFACE** mark: "this face is coplanar with,
+and contained in, the face beneath it — draw it on top". The world is loaded from `.flt` via
+`LoadGameGen`, and **`support\init.gw` line 22 applies `GameGenSetSubfacePriorityOffset 1` to it
+globally, for every mission in the game**, beside `SetCoplanarTolerance`/`SetBFETolerance`/
+`SetInverseZTolerance`. `grep unk3 CSVM/src` returned **zero hits**. So C5's `cblock4/5/6` are not a
+daylit LOD set — they are the **base** ground, and `cblock1/2/3` are subfaces laid on them; we were
+rendering 66.5% of 25.85M m² of that ground inverted, plus 5.6% exactly tied.
+
+**Fix — 3 edits, as the analysis predicted, no new parser and no constant changes.** Parse
+`flags.unk3` in `GameZ.cs` (absent-when-false, so `TryGetProperty` with a false default);
+`GameZPolygon.Subface` joins the surface-group key and the material-cache/`GetMaterial`/
+`BuildMaterial`/`BiasMaterial` chain in `SceneBuilder.cs`; `bias += SubfaceBias` where the priority
+bias is computed. **`SubfaceBias` is half a priority level (1e-4), deliberately not the original's
+literal one level** — priority 1 is genuinely authored (955 C5 polygons, 2207 in C1) and a full
+level would make a subface tie with a real priority-1 overlay; measured over every C5 subface/base
+overlap, 0.5 and 1.0 resolve identically (25,732,146 m² front / 120,999 behind either way).
+
+**Verified.** At the recorded C5 repro pose (`--viewer --chapter=C5 --sky-zone=zone2
+--campos=-9533.178,76.319,-3367.413 --lookat=-9451.281,28.148,-3398.597 --shots=5 --jitter=0.006`):
+
+| region | baseline | fixed |
+|---|---|---|
+| ground crop (0,330)–(850,720) | **28.87%** | **0.41%** |
+| buildings crop (0,0)–(1280,300) | 7.13% (27,367 px) | 7.13% (27,373 px) |
+| whole frame | 16.46% | 6.21% |
+| `--jitter=0` control, whole frame | **0.00%** | **0.00%** |
+
+The buildings crop is the honest reading of the 6.21% residual: it is a **pre-existing, separate**
+facade phenomenon, identical to within 6 px across the two builds, and a ground-only fix must not
+move it (`verification.md` rule 10 — a residual you have not driven to zero is not a floor; here it
+was driven to a *different mechanism*, not asserted as noise). The `--jitter=0` control at exactly
+0.00% on both builds proves the residual is not temporal noise either.
+
+**Rule 4 satisfied the right way round — the metric fell AND the picture went to the authored
+layer.** The baseline's ground is a washed-out daylit grey mush (the `cblock4` base winning); the
+fixed build's is near-black night blocks with sparse street lights and a light-grey plaza. That is
+`OriginalScreenshots/C5 IA1 Terrain.png` exactly, and it explains the user's original report ("I
+could not find `cblock[4-6].png` in C5 IA1 in the original") — they are not absent, they are
+**100.000%** buried under subfaces. **User confirmed at the controls: "Can confirm no more
+z-fighting on the C5 ground."**
+
+**8-chapter regression:** node, mesh-instance and collider counts **identical in all 8 chapters**;
+zero errors (C1's single flagged line is a `--mute`-induced `snd_police` *warning*, present
+identically in both builds — the grep false-matched `godot_variant_call_error` in its stack trace).
+uv-clamped surfaces moved only where textured subfaces exist: C1 +0, C1B +0, C1C +0, C2 +3, C2B +0,
+C3 **+1**, C4 +15, C5 +18. **C3 gaining exactly +1 is the sharpest confirmation in the run** — C3
+ships exactly **one** `unk3` polygon in the entire chapter, so the instrument resolves
+single-polygon granularity and lands precisely where the data says. C1B, C1C and C2B are unchanged
+because their `unk3` polygons are all untextured `COLORED`.
+
+**Aircraft are provably untouched:** `extracted/planes/models.json` carries **0** `unk3` polygons of
+16,200, and the static plane viewer came out **byte-identical** (md5 `F1290254F2DDA1E3B8A9BCEE867D6C3D`
+on both builds) — meaningful here because the same instrument had just been seen to move the C5
+ground dramatically.
+
+**C1B is structurally safe.** It ships **zero** `unk3` polygons chapter-wide, so this change cannot
+perturb it — an independent, data-side corroboration of the user's 2026-07-22 ruling that C1B's
+z-fighting is authentic to the original and must not be "fixed".
+
+**Method notes.** Build freshness was proven from inside the running program rather than from the
+build log, per the standing trap: the load line's uv-clamped-surface count (1373 baseline vs 1391
+fixed) differs, so the correct binary demonstrably ran in each capture. `git stash` was avoided
+(banned here); baselines were produced by `git checkout HEAD -- <files>` and restored with
+`git apply`, both of which write current mtimes.
+
+**Found and NOT fixed:** the `SurfaceRankCap` backlog entry's four cited C5 zero-separation pairs
+(774,152 m²) were **all subface/base pairs** and are now resolved by this change, so that entry has
+lost its measured example while its structural hole remains — flagged in `backlog.md` rather than
+silently left to be re-quoted.
