@@ -829,3 +829,30 @@ much more visible symptom, and a good confirmation test.
 
 Still needs the user's answer on what the original shows during *gameplay* before anything is
 changed.
+
+**✅ User-confirmed 2026-07-22: "Yeah those are the cut scenes."** The open question above is
+settled — the intro choreography is not gameplay state, and bootstrapping it is the bug.
+
+**Scope, surveyed across all 53 missions' `startanims.zrd.json`: 13 bootstrap a cutscene def.**
+
+| def | missions |
+|---|---|
+| `generic_intro` | 12 — C1/M05, C1B/M03, C1C/M01, C2B/M04, C3/M01, C3/M02, C3/M05, C4/M01, C4/M02, C4/M04, C5/M01, C5/M04 |
+| `mission_intro_animation` | 1 — C1/M04 (the bespoke one) |
+
+**No `IA1` and no `MP` mission names one** — all 13 are `M0x` story missions, so this is invisible
+in instant action and multiplayer, which is what the project defaults to. That bounds the blast
+radius neatly and explains why it went unnoticed until someone flew `--mission=M04`.
+
+**Proposed fix:** skip those two def names when the animation bootstrap walks `startanims`, with
+the reason recorded in code (we have no cutscene player, so their choreography would otherwise run
+as world state). Small and data-driven — it is a name check against the start-anim list, not a new
+subsystem.
+
+**Verify by what disappears, not by what looks right:** in C1/M04 the pirate zeppelin should stop
+executing scene1's 15.7 s flight and the subsequent hard cuts, and any `letterbox` bars should
+stop being raised. Check the other 12 missions for *removed* motion too — `generic_intro` is
+shared, so it may currently be driving things nobody has looked at. An 8-chapter regression will
+not catch this: the default mission is IA1, which has no intro at all, so the regression is
+inert here by construction (`docs/verification.md` §3, "the change is inert by construction in
+that chapter").
