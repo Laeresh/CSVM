@@ -27,6 +27,11 @@ You need a legally-owned copy of Crimson Skies, [Godot 4.7 (.NET)](https://godot
 and the .NET 8 SDK. Extract your install's assets with `ExtractAssets.ps1`, then see
 [`CSVM/README.md`](CSVM/README.md) to build and run.
 
+Extraction is done by our fork of mech3ax, which is where the Crimson Skies format support
+lives: **[Laeresh/mech3ax, branch `cs-anim`](https://github.com/Laeresh/mech3ax/tree/cs-anim)**
+— that branch is what the extractor binary is built from. (The fork's `main` is an upstream
+mirror and does *not* carry the Crimson Skies work.)
+
 ## Format documentation
 
 The reverse-engineered format reference lives in [`docs/formats/`](docs/formats/) — 17 pages
@@ -68,9 +73,9 @@ under **Creative Commons Attribution 4.0 International**
 by any project regardless of its own license. Attribute to **CSVM**, linking
 <https://github.com/Laeresh/CSVM>.
 
-Asset extraction uses a fork of [mech3ax](https://github.com/TerranMechworks/mech3ax), which
-is licensed under the EUPL-1.2 and carries its own license terms. It is a separate tool, not
-linked into this engine.
+Asset extraction uses [our fork](https://github.com/Laeresh/mech3ax) of
+[mech3ax](https://github.com/TerranMechworks/mech3ax), which is licensed under the EUPL-1.2
+and carries its own license terms. It is a separate tool, not linked into this engine.
 
 ## AI assistance disclosure
 
