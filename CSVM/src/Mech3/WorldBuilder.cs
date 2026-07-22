@@ -358,7 +358,9 @@ public sealed class WorldBuilder
         if (built != null)
         {
             if (IsParkedAtOrigin(node, built))
+            {
                 _parkedAtOrigin.Add((node, built));
+            }
             (_deckNodes.Contains(nodeIndex) ? deck : root).AddChild(built);
         }
     }
@@ -384,10 +386,14 @@ public sealed class WorldBuilder
     private static bool IsParkedAtOrigin(GameZNode node, Node3D built)
     {
         if (node.Local != null)
+        {
             return false; // authored somewhere specific; wherever that is, it is not "unplaced"
+        }
         var aabb = SubtreeAabb(built, Transform3D.Identity);
         if (aabb == null)
+        {
             return false; // no geometry at all (empty group node) — nothing to draw either way
+        }
         var box = aabb.Value;
         // Strictly straddling the origin in x and z. Map geometry never does: every chapter's
         // world `area` is x,z in [-N, 0], so the origin is the map's CORNER and real terrain
@@ -409,9 +415,13 @@ public sealed class WorldBuilder
         foreach (var child in node.GetChildren())
         {
             if (child is not Node3D c3d)
+            {
                 continue;
+            }
             if (SubtreeAabb(c3d, xf * c3d.Transform) is { } sub)
+            {
                 total = total?.Merge(sub) ?? sub;
+            }
         }
         return total;
     }
@@ -463,9 +473,13 @@ public sealed class WorldBuilder
         foreach (var (node, built) in _parkedAtOrigin)
         {
             if (!GodotObject.IsInstanceValid(built) || !built.Visible)
+            {
                 continue; // the mission's setup script already switched it off
+            }
             if (!built.Transform.Origin.IsZeroApprox())
+            {
                 continue; // an ON_STARTUP translate placed it — this is real, shown content
+            }
             built.Visible = false;
             SetCollidersEnabled(built, false);
             _hiddenUnplaced.Add((node, built));
@@ -497,7 +511,9 @@ public sealed class WorldBuilder
                 continue;
             }
             if (built.Transform.Origin.IsZeroApprox())
+            {
                 continue; // still parked — leave it switched off
+            }
             built.Visible = true;
             SetCollidersEnabled(built, true);
             _hiddenUnplaced.RemoveAt(i);
@@ -512,9 +528,13 @@ public sealed class WorldBuilder
     private static void SetCollidersEnabled(Node node, bool enabled)
     {
         if (node is CollisionShape3D shape)
+        {
             shape.Disabled = !enabled;
+        }
         foreach (var child in node.GetChildren())
+        {
             SetCollidersEnabled(child, enabled);
+        }
     }
 
     /// <summary>
