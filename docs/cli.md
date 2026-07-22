@@ -3,7 +3,7 @@
 Full per-flag reference for the Godot project's user arguments, passed after `--`:
 
 ```
-tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CrimsonSkies res://scenes/Main.tscn -- --plane=player_bhawk
+tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 ```
 
 `RunGame.ps1` (play) and `RunDev.ps1` (dev, with console prompts) forward these verbatim.

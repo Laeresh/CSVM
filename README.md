@@ -25,7 +25,7 @@ git clone https://github.com/Laeresh/CSVM.git
 
 You need a legally-owned copy of Crimson Skies, [Godot 4.7 (.NET)](https://godotengine.org/)
 and the .NET 8 SDK. Extract your install's assets with `ExtractAssets.ps1`, then see
-[`CrimsonSkies/README.md`](CrimsonSkies/README.md) to build and run.
+[`CSVM/README.md`](CSVM/README.md) to build and run.
 
 ## Format documentation
 

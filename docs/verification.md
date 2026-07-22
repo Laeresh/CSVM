@@ -118,6 +118,20 @@ The measuring tool has been the bug more often than is comfortable:
   would have hidden a whole class of shader error.
 - **A pad with stick drift silently steers the free camera** and turns a "deterministic" scripted
   screenshot into one that isn't. SDL's hints do not stop Godot enumerating it — pass `--no-pads`.
+- **`dotnet build` cannot fail on script encoding corruption, so it is not evidence about it.**
+  A bulk rewrite mangled every UTF-8 multi-byte sequence in 3 source files; `dotnet build` returned
+  0 warnings / 0 errors because the damage sat in comments, which the C# compiler happily compiles
+  as mojibake. Godot's Mono loader validates UTF-8 *strictly* and refused the same files
+  (`Script contains invalid unicode (UTF-8), so it was not loaded`), surfacing only as
+  `Main.tscn: Parse Error: [ext_resource] referenced non-existent resource`. **After any bulk text
+  rewrite, run the game — a clean build is a green light that means nothing here.**
+- **`[IO.File]::ReadAllText($path, $encoding)` silently ignores the encoding you passed** when the
+  file starts with a BOM: it auto-detects and decodes as UTF-8 instead. The "read as Latin-1,
+  replace ASCII, write as Latin-1" trick is therefore **not** byte-preserving — for BOM-prefixed
+  files it decodes real Unicode and then collapses each multi-byte char to one byte (`°` C2 B0 → B0,
+  `×` C3 97 → D7) and drops the BOM. For a bulk rewrite, read the bytes, detect the BOM yourself,
+  decode with `UTF8Encoding($false, $true)` so invalid input *throws* instead of being replaced with
+  U+FFFD, and write back with the BOM state you found.
 
 ## 5. Before you trust the baseline
 

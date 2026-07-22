@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds CrimsonSkies and launches it straight into the in-game launchscreen.
+    Builds CSVM and launches it straight into the in-game launchscreen.
 
 .DESCRIPTION
     The "play the game" entry point (as opposed to RunDev.ps1, the dev helper with
@@ -14,7 +14,7 @@
     launchscreen and builds directly -- handy for jumping straight into a specific
     setup. Flight is the default for those: --plane=player_fury flies the Fury, and
     --viewer is what asks for the static inspection view instead. See
-    CrimsonSkies/src/PlaneViewer.cs for the full arg list.
+    CSVM/src/PlaneViewer.cs for the full arg list.
 
 .EXAMPLE
     .\RunGame.ps1
@@ -32,8 +32,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot   = $PSScriptRoot
-$ProjectDir = Join-Path $RepoRoot "CrimsonSkies"
-$Sln        = Join-Path $ProjectDir "CrimsonSkies.sln"
+$ProjectDir = Join-Path $RepoRoot "CSVM"
+$Sln        = Join-Path $ProjectDir "CSVM.sln"
 $GodotExe   = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
 
 if (-not (Test-Path $Sln)) {
@@ -43,7 +43,7 @@ if (-not (Test-Path $GodotExe)) {
     throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup."
 }
 
-Write-Host "Building CrimsonSkies..." -ForegroundColor Cyan
+Write-Host "Building CSVM..." -ForegroundColor Cyan
 dotnet build $Sln
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build failed (exit $LASTEXITCODE)."

@@ -2054,3 +2054,45 @@ for the repo name rather than a generic description.
 is Microsoft's copyright and trademarks, and that is handled by the XWVM model — no assets in the
 repo, runtime read of the player's own install, explicit disclaimer. The licence governs what
 *downstream users* may do with the code, which is a separate question that copyleft answers well.
+
+
+## 2026-07-22 — The Godot project renames to CSVM
+
+`CrimsonSkies/` → `CSVM/`, matching the public repo name set earlier today, and removing the
+long-standing ambiguity with `CrimsonSkiesGame/` (the retail install). Moved with `git mv` so
+history follows the files.
+
+**Changed:** the project directory; `CrimsonSkies.sln`/`.csproj` → `CSVM.sln`/`.csproj` plus the
+solution's internal project reference and `RootNamespace`; `project.godot`'s `assembly_name` and
+`config/name` (the window title, previously "Crimson Skies"); the C# namespace `CrimsonSkies.*` →
+`CSVM.*` across all 63 sources; `.gitignore`'s three build-artifact paths; the launch scripts; and
+the live docs.
+
+**Deliberately not renamed.** `docs/HISTORY.md` and `docs/plans/` keep their old paths — they are
+historical records, and house style here dates an assertion inline rather than rewriting a past
+snapshot around it. The F12 screenshot prefix stays lowercase `crimsonskies_` (`PlaneViewer.cs`);
+renaming it would orphan the existing captures that `NOTES.md` and `backlog.md` cite by filename.
+`CrimsonSkiesGame/` is untouched — every rewrite used a `CrimsonSkies(?!Game)` negative lookahead
+so the install path could not be caught by accident.
+
+**The rewrite corrupted 3 source files and `dotnet build` reported 0 errors.** The bulk replace
+read each file as Latin-1 on the assumption that a byte→char→byte round trip is lossless for an
+ASCII-only substitution. It is not: `[IO.File]::ReadAllText($path, $encoding)` still auto-detects
+a BOM and decodes as UTF-8 regardless of the encoding argument, so the three BOM-prefixed files
+came back as real Unicode and were then written out as Latin-1 — collapsing every multi-byte
+sequence to a single byte (`°` C2 B0 → B0, `×` C3 97 → D7) and dropping the BOM. The C# compiler
+compiled the resulting mojibake without complaint because it all sat in comments; **Godot refused
+the same files outright**, validating UTF-8 strictly, and the only symptom was
+`Main.tscn: Parse Error: [ext_resource] referenced non-existent resource`. Recovered by restoring
+from the index (`git checkout`, verified byte-identical against `git show HEAD:...`) and redoing
+the pass with explicit BOM detection and a throwing UTF-8 decoder. Both halves are now rules in
+`docs/verification.md` §4.
+
+**Verified:** `dotnet build` clean (0/0), all 63 sources validate as UTF-8, and a C1 Bloodhawk
+flight screenshot is visually indistinguishable from a pre-rename capture taken the same morning —
+same terrain, fog, HUD, compass tape, gauge cluster and livery.
+
+**The transferable point is the one already in `docs/verification.md` rule 5, in a new costume:** a
+clean compile is only evidence if the compiler is *able* to fail on the thing you broke. It cannot
+fail on comment encoding, so it said nothing. Running the game took one command and said
+everything.

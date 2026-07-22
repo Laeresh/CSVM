@@ -66,7 +66,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 One line each — **the extraction pipeline, the launch scripts and the mech3ax fork are in `docs/tooling.md`**; none of it is needed to write engine code.
 
-- `CrimsonSkies/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
+- `CSVM/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CrimsonSkiesGame/` — the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/` — extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
@@ -74,7 +74,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
-- `docs/architecture.md` — deep per-module implementation notes for `CrimsonSkies/src`. **Read a module's bullet before changing it.**
+- `docs/architecture.md` — deep per-module implementation notes for `CSVM/src`. **Read a module's bullet before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
 - `docs/cli.md` — the full per-flag CLI reference (CLAUDE.md keeps only the day-to-day table).
 - `docs/verification.md` — how to verify a change here, and how the instruments lie. Read before measuring anything.
@@ -83,13 +83,13 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; delete when landed.
 - `OriginalScreenshots/` — user-captured reference shots from the original game (committed; no bulk asset data). Reference videos in `Videos/` are git-ignored — ask the user if one is missing.
 
-## Godot project (`CrimsonSkies/`)
+## Godot project (`CSVM/`)
 
 Godot 4.7 .NET, C# / net8.0. Build & run:
 
 ```
-dotnet build CrimsonSkies/CrimsonSkies.sln
-tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CrimsonSkies res://scenes/Main.tscn -- --plane=player_bhawk
+dotnet build CSVM/CSVM.sln
+tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 ```
 
 (First time only: run with `--headless --import` once before running scenes.)

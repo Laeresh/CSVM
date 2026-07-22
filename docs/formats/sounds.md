@@ -2,7 +2,7 @@
 
 Part of the [format documentation](README.md). Covers the shared zrdr archive's sound
 definitions and curve blocks, and the audio container format. Consumed by
-`CrimsonSkies/src/Mech3/SoundDefs.cs`, `WavFile.cs`, `src/Flight/FlightAudio.cs`.
+`CSVM/src/Mech3/SoundDefs.cs`, `WavFile.cs`, `src/Flight/FlightAudio.cs`.
 
 ## `sounds.json` — the SETS block
 

@@ -7,8 +7,8 @@ sources combine: `ia.json`'s `dzones` list (the zone set), the mission's `target
 localized text). Decoded + wired 2026-07-19 (Milestone 2.5 item 1); zone positions verified
 against the C1 gamez and the assembled marker text against
 `OriginalScreenshots/C1 IA1 Cloudcoverage 1.png`. Consumed by
-`CrimsonSkies/src/Mech3/Messages.cs`, `CrimsonSkies/src/Flight/MissionTargets.cs`, and
-`CrimsonSkies/src/Flight/StuntMission.cs`.
+`CSVM/src/Mech3/Messages.cs`, `CSVM/src/Flight/MissionTargets.cs`, and
+`CSVM/src/Flight/StuntMission.cs`.
 
 ## The stunt objective: fly through the Danger Zones
 

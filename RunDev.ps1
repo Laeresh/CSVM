@@ -1,6 +1,6 @@
 <#
 .SYNOPSIS
-    Builds CrimsonSkies and launches it in Godot.
+    Builds CSVM and launches it in Godot.
 
 .DESCRIPTION
     Runs `dotnet build` on the Godot .NET project, then launches the game via the
@@ -24,8 +24,8 @@
                                 extra flag. Per-part HP sliders (H toggles them);
                                 prompts for the plane unless --plane= is given.
 
-    Any other CrimsonSkies user args are forwarded as-is (see
-    CrimsonSkies/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
+    Any other CSVM user args are forwarded as-is (see
+    CSVM/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
     --spawn=, --sky-zone=, --mute, --debug-collision, --hold=, etc).
 
 .EXAMPLE
@@ -60,8 +60,8 @@
 $ErrorActionPreference = "Stop"
 
 $RepoRoot   = $PSScriptRoot
-$ProjectDir = Join-Path $RepoRoot "CrimsonSkies"
-$Sln        = Join-Path $ProjectDir "CrimsonSkies.sln"
+$ProjectDir = Join-Path $RepoRoot "CSVM"
+$Sln        = Join-Path $ProjectDir "CSVM.sln"
 $GodotExe   = Join-Path $RepoRoot "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
 
 # Every player-flyable aircraft: the vehicle.json defs with kind_of=player_airplane,
@@ -132,7 +132,7 @@ if (-not (Test-Path $GodotExe)) {
     throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup."
 }
 
-Write-Host "Building CrimsonSkies..." -ForegroundColor Cyan
+Write-Host "Building CSVM..." -ForegroundColor Cyan
 dotnet build $Sln
 if ($LASTEXITCODE -ne 0) {
     throw "dotnet build failed (exit $LASTEXITCODE)."

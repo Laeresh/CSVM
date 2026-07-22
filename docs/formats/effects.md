@@ -2,7 +2,7 @@
 
 Part of the [format documentation](README.md). Covers the original's fully data-driven
 effect system (surveyed 2026-07-14 for the crash sequence + damage trails; no binary anim
-format needed for any of it). Consumed by `CrimsonSkies/src/Effects/Puffer.cs`.
+format needed for any of it). Consumed by `CSVM/src/Effects/Puffer.cs`.
 
 The system has three layers, all in zrdr + the chapter `texture.zbd`:
 

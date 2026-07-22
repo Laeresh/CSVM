@@ -2,7 +2,7 @@
 
 Part of the [format documentation](README.md). Covers how the original populates
 forests/bushes (and city blocks) without a single placed tree node in the gamez.
-Consumed by `CrimsonSkies/src/Mech3/Clutter.cs`.
+Consumed by `CSVM/src/Mech3/Clutter.cs`.
 
 ## `interp.json` — the engine boot scripts
 

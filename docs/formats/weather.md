@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 [world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
-`CrimsonSkies/src/Flight/Weather.cs` (`WeatherState`) + `PlaneViewer.SetupWeather`.
+`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `PlaneViewer.SetupWeather`.
 
 Seeded 2026-07-18 with the item-3 fog-colour decode; grown the same day with precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
@@ -162,7 +162,7 @@ mech3ax's `GetSingle()`, so `PARTICLES 100` is `100.0f` — read with `ScalarAft
 normalized by `ParseColor`; it's a DX7 sRGB framebuffer value, so the renderer converts it
 sRGB→linear (same as `FOG_COLOR`).
 
-Rendered by `CrimsonSkies/src/Effects/Precipitation.cs` as one camera-following MultiMesh
+Rendered by `CSVM/src/Effects/Precipitation.cs` as one camera-following MultiMesh
 field the plane flies through (SNOW = billboarded flakes, RAIN = fall-aligned streak quads);
 the data→look scale factors (fall m/s, particle count, box size, streak length) are marked
 `TUNE` there.

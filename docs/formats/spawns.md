@@ -5,7 +5,7 @@ Part of the [format documentation](README.md). Covers where a mission places the
 own zrdr archive** (`<chapter>/<mission>/zrdr.zbd` — a different archive than the shared
 top-level zrdr). Decoded + wired 2026-07-15; spawn positions/headings verified byte-exact
 against the data for C1/IA1 `zeppelin_run` and side-by-side in-game for C3/M01. Consumed
-by `CrimsonSkies/src/Flight/SpawnPoints.cs`.
+by `CSVM/src/Flight/SpawnPoints.cs`.
 
 ## Instant action — `ia.json` `spawn_points`
 
