@@ -3534,3 +3534,63 @@ its `node_bbox`/`child_bbox`, neither of which is parsed into `GameZNode` today.
 No code changed. The verification that matters is that every moved entry's evidence exists in the
 plan and every cross-reference still resolves — checked, including `CLAUDE.md`'s "Known issues"
 z-fight bullet, which pointed into the deleted backlog section and now points at the plan.
+
+## 2026-07-22 — Polish-4 item 1: an event's START_TIME gates that event, not the next one
+
+**The bowl sign was the symptom; the defect is the sequence scheduler, and it shifted every
+sequence in the install by one slot.** `SequenceRunner.Advance` fired event *i*, then computed
+`_due = NextDue(events[i], duration)` — and that `_due` gated event *i+1*. But
+`AnimEvent.StartOffset` is documented at `CompiledAnim.cs:256-259` as `"Event"` = *since the
+previous event fired*, null = *immediately after the previous event*: **the offset belongs to the
+event that carries it.** So every timestamped event fired one slot early and its unstamped partner
+one slot late.
+
+**The fix.** `SetDue()` re-gates on `_seq.Events[_pc]`'s **own** offset after every `_pc` change,
+measured from a new `_base` = the previous event's fire time plus its run time. Control flow does
+not advance `_base` (LOOP/IF consume no time) but **is** gated, and the constructor calls
+`SetDue()` so the first event's own offset applies — `_due` previously started unconditionally at 0.
+That last part fixes a second, separate discard: the `Loop` branch hard-reset `_due = 0f`, throwing
+away e.g. the bowl sign's trailing `Loop {Event 1.2}`, which is its entire inter-cycle pause.
+
+**Why the sign proves it.** `bowl` (gamez 4868) carries `des_on`/`des_off` (models 631/632), both
+shipped `active: true`, both with real textures (`bowlsignon03.tif` vs `bowlsign03.tif`). Its
+compiled `on_off` sequence is **nine strict SWAP pairs plus an infinite Loop**, and only the first
+of each pair is timestamped — so a one-slot shift splits every pair, leaving windows with neither
+variant on. Traced and then measured.
+
+**Measurement.** Face-on at `--freecam --chapter=C1 --campos=-6605,135.15,-5975.2
+--lookat=-6618.7,135.15,-5975.2`, `--shots=150 --jitter=0`, crop (505,280)-(650,325), classified
+three-way by luminance **standard deviation** (empty sky sd≈18, panel present sd≈48–53) then mean:
+
+| | no panel at all | unlit | lit |
+|---|---|---|---|
+| before | **38.0%** | **0.0%** | 62.0% |
+| after | **0.0%** | 72.0% | 28.0% |
+
+Before the fix **`des_off` never rendered in a single frame** — the sign was lit or gone, which is
+precisely the report ("the bowl sign flashes in the original, but ours disables and re-enables it
+instead"). After, the blank windows map one-to-one onto the now-unlit ones and the lit windows
+shift by exactly one slot.
+
+**⚠ The instrument trap is the more transferable finding, and is now `docs/verification.md` rule 16.**
+The first classifier asked "is the crop reddish?" — which cannot distinguish an **unlit panel** from
+**empty sky**, because both are grey. It reported this correct fix as a regression, 38% → 72%
+"blank", and the number was precise, reproducible and meaningless. Only *looking at the frames*
+caught it. A metric built from the broken state does not necessarily survive the state being fixed.
+
+**8-chapter regression.** Every structural count identical across C1/C1B/C1C/C2/C2B/C3/C4/C5 — gamez
+nodes, mesh instances, colliders, uv-clamped surfaces, def counts, anchored, unresolved. What moves
+is bootstrap-window activity: state ops C1 4136→4132, C4 2282→2278, C5 4192→4146, and live motions
+C1 41→39, C5 43→39 — events that used to fire early now wait, so fewer have fired by the time the
+snapshot prints. **Those lines are bootstrap snapshots** (`AnimRuntime.cs:223` says so), so C5's
+`ObjectMotion(rotation delta)×1` dropping off the "not yet acted on" tally means that event now
+fires at its authored time rather than during boot — not that it stopped firing. Zero errors in all
+eight. C1 traffic re-verified as still driving its routes continuously (`mafia` −17.2 units/s,
+`black_car1` +17.2, smooth across a 10 s run), since the route loops were the documented risk area.
+
+**Found on the way, NOT fixed, now in `backlog.md`: `wait_for_completion` is decoded and read by
+nothing.** It appears on **56,750 `CallAnimation` events** install-wide (53,019 null, 3,639 zero, and
+92 scattered across 1–6), so it is an index rather than a boolean — the same family as the
+`wait_for_raw` connector slots. Nothing in `CSVM/src` references it. This is the `spline_interp`
+shape exactly: a field the extraction decodes faithfully and the runtime silently ignores. It is a
+separate mechanism from this item's off-by-one and was deliberately not folded in.

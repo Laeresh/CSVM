@@ -37,9 +37,9 @@ Chosen for a mix of **long-running depth** (items 1, 9, 10) and **diagnosed-and-
 
 Statuses: ☐ open · ◐ in progress · ☑ done — keep this in sync as items land.
 
-1. ☐ **`NextDue` off-by-one — every sequence in the game is mis-scheduled** (the bowl sign is one symptom)
+1. ☑ **`NextDue` off-by-one — every sequence in the game is mis-scheduled** (the bowl sign is one symptom) **(done 2026-07-22 — an event's `START_TIME` now gates that event, not its successor; control-flow events are gated too, which restores the sign's discarded `Loop {Event 1.2}` pause. Measured face-on: frames with NO panel at all 38.0% → 0.0%, and `des_off` went from rendering in 0.0% of frames to 72%. 8-chapter regression structurally identical, zero errors, C1 traffic still driving. Found and NOT fixed on the way: `wait_for_completion` is decoded on 56,750 `CallAnimation` events and read by nothing — now in `backlog.md`. `docs/HISTORY.md`)**
 2. ☐ **`FromToMotion` resets orientation to rest** — C1's cars drive mis-headed
-3. ☐ **C1 IA1: oil tanks / fuel boxes already destroyed at spawn** — leads only, not yet diagnosed
+3. ⤳ ~~C1 IA1: oil tanks / fuel boxes already destroyed at spawn~~ **MOVED BACK TO `backlog.md` 2026-07-22, under "Open fidelity questions".** The premise inverted twice and then failed to close: our engine is **correct** per the shipped data (intact tanks, every run), the original's only route to a destroyed tank is **weapon damage via the fuel trucks**, and the user has confirmed **those trucks exist only in C1/M02**. So the reported IA1 sighting is most likely M02. **Blocked on user testing**, with the full traced mechanism and the three surviving explanations recorded in the backlog entry. **Nine items remain.**
 4. ☐ **C5 IA1: the sunk zeppelin** — `piratezep` at the world origin
 5. ☐ **C2 stunt: the Seaplane Hangar objective sits at (0,0,0)**
 6. ☐ **Knife-edge: the nose should drop, not just the path** (+ delete the dead soft-tree branch)
@@ -77,18 +77,15 @@ any of the individual findings:
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | 1, 2, 4, 5, 10 | Confirm the trace, then implement. These name a specific line and a specific wrong behaviour. |
 | **Direction is sound, magnitude is a judgement call** | 6, 7, 8 | The *what* is settled by data; the *how much* is TUNE and goes on the TUNE list rather than being invented as fact. |
-| **Leads only — no mechanism yet** | 3, 9 | Budget the session for investigation. Item 9 in particular has been diagnosed wrong three times. |
+| **Leads only — no mechanism yet** | 9 | Budget the session for investigation. Item 9 has been diagnosed wrong three times. (Item 3 was in this row and has since been moved back to `backlog.md`, which is what this row's risk looks like when it materialises.) |
 
 ## Waves and dependencies
 
-**Wave A — the animation runtime (items 1, 2, 3).** All three edit `CSVM/src/Mech3/AnimRuntime.cs`
-and share one regression surface, so they are **sequential, in this order**:
-
-- **1 before 2.** Item 1 changes *when* events fire; item 2 changes *what pose* they leave behind.
-  The police chase (`police_car-police_chase.json`) is the shared repro for both, so doing 2 first
-  means re-establishing its baseline after 1 lands.
-- **3 last.** It is the only one of the three still undiagnosed, and both 1 and 2 change bootstrap
-  behaviour it would otherwise be measured against.
+**Wave A — the animation runtime (items 1, 2).** Both edit `CSVM/src/Mech3/AnimRuntime.cs` and share
+one regression surface, so they are **sequential: 1 before 2.** Item 1 changes *when* events fire;
+item 2 changes *what pose* they leave behind. The police chase (`police_car-police_chase.json`) is
+the shared repro for both, so doing 2 first means re-establishing its baseline after 1 lands.
+*(Item 3 was moved back to `backlog.md` — see the checklist.)*
 
 **Wave B — placement (items 4, 5).** Independent of each other and of Wave A. **These two share a
 root cause worth naming once:** a gamez node whose `transform` is the JSON *string* `"Initial"`
@@ -251,64 +248,6 @@ sequence plus `--debug-anim` pose lines); the car should point along its directi
   Note the connection to item 3, which is about those same `fuelbox*` nodes. If you fix the units,
   fix them as their own change with their own regression.
 
-## 3. ☐ C1 IA1: oil tanks / fuel boxes already destroyed at spawn
-
-**Goal.** Find out what applies a destroyed-looking state at bootstrap next to the Bloodhawk hangar,
-and stop it.
-
-**Evidence — LEADS ONLY. This is the least-diagnosed item in the plan; budget for investigation.**
-
-The airfield oil tanks are `ftank01`–`ftank04` under `fuel_station.flt` → `fueldepot`, world
-≈ (−4700, 128, −5870). Each has exactly two children, `healthy` and `destroyed`, **and the gamez
-ships both `active: true`** — the overlay case bootstrap exists to resolve. (Nearest hangar is
-`hangar_3` at (−4336, 128, −6416); the only things within 400 m are `firetruck5/6` and `dz5`, so
-"next to the Bloodhawk hangar" most likely means this fuel depot — **confirm that before fixing
-anything.**)
-
-**Already ruled out.** The `ftank0*` reader def (`extracted/C1/zrdr/fuel_tanks.zrd.json`,
-`ANIMATION_ROOT_NAME healthy` + `LOCAL_NODES_ONLY`, `ACTIVATION ON_CALL`) anchors cleanly to all four
-tanks. Four per-instance compiled twins exist (`extracted/C1/cam_anim/ftank0N-ftank_boomN-healthy.json`)
-with correct reset state (`healthy` true, `destroyed` false) and a full symbol table. **No def in
-C1's compiled archive has `activation: OnStartup` and mentions `healthy`/`destroyed`** — all 481
-were checked — so nothing detonates the tanks at boot. `depot_fuse`, `chainreaction_fueldepot1/2`
-and `ftank_boom*` are all `OnCall`.
-
-**Two leads, in priority order:**
-
-1. **`brokenbox` is a destroyed variant the safety net structurally cannot catch.** `fuelbox1` and
-   `fuelbox2` (same `fuel_station.flt` group, ~25 m from the tanks) each ship `box` (model 750)
-   **and** `brokenbox` (model 757), both `active: true`. `HideUncoveredDestroyed`
-   (`AnimRuntime.cs:1957-1970`) matches **the substring `"destroyed"` only** — the `_dest` suffix
-   rule was removed deliberately (`:1954-1956` records why: it wiped the harbor `refuel*` tanks).
-   `brokenbox` contains neither, so it is hidden *only* if the `fuelbox*`/`fuelboxconnect*` reset
-   state runs. **That is the exact shape of the reported symptom, on objects a user would plausibly
-   call oil tanks.** Verify by logging pass 1's applied-op count for `fuelbox1`/`fuelbox2`.
-2. **Double-load.** `AnimProgram.KeyOf` is `"{Name} {AnimName}"`, so reader key `ftank0* ftank_boom*`
-   never collides with compiled `ftank01 ftank_boom1`. Both are in `program.Defs`, both anchor, both
-   apply a reset state — benign in isolation, but op ordering here is not what the "compiled wins on
-   collision" rule implies.
-
-**The bootstrap map** (`AnimRuntime.Bootstrap`, `:121-231`), five passes: 0 `MissionSetup.Apply`
-(`:133`) · 1 anchored defs' `RESET_STATE` via `ApplyInstant` (`:138-148`) — the pass carrying
-`healthy ACTIVE / destroyed INACTIVE` · 2 `ON_STARTUP` defs run (`:153-159`) · 3 `startanims.json`
-**with the global-resolution fallback at `:176-177`** (`if (anchors.Count == 0) anchors.Add(null)`),
-the one pass where a bare name like `healthy` resolves against the whole world · 4
-`HideUncoveredDestroyed` (`:187-188`). Resolution: `Anchors` `:1715-1734`, `Targets` `:1739-1772`
-(**for compiled defs the symbol table wins unconditionally and the anchor is ignored**, `:1744-1753`).
-
-**Approach.** Take a screenshot at the depot first and establish *which* objects actually look
-destroyed — the report says "oil tanks" and the strongest lead is the fuel boxes beside them. Then
-instrument bootstrap passes 1 and 3 for those node names and read what actually applies. Fix the
-mechanism, not the symptom.
-
-**⚠ Traps.**
-- **Do not widen `HideUncoveredDestroyed`'s substring match to catch `brokenbox`.** The `_dest`
-  suffix rule was already removed once for wiping correct content. A name-pattern safety net is what
-  produced this class of bug; prefer making the real reset state run.
-- Confirm the objects before fixing them — `docs/verification.md` §8: a measurement that locates
-  geometry has not told you what is wrong with it.
-
----
 
 # Wave B — placement
 

@@ -145,6 +145,21 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     clipped. **Before debugging a suspiciously axis-aligned artifact, check whether the camera
     pose is special** — an artifact that lands on exact half-viewport boundaries is usually
     projection, not rendering.
+16. **A metric built while looking at the broken state may not survive the state being fixed.**
+    Verifying the bowl-sign scheduler fix (2026-07-22) started with the obvious classifier: the
+    sign is red, so score each frame "is this crop reddish?". Against the *broken* build that is a
+    perfectly good instrument — the sign was either lit-red or completely absent, and it measured
+    38.0% absent exactly. Then the fix landed and it reported **72% blank: twice as bad**. The
+    number was precise, reproducible, and meaningless. The fix had restored the `des_off` variant,
+    which had never rendered in a single frame before, and an **unlit grey panel is not reddish** —
+    so the classifier scored "sign correctly showing its off state" identically to "no sign at
+    all". What caught it was *looking at four frames*; what fixed it was classifying on luminance
+    **standard deviation** (empty sky sd≈18 vs any panel sd≈48–53) before asking about brightness.
+    **Two rules fall out.** First: a classifier that only ever saw two of the three possible states
+    cannot be trusted to name the third — enumerate the states the *fixed* code can produce, not
+    the ones the bug produces. Second, and more general: **when a fix makes a metric worse, look at
+    the artifact before believing the metric.** Compare rule 4 (a metric going to zero is not the
+    outcome being right) — this is its mirror image, and the same discipline answers both.
 
 ## 1. Before you trust a screenshot diff
 

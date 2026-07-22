@@ -151,6 +151,23 @@ unscheduled.
   drawn procedurally instead in a future Hi-Def mode.
 ## Feature backlog
 
+- **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
+  sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
+  mechanism). It appears on **56,750 `CallAnimation` events** across the install and on **no other
+  event kind**. Value distribution: `null` ×53,019, `0` ×3,639, then `1` ×32, `2` ×19, `5` ×16,
+  `3` ×9, `4` ×8, `6` ×8. **That shape says index, not boolean** — the same family as the
+  `wait_for_raw` connector slots seen on `player_plane_destruct`'s per-piece
+  `CallAnimation large_firetrail WithNode pieceN` (`wait_for_raw` 0/1/2 = the three `local_lft`
+  `CallObjectConnector` refs). Working hypothesis to test first: it selects which of the def's
+  `anim_refs` connectors the call blocks on. **Nothing in `CSVM/src` references the field at all.**
+  ⚠ **This is the `spline_interp` shape** — a field the extraction decodes faithfully and the
+  runtime silently ignores — and that one was inert-looking right up until it was traced to a 1e29
+  transform blowup. Not evidence this one is harmful, but it is a reason to decode it rather than
+  leave it. Start by dumping the defs where the value is non-null and non-zero (92 events total,
+  small enough to read by hand) and checking whether their `anim_refs` arrays are long enough to
+  index. Note the scheduler now honours event offsets correctly, so any *timing* symptom this field
+  causes should be cleaner to see than it was before 2026-07-22.
+
 - **Better mission states.** There is still a lot of difference between our maps and the
   original's. May need a pipeline to diff them, or to crack the mission loading states properly.
   (`MissionSetup`'s interp boot script, landed 2026-07-22, closed the largest single gap and
@@ -274,6 +291,65 @@ unscheduled.
   `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 ## Open fidelity questions (answerable by testing the original)
+
+- **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
+  TEST BY THE USER — scheduled into polish run 4 as item 3 on 2026-07-22, then moved back here the
+  same day when the investigation could not close it.** Report: in the original, the depot's state
+  varies between loads — sometimes all tanks intact, sometimes **the two middle (east–west) tanks
+  already destroyed at spawn** plus **blinking lights on a pipeline tower**. Original capture:
+  `OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png` (user-confirmed the tanks were **already
+  alight at mission start, not shot**). Ours, annotated: `Screenshots/C1 IA1 Fuel tanks
+  annotated.png` (freecam `x -4709 y 270 z -5809`; **yellow** = the varying tanks, **red** = the
+  blinking element). Both folders are gitignored, so those citations resolve only locally.
+
+  **CSVM is not misbehaving — do not "fix" this.** Verified from code: both `healthy` and
+  `destroyed` ship `active: true` in the gamez, bootstrap pass 1 resolves them correctly via each
+  `ftank0N` def's `RESET_STATE`, and we render **intact tanks, dark lights, static — every run**.
+  That is what the shipped data specifies for IA1. Forcing any other state would harden a guess.
+
+  **The mechanism, fully traced (2026-07-22) — do not re-derive it:**
+  - **The ONLY route to a destroyed tank is weapon damage.** `fuel_truck01-truck_destroy01.json`
+    (`activation: WeaponHit`, `health: 20.0`) → `chainreaction` → `StopAnimation fuelboxconnect1`
+    → `CallAnimation chainreaction_fueldepot1` → burn crawl → `ftank_boom4`, then `ftank_boom3`.
+    `chainreaction_fueldepot2` mirrors it with `ftank_boom1`, `ftank_boom2`. Each `ftank_boomN`
+    flips `healthy`→inactive, `destroyed`→active.
+  - **No randomness exists on that path.** The authored-random idiom in this data is
+    `If {RandomWeight: w}` → state → `StopSequence` (see `gen_zep-random_prop.json`, event kind
+    `If`, opcode 4537). Checked clean: `fuel_tanks.zrd.json`, `ref_fueltanks.zrd.json`,
+    `fueltruck.zrd.json` (its only `RandomWeight` picks how a truck *chassis tumbles*), all 47 C1
+    `cam_anim` files carrying `RandomWeight`, all 13 in `C1/IA1/mis_anim`, and `ia1.gw` — **which
+    has no conditional or branching construct at all.**
+  - **The blinking is a WORKING indicator, not damage.** `fuelbox1-fuelboxconnect1.json` `OnCall`,
+    sequence `flashthelights`: lights on → +0.1 s off → +0.2 s `Loop {-1}`, alongside `scale_hose`
+    rocking the `rockerarm` — a pump station refuelling. Its damaged counterpart `fuelboxbreaks1`
+    turns those lights off permanently. **So blinking and destroyed tanks are anti-correlated
+    within a chain**; seeing both means one chain ran and the other did not (one side wrecked while
+    the other pump still works).
+  - **⚠ The anomaly that blocks closure.** "The two middle, east–west" = `{ftank02, ftank04}` by
+    world X (01 −4722.8, 02 −4691.2, 04 −4682.8, 03 −4618.2). **No chain produces that pair** —
+    the chains partition `{01,02}` and `{04,03}`, and no partial-timing cut gives it either. Caveat:
+    `ftank02` sits ~52 m north of the other three, so the visual "row of four" from that freecam
+    pose may not match the X ordering.
+
+  **Why it cannot be actioned yet.** In IA1 the whole route is unreachable: `ia1.gw` deactivates
+  `fuel_truck01`/`02`, `nodes.json` ships both `active: false`, and the only caller of
+  `trucktodepot1` anywhere in the tree is a **C1/M02** script. **User-confirmed 2026-07-22: the
+  trucks are only in M02.** So per the shipped data C1 IA1's depot **cannot burn and cannot blink**
+  — which contradicts the report and means one of these is true, undiscriminated by the files:
+  1. **The observation was C1/M02, not IA1** — the one mission where trucks drive, pumps blink and
+     the trucks are shootable. **Now the leading explanation**, given the trucks are M02-only.
+  2. **IA scenario selection lives in the exe** — `ia.zrd.json` carries `disallow_missions` and
+     `dogfight_ace`/`dogfight_squadron` spawn sets, so instant action has multiple scenario types
+     and per-scenario setup could re-activate the trucks. Nothing in the extraction shows this.
+  3. **The exe drives it directly** — the `fire2`-trigger class, i.e. not recoverable from files.
+
+  **What the user needs to test, in order:** (a) re-run **C1/M02** in the original and see whether
+  that is where the burning depot and blinking pumps appear; (b) if it really is IA1, note whether
+  the **fuel trucks are visible** — our data says they are off there, so seeing them breaks the
+  model at its root; (c) if IA1 and no trucks, record **which** tanks burn across several loads, to
+  test the `{ftank02, ftank04}` anomaly against the chains' `{01,02}` / `{04,03}` partition.
+  Until (a)–(c) come back, **there is nothing to implement** — and if the answer is (2) or (3) this
+  closes as blocked, alongside the `fire2` trigger and the weather-zone selection.
 
 - **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
   2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).

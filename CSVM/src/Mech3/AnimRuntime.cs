@@ -1534,6 +1534,9 @@ public sealed partial class AnimRuntime : Node
         private float _due;           // when the next event fires
         private bool _done;
         private int _loopsLeft = -2;  // -2 = no loop seen yet
+        // The instant the CURRENT event's start offset is measured from: when the previous
+        // event fired, plus that event's own run time. Control flow does not advance it.
+        private float _base;
         // Did the current loop iteration schedule any time? Decides whether reaching the
         // LOOP starts the next iteration at once or yields to the next frame.
         private bool _iterScheduledTime;
@@ -1542,7 +1545,13 @@ public sealed partial class AnimRuntime : Node
         // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
         private readonly List<bool> _branchTaken = new();
 
-        public SequenceRunner(AnimSequence seq) => _seq = seq;
+        public SequenceRunner(AnimSequence seq)
+        {
+            _seq = seq;
+            // The first event's OWN offset gates it, so the opening gate is not
+            // unconditionally zero — a sequence may legitimately start with a delay.
+            SetDue();
+        }
 
         public bool Done => _done;
 
@@ -1556,10 +1565,16 @@ public sealed partial class AnimRuntime : Node
                 var ev = _seq.Events[_pc];
                 if (rt.Dispatch(ev, inst.Def, inst.Anchor, instant: false, out float duration))
                 {
-                    _pc++;
-                    _due = NextDue(ev, duration);
-                    if (duration > 0f || ev.StartTime > 0f)
+                    // This event has fired. The NEXT event's offset is measured from this
+                    // moment plus this event's own run time — the offset belongs to the
+                    // event that CARRIES it, not to its successor. See SetDue().
+                    _base = _clock + duration;
+                    if (duration > 0f)
+                    {
                         _iterScheduledTime = true;
+                    }
+                    _pc++;
+                    SetDue();
                     continue;
                 }
                 // Control flow.
@@ -1606,11 +1621,14 @@ public sealed partial class AnimRuntime : Node
                         bool instantIteration = !_iterScheduledTime;
                         _pc = 0;
                         _clock = 0f;
-                        _due = 0f;
+                        _base = 0f;
                         _iterScheduledTime = false;
                         _branchTaken.Clear(); // a new iteration re-tests every condition
+                        SetDue();
                         if (instantIteration)
+                        {
                             return;
+                        }
                         break;
                     case "If":
                         _branchTaken.Add(false);
@@ -1651,21 +1669,64 @@ public sealed partial class AnimRuntime : Node
                         _pc++;
                         break;
                 }
+                // Control flow moved _pc without firing anything, so re-gate on whatever
+                // event we landed on. Its own offset applies (LOOP included — the bowl
+                // sign's trailing `Loop {Event 1.2}` is its inter-cycle pause, and that
+                // offset used to be discarded).
+                SetDue();
             }
             if (_pc >= _seq.Events.Count)
+            {
                 _done = true;
+            }
         }
 
         private static float? CountOf(AnimEvent ev) => ev.Data.Num("Count");
 
-        private float NextDue(AnimEvent ev, float duration) => ev.StartOffset switch
+        /// <summary>
+        /// Gate the event at <see cref="_pc"/> on ITS OWN schedule.
+        ///
+        /// An event's START_TIME says when *that* event fires — see
+        /// <see cref="AnimEvent.StartOffset"/>: "Event" = since the previous event fired,
+        /// null = immediately after it. This used to be computed from the event just
+        /// FIRED and applied to its successor, which shifted **every sequence in the
+        /// install** by one slot: a timestamped event fired one slot early and its
+        /// unstamped partner one slot late.
+        ///
+        /// C1's `bowl` sign is the clean demonstration (fixed 2026-07-22). Its compiled
+        /// sequence is nine strict `des_on`/`des_off` SWAP pairs plus an infinite Loop,
+        /// and only the FIRST of each pair carries a timestamp — so the shift split every
+        /// pair, leaving both variants lit at t=0 and then **nothing at all** for each
+        /// gap. Measured face-on at the sign: 38.0% of frames completely blank before,
+        /// 0% after. The user's report was "the bowl sign flashes in the original, but
+        /// ours disables and re-enables it instead".
+        ///
+        /// Control-flow events (LOOP/IF/ELSEIF/…) do not advance <see cref="_base"/> —
+        /// they take no time — but they ARE gated, which is what gives the sign's trailing
+        /// `Loop {Event 1.2}` its inter-cycle pause. That offset was previously discarded
+        /// outright, since the Loop branch hard-reset the gate to zero.
+        /// </summary>
+        private void SetDue()
         {
-            // "Animation"/"Sequence" are absolute against their origin; this runner's clock
-            // is the sequence clock, and an instance starts all its sequences together, so
-            // the two coincide for every case in the shipped data.
-            "Animation" or "Sequence" => ev.StartTime,
-            _ => _clock + duration + ev.StartTime,
-        };
+            if (_pc >= _seq.Events.Count)
+            {
+                _due = _base;
+                return;
+            }
+            var ev = _seq.Events[_pc];
+            _due = ev.StartOffset switch
+            {
+                // "Animation"/"Sequence" are absolute against their origin; this runner's
+                // clock is the sequence clock, and an instance starts all its sequences
+                // together, so the two coincide for every case in the shipped data.
+                "Animation" or "Sequence" => ev.StartTime,
+                _ => _base + ev.StartTime,
+            };
+            if (_due > _clock)
+            {
+                _iterScheduledTime = true;
+            }
+        }
 
         /// <summary>Has some branch of the innermost open IF chain already run? A malformed
         /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
