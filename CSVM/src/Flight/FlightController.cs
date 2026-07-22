@@ -178,16 +178,12 @@ public partial class FlightController : Node3D
     // Collision severity (Run-2 item 10b, all TUNE): impact speed along the contact
     // normal decides between a survivable graze and a crash. A graze damages the
     // struck part (quadratic in severity), slides the velocity along the surface
-    // with some tangential loss, and kicks the attitude; trees are soft obstacles —
-    // the plane plows through with fixed damage and speed loss, never a direct
-    // crash (the data still kills it once a critical part's HP drains).
+    // with some tangential loss, and kicks the attitude.
     private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
     private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
     private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
-    private const float TreeDamage = 2.5f;       // HP per tree strike
-    private const float TreeSpeedFactor = 0.92f; // speed retained per tree strike
     private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
     private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
     private const float GrazeStopSpeed = 12f;    // m/s — grinding to (near) standstill on the
@@ -289,7 +285,7 @@ public partial class FlightController : Node3D
     /// <summary>True if the segment crosses any static world collider; on a hit,
     /// <paramref name="point"/> is the impact position (else the segment end) and
     /// <paramref name="hitName"/> names the collider (parent/body — e.g. a terrain
-    /// tile's "g27889/col", or the tree field's "world1/clutter_col").</summary>
+    /// tile's "g27889/col", or a clutter city block's "world1/clutter_bld_3_7").</summary>
     private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName)
     {
         point = to;
@@ -555,17 +551,15 @@ public partial class FlightController : Node3D
     /// crash (severe impact, a critical part destroyed, or no damage data), true =
     /// survivable graze — the struck part takes severity-scaled damage, the plane is
     /// placed at the swept safe pose, its velocity deflects along the surface with
-    /// some tangential loss, and the attitude takes a lever-arm kick. Trees
-    /// (clutter_col) are soft: fixed damage + speed loss, fly straight through.</summary>
+    /// some tangential loss, and the attitude takes a lever-arm kick.</summary>
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
         string hitName, string part, Vector3 normal)
     {
         if (Damage == null)
             return false; // no destroyable_parts data — every hit crashes (old behavior)
-        bool tree = hitName.EndsWith("clutter_col");
         var vel = _model.VelocityDir * _model.Speed;
-        float vn = tree ? 0f : Mathf.Abs(vel.Dot(normal));
-        if (!tree && vn >= CrashSpeed)
+        float vn = Mathf.Abs(vel.Dot(normal));
+        if (vn >= CrashSpeed)
         {
             GD.Print($"impact severity: vn={vn:0.0} m/s (spd {_model.Speed:0.0}, " +
                      $"n=({normal.X:0.00},{normal.Y:0.00},{normal.Z:0.00})) ≥ {CrashSpeed} — crash");
@@ -578,8 +572,7 @@ public partial class FlightController : Node3D
         if (_damageCooldown <= 0f)
         {
             _damageCooldown = DamageCooldown;
-            float dmg = tree ? TreeDamage
-                : GrazeMaxDamage * (vn / CrashSpeed) * (vn / CrashSpeed);
+            float dmg = GrazeMaxDamage * (vn / CrashSpeed) * (vn / CrashSpeed);
             var state = Damage.Apply(dataPart, dmg);
             if (state != null)
             {
@@ -588,21 +581,15 @@ public partial class FlightController : Node3D
                 if (state.Hp <= 0f && state.Def.Critical)
                 {
                     GD.Print($"part destroyed: {dataPart} (critical) — " +
-                             $"{(tree ? "tree strike" : $"vn={vn:0.0} m/s")} into {hitName}");
+                             $"vn={vn:0.0} m/s into {hitName}");
                     return false; // the data's meaning: a dead critical part downs the plane
                 }
                 _damageFlashText = $"⚠ IMPACT {dataPart.ToUpperInvariant()} {state.Fraction * 100f:0}%";
                 _damageFlash = DamageFlashTime;
                 GD.Print($"graze ({part}→{dataPart}): {hitName} " +
-                         $"{(tree ? "tree" : $"vn={vn:0.0} m/s")} dmg={dmg:0.0} " +
+                         $"vn={vn:0.0} m/s dmg={dmg:0.0} " +
                          $"hp={state.Hp:0.0}/{state.Def.MaxHp:0}");
             }
-        }
-
-        if (tree)
-        {
-            _model.Speed = speedBefore * TreeSpeedFactor; // plow through, shedding speed
-            return true;
         }
 
         // Slide: place at the safe pose just off the surface, keep the tangential
@@ -644,15 +631,15 @@ public partial class FlightController : Node3D
                         Shape = p.Shape,
                         Transform = pose * p.Local,
                     };
-                    // trees (clutter_col) are soft — never "embedded" in a forest
-                    foreach (var hitInfo in space2.IntersectShape(q, 4))
-                        if (hitInfo["collider"].Obj is not Node b || !b.Name.ToString().EndsWith("clutter_col"))
-                        {
-                            overlapping = true;
-                            break;
-                        }
-                    if (overlapping)
+                    // One hit is enough — this only asks whether the box is free.
+                    // (Was a 4-result scan skipping bodies named "clutter_col". Those
+                    // bodies were real until `a795548` confined clutter collision to
+                    // kind.Solid; after it, the filter had nothing left to skip.)
+                    if (space2.IntersectShape(q, 1).Count > 0)
+                    {
+                        overlapping = true;
                         break;
+                    }
                 }
                 if (!overlapping)
                     break;

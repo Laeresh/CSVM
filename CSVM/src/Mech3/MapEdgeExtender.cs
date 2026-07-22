@@ -257,9 +257,12 @@ public sealed partial class MapEdgeExtender : Node3D
                 : new Transform3D(Basis.Identity, mirror * xf.Origin));
         }
 
-        // One body for the whole cell's buildings, named so it does NOT end in "clutter_col"
-        // (FlightController's soft-tree branch) and so a crash log locates the cell. Created
-        // lazily: most cells are sea or forest and have no solid decoration at all.
+        // One body for the whole cell's buildings, named so a crash log locates the cell.
+        // (It used to also have to avoid the suffix "clutter_col", FlightController's soft
+        // fly-through branch. This file DID build a "clutter_col" body until `a795548`
+        // confined clutter collision to kind.Solid; that left the branch unreachable and
+        // it was deleted 2026-07-23.) Created lazily: most cells are sea or forest and have no solid
+        // decoration at all.
         StaticBody3D? solidBody = null;
 
         foreach (var (kindIndex, placements) in byKind)

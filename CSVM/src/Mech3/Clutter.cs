@@ -779,9 +779,14 @@ public sealed class ClutterBuilder
                            Mathf.FloorToInt(xf.Origin.Z / CollisionRegion));
                 if (!regions.TryGetValue(key, out var body))
                 {
-                    // Named so it does NOT end in "clutter_col": that suffix is
-                    // FlightController's soft-tree branch (fly straight through, fixed damage),
-                    // and a skyscraper is the opposite of soft.
+                    // Named to locate the cell in a crash log. (It used to also have to
+                    // avoid the suffix "clutter_col", which FlightController read as a
+                    // soft fly-through obstacle — a skyscraper being the opposite of
+                    // soft. That constraint is gone: clutter collision now exists only
+                    // for kind.Solid, so `a795548` removed the "clutter_col" body this
+                    // file used to build, which left the soft branch unreachable and it
+                    // was deleted 2026-07-23. The name WAS live 2026-07-17 → 2026-07-22
+                    // and the soft-tree behaviour was real while it lasted.)
                     regions[key] = body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
                     root.AddChild(body);
                 }
