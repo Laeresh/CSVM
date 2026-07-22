@@ -2839,3 +2839,99 @@ actually conflict** rather than uniform over all of them — rank coplanar-overl
 against each other and spend the available range on them, with the floor above as the budget.
 That is a scene-graph analysis, not a constant. Do not re-try a within-surface tie-break, and do
 not raise a global constant.
+
+## 2026-07-22 — Polish-3 item 6: the 3D city-block clutter path — C2 and C5 finally have buildings
+
+**The plan's premise held in full**, which after this plan's track record is worth stating
+plainly: C2 and C5 really were rendering painted city-block ground with nothing standing on it,
+and the cause really was the clutter pipeline being billboard-only. C5 gains **79,306** 3D
+decorations and C2 **10,261**, all from templates whose non-sprite decorations were previously
+counted, logged and dropped ("skipped N non-sprite decoration(s)", now gone).
+
+### What landed
+
+- `SceneBuilder.SharedMesh(meshIndex)` publishes the cached built `ArrayMesh` with this
+  builder's materials. It returns the *mesh*, not a node, because everything `BuildSubtree`
+  wraps around a mesh (transform, `node_bias`, collider) is per-placement.
+- `WorldBuilder.Scene` exposes the world's `SceneBuilder`, handed to `ClutterBuilder`.
+- `Clutter.Kind` gained `Solid`, `NodeIndex` and a `Transform3D` `CellPlacements` list
+  (was an XZ `Vector2`). Solid kinds render as one `MultiMeshInstance3D` over the world's own
+  mesh + materials — fullbright, fogged, depth-biased identically to the placed world, and
+  structurally incapable of billboarding, since the world shader has no camera-facing term.
+- Collision (user decision: buildings keep it, sprites do not): one merged static trimesh per
+  1024 m region, named `clutter_bld_<cx>_<cz>` — deliberately NOT ending in `clutter_col`,
+  which is `FlightController`'s *soft*-tree branch. 79,306 bodies would have been the naive
+  alternative.
+- `KindExport` switched from `Positions` to `Placements` (`Transform3D`), which
+  `MapEdgeExtender` consumes: a sprite still mirrors as its position alone, a building
+  mirrors as its whole transform.
+
+### Two plan claims corrected
+
+- **The item's scope is not `cblock*`.** C5's seven `cblock*` templates are only half of it;
+  C2's gain comes entirely from `filmblock1-5`, `resblock1-6` and `parklot1-2` (studio sound
+  stages, houses, parked Studebakers), which the plan never names. Anything keyed on the
+  `cblock` prefix would have fixed C5 and left C2 exactly as reported-broken.
+- **"A building needs its real orientation" is true in principle and inert in this data.**
+  Surveyed every 3D decoration of every C2/C5 template: the deco→mesh chain is exactly two
+  nodes deep in 249 of 249 cases, no mesh node carries a transform at all, and **every
+  authored basis is identity to within 0.108°** (the single matrix-stored node is a 0.03°
+  rotation). A city block varies because its template names 17–28 *different* models, not
+  because it rotates them. The full basis is kept anyway — it is the right thing to consume —
+  but **the upright, correct-looking C5 render is not evidence that it is**: dropping the
+  basis entirely would look identical. This is exactly the trap the coordinator flagged, and
+  the data settled it where a screenshot could not.
+
+### Also found
+
+**`cbNNa` and `cbNNdet01` are co-located halves of one building, not a LOD pair.** Every `det`
+decoration in `cblock1` sits at the *exact* same local origin as its `a` sibling, with a
+different footprint and a different texture family (`roof01`/`bldg*` vs `genbldg3`). Both draw.
+They are 40% of the collision triangles, so this will look like an obvious saving to someone
+chasing the load cost — recorded in `backlog.md` with why it was not taken.
+
+### Verification
+
+- **8-chapter regression, zero errors, counts explained.** Sprite counts byte-identical in all
+  eight (C1 9303, C1B 60, C2 37167, C3 371, C4 88630, C5 139388); solids appear in exactly two
+  (C2 10261, C5 79306); node and mesh-instance counts unchanged everywhere. **C2B gains
+  nothing** — it registers `resblock2`/`filmblock1`/`filmblock2` in `adjust.gw` but its gamez
+  ships none of those template roots, which is retail data and was already true.
+- **Same-build noise floor measured first** (rule 2). Per chapter: C1 0.00%, C1B 0.00%,
+  C1C **35.04%**, C2 0.00%, C2B 1.37%, C3 0.00%, C4 **5.86%**, C5 0.00%. Against those floors
+  the before/after diffs are C5 **65.59%** and C2 **11.76%** (real), and C1C 43.25% / C2B 1.47%
+  / C4 4.61% — all at or *below* their own floors, i.e. precipitation noise, in three chapters
+  that gain no clutter. Without the floor, C1C's 43% would have read as a serious regression.
+- **C1's residual 54–60 px was chased down rather than waved off.** It is reproducible between
+  builds (not run-to-run: three same-build runs agree within 6 px), which is the signature of a
+  real change — so the differing pixels were localised. They are two clusters, both on **moving
+  road vehicles** (the orange car bottom-left and a blue car on the road), i.e. animation phase.
+  A clutter change cannot move a Studebaker, and C1's clutter is 9303 sprites before and after.
+- **Non-spinning: verified by construction and by picture.** Two C5 views 90° apart on the same
+  block show entirely different faces, silhouettes and occlusion.
+- **Collision verified live, both directions.** A scripted C5 dive logs
+  `CRASH into clutter/clutter_bld_-10_-4 (wing)` — a hard crash, and the body name is itself
+  proof the collider is the new one. The same scripted dive in C1 hits `someroads/col` and the
+  forest stays pass-through: C1 builds no clutter collider at all, so item 5's behaviour
+  survives untouched.
+- **Grounding and phase.** Street-level C5 shows buildings meeting the pavement with no float or
+  sink; the far shot shows lamp-post *sprites* lining the streets while *buildings* fill the
+  blocks — the already-validated sprite path and the new solid path agreeing on one grid, which
+  is a stronger phase check than either alone.
+- **Mode battery clean:** freecam, fly, 2P splitscreen stunt race, viewer + damage lab, and the
+  map-edge extension (which now continues the city past the map edge). Full-stderr sweep on C5
+  shows no shader or `instance_uniforms` warning.
+
+### Cost — reported, not hidden
+
+| | before | after |
+|---|---|---|
+| C5 `--freecam` load | 2094 ms | 2188 ms |
+| **C5 `--fly` load** | **3895 ms** | **7393 ms** |
+| C5 draw calls | ~1190 | ~1348 |
+| C5 GPU time | 0.35–1.15 ms | 2.3–3.5 ms |
+| C5 collision triangles | 0 | 2,554,455 |
+
+Frame rate stays pinned at the 60 fps vsync cap throughout, so those frame numbers are floors,
+not ceilings (`docs/verification.md` §2). The one real price is **C5's flight load, +3.5 s**,
+entirely the region-trimesh build; `backlog.md` records the two ways to bring it down.

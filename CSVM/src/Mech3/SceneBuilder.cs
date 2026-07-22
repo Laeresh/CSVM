@@ -319,6 +319,18 @@ void fragment() {
         return mesh;
     }
 
+    /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this
+    /// builder's shared cache and carrying this builder's materials (so a world builder hands
+    /// back fullbright, fogged, correctly depth-biased world geometry).
+    ///
+    /// <para>Exists for <see cref="ClutterBuilder"/>'s 3D-decoration path: a city-block
+    /// building is placed tens of thousands of times, so it is drawn from ONE MultiMesh over
+    /// this single mesh rather than a node per copy. Everything the node path adds around the
+    /// mesh — the transform, the <c>node_bias</c> instance uniform, the collider — is the
+    /// caller's to supply, which is why this returns the mesh and not a node.</para></summary>
+    internal ArrayMesh? SharedMesh(int meshIndex) =>
+        meshIndex >= 0 && meshIndex < _gamez.Meshes.Count ? GetMesh(meshIndex) : null;
+
     private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex)
     {
         if (mesh.Polygons.Count == 0)

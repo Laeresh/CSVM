@@ -30,10 +30,27 @@ templateRoot (parentless Object3d, e.g. terpat02)
    │             •   (terpat02.tif = C1's forest texture)
    │             • quad size = the world-space tiling period
    │             •   (512 m for C1 terpat02; "-128" template variants = 128 m)
-   └─ decoration nodes — one local translation each (position within the patch),
-      └─ sprite mesh below: a single vertical one-sided quad
-         (tree/bush billboard; its texture = the decoration kind, e.g. firtree1.tif)
+   └─ decoration nodes — one local transform each (position within the patch),
+      └─ decoration mesh, exactly one level below: either a single vertical
+         one-sided quad (tree/bush billboard, e.g. firtree1.tif) or a 3D
+         building/vehicle mesh (e.g. cb02a.flt, resbuild11.flt, c_studebaker2.flt)
 ```
+
+**The chain is always exactly two nodes deep, and only the decoration node carries a
+transform.** Measured over every decoration of every template in C2 and C5 (2026-07-22):
+`deco → mesh` in 249 of 249 cases, and 0 of them put a non-identity transform on the mesh
+node. So one node's local transform is the whole placement.
+
+**Authored orientation is identity — the variety is in the model list, not in rotation.**
+Same survey: every 3D decoration's local basis is identity to within **0.108°**, and the
+one node stored as a matrix rather than Euler angles is a 0.03° rotation. A city block
+varies because the template names 17–28 *different* building models, not because it turns
+them. (The remake keeps the authored basis anyway — it is the correct thing to consume,
+and it costs nothing — but be aware that a screenshot cannot tell a correct implementation
+from one that dropped the basis on this data.)
+
+Decoration Y offsets are likewise near-zero: template ground quads sit at exactly `y = 0`
+and building bases sit at `−0.02 … +3.67` relative to it.
 
 The engine dresses **every world polygon textured with a template's ground texture**
 with that template's decorations, repeated at the tiling period. C1's three templates
@@ -55,13 +72,39 @@ in local Z; every 3D building decoration is `model_type: "Default"` with 2–27 
 **Do not classify on `facade_mode` alone** — the 3D building decorations carry a *stale*
 `CylindricalY` in that field while being `Default`, so the type is the discriminator.
 
-**Non-sprite decorations:** C2's `filmblock*`/`resblock*`/`parklot*` and C5's `cblock*`
-city-block templates carry 3D building meshes as decorations, not sprite quads — a
-different placement system the remake skips (logged once per template). Their *sprite*
-decorations are still placed: C5's `cblock*` templates each ship `lightpole` (CylindricalY)
-posts and `poleflare` (SphericalY) glows, 139,388 sprites in total.
+## Non-sprite decorations: the city blocks
 
-## Clutter is not collidable
+C2's `filmblock*` / `resblock*` / `parklot*` and C5's `cblock*` templates carry **3D
+building meshes** as decorations, not sprite quads. They are placed by exactly the same
+rule as the sprites — same grid, same period, same phase, same surface-height sample — and
+differ only in what is drawn and whether it is solid. Implemented 2026-07-22 (polish-3
+item 6); before that they were skipped, which is why C2 and C5 rendered painted city-block
+ground with nothing standing on it.
+
+| chapter | templates | period | 3D decorations placed | sprites placed |
+|---|---|---|---|---|
+| C2 | `filmblock1-5`, `resblock1-6`, `parklot1-2` | 128 m (`parklot*` 32 m) | 10,261 | 37,167 |
+| C5 | `cblock1-7` | 256 m | 79,306 | 139,388 |
+
+`parkpat` (C2, 512 m) and every other chapter's templates are sprite-only, so no other
+chapter gains or loses anything. **C2B registers `resblock2`/`filmblock1`/`filmblock2` in
+its `adjust.gw` but its gamez ships none of those template roots** — the boot script and
+the gamez disagree, and C2B has always placed no clutter at all. That is retail data, not
+a bug in the reader.
+
+**A block's variety comes from its model list.** `cblock1` names 28 3D decorations drawn
+from 11 distinct models; each is stamped at every 256 m grid cell whose terrain carries
+`cblock1.tif`.
+
+**`cbNNa` and `cbNNdet01` are co-located halves of one building, not a LOD pair.** Every
+`det` decoration in `cblock1` sits at the *exact* same local origin as its `a` sibling, but
+with a different footprint and a different texture family (`roof01`/`bldg*` for `a`,
+`genbldg3`/`nosegun5` for `det`). Both are drawn. The `det` meshes are 40% of a block's
+collision triangles, so an implementation looking to cut collision cost will be tempted to
+drop them — note first that they are geometry, not decoration, and that "det" is a name
+heuristic with nothing in the data behind it.
+
+## Sprites are not collidable; 3D decorations are
 
 **Corrected 2026-07-22.** This page previously stated:
 
@@ -77,8 +120,17 @@ Hughes' flying boat and the C2/M01 mission object, whose folder siblings are
 `sprucegoose-fly_the_goose`, `free_the_goose`, `goose_cooked` and `spruce_enginedest`.
 
 **There is no spruce-*tree* animation, and no tree-destruction animation of any kind,
-anywhere in the install.** The remake therefore gives clutter no collider at all (user
-decision, 2026-07-22) — consistent with every other billboard, which is a flat card whose
-collider would be a phantom wall wherever the card happens to be facing. The map-edge
-continuation carries the border tiles' clutter along, likewise without collision
+anywhere in the install.** The remake therefore gives clutter **sprites** no collider at
+all (user decision, 2026-07-22) — consistent with every other billboard, which is a flat
+card whose collider would be a phantom wall wherever the card happens to be facing.
+
+**The 3D decorations are the opposite case and DO collide** (user decision, 2026-07-22):
+they are real multi-polygon geometry with real sides, they do not turn, and flying through
+a skyscraper is not something the original permits. The remake merges them into one static
+trimesh per 1024 m region rather than one body per building — C5 would otherwise need
+79,306 collision bodies — for 2,554,455 collision triangles in C5 and 202,303 in C2.
+
+The map-edge continuation carries the border tiles' clutter along, sprites and buildings
+alike, **without** collision in either case, because a continuation cell is built mid-flight
+and merging a region trimesh on that frame would be a visible hitch
 (see [world-structure.md](world-structure.md)).

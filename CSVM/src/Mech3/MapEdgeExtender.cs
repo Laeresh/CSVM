@@ -49,7 +49,7 @@ public sealed partial class MapEdgeExtender : Node3D
     // Per source cell: its ground-tile nodes (with the accumulated ancestor transform —
     // identity for every observed tile, kept for correctness) and its clutter sprites.
     private readonly Dictionary<(int, int), List<(GameZNode Node, Transform3D ParentXf)>> _tiles = new();
-    private readonly Dictionary<(int, int), List<(int Kind, Vector3 Pos)>> _sprites = new();
+    private readonly Dictionary<(int, int), List<(int Kind, Transform3D Xf)>> _sprites = new();
     private readonly IReadOnlyList<ClutterBuilder.KindExport>? _clutter;
 
     private readonly Dictionary<(int, int), Node3D> _live = new();
@@ -222,36 +222,51 @@ public sealed partial class MapEdgeExtender : Node3D
         return cell;
     }
 
-    private void AddCellClutter(Node3D cell, Transform3D mirror, List<(int Kind, Vector3 Pos)> sprites)
+    // The source cell's decorations at mirrored placements. A sprite mirrors as its position
+    // alone (the billboard shader re-faces it from the instance origin), but a 3D city block
+    // has to carry the mirror's reflection in its basis or the continued city would face the
+    // wrong way — which is why the export switched from positions to whole transforms
+    // (polish-3 item 6). The reflection flips winding; world geometry renders double-sided
+    // and fullbright, so nothing reads the inverted normals.
+    //
+    // Extension 3D decorations are NOT collidable, unlike the map's own: a cell is built
+    // mid-flight when the camera crosses a boundary, and merging a region trimesh there would
+    // be a hitch on the frame that crosses. Extension *ground* still collides. Logged in
+    // backlog.md — out-of-map buildings sit deep in the fog, so this has never been visible.
+    private void AddCellClutter(Node3D cell, Transform3D mirror, List<(int Kind, Transform3D Xf)> sprites)
     {
-        // Group the cell's sprites per kind (kept in kind order for determinism).
-        var byKind = new Dictionary<int, List<Vector3>>();
-        foreach (var (kind, pos) in sprites)
+        // Group the cell's decorations per kind (kept in kind order for determinism).
+        var byKind = new Dictionary<int, List<Transform3D>>();
+        foreach (var (kind, xf) in sprites)
         {
             if (!byKind.TryGetValue(kind, out var list))
-                byKind[kind] = list = new List<Vector3>();
-            list.Add(mirror * pos);
+                byKind[kind] = list = new List<Transform3D>();
+            list.Add(_clutter![kind].Solid ? mirror * xf
+                : new Transform3D(Basis.Identity, mirror * xf.Origin));
         }
 
-        foreach (var (kindIndex, positions) in byKind)
+        foreach (var (kindIndex, placements) in byKind)
         {
             var kind = _clutter![kindIndex];
             var mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
                 Mesh = kind.Mesh,
-                InstanceCount = positions.Count,
+                InstanceCount = placements.Count,
             };
-            for (int i = 0; i < positions.Count; i++)
-                mm.SetInstanceTransform(i, new Transform3D(Basis.Identity, positions[i]));
-            cell.AddChild(new MultiMeshInstance3D
+            for (int i = 0; i < placements.Count; i++)
+                mm.SetInstanceTransform(i, placements[i]);
+            var mmi = new MultiMeshInstance3D
             {
                 Multimesh = mm,
                 MaterialOverride = kind.Material,
                 CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
                 ExtraCullMargin = kind.Width, // the billboard shader swings verts outside the AABB
                 Name = $"clutter_{kindIndex}",
-            });
+            };
+            if (kind.Solid)
+                mmi.SetInstanceShaderParameter("node_bias", kind.NodeBias);
+            cell.AddChild(mmi);
         }
     }
 
@@ -333,15 +348,15 @@ public sealed partial class MapEdgeExtender : Node3D
         if (_clutter == null)
             return;
         for (int k = 0; k < _clutter.Count; k++)
-            foreach (var pos in _clutter[k].Positions)
+            foreach (var xf in _clutter[k].Placements)
             {
-                int cx = Mathf.FloorToInt((pos.X - _x0) / _tileX);
-                int cz = Mathf.FloorToInt((pos.Z - _z0) / _tileZ);
+                int cx = Mathf.FloorToInt((xf.Origin.X - _x0) / _tileX);
+                int cz = Mathf.FloorToInt((xf.Origin.Z - _z0) / _tileZ);
                 if (cx < 0 || cx >= _cols || cz < 0 || cz >= _rows)
                     continue;
                 if (!_sprites.TryGetValue((cx, cz), out var list))
-                    _sprites[(cx, cz)] = list = new List<(int, Vector3)>();
-                list.Add((k, pos));
+                    _sprites[(cx, cz)] = list = new List<(int, Transform3D)>();
+                list.Add((k, xf));
             }
     }
 }
