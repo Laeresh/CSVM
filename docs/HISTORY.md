@@ -2294,3 +2294,78 @@ single-axis clip, the verbatim name propagation and the `MapStruckPart` asymmetr
 One thing it implied that is not true: the strips are not *entirely* outboard (the Bloodhawk's
 run from |x| 0.88 out to 5.80, crossing the 2.03 m wing band), so an "entirely outboard" test
 would have matched nothing. The box **centre** against the wing band is the test that works.
+## 2026-07-22 — `LOOP_COUNT 0` means infinite: C1/C2/C3 traffic drives its route forever (plan item 8)
+
+**Symptom.** C1's police car, mafia car, black car, truck and the two loop cars drove their route
+exactly once and froze wherever the last leg ended. Same for C2's ten studebakers and C3/M02's
+nine. The original loops all of them.
+
+**Cause — one condition.** `SequenceRunner` read a `Loop` event's count and treated `0` as "stop
+now" (`_loopsLeft == 0 → _done = true`). Every one of these defs ships `Count: 0`.
+
+**The survey says `0` is the data's second spelling of "infinite".** Re-run here from the
+extraction rather than taken on trust, and it confirms the plan:
+
+| `Loop.Count` | events (compiled `cam_anim`/`mis_anim`) |
+|---|---|
+| `0` | **26**, in **25** defs |
+| `-1` | 2,919 |
+| positive N | 530 |
+
+All 26 are ground-vehicle route animations — C1's six traffic defs, C2's ten studebakers,
+C3/M02's nine — every one `activation: OnStartup`, and every one with its `Loop` as the **last
+event of its sequence** (verified positionally on all 26). No door, gate, one-shot, hangar, bomb
+or explosion def carries `Count: 0`, so the risk the backlog flagged — a `Count: 0` def that must
+terminate — does not exist. Blast radius: C1, C2, C3. C1B, C1C, C2B, C4 and C5 have none.
+
+**Fix.** Normalise the authored count at read time (`authored == 0 ? -1 : authored`) rather than
+special-casing the test below, so `_loopsLeft == 0` keeps meaning "a *finite* loop has run out" —
+the only way a positive count can ever terminate. `AnimRuntime.cs`, one hunk.
+
+**One plan claim was wrong, immaterially.** The plan states the chapter/mission `zrdr` scopes
+"contain zero `Loop` events". They contain **703**. What is true — and is the claim that matters
+— is that **none of them has `LOOP_COUNT 0`**: the reader scope runs `-1` (575) and positive
+counts only. So the reader path is untouched either way, but the stated reason was not the real
+one. Corrected in `docs/formats/anim-definitions.md`.
+
+**Verification — the runaway check is the point.** A loop the runtime never exits is only safe if
+each iteration consumes time. Measured, not argued:
+
+- **A/B on C1, 100 s each, `--freecam --chapter=C1 --spawn=0 --debug-anim`.** The per-second
+  motion log truncates at 12 entries, which hides exactly these cars once a route restart
+  re-registers their motion at the end of the list — so both runs were taken with the cap
+  temporarily raised (reverted before commit; **the 12-cap is a real trap for this measurement**).
+  Before: `mafia` last seen at t=14, `black_car1` t=14, `car_go_home` t=20, `car_loop1` t=23,
+  `police_car` t=51, `truck1` t=73 — each exactly its authored route length, then frozen. After:
+  all six still moving at t=96, restarting every 16 / 16 / 21 / 52 s respectively, which is their
+  authored `run_time` to the second. Live motions hold at ~36 instead of decaying 41 → 29.
+- **C2 and C3/M02, 110 s each.** C2 base decays 41 → 25, after holds 35 (**+10** = its ten
+  studebakers). C3/M02 base decays 33 → 24, after holds 32–33 (**+9**). Restart periods measured
+  per car: C2 46/40/40/40/40/35/35/35 s, C3/M02 32/26/40/44/35 s — every one equal to that car's
+  authored route time. **No iteration completes in zero time**, so the degenerate two-event cases
+  (`C2/studebaker1`, `C1/mafia`) cannot hang; their 46 s and 16 s legs schedule time on their own.
+- **No runaway by the indirect measures either**: identical debug-tick counts in the same wall
+  clock (107 vs 107 on C2, 108 vs 108 on C3/M02, 32 vs 32 on the short runs) and no log growth
+  (1637 vs 1637 lines on C2), so nothing is spinning inside a frame.
+- **8-chapter regression, zero errors.** Bootstrap figures **identical on all eight** — ON_STARTUP
+  count, start anims, live instances and live motions all match; only the `[index/reset/start ms]`
+  timings move, which is noise. Correct by construction: a `Loop` only runs after bootstrap.
+- **C4 was checked twice on purpose.** A first pass showed C4 decaying to 3 motions on the
+  baseline and holding at 24 after — impossible, since C4 ships no `Count: 0`. It was a dirty
+  baseline (see below), not a real effect. Re-run as a clean one-line A/B, C4 is **24 → 24 on both
+  sides**, and C1B/C1C/C2B/C5 were unchanged in both passes.
+
+**Process note worth more than the fix: this worktree was not isolated.** Another agent was
+editing `AnimRuntime.cs` and `CompiledAnim.cs` in the same directory concurrently. Two things
+followed, both of which cost a re-run:
+
+- **`git stash` is repo-global and its stack is shared across worktrees.** Using
+  `git stash push <path>` to produce a baseline build silently lost this change when the
+  concurrent agent rewrote the same file, and the stash list showed another worktree's entry.
+  **Do not use `git stash` to make a baseline here.** Flip the one line under test, build, run,
+  flip back — that is what the clean A/B above did.
+- **The first "baseline" build therefore contained someone else's in-flight change**, which is
+  what manufactured the phantom C4 result. This is `docs/verification.md` §5 ("before you trust
+  the baseline") arriving through a new door: the baseline was not merely stale, it was *someone
+  else's working tree*. Confirm what the baseline build actually contains before comparing.
+

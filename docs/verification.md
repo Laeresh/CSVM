@@ -130,6 +130,13 @@ The measuring tool has been the bug more often than is comfortable:
 - **A log line can be structurally unable to show the thing.** `--debug-anim`'s motion line
   printed position only, and a spin turns in place, so it read identically every second whether
   or not it was running.
+- **A truncated diagnostic list can hide exactly the entity under test — and hide it *because*
+  the fix worked.** `--debug-anim` prints the first 12 live motions. When the `Loop{0}` fix made
+  C1's traffic loop, each restart re-registered that car's motion at the *end* of `_motions`, so
+  the looping cars fell off the printed list and the fixed build looked identical to the broken
+  one ("last seen at t=14" in both). **Before trusting a per-entity log, check whether the entity
+  is inside the print window, and whether your change moves it out of it.** Raise the cap for the
+  measurement and revert it afterwards.
 - **Node names in the tool are not the names in the game files.** Godot sanitises `.`→`_` and
   auto-renames duplicate siblings; use the `cs_name` meta.
 - **Grep the *full* stderr.** A byte-identical run that grepped only for the screenshot line
@@ -155,6 +162,14 @@ The measuring tool has been the bug more often than is comfortable:
 
 - **`git stash` without `-u` leaves new files in place**, so the "baseline" build can fail and
   Godot happily runs the new DLL. Check the build actually succeeded.
+- **Do not use `git stash` to produce a baseline when anything else may be touching the tree.**
+  The stash stack is **repo-global, shared across every worktree**, and `git stash push <path>`
+  reverts a file another agent may be editing at the same moment. Doing this in a supposedly
+  isolated agent worktree (2026-07-22) silently lost the change under test *and* built the
+  "baseline" from a concurrent agent's in-flight edits to the same two files — which manufactured
+  a confident C4 result in a chapter the change provably cannot touch. **Flip the one line under
+  test, build, run, flip back**; and before comparing, confirm what the baseline build actually
+  contained (`git diff --stat` immediately before the build, not after the run).
 - **A regression test that has never been seen to fail proves nothing.** Reverting one guard
   still passed, because a second guard was silently doing the work.
 - **A passing screenshot that would pass identically with a no-op is not a test.** The livery lab
