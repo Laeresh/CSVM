@@ -1,0 +1,1233 @@
+# Milestone 3 — Weapons and Destruction
+
+**ACTIVE PLAN** (written 2026-07-22). It sits in `docs/` rather than `docs/plans/`, which by
+this repo's convention makes it a live plan. Move it to `docs/plans/` with a `COMPLETE` banner
+when every item lands.
+
+**⚠ This plan is preliminary.** It was written on the assumption that M2 polish 3 was still in
+flight; **that plan closed during the same session** (items 4, 5, 6 landed in `b83252c` /
+`0b15521` / `966ac46`; item 11 closed as disproven in `3c1e008`; item 7 folded into 11). Every
+item there is now landed or closed, and it is ready to move to `docs/plans/` with a `COMPLETE`
+banner once its user-owned weather-zone A/B is handed over.
+
+**So the sequencing constraint behind decision 8 is already satisfied.** Wave A remains the
+right place to start — it is what unblocks the user-owned items on the critical path — but
+waves B–F are no longer gated on anything except A8. The **owed playtests** and **TUNE
+constants** in `backlog.md` still gate calling Milestone 2.5 done; they do not gate this work.
+
+Scope was settled in a grilling session on 2026-07-22. Every decision below is the user's, and
+the "Decisions" table is the authority when this document contradicts itself elsewhere.
+
+---
+
+## Milestone goal
+
+The player can shoot, and the world can break.
+
+- Guns, cannons and hardpoint ordnance fire from the player's aircraft with correct ballistics.
+- World destructibles take damage, run their authored damage stages, and die with the correct
+  animation, effects, audio and collider removal.
+- Everything is driven by the original's own data.
+
+**Nothing fights back.** No AI aircraft, no return fire from emplacements or turrets, no PvP.
+That is a deliberate boundary: the player's damage model (`PlaneDamage`, `DamageVisuals`,
+`CrashBreakup`) already exists and stays collision-driven exactly as it is today.
+
+---
+
+## Decisions (2026-07-22)
+
+| # | Question | Decision |
+|---|---|---|
+| 1 | Threat model | **Nothing fights back.** Player fires, world dies. No PvP, no AA return fire, no AI. |
+| 2 | Loadout source | **A hand-authored stock-loadout table** supplied by the user, read from a data file. |
+| 3 | Guided weapons | **Full guided flight**; lock restricted to ground destructibles. Air-to-air lock → M4. |
+| 4 | Gun mechanics | **Finite ammo + empty-clip warning, and cannon spread.** Heat/jam and ammo pickups → `backlog.md`. |
+| 5 | HUD | **All four**: `gungauge` + `missilegauge`, weapon-name readout, ballistic impact-point reticle, lock-on indicator. |
+| 6 | Collide damage | **Follow the data exactly** — 44 collide-destructibles, 2,565 weapon-only. |
+| 7 | Weapon select | **Gun selector cycles mount slots** (plus ALL); hardpoint selector cycles ordnance. Two independent buttons. |
+| 8 | Sequencing | **Wave A now; waves B–F after M2 polish 3 closes** — *satisfied: that plan closed the same day. See the banner above.* |
+| 9 | Configurator | **Stock loadouts only.** The gun/hardpoint configurator UI is deferred, but the loadout model is fully data-driven so it drops in later without rework. |
+| 10 | Turrets | **Deferred to M4.** Turrets are AI gunners that acquire and engage other aircraft automatically — not player-aimed. With nothing to fight they have no targets. |
+
+---
+
+## ⚠ Read this before implementing anything
+
+`docs/PLAN-M2-polish-3.md` records that **three of its five wave-1 items had materially wrong
+evidence**, and that in both bad cases the *supporting* evidence agreed while the *mechanism*
+did not (`docs/verification.md` rules 6 and 7). This plan was written in one session and
+**four of its author's confident readings were disproven within that same session** — two by
+data, two by the user's playtests, in minutes:
+
+| # | The wrong claim | How it died |
+|---|---|---|
+| 1 | `CLUSTER_SIZE` is the volley size (rounds per trigger pull) | `wep_00` has `CLUSTER_SIZE 2800`. Nothing fires 2,800 rounds per pull. It is **rounds carried per slot** — since confirmed by playtest (A9). |
+| 2 | Gun calibers are fixed hardware per airframe | User: there is a **configurator** where you place up to 4 guns. The Ammo Selection screen only picks the ammo *type* for guns already placed. |
+| 3 | Slot 𝑛 maps to `firepoint(2𝑛−1), firepoint(2𝑛)` | User flew the Bloodhawk: stock is **40-cal inner wing, 30-cal outer wing** — the wing pairs. The predicted mapping put both guns in the nose. *(The correct rule — reverse index order — was found later, from the user's mount table. Note the direction was exactly backwards: an appealing rule that happens to be inverted still fails every test.)* |
+| 4 | Turrets are a player-aimed gun slot | User: turrets are **AI gunners**, automatically targeting other planes. (This also explains why `extracted/zrdr/ai.zrd.json` contains nothing but `TURRET` defs.) |
+
+**Treat every Evidence section below as a lead to verify, not a finding to implement.** Where
+this plan states a hypothesis it says so explicitly, and names the instrument that settles it.
+**Landing no code with a correct disproof is a success here.**
+
+**⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees. Wave 1 of
+M2 polish 3 had three agents pop each other's stashes, one of which manufactured a confident
+result from another agent's in-flight edits. **Never use `git stash` in a worktree session
+here** — use a local commit on your branch, or a file copy. Recorded in `docs/verification.md`.
+
+---
+
+## What the data actually ships
+
+A survey on 2026-07-22 found the weapon data far more complete than the docs suggest — and
+almost entirely undocumented.
+
+### `extracted/zrdr/weapons.zrd.json` — the ballistics table
+
+**48 entries** under `BALLISTICS`, keyed `wep_00` … `wep_73`. **No page in `docs/formats/`
+covers this file, and `zrdr.md`'s reader-family index does not list it at all.**
+`vehicle.md:30` is the only mention, and it is a deferral: *"weapon lists — dogfight-milestone
+scope, undecoded here."* Retiring that line is item A6.
+
+Key coverage across the 48: `DESC`/`NAME`/`FIRE_RATE`/`FLYOUT` 48, `IMPACT`/`VELOCITY`/`FIRE`
+47, `ARMOR_DAMAGE`/`HEALTH_DAMAGE` 46, `RANGE`/`CLUSTER_SIZE` 46, `AMMO_LIMIT` 37,
+`CANNON`/`CANNON_SPREAD`/`LOOPED_SOUND_NAME` 31, `CALIBER` 29, `PRIORITY`/`ACCELERATION` 16,
+`ROCKET` 15, `TURN_RATE`/`IMPACT_PROXIMITY` 14, `LOCK_ON`/`DETONATION_DISTANCE` 13,
+`CRATER` 6, `GRAVITY` 5, `FIRING_HEAT` 4, plus singletons (`FLYOUT_HEALTH`, `TARGETABLE`,
+`DAMAGES_ZEPPELIN`, `PROJECTILE_BBOX`, `DESTROY_ANIMATION`, `SHAKES_CAMERA`, `TORPEDO`, …).
+
+Structure of one gun entry:
+
+```json
+"wep_00": {
+  "DESC":["MSG_WEAP_30CAL_SLUG"], "NAME":["30slug"],
+  "AMMO_LIMIT":[2800], "CLUSTER_SIZE":[2800], "FIRE_RATE":[10.5],
+  "ARMOR_DAMAGE":[2.0], "HEALTH_DAMAGE":[2.0],
+  "RANGE":[1000.0], "VELOCITY":[1000.0], "CALIBER":[30],
+  "CANNON":null, "CANNON_SPREAD":[6.0], "FIRING_HEAT":[5.0],
+  "LOOPED_SOUND_NAME":["snd_30cal"],
+  "FIRE":["ANIMATION",["muzzle_burst_slug"]],
+  "FLYOUT":["MODEL",["slug.flt"]],
+  "IMPACT":["default",  ["ANIMATION",["3040slug_gunhit"],"SOUND",["snd_grnd_bullet"]],
+            "water",    ["ANIMATION",["splash1.flt"],   "SOUND",["snd_water_bullet"]],
+            "enemy",    null,
+            "player",   [...],
+            "buildings",["ANIMATION",["bld_damage.flt"]]]
+}
+```
+
+**`IMPACT` is keyed by surface class** — `default` / `water` / `enemy` / `player` /
+`buildings` — each naming an effect animation and a sound. Hit-testing must classify the
+struck surface to pick the right variant (item B5).
+
+Tiers within the 48:
+- `wep_00`–`03` — base 30/40/50/60-cal.
+- `wep_04`–`15` — ordnance: `9M` incendiary, `ARMOR` AP, `BOOM` HE, `FLAK`, `SONIC`, `FLASH`,
+  `BEEPER`, `SEEKER`, `CHOKER`, `SMOKER`, `TORPDO`, `FLARE` (rear-arc).
+- `wep_23`–`29` — turret guns, glidebomb, cannonball (`RANGE 3500`), AA flak, `FW` fake weapon.
+- `wep_30`–`73` — the **player matrix**: 5 calibers × 4 ammo types. `X0` slug, `X1` dum-dum,
+  `X2` AP, `X3` magnesium. Systematic: DD = ½ armour / 1.5× health damage, AP the inverse.
+- `wep_130`–`170` — the same guns detuned for AI (velocity 600, rate 6.0, ~½ damage).
+
+### The stock loadout (user-supplied, validated against the original's own UI)
+
+There is **no player loadout in the extraction**. All 12 `p*` defs omit `weapons` and inherit
+a single list from `player_airplane` that is provably a *capability catalogue* — all 20 gun
+variants plus 1,000 rounds of each of 12 rocket types, simultaneously. Per-plane slot counts,
+starting loadout and costs are executable-resident. A UI string confirms nothing is pre-filled:
+*"You have not selected the necessary rockets for your plane's hardpoints."*
+
+The user supplied the stock table, and it is corroborated by two original-game captures
+(`OriginalScreenshots/Ammo Selector Hoplite.png`, `… Balmoral.png`). Those screens read
+**"Stock Ford Hoplite"** / **"Stock Bristol Type 146 Balmoral"**, show `AMMUNITION (by gun
+group)` as four rows with unused slots reading **"No Gun"**, and show `ROCKETS (underwing
+hardpoints)` as exactly one dropdown per pylon. Balmoral renders `.50 / .50 / .30 / .30` and
+eight rocket dropdowns — matching the table exactly.
+
+| Plane | Def | W1 | W2 | W3 | W4 | Pylons |
+|---|---|---|---|---|---|---|
+| Hoplite | `pautogyro` | 30 | X | X | X | 2 |
+| Hellhound | `pavenger` | 50 | 40 | X | **50 ᵀ** | 3 |
+| Balmoral | `pbalmoral` | 50 | 50 | **30 ᵀ** | **30 ᵀ** | 8 |
+| Bloodhawk | `pbloodhawk` | 40 | 30 | X | X | 3 |
+| Brigand | `pbrigand` | 60 | 30 | X | **30 ᵀ** | 4 |
+| Devastator | `pdevastator` | 50 | 40 | 30 | X | 4 |
+| Firebrand | `pfirebrand` | 70 | 30 | X | **30 ᵀ** | 6 |
+| Fury | `pfury` | 70 | 30 | X | X | 3 |
+| Kestrel | `pkestrel` | 60 | 50 | X | **40 ᵀ** | 5 |
+| Peacemaker | `ppeacemaker` | 50 | 40 | X | X | 3 |
+| Warhawk | `pwarhawk` | 70 | 50 | X | X | 8 |
+
+**ᵀ = turret slot, deferred to M4** (decision 10). Both screenshots ship stock as **Slug**
+guns and **High explosive** rockets, so stock resolves to: caliber *N* → `wep_N0`
+(`wep_30`/`40`/`50`/`60`/`70`), every pylon → **`wep_06`** (`BOOM`, the `HIGH_EXPLOSIVE` entry,
+armour 40 / health 60).
+
+**W4 is filled on exactly the five airframes carrying a turret** (`pavenger`, `pbalmoral`,
+`pbrigand`, `pfirebrand`, `pkestrel` — the five with a `turrets` key in `vehicle.json`) and on
+no others. The Balmoral is the only plane with two turrets (`MSG_TUR_PFRONT` +
+`MSG_TUR_PREAR`, mesh nodes `fgun`/`rgun`) and the only one with both W3 and W4 filled.
+Correlation is 5/5 on n=11 — strong, but still a correlation; A2 confirms it.
+
+### Gun mounts — named positions, not index arithmetic
+
+`extracted/rof/ui_strings.json` carries a contiguous enum at IDs **3060–3079**, headed
+`IDS_AIRFRAMEGUNGROUPNAMES`. That symbol name says the exe stores a per-airframe *list of gun
+group name IDs* and the configurator renders slot titles by indexing it.
+
+```
+3060 Nose Turret          3061 Inner Wing Guns      3062 Outer Wing Guns
+3063 Lower Nose Guns      3064 Upper Nose Guns      3066 Right Fuselage Guns
+3067 Right Wing Guns      3068 Left Wing Guns       3069 Outer Wing Guns 2
+3070 Inner Wing Guns 2    3071 Nose Guns            3072 Nose Guns 2
+3073 Rear Turret          3074 Low Inner Wing Guns  3075 Low Outer Wing Guns
+3076 Upper Inner Wing Guns 3077 Upper Outer Wing Guns 3079 Middle Wing Guns
+```
+
+The `… 2` variants explain a finding that no index rule could: **several planes have
+duplicated firepoint coordinates.** Balmoral `fp1,2 ≡ fp5,6` at ±2.62 and `fp3,4 ≡ fp7,8` at
+±1.96; Brigand `fp1,2 ≡ fp3,4` at ±1.40 and `fp5,6 ≡ fp7,8` at ±2.34. Two physical positions,
+each hosting two gun groups — i.e. `Outer Wing Guns` **and** `Outer Wing Guns 2`. The user
+confirmed this directly for the Brigand: *"uses the same outer wing mount for W1 and W2."*
+
+Every plane carries a uniform **8 firepoints + 8 pylons** marker rig under `markers`
+(Kestrel is the sole exception at 7 firepoints, its `fp7` at exactly x = 0.00 — a centreline
+mount). Pylons bind trivially and sequentially: **Pylons = N → `pylon1`…`pylonN`.**
+
+`target` is a separate mesh-less marker, one per plane root (11 player + 11 AI) — the aim
+point, irrelevant to M3, essential to M4.
+
+#### The mount table (user-supplied 2026-07-22, read off the configurator)
+
+**Every plane has all four mount positions.** The stock table's `X` means "this available
+mount carries no gun in stock configuration", not "no mount here" — consistent with the
+configurator letting you place up to four guns on any airframe. **Every name below is a
+verbatim entry from the 3060–3079 enum.**
+
+| Plane | W1 | W2 | W3 | W4 |
+|---|---|---|---|---|
+| Hoplite | Inner Wing Guns | Inner Wing Guns 2 | Outer Wing Guns | Outer Wing Guns 2 |
+| Hellhound | Nose Guns | Nose Guns 2 | Inner Wing Guns | Rear Turret |
+| Balmoral | Inner Wing Guns | Outer Wing Guns | Nose Turret | Rear Turret |
+| Bloodhawk | Inner Wing Guns | Outer Wing Guns | Lower Nose Guns | Upper Nose Guns |
+| Brigand | Outer Wing Guns | Outer Wing Guns 2 | Inner Wing Guns | Rear Turret |
+| Devastator | Low Inner Wing Guns | Low Outer Wing Guns | Upper Inner Wing Guns | Upper Outer Wing Guns |
+| Firebrand | Inner Wing Guns | Middle Wing Guns | Outer Wing Guns | Rear Turret |
+| Fury | Outer Wing Guns | Outer Wing Guns 2 | Inner Wing Guns | Inner Wing Guns 2 |
+| Kestrel | Center Guns | Center Guns 2 | Outer Wing Guns | Rear Turret |
+| Peacemaker | Center Guns | Right Fuselage Guns | Right Wing Guns | Left Wing Guns |
+| Warhawk | Inner Wing Guns | Inner Wing Guns 2 | Outer Wing Guns | Outer Wing Guns 2 |
+
+#### The binding rule — **reverse index order** (strongly supported, pending A10)
+
+Cross-referencing the mount names against measured firepoint positions gives:
+
+> **Slot 𝑛 → `firepoint(9−2𝑛)`, `firepoint(10−2𝑛)`** — W1→`fp7,8`, W2→`fp5,6`,
+> W3→`fp3,4`, W4→`fp1,2`.
+
+⚠ **This is the third binding hypothesis in this plan; the first two were disproven.** It is
+recorded as strongly supported rather than proven, and item A10 verifies it. But the supporting
+evidence is of a categorically different kind from the earlier attempts — four independent
+hard-to-fake coincidences:
+
+- **Devastator (decisive).** The only plane whose mounts vary on two axes. `Low Inner` →
+  `fp7,8` (y −0.62, x ±1.17), `Low Outer` → `fp5,6` (y −0.83, ±2.12), `Upper Inner` → `fp3,4`
+  (y +0.44, ±1.00), `Upper Outer` → `fp1,2` (y +0.60, ±1.91). **4/4 correct on both axes.**
+- **Peacemaker (decisive).** The only plane with left/right-asymmetric mounts. `Center` →
+  `fp7,8` (x +0.56, −0.64), `Right Fuselage` → `fp5,6` (+1.96, +1.66), `Right Wing` → `fp3,4`
+  (+2.91, +3.34), `Left Wing` → `fp1,2` (−3.34, −2.91). **4/4, sides correct.**
+- **Kestrel.** `Center Guns` → `fp7`, which sits at **exactly x = 0.00** and has no `fp8` —
+  a single centreline mount. This is the only explanation offered so far for why the Kestrel
+  is the one plane with 7 firepoints instead of 8.
+- **Bloodhawk.** Reproduces the user's playtest (`Inner`=40 → `fp7,8` at ±3.22; `Outer`=30 →
+  `fp5,6` at ±3.66) *and* correctly splits `Lower Nose` → `fp3,4` (y −0.11) from `Upper Nose`
+  → `fp1,2` (y +0.46).
+
+Also clean 4/4: Warhawk, Hoplite, Fury (each monotonic inner↔outer). Clean on all non-turret
+slots: Balmoral, Brigand (reproducing the user's "W1 and W2 share the outer mount"), Hellhound.
+
+**Two imperfect fits, both turret airframes.** On Firebrand and Kestrel the W3 `Outer Wing`
+mount lands one pair inboard of the most extreme pair, leaving the outermost stranded —
+because W4 is a `Rear Turret` that consumes a firepoint slot it cannot use. Not a
+contradiction, but the place to look first if A10 finds a discrepancy.
+
+### Ammo semantics — settled by playtest
+
+The user confirmed: **the Balmoral's two .50-cal groups have distinct ammo counters.** So
+**ammo is per gun group, not per weapon type** — two `.50` groups carry 2,000 rounds *each*.
+
+This makes gun-slot selection meaningful (you can nurse one group while emptying another) and
+explains why `MSG_HUD_GUNGAUGE` is `"GUNS: %1: %2!d!"` — the `%1` names *which* counter.
+
+**CONFIRMED by playtest 2026-07-22** (user, stock Bloodhawk: **9 HE rockets, 3 per
+hardpoint**): `CLUSTER_SIZE` is **rounds carried per slot**. It is the
+only allotment field present for both weapon classes — `wep_06` (HE) has `CLUSTER_SIZE 3` and
+**no `AMMO_LIMIT` at all** — and for guns it equals `AMMO_LIMIT` exactly (2800/2800,
+2000/2000), so the two readings are indistinguishable on guns and only rockets can separate
+them. Under this reading a stock Bloodhawk carries 3 pylons × 3 = **9 HE rockets**, and
+`AMMO_LIMIT` is a purchase cap rather than a carried amount.
+
+**Rocket capacity = pylon count × `CLUSTER_SIZE`.** Stock Bloodhawk 3 × 3 = **9** (measured);
+stock Balmoral 8 × 3 = 24. Gun capacity = `CLUSTER_SIZE` **per gun group**, counters
+independent (measured on the Balmoral's two .50s).
+
+### World destructibles — complete in the data, inert in the engine
+
+An `ANIMATION_DEFINITION` *is* the destructible object, via three keys: **`HEALTH`** (hit
+points), **`DAMAGE_SEQUENCE`** (a threshold script — `IF ANIM_HEALTH n → CALL_ANIMATION …`),
+and **`ACTIVATION`** = `WeaponHit` or `WeaponOrCollideHit`. `ANIM_HEALTH n` means
+`health <= n` (`AnimRuntime.cs:1046`).
+
+Census across all 61 compiled archives (14,963 defs):
+
+| Metric | Count |
+|---|---|
+| defs with `health > 0` | **2,603** |
+| `activation: WeaponHit` | **2,565** |
+| `activation: WeaponOrCollideHit` | **44** |
+| `AnimHealth`/`AnimHealthRange` conditions | 4,131 — **100 % inside `DAMAGE_SEQUENCE`** |
+| defs with a non-null `unknown_seq` | 1,544 — **all** health > 0 |
+
+Health histogram: `40.0`×1246, `10.0`×512, `60.0`×460, `20.0`×111, `30.0`×90, `15.0`×65,
+`0.01`×43, `5.0`×31, `4.0`×17, singletons up to `750.0`.
+
+**Damage stages are a shared template, not per-object authoring.** Of the reader-side defs,
+**91 carry both `HEALTH` and a `DAMAGE_SEQUENCE`** (48 with two stages, 42 with three, 1 with
+one). Their `ANIM_HEALTH` thresholds, expressed as a fraction of that def's own `HEALTH`, draw
+from a small vocabulary:
+
+| fraction | 0.85 | 0.75 | 0.60 | 0.50 | 0.30 | 0.25 |
+|---|---|---|---|---|---|---|
+| count | 20 | 17 | 43 | 43 | 41 | 39 |
+
+Two dominant progressions: **`{0.60, 0.30}`** and **`{0.85, 0.50, 0.25}`**. The standard
+two-stage escalation is `sputter_black_smoke_obj` (smoke) then `sputter_fire_smoke_obj` (fire),
+48 defs each. **Implication for C22:** evaluate thresholds generically as fractions and ~90
+objects behave correctly at once — do not special-case per object.
+
+⚠ Thresholds are authored as **absolute** `ANIM_HEALTH` values, not fractions. The fractions
+above are derived. Evaluate against the absolute value (`health <= n`) as
+`AnimRuntime.cs:1046` already does; the fraction view is for understanding the template, not
+for implementing it.
+
+Sequence shape for a WeaponHit def is typically `('DAMAGE_SEQUENCE', 'destroyit')` (879 defs)
+or `('destroyit',)` (761): **`DAMAGE_SEQUENCE` = progressive damage, `destroyit`/`unknown_seq`
+= the death sequence.** Death-sequence event kinds (2,360 calls): `CallAnimation` 2360,
+`ObjectActiveState` 2028, `InvalidateAnimation` 1286, `StopAnimation` 1260, `Sound` 307,
+`PufferState` 148, `Loop` 86, `ObjectMotion` 16. Effects called: `large_30sec_fire` ×1035,
+`great_balls_of_fire` ×432, `large_fireball` ×307, `large_black_smokeball` ×288,
+`biggun_flying_parts` ×84.
+
+**The collide-destructible set is exactly 44 objects**, and they are special:
+
+| Chapter | Objects | Health | What |
+|---|---|---|---|
+| C2 | `fcpan01`–`fcpan39` | 0.01 | Hollywood facade panels — fly-through set dressing |
+| C5 | `w_win01`–`w_win04` | 0.01 | Warehouse windows |
+| C5 | `agyrobus` | 70.0 | The only substantial collide-destructible in the game |
+
+Everything else is weapon-only: ramming a water tower kills *you*, and the tower is untouched.
+
+**Engine gap.** `CompiledAnim.cs` already parses `Health` and `Activation`; a compiled
+`DAMAGE_SEQUENCE` already arrives as an ordinary `AnimSequence`. But `AnimDefs.cs:74-95` (the
+reader front-end) has **no `DAMAGE_SEQUENCE` case — it is silently dropped** (zero hits for the
+token across all `*.cs`). `unknown_seq` and `proximity_damage` are never read. And health is
+used for exactly one thing: condition evaluation against the **static authored** value
+(`AnimRuntime.cs:1043-1049`), never a mutable per-instance value — so every `ANIM_HEALTH`
+branch is uniformly false in a live world. Nothing ever starts a `WeaponHit` def.
+
+### Two dead code paths this milestone wakes up
+
+- **`AnimRuntime.cs:429`** skips `ObjectMotion`'s ballistic half with the comment that it is
+  "reachable only from OnCall/WeaponHit". That is the debris physics — e.g. the water tower's
+  `OBJECT_MOTION h2twr_middle {GRAVITY LOCAL -2, … RUN_TIME 5}`.
+- **`backlog.md:102`**: 4,378 `OnCall` + 1,650 `WeaponHit` `Sound` events are deferred because
+  they "need weapons this project does not have" (21 names are `DYNAMIC_WEIGHTS` groups needing
+  a further decode).
+
+### Effects and assets already on disk
+
+Effect readers in `extracted/zrdr/`: `muzzle_burst`, `gunhit`, `gunshell`, `flak_control`,
+`flak_trails`, `torpedo_effects`, `sonic_control`, `sonic_puffers`, `sonic_rings`,
+`missile_puffers`, `flash_control`, `beeper_plug`, `scatter_control`, `scatter_trails`,
+`he_control`, `he_effects`, `pufftrails`, `rear_arc`, `cockpit_bulletholes`, `8inch_cannon`,
+`aa_gun`, `maa_gun`, `fbgun`, `fbgun2`, `zep_*_pieces`.
+
+Projectile/effect prototype roots in `C1/gamez/nodes.json` (54 weapon-named): `slug.flt`,
+`a_torpedo`, `ap_rocket`, `he_rocket`, `flak_rocket`, `flash_rocket`, `beeper_rocket`,
+`scatter_rocket`, `aaflak`, `gunshell`, `firepoint`, `muzzle_burst`/`_slug`/`_ap`/`_dum`/`_mag`,
+`gunhit`, `dum_gunhit`, `mag_gunhit`, `flak_explosion`/`_fire`/`_smoke`/`_trail1..5`,
+`scat_explosion`, `flake1..7`, `planeflakes`, `two`/`three`/`four_bulletholes`,
+`explode_here1..9`.
+
+Textures in each chapter's `texture/`: `slug_muzzle1/2`, `dum_muzzle1/2`, `ap_muzzle1/2`,
+`mag_muzzle1/2`, `tracer_slug`, `tracer_dumdum`, `tracer_armorpierce`, `tracer_magnesium`,
+`tracer1`, `slugtip`, `shell1/2`, `atorp`.
+
+HUD assets in `extracted/rimage/`, **neither referenced anywhere in the codebase yet**:
+- **`impact_point.png`** — the reticle: four tick marks around an open centre.
+- **`5pointhud.png` / `5pointhudbrite.png`** — the game's **HUD bitmap font** (a 5-pixel
+  character atlas, `0123456789:;<=>?@A…z`), normal and highlighted. Not a reticle.
+
+`gungauge` and `missilegauge` are modelled on all 11 planes inside the same `gauges` subtree
+`GaugeCluster` already reads, with letter/digit texture cycles and `ggindicatorN`/`mgindicatorN`
+belt lights — entirely unwired (`docs/formats/hud.md:120`).
+
+---
+
+## Ground rules
+
+Carried over from every prior plan here:
+
+- **Original-game data drives everything.** Read the reader/compiled JSON before writing a
+  handler; never guess a value.
+- `CLAUDE.md` + `docs/architecture.md` / `docs/formats/` are updated in the **same turn** as
+  each landed item. **New decodes land with their docs page in the same change.**
+- A landed item gets a dated entry in `docs/HISTORY.md`.
+- Verify against a full 8-chapter `--freecam --chapter=<X>` regression (zero errors, same
+  mesh/node counts unless the change is expected to add coverage), plus a targeted screenshot
+  at the location the report came from.
+- **Read `docs/verification.md` before measuring anything.**
+- Scratch output goes to `./.scratch/`, never the OS temp directory.
+- **Read a module's bullet in `docs/architecture.md` before modifying that module.**
+
+---
+
+## Checklist
+
+Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
+
+### Wave A — research & documentation (may start now)
+
+New files and docs only; touches no module M2 polish 3 is editing.
+
+1. ☐ `docs/formats/weapons.md` — the ballistics table
+2. ☐ `docs/formats/` — gun mounts, markers and the airframe gun-group enum
+3. ☐ **Marker reference tool** — `--dump-markers` + labelled viewer overlay
+4. ☐ `docs/formats/destructibles.md` — the world-destructible model
+5. ☐ `docs/formats/` — the weapon effect-reader family
+6. ☐ `vehicle.md` — retire the "undecoded here" deferral
+7. ☐ Stock-loadout file format + seed from the user's table
+8. ☑ **[USER]** mount-name column — **delivered 2026-07-22**; the binding rule fell out of it
+9. ☑ **[USER]** `CLUSTER_SIZE` = rounds-per-slot — **confirmed 2026-07-22** (Bloodhawk: 9 HE, 3/hardpoint)
+10. ☐ Verify the binding rule + flash appearance — **in-engine, self-serve** (the `MuzzleFlash*.png` crops are appearance reference only, not placement evidence)
+
+### Wave B — weapons core
+
+11. ☐ `WeaponDefs.cs` — typed reader over `weapons.json`
+12. ☐ `Loadout.cs` — stock-loadout reader, slot model, marker resolution
+13. ☐ `Projectile.cs` — spawn and integration
+14. ☐ `FLYOUT` model instancing — projectile visuals from the gamez prototypes
+15. ☐ Hit detection + surface classification for `IMPACT` variant selection
+16. ☐ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip
+17. ☐ Hardpoint firing — per-pylon allotment and depletion
+18. ☐ Weapon selectors — gun-group cycle (+ALL) and hardpoint cycle
+19. ☐ Guided flight — `TURN_RATE`, `IMPACT_PROXIMITY`, `DETONATION_DISTANCE`
+20. ☐ Ground lock-on — acquisition against destructibles
+
+### Wave C — destructibles
+
+21. ☐ Per-instance mutable HP + destructible instance registry
+22. ☐ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation
+23. ☐ `WeaponHit` activation and damage application
+24. ☐ Death sequence execution + healthy→destroyed swap
+25. ☐ Collider removal on destruction (the doors)
+26. ☐ Ballistic `ObjectMotion` — debris tumble (`AnimRuntime.cs:429`)
+27. ☐ The 44 `WeaponOrCollideHit` collision path
+28. ☐ Destructible reset/restore (for the debug tools)
+
+### Wave D — presentation & audio
+
+29. ☐ Muzzle flash — `FIRE` → `muzzle_burst_*` at firepoints
+30. ☐ Impact effects — per-surface `IMPACT` animation + sound
+31. ☐ The `Sound` anim-event family — unblocks ~6,000 events
+32. ☐ Destruction effects wiring — `large_30sec_fire`, `great_balls_of_fire`, puffers
+33. ☐ Tracers
+44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
+
+### Wave E — HUD
+
+34. ☐ Bitmap-font HUD text renderer (`5pointhud`)
+35. ☐ `gungauge` + `missilegauge` in `GaugeCluster`
+36. ☐ Selected-weapon readout (`MSG_HUD_GUNGAUGE`)
+37. ☐ Impact-point reticle — ballistic projection
+38. ☐ Lock-on indicator
+
+### Wave F — debug & verification
+
+39. ☐ Weapon lab in `--viewer`
+40. ☐ Freecam raycast pick + HP control
+41. ☐ Destructible list overlay + camera jump
+42. ☐ `--destroy=` CLI trigger
+43. ☐ `--infinite-ammo` / `--loadout=` overrides
+
+---
+
+## Dependency and parallelism notes
+
+**Wave A is almost fully parallel.** A1, A2, A4, A5, A6 are five independent docs pages
+touching five different files — run them concurrently. A3 is code but creates a new module and
+a new flag, colliding with nothing. **A3 should go first in priority order**, because it is
+what lets the user fill in A8, and A8 blocks B2, which blocks most of wave B.
+
+**A8 and A9 are both delivered, so wave B is fully unblocked and no item is user-gated.** A10
+remains as in-engine verification of A8's derived binding rule, and is self-serve once D29
+lands — it needs nothing further from the user.
+
+**Within wave B**: B1 blocks everything (every other item reads `WeaponDef`). B3 → B4 → B5 is a
+chain. B6/B7/B8 all need B2 for the slot model but are independent of each other. B9/B10 need
+B3 but nothing else, so guided work can run alongside gun work.
+
+**Within wave C**: C1 blocks C2, C3, C4, C7. C5, C6, C8 are independent once C1 lands. C6
+(ballistic `ObjectMotion`) touches `AnimRuntime.cs` and can in fact start immediately after
+wave A — it is a self-contained fix to an already-identified skipped branch.
+
+**Wave D and E are almost entirely independent of each other** and can run concurrently with
+late wave B/C, with one caveat: D1/D2 need B15's surface classification to choose an `IMPACT`
+variant, and E4's reticle needs B13's ballistics to project the impact point.
+
+**File contention to watch.** Waves B and C both reach into `FlightController.cs` (B for input
+and firing, C for the collide path). D3 and C4 both edit `AnimRuntime.cs`'s event dispatch. E2
+and E3 both edit `GaugeCluster.cs`. Give each concurrent agent a stated file-ownership boundary.
+
+---
+
+## Items
+
+### A1 ☐ `docs/formats/weapons.md` — the ballistics table
+
+**Goal.** A complete public reference page for `weapons.zrd.json`, and a fix to `zrdr.md`'s
+family index, which omits the file entirely.
+
+**Evidence.** 48 entries, key coverage and structure as surveyed above. `docs/formats/README.md`
+is the index and the shared reader conventions; this page joins it.
+
+**Approach.** Document every key with its measured range and meaning; the `FIRE`/`FLYOUT`/
+`IMPACT` binding structure including the five surface classes; the caliber × ammo-type matrix
+and its damage-tradeoff rule; the player/AI tier split; the `CLUSTER_SIZE` / `AMMO_LIMIT`
+relationship **confirmed by playtest (A9)**: per-slot allotment vs purchase cap. Cross-reference the `MSG_WEAP_*` display
+names through `messages.json` (IDs 12124–12160). Note the CC-BY licence header used by the
+other pages there.
+
+**Verify.** Every one of the 48 entries is accounted for; every key that appears in the file
+appears on the page; `zrdr.md`'s index lists `weapons.json`.
+
+### A2 ☐ Gun mounts, markers and the airframe gun-group enum
+
+**Goal.** Document the marker rig and the mount-name enum, so the loadout binding has a
+published basis.
+
+**Evidence.** `IDS_AIRFRAMEGUNGROUPNAMES` at IDs 3060–3079 (18 names, contiguous but with gaps
+at 3065 and 3078 — check whether those IDs exist and are something else). Uniform 8 firepoints
++ 8 pylons per plane; Kestrel 7 with `fp7` at x = 0.00. Duplicated coordinates on Balmoral and
+Brigand, explained by the `… 2` mount names and confirmed by the user for the Brigand. `target`
+marker, one per plane root. Gun mesh nodes `fgun`/`rgun`/`bgun0..3`/`hgun`/`hgun2`.
+
+**Approach.** A per-plane marker table with positions. Document the mount-name enum with the
+gap check. Document `target` as the aim point and mark it **M4 scope**. Document the 5/5
+turret ↔ W4 correlation, **stated as a correlation on n=11**, and the Balmoral's two-turret
+case.
+
+**Verify.** The per-plane table regenerates from `extracted/planes/nodes.json` by script; the
+duplicate-coordinate claim is reproduced for both Balmoral and Brigand.
+
+⚠ **Do not restate the disproven index-arithmetic rule as fact anywhere on this page.**
+
+### A3 ☐ Marker reference tool — `--dump-markers` + viewer overlay
+
+**Goal.** Let the user see and name every firepoint and pylon on a plane, so A8 is fillable.
+**This is wave A's highest-priority item** — it is on the critical path.
+
+**Approach.** Two halves. (a) A `--dump-markers[=plane]` flag printing a per-plane table of
+marker name, local position, and mirror-pair grouping, to stdout and `./.scratch/`. (b) A
+`--viewer` overlay drawing each marker as a labelled gizmo on the model, reusing `NodeLabels`'
+existing anchoring and de-cluttering. Colour firepoints and pylons differently; group
+duplicate-coordinate markers visibly, since that is the case the user most needs to disambiguate.
+
+**Verify.** The overlay's Bloodhawk labels agree with the dumped table; the known duplicates on
+Balmoral and Brigand render as visibly co-located pairs; a screenshot of each of the 11 planes
+lands in `./.scratch/`.
+
+### A4 ☐ `docs/formats/destructibles.md` — the world-destructible model
+
+**Goal.** Document the `HEALTH` / `DAMAGE_SEQUENCE` / `ACTIVATION` mechanism end to end.
+
+**Evidence.** The census, health histogram, sequence-shape counts and death-sequence event
+breakdown above. `extracted/C1/zrdr/ap_h2otwr.zrd.json` is the canonical worked example
+(HEALTH 60, two damage stages at 18 and 36, a `destroy_h2twr` sequence, a ballistic
+`OBJECT_MOTION` debris section, and a puffer sequence).
+
+**Approach.** Document def→node binding via `NAME` wildcard + `ANIMATION_ROOT_NAME`, the
+`healthy`/`destroyed` node convention in gamez (422 such nodes in C1 alone), the
+`DAMAGE_SEQUENCE` threshold script, the `destroyit`/`unknown_seq` death sequence, and the
+`ANIM_HEALTH n` = `health <= n` semantics. Include the full 44-object collide table.
+
+**Note the existing engine bug in `HideUncoveredDestroyed()`** (`AnimRuntime.cs:1934-1947`):
+its substring match on `"destroyed"` wrongly wiped C1's `ref_tank_dest`, which is the *healthy*
+tank group. C4's destructible work should not re-introduce a suffix rule.
+
+**Verify.** The census numbers regenerate by script; the worked example matches the file.
+
+### A5 ☐ The weapon effect-reader family
+
+**Goal.** Document the ~25 effect readers and the 54 gamez projectile prototype roots that
+`FIRE`/`FLYOUT`/`IMPACT` reference, so waves B and D have a map.
+
+**Approach.** One page (or a section of A1 if it stays small) covering each reader's role and
+the prototype roots it drives. `muzzle_burst.zrd.json` defines `muzzle_burst_slug` as `ON_CALL`,
+`EXECUTION_PRIORITY 6`, LOD-gated via `CALL_ANIMATION muzzleburst_effects AT_NODE`.
+`gunhit.zrd.json` defines per-caliber impacts with `PLAYER_RANGE 500` gating and a
+`PUFFER_STATE blacksmokepuffer`. Record the muzzle/tracer texture naming axis
+(`slug`/`dum`/`ap`/`mag` × `_muzzle1/2`, `tracer_*`), which maps 1:1 onto the `wep_X0..X3`
+ammo-type axis.
+
+**Verify.** Every `FIRE`/`FLYOUT`/`IMPACT` target named across all 48 weapon entries resolves
+to either a documented reader or a documented gamez prototype root. **Report any that do not**
+— an unresolved name is a data gap worth knowing before wave D.
+
+### A6 ☐ `vehicle.md` — retire the deferral
+
+**Goal.** Decode what `vehicle.md:30` defers as "dogfight-milestone scope, undecoded here".
+
+**Approach.** Document the `weapons` 5-tuple `[weapon_id, count, ?, ?, range]` — positions 3–5
+are **inferred, not confirmed**; the 5th is 10000 for the player catalogue vs 800–900 for AI,
+suggesting AI engagement range. Document `cannon_jam` (`heat_safe_limit 1000`,
+`heat_dissipation_rate 50`, `jam_chance 0.1`, pairing with `FIRING_HEAT`) and mark it
+**backlogged, not implemented**. Document the AI-only `armor`/`health` pair
+(bloodhawk 64/64 … balmoral 100/100, patrolboat 0/40) which `PlaneStats` does not read.
+Document `turrets` and mark it **M4**. Document `bullethole_anims`.
+
+**Verify.** No key in any of the 75 vehicle defs remains undocumented; the "undecoded here"
+line is gone.
+
+### A7 ☐ Stock-loadout file format + seed
+
+**Goal.** Define the data file the engine reads, and seed it with the user's table.
+
+**Approach.** A committed JSON file (hand-authored config describing the original, the same
+category as `docs/formats/` — **not a game asset**, so the no-assets rule does not apply;
+confirm with the user before committing). Shape, per plane def:
+
+```json
+"pbloodhawk": {
+  "guns": [
+    {"slot": 1, "mount": "Inner Wing Guns", "caliber": 40, "markers": ["firepoint7","firepoint8"]},
+    {"slot": 2, "mount": "Outer Wing Guns", "caliber": 30, "markers": ["firepoint5","firepoint6"]}
+  ],
+  "hardpoints": {"count": 3, "stock": "wep_06"}
+}
+```
+
+Ammo type is separate from caliber so the configurator can later vary it: stock resolves
+caliber *N* + `slug` → `wep_N0`. Turret slots are **represented but flagged inert** so the M4
+work has somewhere to land. `markers` is authored, not derived (A8).
+
+**Verify.** All 11 planes parse; every named marker exists on that plane's model; every
+`wep_*` id resolves in `weapons.json`.
+
+### A8 ☑ **[USER]** Mount-name column — **DELIVERED 2026-07-22**
+
+**Delivered.** The full per-plane mount table is above, all 44 slots. Every name is a verbatim
+entry from the 3060–3079 enum, which is complete and contiguous (the gaps this plan originally
+noted at 3065 and 3078 are `IDS_CENTERGUNS` and `IDS_CENTERGUNS2`, both of which the table
+uses).
+
+**Consequence: the binding rule fell out of it.** Cross-referencing the names against measured
+firepoint positions yields **slot 𝑛 → `firepoint(9−2𝑛), firepoint(10−2𝑛)`** — see the binding
+section above for the four independent confirmations. So A7's `markers` field can be
+**generated** rather than hand-authored, with the generated values checked into the loadout
+file explicitly (not computed at runtime) so a wrong one is a visible data fix.
+
+**Still open:** A10 verifies the rule against the muzzle-flash captures. **B12 is unblocked.**
+
+### A9 ☑ **[USER]** `CLUSTER_SIZE` = rounds per slot — **CONFIRMED 2026-07-22**
+
+**Result.** User flew a stock Bloodhawk: **9 HE rockets, 3 per hardpoint.** The prediction was
+9 (3 pylons × `CLUSTER_SIZE 3`); a count of 3 would have meant per-plane rather than per-pylon.
+
+**Therefore:** rocket capacity = **pylon count × `CLUSTER_SIZE`**; gun capacity =
+`CLUSTER_SIZE` per gun group with independent counters; **`AMMO_LIMIT` is a purchase cap**, not
+a carried amount (and does not exist at all on rocket entries).
+
+**Consequence for B17:** capacity is settled, but *rounds released per trigger pull* is a
+separate question this test does not answer — B17 still must not assume.
+
+### A10 ☐ Verify the binding rule and the flash appearance
+
+**Goal.** Confirm A8's derived binding rule puts flashes on the right mounts, and that the
+flash itself looks right.
+
+⚠ **Correction (2026-07-22).** An earlier draft of this item proposed matching
+`OriginalScreenshots/MuzzleFlash1-3.png` against the marker overlay and asked the user which
+plane each showed. **That was misconceived** — those three files are ~100×80 px *crops of a
+single flash*, far too zoomed to show which firepoints are emitting. They are appearance
+reference, not placement evidence. Do not ask the user to identify them.
+
+**Placement** is not derivable from data, but it is already substantially verified by the
+user's own playtests: Bloodhawk stock is 40-cal **inner wing** + 30-cal **outer wing**, and the
+Brigand's W1 and W2 **share the outer mount**. Both are reproduced by the reverse-index rule,
+which additionally agrees with measured geometry on all 11 aircraft (see the binding section).
+The remaining check is in-engine and self-serve: once D29 lands, fire each plane, screenshot,
+and confirm flashes appear on the mounts the table names — the Bloodhawk and Brigand against
+the user's direct observations, the Devastator and Peacemaker against their distinctive
+two-axis and left/right layouts.
+
+**Appearance** *is* fully data-derived: the 8 `<ammo>_muzzle[1|2].png` textures (the `1`/`2`
+pair is a two-frame flipbook — see the existing analysis at
+`docs/formats/anim-definitions.md:319-320`), `muzzle_burst.zrd.json`, and the gamez prototype
+roots. The three crops are a useful sanity check on colour, size and airframe-relative scale.
+
+**Verify.** A per-plane firing screenshot set in `./.scratch/`, each flash on a named mount;
+any discrepancy reported with the mount and firepoint names involved. **Look at Firebrand and
+Kestrel W3 first** — both are turret airframes where one firepoint pair is stranded, and they
+are the rule's two soft spots.
+
+---
+
+### B11 ☐ `WeaponDefs.cs` — typed reader over `weapons.json`
+
+**Goal.** `ZrdrDict` → typed `WeaponDef` for all 48 entries. Blocks every other wave-B item.
+
+**Approach.** Follow `PlaneStats.cs`'s shape as the model for a typed reader over a zrdr file.
+Parse the flat `BALLISTICS` alternating list; expose ballistics, damage, ammo, the class flags
+(`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TARGETABLE`/…), and the `FIRE`/`FLYOUT`/`IMPACT` bindings
+with `IMPACT` keyed by surface class. Resolve `DESC` through `Messages`.
+
+**Verify.** All 48 parse with no unhandled key; a dump of every parsed def matches A1's page.
+
+### B12 ☐ `Loadout.cs` — loadout reader, slot model, marker resolution
+
+**Goal.** Turn A7's file plus a built plane into a live set of gun groups and hardpoints with
+resolved muzzle transforms.
+
+**Approach.** Read the loadout file, resolve each slot's `markers` against the built plane's
+node tree, and expose gun groups (with **independent ammo counters** — confirmed by playtest)
+and hardpoints. Turret slots parse but are constructed inert. `--loadout=` overrides the plane's
+stock entry for testing.
+
+**Verify.** All 11 planes resolve every named marker; a missing marker is a loud error, not a
+silent skip; the Balmoral reports two separate .50 counters.
+
+### B13 ☐ `Projectile.cs` — spawn and integration
+
+**Goal.** A pooled projectile with the data's own ballistics.
+
+**Approach.** Integrate `VELOCITY`, `ACCELERATION`, `GRAVITY` (5 entries only), and expire at
+`RANGE`. Inherit launch-platform velocity. Pool aggressively — a 10.5/s gun over several groups
+generates a lot of entities. Keep the integration step fixed and independent of frame rate:
+`docs/verification.md` warns that frame numbers here are vsync-capped floors.
+
+**Verify.** Measured muzzle-to-impact time over a known distance matches `RANGE`/`VELOCITY`;
+no allocation churn in a sustained-fire `--perf` run.
+
+### B14 ☐ `FLYOUT` model instancing
+
+**Goal.** Projectiles look like the original's projectiles.
+
+**Approach.** `FLYOUT` names either a `MODEL` (`slug.flt`, `ap_rocket`, `a_torpedo`) or a
+`MODEL` + `MODEL_ANIMATION` pair. Instance from the gamez prototype roots via `SceneBuilder`.
+Guns need the cheap path (tracer quad, item D33) rather than a mesh per round — measure before
+choosing.
+
+**Verify.** Each of the 15 `ROCKET` entries instances its named model; a screenshot shows a
+rocket in flight with correct orientation.
+
+### B15 ☐ Hit detection + surface classification
+
+**Goal.** Register hits and pick the right `IMPACT` variant.
+
+**Approach.** Raycast or swept test per projectile step against world geometry and plane
+colliders. Classify the struck surface into the data's five classes — `default`, `water`,
+`enemy`, `player`, `buildings` — since `IMPACT` is keyed by them. Water is identifiable from
+existing material/texture classification; `buildings` likely from the destructible registry
+(C21). **`enemy` has no meaning in M3** (nothing to hit) — leave it wired but unreachable.
+
+**The collision world this lands into changed on 2026-07-22 — read these two before designing
+the hit test.** M2 polish 3 item 5 landed: `SceneBuilder.ClassifyBillboard` now serves all four
+call sites, and **clutter plus every gamez billboard lost collision**, so projectiles will not
+stop on tree sprites. It also fixed a live bug worth knowing — `skywal*` is a *building*
+texture that `IsCloudOrSkyTexture` had been exempting, leaving C4's sky-city pods and `g74`
+(395×135×275 m) flyable-through. Item 6 then added **79,306 buildings to C5 and 10,261 to C2**,
+colliding as a merged trimesh per 1024 m region (C5 flight load +3.5 s, 2.55 M collision
+triangles). That is a large amount of new collision geometry for every projectile step to test
+against — **measure before choosing a broadphase.**
+
+**Verify.** A shot into water plays the water variant, into terrain the default, into a
+building the buildings variant; a scripted `--screenshot` run captures each.
+
+### B16 ☐ Gun firing — rate, ammo, spread, empty-clip
+
+**Goal.** Guns that fire like the original's guns.
+
+**Approach.** `FIRE_RATE` (rounds/s, 8.0–10.5 for the player calibers) gates spawning.
+**One ammo counter per gun group** (playtest-confirmed), initialised from `CLUSTER_SIZE`
+(A9-confirmed). `CANNON_SPREAD` (6.0 on the 30-cal) as a dispersion cone, scaled by `CALIBER`.
+`LOOPED_SOUND_NAME` for the firing loop; `NO_AMMO_WARNING` → `snd_emptyclip` when dry. Refill on
+respawn (R). `--infinite-ammo` (item F43) for frictionless testing.
+
+⚠ `FIRING_HEAT` and `cannon_jam` are **explicitly out of scope** (decision 4) — parse and
+ignore, and add the backlog entry rather than implementing them opportunistically.
+
+**Verify.** Rounds/second matches `FIRE_RATE` over a timed burst; dispersion at a fixed range
+matches the `CANNON_SPREAD` cone; the counter empties at the expected round count and the
+empty-clip sound plays exactly once.
+
+### B17 ☐ Hardpoint firing
+
+**Goal.** Rockets launch from pylons and deplete correctly.
+
+**Approach.** Each hardpoint holds one ammo type in `CLUSTER_SIZE` quantity (A9-confirmed:
+stock Bloodhawk = 3 pylons × 3 = 9 HE). **One trigger pull releases ONE rocket from ONE
+hardpoint** (user-confirmed 2026-07-22) — not a ripple across pylons and not a slot salvo, so a
+stock Bloodhawk takes 9 pulls to empty. Cycle which hardpoint sources the next round.
+Launch from that pylon's marker. Decide and document whether a trigger pull releases one round
+**Cooldown:** every rocket entry has `FIRE_RATE 1.0` against 8.0–10.5 for guns, i.e. one
+launch per second. The user did not confirm a cooldown by observation, so treat 1.0 as the
+data's answer and a TUNE candidate rather than a measured fact.
+
+**Verify.** A stock Bloodhawk fires exactly 9 HE rockets over 9 trigger pulls; each launch originates
+at the correct pylon (screenshot against the A3 overlay).
+
+### B18 ☐ Weapon selectors
+
+**Goal.** Two independent selectors, per decision 7.
+
+**Approach.** Gun selector cycles the plane's mounted gun slots plus an **ALL** entry; the fire
+button fires only the selected slot(s). Hardpoint selector cycles mounted ordnance. Two buttons,
+bound for both keyboard and pad; route through `MenuInput`/`Pads` conventions and respect
+`--no-pads`. Feed the selection to E36's readout.
+
+**Verify.** On the Balmoral, selecting group 1 depletes only counter 1; ALL depletes both.
+
+### B19 ☐ Guided flight
+
+**Goal.** Guided ordnance flies its authored profile.
+
+**Approach.** `ACCELERATION` (16 entries), `TURN_RATE` (14), `IMPACT_PROXIMITY` (14),
+`DETONATION_DISTANCE` (13), `DETONATION_DOT_PRODUCT` (3), `DETONATION_TIME`. `RANGE_MINIMUM`
+on the torpedo is an arming distance. `FLYOUT_HEALTH 10` + `TARGETABLE` make the torpedo itself
+shootable — **out of scope in M3** (nothing else shoots), but note it in the code so M4 finds it.
+
+**Verify.** A seeker's turn radius matches `TURN_RATE`; proximity fuzing triggers at
+`IMPACT_PROXIMITY` metres, verified by a scripted run at a known offset.
+
+### B20 ☐ Ground lock-on
+
+**Goal.** Acquisition against world destructibles, per decision 3.
+
+**Approach.** Lockable set = the destructible registry (C21). `LOCK_ON` (2.5 s on the Seeker)
+is acquisition time; `LOCK_ON_LEAD` (3 entries) presumably lead computation. Reuse
+`MissionTargets`/`MarkerHud` conventions for target tracking. Feed E38's indicator.
+
+⚠ **Air-to-air lock is M4.** The `target` aim-point marker (A2) is what it will use — do not
+wire it now, just leave it documented.
+
+**Verify.** A seeker fired at a locked water tower hits it; breaking line of sight drops lock.
+
+---
+
+### C21 ☐ Per-instance mutable HP + destructible registry
+
+**Goal.** Replace the static `def.Health` read with live per-instance state. **Blocks C22, C23,
+C24, C27.**
+
+**Evidence.** `AnimRuntime.cs:1043-1049` evaluates `AnimHealth` against the def's authored
+value, so every threshold branch is uniformly false in a live world
+(`docs/formats/anim-definitions.md:208`).
+
+**Approach.** A registry of live destructible instances keyed by the nodes a def binds to
+(`NAME` wildcard + `ANIMATION_ROOT_NAME`), each with current HP, max HP, and state
+(healthy / damaged-stage-*n* / destroyed). Condition evaluation reads the instance, not the def.
+Keep the def's authored health as the max.
+
+⚠ **One def can bind to many instances** (`NAME` is a wildcard — `ap_h2otwr*`). Per-instance
+means per *node group*, not per def. Getting this wrong makes one tower's damage break all of
+them.
+
+**Verify.** An 8-chapter freecam regression shows identical rendering to before (no behaviour
+change yet); the registry's instance count per chapter is reported and sane against A4's census.
+
+### C22 ☐ `DAMAGE_SEQUENCE` parsing + threshold evaluation
+
+**Goal.** Progressive damage stages run as authored.
+
+**Evidence.** `AnimDefs.cs:74-95` has no `DAMAGE_SEQUENCE` case — the reader front-end drops it
+silently. The compiled front-end already delivers it as an ordinary `AnimSequence`.
+
+**Approach.** Add the case to the reader switch (roughly one line plus a handler). Evaluate
+`AnimHealth`/`AnimHealthRange` against C21's live value. Worked example: `ap_h2otwr` at HEALTH
+60 calls `sputter_black_smoke_obj` at ≤36 and `sputter_fire_smoke_obj` at ≤18.
+
+**Verify.** Chipping a water tower's HP through 36 and 18 (via F40) starts each effect at the
+right threshold and only once.
+
+### C23 ☐ `WeaponHit` activation and damage application
+
+**Goal.** Projectile hits actually damage destructibles.
+
+**Approach.** B15's hit reports the struck node; resolve it to a registry instance; apply
+damage from the weapon def.
+
+**The damage model — resolved 2026-07-22.** Measured: **world destructibles carry `health`
+only.** Across all 16,114 compiled anim defs the schema has exactly one damage field and
+**zero** armour-ish keys; `armor` appears only in `vehicle.json`, `weapons.json`
+(`ARMOR_DAMAGE`) and `player.json`. **So only `HEALTH_DAMAGE` applies to world objects** —
+there is no armour pool to spend `ARMOR_DAMAGE` against.
+
+**The two-pool model, where it does apply, is armour-then-health** (not parallel depletion, and
+not damage reduction). The proof is a dominance argument rather than a stated rule: the 50-cal
+AP does `9.375` armour / `3.125` health and dum-dum the exact inverse. Under parallel pools
+with death on health, **AP would be strictly dominated by dum-dum** — faster at draining a pool
+that cannot kill, slower at the one that can — making an entire purchasable ammo tier useless.
+Armour-first makes the tradeoff real, and matches the in-game ammo text *"damage equally well
+to both armor and internal components."* Corroborating: every aircraft has `armor == health`
+exactly, while `patrolboat` and `t_truck` have `armor 0 / health 40` — unarmoured soft targets
+taking damage straight to health, which is what armour-first predicts.
+
+**This game therefore has three damage models**, and M3 touches two:
+1. **Player planes** — per-part `destroyable_parts` HP. No armour/health pair. Already built.
+2. **AI vehicles** — the armour+health pair. Mostly M4, **but `patrolboat` and `t_truck` are
+   shootable in M3.**
+3. **World destructibles** — `health` only, `HEALTH_DAMAGE` only.
+
+⚠ **Open edge case, now precisely stated (2026-07-22).** The patrol boat is described by **two
+systems that agree on shape and disagree on magnitude**:
+
+| Source | Total HP | Stage 1 | Stage 2 | Effects |
+|---|---|---|---|---|
+| `patrolboat` vehicle def | **40** | `0.60` | `0.30` | `ptboat_50damage`, `ptboat_75damage` |
+| `C1/patrol_boat` anim def | **20** | `ANIM_HEALTH 12` (=0.60) | `ANIM_HEALTH 6` (=0.30) | `sputter_black_smoke_obj`, `sputter_fire_smoke_obj` |
+
+Identical 60 % / 30 % thresholds, **2× different total HP**, and different effect animations —
+the vehicle def naming a boat-specific pair, the anim def using the generic shared template.
+The likeliest reading is that the vehicle def governs the boat **as an AI combatant** and the
+anim def governs it **as placed world scenery**, but that is a hypothesis, not a finding.
+
+**Resolve before implementing C23.** M3 only ever sees the boat as scenery, so the anim def
+(HP 20) is the probable answer — but verify by shooting one in the original and counting hits,
+rather than assuming. Check whether `t_truck` (`armor 0 / health 40`, **no injure_anims**) and
+`fueltruck` / `armytruck_destruct` show the same duplication.
+
+⚠ **Note the animation-name trap.** `ptboat_50damage` fires at **60 %** remaining and
+`ptboat_75damage` at **30 %** — the names lag their trigger, exactly as
+`docs/formats/hud.md` records for the cockpit damage dial ("the anim names lag their effect by
+one state"). **Never infer a threshold from an animation's name.**
+
+**Verify.** A tower with HEALTH 60 dies after the expected number of `HEALTH_DAMAGE` hits from
+a known weapon; an AP rocket is measurably *worse* than HE against a building, which is the
+observable signature of the model being right.
+
+### C24 ☐ Death sequence execution + healthy→destroyed swap
+
+**Goal.** Objects die correctly.
+
+**Approach.** Run `destroyit`/`unknown_seq` on reaching zero. Its event kinds are all already
+implemented (`ObjectActiveState` 2028, `InvalidateAnimation` 1286, `StopAnimation` 1260,
+`CallAnimation` 2360) except `Sound` (D31) and ballistic `ObjectMotion` (C26). The
+`healthy` node deactivates and `destroyed` activates.
+
+⚠ Coordinate with `HideUncoveredDestroyed()` (`AnimRuntime.cs:1934-1947`), the bootstrap safety
+net that hides `destroyed` subtrees — once real destruction exists, that pass must not fight it.
+Its known substring-match bug (`ref_tank_dest`) is documented in A4.
+
+**Verify.** `--destroy=` (F42) on a representative object in each of the 8 chapters produces
+the correct visual swap; the 8-chapter regression is otherwise unchanged.
+
+### C25 ☐ Collider removal on destruction
+
+**Goal.** Destroyed doors stop blocking flight.
+
+**Approach.** When a destructible dies, remove or disable the collision bodies belonging to its
+`healthy` subtree, and add any the `destroyed` subtree needs. Named cases: `sghangar_doors`,
+`studiogate_doors` (C2).
+
+⚠ M2 polish 3 items 5 and 6 (landed 2026-07-22) reshaped which nodes get colliders — clutter
+and billboards lost theirs, and city-block decorations gained merged per-region trimeshes.
+Read `docs/architecture.md` on `SceneBuilder`/`WorldBuilder` before assuming where a
+destructible's collision body lives.
+
+**Verify.** Fly through a destroyed hangar door without a collision; fly into the intact one and
+collide.
+
+### C26 ☐ Ballistic `ObjectMotion` — debris
+
+**Goal.** Turn on a code path skipped as unreachable.
+
+**Evidence.** `AnimRuntime.cs:429` implements only `ObjectMotion`'s spin half and explicitly
+skips the ballistic half as "reachable only from OnCall/WeaponHit". 16 death sequences use it.
+`ap_h2otwr` is the worked example: `OBJECT_MOTION h2twr_middle {GRAVITY LOCAL -2,
+TRANSLATION_RANGE_MIN/MAX, FORWARD_ROTATION, SCALE -0.1, RUN_TIME 5}`.
+
+**Approach.** Implement gravity, translation range, forward rotation, scale-over-time and run
+time. `CrashBreakup.cs` already hand-simulates ballistic wreck pieces — **read it first**; the
+integration and ground-rest logic may be directly reusable.
+
+**Note.** This item is independent of C21 and can start right after wave A.
+
+**Verify.** The water tower's middle section tumbles and settles; run time matches 5 s.
+
+### C27 ☐ The 44 `WeaponOrCollideHit` collision path
+
+**Goal.** The Hollywood facades and warehouse windows break on contact — and nothing else does.
+
+**Evidence.** The 44-object table above. 43 at health 0.01 (break on any touch), `agyrobus` at
+70.0.
+
+**Approach.** `FlightController.SurviveHit` already computes impact point, normal and severity
+`vn` — reuse it. On collision with a `WeaponOrCollideHit` instance, apply damage; on
+`WeaponHit`, do nothing to the object (the plane still takes its normal collision damage).
+
+⚠ **Do not extend collision damage to `WeaponHit` objects** (decision 6). The 0.01 health tells
+you these were authored as fly-through set dressing.
+
+**Verify.** Flying through a C2 facade panel destroys it and the plane survives; flying into a
+C2 water tower kills the plane and leaves the tower intact.
+
+### C28 ☐ Destructible reset/restore
+
+**Goal.** Return an instance to healthy, for the debug tools and for respawn.
+
+**Approach.** Re-apply `RESET_STATE`, restore HP, stop running damage effects, restore
+colliders. Feeds F40 and F41.
+
+**Verify.** Destroy → reset → destroy again produces identical results both times.
+
+---
+
+### D29 ☐ Muzzle flash
+
+**Approach.** `FIRE` → `ANIMATION` (`muzzle_burst_slug`/`_ap`/`_dum`/`_mag`) at the firing
+group's markers. The reader is `ON_CALL`, `EXECUTION_PRIORITY 6`, LOD-gated via
+`CALL_ANIMATION muzzleburst_effects AT_NODE`. Textures `{slug,dum,ap,mag}_muzzle1/2`.
+Reference captures: `OriginalScreenshots/MuzzleFlash1-3.png`.
+
+**Verify.** Flash appears at every marker of the firing group and nowhere else; A10's
+comparison passes.
+
+### D30 ☐ Impact effects
+
+**Approach.** `IMPACT` → per-surface `ANIMATION` + `SOUND`, using B15's classification.
+`gunhit.zrd.json` gates on `PLAYER_RANGE 500` and drives `PUFFER_STATE blacksmokepuffer` —
+`Puffer.cs` already implements puffer emission.
+
+**Verify.** Each of the five surface classes plays its authored effect and sound.
+
+### D31 ☐ The `Sound` anim-event family
+
+**Goal.** Unblock ~6,000 events currently deferred for want of weapons.
+
+**Evidence.** `backlog.md:102` — 4,378 `OnCall` + 1,650 `WeaponHit` `Sound` events; 21 names are
+`DYNAMIC_WEIGHTS` groups needing a further decode. 307 `Sound` events sit inside death sequences.
+
+**Approach.** Implement the `Sound` event in `AnimRuntime`'s dispatch, resolving through
+`SoundDefs`/`SoundArchive`. Decode `DYNAMIC_WEIGHTS` (a weighted random group) or document why
+not. Note the recorded gotcha: the one-shot `Sound` in C3 names a sound *definition*, not a node.
+
+⚠ Contends with C24 on `AnimRuntime.cs`'s event dispatch — assign file ownership.
+
+**Verify.** Destruction sounds play (`air_mixed_exp_sg` on the worked example); the unhandled-
+event counter drops by the expected amount; `--debug-anim` shows the emitters.
+
+### D32 ☐ Destruction effects wiring
+
+**Approach.** Mostly already implemented — `CallAnimation` and `PufferState` both work. This is
+wiring plus verification that the named effects resolve: `large_30sec_fire` ×1035,
+`great_balls_of_fire` ×432, `large_fireball` ×307, `large_black_smokeball` ×288,
+`biggun_flying_parts` ×84, `big_splash`.
+
+**Verify.** Each of the top effect names resolves and renders; report any that do not.
+
+### D33 ☐ Tracers
+
+**Approach.** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium` /
+`tracer1`, matched to the ammo type. Cheap billboard/quad per round rather than a mesh.
+Establish the visual-length and frequency rule against reference footage in
+`OriginalScreenshots/Videos/`.
+
+**Verify.** `--perf` shows no meaningful GPU cost at sustained fire from all groups.
+
+### D44 ☐ Pylon ordnance visuals
+
+**Goal.** Mounted ordnance is visible under the wings, and disappears as it is used.
+
+**Evidence (user, 2026-07-22).** *"Visible rocket at pylon below as long as there is ammo left
+on the hardpoint. Different models for different rocket types."* So each loaded pylon renders
+its ordnance, the model varies by rocket type, and it is hidden once that hardpoint is dry.
+
+**Approach.** Instance the weapon's `FLYOUT` `MODEL` at the pylon marker — the same gamez
+prototype roots the projectile uses (`ap_rocket`, `he_rocket`, `flak_rocket`, `flash_rocket`,
+`beeper_rocket`, `scatter_rocket`, `a_torpedo`), so the thing hanging on the wing and the thing
+that flies off it are the same asset. Bind visibility to the hardpoint's remaining count from
+B17.
+
+⚠ **A pylon holds `CLUSTER_SIZE` rounds but shows one model** — the user reports a single
+visible rocket per pylon, not a stack of three. Do **not** render one model per remaining
+round; render one while `count > 0`. This asymmetry is the whole reason the item needs stating.
+
+⚠ Check whether the plane models already carry static ordnance geometry under the pylons that
+would double up with an instanced model — several airframes have detailed underwing nodes.
+`--dump-markers` (A3) and the `--viewer` overlay make this visible.
+
+**Verify.** A stock Bloodhawk shows 3 HE rockets before firing and none after 9 pulls, with
+the third pylon's model vanishing on the 9th; swapping rocket type via `--loadout=` changes
+the model; no z-fighting or duplication against existing airframe geometry.
+
+---
+
+### E34 ☐ Bitmap-font HUD text renderer
+
+**Goal.** HUD text in the game's own font. Nothing in the codebase uses it yet.
+
+**Approach.** `5pointhud.png` / `5pointhudbrite.png` are a character atlas
+(`0123456789:;<=>?@A…z`). Build a small text renderer: glyph metrics from the atlas, a normal
+and a highlighted variant. Size through `HudMetrics`, which is the single rule for HUD sizing
+and already handles splitscreen pane damping.
+
+**Verify.** A known string renders identically at 1P and in a 4-way splitscreen pane, scaled per
+`HudMetrics`.
+
+### E35 ☐ `gungauge` + `missilegauge`
+
+**Approach.** Extend `GaugeCluster`, which already extracts `altimeter`/`speedometer`/
+`damageindicator` from the same `gauges` subtree. Both gauges exist on all 11 planes with
+letter/digit texture cycles and `ggindicatorN`/`mgindicatorN` belt lights.
+
+⚠ **Read `docs/formats/hud.md` first.** It records that gauge geometry is parented differently
+per aircraft — on `player_bhawk` the dial's mesh is on the node itself, on every other plane it
+hangs off a generically-named child (`g951`, `g927`, …). A reader that only checks the dial
+node's own mesh works for the Bloodhawk and fails for the other ten.
+
+**Verify.** All 11 planes render both gauges; the counters track B16/B17's ammo; belt lights
+step correctly.
+
+### E36 ☐ Selected-weapon readout
+
+**Approach.** `MSG_HUD_GUNGAUGE` = `"GUNS: %1: %2!d!"` — `%1` names the gun group (which is why
+it exists: per-group counters), `%2` the count. Resolve through `Messages`, render with E34.
+
+**Verify.** Cycling groups on the Balmoral updates both name and count; the string comes from
+`messages.json`, not a hardcoded literal.
+
+### E37 ☐ Impact-point reticle
+
+**Goal.** The aiming reticle, with the original's behaviour.
+
+**Evidence (user, 2026-07-22).** The reticle is **not fixed to the plane's flight direction**.
+It is a computed impact point at *x* metres, so it **lags behind the plane's rotation** during a
+roll or pull rather than sitting locked at screen centre. Texture: `extracted/rimage/impact_point.png`
+— four tick marks around an open centre.
+
+**Approach.** Project the selected gun group's ballistics forward to a convergence distance and
+draw the reticle at that world point's screen projection, using the same integration as B13 so
+the reticle and the rounds agree. Choose and document the convergence distance — **not stated in
+the data**; a TUNE constant pending playtest.
+
+**Verify.** In a hard turn the reticle visibly trails the nose; rounds land where the reticle
+sits in steady flight.
+
+### E38 ☐ Lock-on indicator
+
+**Approach.** Target box plus acquisition progress for B20, reusing `MarkerHud`'s existing
+reticle and screen-edge arrow.
+
+**Verify.** Acquisition takes `LOCK_ON` seconds; the indicator clears when lock breaks.
+
+---
+
+### F39 ☐ Weapon lab in `--viewer`
+
+**Approach.** A fourth lab alongside `DamageLab` (H), `LiveryLab` (L), `MeshLab` (M) —
+suggest **W**. Mount any of the 48 weapons in any slot, fire, observe muzzle flash, projectile
+and impact. This is where weapon selection gets exercised before the configurator exists.
+Include a copy-CLI-args affordance, as `LiveryLab` does.
+
+**Verify.** Every one of the 48 entries can be mounted and fired without error.
+
+### F40 ☐ Freecam raycast pick + HP control
+
+**Approach.** Crosshair raycast resolves the destructible instance behind it; display name,
+HP, activation kind, root node and sequence list. Keys: chip damage, kill outright, reset
+(C28), cycle to next destructible. Reuse `NodeLabels`' node-resolution.
+
+**Verify.** Picking works in all 8 chapters; reset restores exactly.
+
+### F41 ☐ Destructible list overlay + camera jump
+
+**Approach.** An overlay listing every destructible in the chapter; selecting one warps the
+freecam to it. **Additionally show, per entry, whether its `ANIMATION_ROOT_NAME` resolves to
+real nodes and whether its sequences reference only implemented event kinds** — this is the
+coverage instrument, folded in rather than shipped as a separate flag (per the user's scoping).
+
+**Verify.** The list's totals per chapter match A4's census; unresolved entries are reported
+rather than hidden.
+
+### F42 ☐ `--destroy=` CLI trigger
+
+**Approach.** `--destroy=<def-or-node>` triggers a named destructible at startup so a
+`--screenshot` run captures its death with nobody at the controls. This is what makes wave C
+verifiable the way everything else here is verified.
+
+**Verify.** A scripted run in each of the 8 chapters produces a destruction screenshot.
+
+### F43 ☐ `--infinite-ammo` / `--loadout=` overrides
+
+**Approach.** Two testing switches. `--infinite-ammo` suppresses depletion; `--loadout=`
+overrides a plane's stock entry. Document both in `docs/cli.md` — CLAUDE.md keeps only the
+day-to-day table.
+
+---
+
+## Exit criteria
+
+Milestone 3 is done when:
+
+1. Every weapon in the stock table fires with correct ballistics, effects and audio, on all 11
+   aircraft (turret slots excepted — M4).
+2. A scripted `--destroy=` run kills a representative destructible in **each of the 8 chapters**
+   with correct animation, audio and collider removal.
+3. The 44 collide-destructibles break on contact, and no `WeaponHit` object does.
+4. The 8-chapter `--freecam` regression is clean — zero errors, node/mesh counts unchanged
+   except where coverage was deliberately added.
+5. The HUD shows per-group ammo, selected weapon, impact-point reticle and lock state.
+6. `docs/formats/` covers `weapons.json`, the destructible model, the effect readers and the
+   marker rig; `vehicle.md`'s deferral is gone; `zrdr.md`'s index is complete.
+
+**Not exit criteria** (deliberately): the configurator UI, turrets, air-to-air anything,
+firing heat / cannon jam, ammo pickups.
+
+---
+
+## Added to `backlog.md` (done 2026-07-22, when this plan was committed)
+
+- **Firing heat + cannon jam** — data ships exact constants: `FIRING_HEAT` on 4 weapons,
+  `cannon_jam` on `player_airplane` (`heat_safe_limit 1000`, `heat_dissipation_rate 50`,
+  `jam_chance 0.1`). Deliberately excluded from M3 (decision 4) as friction with no combat
+  pressure to justify it. Record the constants so nobody re-derives them.
+- **Ammo pickups** — `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist, implying world
+  pickups. Needs the pickup entities located first; they may be mission-scripted rather than
+  placed, so this carries research risk.
+- **The gun/hardpoint configurator UI** — `GUNS.SCRIPT` (4 slots, `gn_d_gun0..3`) and
+  `HARDPOINTS.SCRIPT` (2 slots, `hp_d_point0..1`) are pure UI layout reading engine callbacks
+  2249/2250 and 2245. Per-plane slot counts, costs and the economy are executable-resident.
+- **M4 dependencies discovered here** — turrets as AI gunners (`ai.zrd.json` is TURRET-only;
+  `turrets` in `vehicle.json`; `gun_pitch`/`gun_yaw` cones); the `target` aim-point marker;
+  air-to-air lock-on; `FLYOUT_HEALTH`/`TARGETABLE` shootable torpedoes; AI-only `armor`/`health`
+  pairs that `PlaneStats` does not read.
+
+## Open questions the data cannot settle
+
+Carried here rather than guessed at:
+
+1. ~~**`CLUSTER_SIZE` semantics**~~ — **resolved 2026-07-22**: rounds per slot, measured (A9).
+2. ~~**Gun slot → mount name per plane**~~ — **resolved 2026-07-22**, user-supplied (A8), and
+   the slot→firepoint binding rule fell out of it. A10 remains as verification.
+3. ~~**`ARMOR_DAMAGE` vs `HEALTH_DAMAGE` against world objects**~~ — **resolved 2026-07-22**:
+   destructibles carry `health` only (zero armour keys in 16,114 defs), so only `HEALTH_DAMAGE`
+   applies. The two-pool model, where it applies, is armour-then-health (see C23). **New open
+   question in its place:** the patrol boat and trucks have both a vehicle armour/health def
+   and anim destructible defs — which governs? (C23)
+4. **Reticle convergence distance** — not in the data; a TUNE constant pending playtest (E37).
+5. ~~**One trigger pull = one rocket or the whole slot?**~~ — **resolved 2026-07-22**: one
+   rocket from one hardpoint. Cooldown (`FIRE_RATE 1.0`) is data-derived, not observed.
+6. **`vehicle.json` `weapons` tuple positions 3–5** — inferred, not confirmed (item A6).

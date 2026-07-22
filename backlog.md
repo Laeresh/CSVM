@@ -346,6 +346,49 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
 
 ## Feature backlog
 
+- **M3-deferred gun mechanics — firing heat and cannon jam** (scoped out of
+  `docs/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
+  it while nothing shoots back). **The constants are exact, so nobody needs to re-derive them:**
+  `weapons.json` `FIRING_HEAT` on 4 entries (30-cal = 5.0); `vehicle.json` `cannon_jam` on
+  `player_airplane` = `heat_safe_limit 1000`, `heat_dissipation_rate 50`, `jam_chance 0.1`.
+  Heat accumulates per shot, dissipates at 50/s, and past the safe limit each shot has a 10 %
+  jam chance. Pick this up when there is combat pressure — i.e. alongside or after M4 AI.
+
+- **M3-deferred — ammo pickups.** `MSG_AMMO_PICKUP` / `MSG_AMMO_PICKUPS` strings exist
+  (`messages.json` 126–129), implying world pickups that restore ammo. **Carries research
+  risk:** the pickup entities have not been located, and they may be mission-scripted rather
+  than placed in the world data. Locate them before scheduling.
+
+- **The gun/hardpoint configurator UI** (deferred from M3, decision 9 — M3 flies stock loadouts
+  only, but its loadout model is data-driven so this drops in without rework). The original's
+  screens are `GUNS.SCRIPT` (4 gun slots, `gn_d_gun0..3`, engine callbacks 2249/2250) and
+  `HARDPOINTS.SCRIPT` (2 hardpoint slots, `hp_d_point0..1`, callback 2245), plus
+  `PLANECONSTRUCTION.SCRIPT` / `PURCHASE.SCRIPT`. Both are **pure UI layout** — per-plane slot
+  counts, weapon costs and the economy are all executable-resident, so the *buying* half would
+  have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
+  3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
+
+- **M4 dependencies discovered while planning M3** (2026-07-22) — recorded so they are not
+  re-derived:
+  - **Turrets are AI gunners**, not player-aimed: they acquire and engage other aircraft
+    automatically (user-confirmed). This is why `extracted/zrdr/ai.zrd.json` contains nothing
+    but `TURRET` defs. Five player planes carry one — `pavenger`, `pbalmoral` (two: front +
+    rear), `pbrigand`, `pfirebrand`, `pkestrel` — and **W4 in the stock loadout table is filled
+    on exactly those five and no others**. `vehicle.json` `turrets` gives `firstp`/`thirdp` node
+    pairs (which mesh renders in which view, *not* a player camera mode); `gun_pitch`/`gun_yaw`
+    (±11°) are the gunner's cone.
+  - **`target`** — a mesh-less marker, one per plane root (11 player + 11 AI). The aim point
+    for AI gunnery and air-to-air lock-on.
+  - **Air-to-air lock-on.** M3 implements the full guided-missile flight model but restricts
+    acquisition to ground destructibles, so air-to-air is a targeting change, not new flight
+    code.
+  - **Shootable ordnance.** `wep_14` (TORPDO) has `FLYOUT_HEALTH 10` and `TARGETABLE` — the
+    torpedo itself can be shot down. Inert in M3 because nothing else shoots.
+  - **AI vehicle armour/health.** `vehicle.json` carries an `armor` + `health` pair on AI defs
+    only (aircraft always `armor == health`, 60–100; `patrolboat` and `t_truck` `armor 0 /
+    health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
+    (see `docs/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
+
 - **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.**
   - **`csky_fog_on` instance-uniform index disagrees between the two shaders.** `Clutter`'s
     shader declares it at index 0; `SceneBuilder.GetBiasShader` declares `node_bias` first so
@@ -439,6 +482,27 @@ Grouped by the user as a prospective third polish run. Not a plan — write one 
   `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 ## Open fidelity questions (answerable by testing the original)
+
+- **Patrol boat: which HP governs?** (from `docs/PLAN-M3-weapons.md` C23, 2026-07-22.) The boat
+  is described by two systems that **agree on the damage-stage fractions and disagree on total
+  HP by exactly 2×**: the `patrolboat` vehicle def says `health 40` with stages at 0.60/0.30
+  firing `ptboat_50damage`/`ptboat_75damage`, while the `C1/patrol_boat` anim def says
+  `HEALTH 20` with stages at `ANIM_HEALTH` 12/6 (also 0.60/0.30) firing the generic
+  `sputter_black_smoke_obj`/`sputter_fire_smoke_obj`. Likely reading: the vehicle def governs
+  the boat as an **AI combatant**, the anim def as **placed scenery** — so M3 (scenery only)
+  wants 20. **Settle by shooting one in the original with a known weapon and counting hits.**
+  Also check whether `t_truck` (`armor 0 / health 40`, no injure_anims), `fueltruck` and
+  `armytruck_destruct` show the same duplication.
+
+- **Rocket firing cooldown.** Every rocket entry has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns),
+  i.e. one launch per second. The user confirmed one trigger pull = one rocket from one
+  hardpoint but was **not sure whether a cooldown exists**, so 1.0 is the data's answer rather
+  than an observed fact. A/B against the original.
+
+- ⚠ **Never infer a damage threshold from an animation's name.** `ptboat_50damage` fires at
+  **60 %** health remaining and `ptboat_75damage` at **30 %** — the names lag their trigger,
+  the same way `docs/formats/hud.md` records for the cockpit damage dial ("the anim names lag
+  their effect by one state"). Measured 2026-07-22 while planning M3.
 
 - **Map-edge continuation**: ours alternately *reflects* the border tiles (seam-free by
   construction); the original likely plain-repeats them, possibly sharing the edge vertex row.
