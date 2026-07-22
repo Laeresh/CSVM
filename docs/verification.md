@@ -57,6 +57,14 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
   the deck hidden and fog off, the same change moves 74,129 px.
 - **One camera angle is not a test.** The lighthouse-flare bug was invisible from the south,
   where the authored spot already faced the camera.
+- **One scripted collision pose is not a test either — sweep the parameter.** The airframe
+  collision boxes deliberately *overlap*, so only impact points inside the disputed region
+  discriminate between two classifications; everywhere else both labels give the same answer.
+  A/B'ing the item-10 tail/wing relabel over five spawn altitudes changed the logged part at
+  **exactly one** of them (`graze (tail→tail)` → `graze (wing→rightwing)`, at identical vn,
+  damage and HP — which is also what proves the physics did not move). Any of the other four
+  poses on its own would have read as "the fix does nothing", or, run before the fix, as "there
+  is no bug". Sweep a range and require *some* pose to flip.
 - **Compare pixel values, not an upscaled crop.** The gauge face textures contain dark *unlit*
   copies of the STALL / LOW ALT windows that read as lit when enlarged (~58,0,0 unlit vs 180+,0,0
   lit). This one bit twice.
