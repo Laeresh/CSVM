@@ -735,7 +735,56 @@ re-shoot the original at the repro pose (`--campos=-9533.178,76.319,-3367.413
 and check whether it is a LOD sibling that should have been culled, which would settle the "why is
 it coplanar at all" half without needing the original at all.
 
-## C3 coast: dark polygon-edge outlines and uneven shoreline brightness
+## Hairline seams on polygon edges (C3 coast, C4 river) — strong lead: the depth bias is a vertex scale
+
+**⚠ Updated 2026-07-22 with a C4 reproduction and a specific mechanism. Read this before the
+C3-only notes below, which are the earlier and weaker reading of the same artifact.**
+
+**User-reported in C4 as well** (`--campos=-6439.027,807.788,-7376.811
+--lookat=-6399.279,723.584,-7413.278`, mid-map — *not* at the map edge, so `MapEdgeExtender`
+mirroring is ruled out; the extender only acts past the boundary).
+
+**Pre-existing in C4 too.** That pose renders **byte-identically** (0 of 921,600 px) between
+`a16cec0` — before every polish-3 rendering change — and current `main`. Same proof as the C3
+case. Nothing in polish run 3 caused either.
+
+**What it actually looks like, magnified.** Not a shading gradient: **one-pixel-wide hairlines
+lying exactly on polygon/surface boundaries**, some brighter than their surroundings and some
+darker (measured deltas 19–32 against local background). The decisive detail is that a **tan
+hairline crosses blue water** — a vertex-colour or normal seam on a flat water surface could only
+shift the *water's* shade, so this is the **terrain behind showing through a gap**.
+
+**Leading mechanism — `SceneBuilder.cs:907`:**
+
+```glsl
+VERTEX *= 1.0 - (depth_bias + node_bias);
+```
+
+The draw-priority bias is a **multiplicative scale on vertex position**, i.e. every polygon is
+shrunk slightly toward the camera in proportion to its rank. Two adjacent surfaces with
+*different* bias values shrink by *different* amounts, so a shared edge stops coinciding and a
+sub-pixel gap opens along it. That predicts all of it: seams exactly on surface boundaries,
+hairline width, and the colour being whatever lies behind rather than a variation of the surface
+in front.
+
+**Cheapest decisive test:** force `depth_bias` and `node_bias` to 0 and re-render both poses. If
+the hairlines vanish, it is the bias-as-scale; if they persist, fall back to the vertex-colour
+reading below. Note this cannot be done from the CLI today — the mesh lab has no bias override —
+so it needs a temporary edit or a new debug switch.
+
+**If confirmed, do NOT just reduce the constants.** They exist to resolve coplanar draw order and
+item 11 measured that this renderer's depth-resolution floor is ≈1e-6 of view distance, with
+`SurfaceRankBias` (2e-6) sitting right at it and `NodeOrderBias` (5e-8) already 20× *below* it.
+Shrinking the bias to close the seams would re-open the z-fighting it was added to fix. The real
+fix is likely a different bias mechanism — a depth-only offset that does not move vertices
+laterally — rather than a smaller scale.
+
+**Related, and possibly the same bug:** the `--no-fog` flag added 2026-07-22 is the tool for
+inspecting this, since fog otherwise washes the seams out at distance.
+
+---
+
+### Earlier C3-only notes (weaker reading, kept for its evidence)
 
 **Reported by the user 2026-07-22, and proven PRE-EXISTING the same day** — not a regression from
 polish run 3. Pose: `--campos=-5931.403,149.271,-3292.775 --lookat=-5933.68,66.417,-3348.722`.
