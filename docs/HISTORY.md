@@ -1736,3 +1736,36 @@ would need its own decode to tween honestly.
 **Noted but not chased:** parking the camera at the world origin renders the world into only the
 upper-left quadrant of the viewport, like a 4P pane with one player. Reproduced on the pre-change
 build, so it is **pre-existing** and unrelated; logged in `backlog.md`.
+
+## 2026-07-22 — `docs/verification.md`: the measurement traps get their own page
+
+User question, and a fair one: the verification gotchas were being written into dated `HISTORY.md`
+entries, which is the wrong place for them. HISTORY is chronological — you read it to learn what
+happened. These are things you need *before* you start measuring, and nobody reads a 1,700-line
+log first.
+
+A sweep of `HISTORY.md`, `CLAUDE.md` and `architecture.md` found **~90 distinct verification
+traps**. Only ~14 were phrased as standing rules; `architecture.md` had correctly promoted 5 into
+permanent per-module warnings (`AnimRuntime`, `TextureCycler`, `GaugeCluster`, `MeshLab`, `Pads`).
+**Everything else existed in exactly one dated entry and was findable only by someone who already
+knew it was there** — which is no use to the session that needs it.
+
+They cluster into recurring failure modes rather than one-offs, which is the argument for a page:
+screenshot diffs that prove nothing (the subject occluded, fogged, sub-threshold, or shot from the
+one angle where the bug is invisible); numbers that are not what they look like (`--perf`'s
+`script` figure reads ~2.2× real frame time; vsync-capped results are floors, not ceilings;
+`RandomWeight` varies op counts run to run); "nothing changed" having four innocent explanations;
+instruments that manufacture the predicted answer (a wrong triangulation "proving" inverted
+normals, a sampling window ignoring the structure it sampled); and baselines that were never valid
+(`git stash` without `-u` leaving a failed build, a regression test never seen to fail).
+
+Written as `docs/verification.md`: the five rules that have each paid more than once, five sections
+by what you are about to trust, what this project *cannot* verify itself (audio, feel, two
+controllers, fidelity vs the original), a table of known non-deterministic surfaces, and a standing
+pre-flight checklist. It distils rather than duplicates — HISTORY keeps the narratives.
+
+`CLAUDE.md`'s doc-maintenance rules gained the routing line that prevents the regression: a way a
+measurement can mislead goes to `docs/verification.md` as a transferable rule, not only into a
+dated entry.
+
+No code change. Nothing was deleted from `HISTORY.md`.

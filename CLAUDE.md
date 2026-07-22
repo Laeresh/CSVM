@@ -7,6 +7,7 @@
 - Changes to *what the tool does from the outside* (flags, outputs, defaults, algorithms, UI, entry points) → the relevant section **here**.
 - Implementation detail, diagnosis narratives, verified gotchas → the module's bullet in `docs/architecture.md`. **Read a module's bullet there before modifying that module** — dead ends and misdiagnoses are recorded so they don't get re-chased.
 - Format / reverse-engineering knowledge → `docs/formats/`.
+- A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A dated `HISTORY.md` entry alone buries it — nobody reads a chronological log before starting work.
 - Landed work → a dated entry appended to `docs/HISTORY.md`, plus refresh "Current status" here (current state + next step only — it is not a log).
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
 
@@ -65,6 +66,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 - `backlog.md` — unscheduled future work: blocked/deferred items (cam_anim extension, upstream PR), feature backlog, open original-game fidelity questions, pointer to the TUNE list. Move items into a plan when scheduled; delete when landed.
 - `OriginalScreenshots/` — user-captured reference screenshots from the original game (committed; UI/plane/sky references for fidelity comparisons — contains no bulk asset data). Reference **videos** live in `OriginalScreenshots/Videos/` (git-ignored — large binaries; docs reference them, ask the user if one is missing).
 - `docs/HISTORY.md` — chronological Milestone-2 development log (moved out of this file 2026-07-18): every landed change with its verification details. Append new dated entries there when work lands.
+- `docs/verification.md` — **how to verify a change in this project, and how the instruments lie.** Read it before measuring anything: the non-deterministic surfaces (the `--freecam` default camera is a random spawn pick per launch), the traps that have each cost real time (a screenshot diff proving nothing because something occludes or fogs the subject; `--perf`'s `script` figure reading ~2.2× real frame time; a regression test never seen to fail), and the standing pre-flight checklist. Distilled from ~90 incidents scattered through `docs/HISTORY.md`; **new verification traps land here, not only in a dated entry.**
 - `docs/architecture.md` — deep per-module implementation notes for `CrimsonSkies/src` (the long narratives formerly inline in this file): read a module's bullet before touching it; update it in the same turn as a change.
 - `docs/formats/` — the public reader-format reference (Run-2 item 13, completed 2026-07-19): `README.md` index + shared conventions, one page per format family (see the list under "Format gotchas" below). New decodes land with their docs page in the same change.
 
