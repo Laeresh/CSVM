@@ -62,22 +62,30 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   fix before removing. Side effect while active: DirectInput-only controllers (non-XInput
   sticks without an SDL HIDAPI driver) are invisible in-game.
 
-- **Degenerate zeppelin node transforms (found 2026-07-22, pre-existing).** On C1/M04 some
-  zeppelin animation nodes carry an astronomically large world basis: `gasbag3` reads a global
-  origin of ~(4.6e27, -4.8e28, 4.0e29) with basis X ~(0.36, -2.5e24, -2.9e27), and one
-  `rock_zeppelin` instance the same — while *sibling instances of the same node names* are
-  perfectly sane (`rock_zeppelin` at (-5248, 200, -5208), identity basis). The chain enters
-  between `rock_zeppelin` and `gasbag3`; local transforms all along it look normal, so the blowup
-  is in an inherited basis, not a local one. **Verified pre-existing** by probing the build from
-  *before* the ambient-sound work, with no sound code present — the sound path only reads
-  transforms and was simply the first consumer to look at one (its emitter reported a position of
-  1e29). Currently harmless-by-accident: nothing else reads those nodes, and `WorldSounds`
-  silences a host whose pose has blown up and logs it. Worth chasing because it means some
-  animation is writing a garbage transform, which could bite anything that later reads those
-  nodes. Start at whatever poses `move_zeppelin`/`tilt_zeppelin`/`rock_zeppelin` in a mission
-  where the zeppelins are visible (C1/M04 reproduces; C1/IA1 does not, because it deactivates
-  them). Candidates: a repeated relative `PoseTranslate`/`PoseRotate` accumulating, or an
-  SI-script/`ObjectScaleState` applied to an already-scaled parent.
+- ~~**Degenerate zeppelin node transforms**~~ — **FIXED 2026-07-22** (polish-3 item 9). The cause
+  was `SiScript.SplineInterp` being parsed and then read by nothing, so the 15 scripts that set
+  `spline_interp: false` had their *uninitialised* spline coefficient blocks evaluated as cubics.
+  C1/M04's `piratezep.zan` decodes a scale constant term of `(0.0, 4.259e27, 4.611e27)` — a
+  singular basis that propagates down the whole zeppelin chain. Neither of this entry's two
+  guessed candidates was right, and neither was the plan's (`ScriptPlayback` compounding scale).
+  See `docs/HISTORY.md` 2026-07-22 and the `CompiledAnim.cs` bullet in `docs/architecture.md`.
+
+- **`SpinMotion` re-seeds its rest pose from an already-spun pose (found 2026-07-22, deliberately
+  not fixed).** `SpinMotion` captures `_rest = target.Transform.Basis` from the CURRENT pose at
+  construction, and the idempotence guard in `Dispatch` matches only on identical
+  `(rate, runTime)`. `zeppelin_rocksleft` fires five events with five different rate/runtime pairs
+  at the same `rock_zeppelin`, so each replacement motion anchors to wherever the previous one
+  left the node, and a looping call drifts. It is **bounded** — rotation is orthonormal, so this
+  can never produce the 1e27 blowup it was originally suspected of — but the drift is real.
+  **Not fixed because both candidate fixes risk a visible regression to cure an invisible one,
+  and the data does not adjudicate:** (a) seeding from `RestOf` would discard a deliberately-posed
+  starting orientation on all 590 spins in the install — C1/M05's `random_prop` poses `propstill`
+  to a random angle *before* spinning it, and that pattern would break; (b) inheriting the
+  previous motion's `_rest` assumes the five rock events oscillate about a fixed pose, but a
+  chained eased rock (accelerate, decelerate, reverse) is at least as plausible a reading, and
+  under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
+  through several loops and see whether it returns to the same attitude or walks. Same class of
+  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit.
 
 - **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
@@ -214,8 +222,9 @@ relative to the Godot project's `src/`.
   uniform. Side note found while checking: `WorldBuilder.DisableFog` is now dead code — its only
   call site is commented out.
 - **C5 IA1 has a zeppelin sunk in the ground** — `--campos=235.618,1471.759,94.103
-  --lookat=237.62,1371.833,97.39`. Undiagnosed. Possibly related to the degenerate zeppelin node
-  transforms entry above (that one reproduces on C1/M04), but not yet shown to be the same fault.
+  --lookat=237.62,1371.833,97.39`. Undiagnosed. **Not** the degenerate-transform fault that entry
+  above used to speculate about: that was the unread `spline_interp` flag (fixed 2026-07-22), and
+  all 15 affected scripts are C1 and C4 only — **C5 ships none**, so this is a separate bug.
 - **C1B z-fighting** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
   Undiagnosed; same caution about the bias constants.
 - **Some oil tanks are already destroyed at spawn in C1 IA1, next to the Bloodhawk hangar.**

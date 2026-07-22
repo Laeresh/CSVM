@@ -27,7 +27,21 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
    front*.
 5. **A clean compile, a passing test, or an unchanged number is not evidence** unless you have
    seen it able to fail. See §5.
-6. **A measurement that locates the geometry still does not tell you which surface is at fault.**
+6. **An arithmetic coincidence is not a mechanism — find the value, not just the magnitude.**
+   Item 9 of the polish-3 plan traced C1/M04's ~1e29 zeppelin transforms to `ScriptPlayback`
+   compounding scale, and the numbers fit beautifully: `lkgasbag02` carries
+   `scale.base.x = 1.52`, 1.52^150 ≈ 1e27, ~2.5 s at 60 fps, and the gasbags sit on exactly
+   the reported node chain. Every step was true and the conclusion was still wrong. The real
+   cause was an unread `spline_interp` flag letting uninitialised spline memory be evaluated,
+   and what proved it was not a magnitude but an **exact value**: the offending script's scale
+   constant term is `4.6109513952913965e27` and the blown-up node's world X was
+   `4610951000000000000000000000` — bit-identical, so no compounding was involved at all.
+   **A hypothesis that predicts the right order of magnitude has barely been tested; one that
+   predicts the exact bits has.** Note also that the plan's static analysis named the right
+   *files* (all 12 of its scripts are among the 15 the real bug affects) for the wrong reason —
+   agreement on where is not agreement on why. See rule 7 below for the same trap in space
+   rather than in arithmetic.
+7. **A measurement that locates the geometry still does not tell you which surface is at fault.**
    C3's "trees standing in the water" was measured precisely — 86 of the 102 `cliff1_sandtrans`
    polygons sit at exactly Y = 0.0, coplanar with the sea plane — and that correct number
    licensed a wrong fix: drop the submerged palms with a `y > waterLevel` guard. But the palms
@@ -111,6 +125,16 @@ The measuring tool has been the bug more often than is comfortable:
 - **A sampling window that ignores the structure it samples will confidently describe the wrong
   bytes** — a fixed 90,000-byte window ran past a `.BM`'s base plane into the mask planes and
   "proved" that shading maps ship pre-painted.
+- **A guard against non-finite values does not guard against garbage.** `SiCubic.Eval` degrades a
+  NaN/∞ result to the constant term — and sailed straight past a *finite* 4.6e27 read out of
+  uninitialised spline memory, which then destroyed a whole subtree's world poses. When data can
+  be junk, "is it a number" is the weakest possible check; prefer a flag in the format that says
+  whether the bytes are meaningful at all (here `spline_interp`, parsed and then read by nothing).
+- **A probe that crashes has told you something.** The first attempt at instrumenting this bug
+  threw `ArithmeticException` out of `Basis.get_Scale()` — and that stack trace was worth more
+  than the log line it failed to print: it proved the corruption was already present *inside
+  `ScriptPlayback`'s constructor during bootstrap*, which ruled out the per-frame accumulation the
+  whole hypothesis rested on. Read the failure before "fixing" the probe.
 - **A tool limitation gets recorded as a data variant.** "24 of 48 SI-script parse failures"
   never existed; the walker lacked the header-declared counts.
 - **A diagnostic can perturb what it measures.** MeshLab's hardcoded default light direction
