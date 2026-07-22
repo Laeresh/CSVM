@@ -32,9 +32,13 @@ CopyToOneDrive.ps1
 
 # Claude Code scratch/probe artifacts
 .scratch/
-# Claude Code agent worktrees — transient checkouts created by `isolation: worktree`
-# subagents. They are real git worktrees of THIS repo; committing them would embed
-# repos inside the repo. Added 2026-07-22 after `git add -A` swept five of them in.
+# Claude Code agent worktrees/workspaces — transient checkouts created by
+# `isolation: worktree` subagents. They are real git worktrees of THIS repo;
+# committing them would embed repos inside the repo. Added 2026-07-22 after
+# `git add -A` swept five of them in. `workspaces/` is the same thing under a
+# different name in newer Claude Code builds — ignored pre-emptively.
+# NOTE: /.claude/skills/ is deliberately NOT ignored; project skills are committed.
 /.claude/worktrees/
+/.claude/workspaces/
 # Personal backlog, ideas and other things
 NOTES.md

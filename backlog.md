@@ -1,7 +1,8 @@
 # Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
-`docs/PLAN-M3-weapons.md`**; completed plans are in `docs/plans/`. Per-item history/diagnosis
+`docs/PLAN-M2-polish-4.md`**, with `docs/PLAN-M3-weapons.md` queued behind it; completed plans are
+in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -132,42 +133,12 @@ had landed, been disproven, or been measured gone were deleted (their records ar
 it is not re-derived; where it did not, the item says so rather than guessing. Paths are relative
 to the Godot project's `src/`.
 
-### Flight & damage
-
-- **Knife-edge only sinks; the nose should also drop slightly.** `FlightModel.cs` scales the
-  velocity-chase rate by `KnifeAlignFloor` and zeroes the lift fraction at 90° bank — both act on
-  `VelocityDir` (the flight *path*), not on `Attitude`, so the path sags below the nose and the
-  plane descends wings-level-nosed. The only code that rotates the nose toward world-down is the
-  stall block, gated on `Speed < StallSpeedFrac × FdSpeed`. Wants a small attitude torque in the
-  knife-edge branch, **not** a tweak to the existing path terms.
-
-### Environment
-
-- **C5 IA1 has a zeppelin sunk in the ground** — `--campos=235.618,1471.759,94.103
-  --lookat=237.62,1371.833,97.39`. Undiagnosed. **Not** the degenerate-transform fault this was
-  once attributed to: that was the unread `spline_interp` flag (fixed 2026-07-22), and all 15
-  affected scripts are C1 and C4 only — **C5 ships none**, so this is a separate bug.
-- **C1B z-fighting** — `--campos=-7698.844,48.763,-5797.924 --lookat=-7749.957,-20.093,-5849.367`.
-  **30.95% of pixels flip** at `--shots=5 --jitter=0.006` (measured 2026-07-22, polish-3 item 11 —
-  the most severe of the three recorded z-fight poses after C5's 35.96%). **It is a CROSS-NODE
-  fight**: raising `NodeOrderBias` from 5e-8 to 2e-6 — a control that changes nothing but the
-  cross-node draw-order term — collapses it to **2.35%**. A within-surface (per-polygon)
-  tie-break leaves it at 31.00%, i.e. does nothing. Same caution about the bias constants: that
-  control is a diagnosis, **not a landable fix** — the same constant takes C5 from 35.96% to
-  41.69%, because the node-index span is thousands and a step big enough to beat the
-  depth-resolution floor spans tens of priority levels. The real fix has to make the bias
-  *dense over the nodes that actually conflict* rather than uniform over all of them; see the C5
-  entry for the resolution-floor measurement that makes this the shape of every remaining z-fight
-  here.
-- **Some oil tanks are already destroyed at spawn in C1 IA1, next to the Bloodhawk hangar.**
-  Undiagnosed — likely a mission-setup or animation-bootstrap pass applying a destroyed state
-  variant that the original does not.
-- **The bowl sign flashes in the original**, but ours disables and re-enables it instead.
-
-### Animation
-
-- **Some C1 animated-object rotations are wrong (cars)** — evidence:
-  `crimsonskies_2026-07-21_23-14-29-724.png`. Undiagnosed.
+**Most of this section moved into `docs/PLAN-M2-polish-4.md` on 2026-07-22** — the knife-edge nose
+drop, the C5 sunk zeppelin, the C1B z-fighting, the C1 IA1 oil tanks, the bowl sign, the C1 car
+rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all scheduled there, each
+with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
+without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
+unscheduled.
 
 ### HUD & audio
 
@@ -178,15 +149,6 @@ to the Godot project's `src/`.
   damage path left latched. Check what the original shows on a crash before wiring anything.
 - **Gauge needles are the wrong shape** — they come from the game's own HUD textures. Could be
   drawn procedurally instead in a future Hi-Def mode.
-- **No mute when the window loses focus.** Nothing in `src` handles
-  `NOTIFICATION_APPLICATION_FOCUS_OUT` / window focus, and there is no `AudioServer` or bus gate —
-  `FlightAudio.cs` only sets per-player `VolumeDb`. Related open question already recorded in
-  `docs/HISTORY.md`: whether pad reads should be gated on focus project-wide. Decide both together.
-
-### Mission logic
-
-- **C2 stunt mode: the Seaplane Hangar objective sits at the wrong position.**
-
 ## Feature backlog
 
 - **Better mission states.** There is still a lot of difference between our maps and the
@@ -237,30 +199,10 @@ to the Godot project's `src/`.
     health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
     (see `docs/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
 
-- **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.**
-  - **`csky_fog_on` instance-uniform index disagrees between the two shaders.** `Clutter`'s
-    shader declares it at index 0; `SceneBuilder.GetBiasShader` declares `node_bias` first so
-    it lands at index 1. Godot merges instance-uniform mappings across the materials on one
-    `GeometryInstance3D`, and a disagreement silently drops fog on the losing surfaces — the
-    2026-07-17 unfogged-hilltops bug. **Verified latent, not live:** clutter renders through
-    `MultiMeshInstance3D` + `MaterialOverride` and never shares an instance with a
-    `SceneBuilder` material, and an 8-chapter run logs **no** `instance_uniforms.cpp` warning
-    at all. Padding Clutter's shader with an unused `node_bias` was tried and reverted — it
-    enforces nothing, since the next shared uniform still has to be added to both shaders by
-    hand. **The real fix is a shared ordered-preamble constant emitted by both**, which means
-    editing `GetBiasShader` and re-running the full regression (it changes every world
-    material's shader text). Until then the invariant is: declare any new instance uniform
-    LAST, in both shaders — documented at both declaration sites.
-  - **`PlaneViewer.cs`'s `InstanceShaderParams` omits `csky_opacity`**, so a duplicated
-    splitscreen cloud deck loses any animated `OBJECT_OPACITY_STATE` opacity. Noted by the
-    plan, untouched here (different file/owner). Arguably the more real of the two uniform
-    defects.
-  - **`FlightController`'s soft-tree collision branch is now dead code.**
-    `hitName.EndsWith("clutter_col")` at `:565` and `:649` can never match. Still true after
-    polish-3 item 6 gave the 3D city-block decorations collision: those bodies are named
-    `clutter_bld_<cx>_<cz>`, chosen precisely so they do NOT hit this branch — a skyscraper
-    must not be soft. Inert, left in place because that file belongs to another module's
-    owner. Delete with the `TreeDamage` constant when someone is next in there.
+- **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.** *(Three of the
+  original five — the `csky_fog_on` uniform ordering, the missing `csky_opacity`, and
+  `FlightController`'s dead soft-tree branch — were scheduled into `docs/PLAN-M2-polish-4.md`
+  items 10 and 6 on 2026-07-22. These two remain.)*
   - **C5's `poleflare` clutter renders with the wrong billboard axis.** The `cblock*` templates
     ship `lightpole` (`CylindricalY`) posts *and* `poleflare` (`SphericalY`) glows — 33,682 of
     each in `cblock1` alone. `ClutterBuilder.Kind` carries no per-kind billboard mode, so every
@@ -269,11 +211,21 @@ to the Godot project's `src/`.
     (the shared `SceneBuilder.ClassifyBillboard` distinguishes the two), but fixing it means
     giving `Kind` a billboard mode and a second material path, and it changes how 139,388 C5
     sprites look with no reference shot to check against — so it needs an original-game A/B.
-  - **Static collider probe is off by 6 (C4) and 11 (C5).** `.scratch/probe_exempt.py`
-    replicates the world walk and reproduces the runtime collider counts *exactly* in 6 of 8
-    chapters, but predicts slightly more billboard exemptions than the game applies in those
-    two. The safety conclusion is unaffected (the probe's candidate list is a superset and
-    contains nothing solid), but the gap is unexplained rather than benign-by-proof.
+  - **Static collider probe is off by 6 (C4) and 11 (C5).** The probe replicated the world walk
+    and reproduced the runtime collider counts *exactly* in 6 of 8 chapters, but predicted
+    slightly more billboard exemptions than the game applies in those two. The safety conclusion
+    is unaffected (the probe's candidate list is a superset and contains nothing solid), but the
+    gap is unexplained rather than benign-by-proof. **⚠ Corrected 2026-07-22:
+    `.scratch/probe_exempt.py` NO LONGER EXISTS** — `CleanScratch.ps1` swept it and `.scratch/` is
+    gitignored, so there is no copy in git either. **Picking this up means rewriting the probe
+    first**, which is why it was considered and dropped from polish run 4. When rewritten, the
+    surface it must match is `WorldBuilder.NoCollisionNode` (`WorldBuilder.cs:69-70`) =
+    `MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n)`; the likeliest source of the
+    divergence is `IsBillboardNode` (`:99-109`), which does a node→`MeshIndex` hop and falls back
+    to a 1-polygon flare-texture test, **plus the fact that the exemption is inherited by the whole
+    subtree** (`SceneBuilder.cs:337` region, via `BuildSubtree` at `WorldBuilder.cs:353`). Two
+    later changes a rewritten probe must also model: clutter collision was removed outright, and
+    city-block clutter uses merged/shared shapes.
 
 - **Skybox colour grading.** No tint, grade or tonemap is applied to the skydome anywhere —
   `WorldBuilder.BuildHorizon` only disables shadows, billboards the moon and disables light
@@ -289,11 +241,6 @@ to the Godot project's `src/`.
     randomizes per player. Decide from playtest whether the menu should offer it.
   - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
     catalog but nothing flies them — there are no AI aircraft yet.
-- **Full `player_plane_destruct` crash choreography**: surface variants
-  (`player_crash_default/_dirt/_water`), sparks, black smokeball, `plane_destroy_sg` sound,
-  crash trails. Current state = fireball + breakup pieces + 10 s wreck fire (item 10d).
-  Folds in the crash-video follow-ups (2026-07-19, `C1 IA1 Crash.mp4`): brown dust burst on
-  hard grazes, burning debris arcs, explosion scale/persistence.
 - **`flight_ceiling`** (data: 2500 m) unenforced — at full throttle a steep climb is a stable
   equilibrium and sails past it (accepted arcade artifact of the Run-1 item-6 flight model).
 - **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
@@ -409,7 +356,18 @@ scripted screenshot.
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
   real flight (the thresholds need states normal play actually reaches).
 - **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B a dive against the original.
-- **Stunt mode** — `DzRadius` 30 m (tightened from 60 on user feedback), marker-HUD placement,
+- **Stunt mode** — `DzRadius` **15 m — user-tuned by hand 2026-07-22, and this is the current
+  value** (an earlier "30 m, tightened from 60" note here was stale; the source is right).
+  **Still wanted: a per-zone radius from the data, because one global constant does not fit** —
+  the user reports 15 m is too tight at some zones while 30 m was too loose at others, the loose
+  case being that you fly *around* the danger and still score it. **Concrete leads, not yet
+  checked:** the `dzones` ia.json record is only `[pathName, dzName]` (two strings, no size), so
+  any per-zone extent has to come off the marker node itself — `dzN` nodes carry a real
+  `RotateTranslateScale` (check whether the **scale** component is meaningful rather than
+  identity), and every gamez node also ships `node_bbox`/`child_bbox` (**not currently parsed into
+  `GameZNode` at all**). C2's `sghangar` proves the bbox route carries real extent. Check the
+  `dzpathN` companion too — it is named but nothing reads it. If none of that pans out, 15 m
+  stands as a tuned constant. Also: marker-HUD placement,
   font and distance units; scoreboard fonts and placement.
 - **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
@@ -462,134 +420,27 @@ and it deliberately gives up the magenta signal that means "our bug" for those t
 project's convention is that magenta is diagnostic, so suppressing it is a judgement call, not a
 cleanup.
 
-## C5 ground z-fighting — coarse quad coplanar with the detailed city ground
+## C5 / C1B ground z-fighting — SCHEDULED, see `docs/PLAN-M2-polish-4.md` item 9
 
-Found 2026-07-21 while investigating the animation-runtime performance regression; the user
-asked whether follow-up plan item 3 would clear it. **It would not** — full diagnosis in
-`docs/HISTORY.md` (2026-07-21 entry), summarised here so it isn't re-chased.
+**Moved out of this file 2026-07-22.** All three z-fight reports (C5's coarse-quad pose, C1B, and
+the C3 beach pose that no longer reproduces) are **one cross-node depth-resolution problem**, and
+the whole investigation — the surviving measurements, the three superseded diagnoses, the
+structural facts about `world1` children vs partition roots, the retracted coverage figures, the
+`fvol*` and `zone_id` cautions, and the `OriginalScreenshots/C5 IA1 Terrain*.png` reference
+captures — now lives in **`docs/PLAN-M2-polish-4.md` item 9**, which is where the work is
+scheduled.
 
-Repro: `--viewer --chapter=C5 --sky-zone=zone2 --campos=-9533.178,76.319,-3367.413
---lookat=-9451.281,28.148,-3398.597`, measured with `--shots=5 --jitter=0.006` (a *sub-pixel*
-dither — the 0.15° default moves the camera far too much to isolate depth flips). 8.42% of
-pixels flip.
+**The two things worth knowing without opening the plan:**
 
-Ruled out: the map-edge extender (identical flicker without `--sky-zone`), and entity rosters /
-item 3 (only 2 mesh nodes within 1500 m, generic ground names — item 3 hides discrete roster
-objects). Confirmed cause: the depth bias is proportional to view distance
-(`VERTEX *= 1.0 - (depth_bias + node_bias)`), so coplanar surfaces sharing a draw priority get
-`rank × 2e-6` ≈ 0.16 mm at ~80 m. A 100× bias drops the flicker to 0.01%.
+1. **Do NOT "fix" this by raising the bias constants.** Measured: `NodeOrderBias` 5e-8 → 2e-6 takes
+   C1B from 30.95% to **2.35%** and C5 from 35.96% to **41.69% (worse)**. That control is a
+   diagnosis, not a landable fix.
+2. **This bug has been diagnosed wrong three times.** The traps it produced are permanent and are
+   recorded in `docs/verification.md` (rules 4, 7, 9 and 11 are all written from it) and in
+   `docs/HISTORY.md` (2026-07-21 and 2026-07-22 entries). Read those before re-measuring.
 
-> **⚠⚠ SUPERSEDED AGAIN 2026-07-22 (third measurement pass, polish-3 item 11) — the
-> "`g4683` fights ITSELF" answer in the box below is ALSO wrong. Read this box first.**
->
-> **`g4683` has no self-overlapping polygons at all.** The "8 pairs exactly coplanar at y = 5,
-> overlapping by up to 768 × 512" figure came from an **AABB** overlap test, and an AABB
-> overlap is not an area overlap. Clipping the actual outlines (Sutherland-Hodgman, true
-> polygon∩polygon area) gives **zero** overlap for every pair in the mesh. Worked example —
-> its polygons 3 and 4, the pair whose bounding boxes overlap most:
->
-> ```
-> poly3  (-9600,-3712) (-9472,-3712) (-9216,-4096) (-10240,-4096)
-> poly4  (-9600,-3712) (-10240,-4096) (-10240,-3584) (-9600,-3584)
-> ```
->
-> They **share the edge (-9600,-3712)→(-10240,-4096) exactly** and lie on opposite sides of
-> it. They abut; they are a tiled ground surface, which is what this data mostly is.
->
-> **The real mechanism at this pose is cross-node, and it is a resolution problem, not an
-> ordering problem.** Nine *different* World-child nodes stack coplanar `cblock*` ground at
-> y = 5 inside the repro footprint — nodes 1777 (`g4683`), 1799, 1800, 1801, 1813, 1814, 1822,
-> 1823, 1837, priorities 0 and −10. The priority −10 ones separate cleanly (10 × 2e-4). The
-> priority-0 ones are separated only by `node_bias`, and the measured depth-resolution floor at
-> this view is **≈1e-6 of view distance** (bracketed directly: a per-polygon depth ramp of 2e-7
-> moves the flip rate 35.96% → 33.20%, one of 2e-6 moves it to 0.37%). `NodeOrderBias` is
-> **5e-8 — twenty times below that floor**, so sibling nodes 36–60 indices apart get a
-> separation of 1.8–3.0e-6 that straddles the floor, and nodes 1822 vs 1823 (delta 1 → 5e-8)
-> can never separate at all. That is why the flicker is partial rather than total.
->
-> **Do not "fix" this by raising `NodeOrderBias`.** Measured: raising it to 2e-6 takes C5 from
-> 35.96% to **41.69% (worse)** — the node-index span is thousands, so a step large enough to
-> beat the floor spans tens of priority levels and scrambles the authored layering. (It does
-> take **C1B from 30.95% to 2.35%**, which is good evidence C1B's fight is cross-node too, but
-> it is not a landable fix.)
->
-> **Also corrected: "the 35.77% baseline is largely grazing-angle mipmap/aniso resampling" is
-> false.** A pure depth-ordering change — the 2e-6 per-polygon ramp, which alters nothing but
-> depth and leaves the projected position identical by construction — took the same pose to
-> 0.37%. So ≤0.4% of it is resampling and ~35.6% really was depth flipping. What that ramp
-> does *visually*, however, is float the coarse sheet in front of the detailed city
-> (`.scratch/cmp_c5_after.png`) — the flicker goes away because the wrong surface wins, which
-> is `docs/verification.md` rule 4 in its purest form.
->
-> **The per-polygon within-surface tie-break was implemented properly and lands nothing.** See
-> `docs/HISTORY.md` 2026-07-22 (item 11) for the implementation and why it was reverted.
->
-> **This is `g4683` z-fighting ITSELF, not the coarse sheet against the partition ground.**
-> Hiding `g4683` alone drops the repro pose's flicker to 0.19%; hiding all 7 coarse sheets
-> gives the *identical* 0.19%; and applying the world-child-vs-partition rank changes it not
-> at all (35.77% → 35.79%). `g4683` carries **8 pairs of its own polygons exactly coplanar at
-> y = 5, same priority 0, overlapping by up to 768 × 512** — five of them the same material
-> (`cblock1.tif`), so `BuildMesh` puts them in one surface with one shared depth bias and no
-> tie-break can reach them. Giving every polygon its own rank moves the flicker to 21.92%,
-> which is the only intervention that shifted it. **The real fix is a per-polygon
-> within-surface draw-order tie-break in `SceneBuilder.BuildMesh`** (`SurfaceRankBias` today
-> only separates *(material, priority)* groups; the original ordered equal-priority polygons
-> by their position in the polygon list).
->
-> Two further corrections. **The rule does not generalise** — across all 8 chapters only C1,
-> C4 and C5 have any World-child mesh (1 / 4 / 9), **C1C has none**, `a6` is the detailed
-> airfield tile and C4's `g1612` is a 477 m cliff, so demoting them would regress. **The
-> coverage figures below did not reproduce**: an independent 64-unit rasterisation gives
-> 18.2–81.4%, not 0.0–97.8%. The conclusion *no sheet is 100% covered, so culling leaves
-> holes* survives; the per-sheet numbers should not be quoted. Also note the 35.77% baseline
-> is largely grazing-angle mipmap/aniso resampling, not depth flips — see
-> `docs/verification.md` rule 6.
->
-> Still confirmed: World children and partition roots are exactly disjoint (intersection 0,
-> all 8 chapters), and the `terrain` node flag is set on every partition root and no World
-> child, so "partition-referenced" is readable straight from the data.
-
-**Open question — answered 2026-07-22 and then acted on as polish-run-3 item 3, which was closed
-as disproven with no code landed; see the box above, which supersedes the answer.**
-
-*Is it a stray LOD tile?* **No.** The coarse sheet is node 1777 `g4683` (34 polys, 2048 × 11264,
-`brick1`/`cblock1`), a **direct child of `world1`**; the fine ground is partition-referenced.
-`world1`'s 105 children and the 471 partition roots are **exactly disjoint** (intersection = 0),
-and neither side sits under an `Lod` node — so `SceneBuilder.cs:132-134`'s nearest-LOD rule could
-never have dropped either. We draw both because the original selects between them at runtime via
-partition visibility (`WorldPartitionSetActive`, 25 uses in interp), which we do not implement.
-
-*Which should win?* **The fine ground — but the coarse sheets must not be culled.** The
-"must not be culled" half stands. ~~Rasterising each C5 coarse sheet on a 64-unit grid against
-fine-tile coverage: `g4632` 97.8%, `g4683` 78.4%, `g4425` 33.3%, `g4631` 20.0%, `g4616` 12.5%,
-`g4428` 8.8%, `g14550` **0.0%** — **72% total**~~ — **RETRACTED 2026-07-22: these per-sheet
-figures do not reproduce** (independent rasterisation gives 18.2–81.4%; `g14550`, claimed 0.0%,
-measures 18.2%). The original method tested fine-tile *bounding-box* containment, an axis-aligned
-proxy far too crude for swept terrain. **Do not quote these numbers.** What survives is only the
-weaker claim that no sheet is fully covered, so culling would leave holes somewhere.
-~~The fix is therefore a *draw-priority* change (world-children ground ranks below partition
-ground)~~ — **also retracted: that fix was implemented and measured to change nothing** (35.77% →
-35.79%). See the superseding box above for the real mechanism.
-
-*Caution for anyone re-measuring:* a naive "large flat quad" filter also catches the `fvol*`
-**fog volumes** (10 in C1, 14 in C5, at altitude) — exclude them by name. And `zone_id` does not
-explain the pair: both surfaces are `zone_id=1`.
-
-**Reference material for that open question (added 2026-07-22, user-confirmed as being about this
-issue):** `OriginalScreenshots/C5 IA1 Terrain.png`, `…Terrain2.png`, `…Terrain3.png` — original-game
-captures (dgVoodoo) of C5 IA1 at night: one low pass looking down between buildings, one horizon
-view across the city, one high overhead of the whole city ground. In all three the ground reads as
-the **fine-detail city-block surface** — lit windows, street strips, per-block variation — with no
-large flat low-resolution quad visible over it. That is evidence for "the detailed ground wins",
-i.e. the bias-bump direction is indeed backwards.
-
-**Do not treat that as settled yet.** Two limits: a still cannot show z-fighting (which is
-temporal), and none of the three poses is matched to our repro camera, so we are comparing
-different views of the same map rather than the same view in two engines. To make it conclusive,
-re-shoot the original at the repro pose (`--campos=-9533.178,76.319,-3367.413
---lookat=-9451.281,28.148,-3398.597`) — or, cheaper, identify the coarse quad's node in our scene
-and check whether it is a LOD sibling that should have been culled, which would settle the "why is
-it coplanar at all" half without needing the original at all.
+C3's coast is **fixed** — `6c592c2`'s per-mission entity setup took it 4.87% → 0.09%. Do not
+re-chase it.
 
 ## Cutscene player — the missing consumer (M04's zeppelin, `letterbox`, `CALLBACK`)
 

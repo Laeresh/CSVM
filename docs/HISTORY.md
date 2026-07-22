@@ -3470,3 +3470,67 @@ sound.
 `backlog.md` 65 KB → 53 KB. No code changed, so there is nothing to regression-test; the
 verification that matters is that every deleted entry's record exists above and every surviving
 cross-reference resolves.
+
+## 2026-07-22 — Milestone 2/2.5 polish run 4 planned; the backlog's open bugs are nearly all scheduled
+
+Ten items selected from `backlog.md` into **`docs/PLAN-M2-polish-4.md`** against three criteria the
+user set — **feasibility, little or no user input, and a preference for long-running work** — scoped
+to **M2/M2.5 only**, with `docs/PLAN-M3-weapons.md` queued behind it. Everything needing a playtest,
+two controllers, or an original-game A/B was deliberately excluded and stays in `backlog.md`.
+
+**Every candidate was verified still open against the code, not just against the backlog** — four
+parallel read-only agents checked each one against `docs/HISTORY.md` *and* the source. That pass is
+the reason this entry exists, because three of its findings changed the plan:
+
+1. **The bowl sign is not a bowl-sign bug — it is an engine-wide scheduler off-by-one.**
+   `AnimRuntime.SequenceRunner.Advance` (`:1549-1568`) computes `_due = NextDue(ev, duration)` from
+   the event it just fired, and that `_due` gates the *next* event; per `CompiledAnim.cs:255-259`,
+   `"Event"` means "since the previous event fired", so the offset gates the event that **carries**
+   it. Every timestamped event therefore fires one slot early and its unstamped partner one slot
+   late. The compiled sign (`bowl-desert_onoff.json`) is **nine strict on/off pairs plus an infinite
+   Loop**, only the first of each pair timestamped — so the shift splits every pair, and the traced
+   result is both variants lit at t=0 and **fully dark for 0.5 s at t=1.0**, which is exactly the
+   reported "disables and re-enables it instead". It also shifts the police chase, the C1/C2/C3
+   traffic, the hangar doors and the train. Promoted from a cosmetic one-liner to plan item 1.
+2. **The C1 cars are a separate root cause**, so the two were *not* merged as intended.
+   `FromToMotion` (`:1468-1474`) rebuilds the basis from `_rest` whenever an event has no rotate
+   channel, so every translate-only event snaps the node back to its authored rest orientation.
+   `police_chase`'s `start_walkin` poses 45° and then runs a **17-second translate-only straight** —
+   the longest, most visible leg — at rest orientation. The correct rule is already documented in
+   the same file, in `ScriptPlayback`'s docstring (`:1296-1300`): *"an ABSENT channel means 'hold the
+   last value this script wrote', not 'return to rest'"*. `ScriptPlayback` keeps persistent
+   components; `FromToMotion` does not. Units and Euler order were both checked and ruled out.
+3. **Two backlog claims did not survive.** `plane_destroy_sg` is listed as missing from the crash
+   choreography but is **already implemented in effect** — the `SOUND_GROUPS` entry is
+   `DYNAMIC_WEIGHTS 0.5` over `snd_exp_plane1..4`, and `FlightAudio.cs:53-58`/`:142` already load
+   exactly those four and pick one at random. And **`.scratch/probe_exempt.py` no longer exists** —
+   `CleanScratch.ps1` swept it, `.scratch/` is gitignored, so there is no copy in git either; that
+   item now means rewriting the probe, which is why it was dropped as the eleventh candidate.
+
+**Two further diagnoses fell out of the same pass**, both traced to one mechanism. C5's sunk
+zeppelin is `piratezep`: **C5's `ia1.gw` is the only IA1 setup script in the install that does not
+deactivate it**, its root carries `"transform": "Initial"` so `GameZ.ParseTransform` leaves `Local`
+null, and its `child_bbox` hangs to y −160.6 — a hull 160 m below a root pinned at the origin. C2's
+Seaplane Hangar objective has the *same* shape: `sghangar` is the **only dzone in the install that
+is a geometry node rather than a `dzN` point marker** (all other chapters' 45 zones are markers), it
+also carries `"transform": "Initial"`, and `StuntMission.cs:143` reads
+`WorldTransformOf(node).Origin` — resolving the objective to exactly (0,0,0), ~8 km from the
+building, which is why it shows a correct label on a wrong point.
+
+**`backlog.md` 53 KB → 42 KB.** The "Open bugs" section is nearly emptied — only the crash-damage
+display and the gauge-needle shape remain unscheduled. The C5/C1B z-fight section (129 lines) was
+**not simply deleted**: its surviving structural evidence moved into the plan's item 9 first (the
+`world1`-children/partition-roots disjointness, the nine coplanar nodes at y=5, the retracted
+coverage figures, the `fvol*` and `zone_id` re-measurement cautions, the reference captures), and
+what remains here is a pointer carrying the two facts worth knowing without opening the plan.
+
+**`DzRadius` corrected: it is 15 m, user-tuned by hand, and the source was right** — the backlog's
+"30 m (tightened from 60)" was stale. Recorded with it is the reason a constant is unsatisfying at
+all: 15 m is too tight at some zones while 30 m was loose enough to fly *around* the danger and
+still score it. The open lead is a **per-zone extent from the data** — the `dzones` record is two
+strings with no size, so it would have to come off the marker node's `RotateTranslateScale` scale or
+its `node_bbox`/`child_bbox`, neither of which is parsed into `GameZNode` today.
+
+No code changed. The verification that matters is that every moved entry's evidence exists in the
+plan and every cross-reference still resolves — checked, including `CLAUDE.md`'s "Known issues"
+z-fight bullet, which pointed into the deleted backlog section and now points at the plan.
