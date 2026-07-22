@@ -232,7 +232,7 @@ public partial class PlaneViewer : Node3D
     private bool _perf;            // --perf: log the CPU/GPU frame-time split once a second
     private double _perfClock;
     private int _perfFrames;
-    private double _perfProcess, _perfGpu, _perfCpuRender;
+    private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
 
     /// <summary>
     /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
@@ -240,6 +240,13 @@ public partial class PlaneViewer : Node3D
     /// most questions is the per-viewport measured GPU time, which separates "our shader got
     /// more expensive" from "our C# got more expensive". Averaged over a second so a single
     /// hitch doesn't read as a regression; A/B two builds by comparing the same line.
+    ///
+    /// <para><c>physics</c> (added 2026-07-22) is Godot's <c>TIME_PHYSICS_PROCESS</c> monitor —
+    /// the physics tick, which is where broadphase and narrowphase cost lands. It exists because
+    /// `frame`/`fps` sit pinned at the vsync cap in nearly every run here, so they are floors
+    /// and cannot show a collision change getting cheaper or dearer; the physics term can move
+    /// while the frame time does not. Same caveat as `script`: it is Godot's own monitor, so
+    /// trust it as an A/B ratio rather than as an absolute.</para>
     /// </summary>
     private void ReportPerf(double delta)
     {
@@ -248,6 +255,7 @@ public partial class PlaneViewer : Node3D
         _perfFrames++;
         _perfClock += delta;
         _perfProcess += Performance.GetMonitor(Performance.Monitor.TimeProcess);
+        _perfPhysics += Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess);
         _perfCpuRender += RenderingServer.ViewportGetMeasuredRenderTimeCpu(vp);
         _perfGpu += RenderingServer.ViewportGetMeasuredRenderTimeGpu(vp);
         if (_perfClock < 1.0)
@@ -256,8 +264,9 @@ public partial class PlaneViewer : Node3D
         GD.Print($"perf: {n / _perfClock:0.0} fps | frame {1000 * _perfClock / n:0.00} ms"
                  + $" = script {1000 * _perfProcess / n:0.00} + render-cpu {_perfCpuRender / n:0.00}"
                  + $" + gpu {_perfGpu / n:0.00} ms"
+                 + $" | physics {1000 * _perfPhysics / n:0.00} ms"
                  + $" | draws {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame):0}");
-        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = 0;
+        _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
     }
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
@@ -581,8 +590,14 @@ public partial class PlaneViewer : Node3D
                         GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites"
                                  + (clutterBuilder.SolidCount > 0
                                      ? $" + {clutterBuilder.SolidCount} 3D decorations"
-                                       + (clutterBuilder.SolidCollisionTriangles > 0
-                                           ? $" ({clutterBuilder.SolidCollisionTriangles} collision tris)" : "")
+                                       + (clutterBuilder.SolidCollisionShapes > 0
+                                           // Shared shapes: N distinct shapes / T distinct triangles,
+                                           // attached M times. The old line printed the expanded
+                                           // triangle total, which is exactly what stopped existing.
+                                           ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
+                                             + $", {clutterBuilder.SolidCollisionTriangles} tris"
+                                             + $", {clutterBuilder.SolidCollisionInstances} attachments)"
+                                           : "")
                                      : "")
                                  + $" ({clutterBuilder.Summary})");
                     }

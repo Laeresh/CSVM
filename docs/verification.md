@@ -138,7 +138,22 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
 - **`--perf`'s `script` figure reads ~2.2× the measured frame time** (it reports Godot's
   `TIME_PROCESS` monitor). Trust `frame`/`fps` for absolutes; use `script` only as an A/B ratio.
 - **Everything sitting at the 60 fps vsync cap means those numbers are floors, not ceilings** —
-  the cap hides both remaining headroom and added cost.
+  the cap hides both remaining headroom and added cost. **`--perf` gained a `physics` term on
+  2026-07-22 for exactly this reason**: `frame`/`fps` are pinned at the cap in nearly every run
+  here, so they can never show a collision or broadphase change getting cheaper or dearer, while
+  `TIME_PHYSICS_PROCESS` moves freely (it reported a steady ~2.4 ms over a C5 rooftop pass and
+  ~30–55 ms in the first second after load). When a change lands in a subsystem the frame time
+  cannot see, find the monitor that watches that subsystem before concluding anything — and if
+  there is none, say the effect is unresolved rather than reading the pinned number as "no
+  change". Same caveat as `script`: it is Godot's own monitor, so use it as an A/B ratio.
+- **A cost can be entirely in one half of an operation you assumed was uniform.** The clutter
+  city-block collision build looked like a bulk-geometry problem — 2.55M triangles transformed
+  and merged — and the obvious read was that the vertex arithmetic dominated. Timing the two
+  halves separately gave **271 ms transform vs 3,403 ms shape build**: 90% of it was
+  `ConcavePolygonShape3D`'s BVH construction, not the loop everyone looks at. Had the fix been
+  aimed at the transform loop (SIMD, parallelism, fewer allocations) it would have bought ~7%.
+  **Split the timer before choosing what to optimise**, especially when part of the work happens
+  inside an engine setter rather than in your own loop.
 - **Bootstrap op counts vary run to run on an unchanged build**, because `RandomWeight`
   conditions roll dice: C1/M05's `unresolved` count measured 100–107. An apparent +2 regression
   was noise.

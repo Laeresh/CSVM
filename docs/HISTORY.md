@@ -2935,3 +2935,118 @@ chasing the load cost — recorded in `backlog.md` with why it was not taken.
 Frame rate stays pinned at the 60 fps vsync cap throughout, so those frame numbers are floors,
 not ceilings (`docs/verification.md` §2). The one real price is **C5's flight load, +3.5 s**,
 entirely the region-trimesh build; `backlog.md` records the two ways to bring it down.
+
+## 2026-07-22 — Clutter city-block collision: shared shapes instead of expanded trimeshes (C5 flight load −3.5 s), and the map-edge city becomes solid
+
+Backlog follow-up to polish-3 item 6, raised by the user the moment that item landed. The
+feature was correct; the price was its load cost. **C5 `--fly` goes 7,104 ms → 3,552 ms** (4-run
+means) — the entire +3.5 s item 6 charged is gone, landing *below* the 3,895 ms pre-item-6
+number. C2 goes 2,637 → 2,381 ms. Nothing about the rendering, the geometry or the collision
+surface changes.
+
+### What it was, and why the old comment's reasoning did not survive
+
+`ClutterBuilder.BuildSolidCollision` transformed every vertex of every placement into world
+space and merged the result into one `ConcavePolygonShape3D` per 1024 m region: **2,554,455
+collision triangles in C5 built from ~2,300 distinct ones**, ~1,100× redundancy. Its comment
+justified this by rejecting one `StaticBody3D` per building ("80k bodies would swamp the
+broadphase and the scene tree"), which is true, and one whole-map trimesh, also true. But body
+count and shape count are different things: a `Shape3D` is shareable, and
+`PhysicsServer3D.BodyAddShape(bodyRid, shapeRid, transform)` attaches one to a body with its own
+transform and **no scene-tree node per instance**. Neither count the comment worried about moves.
+
+Now: one shape per distinct decoration `MeshIndex` (C5 **57**, C2 **66** — keyed by mesh, which
+over-counts, since C5 ships the same model as up to four gamez meshes, one per template that uses
+it; 32 distinct models), attached once per placement. The per-region body split is kept for
+broadphase locality and because `clutter_bld_<cx>_<cz>` is what locates a crash in the log.
+
+### ⚠ The cost was in the shape build, not the loop everyone looks at
+
+This is the transferable finding, and it is now `docs/verification.md` §2. Timing the two halves
+separately, C5 2026-07-22:
+
+| | ms |
+|---|---|
+| transform 2.55M vertices into world space | **271** |
+| `ConcavePolygonShape3D` BVH build, 207 regions | **3,403** |
+| total `BuildSolidCollision` | 3,796 |
+
+**90% of it was inside an engine property setter, not in our loop.** A fix aimed at the vertex
+arithmetic — SIMD, parallelism, fewer allocations, all the obvious moves — would have bought ~7%.
+Sharing the shapes removes essentially all of it, because the BVHs now being built are ~40
+triangles each.
+
+### Convex/box shapes: considered, rejected on the data
+
+The backlog's lever 2 (a `BoxShape3D` or convex hull per model, "a city block is box-like at
+aircraft scale") was measured rather than assumed, and **the data says no**. The `cbNNdet01`
+decorations enclose 0.003–0.05 of their bounding box — they are open detail shells, not solids —
+so a hull or box of one would be a phantom solid up to 62 m tall where the data intends a facade.
+And with the BVH build gone there is no measurable narrowphase cost left to pay for it (see
+below). The collision surface therefore stays exactly what it was: same triangles, still concave,
+still `BackfaceCollision`.
+
+### Map-edge extension buildings are now collidable
+
+Item 6 deliberately left them out: a continuation cell is built on the frame the camera crosses a
+1024 m boundary, and rebuilding a merged region trimesh there would hitch. **That blocker died
+with the rework.** `MapEdgeExtender.AddCellClutter` now creates one lazy `clutter_bld_ext` body
+per cell and attaches the kind's shared shape at each mirrored placement — measured **0.5–0.6 ms**
+for the ~3,900 buildings of an 11-cell crossing rebuild, inside a rebuild that already cost
+~4.1 ms; the initial 66-cell window adds 3.5 ms to 32 ms. Verified live:
+`CRASH into ext_16_7/clutter_bld_ext (fuselage) impact=(88,15,-8369)` — outside the map's `x <= 0`
+boundary, which also proves the det-−1 mirrored shape transforms work. Extension *sprites* stay
+pass-through, as everywhere.
+
+### `--perf` gained a `physics` term
+
+`frame`/`fps` sit pinned at the 60 fps vsync cap in nearly every run here, so they are floors and
+**structurally cannot** show a collision change getting cheaper or dearer. `TIME_PHYSICS_PROCESS`
+can. Added to the `--perf` line for that reason, and the rule recorded in `docs/verification.md`
+§2: when a change lands in a subsystem the frame time cannot see, find the monitor that watches
+that subsystem before concluding anything.
+
+### Verification
+
+- **Load, 4 runs each, both directions.** C5 `--fly` before **7,276 / 7,092 / 7,090 / 6,957 ms**
+  (mean 7,104), after **3,636 / 3,573 / 3,596 / 3,402 ms** (mean 3,552). C2 before
+  **2,711 / 2,608 / 2,620 / 2,610** (mean 2,637), after **2,425 / 2,368 / 2,367 / 2,365**
+  (mean 2,381). Spread is ±2–5% in both builds and the gap is ~2× — far outside it.
+- **Physics tick: no resolvable change, stated plainly.** A rooftop pass across the C5 city with
+  `--perf` gives steady-state **2.32–2.46 ms before, 2.37–2.52 ms after** — indistinguishable.
+  The narrowphase neither gained nor lost anything measurable, which is the honest answer: the
+  win is entirely load-time. Frame time is 16.67 ms (the cap) in both, i.e. uninformative.
+- **The scripted C5 dive still crashes into a named building body, identically.**
+  `CRASH into clutter/clutter_bld_-10_-4 (wing) impact=(-9276,78,-3173) spd=55 m/s` — the same
+  body, the same impact point to the metre, the same speed as the pre-rework build. Since the
+  shape kind did not change, buildings cannot have become more permeable, and this exact match
+  is the direct evidence.
+- **⚠ A missing CRASH line nearly read as a broken collider.** Four runs after the change logged
+  no crash at all, which looks exactly like "collision stopped working" — it was the default
+  `--frames` budget, and the *baseline* dropped it in 1 of 5 runs too. Raising `--frames` gives
+  3/3 crashes. **The scripted C5 dive's crash is not frame-deterministic near the default budget;
+  do not read its absence as a regression without re-running longer.**
+- **Rendering provably untouched.** Deterministic C5 `--viewer` shot, same-build noise floor
+  **4 px**, before-vs-after **2 px and 5 px** — i.e. at the floor. (md5 is useless here: the two
+  same-build captures already differ.)
+- **8-chapter regression, zero errors.** Sprite counts identical everywhere (C1 9303, C1B 60,
+  C2 37167, C3 371, C4 88630, C5 139388); solids in exactly two, C2 10261 and C5 79306; node,
+  mesh-instance and world-collider counts unchanged (C1 2412, C1B 1432, C1C 1733, C2 1848,
+  C2B 1335, C3 2318, C4 2545, C5 4253). Clutter collision now reports **shapes / distinct
+  triangles / attachments** instead of an expanded triangle total: C5 57 / 2,240 / 79,306 (was
+  2,554,455 tris), C2 66 / 1,439 / 10,261 (was 202,303).
+- **Sprites stay pass-through; C1 stays non-solid.** C1 builds no clutter collider at all (no
+  solid kinds => `BuildSolidCollision` is never called), and scripted C1 dives crash into world
+  geometry — `CRASH into g28031/col (fuselage)` at three different impact points — having flown
+  through the forest to get there. *Honest gap:* the item-6 note cites a C1 dive hitting
+  `someroads/col`; three dive profiles here all landed on terrain instead, so the world-collider
+  half is reproduced but not on that exact surface.
+- **Mode battery clean, zero errors, no shader or `instance_uniforms` warning:** C5
+  viewer / freecam / stunt / 2P race / 4P splitscreen, C2 fly + viewer, the launch menu, and the
+  bare plane viewer. `--viewer` correctly builds no clutter collision at all.
+
+### What this leaves
+
+The `cbNNdet01` question in `backlog.md` — "40% of the collision triangles are det meshes, drop
+them?" — is now moot and was deleted: at 2,240 distinct triangles total there is nothing to save,
+and the name heuristic never had data behind it.

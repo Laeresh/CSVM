@@ -108,7 +108,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (local X ailerons/elevators, local Y rudders).
 - `src/Mech3/WingLights.cs` — single source of truth for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
 - `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck by map coverage, camera-anchored skydome, edge extender.
-- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter continuing the world past the map edge, per camera.
+- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter (buildings solid) continuing the world past the map edge, per camera.
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: billboard sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 - `src/Mech3/Messages.cs` — the game's localized string table: a plain `messages.json` key→value map resolving the `MSG_*` keys missions reference.
@@ -179,7 +179,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
-| `--perf` | log the CPU/GPU frame-time split once a second (the headless profiler stand-in) |
+| `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 

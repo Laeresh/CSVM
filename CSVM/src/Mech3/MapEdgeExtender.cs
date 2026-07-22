@@ -31,9 +31,15 @@ namespace CSVM.Mech3;
 /// (ground leaves share SceneBuilder's mesh/shape caches; clutter shares the main build's
 /// sprite mesh + material). Unlike the original's visible reload pop, the window is sized
 /// one ring past the fog wall, so the creep never shows. Extension ground is collidable
-/// exactly when the real world is; extension clutter is never collidable, matching the map's
-/// own clutter (see ClutterBuilder). Float precision is no concern at these ranges (a 10-min
-/// flight ≈ 50 km; float keeps sub-centimeter precision past 100 km — no recenter needed).</para>
+/// exactly when the real world is; extension clutter SPRITES are never collidable, matching
+/// the map's own (see ClutterBuilder), but extension <b>3D decorations are</b> since
+/// 2026-07-22 — attaching the kind's shared collision shape at each mirrored placement costs
+/// one <c>BodyAddShape</c> call each, so the whole cell's city is solid for well under a
+/// millisecond. That was impossible while the map's own collision was one merged region
+/// trimesh: rebuilding one at a boundary crossing would have hitched the frame that crosses,
+/// which is exactly why item 6 left it out. Float precision is no concern at these ranges (a
+/// 10-min flight ≈ 50 km; float keeps sub-centimeter precision past 100 km — no recenter
+/// needed).</para>
 /// </summary>
 public sealed partial class MapEdgeExtender : Node3D
 {
@@ -229,10 +235,16 @@ public sealed partial class MapEdgeExtender : Node3D
     // (polish-3 item 6). The reflection flips winding; world geometry renders double-sided
     // and fullbright, so nothing reads the inverted normals.
     //
-    // Extension 3D decorations are NOT collidable, unlike the map's own: a cell is built
-    // mid-flight when the camera crosses a boundary, and merging a region trimesh there would
-    // be a hitch on the frame that crosses. Extension *ground* still collides. Logged in
-    // backlog.md — out-of-map buildings sit deep in the fog, so this has never been visible.
+    // Extension 3D decorations ARE collidable since 2026-07-22, unlike when item 6 landed.
+    // The blocker then was that the map's own building collision was one merged trimesh per
+    // 1024 m region: rebuilding one on the frame the camera crosses a cell boundary would have
+    // hitched. Now that ClutterBuilder shares ONE shape per decoration mesh, making a cell
+    // solid is one PhysicsServer3D.BodyAddShape per building against a shape that already
+    // exists — a few hundred pointer-sized calls, no geometry work at all. Sprites stay
+    // pass-through, matching the map's own (a billboard has no side to hit).
+    //
+    // The shared shapes stay alive because this node holds `_clutter` (the KindExport list)
+    // for its whole lifetime; the physics server itself holds only RIDs.
     private void AddCellClutter(Node3D cell, Transform3D mirror, List<(int Kind, Transform3D Xf)> sprites)
     {
         // Group the cell's decorations per kind (kept in kind order for determinism).
@@ -245,9 +257,26 @@ public sealed partial class MapEdgeExtender : Node3D
                 : new Transform3D(Basis.Identity, mirror * xf.Origin));
         }
 
+        // One body for the whole cell's buildings, named so it does NOT end in "clutter_col"
+        // (FlightController's soft-tree branch) and so a crash log locates the cell. Created
+        // lazily: most cells are sea or forest and have no solid decoration at all.
+        StaticBody3D? solidBody = null;
+
         foreach (var (kindIndex, placements) in byKind)
         {
             var kind = _clutter![kindIndex];
+            if (kind.Solid && kind.CollisionShape is { } shape)
+            {
+                if (solidBody == null)
+                {
+                    solidBody = new StaticBody3D { Name = "clutter_bld_ext" };
+                    cell.AddChild(solidBody);
+                }
+                var bodyRid = solidBody.GetRid();
+                var shapeRid = shape.GetRid();
+                foreach (var xf in placements)
+                    PhysicsServer3D.BodyAddShape(bodyRid, shapeRid, xf);
+            }
             var mm = new MultiMesh
             {
                 TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,

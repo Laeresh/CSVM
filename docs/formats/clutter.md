@@ -126,11 +126,36 @@ card whose collider would be a phantom wall wherever the card happens to be faci
 
 **The 3D decorations are the opposite case and DO collide** (user decision, 2026-07-22):
 they are real multi-polygon geometry with real sides, they do not turn, and flying through
-a skyscraper is not something the original permits. The remake merges them into one static
-trimesh per 1024 m region rather than one body per building — C5 would otherwise need
-79,306 collision bodies — for 2,554,455 collision triangles in C5 and 202,303 in C2.
+a skyscraper is not something the original permits.
+
+**How they collide: one shared shape per model, attached per placement** (reworked
+2026-07-22, the same day it first landed). The first implementation transformed every
+vertex of every placement into world space and merged the result into one trimesh per
+1024 m region — 2,554,455 collision triangles in C5 and 202,303 in C2, built from about
+2,300 and 1,400 distinct ones respectively. It was written that way to avoid ~80k
+collision bodies, which is a real problem, but body count and shape count are not the same
+thing: a `Shape3D` is shareable and can be attached to a body with its own transform and no
+scene-tree node of its own. The remake now builds one shape per distinct decoration mesh
+and attaches it once per placement, keeping the per-region body split only for broadphase
+locality and for a locating name in the crash log.
+
+That distinction matters to any reimplementation because **the cost was never in the
+vertex arithmetic**. Measured in C5, 2026-07-22: 3,796 ms to build the merged version, of
+which only 271 ms was transforming those 2.55M vertices and **3,403 ms was building the
+concave shapes' BVHs**. Sharing the shapes removed essentially all of it — the BVHs being
+built are ~40 triangles each — and C5's `--fly` load fell from ~7,100 ms to ~3,550 ms.
+
+Note that the geometry is unchanged: the same triangles, still concave, still
+`BackfaceCollision`. Approximating a block with a convex hull or a box was considered and
+rejected on the data, not on cost — `cbNNdet01` decorations enclose almost no volume
+(measured fill fractions 0.003–0.05 of their bounding box) because they are open detail
+shells, so a hull or box of one would be a phantom solid up to 62 m tall where the data
+intends a facade.
 
 The map-edge continuation carries the border tiles' clutter along, sprites and buildings
-alike, **without** collision in either case, because a continuation cell is built mid-flight
-and merging a region trimesh on that frame would be a visible hitch
-(see [world-structure.md](world-structure.md)).
+alike. Sprites stay pass-through there as everywhere; **the buildings are solid** since
+2026-07-22 — attaching an existing shared shape at each mirrored placement costs one call
+per building (measured: 0.5–0.6 ms for the ~3,900 buildings of a boundary-crossing
+rebuild, inside a rebuild that already cost ~4.1 ms), where rebuilding a merged region
+trimesh on that frame would have been a visible hitch. See
+[world-structure.md](world-structure.md).
