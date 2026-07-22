@@ -32,7 +32,10 @@ public sealed class SceneBuilder
     // static dock models) and even with a model scrolling at a DIFFERENT rate (C1B's three
     // wakefronts all use wakefront1.tif at 1.0 / 0.7 / 0.7 u/s). Non-scrolling surfaces all
     // key on (0,0), so the common path's cache behaviour is exactly what it was.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided, float ScrollU, float ScrollV), Material> _materialCache = new();
+    // ClampUv is part of the key because it selects a different sampler wrap mode, and two
+    // surfaces on the same material can disagree about it (a 0..1 mapped tile and a tiling
+    // one share plenty of textures) — see UvsWithinUnitSquare.
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -61,6 +64,11 @@ vec3 csky_srgb_to_linear(vec3 c) {
     /// <c>texture_scroll</c> or the boot script). Logged per world build: it is the one-line
     /// evidence that a chapter animates exactly the surfaces the data says and no others.</summary>
     public int ScrollingModelCount { get; private set; }
+
+    /// <summary>Surfaces given a CLAMPed sampler because their UVs never leave the unit square
+    /// (the hairline-seam fix — see <see cref="UvsWithinUnitSquare"/>). Process-wide across every
+    /// builder, purely for the load log; it is also what tells a capture which build made it.</summary>
+    public static int ClampedSurfaceTotal;
 
     /// <param name="fullbright">Render unshaded, like the original engine's world pass:
     /// texture × baked vertex color, ignoring scene lights. Used for world geometry.</param>
@@ -400,13 +408,65 @@ void fragment() {
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
                 EmitPolygon(st, mesh, poly, offset);
+            // A surface whose UVs never leave the unit square never needs the sampler to wrap,
+            // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
+            // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
+            // repeat to come back round.
+            bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys);
+            if (clampUv)
+                ClampedSurfaceTotal++;
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis)
-                : GetMaterial(materialIndex, priority, rank, doubleSided, scroll));
+                : GetMaterial(materialIndex, priority, rank, doubleSided, scroll, clampUv));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
     }
+
+    /// <summary>
+    /// True when every UV of this surface lies inside the unit square, i.e. the texture is
+    /// mapped once and never tiled — which is what makes a CLAMPed sampler safe for it.
+    /// <para>
+    /// This is the hairline-seam fix (diagnosed 2026-07-22). The terrain's UVs are a
+    /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
+    /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
+    /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
+    /// bilinear filter's second tap at the fold wraps to texel 0 — the opposite edge of the
+    /// texture — and blends it in over a band one texel wide. On C4's <c>river3.tif</c>
+    /// (column 0 tan, column 63 blue-green) that is the tan hairline crossing blue water.
+    /// Measured: the seam peaks at exactly the 50/50 blend of the two edge columns
+    /// (predicted (86.5, 91.0, 74.0), measured (89.5, 92.5, 77.2)), and the background is
+    /// identical on both sides of it — the signature of a fold, not of a texture
+    /// discontinuity, which would have to step.
+    /// </para>
+    /// <para>
+    /// Clamping is safe <b>by construction</b> when this returns true: with no UV outside
+    /// [0,1] the wrap is never exercised, so CLAMP and REPEAT can only differ within half a
+    /// texel of the edge — exactly the artifact. A blanket clamp is NOT safe and was measured
+    /// to be wrong: 54% of this install's surfaces genuinely tile (U reaches 407), and
+    /// forcing clamp on them changes 80% of the C5 city pose.
+    /// </para>
+    /// </summary>
+    private static bool UvsWithinUnitSquare(List<GameZPolygon> polys)
+    {
+        bool any = false;
+        foreach (var poly in polys)
+        {
+            if (poly.UvCoords == null)
+                continue;
+            foreach (var uv in poly.UvCoords)
+            {
+                any = true;
+                if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon ||
+                    uv.Y < -UvEpsilon || uv.Y > 1f + UvEpsilon)
+                    return false;
+            }
+        }
+        return any; // no UVs at all ⇒ nothing to clamp; keep the surface on the old path
+    }
+
+    // The source UVs are exact 0.0/1.0 at the fold, so this only absorbs float noise.
+    private const float UvEpsilon = 1e-6f;
 
     /// <summary>
     /// The UV scroll rate (units/second) for one model: the caller's per-model override if it
@@ -638,13 +698,13 @@ void fragment() {
     public const float NodeOrderBias = 5e-8f;
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool doubleSided,
-        Vector2 scroll = default)
+        Vector2 scroll = default, bool clampUv = false)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, doubleSided, scroll.X, scroll.Y);
+        var key = (materialIndex, priority, rank, doubleSided, scroll.X, scroll.Y, clampUv);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided, scroll);
+        var mat = BuildMaterial(materialIndex, priority, rank, doubleSided, scroll, clampUv);
         _materialCache[key] = mat;
         return mat;
     }
@@ -704,7 +764,7 @@ void fragment() {
     }
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool doubleSided,
-        Vector2 scroll)
+        Vector2 scroll, bool clampUv = false)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -737,7 +797,7 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor);
-            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor, scroll);
+            var textured = BiasMaterial(priority, rank, doubleSided, tex, null, blend, scissor, scroll, clampUv);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -769,13 +829,14 @@ void fragment() {
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool doubleSided, ImageTexture? tex,
-        Color? color, bool blend, bool scissor, Vector2 scroll = default)
+        Color? color, bool blend, bool scissor, Vector2 scroll = default, bool clampUv = false)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         var mat = new ShaderMaterial
         {
-            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided, scrolls),
+            Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
+                scrolls, clampUv && tex != null),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         mat.SetShaderParameter("depth_bias", bias);
@@ -789,10 +850,10 @@ void fragment() {
     }
 
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
-        bool scroll = false)
+        bool scroll = false, bool clampUv = false)
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
-            | (scroll ? 32 : 0);
+            | (scroll ? 32 : 0) | (clampUv ? 64 : 0);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -864,7 +925,11 @@ vec3 csky_light_spill(vec3 world_pos, vec3 normal) {
             // "blurry city ground" report — and it is NOT a missing hi-res archive: the base
             // texture set is already max-res, rtexture2/4/6/8 are downscaled quality tiers and
             // rtexture14 == base). Anisotropic sharpens the receding ground without new assets.
-            sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, repeat_enable;");
+            // repeat_disable for a surface whose UVs never leave the unit square: the wrap is
+            // unreachable there, so clamping costs nothing and removes the hairline seams the
+            // wrap otherwise produces at a mirrored UV fold (see UvsWithinUnitSquare).
+            sb.AppendLine("uniform sampler2D albedo_tex : source_color, filter_linear_mipmap_anisotropic, "
+                + (clampUv ? "repeat_disable;" : "repeat_enable;"));
         // UV animation (the model's texture_scroll / the boot script's Object3DSetScroll): the
         // waterfalls' falling sheet, the boats' wake fronts, the oil-dock conveyor and the
         // daytime sky layer. Emitted only for surfaces that actually scroll, so every other

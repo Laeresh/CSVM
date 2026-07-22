@@ -100,6 +100,30 @@ gotchas live in that module's `docs/architecture.md` bullet (`AnimRuntime`, `Tex
     a hierarchy of them (priority ≫ surface rank ≫ node order) can be silently inverted or
     silently truncated at any level.**
 
+12. **A quantity read out of an 8-bit capture is quantised, and the error scales with how
+    little of the range you used.** Diagnosing the hairline seams (2026-07-22) needed the
+    screen size of one texel. The obvious probe — render `fract(UV)` and take a finite
+    difference — gave **46 px/texel**, which made the 3-px hairline sub-texel and therefore
+    "impossible for any texture filter to produce", killing the correct hypothesis. The true
+    value is **~4 px/texel**: the finite difference had spanned about *1.4 quantisation steps*
+    of an 8-bit channel, so it was ~all rounding. The instrument that worked encodes the
+    quantity as a **period instead of a level** — a ramp repeating once per texel, where the
+    answer is the stripe spacing and 8-bit precision is irrelevant. **Before believing a
+    number derived from pixel values, check how many of the 256 levels the measurement
+    actually moved across; if it is single digits, change the encoding rather than the
+    threshold.** Note this is the mirror of rule 6: there, a hypothesis survived because it
+    predicted the right magnitude; here, a correct hypothesis was nearly discarded because a
+    bad instrument gave the wrong one.
+13. **"Not on a polygon boundary" and "nothing is behind it" each need their own control, and
+    the obvious probe has a hole.** The same diagnosis replaced textured surfaces with flat
+    colours to prove the seam was in the sampled texture, and the seam count went to zero —
+    but a crack showing *another surface that happens to use the same texture* would also have
+    scored zero, because both sides render the same flat colour. Closing that took a second
+    probe: unique colour **per surface**, with the material cache bypassed so two meshes
+    sharing one texture cannot collapse into one ID. **When an ID map is your evidence that
+    nothing else is there, check what the map is keyed on — anything it cannot distinguish is
+    exactly what can hide in it.**
+
 ## 1. Before you trust a screenshot diff
 
 - **The default `--freecam` camera is not deterministic.** The spawn is a random pick per launch,

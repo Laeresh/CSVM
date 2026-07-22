@@ -36,3 +36,5 @@ CopyToOneDrive.ps1
 # subagents. They are real git worktrees of THIS repo; committing them would embed
 # repos inside the repo. Added 2026-07-22 after `git add -A` swept five of them in.
 /.claude/worktrees/
+# Personal backlog, ideas and other things
+NOTES.md

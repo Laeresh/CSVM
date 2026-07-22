@@ -3097,3 +3097,73 @@ cannot settle it and the poses are not matched — but it points the same way as
 **Note:** the `CLAUDE.md` day-to-day flag table was NOT updated in this turn, because that file
 holds uncommitted work from a parallel session that owns it. The one-line entry is owed once that
 session lands.
+
+## 2026-07-22 — Hairline seams on C3's coast and C4's river: a texture-wrap bug, fixed per surface
+
+**Symptom (user-reported, both chapters).** One-pixel bright *or* dark hairlines on the terrain,
+laid out on a regular grid, visible with `--no-fog` at
+`--chapter=C3 --campos=-3614.727,98.809,-4639.714 --lookat=-3658.603,8.952,-4640.51` and
+`--chapter=C4 --campos=-6439.027,807.788,-7376.811 --lookat=-6399.279,723.584,-7413.278`. The
+decisive detail was a **tan** hairline crossing **blue** water: a shading seam on flat water can
+only shift the water's own shade.
+
+**Two mechanisms had already been proposed and disproven** (`MapEdgeExtender` mirroring — killed
+by the C4 pose being mid-map; the depth bias being a vertex scale — killed by the user zeroing the
+bias and commenting out `VERTEX *= 1.0 - (depth_bias + node_bias)` with the seams still present).
+The five leads left in the backlog were all wrong in detail, including the leading one: it is a
+texture-sampling artifact, but at a **mirrored UV fold**, not at a tile crossing.
+
+**Mechanism.** The terrain's UVs are a **mirrored triangle wave** — U rises to exactly 1.0 and
+folds back instead of wrapping to 0 (measured on one C4 surface of constant ID: `fract(U)`
+0.8745 → 0.9961 → **1.0000** → 0.9961 → 0.9020, smooth, no jump). That is how the artists tiled
+non-seamless textures seamlessly, and it is the mirror symmetry visible across C4's river. Under
+`repeat_enable` the bilinear filter's second tap *at the fold* wraps to texel 0 — the opposite
+edge of the texture — over a band one texel wide. `river3.tif` is 64×128 with column 0 tan
+(107,101,66) and column 63 blue-green (66,81,82); that is the tan hairline. Whether a given seam
+reads bright or dark is just which way that texture's two edges differ (C4 +24 R, C3 −30 R).
+
+**Fix — per surface, never global (`SceneBuilder.UvsWithinUnitSquare`).** Each (material,
+priority, sidedness) group is asked whether all its UVs lie in [0,1]; if so, and it does not
+scroll, it takes a `repeat_disable` shader variant (`clampUv`, shader-key bit 64, added to the
+`_materialCache` key because two surfaces on one material can disagree). Safe **by construction**:
+with no UV outside [0,1] the wrap is unreachable, so CLAMP and REPEAT can differ only within half
+a texel of the edge. Clamped surface counts are logged on the world-load line.
+
+**Verification.**
+
+- Noise floor for the C3 pose measured at **0 px** (same build twice).
+- Flat-colour probe (geometry, depth, alpha, vertex colours untouched): C4 water box **4,443 → 0**
+  seam px; the same detector still fired **1,818 px** on a real surface boundary, so it was not a
+  dead instrument. A per-surface unique-ID render with the material cache bypassed showed that box
+  is **100.000%** one surface — no crack, no sliver, nothing behind it.
+- Hairlines lie on integer-UV lines: **81.7%** of UV-boundary px carry one in C4 and **100.0%** in
+  C3, against 2.4% / 2.3% chance; only **6.5%** lie near a polygon boundary (1.8% chance).
+- The seam peaks at exactly the 50/50 blend of the two edge columns: predicted **(86.5, 91.0, 74.0)**,
+  measured **(89.5, 92.5, 77.2)**, background (66.0, 86.0, 80.3) ≈ column 63.
+- After the fix: C3 sand box **1,322 → 0** seam px; the C4 profile across the tan hairline goes
+  from a peak of 89.5 to **flat 66.0**, neighbours unchanged. Changed pixels are **96.3%** (C3) and
+  **99.5%** (C4) on UV boundaries — the fix moves the artifact and essentially nothing else.
+- **C5 city pose changes only 447 px (0.05%)**, which is the whole point of the per-surface guard:
+  a blanket `repeat_disable` changes **738,062 px (80.08%)** there, mean delta 47.
+- 8-chapter regression: zero errors; clamped counts 1481/600/782/1132/734/1011/1745/1371 (C1…C5),
+  below the static in-range upper bound as expected since only built, non-LOD-culled, non-billboard,
+  non-scrolling surfaces reach the test.
+- Full mode battery (fly / stunt / viewer / damage / 4P race / menu / freecam): zero errors.
+- Aircraft are **not** byte-identical and should not be — the same bug affects skins mapped 0..1.
+  The static Bloodhawk viewer changes **802 px (0.087%)**, mean delta 12.7, confined to panel and
+  gun-barrel edges; 23 surfaces clamped.
+
+**Fidelity — closed against us.** The user supplied `OriginalScreenshots/C3 IA1 Beach, no seams.png`
+(dgVoodoo, same beach). Same detector, original downscaled 2× to our pixel scale, clean sand box in
+both: **ours 1,322 high-pass px with a 240 px longest connected run; the original 16 px with a 2 px
+run.** The minor seams that *are* visible in the original are the other mechanism — a content step
+where a non-repeatable texture genuinely tiles — and the black stripes are trees seen from above.
+The two are distinguishable by profile shape, and ours was measured to be the fold kind: identical
+background on **both** sides with a spike between (C3 235.5 → 205.8 → 235.3; C4 66.0 → 89.5 → 65.3),
+which a texture discontinuity cannot produce because its two sides must differ.
+
+**Two instrument traps recorded** (`verification.md` rules 12 and 13): deriving texel scale from a
+`fract(UV)` capture was 11× out because the finite difference spanned ~1.4 quantisation steps of an
+8-bit channel — a per-texel *ramp*, where the answer is a period rather than a level, is the
+instrument that works; and a flat-colour ID map cannot see a crack between two surfaces that share
+a texture, which needed a second probe keyed per surface.

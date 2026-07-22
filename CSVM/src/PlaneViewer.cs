@@ -1121,7 +1121,8 @@ public partial class PlaneViewer : Node3D
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
-                     $"{meshInstances} mesh instances, {colliders} colliders, {sw.ElapsedMilliseconds} ms");
+                     $"{meshInstances} mesh instances, {colliders} colliders, " +
+                     $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped surfaces, {sw.ElapsedMilliseconds} ms");
             if (_rigs.Count > 1)
                 foreach (var rig in _rigs)
                     GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
