@@ -285,6 +285,11 @@ public partial class PlaneViewer : Node3D
     private string _texturesPath = "";      // --textures= override value (verbatim when set)
     private bool _gamezOverridden, _texturesOverridden, _zrdrOverridden, _soundsOverridden;
     private bool _mute, _debugCollision;
+    // --no-fog: an inspection aid, not a weather zone. Neutralises the distance-fog RANGE and
+    // the cloud-band whiteout so geometry is visible to the horizon. Deliberately leaves
+    // WorldLight and FOG_COLOR alone — the point is to remove obscuration without changing how
+    // anything is *lit*, so a shading question stays answerable while fog is off.
+    private bool _noFog;
 
     public override void _Ready()
     {
@@ -367,6 +372,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--interp=")) _interpPath = arg["--interp=".Length..];
             else if (arg.StartsWith("--sounds=")) { _soundsPath = arg["--sounds=".Length..]; _soundsOverridden = true; }
             else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
+            else if (arg == "--no-fog") _noFog = true;
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
             else if (arg.StartsWith("--players=")) { _players = int.Parse(arg["--players=".Length..]); playersExplicit = true; }
@@ -1661,7 +1667,17 @@ public partial class PlaneViewer : Node3D
         // near-white read weaker than true 176 gray) — worth a fresh in-game A/B; factor 1
         // makes the overcast deck's texture persist further down toward the horizon.
         float fogRangeFactor = 2.0f;
-        RenderingServer.GlobalShaderParameterSet("csky_fog_range", new Vector2(fog.FogNear, fog.FogFar)/fogRangeFactor);
+        // --no-fog pushes the range out of reach instead of touching `csky_fog_on`. That uniform
+        // would work — every shader still honours it — but it is an INSTANCE uniform declared at
+        // index 1 in SceneBuilder's shader and index 0 in Clutter's, and Godot merges that mapping
+        // per GeometryInstance3D. Writing it would make a latent index mismatch live (the
+        // 2026-07-17 unfogged-hilltops bug; see Clutter.ShaderCode's comment). `csky_fog_range` is
+        // a GLOBAL uniform every fogged shader reads, so one write covers the world, the clutter
+        // sprites, the solid city blocks and the dome with no ordering hazard at all.
+        var fogRange = _noFog
+            ? new Vector2(1e8f, 1e9f)   // same no-op range Weather.NoFog uses
+            : new Vector2(fog.FogNear, fog.FogFar) / fogRangeFactor;
+        RenderingServer.GlobalShaderParameterSet("csky_fog_range", fogRange);
         // FOG_ALTITUDE: the fog cylinder's vertical extent — full fog below FogLow, fading to
         // none at FogHigh (fragment altitude; see SceneBuilder's fog shader block). Absolute
         // altitudes, so the range factor doesn't apply.
@@ -1676,7 +1692,8 @@ public partial class PlaneViewer : Node3D
         // (Applied in linear space, 0.80 only reaches 210→190; gamma-space lands the deck 210→169.)
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        GD.Print($"weather [{_activeZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
+        GD.Print($"weather [{_activeZone}]{(_noFog ? " --no-fog: fog + whiteout OFF, world light unchanged;" : ":")} " +
+                 $"fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 
@@ -1950,7 +1967,9 @@ public partial class PlaneViewer : Node3D
             if (rig.Whiteout != null && _weather != null)
             {
                 var c = rig.Whiteout.Color;
-                c.A = _weather.WhiteoutAmount(camPos.Y);
+                // --no-fog covers the whiteout too: flying into the cloud band would otherwise
+                // still white the pane out, which reads as "fog is not actually off".
+                c.A = _noFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
                 rig.Whiteout.Color = c;
             }
 

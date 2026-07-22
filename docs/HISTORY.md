@@ -3050,3 +3050,50 @@ that subsystem before concluding anything.
 The `cbNNdet01` question in `backlog.md` — "40% of the collision triangles are det meshes, drop
 them?" — is now moot and was deleted: at 2,240 distinct triangles total there is nothing to save,
 and the name heuristic never had data behind it.
+
+---
+
+## 2026-07-22 — `--no-fog`, an inspection aid
+
+User asked whether a fog-disable flag existed. It did not: `--sky-zone=` changes *which* fog you
+get, never whether you get it, and the only writer of the `csky_fog_on` uniform
+(`WorldBuilder.DisableFog`) had been deleted as dead code earlier the same day.
+
+**Implemented through the global `csky_fog_range`, not the instance uniform.** `csky_fog_on` is
+still live and honoured in both shaders, so writing it would have worked — but it is declared at
+**index 1 in `SceneBuilder`'s bias shader and index 0 in `Clutter`'s**, and Godot merges the
+instance-uniform mapping per `GeometryInstance3D`. That mismatch is currently latent precisely
+*because nothing writes it*; adding the first writer would have made it live, which is the exact
+mechanism behind the 2026-07-17 unfogged-hilltops bug. Polish-3 item 5 had already tried padding
+the indices, measured that it enforced nothing, and reverted — so the hazard was known and
+documented, and this change routes around it rather than re-opening it.
+
+`csky_fog_range` is a **global** uniform every fogged shader reads, so a single write covers the
+world, the clutter sprites, the solid city blocks and the skydome with no ordering hazard at all.
+`--no-fog` sets it to the same no-op 1e8/1e9 range `Weather.NoFog` already used, and separately
+zeroes the cloud-band whiteout overlay (otherwise flying into the cloud band still whites the pane
+out, which reads as "fog is not actually off").
+
+**Deliberately does NOT touch `WorldLight` or `FOG_COLOR`.** `Weather.NoFog` also carries
+`WorldLight = 1` (fullbright), and reusing it wholesale would have been the obvious shortcut — but
+the flag exists to help answer a *shading* question (the C3 coast's dark polygon-edge outlines and
+uneven brightness, reported the same day), and changing world brightness while removing fog would
+confound exactly the measurement it is meant to enable.
+
+**Verified.** 8-chapter regression, zero errors both with and without the flag. Effect measured at
+each chapter's default spawn: C2B 81.3%, C1 61.8%, C1C 45.3%, C3 42.6%, C1B 36.0%, C4 34.6%,
+C2 12.5%, C5 0.7% of sampled pixels — so it fires everywhere, not just where it was developed.
+C5 is low because its `zone1` fogs at 1500–2250 m and the spawn sits inside the city; the flag's
+clearest demonstration is `--chapter=C5 --sky-zone=zone3`, where the default render is black
+beyond ~250 m and the whole city returns with the flag on. Inert when absent by construction: the
+ternary's false branch is the original expression verbatim.
+
+**Side finding for the pending user A/B:** that C5 `zone3` capture is itself evidence about which
+zone C5 actually flies. `zone3`'s 50–250 m fog and 300 m clip hide the entire city from a
+rooftop-level camera, which is hard to reconcile with the user's own
+`OriginalScreenshots/C5 IA1 Terrain2.png` horizon view across the city. Not conclusive — a still
+cannot settle it and the poses are not matched — but it points the same way as the node counts.
+
+**Note:** the `CLAUDE.md` day-to-day flag table was NOT updated in this turn, because that file
+holds uncommitted work from a parallel session that owns it. The one-line entry is owed once that
+session lands.
