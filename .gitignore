@@ -41,4 +41,6 @@ CopyToOneDrive.ps1
 /.claude/worktrees/
 /.claude/workspaces/
 # Personal backlog, ideas and other things
-NOTES.md
+NOTES.md# Python bytecode from analysis/ scripts
+__pycache__/
+*.pyc
