@@ -146,6 +146,11 @@ public partial class PlaneViewer : Node3D
     private List<(string, float)>? _damagePreset; // --damage=part:frac,… preset fractions
     private string _skyZone = "zone2"; // the sky the original shows at the C1 airfield (night)
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
+    // The zone actually rendered: _skyZone when this mission defines it, otherwise the first
+    // zone its weather.json does (WeatherState.ResolveZone). C5 ships zone1+zone3, so the
+    // zone2 default resolves to zone1 there; C1–C4 all define zone2 and resolve to themselves.
+    // Reassigned on every StartSession, so a menu rebuild never inherits the last chapter's.
+    private string _activeZone = "zone2";
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
     private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
@@ -663,9 +668,15 @@ public partial class PlaneViewer : Node3D
                     // without the enclosing dome; with --campos inside the map it works).
                     // One dome per rig: it follows *a* camera, so each splitscreen pane needs
                     // its own on that player's visual layer (item 5).
+                    //
+                    // The mission's weather.json is loaded FIRST because it owns the zone
+                    // table: it is what resolves --sky-zone's default against the zones this
+                    // chapter actually ships (C5 has zone1+zone3, not zone2 — polish-3 item 2),
+                    // and the dome must be built for the same zone the fog comes from.
+                    LoadWeather(missionZrdrPath);
                     foreach (var rig in _rigs)
                     {
-                        var dome = builder.BuildHorizon(_skyZone);
+                        var dome = builder.BuildHorizon(_activeZone);
                         if (dome == null)
                             break;
                         dome.Scale = Vector3.One * HorizonScale;
@@ -679,7 +690,7 @@ public partial class PlaneViewer : Node3D
                     // the world+dome are shown — in --fly, and in static --chapter when --sky-zone
                     // is given (deterministic fog/whiteout/puff verification with --campos, same as
                     // the sky-verification path).
-                    SetupWeather(missionZrdrPath, textures);
+                    SetupWeather(textures);
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
@@ -1584,20 +1595,36 @@ public partial class PlaneViewer : Node3D
         return puffer;
     }
 
-    /// <summary>Loads the flown mission's weather.json and applies it: sets the distance-fog
-    /// global shader parameters for the rendered sky zone (all world + aircraft surfaces pick
-    /// them up), and builds the full-screen cloud-band whiteout overlay (its opacity is driven
-    /// each frame from the camera altitude in <see cref="_Process"/>). No-op if the mission has
-    /// no weather.json — the fog globals keep their registered no-op range.</summary>
-    private void SetupWeather(string missionZrdrPath, TextureArchive textures)
+    /// <summary>Loads the flown mission's weather.json and resolves <see cref="_activeZone"/>:
+    /// the zone the fog AND the skydome are both built from. Called before the domes, because
+    /// the zone names are per chapter — C5 ships zone1+zone3, so the `zone2` default has to fall
+    /// back or C5 renders with no fog and no dome at all (polish-3 item 2). The default stays
+    /// `zone2` deliberately; which zone a mission actually flies is in no reader, so it is the
+    /// user's A/B against the original (docs/formats/weather.md).</summary>
+    private void LoadWeather(string missionZrdrPath)
     {
         _weather = WeatherState.Load(missionZrdrPath);
+        _activeZone = _weather?.ResolveZone(_skyZone) ?? _skyZone;
         if (_weather == null)
         {
             GD.PushWarning($"no weather.json for {_chapter}/{_mission} — flying without fog / whiteout");
             return;
         }
-        var fog = _weather.Fog(_skyZone);
+        if (!_activeZone.Equals(_skyZone, StringComparison.OrdinalIgnoreCase))
+            GD.Print($"weather: {_chapter}/{_mission} defines no '{_skyZone}' "
+                     + $"(zones: {string.Join("/", _weather.ZoneNames)}) — using '{_activeZone}'");
+    }
+
+    /// <summary>Applies the loaded weather: sets the distance-fog global shader parameters for
+    /// the rendered sky zone (all world + aircraft surfaces pick them up), and builds the
+    /// full-screen cloud-band whiteout overlay (its opacity is driven each frame from the camera
+    /// altitude in <see cref="_Process"/>). No-op if the mission has no weather.json — the fog
+    /// globals keep their registered no-op range. Call <see cref="LoadWeather"/> first.</summary>
+    private void SetupWeather(TextureArchive textures)
+    {
+        if (_weather == null)
+            return;
+        var fog = _weather.Fog(_activeZone);
         // FOG_COLOR is a DX7-era framebuffer (sRGB) value: the original's fully-fogged pixels
         // are exactly 0.69·255 = 176 gray (measured in OriginalScreenshots/"C1 IA1 Cloudcoverage
         // 1.png", flat regions std 0). The shader mixes ALBEDO in linear space, so convert —
@@ -1625,7 +1652,7 @@ public partial class PlaneViewer : Node3D
         // (Applied in linear space, 0.80 only reaches 210→190; gamma-space lands the deck 210→169.)
         float worldLightLinear = new Color(fog.WorldLight, fog.WorldLight, fog.WorldLight).SrgbToLinear().R;
         RenderingServer.GlobalShaderParameterSet("csky_world_light", worldLightLinear);
-        GD.Print($"weather [{_skyZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
+        GD.Print($"weather [{_activeZone}]: fog {fog.FogColor.R:0.00} gray {fog.FogNear:0}–{fog.FogFar:0} m, " +
                  $"altitude {fog.FogLow:0}–{fog.FogHigh:0} m; world light {fog.WorldLight:0.00}; " +
                  $"cloud band {_weather.CloudBottom:0}–{_weather.CloudTop:0} m (±{_weather.CloudThickness:0})");
 

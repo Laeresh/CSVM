@@ -202,12 +202,21 @@ public sealed class WorldBuilder
     /// shows at the C1 airfield, which always loads at night); zone1 = sky2.tif day haze
     /// dome with an unfinished flat-gray cap, likely never player-visible.
     /// Never collidable, never casts shadows.
+    ///
+    /// <para><b>The zone names are per chapter (2026-07-22).</b> C1–C4's horizon has
+    /// <c>zone1</c>/<c>zone2</c> children, but C5's has <c>zone3</c>/<c>zone1</c> — so a bare
+    /// <c>zone2</c> request there matched no child, the skip predicate below skipped both, and
+    /// C5 built an empty dome. An absent zone therefore falls back to the horizon's first zone
+    /// child, mirroring <see cref="Flight.WeatherState.ResolveZone"/>. In the normal path
+    /// PlaneViewer has already resolved the zone against the mission's weather.json and this
+    /// fallback is a no-op; it exists so a mission with no weather.json still gets a dome.</para>
     /// </summary>
     public Node3D? BuildHorizon(string zone = "zone2")
     {
         var horizon = _gamez.FindByName("horizon");
         if (horizon == null)
             return null;
+        zone = ResolveHorizonZone(horizon, zone);
         bool SkipOtherZones(GameZNode n) =>
             n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
@@ -219,6 +228,30 @@ public sealed class WorldBuilder
         DisableLightRangeFade(built);
        // DisableFog(built);
         return built;
+    }
+
+    // The horizon's zone children in flat-list order, falling an absent request back to the
+    // first one. Logged at most once per WorldBuilder: BuildHorizon is called once per
+    // splitscreen rig, and four identical warnings would read as four separate faults.
+    private bool _loggedHorizonZoneFallback;
+
+    private string ResolveHorizonZone(GameZNode horizon, string zone)
+    {
+        var zones = new List<string>();
+        foreach (var childIndex in horizon.Children)
+            if (childIndex >= 0 && childIndex < _gamez.Nodes.Count
+                && _gamez.Nodes[childIndex].Name is { } name
+                && name.StartsWith("zone", StringComparison.OrdinalIgnoreCase))
+                zones.Add(name);
+        if (zones.Count == 0 || zones.Exists(z => z.Equals(zone, StringComparison.OrdinalIgnoreCase)))
+            return zone;
+        if (!_loggedHorizonZoneFallback)
+        {
+            _loggedHorizonZoneFallback = true;
+            GD.Print($"horizon: no '{zone}' subtree (has {string.Join("/", zones)}) — "
+                     + $"building '{zones[0]}'");
+        }
+        return zones[0];
     }
 
     // The dome's star point-lights sit ~22 km out (camera-anchored, 2.5× scaled) — far past

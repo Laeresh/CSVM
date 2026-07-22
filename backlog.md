@@ -121,6 +121,12 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   zone2-dominant; C1 and C5 zone1-dominant. **Nothing in `CSVM/src` reads the field** — we render
   every zone's geometry at once. Plausible source of artifacts; not yet shown to cause a specific
   one (checked and ruled out for the C5 ground z-fight, where both surfaces are `zone_id=1`).
+  **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/world-structure.md`, counts
+  re-verified against `nodes.json`. **Blocked on the same unknown as the fog zone:** which zone a
+  mission activates is in no file in the install (exhaustive negative result now written up in
+  `docs/formats/weather.md`), so implementing this means *guessing what to hide* — and a wrong
+  guess deletes visible world content, which is strictly worse than drawing both. Wants the
+  user's zone A/B (plan's closing section) first.
 
 - **Partition visibility is a real runtime system we do not implement** (found 2026-07-22 while
   diagnosing the C5 ground z-fight). The interp language has **`WorldPartitionSetActive`**
@@ -138,6 +144,10 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   state on the intro cutscene camera, not a zone selector. Relevant because it is the only
   evidence that weather is scriptable at all; zone *selection* still appears to happen engine-side
   in the binary (same shape as the `fire2` trigger the user searched the disassembly for).
+  **Documented 2026-07-22** (polish-3 item 2) in `docs/formats/anim-definitions.md` as
+  decoded-but-unacted-on, with the reason: implementing it means a second write path onto the
+  `csky_fog_*` globals `PlaneViewer.SetupWeather` owns, for one cutscene the remake does not run.
+  Revisit if the user ever sees fog visibly change *during* a mission elsewhere.
 
 ## Open bugs (moved from NOTES.md 2026-07-22)
 
