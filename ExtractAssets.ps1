@@ -23,9 +23,8 @@
         mis_anim.zbd      -> anim      -> .zip
 
     Anim archives (cam_anim/mis_anim) round-trip byte-identically in the fork since
-    2026-07-21 and are extracted like everything else, but no part of the Godot
-    project reads the output yet (revival-plan item 7, SI-script playback, is
-    deferred).
+    2026-07-21, are extracted like everything else, and are read by the Godot
+    project's animation engine (CompiledAnim.cs -> AnimProgram.cs -> AnimRuntime.cs).
 
 .PARAMETER Source
     Root of the game's ZBD tree. Default: CrimsonSkiesGame\ZBD next to this script.

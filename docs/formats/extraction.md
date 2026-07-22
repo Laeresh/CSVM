@@ -1,0 +1,80 @@
+# Extraction status — what comes out of a retail install
+
+Which of Crimson Skies' archive types can be read, how far each has been validated, and what
+the output looks like. Everything here was validated against **this project's retail install**
+(`unzbd cs <mode>`, round-tripped with `rezbd cs <mode>` and compared by sha256).
+
+**Extraction is complete: every archive type this install ships is supported, and every one of
+them round-trips byte-identically in the fork.** If you only need the practical facts, they are:
+
+- `ExtractAssets.ps1` (repo root) extracts the ZBD half; `ExtractRof.ps1` extracts the non-ZBD
+  half (`.rof` UI archives + the DLL string tables). Output lands under `extracted/`, mirroring
+  the game's own folder structure.
+- Since **2026-07-21** the extractor runs the **fork** build (`tools/mech3ax/target/release/unzbd.exe`),
+  not the pinned v0.6.1 binary. `-Unzbd <path>` rolls back to v0.6.1 with **no code change**,
+  because the Godot loaders read either output shape (see "Two extraction shapes" below).
+- mech3ax's own README support matrix is **outdated** for Crimson Skies — actual support, even at
+  v0.6.1, is far better than it advertises.
+
+## Support matrix
+
+| Format | Status |
+|---|---|
+| `texture.zbd` / `rtexture*.zbd` / `rimage.zbd` | ✅ extracts to PNGs; round-trip **byte-identical** (C1 verified) |
+| `soundsh.zbd` / `soundsl.zbd` | ✅ extracts to WAVs |
+| `zrdr.zbd` (reader / mission config) | ✅ extracts to JSON (ai, engines, Briefing, …) |
+| `interp.zbd` | ✅ extracts to JSON (engine boot scripts) |
+| `gamez.zbd` (world geometry) | ✅ extracts (metadata / textures / materials / meshes / nodes JSON); round-trip **byte-identical** with the pinned v0.6.1 binary (C1 + C5 verified) **and with the fork** (all 8 chapters, 2026-07-21). The fork's JSON *shape* differs — see the `planes.zbd` row |
+| `planes.zbd` (aircraft models) | ✅ extracts. It is a GameZ-format file (the boot script loads it via `GameZReadZBDFile`), so it uses `gamez` mode. With the pinned v0.6.1 binary the round-trip differed by 72 bytes / 6 MB — swapped `\0`/`.` garbage past the null terminator in fixed-width texture-name fields; **fixed in the fork, where the round-trip is byte-identical** (2026-07-21). The bug was a general `Ascii` asymmetry, not CS-specific: `to_str_suffix` restores the period at the *first* zero, but `from_str_suffix` converted the *last* one |
+| `cam_anim.zbd` / `mis_anim.zbd` | ✅ **in the fork only** (not in the pinned v0.6.1 binary): `unzbd cs anim` / `rezbd cs anim` work end-to-end since 2026-07-21 — test.py `--- ALL OK ---`, **all 61 archives of this install byte-identical through the real zip pipeline**. Extracted by `ExtractAssets.ps1` like every other type, and **consumed by the Godot project** since the animation engine landed (`CompiledAnim.cs` → `AnimProgram.cs` → `AnimRuntime.cs`) |
+| `GOSDATA/ASSETS/*.rof` | ✅ **not a ZBD, not mech3ax** — decoded by this project 2026-07-20, extracted by `ExtractRof.ps1`. 846 members, all inflating to their exact declared size. Holds the customisation UI and the per-pattern **paint region masks** ([rof.md](rof.md)) |
+| `BINARIES/langui.dll` | ✅ Win32 STRINGTABLE, extracted by `ExtractRof.ps1` — 1,247 UI strings including the aircraft names and descriptions ([strings.md](strings.md)) |
+
+## The anim archives
+
+`cam_anim.zbd`/`mis_anim.zbd` were **net-new** work in the fork — upstream mech3ax has no CS anim
+support at all. Every `AnimDef` field, support array and sequence event is **semantically decoded**
+into mech3ax's shared API types (PM-delegating `EventCs` dispatch; the CS-only e46 `SOUND_ADJUST`
+and e47 si-script `ALL_NAMES` are preserved raw; `hangar3_doors` was verified field-for-field
+against its zrdr JSON source), and **every SI script frame-decodes** — all 1,090 of them. Rotate
+cubics are half-angle offsets composed `exp(v)⊗base`; splines are kept as raw bytes, matching
+upstream's MW/PM handling.
+
+CS-only container data rides in optional `AnimMetadata` fields (`base_files`, raw `ptrs`). One
+JSON-layer quirk — six NaN deltas in C5/M02's `carneypkup_cam.zan` — is preserved bit-exact via
+`delta_raw`.
+
+The schema itself is documented in [anim-definitions.md](anim-definitions.md).
+
+## Two extraction shapes
+
+The fork's extraction JSON is **intentionally not shape-compatible** with v0.6.1's. Same data,
+different spelling:
+
+| v0.6.1 ("legacy") | fork ("unified") |
+|---|---|
+| `{"Object3d":{…}}` wrapper | flat node with the variant under `data` |
+| `mesh_index` / `children` / `transformation` | `model_index` / `child_indices` / `transform` |
+| `matrix.a…i` | `original.r00…r22` (no-transform case is the string `"Initial"`) |
+| `meshes.json` | `models.json` |
+| polygon `unk04` / `triangle_strip` | `priority` / `tri_strip` |
+| mesh light `extra` | `vertices` |
+| `textures.json` = `{original, renamed}`, plus `texture_ptrs` | `textures.json` = `{name}`, materials carry `texture_index` |
+| partition cells `nodes[].index` | `values[].node_index` |
+
+`GameZ.cs`, `TextureArchive.cs` and `Zrdr.cs` read **both**, which is what makes the v0.6.1
+rollback a data-only operation. Two traps in the unified shape are worth knowing before touching
+that code, and are recorded in `docs/architecture.md`: its own `index` field is 1-based and
+duplicated (v0.6.1's `node_index`, renamed) while `child_indices` are **not** in that space — they
+stay flat list positions; and unified `scale` is unit everywhere measured, so it is deliberately
+ignored.
+
+## Extracted aircraft data
+
+Confirmed usable: `nodes.json` holds **3,317 nodes**, including full hierarchies for
+`player_bhawk`, `player_peacemaker`, `player_kestrel`, `player_autogyro`, `player_avenger`,
+`player_balmoral` and `player_fury` — with control surfaces (ailerons / elevators), props, gear,
+firepoints and cockpits.
+
+Note that **plane skin pixels live in each chapter's `texture.zbd`, not in `planes.zbd`**, and that
+the shipped skins are unpainted key textures — see [paint.md](paint.md).

@@ -80,7 +80,7 @@ Keep the format fact in CLAUDE.md and the measurement lesson in verification.md.
 1. ☑ Backfill the 3 undocumented modules into `docs/architecture.md` **(done 2026-07-22 — `CompiledAnim.cs`, `AnimProgram.cs`, `SpectatorCamera.cs`; set-diff now 63/63 empty both ways, so item 3 is unblocked)**
 2. ☑ Status section → current state + next step only **(done 2026-07-22 — 65,166 → 2,993 bytes; 27 landed bullets deleted after per-bullet HISTORY verification, three open items migrated to `backlog.md`)**
 3. ☑ Module index → one line per module **(done 2026-07-22 — 66.2 KB → 8.4 KB over 63 entries, avg 136 chars; CLAUDE.md 110,222 → 52,677 bytes. Per-module diff against `architecture.md` first: 30 CLAUDE-only facts migrated there, +17 KB. Verified by the two-stage check: 697 distinct tokens, 0 absent from the docs corpus; open-claim hand-read clean.)**
-4. ☐ Format support status → `docs/formats/extraction.md` (−3.6 KB)
+4. ☑ Format support status → `docs/formats/extraction.md` **(done 2026-07-22 — CLAUDE.md 52,677 → 49,374 bytes; matrix + round-trip notes + the two-shapes table + the plane-data inventory moved, listed in `formats/README.md`. Four stale claims fixed en route: the `cam_anim` row's "Remaining: item 7 … skipped", `formats/README.md`'s "unsupported by mech3ax", `ExtractAssets.ps1`'s own docstring, and CLAUDE.md's "still reported+skipped" — the extractor *does* run mode `anim` and the animation engine *does* read the output. Also corrected "13 pages" → 17 and added the two pages the list had never carried.)**
 5. ☐ User args → `docs/cli.md`, compact table stays (−10 KB)
 6. ☐ Fix the stale claims and internal contradictions
 7. ☐ Repo layout: collapse the completed PLAN descriptions (−4 KB)

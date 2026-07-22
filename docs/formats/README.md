@@ -2,7 +2,8 @@
 
 Reverse-engineered format reference for **Crimson Skies** (2000, Zipper Interactive /
 Microsoft), validated against a retail install with [mech3ax](https://github.com/TerranMechworks/mech3ax)
-v0.6.1 (`unzbd cs <mode>`). This is the project's public deliverable under the XWVM legal
+(`unzbd cs <mode>` — originally v0.6.1, and since 2026-07-21 this project's fork; see
+[extraction.md](extraction.md)). This is the project's public deliverable under the XWVM legal
 model: **format documentation and code only — no game asset data.** Pages carry field
 tables and tiny excerpt values, never bulk extracted content.
 
@@ -13,6 +14,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 
 | Page | Covers |
 |---|---|
+| [extraction.md](extraction.md) | **Start here for tooling:** which archive types extract, how far each round-trips, the two extraction JSON shapes, where the output lands |
 | [gamez.md](gamez.md) | The GameZ container (`gamez.zbd`, `planes.zbd`): nodes/meshes/materials JSON, transforms, draw priority, backface flags, aircraft trees, damage-panel states |
 | [world-structure.md](world-structure.md) | Chapter worlds: partition grid, terrain tiling, skydome zones, point-sprite lights, flare billboards, map-edge behavior |
 | [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |
@@ -70,8 +72,10 @@ JSON file of nested arrays. Conventions that recur across every reader family:
 data); `soundsh/soundsl` → `sounds` (WAVs); `zrdr` → `reader` (JSON);
 `rimage`/`texture`/`rtexture*` → `textures` (PNGs). The per-chapter `rtextureN` archives
 are *downscaled* quality tiers of the base `texture` set (never higher-res); `rimage` is
-menu/briefing UI only. `cam_anim.zbd`/`mis_anim.zbd` are unsupported by mech3ax — the
-container survey lives in [anim-definitions.md](anim-definitions.md).
+menu/briefing UI only. `cam_anim.zbd`/`mis_anim.zbd` → `anim` (JSON defs + SI scripts) —
+**supported in this project's mech3ax fork**, not in upstream or in the pinned v0.6.1 binary;
+the schema lives in [anim-definitions.md](anim-definitions.md). Per-type support and
+round-trip status: [extraction.md](extraction.md).
 
 `ExtractRof.ps1` (repo root) covers the non-ZBD half of the install: the `.rof` UI resource
 archives and the `langui.dll` string table, into `extracted\rof\`. These are decoded by this
