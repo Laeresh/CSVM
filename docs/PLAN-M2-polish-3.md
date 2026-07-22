@@ -24,7 +24,7 @@ instruments that mislead.
 ## Checklist
 
 1. ☑ `--data-root=` / `CSVM_DATA_ROOT` — let a git worktree run the game **(done 2026-07-22 — verified end-to-end against a real detached worktree with no `extracted/` and no `tools/`: byte-identical render, `docs/HISTORY.md`)**
-2. ☐ Weather zones: C5 loads no fog at all; make the zone table data-driven
+2. ☑ Weather zones: C5 loads no fog at all; make the zone table data-driven **(done 2026-07-22 — C5's default now resolves `zone2`→`zone1`, byte-identical to the old build's explicit `--sky-zone=zone1`; 8-chapter regression clean; `docs/HISTORY.md`)**
 3. ☐ C5 ground z-fighting — coarse/fine draw priority (+ 7 reference screenshots for the user)
 4. ☐ C4 cloud deck does not follow the plane
 5. ☐ One billboard classifier; billboards and clutter lose collision
@@ -159,10 +159,16 @@ But `weather.zrd.json` is **per-mission** (53 files), and the zones it defines a
 - **C5 → `ZONE1` + `ZONE3`** (all 8 missions)
 
 Corroborated by the gamez horizon subtree node names: C5 has `zone1`/`zone3`, everyone else
-`zone1`/`zone2`. So C5's dict is never populated, `Fog("zone2")` (`PlaneViewer.cs:1583`, default
-`_skyZone = "zone2"` at `:147`) misses, and it falls through to `NoFog` (`Weather.cs:44`) —
-near/far 1e8/1e9, `WorldLight` 1 = fullbright. `--sky-zone=zone3` cannot rescue it either,
-because the dict is never populated in the first place.
+`zone1`/`zone2`. So `Fog("zone2")` (`PlaneViewer.cs:1583`, default `_skyZone = "zone2"` at
+`:147`) misses and falls through to `NoFog` (`Weather.cs:44`) — near/far 1e8/1e9, `WorldLight`
+1 = fullbright. `--sky-zone=zone3` cannot rescue it, because `ZONE3` is never read.
+
+> **Correction (measured 2026-07-22 while landing this):** "C5's dict is never populated" is
+> wrong — the hardcoded loop *does* find `ZONE1`, so `--sky-zone=zone1` already worked on C5 on
+> the old build. What was unreachable was `zone3` and the whole default path. The symptom, the
+> fix and the fix's shape are unaffected; the useful consequence is that the old build's
+> explicit `--sky-zone=zone1` render is the exact expected "after" image for the new default,
+> which is how this was verified (byte-identical, 0/921600 px).
 
 C5's two zones, for reference:
 
@@ -319,8 +325,9 @@ to `.scratch/` with descriptive names:
 | `g4683` | 21.6% | `--campos=-9120,218.5,-11036 --lookat=-9120,38.5,-11296` |
 | `g4632` | 2.2% | `--campos=-12512,185,-10396 --lookat=-12512,5,-10656` |
 
-All with `--chapter=C5`. Use `--sky-zone=zone1` **only if item 2 has landed** (C5 has no
-zone2); otherwise the shot will be fogless and not comparable.
+All with `--chapter=C5`. Since item 2 landed, plain `--chapter=C5` already resolves to `zone1`
+(C5 has no zone2) and the shots are fogged and comparable — passing `--sky-zone=zone1`
+explicitly is equivalent and harmless.
 
 ---
 

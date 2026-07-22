@@ -24,7 +24,7 @@ returns "no fog" then.
 | `VIEWING_RANGE` | dict | not used by the remake |
 | `WIND` | **bare-scalar block** | `STATIC_VELOCITY [x,y,z]`, `RANDOM_MAX_SPEED s`, `RANDOM_ACCEL a` |
 | `CLOUD_COVER` | **bare-scalar block** | `TOP`, `BOTTOM`, `THICKNESS` (metres) + optional `TOP_COLOR`/`BOTTOM_COLOR` |
-| `ZONE1` / `ZONE2` | dict (+ `SW_*` twin) | per-zone fog; the `SW_*` software-renderer twin is ignored |
+| `ZONE<n>` | dict (+ `SW_*` twin) | per-zone fog; the `SW_*` software-renderer twin is ignored. **The names are per chapter — see below** |
 
 **Bare-scalar blocks** (`CLOUD_COVER`, `WIND`, and the item-5 precipitation block) pair
 each key with a *bare* value (`"TOP", 1124`) or a list (`"TOP_COLOR", [192,192,192]`), not
@@ -59,10 +59,58 @@ measures 192 gray, C1's 0.69 measures 176 (0.69·255).
 colour far above 1), which sRGB→linear then blew to pure white — C4's Rocky-Mountains fog
 was a blown-white wall with a hard horizon cut instead of its data's 192 haze.
 
-## Per-zone fog (`ZONE1`/`ZONE2`)
+## Per-zone fog (`ZONE<n>`)
 
-Which zone a mission actually shows is **not** in these readers — the remake selects it
-via `--sky-zone` (default `zone2` = night). List-valued dict keys:
+### The zone names are per chapter, not a fixed `ZONE1`/`ZONE2` pair (2026-07-22)
+
+Surveyed across all 53 `weather.json` in the install:
+
+| chapter | zones (file order) |
+|---|---|
+| C1, C1B, C1C, C2, C2B, C3, C4 | `ZONE1`, `ZONE2` |
+| **C5** | `ZONE1`, **`ZONE3`** — all 8 missions, no `ZONE2` at all |
+
+Corroborated by the gamez `horizon` subtree, whose children carry the same names: C5's are
+`zone3`/`zone1`, everyone else's `zone1`/`zone2`. (Note the two orders disagree — C5's
+weather.json lists `ZONE1` first, its horizon lists `zone3` first — so "the first zone" is
+only well defined per file.)
+
+*Bug this fixed (polish-3 item 2):* the reader hardcoded `{ "ZONE1", "ZONE2" }`, so C5's
+`ZONE3` was never read and the `zone2` default matched nothing — **every C5 flight rendered
+with no fog and `WorldLight` 1 (fullbright)**, and its skydome built empty because
+`BuildHorizon("zone2")` skipped both of C5's zone children. The zone table is now read from
+whatever `ZONE<digits>` keys the file carries (the `SW_*` twins stay excluded), and an absent
+request falls back to the file's first zone (`WeatherState.ResolveZone`), logged once.
+**The default stays `zone2`** — see the selection note below.
+
+### Which zone a mission flies is not in any file (searched exhaustively 2026-07-22)
+
+Not in the mission `zrdr` (`ia`, `objectives`, `targets`, `dzones`, `aiv`, `location`, `map`,
+`egen`, `net`, `startanims`), not in the 53 mission `.gw` interp scripts (1,215 statements,
+zero zone mentions), not in the ROF/DLL string tables (`DEBUGINFO.TXT`'s zone strings are
+Danger-Zones **UI widget** names — `ozonestitle`, `o_radbutzone`). The only zone references in
+the install are chapter-level and mutually inconsistent: `support\c1\load.gw` says
+`CameraSetHorizonXZ zone2_cloud_floor` while `support\c1\tex_fx.gw` says
+`FindNode h_zone1scroll`; six other `load.gw` name a plain `horizon`. Zone selection therefore
+happens engine-side in the binary — the same shape as the `fire2` trigger (see
+[anim-definitions.md](anim-definitions.md#fire-templates-flipbooks-and-a-trigger-that-lives-in-the-exe)).
+
+So the remake selects it via `--sky-zone` (default `zone2` = night), and settling the real
+answer needs an A/B against the original — C5 most of all, whose two candidates are far apart:
+
+| | `ZONE1` | `ZONE3` |
+|---|---|---|
+| `FOG_COLOR` | `[0,0,0]` | `[16,16,16]` |
+| `FOG_RANGES` | 1500 – 2250 | **50 – 250** |
+| `CLIP_RANGES` | 5 – 2500 | **5 – 300** |
+| `FOG_ALTITUDE` | 9000 – 10000 | 9000 – 10000 (identical) |
+
+Note the identical `FOG_ALTITUDE`: in C1 the zones read as altitude bands (zone1 970–1047 at
+the cloud floor, zone2 4000–5000), but in C5 altitude cannot be what selects between them.
+
+### Zone keys
+
+List-valued dict keys:
 
 | Key | Meaning |
 |---|---|

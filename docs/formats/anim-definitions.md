@@ -96,6 +96,31 @@ from below**, and at any normal viewing distance **fog washes them to exactly `F
 the deck hidden and fog off (static `--viewer --chapter=C1`, no `--sky-zone`) the effect is
 obvious — 74,129 px change, the clouds going from hard opaque white to translucent.
 
+### `FogState` — decoded, deliberately not acted on
+
+The compiled archives carry a `FogState` event kind: mid-mission weather change is a real engine
+capability. **The data uses it exactly once install-wide** —
+`extracted/C1/M04/mis_anim/camera1-mission_intro_animation.json`, `reset_state/events[4]`
+(surveyed across all 12,746 `mis_anim` + 3,368 `cam_anim` files, 2026-07-22):
+
+```json
+{"FogState": {"name": "drop_fog", "type_": null,
+              "color": {"r": 0.69, "g": 0.69, "b": 0.69},
+              "altitude": {"min": 10000.0, "max": 11000.0},
+              "range": {"min": 1000.0, "max": 1500.0}}}
+```
+
+Note what it is *not*: it carries its fog parameters **inline** and matches neither of C1's
+weather.json zones (zone1 1000–1750 alt 970–1047, zone2 1000–4000 alt 4000–5000). So it is an
+ad-hoc third fog state applied to a cutscene camera, **not a zone selector** — it does not answer
+"which zone does a mission fly", which remains engine-side (see
+[weather.md](weather.md#which-zone-a-mission-flies-is-not-in-any-file-searched-exhaustively-2026-07-22)).
+`AnimRuntime` therefore does not implement it: one occurrence, on the one cutscene camera the
+remake does not run, and implementing it would mean a second write path onto the `csky_fog_*`
+globals that `PlaneViewer.SetupWeather` owns. If the user ever observes fog visibly changing
+*during* a mission somewhere else, that is evidence for the engine-side zone switch and this
+should be revisited.
+
 ### `OBJECT_MOTION` is two ops sharing one event
 
 `OBJECT_MOTION` is the original's rigid-body descriptor, and its 7,442 uses split cleanly into

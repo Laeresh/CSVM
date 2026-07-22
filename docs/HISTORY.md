@@ -2438,3 +2438,76 @@ real errors, zero degenerate lines. Renders byte-identical on 5 of 8 chapters; C
 5.0%/6.8%/7.6% — C4's base-vs-fixed delta is *lower* than its floor), i.e. the documented
 precipitation non-determinism in `docs/verification.md` §7 and not this change. Files:
 `CSVM/src/Mech3/CompiledAnim.cs`, `CSVM/src/Mech3/AnimRuntime.cs`.
+## 2026-07-22 — Polish run 3 item 2: weather zones are per chapter, and C5 had no fog at all
+
+**A live bug, not a polish item.** `Weather.Load` iterated a hardcoded
+`foreach (var zone in new[] { "ZONE1", "ZONE2" })`. But the zone *names* are per chapter: C1–C4
+ship `ZONE1`+`ZONE2`, while **all 8 C5 missions ship `ZONE1`+`ZONE3`** (verified across all 53
+`weather.json` in the install, and corroborated by the `horizon` subtree's own child names —
+C5's are `zone3`/`zone1`, everyone else's `zone1`/`zone2`). So on C5 the `zone2` default matched
+nothing, `Fog("zone2")` fell through to `NoFog` (near/far 1e8/1e9, `WorldLight` 1 = fullbright),
+and `BuildHorizon("zone2")` skipped *both* zone children — **every C5 flight since the fog work
+landed had no fog, no sunlight model, and an empty skydome.**
+
+**What changed.** `ZoneKeys(inner)` walks the raw alternating list for `ZONE<digits>` keys in
+**file order** (raw rather than via `ZrdrDict`, because a `Dictionary` does not preserve order and
+file order is what the fallback walks; the `SW_ZONE*` software-renderer twins stay excluded).
+`WeatherState.ResolveZone(requested)` returns the request when the mission defines it, else the
+file's first zone; `ZoneNames` exposes the list for the log. `PlaneViewer.SetupWeather` split in
+two: `LoadWeather` now runs **before** the per-rig `BuildHorizon` loop and resolves `_activeZone`
+once, and the dome, the fog and the log line all read `_activeZone` — so the sky and the fog can
+never come from different zones, and the fallback logs once per session rather than once per rig.
+`WorldBuilder.ResolveHorizonZone` carries the same fallback against the horizon's own zone
+children, guarded by `_loggedHorizonZoneFallback`; in the normal path it is a no-op, and it exists
+only so a mission with no `weather.json` still gets a dome.
+
+**The default deliberately stays `zone2`** (user decision). Which zone a mission actually flies is
+in **no file in the install** — searched the mission `zrdr`, all 53 `.gw` interp scripts (1,215
+statements, zero zone mentions) and the ROF/DLL string tables; the only zone references are
+chapter-level and mutually contradictory (`support\c1\load.gw` names `zone2_cloud_floor`,
+`support\c1\tex_fx.gw` names `h_zone1scroll`). Selection happens engine-side in the binary. That
+negative result is now written up in `docs/formats/weather.md`, and settling it is the user's A/B
+against the original (the plan's closing section) — a fallback is the only correct move without
+that answer.
+
+**Verified.**
+
+- **C5 before/after, same pinned pose:** fog appears, and the previously-empty dome now shows
+  zone1's stars. `weather [zone1]: fog 0.00 gray 1500–2250 m` replaces
+  `weather [zone2]: fog 0.69 gray 100000000–1000000000 m`.
+- **The strongest check:** the new build's *default* C5 render is **byte-identical
+  (0/921600 px, max delta 0)** to the **old** build's explicit `--sky-zone=zone1` render. The
+  fallback produces exactly what asking for zone1 produced, and nothing else moved.
+- **8-chapter regression** (`--freecam --spawn=0`, pinned): 0 errors. Mesh instances unchanged
+  everywhere except C5, **4723 → 4726** — the +3 is precisely the zone1 horizon subtree that used
+  to build empty. Every C1–C4 `weather [zone2]` line is character-for-character identical.
+- **Screenshot diffs against a same-build noise floor** (verification.md §7): C1B/C3
+  byte-identical; C1 46 px floor vs 78 px changed, C2 13 vs 19 — noise. C1C/C2B/C4 are the
+  precipitation chapters and sit in their known self-animating band; **`old2`-vs-`new` came out
+  *below* their own `old`-vs-`old2` floor** (C1C 18.0% vs 21.2%, C4 13.8% vs 17.2%, C2B 5.2% vs
+  5.0%), which is what confirms the spread is precipitation noise rather than a change. C5 58.2%
+  at max delta 222 — the intended fix.
+- **Both fallback logs shown able to fire, and able to *not* fire.** The weather line prints
+  exactly once, for C5 only, and never for C1–C4. The horizon line is unreachable in the normal
+  path by construction (weather pre-resolves it), so it was forced with
+  `--chapter=C5 --mission=M05` (a mission that does not exist → no weather.json): it printed
+  `horizon: no 'zone2' subtree (has zone3/zone1) — building 'zone3'`. Re-run under
+  `--players=4`: still **one** line, confirming the per-rig log-once guard.
+- Untouched by construction: the static plane viewer. `LoadWeather`/`BuildHorizon` are both inside
+  the world branch; `--plane=`-only sessions take the `else`.
+
+**Plan evidence correction.** Item 2 stated "C5's dict is never populated". Not quite — the
+hardcoded loop *does* find `ZONE1`, so `--sky-zone=zone1` already worked on C5 before this change;
+what was unreachable was `zone3` and the whole default path. The symptom and the fix are
+unaffected, and the correction is what made the byte-identical verification above possible.
+Recorded in the plan file.
+
+**Also documented in the same turn** (both plan-mandated write-ups of findings, not new work):
+the **`zone_id`** node field in `docs/formats/world-structure.md` — every gamez node carries one
+(−1 = always, else the zone number), per-chapter counts re-verified against `nodes.json`, both
+zones spanning the whole map so they are alternative world *variants* rather than regions; nothing
+in `CSVM/src` reads it, and it stays unimplemented for exactly the reason above — we do not know
+which zone is active, so hiding geometry would be a guess. And **`FogState`** in
+`docs/formats/anim-definitions.md` as decoded-but-unacted-on: one occurrence install-wide
+(C1/M04's intro cutscene camera), carrying fog parameters inline and matching neither C1 zone, so
+it is an ad-hoc third fog state and *not* the zone selector.

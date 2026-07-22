@@ -12,10 +12,17 @@ namespace CSVM.Flight;
 /// distance fog, the cloud-band whiteout, and (later) wind-driven ambient cloud puffs.
 ///
 /// <para>weather.json layout (validated on C1/IA1): a single alternating dict with blocks
-/// <c>VIEWING_RANGE</c>, <c>WIND</c>, <c>CLOUD_COVER</c>, and per-zone <c>ZONE1</c>/<c>ZONE2</c>
+/// <c>VIEWING_RANGE</c>, <c>WIND</c>, <c>CLOUD_COVER</c>, and per-zone <c>ZONE<i>n</i></c>
 /// (each with an <c>SW_*</c> software-renderer twin we ignore). Fog is per zone (which zone a
 /// mission shows isn't in these readers — the remake picks it via <c>--sky-zone</c>, default
 /// zone2 = night); the cloud band and wind are global.</para>
+///
+/// <para><b>The zone names are per chapter, not a fixed pair (2026-07-22).</b> C1–C4 ship
+/// <c>ZONE1</c>+<c>ZONE2</c>, but all 8 C5 missions ship <c>ZONE1</c>+<b><c>ZONE3</c></b> — so
+/// the zone table is read from whatever <c>ZONE*</c> keys the file carries, and
+/// <see cref="ResolveZone"/> falls the default back to the file's first zone where the
+/// requested one is absent. Before that, C5's `zone2` lookup missed and every C5 flight
+/// silently rendered with <see cref="NoFog"/>: no fog and <c>WorldLight</c> 1 = fullbright.</para>
 ///
 /// <para>The <c>CLOUD_COVER</c> and <c>WIND</c> blocks pair each key with a bare scalar (e.g.
 /// <c>"TOP", 1124</c>), not a list, so <see cref="ZrdrDict.FromAlternating"/> — which expects
@@ -38,6 +45,7 @@ public sealed class WeatherState
     public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);
 
     private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
 
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
@@ -109,7 +117,25 @@ public sealed class WeatherState
     /// <summary>The mission's precipitation, or null when the weather.json has no TYPE block.</summary>
     public PrecipData? Precip { get; private set; }
 
-    /// <summary>Fog for a zone ("zone1"/"zone2"); a no-op fog if the zone is absent.</summary>
+    /// <summary>The zones this mission's weather.json actually defines, lowercased and in file
+    /// order ("zone1", "zone2" — or "zone1", "zone3" in C5). The <c>SW_*</c> software-renderer
+    /// twins are excluded. Empty only if the file carries no <c>ZONE*</c> block at all.</summary>
+    public IReadOnlyList<string> ZoneNames => _zoneNames;
+
+    /// <summary>The zone to actually render, given the one the caller asked for: the request
+    /// itself when this mission defines it, otherwise the first zone the file defines (and the
+    /// request unchanged when the file defines none, so the caller still gets <see cref="NoFog"/>).
+    ///
+    /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
+    /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
+    /// The default deliberately stays <c>zone2</c> (user decision 2026-07-22): which zone a
+    /// mission actually flies is not in any reader, so picking C5's zone needs an A/B against
+    /// the original. See docs/formats/weather.md.</para></summary>
+    public string ResolveZone(string requested) =>
+        _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
+
+    /// <summary>Fog for a zone ("zone1"/"zone2"/"zone3"); a no-op fog if the zone is absent.
+    /// Callers should pass a <see cref="ResolveZone"/> result rather than a raw request.</summary>
     public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
 
     /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
@@ -163,9 +189,10 @@ public sealed class WeatherState
             w.WindRandomMaxSpeed = ScalarAfter(wind, "RANDOM_MAX_SPEED");
             w.WindRandomAccel = ScalarAfter(wind, "RANDOM_ACCEL");
         }
-        foreach (var zone in new[] { "ZONE1", "ZONE2" })
+        foreach (var zone in ZoneKeys(inner))
             if (dict.Dict(zone) is { } z)
             {
+                w._zoneNames.Add(zone.ToLowerInvariant());
                 var color = ParseColor(z.List("FOG_COLOR")) ?? NoFog.FogColor;
                 (float near, float far) = z.List("FOG_RANGES") is { Count: >= 2 } fr
                     && fr[0] is float n && fr[1] is float f
@@ -204,6 +231,28 @@ public sealed class WeatherState
             Gravity: ScalarAfter(inner, "GRAVITY"),
             Particles: (int)ScalarAfter(inner, "PARTICLES"), // absent (SNOW) → 0
             AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
+    }
+
+    // The file's own per-zone block names, in FILE ORDER — "ZONE1", "ZONE2" in C1–C4;
+    // "ZONE1", "ZONE3" in all 8 C5 missions (the whole reason this isn't a hardcoded pair;
+    // see docs/formats/weather.md). File order is what ResolveZone falls back along, so it
+    // must come from this raw walk over `inner` rather than from ZrdrDict, which is a
+    // Dictionary and does not preserve it.
+    //
+    // "ZONE" + digits only: the SW_ZONE* twins are the software-renderer variants
+    // (SUNLIGHT_ACTIVE 0, ambient 1.0) and must never enter the selectable set. Matching on
+    // the "ZONE" prefix alone would be enough today, but the digit test also keeps any future
+    // ZONE-prefixed sibling block out.
+    private static List<string> ZoneKeys(List<object?> inner)
+    {
+        var keys = new List<string>();
+        for (int i = 0; i + 1 < inner.Count; i++)
+            if (inner[i] is string s && inner[i + 1] is List<object?>
+                && s.StartsWith("ZONE", StringComparison.OrdinalIgnoreCase)
+                && s.Length > 4 && char.IsDigit(s[4])
+                && !keys.Exists(k => k.Equals(s, StringComparison.OrdinalIgnoreCase)))
+                keys.Add(s);
+        return keys;
     }
 
     // key → the immediately following scalar in a flat alternating list
