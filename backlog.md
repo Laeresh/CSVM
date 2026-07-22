@@ -856,3 +856,27 @@ shared, so it may currently be driving things nobody has looked at. An 8-chapter
 not catch this: the default mission is IA1, which has no intro at all, so the regression is
 inert here by construction (`docs/verification.md` §3, "the change is inert by construction in
 that chapter").
+
+**❌ The "skip those two def names" fix above is REJECTED — user decision, 2026-07-22.** *"The M0x
+missions are campaign missions and we need those animations if we want to restore the campaign."*
+
+That is the charter's long-term direction (`CLAUDE.md`: full campaign remake), and the proposal
+above optimised for making M04 look right *today* at the cost of the choreography a campaign
+would need. `generic_intro` × 12 and `mission_intro_animation` × 1 are **assets, not noise** —
+they are the missions' authored intro movies, already decoded and already executing correctly.
+Deleting their bootstrap would throw away working capability to suppress a cosmetic symptom.
+
+**Reframed: this is not a bug to fix, it is a missing consumer.** The cutscene defs run because
+nothing tells them they are cutscenes; what is absent is a **cutscene player** that would own
+them — camera control, the `letterbox` bars, scene sequencing, and an end-of-cutscene handoff to
+gameplay. That is the same missing subsystem already blocking the `CALLBACK` event kind (see the
+"Animation event kinds that need weapons or cutscenes" entry above, where all 8 dispatches are
+`def=camera1`, unanchored, and were triaged as intro-cutscene notifications). **These two entries
+are the same dependency and should be picked up together.**
+
+**Until then, C1/M04's pirate zeppelin flying above the overcast is ACCEPTED as a known artifact**
+of running cutscene choreography with no cutscene player — not a defect to work around. Do not
+lower the zeppelin, do not suppress the def, and do not "fix" the letterbox bars if they appear.
+Anyone who lands a cutscene player should use M04 as its first test case: the data is fully
+decoded (scene1's 15.7 s uniform flight path, the hard cuts to scene2, `open_pzeplaunchdoors`,
+`pz_deploy_hook`/`pz_retract_hook`), so it is a ready-made end-to-end exercise.
