@@ -1268,7 +1268,19 @@ public partial class PlaneViewer : Node3D
     // Node.Duplicate() copies plain properties but not per-instance shader parameters, which
     // SceneBuilder relies on for the coplanar draw order (node_bias) and the fog opt-outs. Walk
     // both trees in lockstep (Duplicate preserves child order) and re-apply them.
-    private static readonly string[] InstanceShaderParams = { "node_bias", "csky_fog_on", "csky_light_fade" };
+    // **This must list every instance uniform SceneBuilder can set**, or a duplicated subtree
+    // silently renders with the shader's default instead of the value the source was given.
+    // `csky_opacity` was missing until 2026-07-23 (polish-4 item 10).
+    // ⚠ **That omission was LATENT, not live — the plan's stated symptom is disproven.** The claim
+    // was that `OBJECT_OPACITY_STATE` poses cloud decks, so panes 2–4 would show an opaque deck
+    // where pane 1 shows 0.6. Measured in a 2-player C1 session: the opacity-animated node is
+    // `world1/g27816/l2586/cloudparent` (0.6, as C1's reader-only `clouds.zrd.json` authors), and
+    // it sits in **`world1`, which every pane shares** — it is not duplicated at all. The subtree
+    // this loop actually copies (WorldBuilder's flat `cloudlayer` deck) carries **no**
+    // `csky_opacity` on any node, in any chapter. So nothing diverges today; the entry is here to
+    // keep the list complete, and the ordering rule below is the reason completeness matters.
+    private static readonly string[] InstanceShaderParams =
+        { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
 
     private static void CopyInstanceShaderParams(Node source, Node copy)
     {

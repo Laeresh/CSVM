@@ -534,3 +534,20 @@ Before calling a change verified:
 - [ ] Static plane viewer byte-identical (md5) if the change should not touch aircraft
 - [ ] Full mode battery: fly / stunt / viewer / damage / 4P race / menu
 - [ ] What remains unverifiable is stated plainly, not implied to be done
+
+22. **An install-wide census over `cam_anim`/`mis_anim` is HALF the animation data.** Checking
+    polish-4 item 10's premise (2026-07-23) meant asking "does any opacity event target a cloud
+    node?". A sweep of every compiled def in every chapter answered **zero, install-wide** — a
+    clean, specific, reproducible number that read as "the plan's premise is false", and it was one
+    edit away from being written up as a disproof. The premise was correct: C1's `cloudparent#` is
+    **reader-only and has no compiled twin**, so it exists solely in `extracted/C1/zrdr/clouds.zrd.json`
+    and no amount of `cam_anim` sweeping can ever see it. `docs/HISTORY.md:1696` states this
+    exact fact about this exact node. **The animation layer has two sources — compiled
+    (`cam_anim`/`mis_anim`) and reader (`zrdr`) — and `AnimProgram` merges them precisely because
+    neither is complete.** Any census, grep or count over animation data must cover both, and must
+    say which it covered. Compare rule 4's §4 bullet ("ask what window the instrument covers before
+    concluding from an absence") — this is that trap in the *data source* rather than in time, and
+    it is more dangerous because a half-swept census still returns a confident round number.
+    Corollary: this near-miss came from applying rule 1 (check the plan's premise) correctly and
+    then trusting an incomplete instrument. **Verifying a premise needs its own able-to-fail check**
+    — here, "does my census find the events I already know exist?" would have caught it in one step.

@@ -4091,3 +4091,47 @@ fixed) differs, so the correct binary demonstrably ran in each capture. `git sta
 (774,152 m²) were **all subface/base pairs** and are now resolved by this change, so that entry has
 lost its measured example while its structural hole remains — flagged in `backlog.md` rather than
 silently left to be re-quoted.
+
+## 2026-07-23 — Polish-4 item 10 Part B: `csky_opacity` joins the splitscreen instance-uniform copy (and its stated symptom is disproven)
+
+`PlaneViewer.InstanceShaderParams` listed three of the four instance uniforms `SceneBuilder` can
+set, so `CopyInstanceShaderParams` — which re-applies them after `Duplicate()` in the splitscreen
+cloud-deck loop — silently dropped `csky_opacity`. Added, referenced through
+`SceneBuilder.OpacityParam` rather than a fourth string literal, since `AnimRuntime` already writes
+it through that constant.
+
+**The fix is correct; the plan's reason for it is not.** The plan called this a *live* defect: "a
+deck posed to 0.6 opacity by `AnimRuntime` comes out fully opaque in players 2–4". Measured with a
+temporary probe in a 2-player C1 session:
+
+- The opacity-animated node is `/Session/world1/g27816/l2586/cloudparent/…` at **0.6**, exactly as
+  C1's `clouds.zrd.json` authors it (`ON_STARTUP`, `OBJECT_OPACITY_STATE … ["ON", 0.6]`).
+- It sits **inside `world1`**, which all panes share (one `World3D`, per-player visual layers), so
+  it is never duplicated and cannot diverge between panes.
+- The subtree the duplication loop *does* copy — WorldBuilder's flat `cloudlayer` deck — carries
+  **no `csky_opacity` on any node**: the probe read `deck0 <none>`, `deck2 <none>`. Of 1840 world
+  nodes carrying the parameter, every one outside `cloudparent` reads 1.0.
+
+So this is **latent hygiene, not a bug fix**, and the plan's symptom must not be repeated. The list
+is worth completing anyway — its contract is "every instance uniform `SceneBuilder` can set", and
+Part A (the shared ordered preamble) depends on that contract being honest.
+
+**Near-miss, and the reason `docs/verification.md` gained rule 22.** The first premise check swept
+every compiled def in every chapter for opacity events targeting a cloud node and found **zero,
+install-wide**. That read as "the plan is wrong about the data" and was one edit from being written
+up as a disproof. It was the instrument: the sweep covered `cam_anim`/`mis_anim` only, and C1's
+`cloudparent#` is **reader-only with no compiled twin** — a fact `docs/HISTORY.md:1696` already
+records about this exact node. The animation layer has two sources and `AnimProgram` merges them
+because neither is complete; any census over it must cover both and say so.
+
+**Sequencing checked and fine** (the plan did not raise it): `animRuntime.Bind` runs at
+`PlaneViewer.cs:672`, well before `AssignCloudDecks` at `:853`, so any opacity the bootstrap writes
+is already on the source when the copy is taken. Had the order been reversed, copying at
+duplication time would have been the wrong fix entirely.
+
+**Part A (the shared ordered preamble) remains open** and is deliberately not bundled here: it
+rewrites every world material's shader text, needs the full 8-chapter regression plus a
+deliberately mis-ordered control to show the regression can fail, and carries a real
+instance-uniform-buffer question (`SceneBuilder`'s `OpacityUniform` docstring says emitting it into
+opaque variants would put them "on the instance-uniform buffer that Run-2 item 2 had to enlarge for
+C4/C5"). That claim needs measuring before any preamble emits four uniforms everywhere.
