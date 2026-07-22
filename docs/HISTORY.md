@@ -1832,3 +1832,53 @@ projected "one unit ahead along the view ray". `PlaneViewer.cs:1992` is
 `architecture.md` claim was wrong and is corrected, along with the missing `--freecam` case.
 
 No code change.
+
+## 2026-07-22 — CLAUDE.md back to an index: extraction, CLI, stale claims (docs-cleanup items 4-6)
+
+Continuing the same session as the module-index entry above. **CLAUDE.md 52,677 -> 36,735 bytes**;
+the file is now 33% of the 110 KB it started this session at, and 21% of the 162 KB that motivated
+the plan.
+
+**Item 4 — format support status -> `docs/formats/extraction.md`.** The support matrix, the
+round-trip evidence, the legacy<->unified extraction-shape table and the extracted-aircraft
+inventory moved to a new page, listed in the formats README. CLAUDE.md keeps four lines:
+extraction is complete, `extracted/` is fork-produced, both shapes are readable, pointer.
+
+**Item 5 — user args -> `docs/cli.md`.** The 43 per-flag prose entries moved **verbatim** as
+bullets rather than reworded, so the move could not lose a detail. CLAUDE.md keeps the
+CLI-inversion rule (a behavioural fact, not a reference entry), a 14-row table of the day-to-day
+set, and the in-flight keys. Verified: all 47 distinct flag names present in the new page,
+149/149 tokens present.
+
+**Item 6 — the stale claims.** All six rows of the plan's table, plus five more found while doing
+items 3-5 and two contradictions the plan had not spotted. The pattern worth noticing is that
+**every one of them was a claim that some work was still pending, written by the session that
+deferred it and never revisited by the session that landed it.** Four separate files said
+cam_anim/mis_anim were unextracted or unread, in four different wordings, while
+`ExtractAssets.ps1` had been extracting them and three C# modules had been reading them:
+
+- the CLAUDE.md matrix row's "Remaining: item 7 ... skipped for now by user decision"
+- `docs/formats/README.md`'s "unsupported by mech3ax"
+- `ExtractAssets.ps1`'s own docstring, "no part of the Godot project reads the output yet"
+- `PLAN-M2-polish-2.md` item 9's "waits for a mech3ax extension"
+
+The same shape produced the paint ones: CLAUDE.md's gotcha said the region table was "superseded
+but not yet reworked" and that "rework is deliberately a separate session"; `paint.md`'s own
+lead-in said the hue-window sections "document what the remake does today" while two sections
+lower in the *same file* documented the rework that replaced them; and `backlog.md` still listed
+"achromatic paint regions" and "slot order" as open, both of which `paint.md` records as fixed.
+
+Two were plain factual errors rather than staleness, and both were in `architecture.md`, i.e. the
+file the module index was about to defer to: F11's free-look look-at documented as "one unit ahead
+along the view ray" when `PlaneViewer.cs:1992` is `PoseLookAtDistance = 100f`, and
+`IsGlowSpriteMesh` still described as "single-polygon all-flare meshes ONLY" as though current,
+which the 2026-07-21 data-driven facade classification had superseded. Both were caught only
+because item 3 forced a per-module diff against the code and the index; a bulk cut would have
+deleted the correct claim and kept the wrong one.
+
+**Verification rule this reinforces** (already in `docs/verification.md` in general form): a
+grep for a *fact* does not prove the *claim* about that fact is still made anywhere. Item 3's
+token check passed 697/697 while three items of genuinely-open work would have vanished; these
+eleven were found by reading for "still / not yet / pending / waits for", not by token search.
+
+No code change across items 4-6; the `ExtractAssets.ps1` edit is a comment.
