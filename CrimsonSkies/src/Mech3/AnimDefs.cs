@@ -192,6 +192,31 @@ public static class AnimDefs
                 if (Num(fields, "RUN_TIME") is { } motionRun)
                     data["run_time"] = motionRun;
                 break;
+            case "ObjectOpacityState":
+                // STATE is a token plus an optional value, IN EITHER ORDER — the install ships
+                // ["ON",0.6], [0.4,"ON"], ["OFF",1], [1,"OFF"] and a bare ["OFF"]. So scan for
+                // the two by type rather than by position, and default a missing value to 1.
+                // Unlike ObjectMotion's normalizer this one is load-bearing: C1's `cloudparent`
+                // (the cloud deck at 0.6, and the single largest use in the game) is reader-only
+                // with no compiled twin, so without this case it arrives carrying neither field.
+                if (fields.TryGetValue("STATE", out var op) && op is { Count: > 0 })
+                {
+                    float value = 1f;
+                    bool? on = null;
+                    foreach (var item in op)
+                    {
+                        if (item is string tok)
+                            on = tok.Equals("ON", StringComparison.OrdinalIgnoreCase);
+                        else if (AnimData.AsNum(item) is { } f)
+                            value = f;
+                    }
+                    if (on is { } state)
+                    {
+                        data["state"] = state;
+                        data["opacity"] = value;
+                    }
+                }
+                break;
             case "PufferState":
                 AddPufferState(data, fields);
                 break;

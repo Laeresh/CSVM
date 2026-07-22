@@ -17,7 +17,7 @@ screenshot at the specific location the report came from.
 ## Checklist
 
 1. ☑ `If`/`Elseif` condition evaluation + `AnimationLod` quality setting **(done 2026-07-21)**
-2. ◐ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
+2. ☑ `LightState` + the remaining unacted-on event kinds **(point lights + material flipbooks + `CALL_ANIMATION` targets done 2026-07-21; `OBJECT_ADD_CHILD` withdrawn, burning-object fires postponed to `backlog.md` — see below)**
 3. ☑ Mission-spawned entity rosters (`hk_zep`, CTF props) **(done 2026-07-22 — the premise was wrong; it is the interp boot script, not a roster)**
 4. ☑ `texture_scroll` rendering **(done 2026-07-22 — the two "sources" are one field written at two times; the waterfalls flow)**
 
@@ -254,8 +254,8 @@ payload) rather than judged by its count in the report:
 | `ObjectCycleTexture` | no | ×1–2, all `node=taildamage` with **`targets=0`** — never resolves. Already build-time in `GaugeCluster`. |
 | one-shot `Sound` | no | ×1 (C3), `snd_waterfall`, **`targets=0`** — names a sound *definition*, and that waterfall already sounds via `SOUND_NODE`. |
 
-The three unreachable kinds moved to `backlog.md` under "Blocked / deferred" with this evidence,
-so item 2 finishes when `OBJECT_OPACITY_STATE` lands.
+The three unreachable kinds moved to `backlog.md` under "Blocked / deferred" with this evidence.
+**`OBJECT_OPACITY_STATE` landed 2026-07-22 — item 2, and this plan, are COMPLETE.**
 
 **One thing that changes the shape of that work:** C1's `cloudparent` — the largest and most
 visible case — is **reader-only** (`extracted/C1/zrdr/clouds.zrd.json`, no compiled counterpart),

@@ -67,6 +67,35 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). |
 | `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the unreached `GRAVITY`/`TRANSLATION`/`BOUNCE_SEQUENCE`/`SCALE` channels | Steady spin about the node's **own** axes at `initial` rad/s (deg/s in the reader), endless without `RUN_TIME`. The zeppelin nacelle props. See "`OBJECT_MOTION` is two ops sharing one event". |
 
+### `OBJECT_OPACITY_STATE` is translucency, not visibility
+
+`state` is whether translucency is **enabled**; `opacity` is the alpha while it is. The data
+settles this: across all 168 compiled uses, `state=false` pairs with `opacity=1.0` **136 times
+and with 0.0 never**, so `false` means "render normally", not "disappear". Hiding is
+`OBJECT_ACTIVE_STATE`'s job and the data uses both side by side. The three shapes shipped are
+`(false, 1.0)` ×136, `(true, 1.0)` ×16 and `(true, 0.4)` ×16.
+
+**The reader writes the token and the value in EITHER ORDER, and the value is optional.** All
+five spellings occur: `["ON", 0.6]`, `[0.4, "ON"]`, `["OFF", 1]`, `[1, "OFF"]` and a bare
+`["OFF"]` (value defaults to 1). So a normalizer must scan the list by type, not by position.
+
+`OBJECT_OPACITY_FROM_TO` tweens the same pair with a `RUN_TIME`; a fade-out is
+`(true,1.0) → (false,0.0)` ×5073 and a fade-in `(true,0.0) → (false,1.0)` ×4609, i.e. the end
+state disables translucency once the object is fully opaque again (or is deactivated outright).
+Only ONE of its 9,917 uses is ever reached at bootstrap, so it is not implemented.
+
+**What is reachable:** 683 dispatches across C1/C3/C4/C5, **zero unresolvable**. C1's
+`cloudparent#` — `ON_STARTUP`, `EXECUTION_BY_RANGE 1900`, a `LOOP{-1}` re-asserting every frame
+— sets the cloud sprites to **0.6**, and is the single largest use in the game; C5 sets `wl_glw`
+and `cfglow` to 0.4; C3/C4 drive the barrage balloons (`bont*`/`balloon_t*`/`tether*`) and
+`bhf_support*`, all at `state=false` (i.e. normal).
+
+⚠ **Observing the C1 clouds needs two things switched off**, which is why a first pass wrongly
+concluded the event had no visible effect: the opaque `cloudlayer` **`CloudDeck` occludes them
+from below**, and at any normal viewing distance **fog washes them to exactly `FOG_COLOR`**. With
+the deck hidden and fog off (static `--viewer --chapter=C1`, no `--sky-zone`) the effect is
+obvious — 74,129 px change, the clouds going from hard opaque white to translucent.
+
 ### `OBJECT_MOTION` is two ops sharing one event
 
 `OBJECT_MOTION` is the original's rigid-body descriptor, and its 7,442 uses split cleanly into

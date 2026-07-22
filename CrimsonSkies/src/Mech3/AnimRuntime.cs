@@ -398,6 +398,27 @@ public sealed partial class AnimRuntime : Node
                 return true;
             }
 
+            case "ObjectOpacityState":
+            {
+                // OBJECT_OPACITY_STATE is translucency, not visibility. `state` is whether
+                // translucency is ENABLED and `opacity` the alpha while it is — settled by the
+                // data, where state=false pairs with opacity=1.0 in all 136 compiled uses and
+                // never with 0, so `false` means "render normally", not "disappear". (Hiding is
+                // OBJECT_ACTIVE_STATE's job and the data uses it right alongside this.)
+                if (ev.Data.Get("state") is not bool on)
+                {
+                    Count("ObjectOpacityState(no state)");
+                    return true;
+                }
+                float alpha = on ? ev.Data.Num("opacity") ?? 1f : 1f;
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    SetSubtreeOpacity(t, alpha);
+                    _opsApplied++;
+                }
+                return true;
+            }
+
             case "ObjectMotion":
             {
                 // OBJECT_MOTION is the original's rigid-body descriptor, and it spans two very
@@ -1812,6 +1833,56 @@ public sealed partial class AnimRuntime : Node
     {
         node.Visible = active;
         SetCollidersEnabled(node, active);
+    }
+
+    // Last opacity pushed to each subtree root. These events sit in `Loop{-1}` sequences —
+    // C1's `cloudparent#` re-asserts its 0.6 every frame — so without this the whole subtree
+    // would be re-walked and re-written ~31 times a frame to set values it already holds. Same
+    // lesson as LightState's per-light host cache, which cost ~7 ms/frame before it existed.
+    private readonly Dictionary<Node3D, float> _opacity = new();
+
+    // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
+    // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
+    // alpha into one would fade every other node that happens to use it. Meshes whose shader
+    // has no alpha path (opaque variants, where SceneBuilder deliberately omits the uniform)
+    // silently ignore the parameter, which is correct — every opaque target the data touches
+    // asks for 1.0 — but a genuine partial opacity landing on one is counted, not swallowed.
+    private void SetSubtreeOpacity(Node3D node, float alpha)
+    {
+        if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
+            return;
+        _opacity[node] = alpha;
+        int applied = ApplyOpacity(node, alpha);
+        if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
+            Count("ObjectOpacityState(no alpha path)");
+    }
+
+    private static int ApplyOpacity(Node node, float alpha)
+    {
+        int n = 0;
+        if (node is GeometryInstance3D g)
+        {
+            g.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
+            if (HasOpacityPath(g))
+                n++;
+        }
+        foreach (var child in node.GetChildren())
+            n += ApplyOpacity(child, alpha);
+        return n;
+    }
+
+    // Whether this mesh's shader actually reads the opacity parameter. Setting an instance
+    // parameter a shader does not declare is silently a no-op in Godot, so without this check
+    // the "no alpha path" tally could never fire and would be a lie rather than a diagnostic.
+    private static bool HasOpacityPath(GeometryInstance3D g)
+    {
+        if (g is not MeshInstance3D mi || mi.Mesh is not { } mesh)
+            return false;
+        for (int i = 0; i < mesh.GetSurfaceCount(); i++)
+            if (mesh.SurfaceGetMaterial(i) is ShaderMaterial { Shader: { } sh }
+                && sh.Code.Contains(SceneBuilder.OpacityParam, StringComparison.Ordinal))
+                return true;
+        return false;
     }
 
     private static void SetCollidersEnabled(Node node, bool enabled)

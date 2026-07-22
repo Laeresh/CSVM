@@ -224,6 +224,23 @@ vec3 csky_srgb_to_linear(vec3 c) {
     // group per mesh (uniform per mesh in practice); materials cached per param set. The
     // camera-anchored skydome's stars sit past any data range, so BuildHorizon exempts
     // them via the csky_light_fade instance uniform.
+    /// <summary>The animation runtime's <c>OBJECT_OPACITY_STATE</c> translucency, as a
+    /// per-instance multiplier on ALPHA (C1 fades its cloud deck to 0.6, C5 its window glows
+    /// to 0.4). Per-instance rather than per-material because materials are cached and shared
+    /// — two nodes on one material can be told different opacities, and unlike a scroll rate
+    /// this one changes at runtime, so it cannot live in the cache key the way texture_scroll
+    /// does. Emitted ONLY into shader variants that already write ALPHA (blend/scissor/glow):
+    /// an opaque variant has no alpha path to multiply, adding one would move it into the
+    /// transparent pass, and every opaque target the data touches asks for opacity 1.0 anyway.
+    /// That keeps opaque materials' shader text byte-identical and keeps these off the
+    /// instance-uniform buffer that Run-2 item 2 had to enlarge for C4/C5.</summary>
+    private const string OpacityUniform =
+        "instance uniform float csky_opacity = 1.0;";
+
+    private const string OpacityTerm = " * csky_opacity";
+
+    public const string OpacityParam = "csky_opacity";
+
     private const string LightShaderCode = @"
 shader_type spatial;
 render_mode unshaded, blend_add, depth_draw_never, cull_disabled;
@@ -231,6 +248,7 @@ uniform float size_scale = 1.0;   // data unk08 (0 -> 1)
 uniform float max_size_px = 30.0; // data unk64
 uniform float range_far = 0.0;    // data unk68/unk52; 0 = no distance fade
 instance uniform float csky_light_fade = 1.0; // 0 = skydome stars (no range fade)
+instance uniform float csky_opacity = 1.0; // OBJECT_OPACITY_STATE
 void vertex() {
     float dist = max(length((MODELVIEW_MATRIX * vec4(VERTEX, 1.0)).xyz), 1.0);
     // A fixed world diameter projected to pixels, clamped: far lights stay visible
@@ -246,7 +264,7 @@ void fragment() {
     // Soft star-like glow: hot gaussian core, no hard edge.
     float glow = exp(-r * r * 5.0) * smoothstep(1.0, 0.6, r);
     ALBEDO = COLOR.rgb * 1.6; // brightness gain, TUNE
-    ALPHA = glow * COLOR.a;
+    ALPHA = glow * COLOR.a * csky_opacity;
 }";
 
     private ArrayMesh GetLightPoints(int meshIndex)
@@ -756,6 +774,8 @@ void fragment() {
         sb.AppendLine("global uniform vec2 csky_fog_range;"); // x = near (clear), y = far (full fog), horizontal metres
         sb.AppendLine("global uniform vec2 csky_fog_alt;");   // fragment altitude: full fog below x, fades to none at y
         sb.AppendLine("instance uniform float csky_fog_on = 1.0;");
+        if (blend || scissor)
+            sb.AppendLine(OpacityUniform);
         // Per-mission world brightness from the weather's SUNLIGHT (item 6): the fullbright world
         // is dimmed by this scalar before fog, matching the original's ambient+diffuse lighting of
         // the baked-vertex world. Fullbright only — shaded (plane) surfaces are lit for real.
@@ -884,7 +904,7 @@ void fragment() {{");
         sb.AppendLine("        * (1.0 - smoothstep(csky_fog_alt.x, csky_fog_alt.y, fog_world.y));");
         sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         if (blend || scissor)
-            sb.AppendLine("    ALPHA = col.a;");
+            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
@@ -930,6 +950,8 @@ void fragment() {{");
         sb.AppendLine("global uniform vec2 csky_fog_range;");
         sb.AppendLine("global uniform vec2 csky_fog_alt;");
         sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        if (blend || scissor)
+            sb.AppendLine(OpacityUniform);
         sb.AppendLine(SrgbToLinearFn); // DX7 gamma-space vertex modulate (world/cloud pass)
         sb.AppendLine(@"
 void vertex() {
@@ -957,7 +979,7 @@ void fragment() {
             ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
             : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
         if (blend || scissor)
-            sb.AppendLine("    ALPHA = col.a;");
+            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
@@ -999,6 +1021,8 @@ void fragment() {
         sb.AppendLine("global uniform vec2 csky_fog_alt;");
         if (!glow)
             sb.AppendLine("global uniform float csky_world_light = 1.0;"); // per-mission SUNLIGHT dimming (item 6)
+        if (blend || scissor)
+            sb.AppendLine(OpacityUniform);
         sb.AppendLine(SrgbToLinearFn);
         // Fixed axis + the plane the camera direction is measured in: Y keeps world-up fixed
         // and spins in XZ (Clutter's tree technique); X keeps the local-right axis fixed and
@@ -1028,7 +1052,7 @@ void fragment() {{
             ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
             : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
         if (blend || scissor)
-            sb.AppendLine("    ALPHA = col.a;");
+            sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");

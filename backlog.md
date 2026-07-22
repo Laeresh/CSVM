@@ -97,6 +97,16 @@ When an item gets scheduled into a plan, move it there; when it lands, delete it
   The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, is scheduled work and
   stays in the plan, not here.
 
+- **World renders into only the upper-left quadrant when the camera sits at the world origin**
+  (noticed 2026-07-22 while verifying `OBJECT_OPACITY_STATE`; **pre-existing** — reproduced on the
+  pre-change build). `--viewer --chapter=C1 --campos=0,30,420 --lookat=0,0,0` draws terrain, sea
+  and cloud sprites only in the left ~640 x top ~360 px, the rest showing bare skydome gradient,
+  with a hard rectangular edge at exactly half width and half height. Reads like a 4P splitscreen
+  pane with one player. The origin is outside C1's playable area (its airfield is near
+  -5466,-5136), so nothing normally looks from there and it has never mattered — but an exact
+  half-viewport boundary is not a terrain edge, so something is clipping. Worth a look before
+  trusting any screenshot taken from an unusual camera.
+
 ## Feature backlog
 
 - **Paint scheme follow-ups** (the core landed 2026-07-20 — see `docs/formats/paint.md`

@@ -1678,3 +1678,61 @@ reads it as load-bearing.
 
 **Remaining for item 2:** `ObjectOpacityState` (58 on C1), `Callback` (×8 every chapter),
 `ObjectCycleTexture` (×1–2), and the one-shot `Sound`.
+
+## 2026-07-22 — `OBJECT_OPACITY_STATE`: the clouds go translucent (plan item 2 — item 2 is now COMPLETE)
+
+The last reachable event kind of `docs/PLAN-anim-rendering-followups.md` item 2. C1's cloud
+sprites now render at the authored **0.6** opacity instead of fully opaque, C5's `wl_glw`/`cfglow`
+at 0.4, and C3/C4's barrage balloons and tethers at their (normal) `state=false`. New handler +
+`SetSubtreeOpacity` in `AnimRuntime`, an `ObjectOpacityState` normalizer in `AnimDefs`, and a
+`csky_opacity` instance uniform in `SceneBuilder`. Decode in `docs/formats/anim-definitions.md`.
+
+**Decode.** `state` is whether translucency is ENABLED, `opacity` the alpha while it is — settled
+by the data, where `state=false` pairs with `opacity=1.0` 136 times and with 0.0 never, so
+`false` means "render normally" rather than "disappear" (hiding is `OBJECT_ACTIVE_STATE`'s job,
+and the data uses both side by side). The reader writes the token and value **in either order**
+with the value optional — `["ON",0.6]`, `[0.4,"ON"]`, `["OFF",1]`, `[1,"OFF"]`, `["OFF"]` — so
+the normalizer scans by type, not position. Unlike `OBJECT_MOTION`'s normalizer this one is
+**load-bearing**: C1's `cloudparent#` is reader-only with no compiled twin, so without a case the
+single largest use in the game arrived carrying neither field.
+
+**A real regression shipped into the working tree and the USER caught it, not the test battery.**
+Godot assigns instance-uniform indices by declaration order per shader and merges the mapping
+across an instance's materials. Declaring `csky_opacity` before `csky_fog_on` gave the opaque
+variant `{node_bias:0, csky_fog_on:1}` and the blend variant `{node_bias:0, csky_opacity:1,
+csky_fog_on:2}`; a mesh carrying both then disagreed, Godot kept only the first mapping and
+**silently stopped fogging the losing surfaces** — reported as hilltops and tree lines standing
+outside the fog, and visible in a diff mask as disturbed road and rail decals. Fixed by declaring
+it after every other instance uniform. Pinning it with an explicit `instance_index(3)` hint is
+**not** a fix: it compiles clean and silently no-ops the uniform. The lesson generalises to any
+shared instance uniform added to a conditional shader variant, and the Godot warning
+(`…same instance shader uniform … different indices…`) is now something to grep for.
+
+**Two verification failures worth recording, both of which produced a confidently wrong answer.**
+(1) **`--freecam`'s default camera is not deterministic** — the spawn is a random pick per launch,
+so an A/B without `--spawn=N` or explicit `--campos`/`--lookat` compares two different views. A
+54%-of-frame "difference" was entirely this. (2) **A first pass concluded the event had no visible
+effect at all**, on the strength of forcing opacity to 0.0 (8 px changed) and even hiding the
+nodes outright (5 px) — both true, and both meaningless, because the opaque `cloudlayer`
+**`CloudDeck` occludes the sprites from below** and at any normal distance **fog washes them to
+exactly `FOG_COLOR`**. The user supplied both facts. With the deck hidden and fog off the effect
+is unmistakable.
+
+**Verified.** `ObjectOpacityState` leaves the unhandled list in every chapter (C1 is now
+`Callback`×8, `ObjectCycleTexture`×1, two puffer stubs, `ObjectMotion`×1); state ops rise by
+exactly the dispatch counts allowing for multi-target events (C1 4154→4212 for 58 events, C3
++50 for 26 events hitting `tether*`×3 / `balloon_t*`×2, C5 +14 for 14); no `(no state)` or
+`(no alpha path)` diagnostic fires anywhere. **The decisive shot is C1's clouds with the deck
+hidden and fog off: 74,129 px change (8.04%), bbox exactly the cloud region, mean 213.7 → 193.4
+as hard opaque white becomes translucent against the sky.** The reported unfogged-terrain camera
+is back to 6 px against a measured 3–25 px noise floor; 8 chapters report zero shader errors and
+zero instance-uniform warnings; static plane viewer **byte-identical** (md5); full mode battery
+(fly/stunt/viewer/damage/4P race/menu/static-C4-zone1) clean; C5 holds the 60 fps vsync cap.
+
+**Not implemented:** `ObjectOpacityFromTo` (the tweened form). Exactly 1 of its 9,917 uses is ever
+reached at bootstrap, and its endpoints encode a disable-translucency-when-done convention that
+would need its own decode to tween honestly.
+
+**Noted but not chased:** parking the camera at the world origin renders the world into only the
+upper-left quadrant of the viewport, like a 4P pane with one player. Reproduced on the pre-change
+build, so it is **pre-existing** and unrelated; logged in `backlog.md`.
