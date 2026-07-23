@@ -29,6 +29,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [destructibles.md](destructibles.md) | World destructibles: how an `ANIMATION_DEFINITION` becomes a destructible object — `HEALTH`, `WeaponHit`/`WeaponOrCollideHit` activation, the `ANIM_HEALTH` `DAMAGE_SEQUENCE`, the death sequence, the 44 collide-destructibles |
 | [effects.md](effects.md) | `PUFFER_STATE` billboard-particle emitters, the effect reader files, flipbook textures, anchor nodes |
 | [weapons.md](weapons.md) | `weapons.json` `BALLISTICS`: the 48-entry weapon catalogue (guns/rockets/ordnance), damage & allotment fields, the player caliber×ammo matrix + AI detune, the `FIRE`/`FLYOUT`/`IMPACT` surface-class bindings |
+| [loadouts.md](loadouts.md) | **Our** `CSVM/data/stock_loadouts.json` (not an extracted format): the 11 aircraft's stock weapon fit — gun groups (mount/caliber/ammo/markers), turret slots, pylons — plus the gun→`wep_*` and slot→firepoint resolution rules |
 | [weapon-effects.md](weapon-effects.md) | The muzzle/flyout/impact effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) and the gamez projectile prototype roots the weapon bindings resolve to |
 | [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |

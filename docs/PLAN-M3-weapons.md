@@ -437,7 +437,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 4. ☑ `docs/formats/destructibles.md` — the world-destructible model — **landed**
 5. ☑ `docs/formats/weapon-effects.md` — the weapon effect-reader family — **landed**
 6. ☑ `vehicle.md` — retire the "undecoded here" deferral — **landed**
-7. ☐ Stock-loadout file format + seed from the user's table
+7. ☑ Stock-loadout file format + seed from the user's table — **landed** (`CSVM/data/stock_loadouts.json` + `docs/formats/loadouts.md`)
 8. ☑ **[USER]** mount-name column — **delivered 2026-07-22**; the binding rule fell out of it
 9. ☑ **[USER]** `CLUSTER_SIZE` = rounds-per-slot — **confirmed 2026-07-22** (Bloodhawk: 9 HE, 3/hardpoint)
 10. ☐ Verify the binding rule + flash appearance — **in-engine, self-serve** (the `MuzzleFlash*.png` crops are appearance reference only, not placement evidence)
@@ -640,13 +640,24 @@ Document `turrets` and mark it **M4**. Document `bullethole_anims`.
 **Verify.** No key in any of the 75 vehicle defs remains undocumented; the "undecoded here"
 line is gone.
 
-### A7 ☐ Stock-loadout file format + seed
+### A7 ☑ Stock-loadout file format + seed — **LANDED**
 
-**Goal.** Define the data file the engine reads, and seed it with the user's table.
+**Landed.** `CSVM/data/stock_loadouts.json` (a new committed-config home, `CSVM/data/`, loaded via
+`res://` by B12) + `docs/formats/loadouts.md`. Seeded from the user's stock table; the `markers`
+arrays are the binding rule's explicit output, checked in (not runtime-computed) so a wrong one is
+a visible fix. Gun `caliber`+`ammo` resolve to `wep_{N+k}` (stock slug → `wep_N`); turret slots
+carry `"turret": true`, inert in M3. **Verified independently against the committed file:** all 11
+parse, every `markers` entry exists on the model, every marker matches the binding rule, every
+derived gun `wep_*` and each `hardpoints.stock` resolves in `weapons.zrd.json`, and the turret set
+is exactly the 5 airframes (Balmoral the only two-turret one). **B12 is unblocked.**
 
-**Approach.** A committed JSON file (hand-authored config describing the original, the same
-category as `docs/formats/` — **not a game asset**, so the no-assets rule does not apply;
-confirm with the user before committing). Shape, per plane def:
+**⚠ Corrected during authoring:** an early draft resolved stock guns as `wep_N0` (e.g. `wep_300`);
+the matrix is `wep_{N+k}`, so slug caliber-30 is **`wep_30`**, not `wep_300`. The verify step
+caught it — the intended "visible data fix" property working as designed.
+
+**Original approach (kept for reference).** A committed JSON file (hand-authored config describing
+the original, the same category as `docs/formats/` — **not a game asset**, so the no-assets rule
+does not apply). Shape, per plane def:
 
 ```json
 "pbloodhawk": {

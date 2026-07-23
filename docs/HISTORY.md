@@ -4898,3 +4898,24 @@ transform" claim was overstated). `PlaneViewer` gained `--markers`/`--dump-marke
 in `architecture.md`, `cli.md`, `markers.md`, CLAUDE.md's module index + viewer-keys line.
 **Next: A7 (the stock-loadout file, commit user-gated), then Wave B.** A10 (in-engine
 firing-placement check) waits on D29.
+
+**M3 Wave A item A7 — the stock-loadout data file (2026-07-24).** Landed `CSVM/data/stock_loadouts.json`,
+the 11 player aircraft's default weapon fit, plus `docs/formats/loadouts.md`. Established a new
+committed-config home, `CSVM/data/` (hand-authored engine config, not extracted assets, loaded via
+`res://` — the first such file; everything else is read from git-ignored `extracted/`). Per plane:
+`guns[]` (slot, mount name verbatim from `IDS_AIRFRAMEGUNGROUPNAMES`, caliber, ammo, firepoint
+markers), turret slots flagged `"turret": true` (inert in M3, decision 10), and `hardpoints`
+(pylon count + stock `wep_06` HE). Seeded from the user's stock table (delivered 2026-07-22); the
+`markers` arrays are the binding rule's (`slot n → firepoint(9−2n),(10−2n)`) explicit output,
+checked in rather than runtime-computed so a wrong one is a visible data fix. Gun weapon ids
+resolve `caliber N + ammo k → wep_{N+k}` (stock slug → `wep_N`). **Verified independently against
+the committed file** (not the generator's memory): all 11 parse; every `markers` entry exists on
+that plane's model; every marker matches the binding rule; every derived gun `wep_*` and each
+`hardpoints.stock` resolves in `weapons.zrd.json`; the turret set is exactly the 5 airframes
+(`pavenger`/`pbalmoral`/`pbrigand`/`pfirebrand`/`pkestrel`), the Balmoral the only two-turret one;
+the Kestrel's W1 correctly resolves to the lone centreline `firepoint7`. The verify caught a real
+authoring bug — an early draft resolved stock guns as `wep_N0` (`wep_300`) instead of `wep_{N+k}`
+(`wep_30`) — exactly the visible-fix property the checked-in approach is for. No engine code
+changed (B12 `Loadout.cs` is the wave-B reader). Docs: new `loadouts.md` + README index entry;
+plan A7 ticked; CLAUDE.md repo-layout + status updated. **Wave A is now complete bar A10** (waits
+on D29). **Next: Wave B — B11 (`WeaponDefs.cs`) blocks the rest, so it goes first.**

@@ -1,0 +1,410 @@
+{
+  "_about": "Stock loadouts for the 11 player aircraft, read off the original's Ammo Selection / configurator UI (user-supplied 2026-07-22). Hand-authored config describing the original game, NOT an extracted asset. Consumed by src/Mech3/Loadout.cs (M3 wave B, item B12).",
+  "_references": "Mounts + binding rule: docs/formats/markers.md. Weapon ids + the caliber x ammo matrix: docs/formats/weapons.md. File format: docs/formats/loadouts.md.",
+  "_ammo_types": {
+    "slug": 0,
+    "dumdum": 1,
+    "ap": 2,
+    "magnesium": 3
+  },
+  "_gun_resolves": "A gun's weapon id is caliber N + ammo index k -> wep_{N+k} (the wep_30..73 matrix, each caliber's four ammo types consecutive). Stock ammo 'slug' (k=0) gives wep_N: wep_30/40/50/60/70.",
+  "_binding_rule": "gun slot n -> firepoint(9-2n),(10-2n); W1->fp7,8 W2->fp5,6 W3->fp3,4 W4->fp1,2. The 'markers' arrays below are the explicit result, checked into the file (not computed at runtime) so a wrong one is a visible fix. Strongly supported by geometry, pending in-engine confirmation (A10).",
+  "_turrets": "Slots whose mount is a Turret carry \"turret\": true. Turrets are AI gunners (decision 10), deferred to M4: the loader parses them but constructs them inert. Filled on the 5 turret airframes; the Balmoral is the only two-turret airframe (Nose + Rear).",
+  "planes": {
+    "pautogyro": {
+      "model": "player_autogyro",
+      "display": "Hoplite",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Inner Wing Guns",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 2,
+        "stock": "wep_06"
+      }
+    },
+    "pavenger": {
+      "model": "player_avenger",
+      "display": "Hellhound",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Nose Guns",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Nose Guns 2",
+          "caliber": 40,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 4,
+          "mount": "Rear Turret",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint1",
+            "firepoint2"
+          ],
+          "turret": true
+        }
+      ],
+      "hardpoints": {
+        "count": 3,
+        "stock": "wep_06"
+      }
+    },
+    "pbalmoral": {
+      "model": "player_balmoral",
+      "display": "Balmoral",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Inner Wing Guns",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Outer Wing Guns",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 3,
+          "mount": "Nose Turret",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint3",
+            "firepoint4"
+          ],
+          "turret": true
+        },
+        {
+          "slot": 4,
+          "mount": "Rear Turret",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint1",
+            "firepoint2"
+          ],
+          "turret": true
+        }
+      ],
+      "hardpoints": {
+        "count": 8,
+        "stock": "wep_06"
+      }
+    },
+    "pbloodhawk": {
+      "model": "player_bhawk",
+      "display": "Bloodhawk",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Inner Wing Guns",
+          "caliber": 40,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Outer Wing Guns",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 3,
+        "stock": "wep_06"
+      }
+    },
+    "pbrigand": {
+      "model": "player_brigand",
+      "display": "Brigand",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Outer Wing Guns",
+          "caliber": 60,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Outer Wing Guns 2",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 4,
+          "mount": "Rear Turret",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint1",
+            "firepoint2"
+          ],
+          "turret": true
+        }
+      ],
+      "hardpoints": {
+        "count": 4,
+        "stock": "wep_06"
+      }
+    },
+    "pdevastator": {
+      "model": "player_pfighter",
+      "display": "Devastator",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Low Inner Wing Guns",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Low Outer Wing Guns",
+          "caliber": 40,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 3,
+          "mount": "Upper Inner Wing Guns",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint3",
+            "firepoint4"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 4,
+        "stock": "wep_06"
+      }
+    },
+    "pfirebrand": {
+      "model": "player_fbrand",
+      "display": "Firebrand",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Inner Wing Guns",
+          "caliber": 70,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Middle Wing Guns",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 4,
+          "mount": "Rear Turret",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint1",
+            "firepoint2"
+          ],
+          "turret": true
+        }
+      ],
+      "hardpoints": {
+        "count": 6,
+        "stock": "wep_06"
+      }
+    },
+    "pfury": {
+      "model": "player_fury",
+      "display": "Fury",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Outer Wing Guns",
+          "caliber": 70,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Outer Wing Guns 2",
+          "caliber": 30,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 3,
+        "stock": "wep_06"
+      }
+    },
+    "pkestrel": {
+      "model": "player_kestrel",
+      "display": "Kestrel",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Center Guns",
+          "caliber": 60,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Center Guns 2",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        },
+        {
+          "slot": 4,
+          "mount": "Rear Turret",
+          "caliber": 40,
+          "ammo": "slug",
+          "markers": [
+            "firepoint1",
+            "firepoint2"
+          ],
+          "turret": true
+        }
+      ],
+      "hardpoints": {
+        "count": 5,
+        "stock": "wep_06"
+      }
+    },
+    "ppeacemaker": {
+      "model": "player_peacemaker",
+      "display": "Peacemaker",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Center Guns",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Right Fuselage Guns",
+          "caliber": 40,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 3,
+        "stock": "wep_06"
+      }
+    },
+    "pwarhawk": {
+      "model": "player_warhawk",
+      "display": "Warhawk",
+      "guns": [
+        {
+          "slot": 1,
+          "mount": "Inner Wing Guns",
+          "caliber": 70,
+          "ammo": "slug",
+          "markers": [
+            "firepoint7",
+            "firepoint8"
+          ]
+        },
+        {
+          "slot": 2,
+          "mount": "Inner Wing Guns 2",
+          "caliber": 50,
+          "ammo": "slug",
+          "markers": [
+            "firepoint5",
+            "firepoint6"
+          ]
+        }
+      ],
+      "hardpoints": {
+        "count": 8,
+        "stock": "wep_06"
+      }
+    }
+  }
+}

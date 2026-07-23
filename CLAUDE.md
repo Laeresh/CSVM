@@ -72,6 +72,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 
 - `CSVM/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CSVM/shaders/` — shared `.gdshaderinc` blocks `#include`d by the generated shaders (instance-uniform order, sRGB, fog, lights).
+- `CSVM/data/` — **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`).
 - `CrimsonSkiesGame/` — the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/` — extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
@@ -210,7 +211,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
-**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`), and A3 landed (the `--dump-markers` tool + the `--viewer --markers` overlay, key K). Next step: A7 (the stock-loadout data file, commit user-gated), then Wave B. A10 (in-engine firing-placement check) waits on D29.
+**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`); A3 landed (the `--dump-markers` tool + the `--viewer --markers` overlay, key K); A7 landed (`CSVM/data/stock_loadouts.json` + `docs/formats/loadouts.md`). **Wave A is complete bar A10** (the in-engine firing-placement check, which waits on D29). Next step: **Wave B** — B11 (`WeaponDefs.cs`, the typed `weapons.json` reader) blocks every other wave-B item, so it goes first.
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 
