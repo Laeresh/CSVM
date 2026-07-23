@@ -61,6 +61,11 @@ different spelling:
 | mesh light `extra` | `vertices` |
 | `textures.json` = `{original, renamed}`, plus `texture_ptrs` | `textures.json` = `{name}`, materials carry `texture_index` |
 | partition cells `nodes[].index` | `values[].node_index` |
+| zrdr entry naming **replaces** the source extension: `vehicle.zrd` → `vehicle.json` | **appends** to it: `vehicle.zrd` → `vehicle.zrd.json` |
+
+Content is unaffected by the zrdr naming difference — all 222 readers of the shared archive
+were verified semantically identical across the two extractions. Consumers must accept both
+spellings when looking an entry up by name.
 
 `GameZ.cs`, `TextureArchive.cs` and `Zrdr.cs` read **both**, which is what makes the v0.6.1
 rollback a data-only operation. Two traps in the unified shape are worth knowing before touching

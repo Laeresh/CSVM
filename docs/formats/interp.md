@@ -69,6 +69,22 @@ Every chapter parks `multiplayer1zep` **and** `multiplayer2zep` in its world and
 both off outside multiplayer — so ignoring these scripts leaves two phantom zeppelins in
 every single Instant Action map.
 
+### Vehicles load unplaced — the origin is the map corner
+
+Every chapter's `support\<chapter>\load.gw` loads its vehicles with a bare `LoadGameGen` +
+`AddChild %worldName%` and **no placement**, so every zeppelin, car, boat, train car and
+aeroplane in the install ships with gamez `transform: "Initial"` and sits at the world
+origin. Every chapter's world `area` is x,z ∈ [−N, 0], so the origin is the map's
+**corner**. Each mission then either switches the vehicle off in its own `.gw` setup script
+or places it from the animation layer — an `ON_STARTUP` `OBJECT_TRANSLATE_STATE` (C3/IA1's
+`cgzepstate` puts `cargozep1` at (−12412.9, 134.0, −10424.8)) or an `OBJECT_MOTION_FROM_TO`.
+
+Retail data misses some: **C5/IA1 leaves `piratezep` and `sprucegoose` on**, and
+**C1C/IA1** — whose `ia1.gw` is four lines naming only the two MP zeppelins — leaves
+`piratezep`, `blackswanzep` and `workersvoyagezep` parked at the corner. (Measured across
+all 8 chapters, the transformless walk roots whose built world AABB straddles the origin in
+x and z are 122 nodes — all vehicles, zero terrain.)
+
 ### Capture the Flag
 
 `ctf_1`/`ctf_2` (gate posts) and `cs_flag_1`/`cs_flag_2` (the flags) exist in the five

@@ -34,6 +34,20 @@ order.
   `dzpaths` group — the AI/guide route through the zone (`dzN`'s point is a vertex of it).
   Never rendered in the original; the world build skips the whole `dzpaths` subtree (see
   [world-structure.md](world-structure.md)). The remake builds it only under `--debug-dzpaths`.
+  Besides the route polyline, a `dzpathN` mesh can carry **gate-outline polygons** — the
+  aperture rings the zone is flown through (C2/IA1's `dzpath1` carries the hangar's
+  front-aperture outline as its second polygon).
+
+**A dzone's node is not always a `dzN` point marker** — it may name real world *geometry*:
+C2/IA1's first dzone is `sghangar`, the Seaplane Hangar structure itself. Its gamez
+`transform` is the no-transform string `"Initial"` (see [extraction.md](extraction.md)), so
+the node's own origin resolves to the world origin, ~8 km from the building — the zone's
+position must come from the subtree's mesh geometry, not the node transform. Every actual
+`dzN` marker in this install (all 53, measured) is a childless `mesh_index -1` node, so the
+two cases are cleanly distinguishable. The remake anchors such geometry zones on the
+`door`-named leaf pair when present (the flown aperture — the hangar's `sgh_door1`/`sgh_door2`
+leave a 20 m front slit), corroborated by `dzpath1`, whose second polygon outlines that front
+aperture 1.9 m away.
 
 **Read the list, not the node names.** `dzN` numbering is *not* contiguous and does not
 enumerate every `dzN` in the gamez: C1B's dzones are `dz1, dz3, dz4, dz6, dz7`, and C1's
@@ -48,7 +62,7 @@ falls back to free flight.
 
 The original has no gate geometry — a Danger Zone is a single point. The remake completes a
 zone when the plane passes within a **sphere** of the `dzN` point (radius `DzRadius`, TUNE,
-60 m — approximates the opening). `help_label` distinguishes `MSG_OBJ_FLYTHROUGH` ("Fly
+15 m — approximates the opening). `help_label` distinguishes `MSG_OBJ_FLYTHROUGH` ("Fly
 Through") from `MSG_OBJ_FLYOVER` ("Fly Over"); both use the same sphere test (revisit only
 if a real mission reads wrong).
 

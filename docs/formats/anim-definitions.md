@@ -160,8 +160,10 @@ parent-frame pose:
 - `GRAVITY.value` (negative) accelerates the launch. `DO_INTERSECTIONS` ground-rest and the
   `BOUNCE_SEQUENCE` re-launch are a **Layer-1.5 follow-up** (they need a physics ray) — the body
   integrates freely over `RUN_TIME` then finishes.
-- `FORWARD_ROTATION.Time.initial` is a tumble **rate** (rad/s) — a piece = 15.708 = 900°/s. ⚠ the
-  axis is a reasoned choice (local X): the data carries a scalar rate, not an axis.
+- `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
+  by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
+  the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).
+  ⚠ the axis is a reasoned choice (local X): the data carries a scalar, not an axis.
 - `SCALE.initial`/`delta` a linear scale ramp (absolute, like `OBJECT_SCALE_STATE`) — the crash
   `dust` grows and shrinks over 6 s.
 
@@ -223,6 +225,20 @@ Evidence, surveyed over all 8 chapters (2026-07-21):
 Rotations are **radians**, not degrees: the maximum magnitude in the data is `15.708 = 5π`,
 99.93% of values are ≤ 2π, and 228 sit on exact π/2 multiples. Converting them with
 `DegToRad` makes every rotation ~57× too small — visually, nothing turns.
+
+**An absent `OBJECT_MOTION_FROM_TO` channel means HOLD the node's current value**, not
+"return to the authored rest pose" — the reader spelling's "a missing FROM means from
+wherever the object currently is", generalised to the whole channel. Surveyed install-wide:
+883 of 1,802 FROM_TO events carry no rotate channel, and on 89 of them (26 nodes) the held
+value differs from rest — C1's traffic and firetrucks, C2's ten studebakers, its sailboats
+and yachts (up to `sailboat1`'s 300 s leg held 180° from rest). Seeded from rest, C1's
+`black_car1` (one ROTSTATE 180° then a single 16 s translate-only loop) drives its whole
+route exactly sideways.
+
+The compiled `*_delta` channels arrive as a bare `{x,y,z}` vector, **not** a `{from,to}`
+pair — 26 events install-wide (15 translate, 6 rotate, 5 scale); the reader front-end emits
+no delta channels at all. A `{from,to}`-shaped parser reads every one as (null, null), i.e.
+the relative form is currently dead in CSVM (tracked in `backlog.md`).
 
 ### `IF`/`ELSEIF` conditions are all evaluable
 
@@ -327,6 +343,16 @@ the builder skipped cannot make an effect vanish; the fallback is counted and re
 
 **There is no index form.** Animations are referenced by name string everywhere in this data —
 relevant because the four `fire.zrd.json` definitions are called by nothing (see below).
+
+**Placing an effect template means moving its root.** An effect template hosts its puffers on
+its OWN root subtree — `small_yellow_sparks`' puffer `at_node` is `yellow_spark_01`,
+`call_crash_trails`' are `fly_trail1..5` — so re-scoping the callee's name resolution to the
+call target is not enough: the template's root node must be relocated to the call site, or the
+effect emits at the template's authored gamez origin. `AT_NODE`'s `position` is an offset in the
+target node's frame, added to the site (world position is what matters — the puffers key off the
+host origin). The original instantiates by *copying* the template mesh; a consumer that relocates
+the single shared template instead must expect overlapping same-template calls to collapse onto
+the last site.
 
 ## Fire: templates, flipbooks, and a trigger that lives in the exe
 
@@ -795,6 +821,13 @@ are not visible from the byte format alone, each measured against this install.
   somewhere wrong. A def's `objects`/`nodes` arrays are therefore its **symbol table**: resolve
   the event's name through them to get the exact index. Reader-sourced defs have no such table
   and keep the wildcard name matching (`ftank0*`, `s_build**`, `air_gen#`).
+  ⚠ **Counter-example: the generic plane defs' indices are non-portable.** The compiled
+  `player_crash_dirt` call closure references `piece1..4` at node indices 7703–7706 — out of
+  range for the shipping planes gamez, because the def is generic across all 11 aircraft and no
+  single plane's index space can satisfy it. The 136,048-reference verification above covers the
+  world-scope `cam_anim`/`mis_anim` defs; a consumer binding plane-scope defs must resolve by
+  NAME (and note a plane subtree staged into a world scene mixes two index spaces that collide —
+  world index 400 and plane index 400 are different nodes).
 - **Event scheduling** (inferred from the data, not stated by the format): each event's optional
   `start` is `{offset, time}` with `offset` ∈ `Animation` (since the animation started) /
   `Sequence` (since this sequence started) / `Event` (since the **previous event completed**);
@@ -804,6 +837,14 @@ are not visible from the byte format alone, each measured against this install.
   completes" turns that into the surveyed ~327 s track loop instead of a zero-length infinite
   loop. A definition's sequences run **concurrently** — the train drives its four cars from four
   sibling `Initial` sequences, each with its own script and its own loop.
+  A present `start` gates **the event it is attached to**, not its successor — including the first
+  event of a sequence, and including control-flow events (`LOOP`/`IF`), which take no run time and
+  therefore do not advance the "previous event completed" base. The discriminating case is C1's
+  bowl sign (`bowl`, gamez 4868, def `on_off`): nine strict on/off SWAP pairs where only the first
+  event of each pair carries a timestamp — gating the *successor* instead shifts every sequence in
+  the install by one slot (timestamped events fire a slot early, their unstamped partners a slot
+  late, the sign spends 38% of frames blank), and a loop back-jump that resets the gate to zero
+  discards the trailing `Loop {Event 1.2}`'s inter-cycle pause.
 - **`LOOP` has two spellings of "infinite": `-1` and `0`** (decoded 2026-07-22). `-1` is the
   common one; `0` is *not* "run zero more times". Across the compiled `cam_anim`/`mis_anim` of the
   whole install the count distribution is **`-1` × 2,919, `0` × 26, positive N × 530**, and all 26
@@ -829,9 +870,13 @@ are not visible from the byte format alone, each measured against this install.
   full parameter set inline, so no reader lookup is needed — cross-checked field-for-field
   against `train.json`'s own `steampuffer` (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE
   0.8–1.5, LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour
-  ramp: all identical). Three shape facts: the emission interval is **always** in
+  ramp: all identical). Four shape facts: the emission interval is **always** in
   `interval_garbage.interval_value` (`interval` itself is null in all 4,387 PUFFER_STATE events
-  of this install); `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose
+  of this install); the number in `interval_garbage.interval_value` is **seconds** for a Time
+  emitter but **meters** for an `interval_type: "Distance"` trail (the crash-debris
+  `spurtpuffer`s), and its flag shape is inverted — `has_interval_value` is **false** even when
+  `interval_value` holds the real distance, so key off `interval_type`, never the flag;
+  `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose
   **second entry's max** is the reader's scalar (matches 172 of 177 puffers whose name resolves
   to a single reader definition); and an event whose `textures` array is **empty** is an
   adjust/stop stub referencing a puffer another event defines — the readers have the same idiom
