@@ -4722,3 +4722,66 @@ though `healthy`/`destroyed` retarget fine by name. The piece launch is the same
 `flydirt` already proves; Layer 2's real `PlaneBuilder.BuildDestroyed` geometry must carry the matching
 indices (or `Targets` needs the fallback). `CrashChoreography.cs`/`CrashBreakup.cs` stay as the working
 fallback until Layer 2 is verified end-to-end.
+
+## 2026-07-23 — Data-driven crash Layer 2 (Waves 2–3): the flight crash plays its def (`--data-crash`)
+
+**PLAN-data-driven-crash Waves 2–3** landed, behind **`--data-crash`** (default off — the bespoke
+`CrashChoreography`/`CrashBreakup`/`CrashEffect` trio stays the verified fallback and the A/B reference).
+With the flag, `FlightController.Crash` PLAYS the compiled `player_crash_dirt` def on a **per-player
+scoped crash `AnimRuntime`** (`PlaneViewer.BuildFlightCrashRuntime`): the def hides the airframe, shows
+the `destroyed` wreck, launches the `pieceN` ballistics, and fires every authored effect (sparks, the
+fireball cluster, the black smokeball, the dirt burst, the five burning-debris arcs) — all from the
+extracted data through the Layer 1 `MotionRuntime`/`OpacityFade` handlers + the puffer machinery, the
+same runtime M3 weapon-kills will reuse.
+
+**Five new AnimRuntime capabilities, all additive + default-off (ambient census byte-identical):**
+- **`NameResolveFallback`** — resolve every node ref by NAME and do NOT populate `_byIndex` at all. Two
+  reasons, both measured: the crash def's ptrs are non-portable (`piece1..4` at planes.zbd indices
+  7703–7706, OUT OF RANGE for the planes gamez — the def is generic across all 11 planes), and the
+  scoped subtree MIXES two gamez index spaces that COLLIDE (fly_trail1 = world-index 400, the plane has
+  a node at plane-index 400), so a shared index would misresolve an effect onto a plane part.
+- **`AnimProgram.Subset(rootAnimName)`** — bind only the transitive CALL_ANIMATION closure (11 defs),
+  not the 800+ world program whose ~150 generic-named defs (`healthy`/`destroyed`/lights) would anchor
+  onto the plane's parts and run their reset states on the aircraft.
+- **`Play(..., applyReset:false)`** — the crash TRIGGER must NOT re-apply RESET_STATE: the crash def's
+  reset calls `player_destruction_reset` → `plane_reset`, which RESTORES the healthy panels (the
+  opposite of a crash). Reset runs at bind and on respawn only.
+- **`ResetToBaseState`** — the respawn: tear down every live instance + re-apply every anchored reset;
+  the caller re-homes the flung wreck pieces (`CrashRestPoses`), which no reset event re-poses.
+- **`InheritedWorldVelocity`** — a world-space momentum added to every ballistic launch (transformed
+  into the launched node's parent frame), so the wreck pieces carry `WreckMomentum` (0.4) of the impact
+  velocity and scatter along travel (the authored launch is a 5–10 m/s pop; the plane hit at 60–90 m/s).
+
+**Two traps the build cost time on, both now documented.** (1) Bind AFTER the controller is in the tree
+or the reset states read invalid global transforms (`is_inside_tree` spam). (2) **⚠ The crash puffers
+must parent at WORLD level (`_worldRoot`), not under the per-player controller subtree** — a PUFFER_STATE
+emitter goes `TopLevel` (world-space) when it emits, and under the controller it was drawn-but-unrendered:
+every particle correctly positioned, `IsVisibleInTree` true, the multimesh drawing 462 instances, and
+nothing on screen. World-level parenting (like the ambient runtime's own `PufferFactory`) renders it.
+A/B against the nearest known-good path (the ambient waterfall splash, same `SustainAt`) is what proved
+the mechanism sound and pointed at the parent — recorded in `docs/verification.md` §4.
+
+**Two playtest TUNE calls (user, mid-session).** `forward_rotation.Time.initial` is a TOTAL angle over
+run_time (crash pieces carry 5π/4.44π — clean π multiples), NOT a rate: read as a rate the pieces spin
+~15 rad/s ("spins like crazy"); ÷ run_time gives 2.5 tumbles. And the momentum inheritance above, which
+fixed "the pieces break apart but only drift slightly."
+
+**Verified:** a forward-dive crash into C1 renders the fireball + sparks + smokeball + the tumbling
+wreck + momentum-scattered pieces + burning-debris arcs; `--debug-anim` confirms the pieces launch, the
+debris arcs fling outward, and the 9 emitters spawn 460+ live particles. Default (bespoke) flight and
+`--anim-lab --play-anim=player_crash_dirt` unregressed; 8-chapter ambient census byte-identical to the
+Wave 1 baseline (C1/C3/C5 spot-checked). Build clean.
+
+**Two respawn regressions fixed same session (user-reported):** (a) pressing R left "just a
+propeller" — the crash def hides `healthy`/`markers` per-node, and `PlaneModel.Visible=true` only
+re-shows the root while the RESET_STATE restores `dontmove` alone (the original respawns a FRESH
+plane); fixed by capturing the plane model's built visibility (`CrashPlaneVisibility`) and restoring
+it on respawn. (b) The fire kept burning after respawn — `ResetToBaseState` tore down only *live*
+instances, but `large_10sec_fire`'s instance ends while its 10 s puffer keeps emitting; rewritten to
+hard-`Clear`+`QueueFree` the whole puffer/motion/light/sound pool (safe because the runtime is scoped
+to one crash). Verified: a crash→auto-respawn cycle restores the whole airframe with no lingering fire,
+and the next crash still spawns its 9 emitters.
+
+**Wave 4 owed:** flip `--data-crash` to the default, delete the bespoke trio, scope the texture archive
+to the session lifetime (the flag keeps it open past the build scope today), and close
+`PLAN-M2-polish-4` item 8 — after the user's A/B playtest across planes/chapters.

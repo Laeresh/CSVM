@@ -450,6 +450,10 @@ public sealed partial class Puffer : Node3D
         Visible = false;
     }
 
+    /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
+    /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
+    public int LiveCount => _liveCount;
+
     /// <summary>Fire one burst at a fixed world position (decoupled from any moving parent).</summary>
     public void Burst(Vector3 worldPosition)
     {

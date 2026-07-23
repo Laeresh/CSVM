@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Effects;
+using CSVM.Mech3;
 using Godot;
 
 namespace CSVM.Flight;
@@ -87,6 +88,34 @@ public partial class FlightController : Node3D
     /// above the primary fireball + wreck fire. Fired at the impact, advanced through the
     /// crash freeze, cleared on respawn. Optional.</summary>
     public CrashChoreography? Choreography;
+
+    /// <summary>The DATA-DRIVEN crash (PLAN-data-driven-crash Layer 2, <c>--data-crash</c>): a
+    /// per-player <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane
+    /// model's <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that
+    /// PLAYS the compiled <c>player_crash_dirt</c> definition on a crash — replacing the bespoke
+    /// <see cref="CrashEffect"/>/<see cref="Breakup"/>/<see cref="Choreography"/> trio. It advances
+    /// itself (its own <c>_Process</c>). Null unless <c>--data-crash</c> is set, in which case the
+    /// bespoke trio is not built. Set by <c>PlaneViewer</c>.</summary>
+    public AnimRuntime? CrashRuntime;
+
+    /// <summary>The node the crash definition anchors to (its <c>player</c> anim-root) — passed to
+    /// <see cref="AnimRuntime.Play"/> on a crash. Set alongside <see cref="CrashRuntime"/>.</summary>
+    public Node3D? CrashAnchor;
+
+    /// <summary>The rest pose of every node the crash def flings (the <c>destroyed</c> wreck's
+    /// pieceN meshes), captured before the first crash so <see cref="Respawn"/> can re-home them —
+    /// a RESET_STATE re-poses only nodes it names, and the pieces have no reset event. Set
+    /// alongside <see cref="CrashRuntime"/>.</summary>
+    public IReadOnlyList<(Node3D Node, Transform3D RestPose)>? CrashRestPoses;
+
+    /// <summary>The BUILT visibility of every node in the plane model, captured before the first
+    /// crash so <see cref="Respawn"/> can undo what the crash def hid. The def deactivates
+    /// <c>healthy</c>/<c>dontmove</c>/<c>markers</c> (each node's own <c>Visible</c>), and its
+    /// RESET_STATE only restores <c>dontmove</c> — so <c>PlaneModel.Visible=true</c> alone re-shows
+    /// the root while the airframe stays hidden (the original respawns a fresh plane; we reuse this
+    /// one). Restoring this snapshot puts every part back to its built state (and keeps the
+    /// built-hidden torn panels / wingtip flares hidden). Set alongside <see cref="CrashRuntime"/>.</summary>
+    public IReadOnlyList<(Node3D Node, bool Visible)>? CrashPlaneVisibility;
 
     /// <summary>The stunt run (M2.5 item 1), when flying --stunt: danger-zone sphere
     /// detection, tested against the plane each physics frame. Deliberately NOT reset on
@@ -186,6 +215,7 @@ public partial class FlightController : Node3D
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
     private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
+    private const float WreckMomentum = 0.4f;    // TUNE: fraction of impact velocity the --data-crash wreck pieces inherit
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
     private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
@@ -269,6 +299,25 @@ public partial class FlightController : Node3D
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         Breakup?.Reset();    // wreck pieces hidden, burn out
         Choreography?.Reset(); // sparks/fireball-cluster/smokeball cleared
+        if (CrashRuntime != null)
+        {
+            // data-driven crash (Layer 2): hard-stop the played def (instances, motions, the fire +
+            // every other puffer), re-hide the wreck + effect templates (their RESET_STATE), re-home
+            // the flung pieces (no reset event re-poses them), and restore the plane model's built
+            // visibility — the def hid healthy/markers and only the RESET_STATE's dontmove comes back,
+            // so without this respawn leaves just the propeller.
+            CrashRuntime.ResetToBaseState();
+            if (CrashRestPoses != null)
+                foreach (var (node, rest) in CrashRestPoses)
+                {
+                    node.Transform = rest;
+                }
+            if (CrashPlaneVisibility != null)
+                foreach (var (node, vis) in CrashPlaneVisibility)
+                {
+                    node.Visible = vis;
+                }
+        }
         _damageCooldown = 0f;
         _damageFlash = 0f;
         if (PlaneModel != null)
@@ -319,14 +368,31 @@ public partial class FlightController : Node3D
         Audio?.OnCrash();
         if (surface == CrashChoreography.Surface.Ground)
             Audio?.OnGroundExplosion(); // snd_exp_ground_a, over the plane explosion (item 8)
-        CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
-        // the wreck: destroyed-subtree pieces scatter with the impact velocity and
-        // the fire/smoke burn at the impact point (item 10d)
-        var crashPose = PlaneModel?.GlobalTransform ?? GlobalTransform;
-        Breakup?.Begin(crashPose, impact, _model.VelocityDir * _model.Speed);
-        // the authored crash effects (item 8): sparks, the delayed fireball cluster, the black
-        // smokeball, and the five burning debris arcs (call_crash_trails), for the surface hit
-        Choreography?.Begin(crashPose, impact, surface);
+        if (CrashRuntime != null)
+        {
+            // Data-driven crash (Layer 2, --data-crash): PLAY the compiled def on this plane's
+            // scoped crash runtime. The def hides healthy/dontmove/markers, shows the destroyed
+            // wreck, launches the pieceN ballistics, and fires every authored effect (sparks, the
+            // fireball cluster, the black smokeball, the dirt burst, the burning-debris arcs) —
+            // replacing the bespoke fireball/breakup/choreography below. Audio stays the same path
+            // (the def's SOUND events are not runtime-driven, so nothing double-plays).
+            // The wreck pieces inherit a fraction of the plane's impact velocity so they scatter
+            // along its travel rather than just popping up (the authored launch is a small relative
+            // pop); TUNE the fraction against the original.
+            CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
+            CrashRuntime.Play("player_crash_dirt", CrashAnchor, applyReset: false);
+        }
+        else
+        {
+            CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
+            // the wreck: destroyed-subtree pieces scatter with the impact velocity and
+            // the fire/smoke burn at the impact point (item 10d)
+            var crashPose = PlaneModel?.GlobalTransform ?? GlobalTransform;
+            Breakup?.Begin(crashPose, impact, _model.VelocityDir * _model.Speed);
+            // the authored crash effects (item 8): sparks, the delayed fireball cluster, the black
+            // smokeball, and the five burning debris arcs (call_crash_trails), for the surface hit
+            Choreography?.Begin(crashPose, impact, surface);
+        }
         GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");

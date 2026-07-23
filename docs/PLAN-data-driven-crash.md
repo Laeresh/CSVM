@@ -241,6 +241,49 @@ hand-code) after the data-driven path reproduces slices 1–2 at least as well. 
   the opacity risk here (dust fade visible or fall back).
 - **Wave 4 — retire the bespoke code**, update docs, close item 8.
 
+### ✅ Waves 2–3 LANDED 2026-07-23 (behind `--data-crash`, default off)
+
+The flight crash now plays `player_crash_dirt` on a **per-player scoped crash `AnimRuntime`**
+(`PlaneViewer.BuildFlightCrashRuntime`, `FlightController.CrashRuntime`). What it took beyond the
+plan's sketch — each a trap worth keeping:
+
+- **The def's node ptrs are non-portable.** `player_crash_dirt` references `piece1..4` at planes.zbd
+  indices (7703–7706) that are *out of range* for the planes gamez (piece1 lives at 203–3274, one per
+  plane) — the def is generic across all 11 planes, resolved by NAME at runtime. So the crash runtime
+  sets **`NameResolveFallback`** (`AnimRuntime`): it does not populate `_byIndex` at all and resolves
+  every reference by name, which is also mandatory because its scoped subtree MIXES two gamez index
+  spaces (the plane model's plane-indices and the effect templates' world-indices) that COLLIDE
+  (fly_trail1 = world-index 400, and the plane has a node at plane-index 400).
+- **Bind a `Subset`, not the world program.** The world program's 800+ defs include ~150 generic-named
+  ones (`healthy`/`destroyed`/light names) that mis-anchor onto the plane's parts and run their reset
+  states on the aircraft. `AnimProgram.Subset("player_crash_dirt")` binds only the transitive
+  CALL_ANIMATION closure (11 defs).
+- **Trigger with `applyReset:false`.** `Play` normally re-applies RESET_STATE first (the startanim/lab
+  path), but the crash def's reset calls `player_destruction_reset` → `plane_reset` (RESTORES the healthy
+  panels) — the opposite of a crash. The reset runs at bind and on respawn (`ResetToBaseState`), not on
+  the trigger.
+- **Bind after the controller is in the tree**, or the reset states read invalid global transforms
+  (`is_inside_tree` errors).
+- **⚠ Puffers must parent at WORLD level, not under the controller.** A PUFFER_STATE emitter goes
+  `TopLevel` when it emits; parented under the per-player controller subtree it was drawn-but-unrendered
+  (particles correctly positioned, `IsVisibleInTree` true, nothing on screen). `PufferParent = _worldRoot`
+  (like the world runtime) fixes it. This cost the most to find — see `docs/verification.md`.
+- **TUNE, playtest-driven (user, 2026-07-23):** `forward_rotation.Time.initial` is a TOTAL angle over
+  run_time (the crash pieces carry 5π/4.44π — clean π multiples), **not a rate** — read as a rate they
+  spin ~15 rad/s ("spins like crazy"); ÷ run_time gives 2.5 tumbles. And the pieces inherit
+  `WreckMomentum` (0.4) of the impact velocity (`InheritedWorldVelocity`) so they scatter along travel
+  instead of popping straight up.
+
+**Verified:** forward-dive crash into C1 renders the fireball + sparks + smokeball + the tumbling wreck
++ momentum-scattered pieces + burning-debris arcs (`--debug-anim` confirms the pieces launch and the
+9 emitters spawn 460+ live particles); default (bespoke) flight and `--anim-lab` unregressed; 8-chapter
+ambient census byte-identical to the Wave 1 baseline (all crash-runtime capabilities default off).
+
+**Wave 4 still owed:** flip `--data-crash` to the default, delete `CrashChoreography.cs`/`CrashBreakup.cs`
++ the `CrashEffect`/`Choreography`/`Breakup` fields, scope the texture archive to the session lifetime
+(the `--data-crash` path leaks it today — a build-scope `using`), and close `PLAN-M2-polish-4` item 8 —
+after the user's A/B playtest across planes/chapters signs off on the data-driven crash.
+
 ---
 
 ## Verification

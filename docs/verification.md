@@ -335,6 +335,19 @@ rotation ~57× too small and nothing visibly turned, while the system ran the wh
 
 The measuring tool has been the bug more often than is comfortable:
 
+- **`IsVisibleInTree() == true` is necessary but NOT sufficient for "it renders."** The data-driven
+  crash (`--data-crash`, 2026-07-23) built its effect puffers, positioned every particle at the crash
+  site, reported `IsVisibleInTree` true, and had the multimesh *drawing* them (`VisibleInstanceCount`
+  = 462) — and nothing appeared on screen. Every visibility/position/emission instrument I added
+  agreed the effect was live; the screenshot was the only one that disagreed, and it was right. The
+  cause was **parenting**: a PUFFER_STATE emitter goes `TopLevel` (world-space) the moment it emits,
+  and parented under the per-player controller subtree it drew nothing; parented at world level
+  (`_worldRoot`, like the ambient world's own puffers) it rendered. **A/B the ONE thing that differs
+  from a known-good path** — the ambient waterfall splash (same `SustainAt` code, far from origin)
+  rendered fine, which is what proved the mechanism sound and pointed at the parent. When "every
+  metric says it works" but the picture is blank, the metric you have not built yet is the one that
+  matters — and the fastest cut is to diff against the nearest thing that DOES render.
+
 - **A census printed once at startup cannot tell "never requested" from "requested later and
   failed."** The `anim: N ambient sound emitter(s): …` line is emitted inside `Bootstrap`, so it
   is a snapshot, not a running total. C1's police siren *is* dispatched, *is* found, and *does*

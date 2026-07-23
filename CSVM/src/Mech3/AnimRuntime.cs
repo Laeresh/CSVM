@@ -291,7 +291,8 @@ public sealed partial class AnimRuntime : Node
     /// re-applied first. Returns the (def, anchor) pairs started — empty when the name matches no
     /// definition in this program. This is the animation debugger's <c>--play-anim</c> path; its
     /// Restart is <see cref="Stop"/> → <see cref="Reseed"/> → Play.</summary>
-    public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName, Node3D? fallbackAnchor = null)
+    public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName, Node3D? fallbackAnchor = null,
+        bool applyReset = true)
     {
         var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
         foreach (var def in _program.ByAnimName(animName))
@@ -306,7 +307,12 @@ public sealed partial class AnimRuntime : Node
             }
             foreach (var anchor in anchors)
             {
-                if (def.ResetState != null)
+                // The debugger re-poses the RESET_STATE before replaying (a startanim-style start).
+                // The crash TRIGGER must not: player_crash_dirt's reset calls player_destruction_reset
+                // (restores the healthy panels) and hides the wreck — the exact opposite of a crash —
+                // and it already ran at bind and re-runs on respawn (ResetToBaseState). So the crash
+                // passes applyReset:false and only the destruction sequences fire.
+                if (applyReset && def.ResetState != null)
                 {
                     ApplyInstant(def.ResetState.Events, def, anchor);
                 }
@@ -392,6 +398,49 @@ public sealed partial class AnimRuntime : Node
                  + $"{_motions.Count} live motion(s)");
     }
 
+    /// <summary>Hard-stops EVERYTHING this runtime created and re-applies every anchored
+    /// definition's RESET_STATE — the per-player crash runtime's respawn. After a crash the wreck is
+    /// shown, the pieces flung and the fire burning; this puts the def back to its quiet base
+    /// (destroyed hidden, effect templates hidden) so the next crash starts clean, and the caller
+    /// re-homes any node the def MOVED but has no reset event for (the flung wreck pieces).
+    ///
+    /// <para>Clears the whole RESOURCE POOL, not just live instances: an effect def whose sequence
+    /// has already ended (e.g. <c>large_10sec_fire</c>, whose 10 s particles outlive its instance)
+    /// is gone from <c>_instances</c> yet its puffer is still emitting, so a per-instance teardown
+    /// would leave the fire burning after respawn. And puffers are <c>Clear</c>ed (particles gone at
+    /// once), not <c>SustainEnd</c>ed (which lets them finish their lifetimes) — respawn is
+    /// immediate. Safe to wipe the whole pool because this runtime is scoped to one plane's crash;
+    /// the shared world runtime never calls this.</para></summary>
+    public void ResetToBaseState()
+    {
+        _instances.Clear();
+        _motions.Clear();
+        foreach (var entry in _puffers.Values)
+        {
+            entry.Puffer.SustainEnd();
+            entry.Puffer.Clear();     // drop live particles NOW; respawn must not leave fire burning
+            entry.Puffer.QueueFree(); // the next crash builds fresh emitters — do not accumulate
+        }
+        _puffers.Clear();
+        _activePuffers.Clear();
+        _lights.Clear();
+        if (Sounds != null)
+        {
+            foreach (var handle in _soundEmitters.Values)
+                Sounds.SetActive(handle, false);
+        }
+        _soundEmitters.Clear();
+
+        foreach (var def in _program.Defs)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var anchor in Anchors(def))
+                if (anchor != null)
+                    ApplyInstant(def.ResetState.Events, def, anchor);
+        }
+    }
+
     private readonly Dictionary<int, Node3D> _byIndex = new();
 
     private void IndexWorld(Node3D worldRoot)
@@ -400,7 +449,10 @@ public sealed partial class AnimRuntime : Node
         {
             var srcName = n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
             _index.Add((n, srcName));
-            if (n.HasMeta(IndexMeta))
+            // The scoped crash runtime resolves purely by name (see NameResolveFallback): it mixes
+            // two gamez index spaces that collide, so a shared _byIndex would misresolve. Leaving it
+            // empty makes every index lookup miss and fall through to the unique name.
+            if (!NameResolveFallback && n.HasMeta(IndexMeta))
                 _byIndex.TryAdd((int)n.GetMeta(IndexMeta), n);
             foreach (var child in n.GetChildren())
                 if (child is Node3D c)
@@ -478,6 +530,28 @@ public sealed partial class AnimRuntime : Node
     /// (and, later, the crash runtime) turn it on so a placeless effect template plays where it is
     /// staged instead of at its gamez origin.</summary>
     public bool PlaceCalledTemplates;
+
+    /// <summary>Makes this runtime resolve every node reference by NAME, ignoring the compiled
+    /// gamez-index table (<see cref="_byIndex"/> is not populated — see <see cref="IndexWorld"/>).
+    /// Off by default: the shared world MUST use the index, because name matching resolves C1's
+    /// <c>caboose</c> to the real consist AND an unrelated <c>caboose.flt</c>. The per-player crash
+    /// runtime turns it on for two reasons that both make the index wrong there: (1) the player
+    /// crash def's node ptrs are non-portable — they index planes.zbd at slots this build never uses
+    /// — so the compiled index resolves nothing; and (2) its scoped subtree MIXES two gamez index
+    /// spaces (the plane model's plane-gamez indices and the effect templates' world-gamez indices),
+    /// which COLLIDE (fly_trail1 is world-index 400, and the plane has a node at plane-index 400),
+    /// so a shared <c>_byIndex</c> would misresolve. Its subtree has one node per name, so name
+    /// resolution is both unambiguous and the only correct choice.</summary>
+    public bool NameResolveFallback;
+
+    /// <summary>A world-space velocity added to every ballistic <see cref="MotionRuntime"/> launch
+    /// (translation / translation_range), transformed into the launched node's parent frame. Zero by
+    /// default. The crash sets it to a fraction of the plane's impact velocity so the wreck pieces
+    /// carry the plane's momentum and scatter along its travel — the authored launch alone is a small
+    /// relative pop (5–10 m/s straight up), which reads as "the pieces barely drift" against a plane
+    /// that hit at 60–90 m/s. It is the physical part the def leaves to the engine (the original does
+    /// the same); a TUNE on the fraction, not a decode.</summary>
+    public Vector3 InheritedWorldVelocity;
 
     public override void _Process(double delta)
     {
@@ -1665,6 +1739,13 @@ public sealed partial class AnimRuntime : Node
         if (_debugClock < 1f)
             return;
         _debugClock = 0f;
+        if (_activePuffers.Count > 0)
+        {
+            int live = 0;
+            foreach (var a in _activePuffers)
+                live += a.Puffer.LiveCount;
+            GD.Print($"anim/debug: {_activePuffers.Count} active puffer(s), {live} live particle(s)");
+        }
         if (_motions.Count == 0)
         {
             GD.Print("anim/debug: no live motions");
@@ -2089,6 +2170,17 @@ public sealed partial class AnimRuntime : Node
 
             float gravity = data.Obj("gravity")?.Num("value") ?? 0f;
 
+            // The plane's momentum (world-space), carried by the launched pieces so they scatter
+            // along its travel instead of just popping up in place. Converted into the node's parent
+            // frame, where the launch velocity lives (v0 drives Target.Transform, a local pose).
+            Vector3 InheritedLocal()
+            {
+                if (rt.InheritedWorldVelocity == Vector3.Zero)
+                    return Vector3.Zero;
+                var parentBasis = (target.GetParent() as Node3D)?.GlobalTransform.Basis ?? Basis.Identity;
+                return parentBasis.Inverse() * rt.InheritedWorldVelocity;
+            }
+
             if (data.Obj("translation") is { } tr)
             {
                 var v0 = tr.Vec3("initial");
@@ -2097,7 +2189,7 @@ public sealed partial class AnimRuntime : Node
                 var delta = tr.Vec3("delta");
                 // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
                 var rampAccel = rtSafe > 0f ? delta / rtSafe : Vector3.Zero;
-                m._v0 = v0;
+                m._v0 = v0 + InheritedLocal();
                 m._accel = rampAccel + new Vector3(0f, gravity, 0f);
                 m._hasBallistic = true;
             }
@@ -2109,7 +2201,8 @@ public sealed partial class AnimRuntime : Node
                               / Mathf.Max(rtSafe, 0.1f)
                               - 0.5f * gravity * rtSafe; // gravity < 0 → the second term adds launch speed
                 float azimuth = Rand(0f, Mathf.Tau);
-                m._v0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz);
+                m._v0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz)
+                        + InheritedLocal();
                 m._accel = new Vector3(0f, gravity, 0f);
                 m._hasBallistic = true;
             }
@@ -2121,7 +2214,12 @@ public sealed partial class AnimRuntime : Node
                 m._hasScale = m._scaleInit.LengthSquared() > 1e-9f;
             }
 
-            m._tumbleRate = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
+            // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
+            // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
+            // π), which read as a rate spin at ~15 rad/s (900°/s) — "spins like crazy" (user playtest
+            // 2026-07-23). ÷ run_time gives 5π over 6 s = 2.5 tumbles, the reference debris tumble.
+            float fwdTotal = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
+            m._tumbleRate = rtSafe > 0f ? fwdTotal / rtSafe : 0f;
             m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
 
             // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
@@ -2490,9 +2588,16 @@ public sealed partial class AnimRuntime : Node
             if (_byIndex.TryGetValue(nodeIndex, out var bound))
                 return new List<Node3D> { bound };
             // The index is valid data but that node was not built (LOD levels the builder
-            // drops, skipped subtrees). Not an error, and not something to name-match around.
-            _opsUnresolved++;
-            return new List<Node3D>();
+            // drops, skipped subtrees). Not an error, and not something to name-match around
+            // in the shared world (C1's `caboose` resolves to the consist AND a `caboose.flt`).
+            // The scoped crash runtime is the exception (see NameResolveFallback): its index has
+            // one node per name and the crash def's ptr is non-portable, so it falls through to
+            // the unique name below.
+            if (!NameResolveFallback)
+            {
+                _opsUnresolved++;
+                return new List<Node3D>();
+            }
         }
 
         var path = new List<string>();

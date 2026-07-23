@@ -308,6 +308,11 @@ public partial class PlaneViewer : Node3D
     private string _texturesPath = "";      // --textures= override value (verbatim when set)
     private bool _gamezOverridden, _texturesOverridden, _zrdrOverridden, _soundsOverridden;
     private bool _mute, _debugCollision;
+    // --data-crash (PLAN-data-driven-crash Layer 2): drive the crash from the compiled
+    // player_crash_dirt def through a per-player crash AnimRuntime, instead of the bespoke
+    // CrashEffect/CrashBreakup/CrashChoreography trio. Off by default (the bespoke path is the
+    // verified fallback) — an A/B toggle until Layer 2 is confirmed and the bespoke code retires.
+    private bool _dataCrash;
     // --no-focus (also implied by --screenshot): set the NoFocus window flag
     // (WS_EX_NOACTIVATE on Windows) so the window doesn't steal foreground focus.
     private bool _noFocus;
@@ -405,6 +410,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--no-focus") _noFocus = true;
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
+            else if (arg == "--data-crash") _dataCrash = true;
             else if (arg.StartsWith("--players=")) { _players = int.Parse(arg["--players=".Length..]); playersExplicit = true; }
             else if (arg.StartsWith("--hold=")) _holdSets = ParseHold(arg["--hold=".Length..]);
             else if (arg.StartsWith("--frames=")) _screenshotFrames = int.Parse(arg["--frames=".Length..]);
@@ -590,7 +596,11 @@ public partial class PlaneViewer : Node3D
             var sw = Stopwatch.StartNew();
             var gamez = GameZ.Load(gamezPath);
             var textures = new TextureArchive(texturesPath);
-            using var texturesScope = _animLab ? null : textures;
+            // --data-crash bakes the crash puffers lazily at crash time (not build time), so the
+            // archive must stay open past the build scope — the same reason --anim-lab keeps it
+            // open. (Wave 4 follow-up when this becomes the default: scope the archive to the
+            // session lifetime so a map reload disposes the previous one instead of leaking it.)
+            using var texturesScope = (_animLab || _dataCrash) ? null : textures;
             labTextures = _animLab ? textures : null;
             // Opened before the world build rather than with the flight audio below, because the
             // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
@@ -610,6 +620,11 @@ public partial class PlaneViewer : Node3D
             // Crash choreography effect params (item 8): read from the world's compiled anim
             // program below, consumed in the sibling --fly block that builds the controllers.
             CrashChoreography.EffectSet? crashEffects = null;
+            // The world's merged anim program + SceneBuilder, captured for the --data-crash path's
+            // per-player crash runtime (Layer 2): the program holds player_crash_dirt + the effect
+            // defs, the scene builds the effect-template roots from the world gamez.
+            AnimProgram? crashProgram = null;
+            SceneBuilder? worldScene = null;
             if (_worldMode)
             {
                 // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
@@ -654,6 +669,8 @@ public partial class PlaneViewer : Node3D
                 // and shared across every player's own emitter instances. Cheap (data only, no
                 // textures), so done here whether or not a plane is being built.
                 crashEffects = CrashChoreography.EffectSet.Load(session.Program, zrdrPath);
+                crashProgram = session.Program;
+                worldScene = session.Builder.Scene;
 
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
@@ -992,7 +1009,7 @@ public partial class PlaneViewer : Node3D
                     // Flight repaints the field on every map load: each player draws their
                     // own random livery (colours + decals) unless --paint pins one.
                     var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
-                        scheme: SchemeFor(pi, zrdrPath, randomByDefault: true, paintRng,
+                        scheme: SchemeFor(pi, zrdrPath, randomByDefault: false, paintRng,
                             PatternsForPlane(planesGamez, planeName)),
                         patterns: Patterns);
                     var planeModel = planeBuilder.Build(planeName);
@@ -1066,19 +1083,23 @@ public partial class PlaneViewer : Node3D
 
                     // Crash fireball: the game's large_fireball (flame_ball.json → fierypuffer),
                     // its flipbook frames from the same texture archive. Built here while the
-                    // archive is open; the FlightController fires it at the impact point.
-                    var pufferState = Effects.PufferState.Load(zrdrPath, "flame_ball.json", "fierypuffer");
-                    if (pufferState != null && Effects.Puffer.Create(pufferState, textures) is { } fireball)
+                    // archive is open; the FlightController fires it at the impact point. In
+                    // --data-crash mode the def's own large_fireball provides this, so skip it.
+                    if (!_dataCrash)
                     {
-                        controller.CrashEffect = fireball;
-                        controller.AddChild(fireball);
-                        if (verbose)
-                            GD.Print($"crash effect: {pufferState.Name} ({pufferState.Number} sprites, " +
-                                     $"{pufferState.TextureSequence.Count} frames)");
-                    }
-                    else
-                    {
-                        GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
+                        var pufferState = Effects.PufferState.Load(zrdrPath, "flame_ball.json", "fierypuffer");
+                        if (pufferState != null && Effects.Puffer.Create(pufferState, textures) is { } fireball)
+                        {
+                            controller.CrashEffect = fireball;
+                            controller.AddChild(fireball);
+                            if (verbose)
+                                GD.Print($"crash effect: {pufferState.Name} ({pufferState.Number} sprites, " +
+                                         $"{pufferState.TextureSequence.Count} frames)");
+                        }
+                        else
+                        {
+                            GD.PushWarning("crash fireball not loaded (flame_ball.json / fire_f textures missing)");
+                        }
                     }
 
                     // Visible damage (item 10c): torn-skin panel flips + the low-HP smoke/fire
@@ -1100,33 +1121,38 @@ public partial class PlaneViewer : Node3D
                                      $"{panelTrails.Count} panel fire trails");
                     }
 
-                    // Crash breakup (item 10d): the plane's destroyed-subtree wreck pieces +
-                    // the player_plane_destruct wreck fire and a rising black-smoke column.
-                    var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
-                    var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
-                    controller.Breakup = CrashBreakup.Create(
-                        planeBuilder.BuildDestroyed(planeName), wreckFire, wreckSmoke);
-                    if (controller.Breakup != null)
+                    // The data-driven crash rig (--data-crash) is built AFTER the controller enters
+                    // the tree (below), so the crash def's reset states read valid global transforms.
+                    if (!_dataCrash)
                     {
-                        controller.AddChild(controller.Breakup.WreckRoot);
-                        if (verbose)
-                            GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
-                                     $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
-                    }
+                        // Crash breakup (item 10d): the plane's destroyed-subtree wreck pieces +
+                        // the player_plane_destruct wreck fire and a rising black-smoke column.
+                        var wreckFire = MakePuffer(zrdrPath, textures, controller, "player_plane_destruct.json", "fire_n_smoke", duration: 10f);
+                        var wreckSmoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "black_smoke");
+                        controller.Breakup = CrashBreakup.Create(
+                            planeBuilder.BuildDestroyed(planeName), wreckFire, wreckSmoke);
+                        if (controller.Breakup != null)
+                        {
+                            controller.AddChild(controller.Breakup.WreckRoot);
+                            if (verbose)
+                                GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
+                                         $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
+                        }
 
-                    // Crash choreography (item 8): the ground variant's spark bursts, delayed
-                    // fireball cluster and black smokeball, on top of the primary fireball + wreck
-                    // fire above. One EffectSet, per-player Puffer instances parented here.
-                    if (crashEffects is { Any: true }
-                        && CrashChoreography.Create(crashEffects, textures) is { } choreo)
-                    {
-                        controller.Choreography = choreo;
-                        foreach (var emitter in choreo.Emitters)
-                            controller.AddChild(emitter);
-                        if (verbose)
-                            GD.Print($"crash choreography: {choreo.SparkCount} spark + " +
-                                     $"{choreo.FireballCount} fireball + {choreo.DebrisCount} debris-arc emitters, " +
-                                     $"smoke={(choreo.HasSmoke ? "on" : "off")}");
+                        // Crash choreography (item 8): the ground variant's spark bursts, delayed
+                        // fireball cluster and black smokeball, on top of the primary fireball + wreck
+                        // fire above. One EffectSet, per-player Puffer instances parented here.
+                        if (crashEffects is { Any: true }
+                            && CrashChoreography.Create(crashEffects, textures) is { } choreo)
+                        {
+                            controller.Choreography = choreo;
+                            foreach (var emitter in choreo.Emitters)
+                                controller.AddChild(emitter);
+                            if (verbose)
+                                GD.Print($"crash choreography: {choreo.SparkCount} spark + " +
+                                         $"{choreo.FireballCount} fireball + {choreo.DebrisCount} debris-arc emitters, " +
+                                         $"smoke={(choreo.HasSmoke ? "on" : "off")}");
+                        }
                     }
 
                     if (sounds != null && soundDefs != null)
@@ -1185,6 +1211,17 @@ public partial class PlaneViewer : Node3D
                     controller.Name = $"player{pi + 1}";
                     rig.Controller = controller;
                     _worldRoot!.AddChild(controller);
+
+                    // Data-driven crash (Layer 2): a per-player crash AnimRuntime that PLAYS
+                    // player_crash_dirt on a crash — the wreck, the pieceN ballistics and every
+                    // authored effect, from the compiled def. Built here, once the controller (and
+                    // its plane model) are in the tree, so the crash def's reset states resolve
+                    // valid global transforms. Replaces the bespoke fireball/breakup/choreography.
+                    if (_dataCrash && crashProgram != null && worldScene != null)
+                    {
+                        BuildFlightCrashRuntime(controller, planeBuilder, planeName, gamez,
+                            worldScene, textures, crashProgram, verbose);
+                    }
                 }
                 // The race's shared results board (item 7): one ranked row per player, over the
                 // WHOLE window rather than inside a pane — the race ends for everybody at once — so
@@ -1762,6 +1799,102 @@ public partial class PlaneViewer : Node3D
             }
         }
         return n;
+    }
+
+    /// <summary>Builds the <c>--data-crash</c> per-player crash runtime (PLAN-data-driven-crash
+    /// Layer 2). Under a <c>player</c> crash root parented to the controller it builds the
+    /// effect-template roots (from the world gamez) and the plane's real <c>destroyed</c> wreck
+    /// subtree, then binds a NON-auto-start <see cref="AnimRuntime"/> to the <b>controller</b> — so
+    /// the crash def resolves <c>healthy</c> (in the plane model), <c>destroyed</c>/<c>pieceN</c>
+    /// (the wreck) and the effect hosts, all scoped to this one plane where every name is unique.
+    /// <see cref="AnimRuntime.NameResolveFallback"/> handles the crash def's non-portable node
+    /// ptrs (they index planes.zbd at slots this build never uses); reset states (run at bind) hide
+    /// the wreck + templates until <see cref="FlightController.Crash"/> plays the def.</summary>
+    private void BuildFlightCrashRuntime(FlightController controller, PlaneBuilder planeBuilder,
+        string planeName, GameZ gamez, SceneBuilder worldScene, TextureArchive textures,
+        AnimProgram crashProgram, bool verbose)
+    {
+        // The crash root: the def's "player" anim-root anchor. Sits in the plane model's frame so
+        // the wreck subtree (built relative to the plane root) lands where the plane is — matching
+        // CrashBreakup's planePose × chain. The effect templates position by AT_NODE global, so the
+        // crash root's own transform is irrelevant to them.
+        var crashRoot = new Node3D { Name = "player" };
+        crashRoot.SetMeta(AnimRuntime.NameMeta, "player");
+        if (controller.PlaneModel != null)
+            crashRoot.Transform = controller.PlaneModel.Transform;
+
+        // Effect-template roots (world gamez nodes WorldBuilder skips) — one instance per player, so
+        // splitscreen crashes do not collide. Hidden by their reset states at bind.
+        int effectRoots = BuildEffectStage(gamez, worldScene, crashRoot);
+
+        // The plane's destroyed wreck (pieceN meshes), built hidden; the crash def shows + flings it.
+        var destroyed = planeBuilder.BuildDestroyed(planeName);
+        var restPoses = new List<(Node3D, Transform3D)>();
+        if (destroyed != null)
+        {
+            destroyed.Visible = false;
+            crashRoot.AddChild(destroyed);
+            // Every wreck node's rest pose, so respawn can re-home the flung pieces (a RESET_STATE
+            // re-poses only what it names, and the pieces have no reset event).
+            CollectRestPoses(destroyed, restPoses);
+        }
+        controller.AddChild(crashRoot);
+
+        // The scoped crash runtime: no ambient start (nothing runs until the crash Plays the def),
+        // puffers baked lazily via the session textures (kept open above), effect templates
+        // relocated onto the call site, and the crash def's non-portable node ptrs resolved by name.
+        // ⚠ PufferParent is the WORLD root, NOT the crash root: a PUFFER_STATE emitter goes TopLevel
+        // (world-space) the moment it emits, and parenting it under the per-player controller subtree
+        // left it drawn-but-unrendered (every particle correctly positioned, IsVisibleInTree true, yet
+        // nothing on screen — measured). Parenting at world level, exactly like the world runtime's
+        // own PufferFactory, renders it. Each crash runtime still makes its own emitter instances at
+        // its own crash site, so splitscreen crashes stay independent.
+        var crashRuntime = new AnimRuntime
+        {
+            AutoStart = false,
+            DebugMotions = _debugAnim,
+            PufferParent = _worldRoot,
+            PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+            PlaceCalledTemplates = true,
+            NameResolveFallback = true,
+        };
+        // Bind only the crash def's transitive CALL_ANIMATION closure (Subset), not the whole world
+        // program: the full 800+ defs include ~150 generic-named world defs that would mis-anchor
+        // onto this plane's parts and run their reset states on the aircraft.
+        crashRuntime.Bind(controller, crashProgram.Subset("player_crash_dirt"));
+        controller.AddChild(crashRuntime);
+        controller.CrashRuntime = crashRuntime;
+        controller.CrashAnchor = crashRoot;
+        controller.CrashRestPoses = restPoses;
+        // The plane model's built visibility, so respawn can undo the crash def's healthy/markers
+        // hides (its RESET_STATE only restores dontmove). Captured pristine, before any crash.
+        var planeVis = new List<(Node3D, bool)>();
+        if (controller.PlaneModel != null)
+            CollectVisibility(controller.PlaneModel, planeVis);
+        controller.CrashPlaneVisibility = planeVis;
+        if (verbose)
+            GD.Print($"data-crash: {effectRoots} effect template(s) + {restPoses.Count} wreck node(s) — "
+                     + "crash runtime bound (scoped, no auto-start)");
+    }
+
+    private static void CollectRestPoses(Node3D node, List<(Node3D, Transform3D)> into)
+    {
+        into.Add((node, node.Transform));
+        foreach (var child in node.GetChildren())
+            if (child is Node3D c)
+            {
+                CollectRestPoses(c, into);
+            }
+    }
+
+    private static void CollectVisibility(Node3D node, List<(Node3D, bool)> into)
+    {
+        into.Add((node, node.Visible));
+        foreach (var child in node.GetChildren())
+            if (child is Node3D c)
+            {
+                CollectVisibility(c, into);
+            }
     }
 
     /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
