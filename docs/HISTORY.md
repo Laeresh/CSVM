@@ -4357,3 +4357,30 @@ is **byte-identical** HEAD-vs-after after normalising out run-to-run timing (cov
 `MissionZrdr` + `ChapterZrdr`); the 14-line census is non-empty, so "identical" is a real match, not two
 empty files. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **A3 (`WorldSession`) is the
 last Wave 1 slice before the runtime work (Wave 2).**
+
+**Animation debugger Wave 1 A3 — world+anim build to `src/Mech3/WorldSession.cs` (2026-07-23):**
+the third and last slice of the `PlaneViewer` split, and the biggest. The whole world-mode build —
+`WorldBuilder` → texture cycler → clutter → mission setup → `AnimProgram.Load` → the `AnimRuntime`
+collaborator wiring (`PufferFactory`/`Lights`/`Sounds`/`PlayerPosition`) → `Bind` → sound prewarm —
+moved **verbatim** out of `PlaneViewer.StartSession`'s `if (_worldMode)` branch into a `WorldSession`
+class in `Mech3`, so `--anim-lab` will build the same world+runtime a flight/viewer session does.
+`WorldSession.Build(Options, gamez, textures, sounds, soundDefs)` returns `Root` (the viewer's
+`_plane`), `Runtime`, `Program`, `Builder`, `Clutter`, `CloudDeck`, and `Lights`. **Three seams were
+kept faithful:** (1) it stops *before* the per-view steps (unplaced-entity watch, edge extender,
+per-rig horizon + weather), which stay in `PlaneViewer` and read the returned `Builder`, and it does
+**not** add `Root` to the tree — the caller's `_worldRoot.AddChild(_plane)` still owns that, with the
+effect siblings (world sounds + puffers) parented to `Options.EffectsParent` = `_worldRoot`, siblings
+of `Root`, exactly as before; (2) the disposal-lifetime contract is preserved — `textures`/`sounds`
+are the caller's `using` locals, so after the bootstrap it nulls `PufferFactory`/sound `Loader` and
+prewarms first, *unless* `Options.KeepArchivesOpen` (the lab's opt-out, wired now, first used in Wave
+3); (3) crash-effect loading (item 8) was **left in `PlaneViewer`**, reading `session.Program`, so no
+`Mech3→Flight` dependency enters the class. No external effect. **Verified inert with able-to-fail
+instruments (rule 5), on two very different chapters:** the static plane-viewer md5 is unchanged
+(`f1290254…`, proving the else-branch is untouched), and the full `--fly` world boot census —
+gamez-node/mesh/collider counts plus the entire anim def/instance/motion/puffer/light/condition
+census — is **byte-identical** HEAD-vs-after for both **C1** (the 814-def, 7064-node airfield with
+clutter/sounds/puffers, 17-line census) and **C5** (the 11 438-node, 4253-collider city, 15-line
+census) after normalising run-to-run timing; both censuses are many non-empty lines, so "identical"
+is a real match. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **Wave 1 (the
+`PlaneViewer` split A1-A3) is complete; Wave 2 (the additive `AnimRuntime` capabilities — manual
+`Advance`, `AutoStart`, seedable RNG, dispatch hooks, `Stop` cleanup) is next.**

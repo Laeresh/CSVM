@@ -559,143 +559,43 @@ public partial class PlaneViewer : Node3D
             CrashChoreography.EffectSet? crashEffects = null;
             if (_worldMode)
             {
-                // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw):
-                // which of the chapter's entities this mission shows, and which of its surfaces
-                // animate their UVs. Loaded before the build because the scroll rates are part of
-                // the material cache key (see MissionSetup.ScrollByModel); the entity half is
-                // applied afterwards, as the animation runtime's bootstrap pass 0.
-                var missionSetup = MissionSetup.Load(interpPath, _chapter, _mission);
-                if (missionSetup == null)
-                    GD.Print($"mission setup: no script for {_chapter}/{_mission} ({interpPath})");
-                var builder = new WorldBuilder(gamez, textures, collision: _fly,
-                    scrollOverrides: missionSetup?.ScrollByModel(gamez));
-                _plane = builder.Build("world1"); // every chapter has exactly one world node
-                // The original's material texture flipbooks (animated water/surf/wake/splash and
-                // the walking crowd). Parented to the world so a session teardown takes it too.
-                if (builder.Cycler.Count > 0)
-                {
-                    builder.Cycler.Debug = _debugAnim;
-                    _plane.AddChild(builder.Cycler);
-                    GD.Print($"texture cycles: {builder.Cycler.Count} animated material(s): " + string.Join(", ", builder.Cycler.Summary));
-                }
-                cloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
-
-                // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips
-                // them — AI/route data the original never renders). Debug inspection only.
-                if (_debugDzPaths && builder.BuildDzPaths() is { } dzpaths)
-                {
-                    _plane.AddChild(dzpaths);
-                    GD.Print("debug: dzpaths route ribbons built");
-                }
-
-                // Clutter: forest trees / river bushes, and C2/C5's 3D city-block buildings.
-                // The chapter's boot script names the templates; ClutterBuilder stamps them
-                // onto every matching-textured world polygon (see Clutter.cs). Sprites are
-                // never solid — a billboard has no side to hit (user decision, 2026-07-22;
-                // the "trees are hittable" justification rested on a misread of
-                // `spruce_destroy`, which is the Spruce Goose) — but the 3D decorations are,
-                // in flight, since they are real geometry (user decision, 2026-07-22).
-                ClutterBuilder? clutterBuilder = null;
-                var clutterNames = ClutterBuilder.TemplateNames(interpPath, _chapter);
-                if (clutterNames.Count > 0)
-                {
-                    clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene);
-                    if (clutterBuilder.Build(clutterNames, collision: _fly) is { } clutter)
+                // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
+                // mission setup, AnimProgram + the AnimRuntime collaborator wiring, bind, sound
+                // prewarm — extracted to WorldSession (2026-07-23) so --anim-lab builds the same
+                // world+runtime. The per-view steps below (unplaced watch, edge extender, per-rig
+                // horizon + weather) stay here and read the returned builder. WorldSession does NOT
+                // add its Root to the tree — _worldRoot.AddChild(_plane) below still owns that.
+                var session = WorldSession.Build(
+                    new WorldSession.Options
                     {
-                        _plane.AddChild(clutter);
-                        GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites"
-                                 + (clutterBuilder.SolidCount > 0
-                                     ? $" + {clutterBuilder.SolidCount} 3D decorations"
-                                       + (clutterBuilder.SolidCollisionShapes > 0
-                                           // Shared shapes: N distinct shapes / T distinct triangles,
-                                           // attached M times. The old line printed the expanded
-                                           // triangle total, which is exactly what stopped existing.
-                                           ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
-                                             + $", {clutterBuilder.SolidCollisionTriangles} tris"
-                                             + $", {clutterBuilder.SolidCollisionInstances} attachments)"
-                                           : "")
-                                     : "")
-                                 + $" ({clutterBuilder.Summary})");
-                    }
-                }
-                else
-                {
-                    GD.Print($"clutter: no templates for {_chapter} ({interpPath})");
-                }
-
-                // Animations: bind the mission's animation program to the built world and run
-                // it. Base states first (hides the destroyed building variants behind their
-                // healthy twins, and the zeppelins/trains this mission deactivates), then the
-                // ON_STARTUP definitions and the mission's startanims — which now *play*
-                // rather than being posed at their end state, so hangar doors swing and the
-                // C1 train drives its SI-script track loop. The program merges the compiled
-                // cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
-                // the three zrdr scopes (the only source of zepstate/startanims).
-                var chapterZrdrPath = SessionPaths.ChapterZrdr(dataRoot, _chapter);
-                var (chapterAnimPath, missionAnimPath) =
-                    AnimProgram.ArchivePaths(dataRoot, _chapter, _mission);
-                var animProgram = AnimProgram.Load(zrdrPath, chapterZrdrPath, missionZrdrPath,
-                    chapterAnimPath, missionAnimPath);
-                // The crash choreography's effect params (item 8): read once from the compiled
-                // defs and shared across every player's own emitter instances. Cheap (data
-                // only, no textures), so done here whether or not a plane is being built.
-                crashEffects = CrashChoreography.EffectSet.Load(animProgram, zrdrPath);
-                // The runtime builds PUFFER_STATE emitters through this factory rather than
-                // holding the TextureArchive: a puffer bakes its atlas at construction, and
-                // `textures` is disposed when this build scope ends. Cleared right after the
-                // bootstrap so a later request is reported instead of hitting a closed zip.
-                var animRuntime = new AnimRuntime
-                {
-                    DebugMotions = _debugAnim,
-                    QualityLod = _animLod,
-                    Setup = missionSetup,
-                    PufferParent = _worldRoot,
-                    PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
-                    // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the
-                    // session so a teardown drops the previous world's lights.
-                    Lights = _worldLights = new WorldLights(),
-                    // The world's ambient SOUND_NODE emitters. Null when muted or soundless, which
-                    // makes the whole feature inert rather than half-built.
-                    Sounds = soundDefs != null && sounds != null
-                        ? new WorldSounds(soundDefs)
-                        {
-                            Loader = d => sounds.Find(d.WavName, d.Looped),
-                            Debug = _debugAnim,
-                        }
-                        : null,
-                    // PLAYER_RANGE conditions measure from the player. Player 1's camera is
-                    // the honest answer in every mode this project has (chase cam in flight,
-                    // the free camera in --freecam, the orbit eye in a static view), and it
-                    // is resolved per call because none of those cameras exist yet here.
-                    PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
-                        ? cam.GlobalPosition
-                        : Vector3.Zero,
-                };
-                // The emitter pool has to be in the tree before the bootstrap builds into it.
-                if (animRuntime.Sounds is { } worldSounds)
-                {
-                    _worldRoot.AddChild(worldSounds);
-                    worldSounds.SetListener(() => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
-                        ? cam.GlobalPosition : Vector3.Zero);
-                }
-                animRuntime.Bind(_plane, animProgram);
-                animRuntime.PufferFactory = null;
-                // Same rule as the puffer factory: the zip handle dies with this build scope. The
-                // decoded streams stay cached in WorldSounds, so an emitter created later reusing
-                // a name already heard still works — but "already heard" is not enough on its own.
-                // Most SOUND_NODE events are first reached at RUNTIME (an OnCall def, or a
-                // CallSequence that lands a frame after bootstrap, like C1's police siren), i.e.
-                // always after this line. So decode everything the program can ask for first.
-                if (animRuntime.Sounds is { } builtSounds)
-                {
-                    int prewarmed = builtSounds.Prewarm(animProgram.SoundNodeNames());
-                    if (prewarmed > 0)
-                    {
-                        GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
-                    }
-                    builtSounds.Loader = null;
-                }
-                _plane.AddChild(animRuntime);
+                        DataRoot = dataRoot,
+                        Chapter = _chapter,
+                        Mission = _mission,
+                        ZrdrPath = zrdrPath,
+                        InterpPath = interpPath,
+                        MissionZrdrPath = missionZrdrPath,
+                        EffectsParent = _worldRoot!,
+                        // PLAYER_RANGE conditions + the sound listener measure from player 1's
+                        // camera — the honest answer in every mode (chase cam, free camera, orbit
+                        // eye); resolved per call because none of those cameras exist yet here.
+                        PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                            ? cam.GlobalPosition
+                            : Vector3.Zero,
+                        Collision = _fly,
+                        DebugAnim = _debugAnim,
+                        AnimLod = _animLod,
+                        DebugDzPaths = _debugDzPaths,
+                    },
+                    gamez, textures, sounds, soundDefs);
+                _plane = session.Root;
+                var builder = session.Builder;
+                cloudDeck = session.CloudDeck;
+                // Owned by the session so a teardown drops the previous world's lights.
+                _worldLights = session.Lights;
+                // The crash choreography's effect params (item 8): read once from the merged defs
+                // and shared across every player's own emitter instances. Cheap (data only, no
+                // textures), so done here whether or not a plane is being built.
+                crashEffects = CrashChoreography.EffectSet.Load(session.Program, zrdrPath);
 
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
@@ -719,7 +619,7 @@ public partial class PlaneViewer : Node3D
                 // for edge-verification shots); off for plain orbit viewing (honest data view).
                 if (_fly || _freecam || _skyZoneExplicit)
                 {
-                    _edgeExtender = builder.CreateEdgeExtender(clutterBuilder);
+                    _edgeExtender = builder.CreateEdgeExtender(session.Clutter);
                     if (_edgeExtender != null)
                     {
                         _plane.AddChild(_edgeExtender);

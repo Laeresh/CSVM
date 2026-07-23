@@ -126,6 +126,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers.
+- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundDefs.cs` — sounds.json SETS parser: `snd_*` → `SoundDef` (wav, flags, range, volume).
@@ -211,19 +212,6 @@ In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respa
 
 Full validated format documentation lives in **`docs/formats/`** — 17 pages, one per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
 
-## Format support status
-
-**Extraction is complete.** Every archive type this install ships extracts, and every one
-round-trips **byte-identically** in the fork — including `planes.zbd` and the net-new
-`cam_anim.zbd`/`mis_anim.zbd`, neither of which upstream mech3ax supports for Crimson Skies.
-`extracted/` is fork-produced since 2026-07-21, and `GameZ.cs`/`TextureArchive.cs`/`Zrdr.cs`
-read **either** extraction shape, so `ExtractAssets.ps1 -Unzbd <v0.6.1 unzbd>` rolls back with
-no code change.
-
-Per-type status, round-trip evidence, the legacy↔unified shape table and the extracted aircraft
-inventory: **`docs/formats/extraction.md`**. (mech3ax's own README support matrix is outdated
-for CS — do not use it as the reference.)
-
 ## Current status / next step
 
 **This section is current state and next step ONLY — it is not a log.** Landed work goes to a dated entry in `docs/HISTORY.md` and is *removed* from here, not also summarised here. That rule is what keeps this file an index; ignoring it is what grew this section to 65 KB — 27 landed-work bullets, every one already recorded in HISTORY, deleted 2026-07-22.
@@ -250,7 +238,5 @@ Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds —
 **`docs/PLAN-M2-polish-4.md` is now landed end to end** (items 1, 2, 4, 5, 6, 7, 9, 10 done 2026-07-22/23; item 3 moved back to `backlog.md`). **Item 8 (the crash choreography) landed 2026-07-23 over two slices**: the ground/dirt variant's authored sparks, delayed fireball cluster, black smokeball, five burning debris arcs (`call_crash_trails`, on a reconstructed ballistic) and the earth-impact boom (`snd_exp_ground_a`), surface-selected in `FlightController.Crash` at the plane centre (`healthy`), atop the existing primary fireball + wreck fire. **The remaining item-8 work is now scoped as a data-driven rewrite** — [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) (written 2026-07-23, with the user): the crash plays `player_crash_dirt` through a real `AnimRuntime` with **generic motion/opacity handlers** (the biggest gap: `ObjectOpacityFromTo`, 9,917 events, no handler — also the M3 destruction foundation), retiring the bespoke `CrashChoreography`/`CrashBreakup`. **Item 8 stays ◐ until that lands**; `flydirt`/water/air detail in `backlog.md`. **Item 9 landed as the subface fix** — the C5 ground z-fight was never a depth-precision bug but the unparsed OpenFlight subface flag, now parsed and layered at half a priority level; user-confirmed at the controls, and **no bias constant was touched**. **Item 10 (shader instance-uniform hygiene) landed 2026-07-23**, both parts — the shared blocks now live in `CSVM/shaders/*.gdshaderinc` (`docs/HISTORY.md`; ⚠ opaque sprite shaders must never take the preamble). **One landed change is user-vetoable:** the pad-read-on-focus gate shipped as its own commit alongside item 7's focus mute; reverting it alone leaves the mute intact, and it will stop a pad working while the window is unfocused. Separately, **the owed playtests** remain the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest".
 
 **Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
-
-- **C3 references `cloud1`/`cloud2`**, which its own `texture.zbd` does not ship — a retail-data gap, true in both extraction trees. The one-line fix is deliberately left to the user because it trades away the magenta "this is our bug" signal for those names.
 
 **Everything else unscheduled** — blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.

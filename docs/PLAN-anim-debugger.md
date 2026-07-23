@@ -120,7 +120,12 @@ name for now (renaming it is the future split's business).
   control), rule-5 able-to-fail control passed. See `docs/HISTORY.md`.
   **✅ A2 landed 2026-07-23** (`src/SessionPaths.cs`) — `PreferUnzipped` + per-chapter/mission path
   construction extracted verbatim (override policy stays in PlaneViewer); plane-viewer md5 unchanged +
-  C1 world boot census byte-identical HEAD-vs-after. **A3 (`WorldSession`) next.**
+  C1 world boot census byte-identical HEAD-vs-after.
+  **✅ A3 landed 2026-07-23** (`src/Mech3/WorldSession.cs`) — the world+anim build extracted verbatim
+  (per-view horizon/weather/edge/unplaced stay in PlaneViewer; `KeepArchivesOpen` opt-out wired for the
+  lab; crash-effects load left in PlaneViewer so no Mech3→Flight dep). Plane-viewer md5 unchanged + the
+  full `--fly` world boot census byte-identical HEAD-vs-after on **both C1 and C5**.
+  **✅ Wave 1 (the PlaneViewer split, A1-A3) COMPLETE. Wave 2 (additive AnimRuntime capabilities) next.**
 - **Wave 2 — runtime capabilities** (B1-B5). Additive, defaults = live behavior; world regression
   must be unchanged.
 - **Wave 3 — lab MVP** (C). Quiet stage, transport, fixed dt + seed, `--play-anim`, auto-frame.

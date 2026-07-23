@@ -1,0 +1,249 @@
+using System;
+using System.Collections.Generic;
+using Godot;
+
+namespace CSVM.Mech3;
+
+/// <summary>
+/// Builds one chapter world and binds its animation program to it: the world+anim half of
+/// <see cref="CSVM.PlaneViewer"/>'s session build. Extracted from that class on 2026-07-23
+/// (PLAN-anim-debugger Wave 1 A3) so the <c>--anim-lab</c> mode builds the same world+runtime a
+/// normal flight/viewer session does, without duplicating any of it.
+///
+/// <para>Does the load → <see cref="WorldBuilder"/> → clutter → mission setup →
+/// <see cref="AnimProgram"/> → <see cref="AnimRuntime"/> collaborator wiring → <c>Bind</c> →
+/// sound-prewarm core. It deliberately stops before the per-rig horizon, weather, edge-extender,
+/// and unplaced-entity watch — those are per-view and stay in the caller, which drives them off
+/// the returned <see cref="Builder"/>. It also does NOT add <see cref="Root"/> to the scene tree;
+/// the caller owns that, and the effect siblings (world sounds, puffers) go under the caller's
+/// <see cref="Options.EffectsParent"/> exactly as before.</para>
+///
+/// <para><b>Disposal-lifetime contract (semantics, not incidental).</b> A puffer bakes its atlas
+/// at construction and world-sound streams decode on demand, but the <see cref="TextureArchive"/>
+/// and <see cref="SoundArchive"/> passed in are the caller's <c>using</c> locals — their zip
+/// handles die when the caller's build scope ends. So after the bootstrap this clears the
+/// <c>PufferFactory</c> and the sound <c>Loader</c>, and prewarms every sound the program can name
+/// while the archive is still open. A caller that keeps its archives open for the whole session
+/// (the lab, to build puffers/decals interactively) passes <see cref="Options.KeepArchivesOpen"/>
+/// = true to skip both clears.</para>
+/// </summary>
+public sealed class WorldSession
+{
+    /// <summary>Build settings that vary by mode; the loaded archives are passed to
+    /// <see cref="Build"/> separately.</summary>
+    public sealed class Options
+    {
+        public required string DataRoot { get; init; }
+        public required string Chapter { get; init; }
+        public required string Mission { get; init; }
+        public required string ZrdrPath { get; init; }
+        public required string InterpPath { get; init; }
+        public required string MissionZrdrPath { get; init; }
+
+        /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
+        /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session
+        /// root (<c>_worldRoot</c>), a sibling of <see cref="Root"/>, not <see cref="Root"/>
+        /// itself.</summary>
+        public required Node3D EffectsParent { get; init; }
+
+        /// <summary>Where PLAYER_RANGE conditions and the sound listener measure from. Resolved
+        /// per call because no camera exists yet at build time; player 1's camera is the honest
+        /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
+        public required Func<Vector3> PlayerPosition { get; init; }
+
+        /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
+        public bool Collision { get; init; }
+
+        public bool DebugAnim { get; init; }
+        public int AnimLod { get; init; } = AnimRuntime.HighLod;
+        public bool DebugDzPaths { get; init; }
+
+        /// <summary>Keep the caller's archives open past the build: skip nulling the
+        /// <c>PufferFactory</c> and sound <c>Loader</c> after the bootstrap, so puffers/decals can
+        /// be built interactively later (the lab). Default false = the viewer/flight contract.</summary>
+        public bool KeepArchivesOpen { get; init; }
+    }
+
+    /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
+    /// <c>world1</c> node with the texture cycler, clutter, any debug dzpaths, and the
+    /// <see cref="AnimRuntime"/> as children. <b>Not</b> yet added to the scene tree — the caller
+    /// adds it under <see cref="Options.EffectsParent"/>.</summary>
+    public Node3D Root { get; private set; } = null!;
+
+    public AnimRuntime Runtime { get; private set; } = null!;
+
+    /// <summary>The merged animation program (compiled + reader defs). Held so the caller can read
+    /// crash-effect params off it and so the lab can drive its picker/timeline from it.</summary>
+    public AnimProgram Program { get; private set; } = null!;
+
+    /// <summary>The world builder, kept so the caller can run the per-view steps that stay outside
+    /// this class: the unplaced-entity watch, the edge extender, the per-rig horizon, and the final
+    /// mesh/collider/scroll counts.</summary>
+    public WorldBuilder Builder { get; private set; } = null!;
+
+    /// <summary>The clutter builder (null when the chapter ships no clutter templates), kept for
+    /// the edge extender.</summary>
+    public ClutterBuilder? Clutter { get; private set; }
+
+    /// <summary>The world's cloudlayer overcast, if any — moved to follow the player by the
+    /// caller.</summary>
+    public Node3D? CloudDeck { get; private set; }
+
+    /// <summary>The session's LIGHT_STATE point lights. The caller owns it (disposes it on
+    /// teardown) so a rebuild drops the previous world's lights.</summary>
+    public WorldLights Lights { get; private set; } = null!;
+
+    private WorldSession() { }
+
+    /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
+    /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.</summary>
+    public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
+        SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs)
+    {
+        var s = new WorldSession();
+
+        // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw): which of the
+        // chapter's entities this mission shows, and which of its surfaces animate their UVs.
+        // Loaded before the build because the scroll rates are part of the material cache key (see
+        // MissionSetup.ScrollByModel); the entity half is applied afterwards, as the animation
+        // runtime's bootstrap pass 0.
+        var missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
+        if (missionSetup == null)
+        {
+            GD.Print($"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+        }
+        var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
+            scrollOverrides: missionSetup?.ScrollByModel(gamez));
+        s.Builder = builder;
+        var root = builder.Build("world1"); // every chapter has exactly one world node
+        s.Root = root;
+        // The original's material texture flipbooks (animated water/surf/wake/splash and the
+        // walking crowd). Parented to the world so a session teardown takes it too.
+        if (builder.Cycler.Count > 0)
+        {
+            builder.Cycler.Debug = o.DebugAnim;
+            root.AddChild(builder.Cycler);
+            GD.Print($"texture cycles: {builder.Cycler.Count} animated material(s): " + string.Join(", ", builder.Cycler.Summary));
+        }
+        s.CloudDeck = builder.CloudDeck;     // the cloudlayer overcast, moved to follow the player
+
+        // --debug-dzpaths: the mission's danger-zone route ribbons (world build skips them —
+        // AI/route data the original never renders). Debug inspection only.
+        if (o.DebugDzPaths && builder.BuildDzPaths() is { } dzpaths)
+        {
+            root.AddChild(dzpaths);
+            GD.Print("debug: dzpaths route ribbons built");
+        }
+
+        // Clutter: forest trees / river bushes, and C2/C5's 3D city-block buildings. The chapter's
+        // boot script names the templates; ClutterBuilder stamps them onto every matching-textured
+        // world polygon (see Clutter.cs). Sprites are never solid — a billboard has no side to hit
+        // (user decision, 2026-07-22; the "trees are hittable" justification rested on a misread of
+        // `spruce_destroy`, which is the Spruce Goose) — but the 3D decorations are, in flight,
+        // since they are real geometry (user decision, 2026-07-22).
+        ClutterBuilder? clutterBuilder = null;
+        var clutterNames = ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+        if (clutterNames.Count > 0)
+        {
+            clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene);
+            if (clutterBuilder.Build(clutterNames, collision: o.Collision) is { } clutter)
+            {
+                root.AddChild(clutter);
+                GD.Print($"clutter: {clutterBuilder.InstanceCount} sprites"
+                         + (clutterBuilder.SolidCount > 0
+                             ? $" + {clutterBuilder.SolidCount} 3D decorations"
+                               + (clutterBuilder.SolidCollisionShapes > 0
+                                   // Shared shapes: N distinct shapes / T distinct triangles,
+                                   // attached M times. The old line printed the expanded
+                                   // triangle total, which is exactly what stopped existing.
+                                   ? $" ({clutterBuilder.SolidCollisionShapes} shared collision shapes"
+                                     + $", {clutterBuilder.SolidCollisionTriangles} tris"
+                                     + $", {clutterBuilder.SolidCollisionInstances} attachments)"
+                                   : "")
+                             : "")
+                         + $" ({clutterBuilder.Summary})");
+            }
+        }
+        else
+        {
+            GD.Print($"clutter: no templates for {o.Chapter} ({o.InterpPath})");
+        }
+        s.Clutter = clutterBuilder;
+
+        // Animations: bind the mission's animation program to the built world and run it. Base
+        // states first (hides the destroyed building variants behind their healthy twins, and the
+        // zeppelins/trains this mission deactivates), then the ON_STARTUP definitions and the
+        // mission's startanims — which now *play* rather than being posed at their end state, so
+        // hangar doors swing and the C1 train drives its SI-script track loop. The program merges
+        // the compiled cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
+        // the three zrdr scopes (the only source of zepstate/startanims).
+        var chapterZrdrPath = SessionPaths.ChapterZrdr(o.DataRoot, o.Chapter);
+        var (chapterAnimPath, missionAnimPath) =
+            AnimProgram.ArchivePaths(o.DataRoot, o.Chapter, o.Mission);
+        var animProgram = AnimProgram.Load(o.ZrdrPath, chapterZrdrPath, o.MissionZrdrPath,
+            chapterAnimPath, missionAnimPath);
+        s.Program = animProgram;
+        // The runtime builds PUFFER_STATE emitters through this factory rather than holding the
+        // TextureArchive: a puffer bakes its atlas at construction, and `textures` is disposed when
+        // the caller's build scope ends. Cleared right after the bootstrap so a later request is
+        // reported instead of hitting a closed zip (unless the caller keeps its archives open).
+        var lights = new WorldLights();
+        s.Lights = lights;
+        var animRuntime = new AnimRuntime
+        {
+            DebugMotions = o.DebugAnim,
+            QualityLod = o.AnimLod,
+            Setup = missionSetup,
+            PufferParent = o.EffectsParent,
+            PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+            // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the caller so a
+            // teardown drops the previous world's lights.
+            Lights = lights,
+            // The world's ambient SOUND_NODE emitters. Null when muted or soundless, which makes
+            // the whole feature inert rather than half-built.
+            Sounds = soundDefs != null && sounds != null
+                ? new WorldSounds(soundDefs)
+                {
+                    Loader = d => sounds.Find(d.WavName, d.Looped),
+                    Debug = o.DebugAnim,
+                }
+                : null,
+            // PLAYER_RANGE conditions measure from the player, resolved per call because no camera
+            // exists yet here.
+            PlayerPosition = o.PlayerPosition,
+        };
+        s.Runtime = animRuntime;
+        // The emitter pool has to be in the tree before the bootstrap builds into it.
+        if (animRuntime.Sounds is { } worldSounds)
+        {
+            o.EffectsParent.AddChild(worldSounds);
+            worldSounds.SetListener(o.PlayerPosition);
+        }
+        animRuntime.Bind(root, animProgram);
+        if (!o.KeepArchivesOpen)
+        {
+            animRuntime.PufferFactory = null;
+        }
+        // Same rule as the puffer factory: the zip handle dies with the caller's build scope. The
+        // decoded streams stay cached in WorldSounds, so an emitter created later reusing a name
+        // already heard still works — but "already heard" is not enough on its own. Most SOUND_NODE
+        // events are first reached at RUNTIME (an OnCall def, or a CallSequence that lands a frame
+        // after bootstrap, like C1's police siren), i.e. always after this line. So decode
+        // everything the program can ask for first.
+        if (animRuntime.Sounds is { } builtSounds)
+        {
+            int prewarmed = builtSounds.Prewarm(animProgram.SoundNodeNames());
+            if (prewarmed > 0)
+            {
+                GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
+            }
+            if (!o.KeepArchivesOpen)
+            {
+                builtSounds.Loader = null;
+            }
+        }
+        root.AddChild(animRuntime);
+
+        return s;
+    }
+}
