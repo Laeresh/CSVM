@@ -127,6 +127,7 @@ public sealed partial class AnimRuntime : Node
     // and so is unchanged. Any future WeaponHit/crash handler's randomness must route through this
     // same _rng, or a lab restart stops being identical the day the handler lands.
     private Random _rng = new();
+    private int? _seed;
 
     /// <summary>Pins the runtime's RNG for a reproducible run (the debugger's deterministic
     /// clock). Null — the default — leaves it unseeded, so the game is unchanged. Set at
@@ -135,8 +136,21 @@ public sealed partial class AnimRuntime : Node
     {
         init
         {
+            _seed = value;
             if (value is { } s)
                 _rng = new Random(s);
+        }
+    }
+
+    /// <summary>Re-pins the RNG to the constructed <see cref="Seed"/>. The animation debugger
+    /// calls this on every Play/Restart so a seeded replay rolls the same dice as the launch —
+    /// without it the RNG stream would just continue and a "restart" would diverge on the first
+    /// RANDOM_WEIGHT. No-op when unseeded (the game, which never calls it either way).</summary>
+    public void Reseed()
+    {
+        if (_seed is { } s)
+        {
+            _rng = new Random(s);
         }
     }
 
@@ -252,32 +266,72 @@ public sealed partial class AnimRuntime : Node
                 startupRun++;
             }
 
-        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order.
+        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order — each
+        // through Play, which is also the debugger's --play-anim/Restart path, so the lab
+        // starts a definition exactly the way the bootstrap does.
         var ran = new List<string>();
         var missing = new List<string>();
         foreach (var animName in _program.StartAnims)
         {
-            var matches = _program.ByAnimName(animName);
-            if (matches.Count == 0)
+            if (Play(animName).Count == 0)
             {
                 missing.Add(animName);
-                continue;
             }
-            ran.Add(animName);
-            foreach (var def in matches)
+            else
             {
-                var anchors = Anchors(def);
-                if (anchors.Count == 0)
-                    anchors.Add(null); // global resolution: the def names world nodes directly
-                foreach (var anchor in anchors)
-                {
-                    if (def.ResetState != null)
-                        ApplyInstant(def.ResetState.Events, def, anchor);
-                    Start(def, anchor);
-                }
+                ran.Add(animName);
             }
         }
         return (startupRun, ran, missing);
+    }
+
+    /// <summary>Starts every definition carrying this ANIMATION_NAME, exactly the way bootstrap
+    /// pass 3 starts a startanim: an anchored def starts once per anchor, an unanchored one gets
+    /// a single global-resolution instance (null anchor), and each instance's RESET_STATE is
+    /// re-applied first. Returns the (def, anchor) pairs started — empty when the name matches no
+    /// definition in this program. This is the animation debugger's <c>--play-anim</c> path; its
+    /// Restart is <see cref="Stop"/> → <see cref="Reseed"/> → Play.</summary>
+    public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName)
+    {
+        var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            var anchors = Anchors(def);
+            if (anchors.Count == 0)
+            {
+                anchors.Add(null); // global resolution: the def names world nodes directly
+            }
+            foreach (var anchor in anchors)
+            {
+                if (def.ResetState != null)
+                {
+                    ApplyInstant(def.ResetState.Events, def, anchor);
+                }
+                Start(def, anchor);
+                started.Add((def, anchor));
+            }
+        }
+        return started;
+    }
+
+    /// <summary>The world node the animation debugger frames its camera on for one started
+    /// instance: the anchor itself when the instance has one, else the first of the def's own
+    /// node names that resolves in this world (the unanchored global-resolution case). Null when
+    /// nothing resolves — the caller keeps its current framing.</summary>
+    public Node3D? FrameTarget(AnimDefinition def, Node3D? anchor)
+    {
+        if (anchor != null)
+        {
+            return anchor;
+        }
+        foreach (var name in def.NodeList)
+        {
+            if (!string.IsNullOrEmpty(name) && ResolveOne(name, def, null) is { } node)
+            {
+                return node;
+            }
+        }
+        return null;
     }
 
     /// <summary>Runs the ambient-playback passes a quiet-stage bootstrap (<see cref="AutoStart"/>
@@ -347,7 +401,23 @@ public sealed partial class AnimRuntime : Node
 
     // ---- live execution ----
 
-    public override void _Process(double delta) => Advance((float)delta);
+    /// <summary>True when something else owns the clock (the animation debugger, which feeds
+    /// <see cref="Advance"/> in fixed 1/60 s steps): <see cref="_Process"/> stops advancing.
+    /// A flag rather than <c>SetProcess(false)</c> because Godot re-enables processing at READY
+    /// for any node whose script overrides <c>_Process</c> — and this node enters the tree
+    /// (with the world root) after the lab mode is assembled, so a SetProcess call made before
+    /// that is silently undone. Found by measurement, not by reading: the lab's world ran at 2×
+    /// (fixed steps + wall dt), visible as 20 logged sim-seconds in a 610-frame scripted run.</summary>
+    public bool ManualAdvance;
+
+    public override void _Process(double delta)
+    {
+        if (ManualAdvance)
+        {
+            return;
+        }
+        Advance((float)delta);
+    }
 
     /// <summary>Advances the whole runtime by <paramref name="dt"/> seconds: motions, puffers,
     /// lights and sounds, then every live instance's sequences. <see cref="_Process"/> calls this

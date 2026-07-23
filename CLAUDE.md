@@ -166,6 +166,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
+- `src/UI/AnimLab.cs` — the `--anim-lab` animation debugger: quiet stage, fixed-dt clock, def-playback transport, seeded replay.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
@@ -183,6 +184,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
 | `--viewer` | the static inspection view; hosts the damage (H), livery (L) and mesh (M) labs |
 | `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera |
+| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock with transport keys |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |
@@ -205,7 +207,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
-**Four plans sit in `docs/`. The active plan is [`docs/PLAN-anim-debugger.md`](docs/PLAN-anim-debugger.md)** (written 2026-07-23, design decided with the user) — the permanent `--anim-lab` animation-debugger mode: def playback with transport controls (pause/step/slow-mo), a seeded fixed-dt deterministic clock, an authored-vs-fired timeline, and the reusable-class extraction from `PlaneViewer.cs` it rides on. It runs **before** [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) and delivers that plan's Wave 2a/2b scaffolding; the crash plan's Layer 1 handlers are then developed inside the lab. `docs/PLAN-M2-polish-4.md` (written 2026-07-22) is landed end to end except item 8, which stays ◐ pending the crash plan.
+**Four plans sit in `docs/`. The active plan is [`docs/PLAN-anim-debugger.md`](docs/PLAN-anim-debugger.md)** (written 2026-07-23, design decided with the user) — the permanent `--anim-lab` animation-debugger mode. **Waves 1–3 are landed** (the `PlaneViewer` split, the additive runtime capabilities, and the `--anim-lab` MVP: quiet stage, transport, fixed dt + seed, `--play-anim`, auto-frame); **next is Wave 4, the picker + authored-vs-fired timeline** fed by the B4 dispatch hooks. It runs **before** [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) and delivers that plan's Wave 2a/2b scaffolding (its Wave 5); the crash plan's Layer 1 handlers are then developed inside the lab. `docs/PLAN-M2-polish-4.md` (written 2026-07-22) is landed end to end except item 8, which stays ◐ pending the crash plan.
 
 **Queued behind it: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction: 44 items in six waves, scope settled with the user. **No item is user-gated** — both user-owned inputs (the gun mount-name table and the `CLUSTER_SIZE` playtest) are recorded in the plan. Wave A (research/docs) is the place to start.
 

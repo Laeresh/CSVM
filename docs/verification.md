@@ -337,6 +337,18 @@ The measuring tool has been the bug more often than is comfortable:
   absence**, and where a subsystem can fail after its report, make the failure announce itself at
   the point of use rather than inflating a counter nobody prints again.
 
+- **A sampler paced by the clock under test cannot see that clock running at the wrong RATE.**
+  The anim lab's playback was validated against the live world by comparing poses per
+  `--debug-anim` logged second — and matched perfectly — while the lab's world was actually
+  running at **2×** (the runtime's own `_Process` ticked wall time on top of the lab's fixed
+  steps, because Godot re-enables processing at READY and undid a too-early `SetProcess(false)`).
+  The pose comparison was immune by construction: the once-a-second log is paced by *accumulated
+  simulation time on each side*, so pose-at-logged-second-N is a pure function of sim time and a
+  rate error cancels out of it. What caught the bug was dividing the instrument's tick count by
+  an **external denominator**: 20 logged sim-seconds in a 610-frame (~10 s) scripted run, against
+  the freecam control's 10. When validating a clock, always express at least one measurement per
+  wall frame or wall second — anything expressed per tick of the clock being tested will
+  confirm any rate.
 - **The wrong triangulation manufactured exactly the evidence the hypothesis predicted** — a
   Newell normal over a `triangle_strip`'s raw index list is meaningless and reported a false
   7–14% inversion rate on aircraft normals.

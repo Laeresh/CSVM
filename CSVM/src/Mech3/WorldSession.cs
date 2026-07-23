@@ -62,6 +62,16 @@ public sealed class WorldSession
         /// <c>PufferFactory</c> and sound <c>Loader</c> after the bootstrap, so puffers/decals can
         /// be built interactively later (the lab). Default false = the viewer/flight contract.</summary>
         public bool KeepArchivesOpen { get; init; }
+
+        /// <summary>Whether the bootstrap runs the ambient-playback passes (ON_STARTUP defs +
+        /// startanims). True — the default — in every game/viewer/flight session; the animation
+        /// lab sets false for its quiet stage and runs them on demand through
+        /// <see cref="AnimRuntime.StartAmbient"/>.</summary>
+        public bool AutoStart { get; init; } = true;
+
+        /// <summary>Pins the runtime's RNG for a reproducible run (see
+        /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>
+        public int? RuntimeSeed { get; init; }
     }
 
     /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
@@ -193,6 +203,8 @@ public sealed class WorldSession
         {
             DebugMotions = o.DebugAnim,
             QualityLod = o.AnimLod,
+            AutoStart = o.AutoStart,
+            Seed = o.RuntimeSeed,
             Setup = missionSetup,
             PufferParent = o.EffectsParent,
             PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),

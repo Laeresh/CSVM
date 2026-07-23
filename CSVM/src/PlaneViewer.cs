@@ -45,6 +45,14 @@ namespace CSVM;
 ///   --stunt                      stunt-flying mode: --fly + the mission's danger zones (ia.json
 ///                                dzones) as fly-through objectives, spawning from the stunt_flying
 ///                                spawn list. Completion shows in the text HUD (marker HUD is item 2)
+///   --anim-lab                   the animation debugger (PLAN-anim-debugger): the chapter world
+///                                as a quiet stage (reset states applied, nothing playing) under
+///                                a deterministic fixed-dt clock with def-playback transport
+///                                controls — see UI.AnimLab. Wins over every other mode
+///   --play-anim=name             (implies --anim-lab) play this def at launch and auto-frame
+///                                the orbit camera on its anchor; composes with --screenshot
+///   --seed=N                     the lab's pinned RNG seed (default AnimLab.DefaultSeed) —
+///                                same seed, same dice, identical replay
 ///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
 ///                                world skips — AI/route data the original never renders); debug only
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
@@ -169,6 +177,12 @@ public partial class PlaneViewer : Node3D
     // camera. The testing view for animation work: park in front of a moving object and watch.
     private bool _freecam;
     private SpectatorCamera? _spectator;
+    // --anim-lab: the animation debugger (PLAN-anim-debugger Wave 3) — the chapter world as a
+    // quiet stage under a deterministic fixed-dt clock with def-playback transport (UI.AnimLab).
+    // The most specific mode of all, so it wins outright when combined with any other.
+    private bool _animLab;
+    private string? _playAnim;                      // --play-anim=<name>: play at launch (implies --anim-lab)
+    private int _labSeed = UI.AnimLab.DefaultSeed;  // --seed=N: the lab's pinned RNG seed
     // --debug-anim: log every live animation motion once a second (headless verification
     // that the train/doors actually move, without flying a camera at them).
     private bool _debugAnim;
@@ -340,6 +354,9 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--fly") { _fly = true; hasContentArg = true; }
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
             else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
+            else if (arg == "--anim-lab") { _animLab = true; hasContentArg = true; }
+            else if (arg.StartsWith("--play-anim=")) { _playAnim = arg["--play-anim=".Length..]; _animLab = true; hasContentArg = true; }
+            else if (arg.StartsWith("--seed=")) { _labSeed = int.Parse(arg["--seed=".Length..]); }
             else if (arg == "--debug-anim") _debugAnim = true;
             // A connected pad with stick drift steers the free camera and nudges the flight
             // model, which quietly makes a "deterministic" scripted screenshot not one. SDL's
@@ -399,6 +416,14 @@ public partial class PlaneViewer : Node3D
             if (!_scenarioExplicit)
                 _scenario = "stunt_flying";
         }
+        // --anim-lab is the animation debugger's stage: the chapter world under the lab's own
+        // clock, with no flight controller. The most specific mode of all, so it wins outright
+        // — combining it with a flight/viewer/spectator mode is a contradiction.
+        if (_animLab && (_fly || _viewerMode || _freecam))
+        {
+            GD.Print("--anim-lab is the animation lab; ignoring --fly/--stunt/--viewer/--damage/--freecam");
+            _fly = _stunt = _viewerMode = _damageLab = _freecam = false;
+        }
         // --freecam is the spectator world view: not flight (no aircraft) and not the parked-
         // plane viewer. It is the most specific of the three modes, so it wins outright when
         // combined — asking for a plane-less world AND a plane is a contradiction either way.
@@ -415,11 +440,11 @@ public partial class PlaneViewer : Node3D
             GD.Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
             _fly = _stunt = false;
         }
-        if (hasContentArg && !_viewerMode && !_freecam)
+        if (hasContentArg && !_viewerMode && !_freecam && !_animLab)
             _fly = true;
         // The static viewer shows a chapter world when asked for one, else the parked plane.
-        // Flight and the spectator view always need the world built.
-        _worldMode = _fly || _freecam || (_viewerMode && _chapterGiven);
+        // Flight, the spectator view and the anim lab always need the world built.
+        _worldMode = _fly || _freecam || _animLab || (_viewerMode && _chapterGiven);
         // A --plane= list of several aircraft states the player count on its own (item 6's
         // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
         // different planes); an explicit --players= still wins.
@@ -536,17 +561,28 @@ public partial class PlaneViewer : Node3D
             : _planesGamezPath;
         var missionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _chapter, _mission);
 
+        // The anim lab keeps the session archives open (WorldSession.Options.KeepArchivesOpen):
+        // the AnimLab node owns their disposal so puffers/decals can build at any playhead time.
+        // Until that node exists, a failed lab build must close them from the catch below — in
+        // every other mode they are `using` locals inside the try, as before.
+        TextureArchive? labTextures = null;
+        SoundArchive? labSounds = null;
+        UI.AnimLab? animLab = null;
         try
         {
             var sw = Stopwatch.StartNew();
             var gamez = GameZ.Load(gamezPath);
-            using var textures = new TextureArchive(texturesPath);
+            var textures = new TextureArchive(texturesPath);
+            using var texturesScope = _animLab ? null : textures;
+            labTextures = _animLab ? textures : null;
             // Opened before the world build rather than with the flight audio below, because the
             // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
             // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
             // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
             bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
-            using var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+            var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+            using var soundsScope = _animLab ? null : sounds;
+            labSounds = _animLab ? sounds : null;
             var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
             if (!mute && !haveSounds)
                 GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
@@ -585,6 +621,11 @@ public partial class PlaneViewer : Node3D
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
+                        // The lab: quiet stage (ambient playback deferred to its A toggle),
+                        // pinned RNG, archives kept open for interactive effect builds.
+                        KeepArchivesOpen = _animLab,
+                        AutoStart = !_animLab,
+                        RuntimeSeed = _animLab ? _labSeed : null,
                     },
                     gamez, textures, sounds, soundDefs);
                 _plane = session.Root;
@@ -667,6 +708,56 @@ public partial class PlaneViewer : Node3D
                 if (builder.ScrollingModelCount > 0)
                     GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
                 what = $"chapter {_chapter} world";
+
+                // The animation debugger (--anim-lab): the lab node owns the clock and the
+                // transport; the world above is its quiet stage (AutoStart=false — reset states
+                // and mission setup applied, nothing playing until A or --play-anim).
+                if (_animLab)
+                {
+                    // The lab feeds Advance itself in fixed 1/60 s steps. ManualAdvance, not
+                    // SetProcess(false): Godot re-enables processing at READY for nodes that
+                    // override _Process, and the runtime enters the tree (with _plane, below)
+                    // after this line — a SetProcess here is silently undone and the world runs
+                    // at 2× (fixed steps + wall dt). See AnimRuntime.ManualAdvance.
+                    session.Runtime.ManualAdvance = true;
+
+                    // Optional stage prop: --plane= parks that aircraft at the mission spawn
+                    // point (--spawn-at/--spawn-dir override). No FlightController — unpainted
+                    // by default like every static view (--paint still applies one).
+                    if (_planeNames.Count > 0)
+                    {
+                        var planesGamez = GameZ.Load(planesGamezPath);
+                        var parkedBuilder = new PlaneBuilder(planesGamez, textures,
+                            scheme: SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(),
+                                PatternsForPlane(planesGamez, _planeName)),
+                            patterns: Patterns);
+                        var parked = parkedBuilder.Build(_planeName);
+                        meshInstances += parkedBuilder.MeshInstanceCount;
+                        var labSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                        var (parkPos, parkLook) = ChooseSpawn(labSpawns, missionZrdrPath,
+                            ChooseSpawnBase(labSpawns), 0, "");
+                        _worldRoot!.AddChild(parked);
+                        parked.Position = parkPos;
+                        if ((parkLook - parkPos).LengthSquared() > 1e-6f)
+                        {
+                            parked.LookAtFromPosition(parkPos, parkLook, Vector3.Up);
+                        }
+                        what += $" + parked '{_planeName}'";
+                    }
+
+                    animLab = new UI.AnimLab(session.Runtime, session.Program, _orbit, textures,
+                        sounds, _labSeed, _playAnim,
+                        autoFrame: _camPos == null && _lookAt == null,
+                        fixedFrameStep: _screenshotPath != null)
+                    {
+                        ShowStatus = _screenshotPath == null,
+                    };
+                    _worldRoot!.AddChild(animLab);
+                    GD.Print($"anim-lab: quiet stage, seed {_labSeed}, fixed dt 1/60"
+                             + (_playAnim != null ? $", playing '{_playAnim}'" : "")
+                             + " — Space pause · . step · R restart · S stop · A ambient · 1/2/3 speed");
+                    what += " + anim lab";
+                }
             }
             else
             {
@@ -758,7 +849,7 @@ public partial class PlaneViewer : Node3D
             // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
             if (cloudDeck != null)
             {
-                _deckCenter = ComputeAabb(cloudDeck).GetCenter();
+                _deckCenter = OrbitCamera.MergedAabb(cloudDeck).GetCenter();
                 AssignCloudDecks(cloudDeck);
             }
 
@@ -1091,6 +1182,12 @@ public partial class PlaneViewer : Node3D
         catch (Exception e)
         {
             GD.PrintErr($"failed to load session: {e}");
+            // A failed lab build: no AnimLab node exists to own the kept-open archives.
+            if (animLab == null)
+            {
+                labTextures?.Dispose();
+                labSounds?.Dispose();
+            }
             if (_screenshotPath != null)
                 GetTree().Quit(1);
             return false;
@@ -1795,7 +1892,7 @@ public partial class PlaneViewer : Node3D
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    private void FrameCamera() => _orbit.Frame(ComputeAabb(_plane!), _camPos, _lookAt);
+    private void FrameCamera() => _orbit.Frame(OrbitCamera.MergedAabb(_plane!), _camPos, _lookAt);
 
     private static Vector3 ParseVec3(string s)
     {
@@ -1804,25 +1901,6 @@ public partial class PlaneViewer : Node3D
             float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
-    }
-
-    private static Aabb ComputeAabb(Node3D root)
-    {
-        Aabb merged = default;
-        bool first = true;
-        void Walk(Node node)
-        {
-            if (node is MeshInstance3D mi && mi.Mesh != null)
-            {
-                var box = mi.GlobalTransform * mi.Mesh.GetAabb();
-                merged = first ? box : merged.Merge(box);
-                first = false;
-            }
-            foreach (var child in node.GetChildren())
-                Walk(child);
-        }
-        Walk(root);
-        return merged;
     }
 
     // ---- Focus mute (polish-4 item 7) ------------------------------------------------------

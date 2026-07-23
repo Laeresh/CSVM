@@ -144,6 +144,18 @@ name for now (renaming it is the future split's business).
   balanced. See `docs/HISTORY.md`.
 - **Wave 3 — lab MVP** (C). Quiet stage, transport, fixed dt + seed, `--play-anim`, auto-frame.
   **No timeline yet.** Verified by playing known-good world defs (see Verification).
+  **✅ Wave 3 landed 2026-07-23** — `src/UI/AnimLab.cs` (clock/transport/status/`Play`) + the
+  `--anim-lab`/`--play-anim=`/`--seed=` wiring in `PlaneViewer`; `AnimRuntime` gained public
+  `Play(animName)` (pass 3 now routes through it, so the lab starts defs exactly as the
+  bootstrap does), `Reseed()`, `FrameTarget()` and **`ManualAdvance`** — the clock hand-off is a
+  flag, NOT `SetProcess(false)`, because Godot re-enables processing at READY (found by
+  measurement: the lab world ran at 2×, 20 logged sim-seconds in a 610-frame run).
+  `WorldSession.Options` gained `AutoStart`/`RuntimeSeed`; `OrbitCamera` gained the shared
+  `MergedAabb`. **Verified:** game inert (bhawk md5 + C1/C5 boot censuses byte-identical
+  HEAD-vs-after); quiet stage = Wave 2's throwaway figures; `train_on_track` lab playback
+  matches `--freecam` pose-per-sim-second; same-seed screenshot bursts byte-identical, step-count
+  control differs; seeds 3/5/6 take a different `RandomWeight` branch than 1/2/4 while same-seed
+  reruns match. See `docs/HISTORY.md`.
 - **Wave 4 — picker + timeline** (D), fed by the B4 hooks.
 - **Wave 5 — crash stage** = the crash plan's Wave 2a/2b, delivered here: build the plane's
   `destroyed` subtree (`PlaneBuilder.BuildDestroyed` :133) + the effect templates

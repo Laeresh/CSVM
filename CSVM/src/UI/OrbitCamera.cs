@@ -73,6 +73,34 @@ public sealed class OrbitCamera
         _camera.LookAt(_orbitCenter, Vector3.Up);
     }
 
+    /// <summary>Merges every mesh AABB under <paramref name="root"/> into one world-space box —
+    /// the subject box <see cref="Frame"/> takes. A subtree with no meshes returns a zero-size
+    /// box at the origin, which callers must special-case (the anim lab substitutes a nominal
+    /// box around the node's own position). Moved verbatim from PlaneViewer's ComputeAabb
+    /// (PLAN-anim-debugger Wave 3) so the lab frames arbitrary world subtrees through the same
+    /// code; the nodes must be in the scene tree (GlobalTransform on a detached node is
+    /// identity, and Godot logs an error per call).</summary>
+    public static Aabb MergedAabb(Node3D root)
+    {
+        Aabb merged = default;
+        bool first = true;
+        void Walk(Node node)
+        {
+            if (node is MeshInstance3D mi && mi.Mesh != null)
+            {
+                var box = mi.GlobalTransform * mi.Mesh.GetAabb();
+                merged = first ? box : merged.Merge(box);
+                first = false;
+            }
+            foreach (var child in node.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(root);
+        return merged;
+    }
+
     /// <summary>Feed one input event: LMB toggles orbit-drag, the wheel zooms, and drag motion
     /// spins yaw/pitch. The host filters out the modes that own the camera (flight / freecam) and
     /// the global keys (Esc / F11 / F12) before delegating here.</summary>

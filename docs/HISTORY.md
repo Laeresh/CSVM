@@ -4448,3 +4448,40 @@ instances, 39 motions), and the hooks fire 1330 dispatches / 623 starts / 8 fini
 the only backtrace difference is the new `Advance` frame from B1. Build clean, 0 warnings. Evidence:
 `.scratch/wave2/`. **Wave 2 complete; Wave 3 (the lab MVP — quiet stage, transport, fixed dt + seed,
 `--play-anim`, auto-frame) is next.**
+
+**Animation debugger Wave 3 — the `--anim-lab` MVP (2026-07-23):** the lab mode itself: quiet
+stage, transport controls, deterministic fixed-dt clock + pinned seed, `--play-anim` auto-play
+with camera auto-frame. **New `src/UI/AnimLab.cs`** (clock accumulator at `FixedDt` = 1/60,
+clamped 0.25 s; Space pause · `.` step (pauses first) · R restart · S stop · A ambient · 1/2/3 =
+0.1×/0.25×/1×; status readout hidden in screenshot runs; in scripted runs wall time is ignored —
+exactly `timeScale×1` step per frame, so captures land on exact step counts). **`AnimRuntime`**
+gained `Play(animName)` (bootstrap pass 3 now routes through it, so the lab starts defs exactly
+as the bootstrap does), `Reseed()` (re-pins `_rng` on every Play/Restart — without it a seeded
+replay continues the stream and diverges on the first RANDOM_WEIGHT), `FrameTarget()`, and
+`ManualAdvance`. **`WorldSession.Options`** gained `AutoStart`/`RuntimeSeed` (default-preserving);
+**`OrbitCamera`** gained `MergedAabb` (PlaneViewer's `ComputeAabb` moved verbatim, both call
+sites delegate); **`PlaneViewer`** parses `--anim-lab`/`--play-anim=`/`--seed=` (lab wins over
+every other mode), hands the session archives to the lab (`using var scope = _animLab ? null :
+textures` keeps the disposal contract elsewhere; the catch disposes on a failed lab build), and
+optionally parks a `--plane=` stage prop at the mission spawn. **The bug the verification caught
+— the clock hand-off is a flag, not `SetProcess(false)`:** Godot re-enables processing at READY
+for nodes overriding `_Process`, and the runtime enters the tree after the lab mode is
+assembled, so the intended `SetProcess(false)` was silently undone and the lab world ran at
+exactly **2×** (fixed steps + wall dt). The pose-per-sim-second lab-vs-live comparison could not
+see it (both sides sampled per sim-second — rate errors cancel; now a rule in
+`docs/verification.md` §4); what caught it was 20 logged sim-seconds in a 610-frame (~10 s) run
+against the freecam control's 10, and its visible symptom was same-seed screenshot bursts
+differing by a quarter-step of door motion (wall-dt variance). Fixed with
+`AnimRuntime.ManualAdvance` gating `_Process`. **Verified:** *game inert* — static plane-viewer
+md5 `f1290254…` and the full C1 + C5 `--fly` boot censuses byte-identical HEAD-vs-after (re-run
+after the final build); *quiet stage* — C1 gives 0 ON_STARTUP + 0 startanims, 0 instances, with
+reset states (3511 ops), mission setup (29 nodes) and the safety net (31 hidden) still applied,
+0 colliders by design; *lab matches live* — `--play-anim=train_on_track` pose-per-sim-second
+equals the `--freecam` world's (caboose within 0.3 m at second 1, rotations within 0.4°, same
+~35 units/s track speed; the raised-`Take(12)` log-cap probe was reverted); *determinism* —
+same-seed `--frames=90 --shots=3 --jitter=0` bursts on `mp_hangar3_open` byte-identical (3/3
+frames, twice), `--frames=30` differs (rule-5 control); *seed is live* — C1/M05
+`--play-anim=random_prop`: seeds 1/2/4 roll `false TRUE false`, seeds 3/5/6 roll `false` (a
+different branch), same-seed reruns identical. Build clean, 0 warnings. Evidence:
+`.scratch/wave3/`. **Wave 3 complete; Wave 4 (picker + authored-vs-fired timeline, fed by the B4
+hooks) is next.**
