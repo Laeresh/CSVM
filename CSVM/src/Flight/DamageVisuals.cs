@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Visible damage on the flying aircraft (Run-2 item 10c), driven by the data's
+/// Visible damage on the flying aircraft, driven by the data's
 /// thresholds: as a part's HP fraction crosses an entry of its 'injure_anims'
 /// (see <see cref="DestroyablePart"/>), the named pdpanelN anim flips the
 /// torn-skin panel — pdpN shown, and the healthy skin covering the same spot

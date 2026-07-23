@@ -19,14 +19,14 @@ public readonly struct SoundCurve
         : MinY + (MaxY - MinY) * Mathf.Clamp((x - MinX) / (MaxX - MinX), 0f, 1f);
 }
 
-/// <summary>One entry of a vehicle def's 'destroyable_parts' block (Run-2 item 10):
+/// <summary>One entry of a vehicle def's 'destroyable_parts' block:
 /// a damageable airframe section — nose / tail / leftwing / rightwing for the
 /// player planes — with its hit points and state-change anims. 'critical' means
 /// the plane is destroyed when this part's HP reaches 0; the tail additionally
 /// carries 'engine' (power loss on destruction — flight-handling penalties are
-/// out of scope this run, recorded only). InjureAnims maps descending
+/// not modeled yet, recorded only). InjureAnims maps descending
 /// HP fractions to anim names: the *_damage_green/yellow/red cockpit-indicator
-/// cycle plus the pdpanelN torn-skin panel flips (10c wires the panels).</summary>
+/// cycle plus the pdpanelN torn-skin panel flips (DamageVisuals wires the panels).</summary>
 public sealed class DestroyablePart
 {
     public string Name = "";

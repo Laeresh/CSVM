@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The flying aircraft's collision silhouette (M2-polish item 8): a handful of
+/// The flying aircraft's collision silhouette: a handful of
 /// plane-frame boxes — fuselage, wing slab(s), tail — that FlightController sweeps
 /// along each physics frame's motion (PhysicsDirectSpaceState3D.CastMotion), so a
 /// wingtip or tail fin clips a building corner like the original. The old test was a
@@ -26,8 +26,8 @@ namespace CSVM.Flight;
 /// half-span are wing (split at the widest chord gap into separate slabs, should a
 /// plane's outboard geometry cluster fore/aft); the aft part of the plane is tail
 /// (fins, stabilizers, twin booms); a narrow central band ahead of the tail is the
-/// fuselage. Each region's box is then refined by greedy volume-guided splitting
-/// (Run-2 item 10a): cut at the axis plane that most shrinks the summed enclosed
+/// fuselage. Each region's box is then refined by greedy volume-guided splitting:
+/// cut at the axis plane that most shrinks the summed enclosed
 /// volume, while a cut still removes a real share of bridged air — so the
 /// Bloodhawk's full-span tail slab (the thin wing trailing edge AABB'd together
 /// with the tall center fins = an 11.6 × 2.4 m barn door of mostly air) becomes
@@ -125,7 +125,7 @@ public sealed class PlaneCollider
     }
 
     /// <summary>Corrects the label of a refined <c>tail</c> piece that is really wing
-    /// geometry (Run-3 item 10). The tail region is clipped on z ALONE, at full span,
+    /// geometry. The tail region is clipped on z ALONE, at full span,
     /// so on a swept or trailing-edge-heavy plane its outboard slabs are the wing's
     /// trailing edge rather than the empennage — the Bloodhawk's two flat 4.9 × 0.4
     /// strips are literally its <c>leftwing</c> / <c>rightwing</c> nodes. Refinement

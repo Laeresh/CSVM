@@ -5,8 +5,8 @@ namespace CSVM.UI;
 /// <summary>
 /// The static inspection view's orbit-camera controller: LMB-drag orbit, mouse-wheel zoom, and
 /// AABB-based framing of a subject. Extracted verbatim from <see cref="CSVM.PlaneViewer"/>
-/// (2026-07-23, PLAN-anim-debugger Wave 1 A1) so the <c>--anim-lab</c> mode can drive the same
-/// orbit camera without duplicating it — the first slice of the eventual PlaneViewer split.
+/// so the <c>--anim-lab</c> mode can drive the same orbit camera without duplicating it — the
+/// first slice of the eventual PlaneViewer split.
 ///
 /// <para>Owns the orbit state (center / distance / yaw / pitch / drag) and steers a
 /// <see cref="Camera3D"/> it does not own. The host keeps ownership of <c>--campos</c>/<c>--lookat</c>
@@ -77,7 +77,7 @@ public sealed class OrbitCamera
     /// the subject box <see cref="Frame"/> takes. A subtree with no meshes returns a zero-size
     /// box at the origin, which callers must special-case (the anim lab substitutes a nominal
     /// box around the node's own position). Moved verbatim from PlaneViewer's ComputeAabb
-    /// (PLAN-anim-debugger Wave 3) so the lab frames arbitrary world subtrees through the same
+    /// so the lab frames arbitrary world subtrees through the same
     /// code; the nodes must be in the scene tree (GlobalTransform on a detached node is
     /// identity, and Godot logs an error per call).</summary>
     public static Aabb MergedAabb(Node3D root)

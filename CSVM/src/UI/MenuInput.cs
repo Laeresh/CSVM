@@ -4,14 +4,14 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// One launchscreen player's input source (M2.5 item 6): the keyboard (player 1 only) and/or that
+/// One launchscreen player's input source: the keyboard (player 1 only) and/or that
 /// player's gamepads, polled every frame with edge detection + auto-repeat. Splitting this out
 /// of <see cref="LaunchMenu"/> is what makes the join flow possible at all — before the split,
 /// every menu read was an any-pad OR across the whole roster (correct for one player, useless
 /// once two people need separate cursors).
 ///
 /// <para>Polling rather than Godot's input map / focus system is deliberate and carried over from
-/// item 4: it needs no project-settings wiring, works identically for keyboard and pad, and — the
+/// the original launchscreen: it needs no project-settings wiring, works identically for keyboard and pad, and — the
 /// reason it matters here — reads a <b>named device</b>, which the action system cannot do.</para>
 ///
 /// <para><see cref="Prime"/> seeds the edge flags from the current raw state, so a button still
@@ -20,7 +20,7 @@ namespace CSVM.UI;
 /// </summary>
 public sealed class MenuInput
 {
-    // Auto-repeat while a direction is held (TUNE; carried over from item 4's LaunchMenu).
+    // Auto-repeat while a direction is held (TUNE; carried over from the original LaunchMenu).
     private const float RepeatInitial = 0.42f;   // s before the first repeat
     private const float RepeatInterval = 0.12f;  // s between repeats after that
     private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
@@ -30,7 +30,7 @@ public sealed class MenuInput
 
     /// <summary>The gamepad devices this player reads. A joined player has exactly one (the pad
     /// they pressed Start on); <b>player 1 holds every pad nobody has claimed</b>, which is what
-    /// preserves the 2026-07-19 any-pad fix: phantom joypad devices (a wireless dongle enumerating
+    /// preserves the any-pad fix: phantom joypad devices (a wireless dongle enumerating
     /// with the pad asleep, a non-pad HID exposing a joypad interface) can occupy the early slots,
     /// so binding player 1 to <c>pads[0]</c> would leave a real controller dead in the menu. Idle
     /// devices read as zero, so reading several is safe.</summary>
@@ -141,7 +141,7 @@ public sealed class MenuInput
     /// <summary>Button pressed on ANY of this player's pads (a set of one for a joined player,
     /// every unclaimed device for player 1). Through <c>CSVM.Pads.For</c> rather than the
     /// <see cref="Pads"/> field directly, so the read is gated on window focus and on
-    /// <c>--no-pads</c> (polish-4 item 7) — the field stays the player's <i>binding</i>, which
+    /// <c>--no-pads</c> — the field stays the player's <i>binding</i>, which
     /// the join bookkeeping still needs while unfocused.</summary>
     private bool PadButton(JoyButton button)
     {
@@ -185,7 +185,7 @@ public sealed class MenuInput
     /// <summary>Whether an unbound pad is pressing Start — the join gesture. Static because the
     /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
     /// edge-detects per device. Gated like every other pad read, so nobody joins while the
-    /// window is in the background (polish-4 item 7).</summary>
+    /// window is in the background.</summary>
     public static bool JoinPressed(int pad) =>
         !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 }

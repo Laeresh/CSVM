@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The original's Stunt Flying objective marker (Milestone 2.5 item 2), rebuilt as a HUD Control
+/// The original's Stunt Flying objective marker, rebuilt as a HUD Control
 /// over the flight view. It guides the player to the active Danger Zone:
 ///  • on screen → the zone's text block floats at its projected position (name + live distance),
 ///    a small reticle marking the point;
@@ -30,7 +30,7 @@ public sealed partial class MarkerHud : Control
     /// <summary>The plane nose heading, 0 = north (−Z), 90 = east (+X) — for the clock bearing.</summary>
     public float HeadingDeg { get; set; }
 
-    /// <summary>The splitscreen race this pilot is flying in (M2.5 item 7), or null in a solo run.
+    /// <summary>The splitscreen race this pilot is flying in, or null in a solo run.
     /// Set, the all-zones-cleared banner becomes their placing + finish time and says who they are
     /// still waiting on; the shared ranked board (<see cref="StuntRaceBoard"/>) takes over from
     /// there. Paired with <see cref="PlayerIndex"/>.</summary>
@@ -177,7 +177,7 @@ public sealed partial class MarkerHud : Control
     }
 
     /// <summary>The banner shown in this player's pane once they have cleared every zone. Solo: the
-    /// run is simply over (the results board is coming up in the same pane). In a race (item 7):
+    /// run is simply over (the results board is coming up in the same pane). In a race:
     /// their placing + finish time, held while the rest of the field still flies — the shared
     /// ranked board only appears when the last pilot is in.</summary>
     private string[] CompleteBanner()

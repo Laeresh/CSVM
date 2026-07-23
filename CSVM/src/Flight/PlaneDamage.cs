@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Per-part hit points for the flying aircraft (Run-2 item 10b), backed by the
+/// Per-part hit points for the flying aircraft, backed by the
 /// vehicle def's 'destroyable_parts' (see <see cref="DestroyablePart"/>): the
 /// player planes carry nose / tail / leftwing / rightwing, all 'critical' — the
 /// plane is destroyed when any reaches 0 HP. FlightController applies

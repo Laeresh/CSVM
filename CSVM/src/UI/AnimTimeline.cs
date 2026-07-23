@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The animation debugger's timeline (PLAN-anim-debugger Wave 4): a custom-drawn strip showing,
+/// The animation debugger's timeline: a custom-drawn strip showing,
 /// for the played definition, one lane per Initial sequence with its events at their
 /// <b>authored</b> start times (an upper band of blocks, computed statically here), a moving
 /// playhead, and a bright tick stamped in the lower band at each event's <b>actual</b> dispatch
@@ -17,7 +17,7 @@ namespace CSVM.UI;
 /// schedule below, and the live <c>SequenceRunner</c> in the runtime — so a scheduling bug shows
 /// up as a horizontal gap between an event's authored block and its fired tick (drawn as a
 /// slanted connector on the first firing of each event). This is the instrument that would have
-/// caught the polish-4 <c>NextDue</c> off-by-one, which fired each timestamped event one slot
+/// caught the <c>NextDue</c> off-by-one, which fired each timestamped event one slot
 /// early and its unstamped partner one slot late. If the authored pass reused the runner's code
 /// the divergence would be invisible, so it deliberately re-derives the <i>documented</i>
 /// scheduling rule instead of calling into the runner.</para>
@@ -58,8 +58,7 @@ public sealed partial class AnimTimeline : Control
     }
 
     // Beyond this many ticks a looping lane drops its oldest, so a train left running for
-    // minutes cannot grow the list without bound. Short one-shot defs (the Wave 4/5 targets)
-    // never reach it.
+    // minutes cannot grow the list without bound. Short one-shot defs never reach it.
     private const int MaxFiredPerLane = 600;
 
     private const float MinSpan = 2f;      // the axis never zooms in tighter than 2 s

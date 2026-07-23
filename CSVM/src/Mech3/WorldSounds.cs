@@ -34,7 +34,7 @@ public sealed partial class WorldSounds : Node3D
     /// genuinely new name after the build is reported rather than faulting on a closed zip.
     ///
     /// <para><b>The cache is not enough on its own — <see cref="Prewarm"/> is what makes this
-    /// safe (2026-07-22).</b> "A name already heard" only covers names some emitter happened to
+    /// safe.</b> "A name already heard" only covers names some emitter happened to
     /// create during bootstrap. Measured install-wide, <b>947 of 1,244</b> SOUND_NODE events sit
     /// in Initial sequences of <c>OnCall</c>-activation defs, so they are first reached at
     /// runtime — always after this field is nulled — and 386 of them name a sound that is never

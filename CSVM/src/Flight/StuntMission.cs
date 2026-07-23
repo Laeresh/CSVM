@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 public sealed class StuntZone
 {
     public string DzName = "";        // dz1..dzN — the point marker (mesh_index -1) the sphere tests against
-    // dzpath1..dzpathN — never rendered (--debug-dzpaths). Decoded 2026-07-22: NOT just a route
+    // dzpath1..dzpathN — never rendered (--debug-dzpaths). Decoded: NOT just a route
     // ribbon. Each is a 3-polygon model — polygon 0 is the approach/exit polyline, polygons 1 and 2
     // are the two *gate outlines*, i.e. the aperture rings the zone is flown through. Read by
     // nothing yet; the obvious use is a per-zone extent to replace the one global DzRadius, but the
@@ -25,7 +25,7 @@ public sealed class StuntZone
     public bool Completed;
 
     /// <summary>Run clock, seconds, at the moment this zone was flown through — its cumulative
-    /// time from run start (item 3 scoring). 0 until completed; the scoreboard's per-zone split is
+    /// time from run start. 0 until completed; the scoreboard's per-zone split is
     /// the delta between consecutive completions in <see cref="CompletionOrder"/>.</summary>
     public float CompletedAt;
 
@@ -33,8 +33,8 @@ public sealed class StuntZone
     /// the flown order, not the ia.json list order). −1 until completed.</summary>
     public int CompletionOrder = -1;
 
-    /// <summary>The original's assembled marker text without the clock suffix (item 2 adds
-    /// that): "Danger Zone [Fly Through] - Train Tunnel Mid". Degrades gracefully if any
+    /// <summary>The original's assembled marker text without the clock suffix (the marker HUD
+    /// adds that): "Danger Zone [Fly Through] - Train Tunnel Mid". Degrades gracefully if any
     /// part is absent.</summary>
     public string MarkerText()
     {
@@ -49,14 +49,14 @@ public sealed class StuntZone
 }
 
 /// <summary>
-/// The Stunt Flying instant-action mode (Milestone 2.5 item 1). A stunt run's objective is to
+/// The Stunt Flying instant-action mode. A stunt run's objective is to
 /// fly through every Danger Zone; each <c>dzN</c> marker completes when the plane passes within
 /// <see cref="DzRadius"/> of its point, order-free, and the run ends when all are done.
 ///
 /// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs); each
 /// <c>dzN</c>'s world position comes straight from the chapter gamez (a point marker under the
 /// identity World root), and its display strings from targets.json → messages.json. Detection
-/// and completion only — the marker HUD (item 2) and timed scoring (item 3) build on this.
+/// and completion only — the marker HUD and timed scoring build on this.
 /// </summary>
 public sealed class StuntMission
 {
@@ -65,7 +65,7 @@ public sealed class StuntMission
     public const float DzRadius = 15f;
 
     /// <summary>Messages key for the run-start intro line ("Fly through all the Danger Zones to
-    /// win!") — the marker HUD's one-shot banner (item 2).</summary>
+    /// win!") — the marker HUD's one-shot banner.</summary>
     private const string IntroMsgKey = "MSG_BRF_IASF_OBJ2";
 
     private readonly List<StuntZone> _zones;
@@ -78,7 +78,7 @@ public sealed class StuntMission
 
     /// <summary>Elapsed run time, seconds, advanced by <see cref="Tick"/> every physics frame —
     /// including through the crash freeze ("the clock never stops"), frozen only once the run is
-    /// complete. Read by the marker HUD (item 2) and scoring (item 3). Not reset on respawn (a
+    /// complete. Read by the marker HUD and scoring. Not reset on respawn (a
     /// mid-run crash keeps the same clock, like the completed zones).</summary>
     public float Elapsed { get; private set; }
 
@@ -86,18 +86,18 @@ public sealed class StuntMission
     /// Zones to win!"), resolved at load from the message table. Empty if the table is absent.</summary>
     public string IntroLine { get; private set; } = "";
 
-    /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race, item 7). Empty in a
+    /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
     /// solo run, so single-player logs read exactly as before — but with four pilots clearing zones
     /// in one shared world the completion lines are otherwise indistinguishable.</summary>
     public string LogTag = "";
 
     /// <summary>The zone the HUD points at: the first still-incomplete zone in list order
-    /// (item 2's cycling overrides the displayed one). Null once the run is complete.</summary>
+    /// (manual cycling overrides the displayed one). Null once the run is complete.</summary>
     public StuntZone? ActiveZone => _active >= 0 && _active < _zones.Count ? _zones[_active] : null;
 
-    /// <summary>Fired once per zone the moment it is flown through (item 3 records a split).</summary>
+    /// <summary>Fired once per zone the moment it is flown through (scoring records a split).</summary>
     public event Action<StuntZone>? ZoneCompleted;
-    /// <summary>Fired once when the last zone completes (item 3 stops the clock / shows the board).</summary>
+    /// <summary>Fired once when the last zone completes (stops the clock / shows the board).</summary>
     public event Action? RunCompleted;
 
     private StuntMission(List<StuntZone> zones)
@@ -268,7 +268,7 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>A second, independent run over the same Danger Zones (M2.5 item 7, splitscreen
+    /// <summary>A second, independent run over the same Danger Zones (splitscreen
     /// racing): same zone list, positions and display strings, but its own completion flags, clock,
     /// active target and events. Copying beats calling <see cref="Load"/> once per player — the
     /// ia.json/targets.json/messages parse and the gamez lookups happen once for the session.</summary>
@@ -301,7 +301,7 @@ public sealed class StuntMission
     }
 
     /// <summary>Advance the run clock one physics frame. Called every frame — including through
-    /// the crash freeze so the clock never stops (item 3 rule) — and stops accumulating once the
+    /// the crash freeze so the clock never stops (a deliberate rule) — and stops accumulating once the
     /// run is complete.</summary>
     public void Tick(float dt)
     {
@@ -312,12 +312,12 @@ public sealed class StuntMission
     private void Complete(StuntZone z)
     {
         z.Completed = true;
-        z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits (item 3)
+        z.CompletedAt = Elapsed;      // cumulative run time — the scoreboard derives splits
         z.CompletionOrder = CompletedCount; // 0-based, before the increment below
         CompletedCount++;
         GD.Print($"stunt: {LogTag}completed {z.DzName} — {z.MarkerText()} ({CompletedCount}/{TotalCount})");
         ZoneCompleted?.Invoke(z);
-        // Keep pointing at the manually-cycled target (item 2) unless it was the zone just
+        // Keep pointing at the manually-cycled target unless it was the zone just
         // completed; otherwise auto-advance to the next incomplete in list order.
         if (_active < 0 || _zones[_active].Completed)
             AdvanceActive();
@@ -346,7 +346,7 @@ public sealed class StuntMission
         _active = -1;
     }
 
-    /// <summary>Manual target cycling (item 2): point the HUD at the next still-incomplete zone in
+    /// <summary>Manual target cycling: point the HUD at the next still-incomplete zone in
     /// list order (wrapping). No-op once the run is complete. Whichever zone ends up displayed is
     /// still auto-advanced when it (or the displayed one) completes.</summary>
     public void CycleTarget()
@@ -367,7 +367,7 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>Start a fresh run (item 3, the scoreboard's "R — New Run"): every zone incomplete,
+    /// <summary>Start a fresh run (the scoreboard's "R — New Run"): every zone incomplete,
     /// the clock back to zero, the active target back to the first zone. Unlike a mid-run respawn
     /// this DOES clear progress and the clock — it is the deliberate opposite of the
     /// crash-keeps-everything rule.</summary>
@@ -402,7 +402,7 @@ public sealed class StuntMission
         }
     }
 
-    /// <summary>The zones in the order they were flown through (item 3 scoreboard) — completed
+    /// <summary>The zones in the order they were flown through (for the scoreboard) — completed
     /// zones by <see cref="StuntZone.CompletionOrder"/>, any still-incomplete zones appended in
     /// list order.</summary>
     public IEnumerable<StuntZone> InCompletionOrder()
@@ -420,7 +420,7 @@ public sealed class StuntMission
     }
 
     /// <summary>"m:ss.t" run-clock formatting, shared by the marker HUD status line and the
-    /// scoreboard (item 3). Invariant culture so the decimal is always a period regardless of the
+    /// scoreboard. Invariant culture so the decimal is always a period regardless of the
     /// player's system locale (a game clock, and deterministic across screenshot runs).</summary>
     public static string FormatTime(float seconds)
     {
@@ -430,7 +430,7 @@ public sealed class StuntMission
     }
 
     /// <summary>Compact HUD status: "2/5 zones — Danger Zone [Fly Through] - Train Tunnel Mid",
-    /// or "COMPLETE" once the run is done. (Item 1's placeholder-but-playable readout; item 2
+    /// or "COMPLETE" once the run is done. (A placeholder-but-playable readout; the marker HUD
     /// replaces it with the projected marker + edge arrow.)</summary>
     public string StatusLine() =>
         AllComplete

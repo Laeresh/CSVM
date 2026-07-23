@@ -6,7 +6,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>Which crash variant the original would play for the surface just hit (polish-4 item 8).
+/// <summary>Which crash variant the original would play for the surface just hit.
 /// The engine chooses natively from the impact surface — the three <c>player_crash_*</c> defs are
 /// never <c>CallAnimation</c>-referenced by name — so the choice is ours to reconstruct in
 /// <see cref="FlightController.ClassifySurface"/>. Every reachable crash today is a hard non-water
@@ -74,16 +74,16 @@ public partial class FlightController : Node3D
     /// back to the old center-ray-only test.</summary>
     public PlaneCollider? Collider;
 
-    /// <summary>Per-part hit points from the vehicle def's destroyable_parts (Run-2
-    /// item 10b). When set, collisions below the crash threshold damage the struck
+    /// <summary>Per-part hit points from the vehicle def's destroyable_parts.
+    /// When set, collisions below the crash threshold damage the struck
     /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
     public PlaneDamage? Damage;
 
-    /// <summary>Visible damage (Run-2 item 10c): torn-skin pdpanel flips + the low-HP
+    /// <summary>Visible damage: torn-skin pdpanel flips + the low-HP
     /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
     public DamageVisuals? Visuals;
 
-    /// <summary>The data-driven crash (PLAN-data-driven-crash Layer 2): a per-player
+    /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
     /// <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that PLAYS the
     /// compiled <c>player_crash_dirt</c> definition on a crash — the airframe hides, the wreck
@@ -113,24 +113,24 @@ public partial class FlightController : Node3D
     /// built-hidden torn panels / wingtip flares hidden). Set alongside <see cref="CrashRuntime"/>.</summary>
     public IReadOnlyList<(Node3D Node, bool Visible)>? CrashPlaneVisibility;
 
-    /// <summary>The stunt run (M2.5 item 1), when flying --stunt: danger-zone sphere
+    /// <summary>The stunt run, when flying --stunt: danger-zone sphere
     /// detection, tested against the plane each physics frame. Deliberately NOT reset on
-    /// respawn — a mid-run crash keeps completed zones (the clock keeps running, item 3).
+    /// respawn — a mid-run crash keeps completed zones (the clock keeps running).
     /// Null in free flight.</summary>
     public StuntMission? Stunt;
 
-    /// <summary>The stunt objective marker HUD (M2.5 item 2): the active zone's projected marker /
+    /// <summary>The stunt objective marker HUD: the active zone's projected marker /
     /// screen-edge arrow + clock bearing, the run-status line, intro/complete banners. Added to
     /// the HUD canvas, fed the plane pose each frame; the camera + mission are bound at Build.
     /// Null in free flight (and when --stunt found no danger zones).</summary>
     public MarkerHud? Marker;
 
-    /// <summary>The end-of-run results overlay (M2.5 item 3): splits + total + best-time on
+    /// <summary>The end-of-run results overlay: splits + total + best-time on
     /// AllComplete. Added to the HUD canvas last (drawn over the marker/dials); wakes itself on
     /// the run's RunCompleted. Null in free flight.</summary>
     public StuntScoreboard? Scoreboard;
 
-    /// <summary>The splitscreen stunt race this plane is one seat of (M2.5 item 7), or null when
+    /// <summary>The splitscreen stunt race this plane is one seat of, or null when
     /// flying solo. Set, clearing every zone parks this player at the finish while the others fly
     /// on, and R only becomes a rematch once the whole field is in — a rematch restarts every
     /// player, so it goes through <see cref="RestartRace"/> rather than this plane alone.</summary>
@@ -147,7 +147,7 @@ public partial class FlightController : Node3D
     /// crash test sweeps each physics frame — in green (red on the impact frame).</summary>
     public bool DebugCollision;
 
-    /// <summary>The gamepad devices that fly THIS plane (M2.5 item 5, splitscreen). Null — the
+    /// <summary>The gamepad devices that fly THIS plane (splitscreen). Null — the
     /// single-player default — means every connected pad flies it (see <see cref="PadPressed"/>).
     /// In splitscreen each player is bound to its own device so P2's stick never moves P1.</summary>
     public int[]? PadDevices;
@@ -206,7 +206,7 @@ public partial class FlightController : Node3D
     private const float AutoRespawnDelay = 1.5f; // s a HoldInput run stays crashed before auto-respawn
     private const float DebugFinishStagger = 1.5f; // s between players' forced finishes (--debug-scoreboard in a race)
 
-    // Collision severity (Run-2 item 10b, all TUNE): impact speed along the contact
+    // Collision severity (all TUNE): impact speed along the contact
     // normal decides between a survivable graze and a crash. A graze damages the
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
@@ -280,7 +280,7 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
-    /// crash respawn (R), and the session's per-plane reset for a race rematch (item 7). Leaves the
+    /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
     /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
     public void Respawn()
     {
@@ -294,7 +294,7 @@ public partial class FlightController : Node3D
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         if (CrashRuntime != null)
         {
-            // data-driven crash (Layer 2): hard-stop the played def (instances, motions, the fire +
+            // data-driven crash: hard-stop the played def (instances, motions, the fire +
             // every other puffer), re-hide the wreck + effect templates (their RESET_STATE), re-home
             // the flung pieces (no reset event re-poses them), and restore the plane model's built
             // visibility — the def hid healthy/markers and only the RESET_STATE's dontmove comes back,
@@ -322,7 +322,7 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
-    /// <summary>Full stunt restart from the results scoreboard (item 3, R): fresh clock + every
+    /// <summary>Full stunt restart from the results scoreboard (R): fresh clock + every
     /// zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     /// scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.</summary>
     private void RestartStuntRun()
@@ -360,10 +360,10 @@ public partial class FlightController : Node3D
         var surface = ClassifySurface(hitName);
         Audio?.OnCrash();
         if (surface == CrashSurface.Ground)
-            Audio?.OnGroundExplosion(); // snd_exp_ground_a, over the plane explosion (item 8)
+            Audio?.OnGroundExplosion(); // snd_exp_ground_a, layered over the plane explosion
         if (CrashRuntime != null)
         {
-            // Data-driven crash (Layer 2): PLAY the compiled def on this plane's scoped crash
+            // Data-driven crash: PLAY the compiled def on this plane's scoped crash
             // runtime. The def hides healthy/dontmove/markers, shows the destroyed wreck, launches
             // the pieceN ballistics, and fires every authored effect (sparks, the fireball cluster,
             // the black smokeball, the dirt burst, the burning-debris arcs). Audio stays the same
@@ -386,7 +386,7 @@ public partial class FlightController : Node3D
     /// that fires when the plane is destroyed with NO impact at all (shot down mid-flight),
     /// which has no trigger until weapons (M3). Water needs a sea-surface signal the collision
     /// system does not yet expose. So this is Ground for now — the seam is real, the other two
-    /// arms wait on their triggers (polish-4 item 8).</summary>
+    /// arms wait on their triggers.</summary>
     private static CrashSurface ClassifySurface(string hitName) =>
         CrashSurface.Ground;
 
@@ -433,7 +433,7 @@ public partial class FlightController : Node3D
         AllowPause && (KeyDown(Key.P) || PadPressed(JoyButton.Start));
 
     /// <summary>Tab / gamepad X — cycles the stunt marker's displayed target (caller edge-detects).
-    /// The plan suggested gamepad Y, but Y is the respawn button, so X (a free face button) instead.</summary>
+    /// Gamepad Y would clash with the respawn button, so X (a free face button) instead.</summary>
     private bool CycleTargetPressed() =>
         KeyDown(Key.Tab) || PadPressed(JoyButton.X);
 
@@ -456,7 +456,7 @@ public partial class FlightController : Node3D
             return;
 
         // Advance the stunt clock every physics frame — including through the crash freeze so the
-        // clock never stops (item 3 rule); it stops only at AllComplete (inside Tick). Frozen
+        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). Frozen
         // while paused (returned above — a debug screenshot freeze must not run the timer).
         Stunt?.Tick(dt);
 
@@ -471,8 +471,8 @@ public partial class FlightController : Node3D
 
         // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
         // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
-        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone
-        // (item 3). In a race (item 7) this player is simply parked at the finish while the rest
+        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone.
+        // In a race this player is simply parked at the finish while the rest
         // of the field flies on, and R only means "rematch" — restarting everybody — once the
         // last pilot is in. Checked before the crash branch so completing the final zone always
         // restarts cleanly.
@@ -618,7 +618,7 @@ public partial class FlightController : Node3D
         };
     }
 
-    /// <summary>Decides a confirmed collision's outcome (Run-2 item 10b): false =
+    /// <summary>Decides a confirmed collision's outcome: false =
     /// crash (severe impact, a critical part destroyed, or no damage data), true =
     /// survivable graze — the struck part takes severity-scaled damage, the plane is
     /// placed at the swept safe pose, its velocity deflects along the surface with
@@ -909,7 +909,7 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
-        // Stunt run status now lives in the marker HUD (item 2); keep the compact text line only
+        // Stunt run status now lives in the marker HUD; keep the compact text line only
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)
             _hud.Text += $"\n{Stunt.StatusLine()}";

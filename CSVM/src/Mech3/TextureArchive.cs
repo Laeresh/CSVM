@@ -25,7 +25,7 @@ public sealed class TextureArchive : IDisposable
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
 
     // Texture names referenced by gamez meshes that ship in NO archive of a retail
-    // install — verified absent across all extracted chapters (2026-07-17). The
+    // install — verified absent across all extracted chapters. The
     // original engine tolerates them (renders neutral), so we do too: a quiet gray
     // fallback instead of the debug magenta, and a one-line data-gap note instead of
     // a lookup-failure warning. Anything NOT on this list that goes missing is likely

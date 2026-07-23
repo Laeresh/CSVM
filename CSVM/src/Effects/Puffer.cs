@@ -10,7 +10,7 @@ namespace CSVM.Effects;
 /// (a COLORS ramp ⇒ <c>blend_mix</c>, else <c>blend_add</c>); the explicit modes override it
 /// for effects whose blend the data does not imply — the crash <c>large_black_smokeball</c>
 /// carries <c>colors: null</c> yet must render as MIX, because additive black smoke adds ~0
-/// and is invisible (polish-4 item 8, gap 1).</summary>
+/// and is invisible.</summary>
 public enum PufferBlend { Auto, Additive, Mix }
 
 /// <summary>
@@ -46,7 +46,7 @@ public sealed class PufferState
     /// the spray reads as the base of the falls rather than one point source.</summary>
     public Vector3 AtNodeOffset;
 
-    /// <summary>Trail emission (Run-2 item 10c): emit one sprite per this many meters
+    /// <summary>Trail emission: emit one sprite per this many meters
     /// of the followed node's motion (the smoke/fire trail puffers in
     /// pufftrails.json's dense_firetrail). 0 = burst-style (NUMBER per TIME_INTERVAL).</summary>
     public float DistanceInterval;
@@ -349,7 +349,7 @@ public sealed partial class Puffer : Node3D
             // (SOFT_EXPR → 1.0) for the crash smokeball: it sits just above the ground,
             // so the fade zeroes the alpha of every fresh puff against the terrain right
             // behind it — a bright additive fire still leaks through, but MIX black smoke
-            // faded to zero is simply invisible until it grows tall (item 8).
+            // faded to zero is simply invisible until it grows tall.
             float scene_raw = texture(depth_texture, SCREEN_UV).r;
             vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
             float scene_z = unproj.z / unproj.w;

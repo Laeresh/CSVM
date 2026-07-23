@@ -18,7 +18,7 @@ public static class Zrdr
     /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
     /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
     /// identical — all 222 readers verified semantically equal across the two — so only
-    /// the lookup needs to accept both (2026-07-21, revival-plan item 13).</summary>
+    /// the lookup needs to accept both.</summary>
     private static IEnumerable<string> CandidateNames(string fileName)
     {
         yield return fileName;

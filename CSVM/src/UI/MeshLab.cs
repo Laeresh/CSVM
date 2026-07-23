@@ -7,7 +7,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The static viewer's mesh lab (<c>--viewer</c>, key M, 2026-07-20): geometry and shading
+/// The static viewer's mesh lab (<c>--viewer</c>, key M): geometry and shading
 /// diagnostics for one aircraft — normal vectors, wireframe with smoothing seams, the
 /// collision zone boxes, steerable lighting, and live overrides of the two render decisions
 /// that shading artifacts usually trace back to.

@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// Floating node-name labels over the built scene (key <b>T</b>, 2026-07-20) — available in
+/// Floating node-name labels over the built scene (key <b>T</b>) — available in
 /// the static viewer <i>and</i> in flight, which is the point: the fastest way to identify an
 /// object sitting at a wrong position is to read its name off it while you fly past.
 ///

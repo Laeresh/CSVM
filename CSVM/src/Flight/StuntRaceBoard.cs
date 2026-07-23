@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The shared results board for a splitscreen stunt race (M2.5 item 7). Where the single-player
+/// The shared results board for a splitscreen stunt race. Where the single-player
 /// <see cref="StuntScoreboard"/> shows one pilot's per-zone splits inside their own pane, this
 /// ranks the whole field and covers the <b>entire window</b> — it goes on its own CanvasLayer over
 /// the splitscreen panes, not into a SubViewport, because the race ends for everybody at once.

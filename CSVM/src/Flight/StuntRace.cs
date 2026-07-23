@@ -4,7 +4,7 @@ using Godot;
 
 namespace CSVM.Flight;
 
-/// <summary>One seat in a splitscreen stunt race (M2.5 item 7): the player's own
+/// <summary>One seat in a splitscreen stunt race: the player's own
 /// <see cref="StuntMission"/> — their own zone progress and run clock — plus where they placed
 /// once they crossed the last Danger Zone.</summary>
 public sealed class Racer
@@ -35,7 +35,7 @@ public sealed class Racer
 }
 
 /// <summary>
-/// The splitscreen stunt race (M2.5 item 7): every player flies the same mission's Danger Zones
+/// The splitscreen stunt race: every player flies the same mission's Danger Zones
 /// concurrently in one shared world, each with their own progress, marker HUD and clock. This
 /// object is only the race bookkeeping on top of the per-player <see cref="StuntMission"/>s —
 /// who has finished, in what order, and whether the race is over.

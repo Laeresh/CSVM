@@ -44,8 +44,8 @@ namespace CSVM;
 ///                                Combine with --chapter= to fly a different chapter (default C1)
 ///   --stunt                      stunt-flying mode: --fly + the mission's danger zones (ia.json
 ///                                dzones) as fly-through objectives, spawning from the stunt_flying
-///                                spawn list. Completion shows in the text HUD (marker HUD is item 2)
-///   --anim-lab                   the animation debugger (PLAN-anim-debugger): the chapter world
+///                                spawn list. Completion shows in the text HUD
+///   --anim-lab                   the animation debugger: the chapter world
 ///                                as a quiet stage (reset states applied, nothing playing) under
 ///                                a deterministic fixed-dt clock with def-playback transport
 ///                                controls — see UI.AnimLab. Wins over every other mode
@@ -85,7 +85,7 @@ namespace CSVM;
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
 ///                                crash test; green, red on impact)
-///   --players=N                  splitscreen (M2.5 item 5): fly N planes (1–4) in one shared
+///   --players=N                  splitscreen: fly N planes (1–4) in one shared
 ///                                world, each in its own pane with its own camera, sky, HUD and
 ///                                input device. 2P = stacked top/bottom, 3–4P = 2×2 grid. P1 =
 ///                                keyboard + the first pad, P2–P4 = the next pads in order.
@@ -130,14 +130,14 @@ public partial class PlaneViewer : Node3D
     private static readonly Color WhiteoutColor = new(0.95f, 0.95f, 0.96f);
 
     private string _planeName = "player_bhawk";
-    // Splitscreen (M2.5 item 6): one plane per player, from the launchscreen's simultaneous pick
+    // Splitscreen: one plane per player, from the launchscreen's simultaneous pick
     // or a comma-separated --plane= list. Empty = everyone flies _planeName (the 1P/CLI default).
     private readonly List<string> _planeNames = new();
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private int[][]? _menuPads;
     private int _debugJoin;            // --debug-join=N: extra device-less menu players (screenshot aid)
-    // Aircraft paint (2026-07-20). --paint= names a shipped pattern / "random" / "none",
+    // Aircraft paint. --paint= names a shipped pattern / "random" / "none",
     // comma-separated per player like --plane=. Null = the mode default: free flight and
     // stunt runs randomize a livery per player on every map load (the original gives every
     // aircraft in the world its own squadron colours), static --plane views stay unpainted
@@ -156,14 +156,14 @@ public partial class PlaneViewer : Node3D
     private bool _skyZoneExplicit;     // --sky-zone given: render the horizon even in static --chapter mode
     // The zone actually rendered: _skyZone when this mission defines it, otherwise the first
     // zone its weather.json does (WeatherState.ResolveZone). C5 ships zone1+zone3, so the
-    // zone2 default resolves to zone1 there — CONFIRMED correct by playtest 2026-07-22, not
+    // zone2 default resolves to zone1 there — CONFIRMED correct by playtest, not
     // just a lucky fallback; C1–C4 all define zone2 and resolve to themselves.
     // Reassigned on every StartSession, so a menu rebuild never inherits the last chapter's.
     private string _activeZone = "zone2";
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
     private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
-    // --viewer: the static inspection view (2026-07-20). Flight is the default for any
+    // --viewer: the static inspection view. Flight is the default for any
     // content arg, so this is how you get the parked-plane orbit — and it is where the
     // damage lab (--damage) and the livery lab (L) live.
     private bool _viewerMode;
@@ -172,12 +172,12 @@ public partial class PlaneViewer : Node3D
     private string _scenario = "zeppelin_run"; // which instant-action scenario's spawn list (--scenario=)
     private bool _scenarioExplicit;    // --scenario= given (so --stunt doesn't override it)
     private bool _stunt;               // --stunt: stunt-flying mode (= --fly + stunt_flying spawns + StuntMission)
-    // --freecam: spectator mode (anim-playback plan item 1) — the live chapter world (sky,
+    // --freecam: spectator mode — the live chapter world (sky,
     // weather, edge continuation, animations) with NO aircraft, observed from a free-flying
     // camera. The testing view for animation work: park in front of a moving object and watch.
     private bool _freecam;
     private SpectatorCamera? _spectator;
-    // --anim-lab: the animation debugger (PLAN-anim-debugger Wave 3) — the chapter world as a
+    // --anim-lab: the animation debugger — the chapter world as a
     // quiet stage under a deterministic fixed-dt clock with def-playback transport (UI.AnimLab).
     // The most specific mode of all, so it wins outright when combined with any other.
     private bool _animLab;
@@ -205,7 +205,7 @@ public partial class PlaneViewer : Node3D
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
-    private int _players = 1;          // --players=N: splitscreen panes/planes (M2.5 item 5); 1 = single player
+    private int _players = 1;          // --players=N: splitscreen panes/planes; 1 = single player
     private (FlightInput, float)[][]? _holdSets; // --hold: one scripted sequence per player ('|'-separated)
     private Vector3? _camPos, _lookAt;
     private string? _screenshotPath;
@@ -221,7 +221,7 @@ public partial class PlaneViewer : Node3D
     private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
     private Effects.Precipitation? _precip; // rain/snow field (self-animating, per-view for free)
-    // One rig per rendered view (M2.5 item 5): its camera plus the camera-anchored copies only it
+    // One rig per rendered view: its camera plus the camera-anchored copies only it
     // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
@@ -238,7 +238,7 @@ public partial class PlaneViewer : Node3D
     private OrbitCamera _orbit = null!;
     private float? _argYaw, _argPitch;
 
-    // Session lifecycle (M2.5 item 4 — the launchscreen's in-process world rebuild): everything a
+    // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and StartSession run again.
     // The camera, lights and global shader params live on `this` and persist across sessions.
     private Node3D? _worldRoot;    // the current session's subtree (world/plane/HUD/effects)
@@ -269,7 +269,7 @@ public partial class PlaneViewer : Node3D
     /// more expensive" from "our C# got more expensive". Averaged over a second so a single
     /// hitch doesn't read as a regression; A/B two builds by comparing the same line.
     ///
-    /// <para><c>physics</c> (added 2026-07-22) is Godot's <c>TIME_PHYSICS_PROCESS</c> monitor —
+    /// <para><c>physics</c> is Godot's <c>TIME_PHYSICS_PROCESS</c> monitor —
     /// the physics tick, which is where broadphase and narrowphase cost lands. It exists because
     /// `frame`/`fps` sit pinned at the vsync cap in nearly every run here, so they are floors
     /// and cannot show a collision change getting cheaper or dearer; the physics term can move
@@ -348,7 +348,7 @@ public partial class PlaneViewer : Node3D
         // A content-selecting arg (--plane/--chapter/--fly/--stunt/--viewer/--damage/--screenshot)
         // builds directly and bypasses the launchscreen; a bare launch (none of them) shows the menu.
         //
-        // FLIGHT IS THE DEFAULT (2026-07-20): a content arg with no --viewer flies. So
+        // FLIGHT IS THE DEFAULT: a content arg with no --viewer flies. So
         // `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4, where both
         // used to open a static orbit view. `--viewer` asks for that static inspection view
         // back, and is where the damage and livery labs live. `--fly` is still accepted and
@@ -467,12 +467,12 @@ public partial class PlaneViewer : Node3D
         // The static viewer shows a chapter world when asked for one, else the parked plane.
         // Flight, the spectator view and the anim lab always need the world built.
         _worldMode = _fly || _freecam || _animLab || (_viewerMode && _chapterGiven);
-        // A --plane= list of several aircraft states the player count on its own (item 6's
+        // A --plane= list of several aircraft states the player count on its own (the
         // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
         // different planes); an explicit --players= still wins.
         if (!playersExplicit && _planeNames.Count > 1)
             _players = _planeNames.Count;
-        // Splitscreen (item 5) is a flight mode: it needs planes to fly. Clamp to the rig's
+        // Splitscreen is a flight mode: it needs planes to fly. Clamp to the rig's
         // capacity and fall back to single player for any static/orbit view.
         _players = Mathf.Clamp(_players, 1, UI.SplitScreen.MaxPlayers);
         if (_players > 1 && !_fly)
@@ -505,7 +505,7 @@ public partial class PlaneViewer : Node3D
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
         RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
             RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
-        // The fullbright world's per-mission brightness from the weather's SUNLIGHT (item 6):
+        // The fullbright world's per-mission brightness from the weather's SUNLIGHT:
         // 1.0 = fullbright (no darkening) for static views / missions without weather; --fly
         // overrides it from WeatherState.WorldLight below.
         RenderingServer.GlobalShaderParameterAdd("csky_world_light",
@@ -632,7 +632,7 @@ public partial class PlaneViewer : Node3D
             {
                 // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
                 // mission setup, AnimProgram + the AnimRuntime collaborator wiring, bind, sound
-                // prewarm — extracted to WorldSession (2026-07-23) so --anim-lab builds the same
+                // prewarm — extracted to WorldSession so --anim-lab builds the same
                 // world+runtime. The per-view steps below (unplaced watch, edge extender, per-rig
                 // horizon + weather) stay here and read the returned builder. WorldSession does NOT
                 // add its Root to the tree — _worldRoot.AddChild(_plane) below still owns that.
@@ -710,11 +710,11 @@ public partial class PlaneViewer : Node3D
                     // only an explicit --sky-zone adds it (an outside orbit view is better
                     // without the enclosing dome; with --campos inside the map it works).
                     // One dome per rig: it follows *a* camera, so each splitscreen pane needs
-                    // its own on that player's visual layer (item 5).
+                    // its own on that player's visual layer.
                     //
                     // The mission's weather.json is loaded FIRST because it owns the zone
                     // table: it is what resolves --sky-zone's default against the zones this
-                    // chapter actually ships (C5 has zone1+zone3, not zone2 — polish-3 item 2),
+                    // chapter actually ships (C5 has zone1+zone3, not zone2),
                     // and the dome must be built for the same zone the fog comes from.
                     LoadWeather(missionZrdrPath);
                     foreach (var rig in _rigs)
@@ -763,7 +763,7 @@ public partial class PlaneViewer : Node3D
                     // instead of onto one of C1's 217 generic 'healthy' world nodes. With
                     // PlaceCalledTemplates on, a CALL_ANIMATION relocates the called template onto
                     // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
-                    // the templates. PLAN-anim-debugger Wave 5 (= the crash plan's Wave 2a/2b scaffolding).
+                    // the templates.
                     var labStage = new Node3D { Name = "lab_stage_anchor" };
                     int effectRoots = BuildEffectStage(gamez, session.Builder.Scene, labStage);
                     labStage.AddChild(BuildCrashAnchorSet());
@@ -830,7 +830,7 @@ public partial class PlaneViewer : Node3D
             else
             {
                 // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
-                // Every --viewer session gets one now (2026-07-20), so H always has something
+                // Every --viewer session gets one now, so H always has something
                 // to toggle; --damage only decides whether it opens straight away. Built
                 // hidden otherwise, and the panels are built hidden regardless, so a plain
                 // --viewer still renders byte-identically.
@@ -949,7 +949,7 @@ public partial class PlaneViewer : Node3D
                 // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
                 // and the per-plane state below are per player.
                 var planesGamez = GameZ.Load(planesGamezPath);
-                // Stats are per plane, not per player (item 6: splitscreen players can pick
+                // Stats are per plane, not per player (splitscreen players can pick
                 // different aircraft) — load each distinct one once, logging it as it appears.
                 var statsCache = new Dictionary<string, PlaneStats>();
                 PlaneStats StatsFor(string plane)
@@ -965,7 +965,7 @@ public partial class PlaneViewer : Node3D
                 }
                 // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
                 float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
-                // The launchscreen's join flow binds the pads (item 6); a CLI launch derives them
+                // The launchscreen's join flow binds the pads; a CLI launch derives them
                 // from the connected roster instead.
                 var padAssignment = _menuPads ?? AssignPads(_rigs.Count);
                 if (_menuPads != null)
@@ -977,7 +977,7 @@ public partial class PlaneViewer : Node3D
                 var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
 
-                // Stunt run (M2.5 items 1 + 7): the mission's danger-zone objectives from ia.json
+                // Stunt run: the mission's danger-zone objectives from ia.json
                 // dzones, positions resolved against this chapter world's gamez, display strings
                 // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
                 // every player then races an independent copy of the same zone list, so the
@@ -1000,7 +1000,7 @@ public partial class PlaneViewer : Node3D
                     var rig = _rigs[pi];
                     bool verbose = pi == 0; // the per-plane detail lines are identical for every player
                     string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
-                    // Each player flies their own pick (launchscreen item 6 / a --plane= list);
+                    // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
                     // with one name given, that is the same plane for everyone as before.
                     string planeName = PlaneFor(pi);
                     var stats = StatsFor(planeName);
@@ -1025,10 +1025,10 @@ public partial class PlaneViewer : Node3D
                         WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
                         Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
                         Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
-                        // per-part HP from destroyable_parts (item 10b) — collisions below
+                        // per-part HP from destroyable_parts — collisions below
                         // the crash threshold damage the struck part instead of crashing
                         Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
-                        // splitscreen (item 5): this player's own device(s), own pane for the HUD,
+                        // splitscreen: this player's own device(s), own pane for the HUD,
                         // and no debug freeze (it would halt the shared world for everyone)
                         PadDevices = padAssignment?[pi],
                         UseKeyboard = pi == 0,
@@ -1080,7 +1080,7 @@ public partial class PlaneViewer : Node3D
                             GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
                     }
 
-                    // Visible damage (item 10c): torn-skin panel flips + the low-HP smoke/fire
+                    // Visible damage: torn-skin panel flips + the low-HP smoke/fire
                     // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
                     if (controller.Damage != null)
                     {
@@ -1114,20 +1114,20 @@ public partial class PlaneViewer : Node3D
                                      (mixGain < 1f ? $" (per-player mix gain {mixGain:0.00})" : ""));
                     }
                     // This player's stunt run: player 1 flies the loaded instance, everyone else an
-                    // independent copy of the same zones (item 7 — own progress, own clock).
+                    // independent copy of the same zones — own progress, own clock.
                     if (stuntZones != null)
                     {
                         controller.Stunt = pi == 0 ? stuntZones : stuntZones.ForAnotherPlayer();
                         controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
                         controller.PlayerIndex = pi;
                         controller.DebugCompleteStunt = _debugScoreboard;
-                        // The objective marker HUD (item 2), one per pane: projects that player's
+                        // The objective marker HUD, one per pane: projects that player's
                         // active danger zone through THEIR camera, with the edge arrow + clock
                         // bearing + run status.
                         controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
                         if (race != null)
                         {
-                            // Racing (item 7): no per-player splits board — the shared ranked board
+                            // Racing: no per-player splits board — the shared ranked board
                             // below covers the whole window when the last pilot is in. The marker
                             // HUD shows this player's placing meanwhile.
                             race.Add(pi, controller.Stunt, PlaneDisplayName(stats));
@@ -1137,7 +1137,7 @@ public partial class PlaneViewer : Node3D
                         }
                         else
                         {
-                            // Solo: the end-of-run scoreboard (item 3) — per-zone splits + total +
+                            // Solo: the end-of-run scoreboard — per-zone splits + total +
                             // persisted best time, keyed chapter/mission/plane in
                             // user://stunt_scores.json (race totals are deliberately not recorded).
                             var scoreKey = $"{_chapter}/{_mission}/{planeName}";
@@ -1170,7 +1170,7 @@ public partial class PlaneViewer : Node3D
                             worldScene, textures, crashProgram, verbose);
                     }
                 }
-                // The race's shared results board (item 7): one ranked row per player, over the
+                // The race's shared results board: one ranked row per player, over the
                 // WHOLE window rather than inside a pane — the race ends for everybody at once — so
                 // it goes on its own CanvasLayer above the splitscreen panes. Any player's R there
                 // is a rematch, which restarts every plane, so it routes back through the session.
@@ -1260,8 +1260,8 @@ public partial class PlaneViewer : Node3D
         return true;
     }
 
-    /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view (M2.5
-    /// item 5). One player keeps PlaneViewer's own main-viewport camera and the default visual
+    /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view.
+    /// One player keeps PlaneViewer's own main-viewport camera and the default visual
     /// layers, so the single-player render path is byte-for-byte what it was. Two or more build
     /// the <see cref="SplitScreen"/> pane rig: the main camera stands down (the panes cover the
     /// screen) and each pane gets its own camera, culling every other player's private
@@ -1331,8 +1331,8 @@ public partial class PlaneViewer : Node3D
     // both trees in lockstep (Duplicate preserves child order) and re-apply them.
     // **This must list every instance uniform SceneBuilder can set**, or a duplicated subtree
     // silently renders with the shader's default instead of the value the source was given.
-    // `csky_opacity` was missing until 2026-07-23 (polish-4 item 10).
-    // ⚠ **That omission was LATENT, not live — the plan's stated symptom is disproven.** The claim
+    // `csky_opacity` was once missing from this list.
+    // ⚠ **That omission was LATENT, not live — the claimed symptom is disproven.** The claim
     // was that `OBJECT_OPACITY_STATE` poses cloud decks, so panes 2–4 would show an opaque deck
     // where pane 1 shows 0.6. Measured in a 2-player C1 session: the opacity-animated node is
     // `world1/g27816/l2586/cloudparent` (0.6, as C1's reader-only `clouds.zrd.json` authors), and
@@ -1357,7 +1357,7 @@ public partial class PlaneViewer : Node3D
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
     }
 
-    /// <summary>Splits the connected gamepads across the players (M2.5 item 5): P1 gets the first
+    /// <summary>Splits the connected gamepads across the players: P1 gets the first
     /// pad (plus the keyboard, wired separately), P2–P4 the next ones in roster order. Null for a
     /// single player — that keeps the any-pad reads, so every pad flies the one plane. A player
     /// with no pad left gets an empty list and simply sits still (logged) — P1 still has the
@@ -1450,7 +1450,7 @@ public partial class PlaneViewer : Node3D
         }
     }
 
-    /// <summary>Rematch from the shared race board (M2.5 item 7, R): every player's zones, clock and
+    /// <summary>Rematch from the shared race board (R): every player's zones, clock and
     /// placing cleared, then every plane back to its own spawn — same chapter, aircraft and spawn
     /// points. The board retires itself once the placings are gone. The session owns the planes, so
     /// the restart lands here rather than in the FlightController that read the button.</summary>
@@ -1499,8 +1499,8 @@ public partial class PlaneViewer : Node3D
         ShowLaunchMenu();
     }
 
-    /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (item 5 —
-    /// the last one covers any remaining players, so the old single-sequence form still drives
+    /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (the
+    /// last one covers any remaining players, so the old single-sequence form still drives
     /// everyone), ';' separates that sequence's segments, each "pitch,roll,yaw,throttle" with an
     /// optional "@seconds" duration. The last segment (or one without a duration) holds forever —
     /// so the plain "--hold=p,r,y,thr" form keeps its old constant-input meaning.</summary>
@@ -1524,7 +1524,7 @@ public partial class PlaneViewer : Node3D
     }
 
     /// <summary>Parse --plane=: one node name, or a comma-separated list — one plane per player
-    /// for splitscreen (item 6; the launchscreen's simultaneous pick produces the same list). The
+    /// for splitscreen (the launchscreen's simultaneous pick produces the same list). The
     /// first entry stays <see cref="_planeName"/>, which every single-plane code path uses.</summary>
     private void ParsePlanes(string value)
     {
@@ -1537,7 +1537,7 @@ public partial class PlaneViewer : Node3D
 
     /// <summary>The plane player <paramref name="index"/> flies: their own pick when the
     /// launchscreen (or a --plane= list) gave one, else the last one named — so a single
-    /// --plane= puts everybody in the same aircraft, exactly as before item 6.</summary>
+    /// --plane= puts everybody in the same aircraft.</summary>
     private static Color[]? ParsePaintColors(string spec)
     {
         var parts = spec.Split('/', StringSplitOptions.RemoveEmptyEntries);
@@ -1700,10 +1700,10 @@ public partial class PlaneViewer : Node3D
         return list;
     }
 
-    /// <summary>A readable plane name for the stunt scoreboard (item 3) from the vehicle.json def
+    /// <summary>A readable plane name for the stunt scoreboard from the vehicle.json def
     /// name — the player defs are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the
     /// leading p and title-case → "Bloodhawk". Falls back to the node name. (Placeholder until the
-    /// item-4 launchscreen introduces a proper data-driven roster of display names.)</summary>
+    /// launchscreen gets a proper data-driven roster of display names.)</summary>
     private static string PlaneDisplayName(PlaneStats stats)
     {
         var d = stats.DefName;
@@ -1755,8 +1755,8 @@ public partial class PlaneViewer : Node3D
         return n;
     }
 
-    /// <summary>Builds the per-player crash runtime (PLAN-data-driven-crash
-    /// Layer 2). Under a <c>player</c> crash root parented to the controller it builds the
+    /// <summary>Builds the per-player crash runtime.
+    /// Under a <c>player</c> crash root parented to the controller it builds the
     /// effect-template roots (from the world gamez) and the plane's real <c>destroyed</c> wreck
     /// subtree, then binds a NON-auto-start <see cref="AnimRuntime"/> to the <b>controller</b> — so
     /// the crash def resolves <c>healthy</c> (in the plane model), <c>destroyed</c>/<c>pieceN</c>
@@ -1883,7 +1883,7 @@ public partial class PlaneViewer : Node3D
     /// <summary>Loads the flown mission's weather.json and resolves <see cref="_activeZone"/>:
     /// the zone the fog AND the skydome are both built from. Called before the domes, because
     /// the zone names are per chapter — C5 ships zone1+zone3, so the `zone2` default has to fall
-    /// back or C5 renders with no fog and no dome at all (polish-3 item 2). The default stays
+    /// back or C5 renders with no fog and no dome at all. The default stays
     /// `zone2` deliberately; which zone a mission actually flies is in no reader, so it is the
     /// user's A/B against the original (docs/formats/weather.md).</summary>
     private void LoadWeather(string missionZrdrPath)
@@ -1929,7 +1929,7 @@ public partial class PlaneViewer : Node3D
         // would work — every shader still honours it — but it is an INSTANCE uniform declared at
         // index 1 in SceneBuilder's shader and index 0 in Clutter's, and Godot merges that mapping
         // per GeometryInstance3D. Writing it would make a latent index mismatch live (the
-        // 2026-07-17 unfogged-hilltops bug; see Clutter.ShaderCode's comment). `csky_fog_range` is
+        // unfogged-hilltops bug; see Clutter.ShaderCode's comment). `csky_fog_range` is
         // a GLOBAL uniform every fogged shader reads, so one write covers the world, the clutter
         // sprites, the solid city blocks and the dome with no ordering hazard at all.
         var fogRange = _noFog
@@ -1943,7 +1943,7 @@ public partial class PlaneViewer : Node3D
         // World brightness from the zone's SUNLIGHT (see WeatherState.WorldLight): the original
         // dims the baked-vertex world by the mission's ambient+diffuse; we apply it as a scalar
         // on the fullbright world/deck/dome (the fog color, set above, is unaffected — it mixes
-        // in after). 1.0 for bright/day missions, < 1 for overcast/night. (item 6.)
+        // in after). 1.0 for bright/day missions, < 1 for overcast/night.
         // Apply the dimming in GAMMA space (the DX7 chain texel×vtx×light is all sRGB-space),
         // consistent with the gamma-space vertex modulate: the shader multiplies LINEAR ALBEDO,
         // so feed the linearised factor — linear_ALBEDO · srgbToLinear(f) == gamma-space · f.
@@ -1957,7 +1957,7 @@ public partial class PlaneViewer : Node3D
 
         if (_weather.HasCloudBand)
         {
-            // Both of these follow *a* camera, so each rig gets its own (item 5): in splitscreen
+            // Both of these follow *a* camera, so each rig gets its own: in splitscreen
             // the overlay must dim only the pane whose player is inside the cloud, and the puff
             // field must sit around that player.
             foreach (var rig in _rigs)
@@ -2091,7 +2091,7 @@ public partial class PlaneViewer : Node3D
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
     }
 
-    // ---- Focus mute (polish-4 item 7) ------------------------------------------------------
+    // ---- Focus mute --------------------------------------------------------------------------
     //
     // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
     // AudioServer *master-bus* mute rather than a factor threaded through the audio code,
@@ -2104,7 +2104,7 @@ public partial class PlaneViewer : Node3D
     // A `MixGain = 0` mute would therefore leave the whole animated world audible, and would
     // also have to be un-set to exactly the right per-player value on the way back.
     //
-    // The bus mute has a second property the item specifically wants: it does not touch
+    // The bus mute has a second property we specifically want: it does not touch
     // FlightAudio's state at all. The engine loop keeps Playing, `_engineRamp` stays at 1, and
     // FlightAudio.Update keeps writing the throttle curve into VolumeDb every frame while
     // muted — so on focus-in the loop is already at its correct level and does NOT re-ramp
@@ -2123,7 +2123,7 @@ public partial class PlaneViewer : Node3D
     {
         // The APPLICATION_* pair, not the WM_WINDOW_* pair: the application-level notifications
         // are what a real focus change delivers here. Measured on Windows 11 / Godot 4.7 while
-        // implementing this (2026-07-22): another app taking the foreground sends 1005
+        // implementing this: another app taking the foreground sends 1005
         // (WM_WINDOW_FOCUS_OUT) then 2017 (APPLICATION_FOCUS_OUT), and coming back sends 2016
         // then 1004. Note that *minimising* the window from another process delivers neither —
         // only the mouse enter/exit pair — so a manual test must alt-tab, not minimise.
@@ -2168,8 +2168,8 @@ public partial class PlaneViewer : Node3D
             // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
             if (_menu is { Visible: true })
                 return;
-            // Esc out of a menu-launched flight tears the world down and returns to the launchscreen
-            // (item 4); a CLI-launched run just quits, as before.
+            // Esc out of a menu-launched flight tears the world down and returns to the
+            // launchscreen; a CLI-launched run just quits, as before.
             if (_menuDriven && _inSession)
             {
                 ReturnToMenu();
@@ -2352,7 +2352,7 @@ public partial class PlaneViewer : Node3D
         var pos = _camera.GlobalPosition;
         // Free-look modes have no framed point, so the look-at is projected along the view
         // direction. Both flight and the spectator camera (--freecam) are free-look; only the
-        // static orbit view has a real pivot. Before 2026-07-21 --freecam fell into the orbit
+        // static orbit view has a real pivot. Previously --freecam fell into the orbit
         // branch and printed _orbitCenter, which it never sets — every pose aimed at the world
         // origin. Projected a long way out because the args round to 3 decimals: at world
         // coordinates in the thousands, a 1 m offset quantises the reconstructed direction to

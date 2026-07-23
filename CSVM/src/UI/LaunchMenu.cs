@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The in-game launchscreen (Milestone 2.5 items 4 + 6): a keyboard/controller-driven menu shown
+/// The in-game launchscreen: a keyboard/controller-driven menu shown
 /// when the viewer is launched with no content-selecting CLI arg (a bare launch, e.g.
 /// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying) →
 /// <b>Chapter</b> (the eight chapter worlds) → <b>Plane</b> (the player roster, with a couple of
@@ -14,7 +14,7 @@ namespace CSVM.UI;
 /// chapter, the per-player plane + pad, and the mode; PlaneViewer builds the world through the
 /// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
 ///
-/// <para><b>Join flow (item 6).</b> Two phases, in this order. First player 1 — the keyboard plus
+/// <para><b>Join flow.</b> Two phases, in this order. First player 1 — the keyboard plus
 /// every pad nobody else holds — picks the mode and the chapter, and the pad it actually steers
 /// those screens with is <b>claimed</b> for player 1 (driving with the keyboard claims nothing,
 /// which leaves every pad free and is exactly the keyboard-versus-controllers setup). Then, on the
@@ -32,7 +32,8 @@ namespace CSVM.UI;
 /// <see cref="SplitScreen.PaneRect"/> the flight panes use, so you choose in the pane you will
 /// then fly in, in your own colour, with your own roster position, stats and lock state. The
 /// shared breadcrumb and join hint move to a strip along the bottom. One player keeps the plain
-/// centred layout, which is why a single-player launchscreen is pixel-identical to item 4's.</para>
+/// centred layout, which is why a single-player launchscreen is pixel-identical to the
+/// pre-splitscreen one.</para>
 ///
 /// <para><b>Input</b> is polled per player every frame through <see cref="MenuInput"/> rather
 /// than Godot's input map / focus system: it needs no project-settings wiring, behaves identically
@@ -288,7 +289,7 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Reconciles the joined players with the live pad roster: drops a player whose pad
     /// disconnected, then hands player 1 <b>every unclaimed pad</b>. That last part is the
     /// important one — player 1 reading the whole leftover roster rather than <c>pads[0]</c> is
-    /// what keeps the 2026-07-19 phantom-device fix alive (see <see cref="MenuInput.Pads"/>), and
+    /// what keeps the phantom-device fix alive (see <see cref="MenuInput.Pads"/>), and
     /// it falls out for free that a pad joining as its own player leaves player 1's set and
     /// rejoins it on un-join. Returns true when anything changed (the strip needs redrawing).</summary>
     private bool SyncDevices()

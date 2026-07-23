@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The splitscreen rendering rig (M2.5 item 5): N panes, each a
+/// The splitscreen rendering rig: N panes, each a
 /// <see cref="SubViewportContainer"/> + <see cref="SubViewport"/> with its own
 /// <see cref="Camera3D"/>, all rendering the SAME <see cref="World3D"/> as the main viewport —
 /// one shared world, N views into it. Built only for 2+ players; a single player keeps
@@ -65,8 +65,8 @@ public sealed partial class SplitScreen : CanvasLayer
     /// camera-anchored copies (skydome / cloud deck / cloud puffs) on it.</summary>
     public static uint PlayerVisualLayer(int index) => 1u << (PlayerLayerBit0 + index);
 
-    // Per-player identity colours (M2.5 item 6): the launchscreen's join strip and plane-select
-    // cursors, and later the race HUD/scoreboard rows (item 7), all key off these so a player
+    // Per-player identity colours: the launchscreen's join strip and plane-select
+    // cursors, and later the race HUD/scoreboard rows, all key off these so a player
     // recognises "their" colour from the menu through to the results. P1 keeps the launchscreen's
     // existing gold focus colour so a single-player menu looks exactly as it did. TUNE.
     private static readonly Color[] Colors4 =

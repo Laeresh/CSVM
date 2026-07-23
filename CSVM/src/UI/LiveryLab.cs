@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The static viewer's livery lab (<c>--viewer</c>, 2026-07-20): an interactive editor for
+/// The static viewer's livery lab (<c>--viewer</c>): an interactive editor for
 /// one aircraft's <see cref="PaintScheme"/> — pattern, the three paint colours as RGB
 /// sliders, and the three decal slots — repainting the parked plane live.
 ///

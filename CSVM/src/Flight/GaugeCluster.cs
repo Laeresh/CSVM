@@ -6,7 +6,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The original's cockpit gauges as a screen-space HUD (user request 2026-07-19):
+/// The original's cockpit gauges as a screen-space HUD (a user request):
 /// altimeter (two needles + blinking LOW ALT), speedometer (needle + blinking
 /// STALL) and the per-plane damage display (part fills + border bars in
 /// green/yellow/red, blinking for a few seconds after a hit).
@@ -251,7 +251,7 @@ public sealed partial class GaugeCluster : Control
     /// hatch fill — and everything else is the silhouette face. Color thresholds come from the
     /// matching destroyable part's injure anims.
     ///
-    /// <para><b>Where the face lives differs per plane</b> (user-reported 2026-07-19, via a 4P
+    /// <para><b>Where the face lives differs per plane</b> (user-reported via a 4P
     /// screenshot): the Bloodhawk carries the dial's dark backing disc on the `damageindicator`
     /// node itself, but every other plane leaves that node mesh-less (`mesh_index` −1) and hangs
     /// the disc off an extra generically-named child (`g951`, `g927`, `g1156`, `g843`, …) — the

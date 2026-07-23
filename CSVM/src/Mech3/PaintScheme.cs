@@ -18,7 +18,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class PaintScheme
 {
-    /// <summary>Named pattern — and since 2026-07-20 this selects real data, not just a label:
+    /// <summary>Named pattern — and this selects real data, not just a label:
     /// it names a folder of per-skin region masks in the UI resource archive (see
     /// <see cref="PatternLibrary"/> and <c>docs/formats/rof.md</c>), which is what decides
     /// WHERE the three colours go. Patterns are per aircraft: <c>FORTUNE</c> covers all

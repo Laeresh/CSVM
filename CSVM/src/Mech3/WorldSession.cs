@@ -6,8 +6,8 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Builds one chapter world and binds its animation program to it: the world+anim half of
-/// <see cref="CSVM.PlaneViewer"/>'s session build. Extracted from that class on 2026-07-23
-/// (PLAN-anim-debugger Wave 1 A3) so the <c>--anim-lab</c> mode builds the same world+runtime a
+/// <see cref="CSVM.PlaneViewer"/>'s session build. Extracted from that class
+/// so the <c>--anim-lab</c> mode builds the same world+runtime a
 /// normal flight/viewer session does, without duplicating any of it.
 ///
 /// <para>Does the load → <see cref="WorldBuilder"/> → clutter → mission setup →
@@ -148,9 +148,9 @@ public sealed class WorldSession
         // Clutter: forest trees / river bushes, and C2/C5's 3D city-block buildings. The chapter's
         // boot script names the templates; ClutterBuilder stamps them onto every matching-textured
         // world polygon (see Clutter.cs). Sprites are never solid — a billboard has no side to hit
-        // (user decision, 2026-07-22; the "trees are hittable" justification rested on a misread of
+        // (user decision; the "trees are hittable" justification rested on a misread of
         // `spruce_destroy`, which is the Spruce Goose) — but the 3D decorations are, in flight,
-        // since they are real geometry (user decision, 2026-07-22).
+        // since they are real geometry (also a user decision).
         ClutterBuilder? clutterBuilder = null;
         var clutterNames = ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
         if (clutterNames.Count > 0)

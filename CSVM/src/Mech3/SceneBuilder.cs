@@ -50,13 +50,13 @@ public sealed class SceneBuilder
     private Shader? _lightShader;
 
     // Shared shader source lives in res://shaders/*.gdshaderinc, pulled in by Godot's shader
-    // preprocessor. Verified 2026-07-23 that #include resolves in a Shader whose Code is assigned
+    // preprocessor. Verified that #include resolves in a Shader whose Code is assigned
     // at RUNTIME from C#, not only in a .gdshader loaded from disk — the probe declared a uniform
     // inside the include and read it back through GetShaderUniformList().
     //
     // Why files rather than C# const strings: these blocks are shared by four independently
     // generated shaders (this one, the cloud billboards, the cylindrical facades, and Clutter's
-    // trees), and three of them were copy-pasted duplicates before 2026-07-23. A const string
+    // trees), and three of them used to be copy-pasted duplicates. A const string
     // single-sources the text but still lets each shader choose whether and where to emit it;
     // for the instance-uniform block that choice is exactly the bug (see the ordering contract in
     // csky_instance_uniforms.gdshaderinc). The combinatorial parts — render_mode, the
@@ -236,13 +236,13 @@ public sealed class SceneBuilder
 
     // Point-sprite lights: camera-facing soft radial glows, additive blend so they shine
     // over whatever is behind them (and pure-black lights become invisible). The original
-    // renders these as distance-sized sprites — user-verified look (2026-07-18): soft
+    // renders these as distance-sized sprites — user-verified look: soft
     // star-like falloff (no hard cutoff) and clearly brighter than plain fixed dots; the
     // yellow tarmac lamps, blue pier lights and the lighthouse all take this path.
     // Per-light data drives size and reach: SizeScale (unk08) scales the sprite,
     // MaxSizePx (unk64 = 30) caps it on approach, Range (unk68/unk52 = 1500–4000 m)
     // fades it out with distance — which also stops in-map beacons punching through the
-    // fog from kilometres outside (the item-7 nit). One POINTS surface per (size, range)
+    // fog from kilometres outside. One POINTS surface per (size, range)
     // group per mesh (uniform per mesh in practice); materials cached per param set. The
     // camera-anchored skydome's stars sit past any data range, so BuildHorizon exempts
     // them via the csky_light_fade instance uniform.
@@ -252,15 +252,15 @@ public sealed class SceneBuilder
     /// — two nodes on one material can be told different opacities, and unlike a scroll rate
     /// this one changes at runtime, so it cannot live in the cache key the way texture_scroll
     /// does.
-    /// <para><b>Declaration and use came apart on 2026-07-23</b> (item 10 Part A). The
-    /// <i>declaration</i> now lives in the shared ordered preamble
+    /// <para><b>Declaration and use are deliberately split.</b> The
+    /// <i>declaration</i> lives in the shared ordered preamble
     /// (<c>csky_instance_uniforms.gdshaderinc</c>), so every shader that carries any instance
     /// uniform declares it — that is what makes the indices agree. The <i>use</i>, this term, is
     /// still emitted ONLY into variants that already write ALPHA: an opaque variant has no alpha
     /// path to multiply, and adding one would move it into the transparent pass. Declaring the
     /// uniform does not create an alpha path, so nothing moved passes.</para>
     /// <para>The old note that omitting the declaration kept opaque materials "off the
-    /// instance-uniform buffer that Run-2 item 2 had to enlarge for C4/C5" does not apply to the
+    /// instance-uniform buffer that had to be enlarged for C4/C5" does not apply to the
     /// bias shader: it always declares <c>node_bias</c> and <c>csky_fog_on</c>, so those
     /// instances were already on that buffer, and Godot's per-instance allocation is a fixed
     /// 16-vec4 block regardless of how many uniforms a shader declares. It DOES still apply to
@@ -454,7 +454,7 @@ void fragment() {
     /// True when every UV of this surface lies inside the unit square, i.e. the texture is
     /// mapped once and never tiled — which is what makes a CLAMPed sampler safe for it.
     /// <para>
-    /// This is the hairline-seam fix (diagnosed 2026-07-22). The terrain's UVs are a
+    /// This is the hairline-seam fix. The terrain's UVs are a
     /// <b>mirrored triangle wave</b>: U rises to exactly 1.0 and folds back rather than
     /// wrapping to 0, which is how the artists tiled non-seamless textures seamlessly (it is
     /// also the mirror symmetry visible across C4's river). Under <c>repeat_enable</c> the
@@ -531,8 +531,8 @@ void fragment() {
     public enum BillboardKind { None, Spherical, CylindricalY, CylindricalX }
 
     /// <summary>
-    /// The one billboard rule, read straight from the gamez model (2026-07-21 decode,
-    /// consolidated here 2026-07-22). Every caller that needs to know "is this a flat card
+    /// The one billboard rule, read straight from the gamez model.
+    /// Every caller that needs to know "is this a flat card
     /// the engine turns toward the camera?" goes through this — the two rendering paths
     /// below, the world's collision exemption (<c>WorldBuilder.NoCollisionNode</c>) and the
     /// clutter template's sprite-vs-3D-decoration split (<c>ClutterBuilder</c>).
@@ -629,7 +629,7 @@ void fragment() {
     // the same way; fire/flame sprites are soft and blend), and dims with the world's
     // SUNLIGHT UNLESS the texture is a light source itself (the caller's glowTexture
     // predicate — the same delegate the legacy spherical fallback uses, so one rule governs
-    // every light-vs-scenery billboard in the renderer; WorldBuilder widened it 2026-07-21
+    // every light-vs-scenery billboard in the renderer; WorldBuilder widened it
     // to also catch the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
     private readonly Dictionary<(int Material, int Axis), Material> _cylindricalMaterialCache = new();
 
@@ -776,8 +776,7 @@ void fragment() {
     }
 
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.
-    /// Set by the caller before building; null leaves cycling materials static, which is what
-    /// every pre-2026-07-21 caller got.</summary>
+    /// Set by the caller before building; null leaves cycling materials static.</summary>
     public TextureCycler? Cycler;
 
     /// <summary>Registers a built material against its source's flipbook, if it has one. Called
@@ -828,7 +827,7 @@ void fragment() {
             // a billboard ShaderMaterial rather than the bias shader — no depth bias (free-
             // floating sprites have nothing coplanar to fight) but the SAME cylindrical distance
             // fog, so distant sprites fade into the fog wall like the terrain they float over
-            // (Run-2 item 4) instead of punching through as crisp white. (Glow flares don't
+            // instead of punching through as crisp white. (Glow flares don't
             // branch here — their billboard treatment is per-MESH, see BuildMesh: the same
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
@@ -946,7 +945,7 @@ void fragment() {
         // vertex colour (D3DTOP_MODULATE) in GAMMA (sRGB) space; we render in linear space, so
         // our multiply comes out too bright / desaturated wherever the baked colour is < 1
         // (shadows/AO — 30% of the C1 world's corners). Linearising the vertex colour before
-        // the (already-linear) texture multiply reproduces the gamma-space product. (item 6.)
+        // the (already-linear) texture multiply reproduces the gamma-space product.
         if (!shaded)
             sb.AppendLine(SrgbInclude);
         // Normal sign — aircraft only; the fullbright world never reads NORMAL. Our source
@@ -1059,7 +1058,7 @@ void fragment() {{");
         // Same global distance-fog params as GetBiasShader's world shader. Clouds always fog,
         // so this shader never reads csky_fog_on — and an OPAQUE cloud sprite therefore declares
         // no instance uniform at all, which deliberately keeps it off the instance-uniform buffer
-        // (see the Run-2 item-2 buffer note, and the warning in csky_instance_uniforms.gdshaderinc).
+        // (see the buffer note on OpacityTerm, and the warning in csky_instance_uniforms.gdshaderinc).
         sb.AppendLine(AtmosphereInclude);
         // The alpha-writing variants already carry csky_opacity, i.e. they are on that buffer
         // regardless — so they take the shared ordered preamble and agree on indices with every

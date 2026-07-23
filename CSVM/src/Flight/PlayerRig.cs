@@ -4,7 +4,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Everything one player's *view* owns for a session (M2.5 item 5). A single-player session has
+/// Everything one player's *view* owns for a session. A single-player session has
 /// exactly one rig wrapping PlaneViewer's original main-viewport camera, so the 1P path is
 /// unchanged; splitscreen has one per pane (see <see cref="UI.SplitScreen"/>).
 ///

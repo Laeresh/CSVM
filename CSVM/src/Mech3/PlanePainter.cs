@@ -10,7 +10,7 @@ namespace CSVM.Mech3;
 /// instance (two players in the same aircraft wear different liveries), and it never mutates
 /// the shared <see cref="TextureArchive"/> cache.
 ///
-/// HOW THE ORIGINAL PAINTS, and what this now does (rewritten 2026-07-20 onto the real data —
+/// HOW THE ORIGINAL PAINTS, and what this now does (rewritten onto the real data —
 /// see <c>docs/formats/rof.md</c>). Each pattern ships a `.BM` per aircraft skin holding a
 /// near-greyscale shading map plus three per-pixel weight masks, one per paint colour slot,
 /// summing to 255. The composite is

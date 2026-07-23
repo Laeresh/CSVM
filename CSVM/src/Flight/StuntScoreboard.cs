@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The end-of-run results overlay for Stunt Flying (Milestone 2.5 item 3). When the run's last
+/// The end-of-run results overlay for Stunt Flying. When the run's last
 /// Danger Zone is cleared (<see cref="StuntMission.RunCompleted"/>) this shows a centred panel:
 /// the zones in the order they were flown with per-zone split + cumulative times, the total, the
 /// plane + chapter, and a best-time comparison (NEW BEST when the total beats the stored record).
@@ -12,7 +12,7 @@ namespace CSVM.Flight;
 /// It is a plain Godot-UI overlay (panel + containers + labels), distinct from the in-flight
 /// HUD's hand-drawn marker/dials — a modal results screen, not a flight instrument. R starts a
 /// fresh run (FlightController resets the mission + respawns), Esc quits (PlaneViewer's global
-/// handler; item 4 later routes it back to the launchscreen). The panel hides itself the moment
+/// handler; a menu-launched flight returns to the launchscreen instead). The panel hides itself the moment
 /// the run is no longer complete (i.e. after a restart), so the next run's board is clean.
 /// </summary>
 public sealed partial class StuntScoreboard : Control

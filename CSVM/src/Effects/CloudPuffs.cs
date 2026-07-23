@@ -80,7 +80,7 @@ public sealed partial class CloudPuffs : Node3D
 
         // Same global distance-fog params as SceneBuilder's world shader (registered by
         // PlaneViewer; no-op ranges when not flying). Puffs near the fog shell fade into the
-        // fog wall like the terrain below them (Run-2 item 4), replacing the old fog immunity.
+        // fog wall like the terrain below them, replacing the old fog immunity.
         global uniform vec3 csky_fog_color;
         global uniform vec2 csky_fog_range;
         global uniform vec2 csky_fog_alt;

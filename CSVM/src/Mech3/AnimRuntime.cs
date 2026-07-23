@@ -8,7 +8,7 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// The animation engine: binds an <see cref="AnimProgram"/> to a built world and executes
-/// it. Replaces the start-state-only applier this project had before (Run-2 item 8), whose
+/// it. Replaces the start-state-only applier this project had before, whose
 /// node resolution and INACTIVE semantics it keeps verbatim — those are user-verified and
 /// were never the limitation.
 ///
@@ -1146,7 +1146,7 @@ public sealed partial class AnimRuntime : Node
 
     /// <summary>Set once <see cref="Bootstrap"/> has printed its emitter census. After this, a
     /// failed SOUND_NODE is invisible unless reported at the point of use — which is exactly how
-    /// C1's police siren stayed silent undetected (2026-07-22): the census is a bootstrap
+    /// C1's police siren stayed silent undetected: the census is a bootstrap
     /// snapshot, so it cannot distinguish "never requested" from "requested later and failed".
     /// Reported once per name, not per event: snd_fire1 alone has 363 sites.</summary>
     private bool _soundCensusPrinted;
@@ -2216,8 +2216,8 @@ public sealed partial class AnimRuntime : Node
 
             // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
             // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
-            // π), which read as a rate spin at ~15 rad/s (900°/s) — "spins like crazy" (user playtest
-            // 2026-07-23). ÷ run_time gives 5π over 6 s = 2.5 tumbles, the reference debris tumble.
+            // π), which read as a rate spin at ~15 rad/s (900°/s) — "spins like crazy" (user
+            // playtest). ÷ run_time gives 5π over 6 s = 2.5 tumbles, the reference debris tumble.
             float fwdTotal = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
             m._tumbleRate = rtSafe > 0f ? fwdTotal / rtSafe : 0f;
             m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
@@ -2364,8 +2364,8 @@ public sealed partial class AnimRuntime : Node
                         if (_loopsLeft == -2)
                         {
                             int authored = (int)(ev.Data.Num("value") ?? CountOf(ev) ?? -1f);
-                            // An AUTHORED count of 0 means INFINITE, not "stop immediately"
-                            // (2026-07-22). Surveyed across the whole install: 26 Loop events
+                            // An AUTHORED count of 0 means INFINITE, not "stop immediately".
+                            // Surveyed across the whole install: 26 Loop events
                             // in 25 defs ship Count 0, and every one of them is a ground-vehicle
                             // route (C1's police/mafia/black_car/truck traffic, C2's and C3/M02's
                             // studebakers) whose Loop is the LAST event of its sequence — the
@@ -2473,7 +2473,7 @@ public sealed partial class AnimRuntime : Node
         /// install** by one slot: a timestamped event fired one slot early and its
         /// unstamped partner one slot late.
         ///
-        /// C1's `bowl` sign is the clean demonstration (fixed 2026-07-22). Its compiled
+        /// C1's `bowl` sign is the clean demonstration. Its compiled
         /// sequence is nine strict `des_on`/`des_off` SWAP pairs plus an infinite Loop,
         /// and only the FIRST of each pair carries a timestamp — so the shift split every
         /// pair, leaving both variants lit at t=0 and then **nothing at all** for each
@@ -2780,7 +2780,7 @@ public sealed partial class AnimRuntime : Node
     // the "no alpha path" tally could never fire and would be a lie rather than a diagnostic.
     //
     // ⚠ Tests for the USE (`SceneBuilder.OpacityTerm`, i.e. " * csky_opacity"), not the uniform
-    // NAME. Until 2026-07-23 those were equivalent — the uniform was declared exactly in the
+    // NAME. Those used to be equivalent — the uniform was declared exactly in the
     // variants that multiplied by it — but the declaration has since moved into the shared
     // ordered preamble (csky_instance_uniforms.gdshaderinc), so it is now present in shaders
     // with no alpha path at all. Testing the name would report true for every one of them.

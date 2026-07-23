@@ -6,8 +6,8 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The static plane viewer's damage lab (--plane + --damage, no --fly; a Run-2
-/// item-10 tuning aid): one HP slider per destroyable part (vehicle.json
+/// The static plane viewer's damage lab (--plane + --damage, no --fly; a
+/// damage-visuals tuning aid): one HP slider per destroyable part (vehicle.json
 /// destroyable_parts) driving the same <see cref="DamageVisuals"/> pipeline the
 /// flight build uses. Dragging a part's HP below an injure_anims threshold plays
 /// the visual — the pdpanelN torn-skin flip, with its panel fire burning in
@@ -22,7 +22,7 @@ namespace CSVM.Flight;
 /// H toggles the lab — panel AND gauges together, so it is genuinely present or absent
 /// (clean F12 shots). Every --viewer session builds one: with --damage it opens straight
 /// away, otherwise it waits hidden behind H, which is what makes H mean something in a
-/// plain --viewer (before 2026-07-20 the lab only existed when --damage was passed, so H
+/// plain --viewer (previously the lab only existed when --damage was passed, so H
 /// silently did nothing — user-reported). --damage=part:frac,… presets the sliders, so
 /// --screenshot runs capture damage states deterministically.
 /// </summary>

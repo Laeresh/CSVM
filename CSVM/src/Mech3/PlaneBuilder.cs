@@ -50,7 +50,7 @@ public sealed class PlaneBuilder
     /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
     public IReadOnlyList<Node3D> WingFlares => _wingFlares;
 
-    /// <summary>Flight and damage-lab builds (Run-2 item 10c): the exterior damage-state
+    /// <summary>Flight and damage-lab builds: the exterior damage-state
     /// panels — the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
     /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
     /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
@@ -95,7 +95,7 @@ public sealed class PlaneBuilder
     // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
     // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
     // In flight builds the exterior pdpN panels are BUILT hidden instead of skipped,
-    // so DamageVisuals can flip them at the injure_anims HP thresholds (item 10c).
+    // so DamageVisuals can flip them at the injure_anims HP thresholds.
     private static bool IsDamagePanel(string name, out bool cockpit)
     {
         cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
@@ -126,7 +126,7 @@ public sealed class PlaneBuilder
     }
 
     /// <summary>Builds the plane's 'destroyed' wreck-piece subtree (skipped by
-    /// <see cref="Build"/>) for the crash breakup (Run-2 item 10d): a group of
+    /// <see cref="Build"/>) for the crash breakup: a group of
     /// pieceN meshes. The returned root's transform is the accumulated plane-root →
     /// destroyed chain, so `planePose × root.Transform × piece.Transform` is each
     /// piece's crash-time world pose. Null when the plane has no such subtree.</summary>

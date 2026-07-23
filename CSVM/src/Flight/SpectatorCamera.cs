@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Free-flying observation camera (`--freecam`, anim-playback plan item 1). Drives the
+/// Free-flying observation camera (`--freecam`). Drives the
 /// session camera directly with no aircraft in the world: the point is to park in front of
 /// a moving train or a hangar door and watch it, without scripting a flight past it.
 ///
@@ -299,7 +299,7 @@ public sealed partial class SpectatorCamera : Node
     // Any-pad reads, matching the project's phantom-device policy (never pads[0]): take the
     // largest-magnitude value across every connected pad, so idle/phantom devices read ~0.
     // Through Pads.For(null) rather than Pads.Connected(): these are input *reads*, so they are
-    // gated on window focus as well as on --no-pads (polish-4 item 7).
+    // gated on window focus as well as on --no-pads.
     private static float PadAxis(JoyAxis axis)
     {
         float best = 0f;

@@ -17,7 +17,7 @@ namespace CSVM.Flight;
 /// mission shows isn't in these readers — the remake picks it via <c>--sky-zone</c>, default
 /// zone2 = night); the cloud band and wind are global.</para>
 ///
-/// <para><b>The zone names are per chapter, not a fixed pair (2026-07-22).</b> C1–C4 ship
+/// <para><b>The zone names are per chapter, not a fixed pair.</b> C1–C4 ship
 /// <c>ZONE1</c>+<c>ZONE2</c>, but all 8 C5 missions ship <c>ZONE1</c>+<b><c>ZONE3</c></b> — so
 /// the zone table is read from whatever <c>ZONE*</c> keys the file carries, and
 /// <see cref="ResolveZone"/> falls the default back to the file's first zone where the
@@ -34,7 +34,7 @@ public sealed class WeatherState
     /// <summary>Distance fog for one day/night zone: haze toward <see cref="FogColor"/> between
     /// <see cref="FogNear"/> and <see cref="FogFar"/> metres of **horizontal** view distance —
     /// the original's fog volume is a vertical cylinder around the camera, not a sphere
-    /// (user-diagnosed 2026-07-17) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
+    /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
     /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
     /// sky overhead stays clear. C1/IA1 corroborates: zone1's 970→1047 is exactly cloud-band
     /// bottom → whiteout-band centre (fog hands over to the whiteout while climbing into the
@@ -59,7 +59,7 @@ public sealed class WeatherState
     // TUNE calibrated to the C1/IA1 reference (A=0.25,D=1.2 → 0.80, matching the original's
     // deck 210→169 and terrain →~57). It then self-scales the scene from the data: C1B night
     // (0.15,0.6)→0.42, C1C day (0.6,2.0)→clamp 1.0. MinWorldLight floors it off pure black.
-    // (M2-polish-2 item 6 — the data-driven half; the gamma-space modulate is the other half.)
+    // (This is the data-driven half; the gamma-space modulate is the other half.)
     private const float SunIncidence = 0.46f;
     private const float MinWorldLight = 0.15f;
 
@@ -128,10 +128,10 @@ public sealed class WeatherState
     ///
     /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
     /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
-    /// The default stays <c>zone2</c> (user decision 2026-07-22): which zone a mission actually
+    /// The default stays <c>zone2</c> (a user decision): which zone a mission actually
     /// flies is in no reader file, so it is settled per chapter by A/B against the original.
     ///
-    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest 2026-07-22.</b> The fallback already
+    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest.</b> The fallback already
     /// lands there, so this is not a special case — but it is no longer an accident either, and
     /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
     /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
@@ -147,7 +147,7 @@ public sealed class WeatherState
     public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
 
     /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
-    /// cloud band (user-observed in-game 2026-07-16). Clear sight (0) at BOTTOM and TOP, ramping
+    /// cloud band (user-observed in-game). Clear sight (0) at BOTTOM and TOP, ramping
     /// linearly to a fully-opaque core (1 — the plane is no longer visible) that is THICKNESS
     /// deep and centred on the band's midpoint. THICKNESS is the depth of that opaque core, not
     /// an edge transition — so C1/IA1 (970–1124, ±30) is clear at 970/1124 and total in

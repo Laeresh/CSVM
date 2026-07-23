@@ -5,7 +5,7 @@ using Godot;
 namespace CSVM.Mech3;
 
 /// <summary>
-/// Map-edge continuation (Run-2 item 7): a rolling window of mirrored terrain tiles that
+/// Map-edge continuation: a rolling window of mirrored terrain tiles that
 /// follows the plane past the map boundary, so the world continues indefinitely under the
 /// fog — terrain over terrain edges, sea over sea — instead of ending in a void.
 ///
@@ -13,7 +13,7 @@ namespace CSVM.Mech3;
 /// of continuous flight past the edge; the fog wall creeps closer for ~10 s, then the
 /// engine re-centers its loaded tile grid around the plane and the visible radius jumps
 /// back out — with clutter trees on the continued terrain). What it repeats is the
-/// <b>local border tile</b>, not the map: user-tested 2026-07-18, flying east shows the
+/// <b>local border tile</b>, not the map: user-tested — flying east shows the
 /// same one-tile view every crossing (the video's ~10 s loop = one tile at that speed) and
 /// the map interior — the airport — never reappears. So each axis outside the map clamps
 /// to its border cell, repeated forever and <b>alternately reflected</b> so every seam is
@@ -32,12 +32,12 @@ namespace CSVM.Mech3;
 /// sprite mesh + material). Unlike the original's visible reload pop, the window is sized
 /// one ring past the fog wall, so the creep never shows. Extension ground is collidable
 /// exactly when the real world is; extension clutter SPRITES are never collidable, matching
-/// the map's own (see ClutterBuilder), but extension <b>3D decorations are</b> since
-/// 2026-07-22 — attaching the kind's shared collision shape at each mirrored placement costs
+/// the map's own (see ClutterBuilder), but extension <b>3D decorations are</b> —
+/// attaching the kind's shared collision shape at each mirrored placement costs
 /// one <c>BodyAddShape</c> call each, so the whole cell's city is solid for well under a
 /// millisecond. That was impossible while the map's own collision was one merged region
 /// trimesh: rebuilding one at a boundary crossing would have hitched the frame that crosses,
-/// which is exactly why item 6 left it out. Float precision is no concern at these ranges (a
+/// which is exactly why it was originally left out. Float precision is no concern at these ranges (a
 /// 10-min flight ≈ 50 km; float keeps sub-centimeter precision past 100 km — no recenter
 /// needed).</para>
 /// </summary>
@@ -162,8 +162,8 @@ public sealed partial class MapEdgeExtender : Node3D
 
     // Continuation along one axis: outside the map, the LOCAL BORDER cell repeats forever,
     // alternately reflected so every seam is a shared mirror plane (heights match exactly;
-    // plain repetition would step). NOT a whole-map tiling — user-tested in the original
-    // (2026-07-18): flying east for 10+ minutes shows the same one-tile view every crossing
+    // plain repetition would step). NOT a whole-map tiling — user-tested in the
+    // original: flying east for 10+ minutes shows the same one-tile view every crossing
     // and the map interior (the airport) never reappears; the video's ~10 s reload loop is
     // exactly one tile crossing. The first ring (odd parity) is the border cell mirrored
     // across the boundary, the second its straight copy, and so on.
@@ -231,11 +231,11 @@ public sealed partial class MapEdgeExtender : Node3D
     // The source cell's decorations at mirrored placements. A sprite mirrors as its position
     // alone (the billboard shader re-faces it from the instance origin), but a 3D city block
     // has to carry the mirror's reflection in its basis or the continued city would face the
-    // wrong way — which is why the export switched from positions to whole transforms
-    // (polish-3 item 6). The reflection flips winding; world geometry renders double-sided
+    // wrong way — which is why the export switched from positions to whole transforms.
+    // The reflection flips winding; world geometry renders double-sided
     // and fullbright, so nothing reads the inverted normals.
     //
-    // Extension 3D decorations ARE collidable since 2026-07-22, unlike when item 6 landed.
+    // Extension 3D decorations ARE collidable, which they originally were not.
     // The blocker then was that the map's own building collision was one merged trimesh per
     // 1024 m region: rebuilding one on the frame the camera crosses a cell boundary would have
     // hitched. Now that ClutterBuilder shares ONE shape per decoration mesh, making a cell
@@ -261,7 +261,7 @@ public sealed partial class MapEdgeExtender : Node3D
         // (It used to also have to avoid the suffix "clutter_col", FlightController's soft
         // fly-through branch. This file DID build a "clutter_col" body until `a795548`
         // confined clutter collision to kind.Solid; that left the branch unreachable and
-        // it was deleted 2026-07-23.) Created lazily: most cells are sea or forest and have no solid
+        // it was deleted too.) Created lazily: most cells are sea or forest and have no solid
         // decoration at all.
         StaticBody3D? solidBody = null;
 

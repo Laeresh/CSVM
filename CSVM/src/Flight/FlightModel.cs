@@ -77,7 +77,7 @@ public sealed class FlightModel
                                                   // keeps air resistance biting at low speed. The full-throttle
                                                   // equilibrium stays exactly fd_speed for any blend value.
 
-    // Per-axis control-rate calibration (Run-2 item 12), replacing the old global ×2.
+    // Per-axis control-rate calibration, replacing the old global ×2.
     // Steady rate = torque · recInertia · Tune / ang_momentum_damp (× eff on yaw), and a
     // full 360° takes ≈ 1/damp spin-up + 2π/rate. Solved against the user's stopwatch
     // measurements of the original (Bloodhawk, full throttle): 360° roll in 2 s
@@ -85,9 +85,9 @@ public sealed class FlightModel
     // original also bleeds speed in that turn; whether its pitch rate slows with speed
     // is an open fidelity question, ours is constant), full-rudder 360° in 30 s
     // (0.21 rad/s at cruise, where eff = 0.4).
-    private const float PitchTune = 0.75f;        // TUNE: calibrated 2026-07-19
-    private const float YawTune = 1.32f;          // TUNE: calibrated 2026-07-19 (at cruise eff)
-    private const float RollTune = 2.12f;         // TUNE: calibrated 2026-07-19
+    private const float PitchTune = 0.75f;        // TUNE: calibrated to the stopwatch runs above
+    private const float YawTune = 1.32f;          // TUNE: calibrated (at cruise eff)
+    private const float RollTune = 2.12f;         // TUNE: calibrated
 
     public FlightModel(PlaneStats stats)
     {
@@ -153,7 +153,7 @@ public sealed class FlightModel
             Attitude = Attitude.Rotated(omegaWorld / omega, omega * dt).Orthonormalized();
 
         // while stalled the nose can NOT be raised over the horizon, at any bank angle
-        // (original behavior, user-observed 2026-07-17): cap its world elevation at the
+        // (original behavior, user-observed): cap its world elevation at the
         // horizon — or where the frame started, if the stall caught it nose-high, so it
         // can only come down from there. Same great-circle rotation as the stall drop.
         if (stalled)
@@ -269,8 +269,8 @@ public sealed class FlightModel
         // Near-parallel is the normal cruise state, and there Slerp is unusable: it builds its
         // rotation axis from the cross product, whose float error swamps a sub-degree angle, and
         // Godot then throws "Argument is not normalized" — which aborts the whole physics frame,
-        // so a plane holding straight and level simply stopped flying (found 2026-07-19 while
-        // verifying splitscreen; it bit single player exactly the same). Under ~2.5° a normalized
+        // so a plane holding straight and level simply stopped flying (found while verifying
+        // splitscreen; it bit single player exactly the same). Under ~2.5° a normalized
         // lerp is the same rotation to well under a thousandth of a degree, and needs no axis.
         float pathDot = nose.Dot(VelocityDir);
         if (align > 0f && pathDot > -0.999f)

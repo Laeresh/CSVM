@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// Best-time persistence for stunt runs (Milestone 2.5 item 3). One JSON object in
+/// Best-time persistence for stunt runs. One JSON object in
 /// <c>user://stunt_scores.json</c> — the engine's writable user dir, never the repo (the hard
 /// no-assets rule and, besides, scores are per-player) — keyed <c>chapter/mission/plane</c>
 /// (e.g. <c>C1/IA1/player_bhawk</c>) → <c>{ best: seconds, date: "YYYY-MM-DD" }</c>.

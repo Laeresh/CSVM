@@ -18,7 +18,7 @@ namespace CSVM;
 ///   the pad regardless of SDL_JOYSTICK_XINPUT/RAWINPUT/WGI, so the switch has to live in our
 ///   own code.
 ///
-/// <para><b>Two different questions, deliberately kept apart (polish-4 item 7).</b>
+/// <para><b>Two different questions, deliberately kept apart.</b>
 /// <see cref="Connected"/> answers "which pads exist" — the <i>roster</i>; <see cref="For"/>
 /// answers "which pads may this consumer read right now" — the <i>input gate</i>. They differ
 /// only in that the input gate also follows window focus, but conflating them breaks things:
@@ -35,7 +35,7 @@ public static class Pads
     public static bool Disabled;
 
     /// <summary>Whether the game window currently has focus, maintained by
-    /// <c>PlaneViewer._Notification</c> (polish-4 item 7). Pad <i>reads</i> are gated on it, so a
+    /// <c>PlaneViewer._Notification</c>. Pad <i>reads</i> are gated on it, so a
     /// stick held (or drifting) while the player is alt-tabbed cannot fly the plane, steer the
     /// free camera or scroll the launchscreen.
     ///

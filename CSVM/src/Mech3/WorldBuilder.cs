@@ -47,13 +47,13 @@ public sealed class WorldBuilder
         tex.StartsWith("cloud", StringComparison.OrdinalIgnoreCase)
         && !tex.StartsWith("cloudlayer", StringComparison.OrdinalIgnoreCase);
 
-    // Light-source flare/fire sprites (validated in C1, user-reported 2026-07-18): single
+    // Light-source flare/fire sprites (validated in C1, user-reported): single
     // flat quads the original renders camera-billboarded — `refinery_flare` 16 m + the 4 m
     // `gen_flare_yellow` lamps (oil_liteflare.tif), `docklight_flare` 9.6 m blue pier lights
     // (dock_liteflare.tif), the 19.2 m lighthouse `litehsflare` (poleflare.tif), `bflare`
     // (beflare5.tif). World-fixed they show edge-on/skewed — the user's "lamps not oriented
     // to the camera". Classified by texture like the clouds; also never solid, never dimmed.
-    // Widened 2026-07-21 to "fire"/"flame" — the refinery's own gas flame (fire101.tif) isn't
+    // Widened to "fire"/"flame" — the refinery's own gas flame (fire101.tif) isn't
     // "*flare*"-named but is exactly the same kind of always-lit, non-solid billboard sprite
     // (surveyed across all 8 chapters: fireflare1 already matched "flare"; fire101/fire102/
     // fire_barrel01 are the only new matches, nothing else in the install contains either
@@ -70,7 +70,7 @@ public sealed class WorldBuilder
         MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
 
     // `IsCloudOrSkyTexture`'s `sky*` prefix is right for the blend rule but WRONG for
-    // collision, because `skywal*` is a BUILDING WALL texture, not sky (found 2026-07-22).
+    // collision, because `skywal*` is a BUILDING WALL texture, not sky.
     // `MeshUsesTexture` matches if ANY polygon carries the texture, so one `skywal01` face
     // was making a whole structure phantom: C4's sky-city `pod2_hi` (73 polys, 107×88×125 m)
     // and `pod6_hi` (143 polys), `g74` (64 polys, 395×135×275 m), and C1/C1B/C2/C3's `g456`
@@ -89,7 +89,7 @@ public sealed class WorldBuilder
     // A billboard is a flat card the engine turns toward the camera — it has no solid side to
     // hit, and its collider is a phantom wall wherever the card happens to be facing. Asking
     // the gamez model itself (SceneBuilder.ClassifyBillboard) replaced a poly-count + texture-
-    // name heuristic on 2026-07-22: that rule exempted only single-polygon *flare*-textured
+    // name heuristic: that rule exempted only single-polygon *flare*-textured
     // quads, so a tree card or any multi-poly facade was fully solid. No Facade model in the
     // install exceeds 3 polygons, so this cannot exempt real geometry — in particular C2/C5's
     // `cblock*` city-block buildings are ModelType "Default" and keep their collision.
@@ -113,7 +113,7 @@ public sealed class WorldBuilder
     // PlaneViewer can make it follow the player. In C1 it is 144 top-level 1024-unit tiles at
     // y=960 covering the whole map (each a partition-referenced Object3d leaf).
     //
-    // Classified STRUCTURALLY, not by texture (polish-3 item 4, 2026-07-22). The old rule was
+    // Classified STRUCTURALLY, not by texture. The old rule was
     // the texture prefix 'cloudlayer', which is right for C1/C1C/C2B and misses C4 entirely:
     // C4's deck is skinned Sky1.tif (144 parentless partition-referenced nodes g1720..g1863,
     // each a single flat 1024x1024 quad at y=1050 — bit-for-bit C1's signature at y=960), so
@@ -127,7 +127,7 @@ public sealed class WorldBuilder
     //
     // The structural signature instead: a walk root whose model is ONE flat horizontal quad,
     // bucketed with its co-altitude peers, where the bucket's footprint covers the World node's
-    // own 'area' rect. Measured over all 8 chapters (2026-07-22):
+    // own 'area' rect. Measured over all 8 chapters:
     //
     //   C1 / C1C / C2B   cloudlayer.tif  144 tiles  y=960   coverage 1.000
     //   C4               Sky1.tif        144 tiles  y=1050  coverage 1.000
@@ -334,7 +334,7 @@ public sealed class WorldBuilder
     }
 
     /// <summary>
-    /// Map-edge continuation (Run-2 item 7): a rolling window of mirrored terrain tiles
+    /// Map-edge continuation: a rolling window of mirrored terrain tiles
     /// following the plane past the map boundary, so the world continues indefinitely under
     /// the fog like the original's tile-reload grid (see MapEdgeExtender for the model and
     /// the video evidence). Call after Build (and after the chapter's clutter build, so the
@@ -547,7 +547,7 @@ public sealed class WorldBuilder
     /// dome with an unfinished flat-gray cap, likely never player-visible.
     /// Never collidable, never casts shadows.
     ///
-    /// <para><b>The zone names are per chapter (2026-07-22).</b> C1–C4's horizon has
+    /// <para><b>The zone names are per chapter.</b> C1–C4's horizon has
     /// <c>zone1</c>/<c>zone2</c> children, but C5's has <c>zone3</c>/<c>zone1</c> — so a bare
     /// <c>zone2</c> request there matched no child, the skip predicate below skipped both, and
     /// C5 built an empty dome. An absent zone therefore falls back to the horizon's first zone
@@ -570,10 +570,10 @@ public sealed class WorldBuilder
         DisableShadows(built);
         BillboardMoon(built);
         DisableLightRangeFade(built);
-        // NOT opted out of fog (user change with the 2026-07-17 fog remodel, and the
+        // NOT opted out of fog (user change with the fog remodel, and the
         // cylinder model is what makes that correct): high dome fragments stay clear via the
         // FOG_ALTITUDE fade, while the horizon band fogs toward the same gray as the terrain
-        // fog wall. The `csky_fog_on = 0` walk this used to call was deleted 2026-07-22 —
+        // fog wall. The `csky_fog_on = 0` walk this used to call was deleted —
         // it had been dead since that change.
         return built;
     }

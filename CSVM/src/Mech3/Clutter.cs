@@ -26,7 +26,7 @@ namespace CSVM.Mech3;
 /// is seam-consistent across adjacent polygons (one global grid), and plants every
 /// decoration at the polygon's interpolated surface height.</para>
 ///
-/// <para><b>Two kinds of decoration, two rendering paths</b> (polish-3 item 6, 2026-07-22).
+/// <para><b>Two kinds of decoration, two rendering paths.</b>
 /// The split is <see cref="SceneBuilder.ClassifyBillboard"/>, i.e. the gamez model's own
 /// <c>ModelType</c>:</para>
 /// <list type="bullet">
@@ -43,7 +43,7 @@ namespace CSVM.Mech3;
 /// billboard. They keep their authored local basis, and they ARE collidable.</item>
 /// </list>
 ///
-/// <para><b>Sprites are NOT collidable; 3D decorations are</b> (user decisions, 2026-07-22).
+/// <para><b>Sprites are NOT collidable; 3D decorations are</b> (both user decisions).
 /// Sprites used to get a crossed-quad trimesh each, justified by a claim that "trees are
 /// hittable like the original, `spruce_destroy` anims exist". <b>That was a misreading and the
 /// anims are not trees.</b> The two strings in the data are
@@ -71,7 +71,7 @@ public sealed class ClutterBuilder
     public int SolidCount { get; private set; }
     /// <summary>Collision triangles built for the 3D decorations by the last Build (0 when the
     /// build was not collidable). Since the shapes are shared this counts the DISTINCT
-    /// triangles — ~2.3k in C5, not the 2.55M the pre-2026-07-22 expansion produced.</summary>
+    /// triangles — ~2.3k in C5, not the 2.55M a per-placement expansion would produce.</summary>
     public int SolidCollisionTriangles { get; private set; }
     /// <summary>Per-kind counts of the last Build, e.g. "firtree1.tif ×4980".</summary>
     public string Summary { get; private set; } = "";
@@ -83,7 +83,7 @@ public sealed class ClutterBuilder
     /// the city — continues out there, as in the original.
     ///
     /// <para><c>Placements</c> carries full transforms rather than positions (changed
-    /// 2026-07-22 with the 3D-decoration path): a sprite's is always identity-basis and the
+    /// with the 3D-decoration path): a sprite's is always identity-basis and the
     /// billboard shader re-faces it from the instance origin, but a building's authored basis
     /// is part of the placement and mirroring one means mirroring the whole transform.</para>
     ///
@@ -96,7 +96,7 @@ public sealed class ClutterBuilder
     /// mesh's own local space — non-null only for a solid kind of a collidable build. Because
     /// it is shared rather than pre-transformed, the extender can attach it to a mirrored
     /// placement for the cost of one <c>BodyAddShape</c> call, which is what made extension
-    /// buildings collidable (2026-07-22 follow-up); merging a region trimesh at a boundary
+    /// buildings collidable; merging a region trimesh at a boundary
     /// crossing, the old shape of this code, could not be done without a hitch.</para></summary>
     public sealed class KindExport
     {
@@ -118,7 +118,7 @@ public sealed class ClutterBuilder
 
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
     /// and its fullbright world materials). Null disables that path and leaves only the
-    /// sprite one — which is what the pre-2026-07-22 behaviour was.</param>
+    /// sprite one.</param>
     public ClutterBuilder(GameZ gamez, TextureArchive textures, SceneBuilder? scene = null)
     {
         _gamez = gamez;
@@ -269,7 +269,7 @@ public sealed class ClutterBuilder
         var template = new Template { GroundTexture = info.Texture, Period = info.Period };
 
         var kinds = new Dictionary<int, Kind>();
-        // What is left in the skip list after polish-3 item 6 is only genuinely unusable:
+        // What is left in the skip list is only genuinely unusable:
         // a decoration node with no mesh anywhere under it, or a sprite card whose material
         // resolves no texture. The 3D building/car decorations that used to dominate this
         // list now take the solid path below. Collected and logged as ONE summary line.
@@ -385,8 +385,7 @@ public sealed class ClutterBuilder
     // A 3D decoration: anything with real geometry that is NOT a billboard card. C2's
     // filmblock/resblock buildings and parklot Studebakers, C5's cblock city blocks (2-27
     // polygons, up to 108 m tall). Requires a SceneBuilder to render through — without one
-    // (the pre-2026-07-22 construction) these fall back to the skip list, which is exactly
-    // the old behaviour.
+    // these fall back to the skip list.
     private bool IsSolidDecoration(int meshIndex)
     {
         if (_scene == null || meshIndex < 0 || meshIndex >= _gamez.Meshes.Count)
@@ -399,12 +398,12 @@ public sealed class ClutterBuilder
         return !IsSpriteCard(mesh);
     }
 
-    // Only genuine sprite cards billboard. Since 2026-07-22 that question is answered by the
+    // Only genuine sprite cards billboard. That question is answered by the
     // gamez model itself, through the shared SceneBuilder.ClassifyBillboard — the same rule
     // the renderer and the collision exemption use — instead of this file's own shape guess.
     // The two agree exactly on the shipped data: every template decoration is either a
     // Facade (1 polygon, 4 vertices, flat in local Z) or a Default 3D building (2-27
-    // polygons). Since polish-3 item 6 the Default ones are no longer skipped — they take
+    // polygons). The Default ones are not skipped — they take
     // the solid path (IsSolidDecoration above).
     private (string Texture, float Width, float Height)? SpriteInfo(int meshIndex)
     {
@@ -587,8 +586,8 @@ public sealed class ClutterBuilder
         uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
 
         // Fog globals + csky_world_light, and the DX7 gamma-space vertex modulate (trees share
-        // the world's baked-lighting model). Both were duplicated verbatim from SceneBuilder
-        // until 2026-07-23; they are now single-sourced files.
+        // the world's baked-lighting model). Both were once duplicated verbatim from
+        // SceneBuilder; they are now single-sourced files.
         #include "res://shaders/csky_atmosphere.gdshaderinc"
         #include "res://shaders/csky_srgb.gdshaderinc"
 
@@ -596,7 +595,7 @@ public sealed class ClutterBuilder
         // it must declare the whole block in the canonical order: Godot assigns instance-uniform
         // indices by declaration order within each shader and merges the mapping across every
         // material on one GeometryInstance3D, so two shaders that disagree silently read each
-        // other's slots — the 2026-07-17 unfogged-hilltops bug, when `csky_fog_on` was index 0
+        // other's slots — the unfogged-hilltops bug, when `csky_fog_on` was index 0
         // here and index 1 in SceneBuilder's bias shader.
         //
         // An earlier attempt hand-padded this shader with an unused `node_bias` and was dropped
@@ -690,10 +689,10 @@ public sealed class ClutterBuilder
         return mmi;
     }
 
-    // Collision for the 3D decorations only (user decision, 2026-07-22): a city block is real
-    // geometry with real sides, unlike the sprite cards, which lost their colliders in item 5.
+    // Collision for the 3D decorations only (user decision): a city block is real
+    // geometry with real sides, unlike the sprite cards, which deliberately have no colliders.
     //
-    // <b>Shapes are shared, not expanded</b> (2026-07-22 follow-up). Each distinct decoration
+    // <b>Shapes are shared, not expanded.</b> Each distinct decoration
     // MESH gets ONE <see cref="ConcavePolygonShape3D"/>, built once in the mesh's own local
     // space; every placement then attaches that same shape to its region body with its own
     // transform, via <see cref="PhysicsServer3D.BodyAddShape(Rid, Rid, Transform3D?, bool)"/>.
@@ -706,7 +705,7 @@ public sealed class ClutterBuilder
     // What this replaced: the first version transformed every vertex of every placement into
     // world space and concatenated the lot into one giant trimesh per region — 2,554,455
     // triangles in C5 from ~2,300 distinct ones, roughly 1,100x redundancy. Measured cost of
-    // that build, 2026-07-22: 3,796 ms, of which only 271 ms was the vertex transform and
+    // that build: 3,796 ms, of which only 271 ms was the vertex transform and
     // **3,403 ms was ConcavePolygonShape3D's BVH build** over 207 multi-hundred-thousand-triangle
     // regions. Sharing the shapes deletes essentially all of it, because the BVHs being built
     // are now ~40 triangles each.
@@ -776,8 +775,8 @@ public sealed class ClutterBuilder
                     // soft. That constraint is gone: clutter collision now exists only
                     // for kind.Solid, so `a795548` removed the "clutter_col" body this
                     // file used to build, which left the soft branch unreachable and it
-                    // was deleted 2026-07-23. The name WAS live 2026-07-17 → 2026-07-22
-                    // and the soft-tree behaviour was real while it lasted.)
+                    // was deleted too. The soft-tree behaviour was real while that
+                    // body existed.)
                     regions[key] = body = new StaticBody3D { Name = $"clutter_bld_{key.Item1}_{key.Item2}" };
                     root.AddChild(body);
                 }

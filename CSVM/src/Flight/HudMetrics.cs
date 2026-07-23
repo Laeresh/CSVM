@@ -3,7 +3,7 @@ using Godot;
 namespace CSVM.Flight;
 
 /// <summary>
-/// The one place the flight HUD decides how big it draws (M2.5 item 6). Every HUD element
+/// The one place the flight HUD decides how big it draws. Every HUD element
 /// (compass tape, gauge cluster, marker HUD, results scoreboard, the text block) is calibrated
 /// against a 1440p reference — <c>OriginalScreenshots/HUD.png</c> — and used to scale by a plain
 /// <c>viewportHeight / 1440</c>. That breaks in splitscreen: a HUD element in a quarter-height 4P

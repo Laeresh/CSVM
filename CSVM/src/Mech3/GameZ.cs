@@ -12,7 +12,7 @@ namespace CSVM.Mech3;
 /// nodes.json / models.json / materials.json / textures.json). Only the fields the
 /// renderer needs.
 ///
-/// <para><b>Two extraction shapes are accepted</b> (2026-07-21, revival-plan item 13).
+/// <para><b>Two extraction shapes are accepted.</b>
 /// The pinned mech3ax v0.6.1 binary emits the "legacy" shape; the fork (which restored
 /// CS gamez support on top of upstream's unified API) emits a "unified" one. They carry
 /// semantically identical data — verified field-for-field on C1 + planes: same node
@@ -327,8 +327,8 @@ public sealed class GameZ
                         || extra.ValueKind != JsonValueKind.Array || extra.GetArrayLength() == 0)
                         continue;
                     var c = l.GetProperty("color");
-                    // Per-light params (field meanings inferred from the C1 value survey,
-                    // 2026-07-18): unk08 = size scale (0 default / 1 / 2 / 5 — the
+                    // Per-light params (field meanings inferred from the C1 value
+                    // survey): unk08 = size scale (0 default / 1 / 2 / 5 — the
                     // lighthouse), unk64 = max sprite size in px (30 everywhere it's set),
                     // unk52/unk68 = visibility range in m (1500 / 2500 / 4000).
                     float F(string name) =>

@@ -28,13 +28,13 @@ public partial class FlightAudio : Node
     private const float SilenceThreshold = 0.002f;
     private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
 
-    // Item 11: the prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
+    // The prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
     // user's reference video (Bloodhawk dive to ~1.27x fd_speed) bounds the original's whine at
     // 0.06-0.14 of the engine's amplitude — the reader volume is evidently not a linear mix gain
     // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
     private const float WhineMixGain = 0.12f;
 
-    /// <summary>Overall gain for this plane's own-ship mix (M2.5 item 5). 1 for single player;
+    /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
     /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
     /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
     public float MixGain = 1f;
@@ -64,7 +64,7 @@ public partial class FlightAudio : Node
             AddChild(_crash);
         }
 
-        // The ground/dirt crash choreography (polish-4 item 8) layers snd_exp_ground_a — the
+        // The ground/dirt crash choreography layers snd_exp_ground_a — the
         // heavy earth-impact boom — over the plane_destroy_sg explosion above; the dirt anim
         // def fires it as its Sound event. Air/water hits use their own sounds, so this stays
         // gated on the surface in FlightController (OnGroundExplosion), not folded into OnCrash.

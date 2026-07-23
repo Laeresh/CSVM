@@ -5,8 +5,8 @@ namespace CSVM;
 /// <summary>
 /// Where the extracted game data lives on disk: resolves the per-chapter and per-mission
 /// extraction paths (gamez / texture / zrdr) under a data root, preferring an unpacked sibling
-/// folder over its <c>.zip</c>. Extracted from <see cref="PlaneViewer"/> (2026-07-23,
-/// PLAN-anim-debugger Wave 1 A2) so <c>--anim-lab</c> resolves the same paths a normal session
+/// folder over its <c>.zip</c>. Extracted from <see cref="PlaneViewer"/> so
+/// <c>--anim-lab</c> resolves the same paths a normal session
 /// does. Pure path arithmetic — the only I/O is <see cref="PreferUnzipped"/>'s directory-exists
 /// probe.
 ///

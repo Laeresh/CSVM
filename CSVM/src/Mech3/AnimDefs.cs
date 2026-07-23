@@ -11,7 +11,7 @@ namespace CSVM.Mech3;
 /// <see cref="AnimDefinition"/> model the compiled <see cref="AnimArchive"/> produces, so
 /// <see cref="AnimRuntime"/> has exactly one thing to execute.
 ///
-/// Both sources are needed and neither subsumes the other (measured 2026-07-21): the
+/// Both sources are needed and neither subsumes the other (measured): the
 /// compiled cam_anim/mis_anim archives are richer (typed events, resolved node refs, the SI
 /// scripts — which exist nowhere else), but a mission's <c>mis_anim.zbd</c> compiles only
 /// the defs its <c>mis_anim.json</c> lists. <c>zepstate</c> (the per-mission roster that
