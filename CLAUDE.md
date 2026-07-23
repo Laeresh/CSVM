@@ -5,11 +5,11 @@
 **This file is the compact, authoritative index of project context for Claude; deep detail lives in `docs/`.** Update documentation in the same turn as the change it describes:
 
 - Changes to *what the tool does from the outside* (flags, outputs, defaults, algorithms, UI, entry points) → the relevant section **here**.
-- Implementation detail, diagnosis narratives, verified gotchas → the module's bullet in `docs/architecture.md`. **Read a module's bullet there before modifying that module** — dead ends and misdiagnoses are recorded so they don't get re-chased.
+- Module purpose + still-binding constraints, as `⚠` one-liners → the module's `## src/...` entry in `docs/architecture.md` (body ≤ ~8 lines, ~12 for the heaviest). **Read a module's entry there before modifying that module.** Diagnosis narratives do NOT go there — they get a short dated `docs/HISTORY.md` entry; what survives of one is a `⚠` line or a verification.md rule.
 - Format / reverse-engineering knowledge → `docs/formats/`.
 - The extraction pipeline, the launch scripts, or the mech3ax fork → `docs/tooling.md`.
-- A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A dated `HISTORY.md` entry alone buries it — nobody reads a chronological log before starting work.
-- Landed work → a dated entry appended to `docs/HISTORY.md`, plus refresh "Current status" here (current state + next step only — it is not a log).
+- A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A dated `HISTORY.md` entry alone buries it — nobody reads a chronological log before starting work. Shape: a bold 1–2-line imperative + at most one sentence of measured evidence — no narrative.
+- Landed work → a dated entry appended to `docs/HISTORY.md` — a few lines: what landed, how verified, outcome — plus refresh "Current status" here (current state + next step only — it is not a log).
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
 
 **Budget and shape — this file is an index, not a narrative.** It once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
@@ -65,6 +65,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 ## Coding conventions
 - Never write braceless control-flow bodies. Always wrap the body of if, else if, else, for, foreach, while, and do in braces, even for a single statement — this prevents dangling-else and merge-conflict bugs.
+- Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
 ## Repo layout
 
 One line each — **the extraction pipeline, the launch scripts and the mech3ax fork are in `docs/tooling.md`**; none of it is needed to write engine code.
@@ -80,7 +81,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
-- `docs/architecture.md` — deep per-module implementation notes for `CSVM/src`. **Read a module's bullet before changing it.**
+- `docs/architecture.md` — per-module purpose + still-binding constraints for `CSVM/src`, one `##` entry each. **Read a module's entry before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
 - `docs/cli.md` — the full per-flag CLI reference (CLAUDE.md keeps only the day-to-day table).
 - `docs/verification.md` — how to verify a change here, and how the instruments lie. Read before measuring anything.
@@ -100,7 +101,7 @@ tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scene
 
 (First time only: run with `--headless --import` once before running scenes.)
 
-Compact module index — **deep implementation notes, verified diagnoses, and dead ends for every module live in `docs/architecture.md`; read that module's bullet before changing it.**
+Compact module index — **every module's purpose and still-binding constraints live in `docs/architecture.md` as its `##` entry; read that module's entry before changing it.**
 
 - `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects; reads both extraction shapes.
 - `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks and classifies each texture's alpha (soft vs hard).
@@ -207,9 +208,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
-**Three plans completed and were archived to `docs/plans/` (2026-07-23):** [`PLAN-M2-polish-4.md`](docs/plans/PLAN-M2-polish-4.md) (M2/2.5 polish run 4, 10 items — item 3 returned to backlog), [`PLAN-anim-debugger.md`](docs/plans/PLAN-anim-debugger.md) (the permanent `--anim-lab` mode, Waves 1–5), and [`PLAN-data-driven-crash.md`](docs/plans/PLAN-data-driven-crash.md) (all four waves). The crash is now **data-driven by default**: every flown plane gets a **per-player scoped crash `AnimRuntime`** that PLAYS the compiled `player_crash_dirt` def on a crash (bound to the plane's own subtree so `healthy`/`destroyed`/`pieceN` are unique; resolved by NAME via `NameResolveFallback`; a `Subset` program so only the crash's call-closure binds, not 800+ world defs) — the wreck breaks apart, the pieces tumble + scatter with inherited momentum, and the fireball/spark/smokeball/dirt/debris all fire from the extracted data (the same generic `MotionRuntime`/`OpacityFade`/puffer handlers M3's weapon-kills reuse). **✅ The user's A/B playtest passed (2026-07-23)** — the data-driven crash is confirmed as the default. **The bespoke `CrashChoreography`/`CrashBreakup` trio was NOT deleted — it is preserved on branch `bespoke-crash-animation`** (its "breaking apart" is a candidate to improve on the original *after* faithful recreation; see `backlog.md`). The `WreckMomentum` / `forward_rotation`-÷-run_time constants passed the A/B at their landed values and stay in the TUNE list only as fine-tuning handles.
-
-**The active plan is [`docs/PLAN-doc-prune.md`](docs/PLAN-doc-prune.md)** (written 2026-07-23, from a grilling session) — prune `docs/architecture.md` (299 KB) and `docs/verification.md` (52 KB) to searchable per-module/per-rule shapes, sweep the 226 provenance-marker comments out of `CSVM/src`, and rewrite this file's doc-routing rules so the narratives don't regrow. Four waves; Wave A (architecture.md) is the place to start. **It runs before [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves, no item user-gated — because M3's items will write their docs under whatever contract exists when they land. M3's Wave A (research/docs) starts once the prune completes.
+**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves, no item user-gated. Next step: Wave A (research/docs).
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 

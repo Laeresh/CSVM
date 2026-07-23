@@ -1,10 +1,8 @@
 # Documentation prune — architecture.md, verification.md, code comments, and the contract that grew them
 
-**ACTIVE PLAN** (written 2026-07-23). It sits in `docs/` rather than `docs/plans/`, which by
-this repo's convention makes it a live plan. Move it to `docs/plans/` with a `COMPLETE` banner
-when every wave lands. **It runs BEFORE [`PLAN-M3-weapons.md`](PLAN-M3-weapons.md)** — M3 is
-44 items that will all write documentation under whatever contract exists when they land, so
-the contract changes first.
+**COMPLETE (2026-07-23).** All four waves landed the day the plan was written. It ran BEFORE
+[`PLAN-M3-weapons.md`](../PLAN-M3-weapons.md) — M3 is 44 items that will all write
+documentation under whatever contract exists when they land, so the contract changed first.
 
 Scope was settled in a grilling session on 2026-07-23. Every decision below is the user's, and
 the Decisions table is the authority when this document contradicts itself elsewhere.
@@ -27,7 +25,7 @@ the Decisions table is the authority when this document contradicts itself elsew
 - **Root cause:** CLAUDE.md's routing rules *instruct* every session to write narratives into
   these files ("implementation detail, diagnosis narratives, verified gotchas → the module's
   bullet"), and unlike CLAUDE.md itself — which stopped growing only when
-  [`PLAN-docs-cleanup`](plans/PLAN-docs-cleanup.md) gave it a budget and shape rule — they
+  [`PLAN-docs-cleanup`](PLAN-docs-cleanup.md) gave it a budget and shape rule — they
   never got a shape rule. Pruning without changing the contract means regrowth.
 
 ## Decisions (2026-07-23)
@@ -130,4 +128,4 @@ Waves are independent except D, which lands last (the contract should describe t
 they now are). One commit per wave, straight to `main` when the user asks — each individually
 revertable. When all four land: move this file to `docs/plans/`, add its row to
 `plans.md`, append the HISTORY.md entry (a few lines, per its own new rule), and hand the
-active-plan slot to [`PLAN-M3-weapons.md`](PLAN-M3-weapons.md) Wave A.
+active-plan slot to [`PLAN-M3-weapons.md`](../PLAN-M3-weapons.md) Wave A.

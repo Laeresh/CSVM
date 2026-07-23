@@ -21,3 +21,4 @@ when more than one is present.
 | [PLAN-M2-polish-4.md](PLAN-M2-polish-4.md) | M2/2.5 polish run 4 (10 items; item 3 returned to backlog) | 2026-07-23 |
 | [PLAN-anim-debugger.md](PLAN-anim-debugger.md) | The `--anim-lab` animation debugger (Waves 1–5) | 2026-07-23 |
 | [PLAN-data-driven-crash.md](PLAN-data-driven-crash.md) | Data-driven crash: generic anim handlers + the crash plays its def (4 waves) | 2026-07-23 |
+| [PLAN-doc-prune.md](PLAN-doc-prune.md) | Prune architecture.md + verification.md, comment sweep, doc-routing contract (4 waves) | 2026-07-23 |

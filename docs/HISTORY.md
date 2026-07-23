@@ -4827,3 +4827,12 @@ Build clean (0 warnings, 0 errors), which itself proves no dangling refs to the 
 **Still owed (user-gated):** the A/B playtest of the data-driven crash across planes/chapters (the
 `bespoke-crash-animation` branch is the reference), and the `WreckMomentum` / `forward_rotation`-÷-run_time
 TUNE calls.
+
+## 2026-07-23 — Doc prune: architecture.md, verification.md, comment sweep, contract
+
+All four waves of PLAN-doc-prune landed: architecture.md 306 KB → 51 KB (67 per-module `##`
+entries, every kept constraint symbol-verified, format spillover merged into 7 docs/formats/
+pages incl. the FORWARD_ROTATION and DzRadius corrections); verification.md 53 KB → 16.6 KB
+(70 flat rules, each incident told once); the 226 provenance markers swept from 46 CSVM/src
+files (comment-only diff, build clean); CLAUDE.md's routing rules now encode the shapes.
+Verified by the plan's acceptance greps; one commit per wave.
