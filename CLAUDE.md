@@ -12,13 +12,11 @@
 - Landed work → a dated entry appended to `docs/HISTORY.md`, plus refresh "Current status" here (current state + next step only — it is not a log).
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
 
-**Budget and shape — this file is an index, not a narrative.** It grew to 162 KB (~40k tokens, every session paying for it) precisely because the rule above says to update it in the same turn as each change, and every session appended while nobody owned the total. Three rules keep it from happening again:
+**Budget and shape — this file is an index, not a narrative.** It once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
 
 - **Budget: CLAUDE.md stays under ~35 KB.** If a change would push it over, the content belongs in `docs/` and this file gets a *pointer* instead. Check with `(Get-Item CLAUDE.md).Length` before adding a paragraph, not after.
 - **Shape: a module index entry is ONE line** (~120 chars: path, what the module is, its role). If it needs a second sentence, that sentence is an `docs/architecture.md` edit, not a CLAUDE.md edit. The same goes for any list here that another file already indexes — point at that file rather than restating it.
 - **"Current status" is current state + next step ONLY.** Landed work goes to a dated `docs/HISTORY.md` entry and is **removed** from here, not also summarised here. A status section that accumulates finished work is the single biggest way this file regrows.
-
-Precedent: `docs/verification.md` (`d0ad876`) and the `docs/cli.md` / `docs/formats/extraction.md` splits are exactly this move — scattered or bulky content into one purpose-built page, plus a routing line above so it does not scatter back.
 
 **Standing rule — AI-assistance disclosure (decided 2026-07-21).** Every outward-facing communication about this work discloses that it was done with the help of Claude Code: PR bodies, issues, discussion posts, comments, and any community writeup — not only an initial submission. Commits carry a `Co-Authored-By: Claude` trailer. The user owns all upstream/community communication, so this is a constraint on what gets *drafted* for them, not an instruction to post anything.
 
@@ -32,6 +30,7 @@ Charter decided 2026-07-14 (full detail in Claude's project memory):
 
 - **Milestone 1** — complete asset extraction: fill the Crimson Skies gaps in mech3ax (`planes.zbd`, `gamez.zbd`).
 - **Milestone 2** — vertical slice: free flight only. One plane, one map (candidate: C1 instant-action arena), arcade controls, original sounds. No AI, objectives, or weapons.
+- **Milestone 3** — weapons and destruction (scoped 2026-07-22): [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md).
 - Long-term direction (not commitment): full campaign remake.
 
 ## 🚫 Hard rule: no game assets in version control — ever
@@ -87,7 +86,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `docs/HISTORY.md` — chronological development log: every landed change with its verification details. Append a dated entry when work lands.
 - `docs/plans/` — completed plans, indexed in `plans.md` there; each banner-marked `COMPLETE`, kept for evidence and dead ends, read as history. **A plan sitting in `docs/` rather than in here is live** — see "Current status" for which is active.
 - `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; **delete when landed — a `FIXED`/closed entry does not stay here.** Its record belongs in `docs/HISTORY.md`; its traps in `docs/verification.md` or `docs/architecture.md`. **If closing it leaves follow-up work, that follow-up becomes its own new entry with a `⚠ Traps` section** naming the rejected fixes and the misleading instruments — an open thread buried inside a section headed `FIXED` is invisible to anyone scanning for work.
-- `OriginalScreenshots/` — user-captured reference shots + videos from the original game. **Git-ignored in full since 2026-07-22** (was committed until then). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
+- `OriginalScreenshots/` — user-captured reference shots + videos from the original game (git-ignored). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
 ## Godot project (`CSVM/`)
 
@@ -172,7 +171,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 
 ### User args (after `--`)
 
-**Flight is the default (2026-07-20 CLI inversion).** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4, where both used to open a static orbit view. `--viewer` asks for that static inspection view back, and is where the damage / livery / mesh labs live. `--fly` is still accepted and still means exactly this — it is simply redundant now. A bare launch (no content arg) shows the launchscreen.
+**Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the damage / livery / mesh labs live. `--fly` is accepted but redundant. A bare launch (no content arg) shows the launchscreen.
 
 The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`](docs/cli.md)** — including the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, and manual camera placement.
 
@@ -202,18 +201,16 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 ## Current status / next step
 
-**This section is current state and next step ONLY — it is not a log.** Landed work goes to a dated entry in `docs/HISTORY.md` and is *removed* from here, not also summarised here. That rule is what keeps this file an index; ignoring it is what grew this section to 65 KB — 27 landed-work bullets, every one already recorded in HISTORY, deleted 2026-07-22.
+**This section is current state and next step ONLY — it is not a log.** Landed work goes to a dated entry in `docs/HISTORY.md` and is *removed* from here, not also summarised here; ignoring that rule once grew this section to 65 KB.
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
 **Four plans sit in `docs/`. The active plan is [`docs/PLAN-anim-debugger.md`](docs/PLAN-anim-debugger.md)** (written 2026-07-23, design decided with the user) — the permanent `--anim-lab` animation-debugger mode: def playback with transport controls (pause/step/slow-mo), a seeded fixed-dt deterministic clock, an authored-vs-fired timeline, and the reusable-class extraction from `PlaneViewer.cs` it rides on. It runs **before** [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) and delivers that plan's Wave 2a/2b scaffolding; the crash plan's Layer 1 handlers are then developed inside the lab. `docs/PLAN-M2-polish-4.md` (written 2026-07-22) is landed end to end except item 8, which stays ◐ pending the crash plan.
 
-**Queued behind it: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction: 44 items in six waves, scope settled with the user. **No item is user-gated** — both user-owned inputs landed 2026-07-22: the gun mount-name table (from which the slot→firepoint binding rule fell out — reverse index order, `W𝑛 → fp(9−2𝑛), fp(10−2𝑛)`), and the `CLUSTER_SIZE` playtest (stock Bloodhawk = 9 HE rockets, 3 per hardpoint → `CLUSTER_SIZE` is rounds-per-slot, `AMMO_LIMIT` a purchase cap). Wave A (research/docs) is the place to start.
+**Queued behind it: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction: 44 items in six waves, scope settled with the user. **No item is user-gated** — both user-owned inputs (the gun mount-name table and the `CLUSTER_SIZE` playtest) are recorded in the plan. Wave A (research/docs) is the place to start.
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 
-**`docs/PLAN-M2-polish-4.md` is now landed end to end** (items 1, 2, 4, 5, 6, 7, 9, 10 done 2026-07-22/23; item 3 moved back to `backlog.md`). **Item 8 (the crash choreography) landed 2026-07-23 over two slices**: the ground/dirt variant's authored sparks, delayed fireball cluster, black smokeball, five burning debris arcs (`call_crash_trails`, on a reconstructed ballistic) and the earth-impact boom (`snd_exp_ground_a`), surface-selected in `FlightController.Crash` at the plane centre (`healthy`), atop the existing primary fireball + wreck fire. **The remaining item-8 work is now scoped as a data-driven rewrite** — [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) (written 2026-07-23, with the user): the crash plays `player_crash_dirt` through a real `AnimRuntime` with **generic motion/opacity handlers** (the biggest gap: `ObjectOpacityFromTo`, 9,917 events, no handler — also the M3 destruction foundation), retiring the bespoke `CrashChoreography`/`CrashBreakup`. **Item 8 stays ◐ until that lands**; `flydirt`/water/air detail in `backlog.md`. **Item 9 landed as the subface fix** — the C5 ground z-fight was never a depth-precision bug but the unparsed OpenFlight subface flag, now parsed and layered at half a priority level; user-confirmed at the controls, and **no bias constant was touched**. **Item 10 (shader instance-uniform hygiene) landed 2026-07-23**, both parts — the shared blocks now live in `CSVM/shaders/*.gdshaderinc` (`docs/HISTORY.md`; ⚠ opaque sprite shaders must never take the preamble). **One landed change is user-vetoable:** the pad-read-on-focus gate shipped as its own commit alongside item 7's focus mute; reverting it alone leaves the mute intact, and it will stop a pad working while the window is unfocused. Separately, **the owed playtests** remain the real blocker on calling Milestone 2.5 done, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest".
+**One landed change is user-vetoable:** the pad-read-on-focus gate shipped as its own commit alongside polish-4 item 7's focus mute; reverting it alone leaves the mute intact, and it will stop a pad working while the window is unfocused. **The owed playtests remain the real blocker on calling Milestone 2.5 done**, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest".
 
-**Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
-
-**Everything else unscheduled** — blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.
+**Everything else unscheduled** — known issues (diagnosed there so they are not re-chased), blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.

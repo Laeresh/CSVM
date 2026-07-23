@@ -4393,4 +4393,11 @@ now points there. The "Format gotchas" bullet list moved verbatim to `docs/forma
 (added to the formats README index; only cross-references were re-pointed and the two "(item 6)"
 plan-relative tags dropped), with CLAUDE.md keeping a one-line pointer naming the gotchas so they
 still surface in every session's context. Pure docs move, no content changed; CLAUDE.md 34.2 KB →
-under budget.
+under budget. **A second batch the same day, user-reviewed (all eight edits approved):** removed the
+budget-section precedent line; added Milestone 3 to the charter list; trimmed the history clauses
+from the OriginalScreenshots bullet, the CLI-default paragraph (HISTORY §2026-07-20 has the
+inversion), and the two growth war-stories; collapsed the polish-4 landed-items log in "Current
+status" down to its two live facts (the vetoable pad-read-on-focus gate, the owed-playtests
+blocker) — every deleted item has a dated entry here, and the opaque-sprite-preamble trap lives in
+architecture.md's SceneBuilder bullet; trimmed the M3 research detail (recorded in the plan doc);
+merged the empty "Known issues" stub into the backlog pointer. CLAUDE.md → 25.9 KB.
