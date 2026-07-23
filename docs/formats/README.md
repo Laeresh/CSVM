@@ -19,13 +19,17 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [gamez.md](gamez.md) | The GameZ container (`gamez.zbd`, `planes.zbd`): nodes/meshes/materials JSON, transforms, draw priority, backface flags, aircraft trees, damage-panel states |
 | [world-structure.md](world-structure.md) | Chapter worlds: partition grid, terrain tiling, skydome zones, point-sprite lights, flare billboards, map-edge behavior |
 | [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |
-| [vehicle.md](vehicle.md) | `vehicle.json` aircraft defs: `kind_of` inheritance, dynamics, engines, `destroyable_parts` damage model, collision points |
+| [vehicle.md](vehicle.md) | `vehicle.json` aircraft defs: `kind_of` inheritance, dynamics, engines, `destroyable_parts` damage model, collision points, and the weapon/turret/AI keys |
+| [markers.md](markers.md) | Aircraft weapon rig (`planes.zbd` `markers`): firepoints + pylons + `target`, the `IDS_AIRFRAMEGUNGROUPNAMES` gun-group enum, the per-airframe W1–W4 gun-mount table, and the slot→firepoint binding rule |
 | [spawns.md](spawns.md) | Player spawns: `ia.json` `spawn_points`, `objectives.json` `PLAYER_INIT`, the campaign mission ↔ folder map |
 | [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones, `targets.json` node→string keys, the `messages.json` string table |
 | [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
+| [destructibles.md](destructibles.md) | World destructibles: how an `ANIMATION_DEFINITION` becomes a destructible object — `HEALTH`, `WeaponHit`/`WeaponOrCollideHit` activation, the `ANIM_HEALTH` `DAMAGE_SEQUENCE`, the death sequence, the 44 collide-destructibles |
 | [effects.md](effects.md) | `PUFFER_STATE` billboard-particle emitters, the effect reader files, flipbook textures, anchor nodes |
+| [weapons.md](weapons.md) | `weapons.json` `BALLISTICS`: the 48-entry weapon catalogue (guns/rockets/ordnance), damage & allotment fields, the player caliber×ammo matrix + AI detune, the `FIRE`/`FLYOUT`/`IMPACT` surface-class bindings |
+| [weapon-effects.md](weapon-effects.md) | The muzzle/flyout/impact effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) and the gamez projectile prototype roots the weapon bindings resolve to |
 | [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |

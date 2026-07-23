@@ -208,7 +208,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
-**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves, no item user-gated. Next step: Wave A (research/docs).
+**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`; corrections folded back into the plan). Next step: A3 (the `--dump-markers` marker tool) and A7 (the stock-loadout data file, commit user-gated), then Wave B.
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 

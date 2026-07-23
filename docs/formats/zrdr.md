@@ -32,4 +32,7 @@ be scanned across all three:
 | `weather.json` (fog / sunlight / cloud cover / wind / precipitation) | [weather.md](weather.md) |
 | `zepstate.json`, `startanims.json`, `mis_anim.json`, building/vehicle anims, the compiled `cam_anim.zbd`/`mis_anim.zbd` | [anim-definitions.md](anim-definitions.md) |
 | `PUFFER_STATE` effect readers (`flame_ball`, `fire`, `pufftrails`, …) | [effects.md](effects.md) |
+| `weapons.json` (the shared `BALLISTICS` weapon catalogue) | [weapons.md](weapons.md) |
+| weapon effect readers (`muzzle_burst`, `gunhit`, the `*_control` ordnance bursts) | [weapon-effects.md](weapon-effects.md) |
+| destructible `ANIMATION_DEFINITION`s (`HEALTH` / `DAMAGE_SEQUENCE` / `ACTIVATION`) | [destructibles.md](destructibles.md) |
 | `interp.json` boot scripts (not zrdr, but the same config ecosystem) | [clutter.md](clutter.md) |

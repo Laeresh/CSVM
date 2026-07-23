@@ -27,7 +27,7 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `injure_anims` | def-level damage thresholds (below) |
 | `destroyable_parts` | the damage model (below) |
 | `collision` | 6 collision probe points (below) |
-| `bullethole_anims`, `turrets`, `cannon_jam`, weapon lists | dogfight-milestone scope, undecoded here |
+| `bullethole_anims`, `weapons`, `turrets`, `cannon_jam`, `armor`/`health`, AI tuning | not consumed yet — [Weapons, damage & AI keys](#weapons-damage--ai-keys) below |
 
 ## Units, dynamics & engines
 
@@ -120,3 +120,47 @@ from the actual mesh, item 10a); documented for completeness.
 The effect emitters these anims call (`short_firetrail`, `dense_firetrail`,
 `large_fireball`, …) are `PUFFER_STATE` definitions — full schema in
 [effects.md](effects.md).
+
+## Weapons, damage & AI keys
+
+The airframe half of the combat data — none of it consumed by the remake yet. Player defs
+carry `weapons` (as a catalogue), `cannon_jam`, `turrets` and `bullethole_anims`; the
+`armor`/`health` pair and the AI-tuning keys live only on the AI variant defs.
+
+**`weapons`** — a list of 5-tuples `[weapon_id, count, ?, ?, range]`, ids into
+[weapons.md](weapons.md). On `player_airplane` it is a **capability catalogue, not a
+loadout**: all 39 buyable ids at once (`wep_00`–`15`, `25`/`27`/`28`, and the full
+`wep_30`–`73` player matrix), each with position-5 range `10000` — a UI sentinel, since the
+real per-plane loadout is executable-resident. On an AI def it is the actual armament:
+`bloodhawk` = `[["wep_04",4,…,800],["wep_07",2,…,800],["wep_00",9000,…,900]]` — a carried
+count, two undecoded factors, then an **engagement range** in metres (800–900 for AI
+fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
+
+**`cannon_jam`** (`player_airplane`) — `heat_safe_limit 1000`, `heat_dissipation_rate 50`,
+`jam_chance 0.1`; pairs with `FIRING_HEAT` in [weapons.md](weapons.md) to model gun
+overheating. Backlogged, deliberately not implemented.
+
+**`armor` / `health`** — the AI two-pool damage model (fighters `64/64`…`100/100`, always
+equal; `patrolboat`/`t_truck` `0/40`, unarmoured soft targets). Distinct from the player
+planes' per-part `destroyable_parts` — **player defs have no `armor`/`health` pair**, and
+`PlaneStats` does not read these. Where the pool applies, armour is spent before health.
+
+**`turrets`** — on exactly the five turret airframes (`pavenger`, `pbalmoral`, `pbrigand`,
+`pfirebrand`, `pkestrel`). A viewpoint-keyed list (`firstp`/`thirdp`) of
+`[title <MSG_TUR_*>, node <turretNode>]` entries; the Balmoral is the only two-turret plane
+(`balmoral_turret0`–`3`). Turrets are AI gunners that track other aircraft — **M4 scope**.
+`gun_pitch` / `gun_yaw` (AI defs, e.g. `[-11, 11]`) are the aiming cone.
+
+**`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
+`bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).
+
+**AI-combatant tuning** (AI variant defs, M4): pilot skill/personality (`dare_devil`,
+`dead_eye`, `quick_draw`, `steady_hand`, `sixth_sense`, `natural_touch`, `stun_recovery`,
+`talker`, `constitution`, `accentID`); flight/behaviour (`mode`/`mode_alt`, `target_bias`,
+`struct_bias`, `pursuit_range`, `attack`/`attack_dwell`/`not_pursuit_dwell`, `rates`,
+`turns`, `*_damping`, `mass`, `friction`, `chas_*`, `ai_input_*` / `ai_emerg_input_*` limits
+and scales, `preferred_engagement_altitude`/`return_range`, `activation` = spawn/aggro
+range). The boat and truck add surface-vehicle motion keys (`platform`, `collision_d`,
+`a_damping`). Paint keys (`paint_pattern`, `paint_colorN`, `paint_decalN`) set the AI
+liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
+`is_autogyro`, `rudder_tol`, `damaged_engine_sound`, `pilot`, `flight_ceiling`, `title`.

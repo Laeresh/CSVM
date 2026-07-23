@@ -78,6 +78,35 @@ here** — use a local commit on your branch, or a file copy. Recorded in `docs/
 
 ---
 
+## Wave A landed — corrections to the evidence below
+
+Wave A's docs (`weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, and the
+`vehicle.md` decode) verified the survey below against the data and corrected it. The survey
+text is kept as written; these override it:
+
+- **`IMPACT` has SIX surface classes, not five.** A `quicksand` class joins
+  `default`/`water`/`enemy`/`player`/`buildings` (3 entries carry it). **B15 must classify six.**
+- **`AMMO_LIMIT`-absent-on-rockets is too strong.** It holds for the air-to-air rocket set, but
+  the six `CRATER` ground-attack munitions (`wep_04`/`12`/`25`/`26`/`27`) *do* carry `AMMO_LIMIT`.
+  Turret guns carry `AMMO_LIMIT 9999` and no `CLUSTER_SIZE`.
+- **`unknown_seq` is NOT reliably the death sequence.** For the water tower it is a puffer loop;
+  the death swap `destroy_h2twr` sits in the ordinary `sequences` array, and `DAMAGE_SEQUENCE`
+  arrives compiled as a sequence literally named `DAMAGE_SEQUENCE`. **C24 must not key off
+  `unknown_seq`.** `proximity_damage` is `false` everywhere — it does *not* encode collide mode;
+  `activation` does.
+- **The plan's `AnimRuntime.cs` line numbers have drifted** (code moved since it was written):
+  `ANIM_HEALTH` eval is now ~`:1556` (not `:1046`), `HideUncoveredDestroyed` ~`:2813` (not
+  `:1934-1947`). `AnimDefs.cs:74-95` (no `DAMAGE_SEQUENCE` case) still holds. **Re-locate by
+  symbol, not line, when implementing waves B/C** — and re-check `AnimRuntime.cs:429` (C26).
+- **Gun nodes `fgun`/`rgun`/`bgun0..3` are mesh-less markers** (`model_index -1`) under the
+  turret subtrees, on the five turret airframes only — not wing-gun muzzles. **The Devastator
+  has no own model** — `pdevastator` inherits the base `player_pfighter` (the pirate fighter).
+- **Five `weapons.json` effect names resolve to nothing** in this extraction (referenced but
+  undefined): `bld_damage.flt`, `rcochet1`, `call_small_flash`, `f18sparks2`, `flak_effectplayer`.
+  Leads for D30/D29 — confirm each renders or is inert. The other 52 targets + all 23 sounds resolve.
+- **Eight `weapons.json` keys the survey missed** are now documented in `weapons.md`: `DAMAGE`,
+  `HIGH_EXPLOSIVE`, `SONIC`, `BEEPER`, `BEEPER_SEEKER`, `TANGLER`, `REAR`, `SMOKE_SCREEN`.
+
 ## What the data actually ships
 
 A survey on 2026-07-22 found the weapon data far more complete than the docs suggest — and
@@ -402,12 +431,12 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 New files and docs only; touches no module M2 polish 3 is editing.
 
-1. ☐ `docs/formats/weapons.md` — the ballistics table
-2. ☐ `docs/formats/` — gun mounts, markers and the airframe gun-group enum
+1. ☑ `docs/formats/weapons.md` — the ballistics table — **landed**
+2. ☑ `docs/formats/markers.md` — gun mounts, markers and the airframe gun-group enum — **landed**
 3. ☐ **Marker reference tool** — `--dump-markers` + labelled viewer overlay
-4. ☐ `docs/formats/destructibles.md` — the world-destructible model
-5. ☐ `docs/formats/` — the weapon effect-reader family
-6. ☐ `vehicle.md` — retire the "undecoded here" deferral
+4. ☑ `docs/formats/destructibles.md` — the world-destructible model — **landed**
+5. ☑ `docs/formats/weapon-effects.md` — the weapon effect-reader family — **landed**
+6. ☑ `vehicle.md` — retire the "undecoded here" deferral — **landed**
 7. ☐ Stock-loadout file format + seed from the user's table
 8. ☑ **[USER]** mount-name column — **delivered 2026-07-22**; the binding rule fell out of it
 9. ☑ **[USER]** `CLUSTER_SIZE` = rounds-per-slot — **confirmed 2026-07-22** (Bloodhawk: 9 HE, 3/hardpoint)
@@ -738,8 +767,9 @@ rocket in flight with correct orientation.
 **Goal.** Register hits and pick the right `IMPACT` variant.
 
 **Approach.** Raycast or swept test per projectile step against world geometry and plane
-colliders. Classify the struck surface into the data's five classes — `default`, `water`,
-`enemy`, `player`, `buildings` — since `IMPACT` is keyed by them. Water is identifiable from
+colliders. Classify the struck surface into the data's six classes — `default`, `water`,
+`enemy`, `player`, `buildings`, `quicksand` — since `IMPACT` is keyed by them (Wave A found the
+sixth; the plan's earlier "five" is corrected above). Water is identifiable from
 existing material/texture classification; `buildings` likely from the destructible registry
 (C21). **`enemy` has no meaning in M3** (nothing to hit) — leave it wired but unreachable.
 

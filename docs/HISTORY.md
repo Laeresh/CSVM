@@ -4836,3 +4836,40 @@ pages incl. the FORWARD_ROTATION and DzRadius corrections); verification.md 53 K
 (70 flat rules, each incident told once); the 226 provenance markers swept from 46 CSVM/src
 files (comment-only diff, build clean); CLAUDE.md's routing rules now encode the shapes.
 Verified by the plan's acceptance greps; one commit per wave.
+
+## 2026-07-24 — M3 Wave A: weapon/destructible format docs (A1, A2, A4, A5, A6)
+
+The documentation half of Milestone 3's Wave A landed: five `docs/formats/` deliverables plus
+their index wiring, all verified against the extraction and correcting the plan's own survey.
+- **`weapons.md`** — the 48-entry `weapons.zrd.json` `BALLISTICS` table: every key with measured
+  range, the caliber×ammo damage matrix (dum-dum ½ armour/1.5× health, AP the mirror — exact on
+  all 5 calibers), the AI detune (`wep_130`–`170`, velocity 600 / rate 6.0 / ½ damage), the
+  `CLUSTER_SIZE` (per-slot) vs `AMMO_LIMIT` (purchase cap) split, and the `FIRE`/`FLYOUT`/`IMPACT`
+  surface-class bindings. Found a **sixth `IMPACT` class, `quicksand`** (plan said five), refined
+  the "no AMMO_LIMIT on rockets" rule (the six `CRATER` munitions do carry it), and documented 8
+  keys the survey missed (`DAMAGE`, `HIGH_EXPLOSIVE`, `SONIC`, `BEEPER`, `BEEPER_SEEKER`,
+  `TANGLER`, `REAR`, `SMOKE_SCREEN`).
+- **`markers.md`** — the `planes.zbd` `markers` rig (8 firepoints + 8 pylons; Kestrel 7 with a
+  centreline `fp7`), the `IDS_AIRFRAMEGUNGROUPNAMES` enum (3060–3079, contiguous; 3065/3078 =
+  Center Guns / Center Guns 2), the per-airframe W1–W4 mount table, and the reverse-index binding
+  **slot n → firepoint(9−2n),(10−2n)** — verified 4/4 on the Devastator (two-axis) and Peacemaker
+  (asymmetric), Balmoral/Brigand duplicate coords reproduced. Corrected: the gun nodes
+  `fgun`/`rgun`/`bgun0..3` are mesh-less markers, and `pdevastator` reuses `player_pfighter`.
+- **`destructibles.md`** — `HEALTH` / `DAMAGE_SEQUENCE` / `ACTIVATION` model, `ANIM_HEALTH n` =
+  `health <= n`, the water-tower worked example, and the 44 `WeaponOrCollideHit` set (39 C2
+  facades + 4 C5 windows + `agyrobus`). Corrected: `unknown_seq` is **not** reliably the death
+  sequence; `proximity_damage` is false everywhere; the plan's `AnimRuntime.cs` line numbers have
+  drifted (re-locate by symbol).
+- **`weapon-effects.md`** — the muzzle (`muzzle_burst`), impact (`gunhit`) and `*_control`
+  ordnance effect readers, and the gamez projectile prototype roots. Of 57 `FIRE`/`FLYOUT`/`IMPACT`
+  asset targets, 52 resolve + all 23 sounds; **5 are referenced-but-undefined** (`bld_damage.flt`,
+  `rcochet1`, `call_small_flash`, `f18sparks2`, `flak_effectplayer`) — flagged for Wave D.
+- **`vehicle.md`** — retired the "undecoded here" deferral: documented the `weapons` 5-tuple
+  (player catalogue vs AI armament, position-5 engagement range 10000/800–900/500), `cannon_jam`,
+  the AI `armor`/`health` pool, `turrets` (M4), `bullethole_anims`, and the AI-tuning key families;
+  every key across all 75 vehicle defs now accounted for.
+
+`README.md` Pages table + `zrdr.md` family index updated; the plan's checklist ticks A1/A2/A4/A5/A6
+and carries a "Wave A landed — corrections" block. Docs only — no engine code changed. A1/A2/A4
+were parallel sub-agents; A5's agent stalled and its page was written directly. **Next: A3 (the
+`--dump-markers` tool) and A7 (the stock-loadout file, commit user-gated).**
