@@ -551,6 +551,9 @@ public partial class PlaneViewer : Node3D
             int colliders = 0;
             string what;
             Node3D? cloudDeck = null; // the world's cloudlayer overcast (copied per player below)
+            // Crash choreography effect params (item 8): read from the world's compiled anim
+            // program below, consumed in the sibling --fly block that builds the controllers.
+            CrashChoreography.EffectSet? crashEffects = null;
             if (_worldMode)
             {
                 // The engine's per-mission world setup script (interp support\<ch>\<mis>.gw):
@@ -630,6 +633,10 @@ public partial class PlaneViewer : Node3D
                     AnimProgram.ArchivePaths(dataRoot, _chapter, _mission);
                 var animProgram = AnimProgram.Load(zrdrPath, chapterZrdrPath, missionZrdrPath,
                     chapterAnimPath, missionAnimPath);
+                // The crash choreography's effect params (item 8): read once from the compiled
+                // defs and shared across every player's own emitter instances. Cheap (data
+                // only, no textures), so done here whether or not a plane is being built.
+                crashEffects = CrashChoreography.EffectSet.Load(animProgram, zrdrPath);
                 // The runtime builds PUFFER_STATE emitters through this factory rather than
                 // holding the TextureArchive: a puffer bakes its atlas at construction, and
                 // `textures` is disposed when this build scope ends. Cleared right after the
@@ -1059,6 +1066,20 @@ public partial class PlaneViewer : Node3D
                         if (verbose)
                             GD.Print($"crash breakup: {controller.Breakup.PieceCount} wreck pieces, " +
                                      $"fire={(wreckFire != null ? "on" : "off")} smoke={(wreckSmoke != null ? "on" : "off")}");
+                    }
+
+                    // Crash choreography (item 8): the ground variant's spark bursts, delayed
+                    // fireball cluster and black smokeball, on top of the primary fireball + wreck
+                    // fire above. One EffectSet, per-player Puffer instances parented here.
+                    if (crashEffects is { Any: true }
+                        && CrashChoreography.Create(crashEffects, textures) is { } choreo)
+                    {
+                        controller.Choreography = choreo;
+                        foreach (var emitter in choreo.Emitters)
+                            controller.AddChild(emitter);
+                        if (verbose)
+                            GD.Print($"crash choreography: {choreo.SparkCount} spark + " +
+                                     $"{choreo.FireballCount} fireball emitters, smoke={(choreo.HasSmoke ? "on" : "off")}");
                     }
 
                     if (sounds != null && soundDefs != null)

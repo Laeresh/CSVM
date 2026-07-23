@@ -570,3 +570,20 @@ Before calling a change verified:
     asset count can move that budget. Prefer poses with no scroll/flipbook for A/B, or diff
     against a ±1-frame window rather than a single capture. Note this is rule 2's noise floor in a
     dimension nobody measures: the floor was 0 for repeated runs and 18.32% for one frame of drift.
+
+24. **A warm additive glow reads as smoke; to verify one effect, isolate it and remove whatever
+    clears it early.** Verifying the crash smokeball (item 8, 2026-07-23), the first "it works" call
+    was made from a screenshot where a *fireball* was fading over the impact — its orange haze was
+    read as black smoke. It was not; the smokeball was rendering nothing (an added blend-override
+    parameter was dead, so black smoke stayed additive = invisible). Two controls broke the illusion.
+    First, **isolate the emitter**: suppress every co-located effect (here the primary fireball AND
+    the wreck fire, both burning at the same point) so anything left is unambiguously the one under
+    test — a crash has three overlapping fire/smoke systems and any of them will "confirm" a fourth.
+    Second, **remove the confound that clears the effect before it develops**: a scripted `--hold`
+    run auto-respawns 1.5 s after the crash, and the smoke only grows visible after ~2-3 s, so the
+    instrument was destroying the subject before it could appear — crashing *without* `--hold`
+    (frozen until R) let it develop. Only then was the smoke provably absent, then present after the
+    fix. **When an effect overlaps others of the same colour/family, a positive screenshot is worth
+    nothing until the others are removed; and check that the run doesn't reset the effect inside your
+    capture window.** (This is rules 4 and 7 in the effects domain: don't trust that the bright thing
+    you see is the thing you changed.)

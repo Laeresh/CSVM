@@ -6,6 +6,13 @@ using Godot;
 
 namespace CSVM.Effects;
 
+/// <summary>How a puffer's sprites composite. <see cref="Auto"/> keeps the historical rule
+/// (a COLORS ramp ⇒ <c>blend_mix</c>, else <c>blend_add</c>); the explicit modes override it
+/// for effects whose blend the data does not imply — the crash <c>large_black_smokeball</c>
+/// carries <c>colors: null</c> yet must render as MIX, because additive black smoke adds ~0
+/// and is invisible (polish-4 item 8, gap 1).</summary>
+public enum PufferBlend { Auto, Additive, Mix }
+
 /// <summary>
 /// The parameters of one <c>PUFFER_STATE</c> block from a zrdr effects reader
 /// (flame_ball.json, fire.json, pufftrails.json, … all share this schema). A puffer
@@ -326,11 +333,15 @@ public sealed partial class Puffer : Node3D
                      * smoothstep(vec2(0.0), vec2(0.12), vec2(1.0) - UV);
             // soft particles: a billboard tilted by a high chase camera dips into the
             // terrain and the depth test cuts it with a hard straight line — fade
-            // alpha out over the last ~1.5 m before the scene depth instead
+            // alpha out over the last ~1.5 m before the scene depth instead. Disabled
+            // (SOFT_EXPR → 1.0) for the crash smokeball: it sits just above the ground,
+            // so the fade zeroes the alpha of every fresh puff against the terrain right
+            // behind it — a bright additive fire still leaks through, but MIX black smoke
+            // faded to zero is simply invisible until it grows tall (item 8).
             float scene_raw = texture(depth_texture, SCREEN_UV).r;
             vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
             float scene_z = unproj.z / unproj.w;
-            float soft = clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0);
+            float soft = SOFT_EXPR;
             ALBEDO = t.rgb * v_color.rgb;
             ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
         }
@@ -346,8 +357,16 @@ public sealed partial class Puffer : Node3D
     /// <param name="sustained">Continuous emission driven by <see cref="SustainAt"/> — the
     /// animation system's ACTIVE_STATE 1 puffers (the C1 train's steam plume, the waterfall
     /// mist), which run indefinitely at their TIME_INTERVAL rather than for a burst duration.</param>
+    /// <param name="blend">Composite mode (see <see cref="PufferBlend"/>). Default
+    /// <see cref="PufferBlend.Auto"/> keeps the COLORS-ramp rule; the crash smokeball passes
+    /// <see cref="PufferBlend.Mix"/> because its dark textures carry no ramp yet must not
+    /// blend additively (which would make black smoke invisible).</param>
+    /// <param name="softParticles">When true (default) the alpha fades over the last ~1.5 m
+    /// before the scene depth, softening the hard line where a tilted billboard dips into
+    /// terrain. The crash smokeball passes false: it emits just above the ground, and the
+    /// fade would zero its alpha against the terrain right behind it until it grows tall.</param>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false)
+        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
     {
         var frameNames = state.TextureSequence.Count > 0
             ? state.TextureSequence.Select(f => f.Texture).ToList()
@@ -356,12 +375,12 @@ public sealed partial class Puffer : Node3D
         if (atlas == null)
             return null;
         var puffer = new Puffer();
-        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained);
+        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained, blend, softParticles);
         return puffer;
     }
 
     private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
-        bool sustained = false)
+        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
     {
         _state = state;
         Name = "puffer_" + state.Name;
@@ -382,7 +401,18 @@ public sealed partial class Puffer : Node3D
             _particles = new Particle[state.Number * _burstsTotal];
         }
 
-        var code = ShaderCode.Replace("BLEND_MODE", state.Colors.Count > 0 ? "blend_mix" : "blend_add");
+        // Auto keeps the COLORS-ramp rule (ramp ⇒ mix, else add); the explicit modes override
+        // it — the crash smokeball is MIX despite carrying no ramp, because its textures are
+        // near-black with a smoke-shaped alpha, which adds ~0 (invisible) but masks correctly.
+        string blendMode = blend switch
+        {
+            PufferBlend.Additive => "blend_add",
+            PufferBlend.Mix => "blend_mix",
+            _ => state.Colors.Count > 0 ? "blend_mix" : "blend_add",
+        };
+        var code = ShaderCode
+            .Replace("BLEND_MODE", blendMode)
+            .Replace("SOFT_EXPR", softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
         var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
         mat.SetShaderParameter("atlas", atlas);
         mat.SetShaderParameter("frame_count", (float)frameCount);

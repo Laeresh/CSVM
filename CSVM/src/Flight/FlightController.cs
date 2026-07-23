@@ -82,6 +82,12 @@ public partial class FlightController : Node3D
     /// scatter at the impact and the wreck burns until respawn. Optional.</summary>
     public CrashBreakup? Breakup;
 
+    /// <summary>Crash choreography (polish-4 item 8): the authored spark bursts, delayed
+    /// fireball cluster and black smokeball the original plays on a ground crash, over and
+    /// above the primary fireball + wreck fire. Fired at the impact, advanced through the
+    /// crash freeze, cleared on respawn. Optional.</summary>
+    public CrashChoreography? Choreography;
+
     /// <summary>The stunt run (M2.5 item 1), when flying --stunt: danger-zone sphere
     /// detection, tested against the plane each physics frame. Deliberately NOT reset on
     /// respawn — a mid-run crash keeps completed zones (the clock keeps running, item 3).
@@ -262,6 +268,7 @@ public partial class FlightController : Node3D
         Gauges?.Reset();     // damage-dial blink timers cleared
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
         Breakup?.Reset();    // wreck pieces hidden, burn out
+        Choreography?.Reset(); // sparks/fireball-cluster/smokeball cleared
         _damageCooldown = 0f;
         _damageFlash = 0f;
         if (PlaneModel != null)
@@ -312,12 +319,26 @@ public partial class FlightController : Node3D
         CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
         // the wreck: destroyed-subtree pieces scatter with the impact velocity and
         // the fire/smoke burn at the impact point (item 10d)
-        Breakup?.Begin(PlaneModel?.GlobalTransform ?? GlobalTransform, impact,
-            _model.VelocityDir * _model.Speed);
+        var crashPose = PlaneModel?.GlobalTransform ?? GlobalTransform;
+        Breakup?.Begin(crashPose, impact, _model.VelocityDir * _model.Speed);
+        // the authored crash effects (item 8): sparks + the delayed fireball cluster + the
+        // black smokeball, for the surface hit
+        Choreography?.Begin(crashPose, impact, ClassifySurface(hitName));
         GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
+
+    /// <summary>Which crash variant the original would play for the surface just hit. Every
+    /// reachable crash today is a collision with terrain or a city block — a hard non-water
+    /// surface, which is the <c>_dirt</c> (ground) variant; buildings are dirt too, since the
+    /// only alternative to a hard-surface impact is the <c>_default</c> (air) variant, and
+    /// that fires when the plane is destroyed with NO impact at all (shot down mid-flight),
+    /// which has no trigger until weapons (M3). Water needs a sea-surface signal the collision
+    /// system does not yet expose. So this is Ground for now — the seam is real, the other two
+    /// arms wait on their triggers (polish-4 item 8).</summary>
+    private static CrashChoreography.Surface ClassifySurface(string hitName) =>
+        CrashChoreography.Surface.Ground;
 
     /// <summary>True when the button is down on one of THIS player's gamepads. With
     /// <see cref="PadDevices"/> null (single player) that is every connected pad — never `pads[0]`:
@@ -427,6 +448,8 @@ public partial class FlightController : Node3D
         {
             // the wreck pieces keep tumbling/resting while the sim is frozen
             Breakup?.Advance(dt, GetWorld3D()?.DirectSpaceState);
+            // the choreography's delayed fireball cluster fires on this same crash clock
+            Choreography?.Advance(dt);
             // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
             // unattended HoldSegments runs respawn on a timer instead
             if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))

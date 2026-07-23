@@ -4209,3 +4209,55 @@ preamble would therefore render identically, and a passing regression would mean
 *is* verified is that the enforcement is structural rather than behavioural: there is now exactly
 one declaration site, so there is no second order to drift from. The mechanism itself is not
 re-derived here — it is inherited from the real 2026-07-17 unfogged-hilltops incident.
+
+## 2026-07-23 — Crash choreography, first slice (polish-4 item 8): the dirt-crash effects
+
+The original plays an authored effect sequence on a crash — three compiled cam_anim defs rooted
+at the `player` node (`player_crash_default`/`_dirt`/`_water`), each a list of `CallAnimation`
+events firing shared effect defs (`small_yellow_sparks`, `large_fireball`, `large_black_smokeball`,
+`call_crash_trails`, `flydirt_plane`, …) at offsets from the crash pose. Item 8 was the last open
+item in `docs/PLAN-M2-polish-4.md`. This landed a **first slice**: the ground/dirt variant's
+pure-puffer effects, on top of the primary fireball (`CrashEffect`) and 10 s wreck fire
+(`CrashBreakup`) earlier passes already shipped.
+
+**What landed.** New `src/Flight/CrashChoreography.cs`: an `EffectSet` read ONCE per session from
+the compiled defs via `PufferState.FromAnimEvent` (never transcribed — `trailpuffer2` is reused
+with different numbers/sizes by sparks vs smokeball vs steam, so only the per-call payload is
+authoritative), and per-player pooled `Puffer` emitters (3 sparks / 3 fireballs / 1 smokeball)
+fired round-robin off a per-crash clock. `FlightController.Crash` picks the variant via
+`ClassifySurface` and calls `Begin`; the crashed branch `Advance`s it; `Respawn` `Reset`s it.
+The dirt schedule: 2 `small_yellow_sparks` bursts + the `large_black_smokeball` at t=0, then the
+3-fireball cluster at `Event+0.25/0.50/0.75` s at the data's offsets. Anchored at **`pose.Origin`
+(the data's `healthy` node = plane centre), not the impact contact point**. Two `Puffer.Create`
+overrides added, both defaulting to a **byte-identical shader** for every existing puffer (the
+`BLEND_MODE`/`SOFT_EXPR` substitutions reproduce the old code exactly at their defaults): `blend`
+(force MIX/additive) and `softParticles` (disable the depth-fade).
+
+**Three bugs, all the "instrument lies" class (verification.md §4/§7).** (1) The `blend` param I
+added was **dead** — `Init` still selected the mode from `state.Colors.Count` alone, so the
+smokeball (`colors: null`) stayed additive, and additive black smoke (`thickblksmoke0N` is rgb
+(0,4,0) with a smoke-shaped alpha) adds ~0 = invisible. (2) I anchored the effects at the impact
+point; the data attaches every crash effect to `healthy` (the plane centre, a few metres up), and
+emitting at the ground contact both mis-places them and buries the smoke in the terrain. (3) The
+shader's soft-particle depth-fade zeroed the alpha of fresh black smoke sitting near the terrain
+behind it (a bright additive fire leaks through the same fade; MIX black does not), so the smoke
+only appeared once grown — invisible within a scripted run's 1.5 s auto-respawn. **The first
+"smokeball works" verification was wrong**: it mistook a fading additive fireball for smoke. It was
+corrected by *isolating* the emitter — suppressing the fireball + wreck breakup and freezing the
+crash (no `--hold`, so no auto-respawn) — which proved the smoke absent, then present after the
+blend + anchor + soft-fade fixes.
+
+**Verified.** Build clean, 0 warnings. Scripted dive-crashes into C1 terrain (`--spawn-at`/
+`--spawn-dir`): the ground/dirt variant selected (`CRASH into g28031/col`), sparks arc up, the
+fireball cluster builds over ~0.75 s, and the black smokeball develops into a proper column
+(`.scratch/full_05.png`, `full_30.png`). 8-chapter `--fly` build: choreography builds every chapter
+(`3 spark + 3 fireball emitters, smoke=on`), zero errors, no shader errors. The shader change is a
+no-op for every other puffer (world steam/water, fire, damage trails) by construction, so freecam /
+viewer / damage-lab renders are unaffected. User-confirmed the earlier "no black smokeball".
+
+**Deferred to later slices** (each independently verifiable, all in `backlog.md`): the debris arcs
+(`call_crash_trails` — needs `FromAnimEvent` to read DISTANCE intervals), the per-piece
+`large_firetrail`+bounce sub-sequences, `flydirt_plane`/the water splash+steam (need the
+mesh/`ObjectOpacityFromTo` path), and the water/air *variants* (water needs a sea-surface signal
+the collision system does not expose; the air/no-impact variant has no trigger until weapons, M3 —
+a building crash is `_dirt`, not air).
