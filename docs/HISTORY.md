@@ -4336,7 +4336,7 @@ for `player_bhawk`, `player_fury`, and a `--yaw=0` variant — **all three pairs
 Determinism and the able-to-fail control both hold (verification.md rule 5): two launches of the same
 build produced identical bytes, and the `--yaw=0` image differs from the default-angle image, so the
 instrument *can* register a change. Build clean, 0 warnings. `dotnet build` mtime-trap ruled out (the
-rebuilt dll was confirmed newer than the restored source). Evidence: `.scratch/orbit-verify/`. Wave 1
+rebuilt dll was confirmed newer than the restored source). Evidence: `analysis/anim-debugger-verification/` (the durable instrument + numbers; the `.scratch/orbit-verify/` outputs were ephemeral). Wave 1
 A2 (`SessionPaths`) and A3 (`WorldSession`) are the next slices before the runtime work.
 
 **Animation debugger Wave 1 A2 — extracted-data path resolution to `src/SessionPaths.cs` (2026-07-23):**
@@ -4355,7 +4355,7 @@ instruments per rule 5): (1) the static plane-viewer `--screenshot --jitter=0` m
 puffer/light/condition census (814 defs, 616 ON_STARTUP, 615 live instances, 7064 gamez nodes, …) —
 is **byte-identical** HEAD-vs-after after normalising out run-to-run timing (covers `ChapterGamez` +
 `MissionZrdr` + `ChapterZrdr`); the 14-line census is non-empty, so "identical" is a real match, not two
-empty files. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **A3 (`WorldSession`) is the
+empty files. Build clean, 0 warnings. Evidence: `analysis/anim-debugger-verification/`. **A3 (`WorldSession`) is the
 last Wave 1 slice before the runtime work (Wave 2).**
 
 **Animation debugger Wave 1 A3 — world+anim build to `src/Mech3/WorldSession.cs` (2026-07-23):**
@@ -4381,7 +4381,7 @@ gamez-node/mesh/collider counts plus the entire anim def/instance/motion/puffer/
 census — is **byte-identical** HEAD-vs-after for both **C1** (the 814-def, 7064-node airfield with
 clutter/sounds/puffers, 17-line census) and **C5** (the 11 438-node, 4253-collider city, 15-line
 census) after normalising run-to-run timing; both censuses are many non-empty lines, so "identical"
-is a real match. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **Wave 1 (the
+is a real match. Build clean, 0 warnings. Evidence: `analysis/anim-debugger-verification/`. **Wave 1 (the
 `PlaneViewer` split A1-A3) is complete; Wave 2 (the additive `AnimRuntime` capabilities — manual
 `Advance`, `AutoStart`, seedable RNG, dispatch hooks, `Stop` cleanup) is next.**
 
@@ -4446,7 +4446,7 @@ instances, 39 motions), and the hooks fire 1330 dispatches / 623 starts / 8 fini
 `623 − 8 = 615` balancing the live count. The lone stderr "error" is the pre-existing `snd_police`
 "requested after the world build" `GD.PushWarning` (present in the HEAD baseline too, under `--mute`);
 the only backtrace difference is the new `Advance` frame from B1. Build clean, 0 warnings. Evidence:
-`.scratch/wave2/`. **Wave 2 complete; Wave 3 (the lab MVP — quiet stage, transport, fixed dt + seed,
+`analysis/anim-debugger-verification/`. **Wave 2 complete; Wave 3 (the lab MVP — quiet stage, transport, fixed dt + seed,
 `--play-anim`, auto-frame) is next.**
 
 **Animation debugger Wave 3 — the `--anim-lab` MVP (2026-07-23):** the lab mode itself: quiet
@@ -4483,5 +4483,20 @@ same-seed `--frames=90 --shots=3 --jitter=0` bursts on `mp_hangar3_open` byte-id
 frames, twice), `--frames=30` differs (rule-5 control); *seed is live* — C1/M05
 `--play-anim=random_prop`: seeds 1/2/4 roll `false TRUE false`, seeds 3/5/6 roll `false` (a
 different branch), same-seed reruns identical. Build clean, 0 warnings. Evidence:
-`.scratch/wave3/`. **Wave 3 complete; Wave 4 (picker + authored-vs-fired timeline, fed by the B4
+`analysis/anim-debugger-verification/` (`verify.ps1` re-runs every scripted check; the `.scratch/wave3/` outputs were ephemeral). **Wave 3 complete; Wave 4 (picker + authored-vs-fired timeline, fed by the B4
 hooks) is next.**
+
+**Evidence out of `.scratch/`, into `analysis/anim-debugger-verification/` (2026-07-23):** user
+rule — `.scratch/` is a tmp folder; anything worth keeping moves to a tracked location (now also
+stated in CLAUDE.md's scratch section). The anim-debugger waves' evidence dirs
+(`.scratch/orbit-verify/`, `wave2/`, `wave3/`, 66 MB) were exactly the class the `analysis/`
+README warns about, so the durable parts moved there: **`verify.ps1`** (re-runs every scripted
+Wave 1-3 check against the current build — plane-viewer md5, C1/C5 censuses vs the committed
+`baseline_*.census`, the quiet stage, the 610-frame clock-rate regression test for the
+ManualAdvance 2× bug, the same-seed/control determinism bursts, the seed probe; all 8 checks
+PASS on `main`, outputs land in `.scratch/anim-lab-verify/` and stay ephemeral) and
+**`FINDINGS.md`** (the accepted numbers + the instrument bugs, incl. the `--screenshot=`
+relative-path-resolves-against-`CSVM/` gotcha). The PNGs were deliberately NOT preserved —
+rendered frames are game-derived and never enter version control; the md5s in FINDINGS carry
+the comparisons. The five HISTORY "Evidence:" citations above now point at the analysis dir,
+and the swept `.scratch` dirs were deleted.

@@ -23,3 +23,4 @@ importantly — the instrument bugs hit on the way, labelled measured / inferred
 | Directory | Question | Verdict |
 |---|---|---|
 | `item9-depth-bias/` | Can a conflict-local depth bias fix the C1B/C5 z-fighting? | Viable for C1B, structurally incapable for C5 — they are two different bugs. See `FINDINGS.md`. |
+| `anim-debugger-verification/` | Do the anim-debugger waves leave the game byte-identical, and is `--anim-lab` playback deterministic and live-faithful? | Yes on both; `verify.ps1` re-runs every scripted check (incl. the 2×-clock regression test). See `FINDINGS.md`. |

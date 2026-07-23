@@ -52,6 +52,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
   rather than UUIDs, so they're easy to find in the sidebar.
 - When you produce such a file, print its workspace-relative path
   (e.g. `./.scratch/probe_full.png`) so it can be opened directly.
+- `./.scratch/` is a tmp folder. If anything needs to stay as evidence move it into `./analyis`
 
 ## Architecture & key decisions
 
@@ -77,7 +78,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees**; `-WhatIf`/`-Force`/`-OlderThanDays`/`-Keep`/`-SkipWorktrees`/`-IncludeDirtyWorktrees`/`-PruneBranches`. Spares backups and dirty worktrees; leaves branches alone by default.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
-- `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept (that is how `probe_exempt.py` was lost). No game data in them, ever.
+- `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — deep per-module implementation notes for `CSVM/src`. **Read a module's bullet before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
