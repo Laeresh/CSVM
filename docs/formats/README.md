@@ -15,6 +15,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | Page | Covers |
 |---|---|
 | [extraction.md](extraction.md) | **Start here for tooling:** which archive types extract, how far each round-trips, the two extraction JSON shapes, where the output lands |
+| [gotchas.md](gotchas.md) | **The cross-cutting gotchas that bite constantly:** node indexing, transforms/handedness, winding + culling, vertex-color lighting, UV tiling, draw priority + subfaces — read before writing any reader or renderer |
 | [gamez.md](gamez.md) | The GameZ container (`gamez.zbd`, `planes.zbd`): nodes/meshes/materials JSON, transforms, draw priority, backface flags, aircraft trees, damage-panel states |
 | [world-structure.md](world-structure.md) | Chapter worlds: partition grid, terrain tiling, skydome zones, point-sprite lights, flare billboards, map-edge behavior |
 | [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |

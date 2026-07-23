@@ -1,0 +1,20 @@
+# Completed plans
+
+The index of every plan that has run to completion, oldest first. The plan files live in
+this directory, each banner-marked `COMPLETE` with its date; they are kept for their
+evidence and recorded dead ends, and read as history, not live work. **A plan sitting in
+`docs/` rather than in here is live** — CLAUDE.md's "Current status" names the active one
+when more than one is present.
+
+**When a plan completes:** move its file into this directory and append its row here.
+
+| Plan | Scope | Completed |
+|---|---|---|
+| [PLAN-M2-polish.md](PLAN-M2-polish.md) | M2 polish run 1 (8 items) | 2026-07-17 |
+| [PLAN-M2-polish-2.md](PLAN-M2-polish-2.md) | M2 polish run 2 (13 items) | 2026-07-19 |
+| [PLAN-M2.5-prototype.md](PLAN-M2.5-prototype.md) | Stunt mode, launchscreen, splitscreen (7 items) | 2026-07-19 |
+| [PLAN-mech3ax-cs-revival.md](PLAN-mech3ax-cs-revival.md) | The fork: anim + gamez/planes support (14 items) | 2026-07-21 |
+| [PLAN-anim-playback.md](PLAN-anim-playback.md) | The animation engine (7 items) | 2026-07-21 |
+| [PLAN-anim-rendering-followups.md](PLAN-anim-rendering-followups.md) | Conditions, lights, world setup, UV scroll, audio (4 items) | 2026-07-22 |
+| [PLAN-docs-cleanup.md](PLAN-docs-cleanup.md) | Shrink CLAUDE.md back to an index (10 items) | 2026-07-22 |
+| [PLAN-M2-polish-3.md](PLAN-M2-polish-3.md) | M2 polish run 3 (10 items; 3 and 11 closed as disproven) | 2026-07-22 |

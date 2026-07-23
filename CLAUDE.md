@@ -85,7 +85,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `docs/cli.md` — the full per-flag CLI reference (CLAUDE.md keeps only the day-to-day table).
 - `docs/verification.md` — how to verify a change here, and how the instruments lie. Read before measuring anything.
 - `docs/HISTORY.md` — chronological development log: every landed change with its verification details. Append a dated entry when work lands.
-- `docs/plans/` — completed plans, each banner-marked `COMPLETE` with its date; kept for their evidence and recorded dead ends, read as history. **A plan sitting in `docs/` rather than in here is live** — see "Current status" for which is active when more than one is present.
+- `docs/plans/` — completed plans, indexed in `plans.md` there; each banner-marked `COMPLETE`, kept for evidence and dead ends, read as history. **A plan sitting in `docs/` rather than in here is live** — see "Current status" for which is active.
 - `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; **delete when landed — a `FIXED`/closed entry does not stay here.** Its record belongs in `docs/HISTORY.md`; its traps in `docs/verification.md` or `docs/architecture.md`. **If closing it leaves follow-up work, that follow-up becomes its own new entry with a `⚠ Traps` section** naming the rejected fixes and the misleading instruments — an open thread buried inside a section headed `FIXED` is invisible to anyone scanning for work.
 - `OriginalScreenshots/` — user-captured reference shots + videos from the original game. **Git-ignored in full since 2026-07-22** (was committed until then). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
@@ -194,40 +194,17 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 
 In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn, P pause, T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`.
 
-### Format gotchas (the ones that bite constantly)
+### Format gotchas
 
-- `nodes.json` `children`/`parent` are **flat list positions**, NOT the `node_index` field (node_index has duplicates).
-- Euler `transformation.rotation` composes **R = Ry(y)·Rx(x)·Rz(z)** = Godot's `EulerOrder.Yxz`; when `matrix` is present it wins and is stored **transposed**.
-- Coordinates are right-handed Y-up with the nose at **−Z** — Godot's frame exactly; no mirroring, no UV V-flip.
-- `meshes.json` has `null` entries — keep them to preserve `mesh_index` alignment.
-- **Weather/horizon zone names are per chapter, not a fixed pair:** C1–C4 ship `zone1`+`zone2`, **C5 ships `zone1`+`zone3`**. Never hardcode the pair — see `docs/formats/weather.md`.
-- Texture name quirks: fixed-width 20-char truncation (prefix-match) and mech3ax duplicate renames (strip `.-N` suffix). Plane skin pixels are in each chapter's `texture.zbd`, not planes.zbd.
-- **Plane skins ship UNPAINTED** — they are shading maps carrying paint-region keys, which the engine recolours with the scheme's `paint_color1..3` at load time. Rendering them raw gives the desaturated blue-gray Bloodhawk instead of the original's red. **Implemented 2026-07-20** (`PlanePainter`); the region keys are NOT palette index ranges (that earlier reading is corrected in `docs/formats/paint.md` — the palettes are plain luminance-sorted quantizer output). The engine's **real region masks** are in `crimson.rof` — per-pattern, per-skin, three per-pixel weight masks summing to 255 (`docs/formats/rof.md`), extracted by `ExtractRof.ps1` and applied by `PlanePainter` since 2026-07-20. (They replaced an earlier hand-authored hue-window table, which could not paint a region with no hue; that approach is documented as superseded in `docs/formats/paint.md`.) Likewise `*_noselogo`/`*_taillogo`/`*_winglogo` are 16×16 **placeholders**, not artwork — the real decal is one of the numbered 00–49 textures picked by `paint_decalN` (not every plane has all three: no `fir_noselogo`).
-- Per-corner `vertex_colors` = **baked lighting** (really an AO/shadow mask — 70% pure white, 30% darker): the world renders fullbright (texture × vertex color); shaded comes out murky-dark. Some polys are baked pure black on purpose (painted shadows). **The multiply is gamma-space (item 6):** the original DX7 engine multiplied texture × vertex color in sRGB space; our linear-space multiply washes out the baked-dark corners, so the fullbright shaders linearise the vertex color first (`SrgbToLinearFn`). On top of the vertex colors the original applies the mission's **SUNLIGHT** (weather.json) as a per-mission brightness — the remake's `csky_world_light` (item 6).
-- **Terrain UVs are a mirrored triangle wave, not a sawtooth** — U rises to exactly 1.0 and *folds back* rather than wrapping to 0 (that is the mirror symmetry across C4's river, and how non-seamless textures tile seamlessly). So a surface whose UVs stay in [0,1] must be sampled **CLAMPed**: `repeat_enable` makes the filter wrap at the fold and blend in the texture's opposite edge, which is the C3/C4 hairline seams (fixed 2026-07-22, `SceneBuilder.UvsWithinUnitSquare`). **Per surface only — 54% of surfaces genuinely tile (U reaches 407); a blanket clamp changes 80% of the C5 city.** Full diagnosis in `docs/architecture.md`.
-- Polygons carry a signed **draw priority** (v0.6.1 `unk04`, upstream `priority`); equal priorities resolve by **draw order, later wins** (polygon list order within a mesh, flat nodes.json order across nodes). Ignoring either z-fights every decal — SceneBuilder maps both to depth bias.
-- Polygon flag **`unk3` (`0x0800`) is the OpenFlight SUBFACE mark** — coplanar with and *contained in* the face beneath, drawn on top — and `support\init.gw` applies `GameGenSetSubfacePriorityOffset 1` to it globally. It is a **second layering axis, not a priority value**, and it is what C5's ground z-fight was (parsed 2026-07-23; `SubfaceBias` = half a level). ⚠ A base/subface pair can look exactly like a day/night or LOD variant set — see `docs/verification.md` rule 21.
-- Polygon flag `unk2` (upstream `SHOW_BACKFACE`, bit 0) = double-sided; without it the original backface-culls. The visible side is the CCW loop = Godot's *back* face → `cull_front`.
-- **That `cull_front` inverts aircraft lighting unless you cancel it (2026-07-20).** Because the visible side is Godot's back face, *every* visible aircraft fragment is back-facing — and Godot negates `NORMAL` on back faces. The file's normals are correct (measured: 0 of 1827 Fury triangles disagree with their winding, no mirrored nodes), but they arrive at the light calculation pointing into the airframe, so every upward surface shades as if lit from below. SceneBuilder's **shaded** path therefore emits `NORMAL = -normalize(...)`; the fullbright world never reads NORMAL and is untouched. Don't "simplify" that minus away.
+**The cross-cutting gotchas that bite constantly live in [`docs/formats/gotchas.md`](docs/formats/gotchas.md)** — flat-position child indexing, the Yxz Euler order, the mirrored-triangle-wave UVs, gamma-space vertex colors, draw priority + subfaces, `cull_front` and the normals minus, unpainted skins, per-chapter weather zone names. **Read it before writing any reader, transform, or shader code.**
 
-Full validated format documentation lives in **`docs/formats/`** — 17 pages, one per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
+Full validated format documentation lives in **`docs/formats/`** — one page per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
 
 ## Current status / next step
 
 **This section is current state and next step ONLY — it is not a log.** Landed work goes to a dated entry in `docs/HISTORY.md` and is *removed* from here, not also summarised here. That rule is what keeps this file an index; ignoring it is what grew this section to 65 KB — 27 landed-work bullets, every one already recorded in HISTORY, deleted 2026-07-22.
 
-**Where the project is.** Milestones 1, 2 and 2.5 are delivered, and every plan written so far is complete:
-
-| Plan | Scope | Status |
-|---|---|---|
-| `docs/plans/PLAN-M2-polish.md` | M2 polish run 1 (8 items) | ✅ 2026-07-17 |
-| `docs/plans/PLAN-M2-polish-2.md` | M2 polish run 2 (13 items) | ✅ 2026-07-19 |
-| `docs/plans/PLAN-M2.5-prototype.md` | Stunt mode, launchscreen, splitscreen (7 items) | ✅ 2026-07-19 |
-| `docs/plans/PLAN-mech3ax-cs-revival.md` | The fork: anim + gamez/planes support (14 items) | ✅ 2026-07-21 |
-| `docs/plans/PLAN-anim-playback.md` | The animation engine (7 items) | ✅ 2026-07-21 |
-| `docs/plans/PLAN-anim-rendering-followups.md` | Conditions, lights, world setup, UV scroll, audio (4 items) | ✅ 2026-07-22 |
-| `docs/plans/PLAN-docs-cleanup.md` | Shrink this file back to an index (10 items) | ✅ 2026-07-22 |
-| `docs/plans/PLAN-M2-polish-3.md` | M2 polish run 3 (10 items; 3 and 11 closed as disproven) | ✅ 2026-07-22 |
+**Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
 **Four plans sit in `docs/`. The active plan is [`docs/PLAN-anim-debugger.md`](docs/PLAN-anim-debugger.md)** (written 2026-07-23, design decided with the user) — the permanent `--anim-lab` animation-debugger mode: def playback with transport controls (pause/step/slow-mo), a seeded fixed-dt deterministic clock, an authored-vs-fired timeline, and the reusable-class extraction from `PlaneViewer.cs` it rides on. It runs **before** [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) and delivers that plan's Wave 2a/2b scaffolding; the crash plan's Layer 1 handlers are then developed inside the lab. `docs/PLAN-M2-polish-4.md` (written 2026-07-22) is landed end to end except item 8, which stays ◐ pending the crash plan.
 

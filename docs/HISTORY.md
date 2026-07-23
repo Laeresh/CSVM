@@ -4384,3 +4384,13 @@ census) after normalising run-to-run timing; both censuses are many non-empty li
 is a real match. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **Wave 1 (the
 `PlaneViewer` split A1-A3) is complete; Wave 2 (the additive `AnimRuntime` capabilities — manual
 `Advance`, `AutoStart`, seedable RNG, dispatch hooks, `Stop` cleanup) is next.**
+
+**Docs: CLAUDE.md slimming — plans table + format gotchas moved out (2026-07-23):** two moves per
+the budget/shape rules. The completed-plans table violated "Current status is current state and
+next step ONLY — it is not a log" (a table of finished plans is a log); it moved to a new index at
+`docs/plans/plans.md`, which gets a row appended whenever a plan completes, and "Current status"
+now points there. The "Format gotchas" bullet list moved verbatim to `docs/formats/gotchas.md`
+(added to the formats README index; only cross-references were re-pointed and the two "(item 6)"
+plan-relative tags dropped), with CLAUDE.md keeping a one-line pointer naming the gotchas so they
+still surface in every session's context. Pure docs move, no content changed; CLAUDE.md 34.2 KB →
+under budget.
