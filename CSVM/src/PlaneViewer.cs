@@ -445,9 +445,9 @@ public partial class PlaneViewer : Node3D
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
-        _planesGamezPath = PreferUnzipped(planesGamezPath);
-        if (!_zrdrOverridden) _zrdrPath = PreferUnzipped(_zrdrPath);
-        if (!_soundsOverridden) _soundsPath = PreferUnzipped(_soundsPath);
+        _planesGamezPath = SessionPaths.PreferUnzipped(planesGamezPath);
+        if (!_zrdrOverridden) _zrdrPath = SessionPaths.PreferUnzipped(_zrdrPath);
+        if (!_soundsOverridden) _soundsPath = SessionPaths.PreferUnzipped(_soundsPath);
 
         // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
         // shader references, before any material using it is built. Defaults are a no-op
@@ -530,11 +530,11 @@ public partial class PlaneViewer : Node3D
         bool mute = _mute, debugCollision = _debugCollision;
 
         string texturesPath = _texturesOverridden ? _texturesPath
-            : PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, "texture.zip"));
+            : SessionPaths.ChapterTextures(_dataRoot, _chapter);
         string gamezPath = _gamezOverridden ? _gamezPath
-            : _worldMode ? PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, "gamez.zip"))
+            : _worldMode ? SessionPaths.ChapterGamez(_dataRoot, _chapter)
             : _planesGamezPath;
-        var missionZrdrPath = PreferUnzipped(Path.Combine(_dataRoot, "extracted", _chapter, _mission, "zrdr.zip"));
+        var missionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _chapter, _mission);
 
         try
         {
@@ -631,7 +631,7 @@ public partial class PlaneViewer : Node3D
                 // C1 train drives its SI-script track loop. The program merges the compiled
                 // cam_anim/mis_anim archives (richer, and the only source of SI scripts) with
                 // the three zrdr scopes (the only source of zepstate/startanims).
-                var chapterZrdrPath = PreferUnzipped(Path.Combine(dataRoot, "extracted", _chapter, "zrdr.zip"));
+                var chapterZrdrPath = SessionPaths.ChapterZrdr(dataRoot, _chapter);
                 var (chapterAnimPath, missionAnimPath) =
                     AnimProgram.ArchivePaths(dataRoot, _chapter, _mission);
                 var animProgram = AnimProgram.Load(zrdrPath, chapterZrdrPath, missionZrdrPath,
@@ -1896,14 +1896,6 @@ public partial class PlaneViewer : Node3D
     }
 
     private void FrameCamera() => _orbit.Frame(ComputeAabb(_plane!), _camPos, _lookAt);
-
-    /// <summary>Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
-    /// (loose JSON/PNG/WAV: no zip decompression at load); else the .zip path verbatim.</summary>
-    private static string PreferUnzipped(string zipPath)
-    {
-        var dir = Path.Combine(Path.GetDirectoryName(zipPath)!, Path.GetFileNameWithoutExtension(zipPath));
-        return Directory.Exists(dir) ? dir : zipPath;
-    }
 
     private static Vector3 ParseVec3(string s)
     {

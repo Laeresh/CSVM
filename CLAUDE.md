@@ -154,10 +154,10 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the viewer's `--damage` slider UI: one HP slider per part driving flight's own DamageVisuals.
 - `src/Flight/CrashBreakup.cs` — scatters the plane's `destroyed` subtree on a crash: ballistic tumble, ground-rest, ~10 s burn.
-- `src/Flight/CrashChoreography.cs` — the dirt-crash effect timeline (item 8): sparks, a delayed fireball cluster, the black smokeball, five burning debris arcs, at the plane centre.
+- `src/Flight/CrashChoreography.cs` — the dirt-crash effect timeline (item 8): sparks, a delayed fireball cluster, black smokeball, five burning debris arcs.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage), geometry extracted from the plane's `gauges` subtree.
-- `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD feeds, collision/crash, respawn.
+- `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn.
 - `src/UI/MenuInput.cs` — one launchscreen player's input source: keyboard flag + a `Pads` array, edge/auto-repeat `Poll(dt)`.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
@@ -166,6 +166,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
+- `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
 ### User args (after `--`)
@@ -250,7 +251,6 @@ Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds —
 
 **Known issues — diagnosed, unscheduled.** Full diagnoses are in `backlog.md` so they are not re-chased:
 
-- **Ground z-fighting — CLOSED 2026-07-23 after five wrong mechanisms; the sixth was right.** **C1B is NOT a bug** (user ruling — it is in the original; do not fix it, and **never raise `NodeOrderBias`**: the 30.95%→2.35% control was 1.4 points from erasing a faithful artifact). **C5 was a real defect and was never a depth bug** — it was the unparsed OpenFlight **subface** flag (`unk3`), now parsed and layered at `SubfaceBias` = half a priority level. Measured at the repro pose: ground flicker **28.87% → 0.41%**, buildings **7.13% → 7.13%** (untouched), plane viewer byte-identical, all 8 chapters' node/mesh/collider counts identical; **user-confirmed at the controls.** ⛔ **No bias constant was changed and none should be** — `SurfaceRankBias`, `NodeOrderBias` and `DepthBiasPerLevel` all stand. Evidence: `analysis/item9-depth-bias/CBLOCK-LOD.md`. C3's coast is **fixed** (`6c592c2`) — do not re-chase it.
 - **C3 references `cloud1`/`cloud2`**, which its own `texture.zbd` does not ship — a retail-data gap, true in both extraction trees. The one-line fix is deliberately left to the user because it trades away the magenta "this is our bug" signal for those names.
 
 **Everything else unscheduled** — blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.

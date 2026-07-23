@@ -4338,3 +4338,22 @@ build produced identical bytes, and the `--yaw=0` image differs from the default
 instrument *can* register a change. Build clean, 0 warnings. `dotnet build` mtime-trap ruled out (the
 rebuilt dll was confirmed newer than the restored source). Evidence: `.scratch/orbit-verify/`. Wave 1
 A2 (`SessionPaths`) and A3 (`WorldSession`) are the next slices before the runtime work.
+
+**Animation debugger Wave 1 A2 — extracted-data path resolution to `src/SessionPaths.cs` (2026-07-23):**
+second slice of the `PlaneViewer` split. `PreferUnzipped` (prefer the unpacked sibling dir over its
+`.zip`) plus the per-chapter/per-mission extraction-path construction moved **verbatim** out of
+`PlaneViewer` into a static `SessionPaths` helper — `ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
+`MissionZrdr(dataRoot, chapter[, mission])` — so `--anim-lab` (and A3's `WorldSession`) resolve the
+same paths a normal session does. Pure path arithmetic; the `--gamez=`/`--textures=` override policy
+(`x ? _xPath : SessionPaths.Chapter…(…)`) deliberately **stays** in `PlaneViewer` as CLI concern, and
+`_Ready`'s base-path `PreferUnzipped` calls + `StartSession`'s per-chapter construction + the world
+build's `chapterZrdrPath` all now route through the helper. No external effect. **Verified inert twice
+over** (the resolved strings are byte-identical by construction, but confirmed with able-to-fail
+instruments per rule 5): (1) the static plane-viewer `--screenshot --jitter=0` md5 is unchanged
+(`f1290254…`, HEAD-vs-after — covers `PreferUnzipped(planes)` + `ChapterTextures`); (2) a C1/IA1
+`--fly` world boot census — gamez-node/mesh/collider counts *and* the full anim def/instance/motion/
+puffer/light/condition census (814 defs, 616 ON_STARTUP, 615 live instances, 7064 gamez nodes, …) —
+is **byte-identical** HEAD-vs-after after normalising out run-to-run timing (covers `ChapterGamez` +
+`MissionZrdr` + `ChapterZrdr`); the 14-line census is non-empty, so "identical" is a real match, not two
+empty files. Build clean, 0 warnings. Evidence: `.scratch/orbit-verify/`. **A3 (`WorldSession`) is the
+last Wave 1 slice before the runtime work (Wave 2).**

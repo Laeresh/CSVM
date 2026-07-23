@@ -117,8 +117,10 @@ name for now (renaming it is the future split's business).
   + identical anim boot census before anything else lands on top.
   **✅ A1 landed 2026-07-23** (`src/UI/OrbitCamera.cs`) — orbit camera extracted verbatim, PlaneViewer
   delegates; static plane-viewer `--screenshot` md5s byte-identical before/after (2 planes + a `--yaw=0`
-  control), rule-5 able-to-fail control passed. See `docs/HISTORY.md`. **A2 (`SessionPaths`), A3
-  (`WorldSession`) next.**
+  control), rule-5 able-to-fail control passed. See `docs/HISTORY.md`.
+  **✅ A2 landed 2026-07-23** (`src/SessionPaths.cs`) — `PreferUnzipped` + per-chapter/mission path
+  construction extracted verbatim (override policy stays in PlaneViewer); plane-viewer md5 unchanged +
+  C1 world boot census byte-identical HEAD-vs-after. **A3 (`WorldSession`) next.**
 - **Wave 2 — runtime capabilities** (B1-B5). Additive, defaults = live behavior; world regression
   must be unchanged.
 - **Wave 3 — lab MVP** (C). Quiet stage, transport, fixed dt + seed, `--play-anim`, auto-frame.
