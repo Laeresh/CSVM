@@ -165,6 +165,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
+- `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
 ### User args (after `--`)
@@ -239,7 +240,7 @@ for CS — do not use it as the reference.)
 | `docs/plans/PLAN-docs-cleanup.md` | Shrink this file back to an index (10 items) | ✅ 2026-07-22 |
 | `docs/plans/PLAN-M2-polish-3.md` | M2 polish run 3 (10 items; 3 and 11 closed as disproven) | ✅ 2026-07-22 |
 
-**Three plans sit in `docs/`. The active plan is [`docs/PLAN-M2-polish-4.md`](docs/PLAN-M2-polish-4.md)** (written 2026-07-22) — M2/M2.5 polish run 4: 10 items in five waves, selected for feasibility, no user input, and a preference for long-running work. Every item was verified still open against the code, not just against the backlog. Its biggest find: the bowl-sign report is really an **engine-wide scheduler off-by-one** (`AnimRuntime.NextDue` applies each event's `START_TIME` to the *following* event), so every sequence in the install is one slot out of phase.
+**Four plans sit in `docs/`. The active plan is [`docs/PLAN-anim-debugger.md`](docs/PLAN-anim-debugger.md)** (written 2026-07-23, design decided with the user) — the permanent `--anim-lab` animation-debugger mode: def playback with transport controls (pause/step/slow-mo), a seeded fixed-dt deterministic clock, an authored-vs-fired timeline, and the reusable-class extraction from `PlaneViewer.cs` it rides on. It runs **before** [`docs/PLAN-data-driven-crash.md`](docs/PLAN-data-driven-crash.md) and delivers that plan's Wave 2a/2b scaffolding; the crash plan's Layer 1 handlers are then developed inside the lab. `docs/PLAN-M2-polish-4.md` (written 2026-07-22) is landed end to end except item 8, which stays ◐ pending the crash plan.
 
 **Queued behind it: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction: 44 items in six waves, scope settled with the user. **No item is user-gated** — both user-owned inputs landed 2026-07-22: the gun mount-name table (from which the slot→firepoint binding rule fell out — reverse index order, `W𝑛 → fp(9−2𝑛), fp(10−2𝑛)`), and the `CLUSTER_SIZE` playtest (stock Bloodhawk = 9 HE rockets, 3 per hardpoint → `CLUSTER_SIZE` is rounds-per-slot, `AMMO_LIMIT` a purchase cap). Wave A (research/docs) is the place to start.
 

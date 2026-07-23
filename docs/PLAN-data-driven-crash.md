@@ -10,6 +10,14 @@ foundation**: every weapon-hit destruction and kill-chain in the game uses these
 **This supersedes the open half of `docs/PLAN-M2-polish-4.md` item 8.** When this plan's Layer 2
 lands, item 8 closes (the dirt crash is complete, data-driven). Until then item 8 stays ◐.
 
+**⚠ Sequencing update 2026-07-23:** [`PLAN-anim-debugger.md`](PLAN-anim-debugger.md) runs **first**.
+Its Wave 5 delivers this plan's **Wave 2a/2b scaffolding** (the crash subtree + effect templates +
+a bound runtime, inside `--anim-lab`), so Wave 2 here shrinks to the `FlightController` wiring
+(2c), and Layer 1 is developed and verified inside the lab (`--anim-lab
+--play-anim=player_crash_dirt`, seeded + fixed-dt, screenshot bursts). It also exports one
+constraint on Layer 1: **handler randomness (`rnd_xz`, `translation_range` azimuth) goes through
+the runtime's seedable `_rng`, not `GD.Randf()`** — lab restarts must stay deterministic.
+
 ---
 
 ## Why this shape (the evidence, so it is not re-measured)

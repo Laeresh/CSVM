@@ -215,10 +215,10 @@ public partial class PlaneViewer : Node3D
     // SetupLighting.
     private DirectionalLight3D _sun = null!;
     private Godot.Environment? _env;
-    private Vector3 _orbitCenter;
-    private float _orbitDistance = 20f;
-    private float _yaw = 2.5f, _pitch = 0.3f; // default: front-left three-quarter view (nose is -Z)
-    private bool _dragging;
+    // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); created in
+    // _Ready and kept across sessions, like _camera. --yaw=/--pitch= seed its initial angles.
+    private OrbitCamera _orbit = null!;
+    private float? _argYaw, _argPitch;
 
     // Session lifecycle (M2.5 item 4 — the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and StartSession run again.
@@ -385,8 +385,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--shots=")) _screenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..]));
             else if (arg.StartsWith("--jitter=")) _jitterDeg = float.Parse(arg["--jitter=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--screenshot=")) { _screenshotPath = arg["--screenshot=".Length..]; hasContentArg = true; }
-            else if (arg.StartsWith("--yaw=")) _yaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
-            else if (arg.StartsWith("--pitch=")) _pitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg.StartsWith("--yaw=")) _argYaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg.StartsWith("--pitch=")) _argPitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--campos=")) _camPos = ParseVec3(arg["--campos=".Length..]);
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
@@ -491,6 +491,9 @@ public partial class PlaneViewer : Node3D
         SetupLighting();
         _camera = new Camera3D { Fov = _fly || _freecam ? 62 : 50, Far = 40000f };
         AddChild(_camera);
+        _orbit = new OrbitCamera(_camera);
+        if (_argYaw is { } argYaw) _orbit.Yaw = argYaw;
+        if (_argPitch is { } argPitch) _orbit.Pitch = argPitch;
 
         // No content-selecting arg (or an explicit --menu): show the in-game launchscreen
         // (Mode → Chapter → Plane). Its selection fills in _chapter/_planeName/_stunt and calls
@@ -1892,27 +1895,7 @@ public partial class PlaneViewer : Node3D
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    private void FrameCamera()
-    {
-        var aabb = ComputeAabb(_plane!);
-        _orbitCenter = _lookAt ?? aabb.GetCenter();
-        if (_camPos is { } pos)
-        {
-            var offset = pos - _orbitCenter;
-            _orbitDistance = offset.Length();
-            if (_orbitDistance < 0.01f) { _orbitDistance = 1f; offset = Vector3.Back; }
-            var dir = offset / _orbitDistance;
-            _pitch = Mathf.Asin(Mathf.Clamp(dir.Y, -1f, 1f));
-            _yaw = Mathf.Atan2(dir.X, dir.Z);
-        }
-        else
-        {
-            var radius = aabb.Size.Length() * 0.5f;
-            if (radius < 0.01f) radius = 5f;
-            _orbitDistance = radius / Mathf.Sin(Mathf.DegToRad(_camera.Fov) * 0.5f) * 0.8f;
-        }
-        UpdateCamera();
-    }
+    private void FrameCamera() => _orbit.Frame(ComputeAabb(_plane!), _camPos, _lookAt);
 
     /// <summary>Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists
     /// (loose JSON/PNG/WAV: no zip decompression at load); else the .zip path verbatim.</summary>
@@ -1948,17 +1931,6 @@ public partial class PlaneViewer : Node3D
         }
         Walk(root);
         return merged;
-    }
-
-    private void UpdateCamera()
-    {
-        _pitch = Mathf.Clamp(_pitch, -1.5f, 1.5f);
-        var dir = new Vector3(
-            Mathf.Sin(_yaw) * Mathf.Cos(_pitch),
-            Mathf.Sin(_pitch),
-            Mathf.Cos(_yaw) * Mathf.Cos(_pitch));
-        _camera.Position = _orbitCenter + dir * _orbitDistance;
-        _camera.LookAt(_orbitCenter, Vector3.Up);
     }
 
     // ---- Focus mute (polish-4 item 7) ------------------------------------------------------
@@ -2064,25 +2036,7 @@ public partial class PlaneViewer : Node3D
         }
         if (_fly || _freecam)
             return; // the FlightController / SpectatorCamera owns the camera; no orbit controls
-        switch (@event)
-        {
-            case InputEventMouseButton { ButtonIndex: MouseButton.Left } mb:
-                _dragging = mb.Pressed;
-                break;
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelUp, Pressed: true }:
-                _orbitDistance *= 0.9f;
-                UpdateCamera();
-                break;
-            case InputEventMouseButton { ButtonIndex: MouseButton.WheelDown, Pressed: true }:
-                _orbitDistance *= 1.1f;
-                UpdateCamera();
-                break;
-            case InputEventMouseMotion motion when _dragging:
-                _yaw -= motion.Relative.X * 0.008f;
-                _pitch += motion.Relative.Y * 0.008f;
-                UpdateCamera();
-                break;
-        }
+        _orbit.HandleInput(@event);
     }
 
     public override void _Process(double delta)
@@ -2201,7 +2155,7 @@ public partial class PlaneViewer : Node3D
         {
             baseX = _camera.GlobalTransform;
             _shotBaseXform = baseX;
-            _shotPivot = _orbitCenter;   // the point UpdateCamera aims at
+            _shotPivot = _orbit.OrbitCenter;   // the point the orbit camera aims at
         }
         // Golden-angle spread so consecutive frames differ maximally.
         float mag = Mathf.DegToRad(_jitterDeg);
@@ -2227,7 +2181,7 @@ public partial class PlaneViewer : Node3D
     /// <summary>Print the camera's current world pose as ready-to-paste --campos=/--lookat=
     /// arguments (F11, any mode). Reproducing a hand-framed orbit or in-flight vantage for a
     /// deterministic --screenshot run is otherwise fiddly; this prints exactly what
-    /// FrameCamera consumes. In orbit mode the look-at is the framed point (_orbitCenter); in
+    /// FrameCamera consumes. In orbit mode the look-at is the framed point (_orbit.OrbitCenter); in
     /// --fly it is a point one unit ahead along the view ray — either reproduces the same
     /// framing (FrameCamera reconstructs pitch/yaw from the pos→look-at direction).</summary>
     /// <summary>How far ahead of a free-look camera F11 places the printed --lookat point
@@ -2247,7 +2201,7 @@ public partial class PlaneViewer : Node3D
         // ~0.06°, which is visible when the pose is pasted back.
         var lookAt = _fly || _freecam
             ? pos - _camera.GlobalTransform.Basis.Z * PoseLookAtDistance
-            : _orbitCenter;
+            : _orbit.OrbitCenter;
         GD.Print($"camera pose: --campos={Vec3Arg(pos)} --lookat={Vec3Arg(lookAt)}");
     }
 

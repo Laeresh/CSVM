@@ -4317,3 +4317,24 @@ not a decode — but the anchor is invisible, so only its scale reads, and that 
 `large_firetrail`+bounce sub-sequences (need a `SOUND_GROUPS` resolver), and the water/air *variants*
 (water needs a sea-surface signal the collision system does not expose; the air/no-impact variant has no
 trigger until weapons, M3 — a building crash is `_dirt`, not air).
+
+**Animation debugger Wave 1 A1 — orbit camera extracted to `src/UI/OrbitCamera.cs` (2026-07-23):**
+first slice of `PLAN-anim-debugger.md`, and the first slice of the eventual `PlaneViewer` split. The
+static inspection view's orbit-camera controller — LMB-drag orbit, wheel zoom, and AABB framing —
+moved **verbatim** out of `PlaneViewer` into a standalone `UI.OrbitCamera` so `--anim-lab` can drive
+the same orbit camera without duplication. `OrbitCamera` owns the orbit state
+(`_orbitCenter`/`_orbitDistance`/`_yaw`/`_pitch`/`_dragging`) and steers a `Camera3D` it does not own;
+`Frame(aabb, camPos, lookAt)` is the old `FrameCamera` body, `Update()` the old `UpdateCamera`,
+`HandleInput` the LMB/wheel/drag switch, and `Yaw`/`Pitch` seed the initial angles from
+`--yaw=`/`--pitch=`. `PlaneViewer` constructs it once in `_Ready` beside the persistent `_camera`,
+delegates `FrameCamera`/`_UnhandledInput`, and reads `OrbitCenter` back out for `PrintCameraPose`
+(F11) and `ApplyShotJitter` — so `--campos`/`--lookat`/F11/F12/`--screenshot` behaviour is unchanged.
+A pure refactor with no external effect. **Verified byte-identical** (the Wave 1 requirement): static
+plane-viewer `--screenshot --jitter=0` md5s were captured from the HEAD build and the refactored build
+for `player_bhawk`, `player_fury`, and a `--yaw=0` variant — **all three pairs byte-identical**
+(`f1290254…`, `7fe61a97…`, `8348bdd4…`); the restored refactored build reproduced the baseline exactly.
+Determinism and the able-to-fail control both hold (verification.md rule 5): two launches of the same
+build produced identical bytes, and the `--yaw=0` image differs from the default-angle image, so the
+instrument *can* register a change. Build clean, 0 warnings. `dotnet build` mtime-trap ruled out (the
+rebuilt dll was confirmed newer than the restored source). Evidence: `.scratch/orbit-verify/`. Wave 1
+A2 (`SessionPaths`) and A3 (`WorldSession`) are the next slices before the runtime work.
