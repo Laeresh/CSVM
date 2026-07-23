@@ -291,7 +291,7 @@ public sealed partial class AnimRuntime : Node
     /// re-applied first. Returns the (def, anchor) pairs started — empty when the name matches no
     /// definition in this program. This is the animation debugger's <c>--play-anim</c> path; its
     /// Restart is <see cref="Stop"/> → <see cref="Reseed"/> → Play.</summary>
-    public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName)
+    public List<(AnimDefinition Def, Node3D? Anchor)> Play(string animName, Node3D? fallbackAnchor = null)
     {
         var started = new List<(AnimDefinition Def, Node3D? Anchor)>();
         foreach (var def in _program.ByAnimName(animName))
@@ -299,7 +299,10 @@ public sealed partial class AnimRuntime : Node
             var anchors = Anchors(def);
             if (anchors.Count == 0)
             {
-                anchors.Add(null); // global resolution: the def names world nodes directly
+                // A placeless def (its NAME resolves nothing): fall back to the caller's staging
+                // anchor — the animation debugger's in-front-of-camera dummy — or null, which is
+                // global resolution (the def names world nodes directly). Bootstrap passes null.
+                anchors.Add(fallbackAnchor);
             }
             foreach (var anchor in anchors)
             {
@@ -406,6 +409,28 @@ public sealed partial class AnimRuntime : Node
         Walk(worldRoot);
     }
 
+    /// <summary>Indexes a subtree added to the world AFTER the bootstrap — the animation debugger's
+    /// effect-template stage (the fireball/spark/trail/dirt roots <see cref="WorldBuilder"/>
+    /// deliberately skips) — so its nodes resolve by name and index, then applies the RESET_STATE of
+    /// every definition now anchored within it, exactly the quiet-stage posing bootstrap pass 1 would
+    /// have done had the subtree existed then (so the templates start hidden until a call stages
+    /// them). The find cache is cleared because the bootstrap may have cached these names as
+    /// resolving to nothing. Additive: nothing already running is disturbed, and it never re-runs
+    /// mission setup the way a second <see cref="Bind"/> would.</summary>
+    public void IndexStage(Node3D subtree)
+    {
+        IndexWorld(subtree);   // appends the subtree's nodes to _index / _byIndex
+        _findCache.Clear();    // drop stale "resolves to nothing" results cached during bootstrap
+        foreach (var def in _program.Defs)
+        {
+            if (def.ResetState == null)
+                continue;
+            foreach (var a in Anchors(def))
+                if (a != null && (a == subtree || subtree.IsAncestorOf(a)))
+                    ApplyInstant(def.ResetState.Events, def, a);
+        }
+    }
+
     // ---- observability (the animation debugger's timeline; null = zero cost in the game) ----
 
     /// <summary>One runtime event dispatch, reported to <see cref="OnEventDispatched"/>. Carries
@@ -446,6 +471,13 @@ public sealed partial class AnimRuntime : Node
     /// that is silently undone. Found by measurement, not by reading: the lab's world ran at 2×
     /// (fixed steps + wall dt), visible as 20 logged sim-seconds in a 610-frame scripted run.</summary>
     public bool ManualAdvance;
+
+    /// <summary>Whether a CALL_ANIMATION relocates its callee's effect-template root onto the call
+    /// site (see <see cref="PlaceTemplateAt"/>). Off by default — the ambient world boot must stay
+    /// byte-identical, and today's retarget only re-scopes name resolution. The animation debugger
+    /// (and, later, the crash runtime) turn it on so a placeless effect template plays where it is
+    /// staged instead of at its gamez origin.</summary>
+    public bool PlaceCalledTemplates;
 
     public override void _Process(double delta)
     {
@@ -810,10 +842,20 @@ public sealed partial class AnimRuntime : Node
                     // rc*_dbase1}` burns one ship section. 29,633 WITH_NODE + 7,640 AT_NODE +
                     // 179 OPERAND_NODE call sites carry a target; ignoring it ran every one of
                     // them on the CALLER's anchor instead of where the data put it.
-                    var callAnchor = CallTargetAnchor(ev, def, anchor) ?? anchor;
+                    var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
+                    var callAnchor = siteNode ?? anchor;
                     foreach (var target in _program.ByAnimName(callName))
                         if (!IsLive(target, callAnchor))
+                        {
+                            // Re-anchoring alone is not enough for an effect template: its puffers
+                            // ride the template's OWN root, so unless that root is MOVED to the call
+                            // site the effect emits at its gamez origin. Relocate it here. Gated +
+                            // non-instant so it touches only the animation debugger / crash runtime,
+                            // never the ambient world boot (byte-identical regression) or RESET_STATE.
+                            if (PlaceCalledTemplates && !instant && callAnchor != null)
+                                PlaceTemplateAt(target, callAnchor, siteOffset);
                             Start(target, callAnchor);
+                        }
                 }
                 return true;
 
@@ -1250,8 +1292,10 @@ public sealed partial class AnimRuntime : Node
     }
 
     /// <summary>
-    /// The anchor a CALL_ANIMATION hands its callee, or null when the call names no target
-    /// (then the caller's own anchor stands, which is what every call used to get).
+    /// The site a CALL_ANIMATION hands its callee: the target node plus the AT_NODE trailing
+    /// offset (in that node's frame). The node is null when the call names no target (then the
+    /// caller's own anchor stands, which is what every call used to get); the offset is zero
+    /// unless the call carries a <c>position</c>.
     ///
     /// The target is written in the CALLER's namespace, so it resolves through the caller's
     /// definition and scope. Three spellings reach here as two shapes: compiled events nest
@@ -1263,14 +1307,19 @@ public sealed partial class AnimRuntime : Node
     /// an effect disappear — but it is counted, since silently mis-placing an effect is
     /// exactly the failure this method exists to fix.
     /// </summary>
-    private Node3D? CallTargetAnchor(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    private (Node3D? Node, Vector3 Offset) CallTargetSite(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
         string? targetName = null;
+        Vector3 offset = Vector3.Zero;
         if (ev.Data.Obj("parameters")?.Union() is { Value: Dictionary<string, object?> p })
-            targetName = new AnimData(p).Str("node");
+        {
+            var atNode = new AnimData(p);
+            targetName = atNode.Str("node");
+            offset = atNode.Vec3("position"); // absent → zero
+        }
         targetName ??= ev.Data.Str("operand_node");
         if (targetName == null)
-            return null;
+            return (null, Vector3.Zero);
 
         var resolved = ResolveOne(targetName, def, anchor);
         if (resolved != null)
@@ -1284,7 +1333,28 @@ public sealed partial class AnimRuntime : Node
             GD.Print($"anim: retarget '{ev.Data.Str("name")}' onto '{targetName}' "
                      + $"({(resolved != null ? resolved.GetMeta(NameMeta).AsString() : "UNRESOLVED")})"
                      + $" [caller {def.AnimName}]");
-        return resolved;
+        return (resolved, offset);
+    }
+
+    /// <summary>Moves an effect template's own root(s) to a call site so its puffers — which
+    /// ride that root (<c>yellow_spark_01</c>, <c>fly_trailN</c>, …), NOT the caller's anchor —
+    /// emit there instead of at the template's gamez origin. This is the template-instancing the
+    /// original does by copying the template mesh per call; here the single shared template is
+    /// relocated, so overlapping calls to the same template collapse onto the last site (the
+    /// staggered-cluster nuance is a fidelity follow-up). Only the world position is set — the
+    /// puffers key off the host origin — and the offset is applied in the site's own frame.</summary>
+    private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset)
+    {
+        var siteXform = site.GlobalTransform;
+        var origin = siteXform.Origin + siteXform.Basis * offset;
+        foreach (var root in Anchors(callee))
+        {
+            if (root == null || !IsInstanceValid(root))
+                continue;
+            var xf = root.GlobalTransform;
+            xf.Origin = origin;
+            root.GlobalTransform = xf;
+        }
     }
 
     private void CallSequence(AnimDefinition def, Node3D? anchor, string name)

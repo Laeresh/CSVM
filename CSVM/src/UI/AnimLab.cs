@@ -60,6 +60,10 @@ public sealed partial class AnimLab : Node
     private readonly AnimProgram _program;
     private readonly SpectatorCamera _cam;
     private readonly Node3D _world;           // the world content root, walked for pick rays
+    // The pre-built, pre-indexed effect/crash stage (its effect templates + player anchor set), which
+    // the lab repositions a fixed offset in front of the camera on each fresh play; also the fallback
+    // anchor a still-placeless def is staged on. Owned by the session tree, not disposed here.
+    private readonly Node3D _stageAnchor;
     private readonly int _seed;
     private readonly string? _playOnLaunch;   // --play-anim=<name>
     private readonly bool _autoFrame;         // no --campos/--lookat: frame the played def
@@ -103,13 +107,14 @@ public sealed partial class AnimLab : Node
     public bool ShowUi = true;
 
     public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam, Node3D world,
-        TextureArchive textures, SoundArchive? sounds,
+        Node3D stageAnchor, TextureArchive textures, SoundArchive? sounds,
         int seed, string? playAnim, bool autoFrame, bool fixedFrameStep)
     {
         _runtime = runtime;
         _program = program;
         _cam = cam;
         _world = world;
+        _stageAnchor = stageAnchor;
         _textures = textures;
         _sounds = sounds;
         _seed = seed;
@@ -265,7 +270,7 @@ public sealed partial class AnimLab : Node
     /// (also <c>--play-anim</c>) focuses on the first def carrying the name.</summary>
     public void Play(string name) => Play(name, _program.ByAnimName(name).FirstOrDefault());
 
-    private void Play(string name, AnimDefinition? focus)
+    private void Play(string name, AnimDefinition? focus, bool freshAnchor = true)
     {
         if (_defName != null)
         {
@@ -283,7 +288,12 @@ public sealed partial class AnimLab : Node
         _anchorCaptured = false;
         _trackChildren = !_ambient;
         _timeline?.SetDef(_program, _timelineDef, "");
-        var started = _runtime.Play(name);
+        // The staging anchor for a PLACELESS on-call def (an effect template whose NAME resolves
+        // nothing, e.g. the crash def): a dummy a fixed offset in front of the camera, so the
+        // effect — and any template it relocates onto the call site — plays where you are looking
+        // instead of at the world origin. A real-anchored def (train, door) ignores it.
+        var anchor = StageAnchor(freshAnchor);
+        var started = _runtime.Play(name, anchor);
         if (started.Count == 0)
         {
             GD.Print($"anim-lab: no definition named '{name}' among this program's " +
@@ -294,11 +304,44 @@ public sealed partial class AnimLab : Node
         _defName = name;
         _stopped = false;
         _instances = started.Count;
-        GD.Print($"anim-lab: playing '{name}' — {started.Count} instance(s), seed {_seed}");
+        bool placeless = started.Any(s => ReferenceEquals(s.Anchor, anchor));
+        GD.Print($"anim-lab: playing '{name}' — {started.Count} instance(s), seed {_seed}"
+                 + (placeless ? " (placeless — staged in front of the camera)" : ""));
         if (_autoFrame)
         {
-            FrameOn(started);
+            // Placeless: frame + follow the staging dummy, so the in-front-of-camera effect is
+            // centred. Anything with a real anchor frames its own target.
+            if (placeless)
+            {
+                FocusNode(anchor);
+            }
+            else
+            {
+                FrameOn(started);
+            }
         }
+    }
+
+    // The stage's distance in front of the camera. A large-fireball/smokeball cluster is several
+    // metres across; this frames it without clipping the near plane. TUNE.
+    private const float StageAnchorDist = 55f;
+
+    // The stage's snapshot transform, reused across a Restart.
+    private Transform3D _stageAnchorXform = Transform3D.Identity;
+
+    /// <summary>Repositions the effect/crash stage a fixed offset in front of the camera on a
+    /// <paramref name="fresh"/> Play (so the effect sits where you are looking), and leaves it put on
+    /// Restart — so a seeded replay lands in exactly the same spot. Returns it as the fallback anchor
+    /// for a still-placeless def.</summary>
+    private Node3D StageAnchor(bool fresh)
+    {
+        if (fresh)
+        {
+            var cam = _cam.Camera.GlobalTransform;
+            _stageAnchorXform = new Transform3D(Basis.Identity, cam.Origin - cam.Basis.Z * StageAnchorDist);
+        }
+        _stageAnchor.GlobalTransform = _stageAnchorXform;
+        return _stageAnchor;
     }
 
     /// <summary>Restart = <see cref="AnimRuntime.Stop"/> (tear down the def's live
@@ -310,7 +353,9 @@ public sealed partial class AnimLab : Node
         {
             return;
         }
-        Play(_defName, _timelineDef);
+        // freshAnchor:false — reuse the staging dummy's snapshot so a placeless def's replay is
+        // spatially identical, matching the seeded + fixed-dt clock's visual-identity contract.
+        Play(_defName, _timelineDef, freshAnchor: false);
     }
 
     private void StopPlayback()

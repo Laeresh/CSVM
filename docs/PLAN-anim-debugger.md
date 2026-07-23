@@ -1,6 +1,7 @@
 # Animation debugger — `--anim-lab`, a permanent def-playback lab
 
-**🟢 LIVE — written 2026-07-23, design decided with the user (grilling session).** Runs
+**✅ COMPLETE — Waves 1–5 landed 2026-07-23 (written 2026-07-23, design decided with the user in a
+grilling session).** Kept in `docs/` for now; archive to `docs/plans/` on the next cleanup. Runs
 **before** [`PLAN-data-driven-crash.md`](PLAN-data-driven-crash.md): the lab is the development
 and verification loop that plan's Layer 1 handlers are built inside, and this plan delivers that
 plan's Wave 2a/2b scaffolding (the crash subtree + effect templates + a bound runtime). It is a
@@ -169,15 +170,24 @@ name for now (renaming it is the future split's business).
   loop; `train_on_track` shows four SI-script car lanes + `steamplume` with ~327 s authored bars and
   t=0 fired ticks; a plain `--anim-lab --screenshot` (no `--debug-anim-ui`) renders a clean overlay-free
   frame; C1 `--fly` boot unchanged (616 ON_STARTUP + 5 start anims, 615 instances). See `docs/HISTORY.md`.
-- **Wave 5 — crash stage** = the crash plan's Wave 2a/2b, delivered here: build the plane's
-  `destroyed` subtree (`PlaneBuilder.BuildDestroyed` :133) + the effect templates
-  (`carnage_trails` → `fly_trail1..5`, `flydirt` → `flydirt`/`dust` — world-gamez roots
-  `WorldBuilder` deliberately skips; C1 `nodes.json` :46813/:46899) into the lab's stage, hidden
-  by reset states; wire `PufferFactory` on the lab runtime. Acceptance:
-  `--anim-lab --play-anim=player_crash_dirt` fires the def's **puffer** events visibly (sparks,
-  fireball cluster, smokeball — handlers exist today); motion/opacity events dispatch-but-inert
-  until the crash plan's Layer 1. Then amend `PLAN-data-driven-crash.md` (its Wave 2 shrinks to
-  the `FlightController` wiring, 2c) — done as part of this wave, not left to memory.
+- **Wave 5 — crash stage** = the crash plan's Wave 2a/2b, delivered here.
+  **✅ Wave 5 landed 2026-07-23**, and it also folded in a user request from the same session
+  (place placeless on-call defs in front of the camera). **The plan's assumption was wrong in an
+  instructive way:** building the effect templates + wiring `PufferFactory` is *not* enough, because
+  an effect template hosts its puffers on its OWN root (`small_yellow_sparks`→`yellow_spark_01`,
+  `call_crash_trails`→`fly_trail1..5`), which sits at its gamez origin — and the crash def's
+  `healthy`/`destroyed` are generic names that resolve globally onto C1's 217 world `healthy` nodes.
+  So the delivered mechanism is: (a) build the six effect-template roots **and** a meshless `player`
+  crash-anchor set (`healthy`/`destroyed`/`piece*`) into one `labStage`, `IndexStage`d, so the crash
+  def's names resolve LOCALLY; (b) `AnimRuntime.PlaceCalledTemplates` relocates a called template's
+  own root onto the (in-front-of-camera) call site (`PlaceTemplateAt`); (c) `AnimLab` snapshots the
+  `labStage` 55 m ahead of the camera per play. `PufferFactory` was already wired for the lab via
+  `WorldSession.KeepArchivesOpen`. **Acceptance met:** `--play-anim=player_crash_dirt` renders the
+  spark + fireball + smokeball cluster in front of the camera; the piece ballistics + dust
+  opacity/scale dispatch-but-inert, awaiting the crash plan's Layer 1. World regression byte-identical
+  (flag default-off, no stage outside `--anim-lab`). See `docs/HISTORY.md` + the architecture bullets.
+  The `PLAN-data-driven-crash.md` amendment is done (below).
+  **✅ PLAN-anim-debugger COMPLETE (Waves 1–5).**
 - Docs each wave lands with: `docs/architecture.md` bullets for the new classes, the CLI table row
   (CLAUDE.md + `docs/cli.md`) when `--anim-lab` exists, `docs/HISTORY.md` entries.
 

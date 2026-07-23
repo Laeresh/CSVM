@@ -738,6 +738,24 @@ public partial class PlaneViewer : Node3D
                     // at 2× (fixed steps + wall dt). See AnimRuntime.ManualAdvance.
                     session.Runtime.ManualAdvance = true;
 
+                    // Build the lab's effect/crash stage under ONE staging node the lab moves in
+                    // front of the camera: the effect-template roots WorldBuilder skips (the
+                    // fireball/spark/smokeball/fire/trail/dirt roots the world never renders
+                    // ambiently), plus a meshless player crash-anchor set (healthy/destroyed/pieces
+                    // the crash def targets). Indexed so a played crash/effect def resolves its
+                    // puffer hosts AND its healthy/destroyed anchors HERE — scoped to this subtree —
+                    // instead of onto one of C1's 217 generic 'healthy' world nodes. With
+                    // PlaceCalledTemplates on, a CALL_ANIMATION relocates the called template onto
+                    // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
+                    // the templates. PLAN-anim-debugger Wave 5 (= the crash plan's Wave 2a/2b scaffolding).
+                    var labStage = new Node3D { Name = "lab_stage_anchor" };
+                    int effectRoots = BuildEffectStage(gamez, session.Builder.Scene, labStage);
+                    labStage.AddChild(BuildCrashAnchorSet());
+                    session.Root.AddChild(labStage);
+                    session.Runtime.IndexStage(labStage);
+                    session.Runtime.PlaceCalledTemplates = true;
+                    GD.Print($"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
+
                     // The spawn the mission would place the player at — the camera starts here so
                     // the interesting part of the map is in view, and (below) an optional parked
                     // plane sits on it. Resolved once so the camera and plane agree.
@@ -776,7 +794,7 @@ public partial class PlaneViewer : Node3D
                     }
 
                     animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
-                        textures, sounds, _labSeed, _playAnim,
+                        labStage, textures, sounds, _labSeed, _playAnim,
                         autoFrame: _camPos == null && _lookAt == null,
                         fixedFrameStep: _screenshotPath != null)
                     {
@@ -1711,6 +1729,54 @@ public partial class PlaneViewer : Node3D
         for (int i = 0; i < words.Length; i++)
             words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..].ToLowerInvariant();
         return string.Join(' ', words);
+    }
+
+    // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
+    // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
+    // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
+    private static readonly string[] EffectTemplateRoots =
+        { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
+
+    // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
+    // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
+    // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
+    // the camera — rather than falling through to one of the world's 217 generic 'healthy' nodes.
+    // The effects (relocated templates) attach to these; the plane/wreck geometry is the crash
+    // plan's Layer-2 work.
+    private static readonly string[] CrashAnchorNodes =
+        { "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4", "shadow", "cockpit1" };
+
+    /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
+    /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
+    /// CALL_ANIMATION relocates them onto the call site. Returns how many built.</summary>
+    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent)
+    {
+        int n = 0;
+        foreach (var rootName in EffectTemplateRoots)
+        {
+            if (gamez.FindByName(rootName) is { } node && scene.BuildSubtree(node) is { } built)
+            {
+                built.Transform = Transform3D.Identity; // sit at the stage; reposition moves it on call
+                parent.AddChild(built);
+                n++;
+            }
+        }
+        return n;
+    }
+
+    /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
+    /// def's local anchor set (see the field remark).</summary>
+    private static Node3D BuildCrashAnchorSet()
+    {
+        var set = new Node3D { Name = "player" };
+        set.SetMeta(AnimRuntime.NameMeta, "player");
+        foreach (var name in CrashAnchorNodes)
+        {
+            var node = new Node3D { Name = name };
+            node.SetMeta(AnimRuntime.NameMeta, name);
+            set.AddChild(node);
+        }
+        return set;
     }
 
     /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its

@@ -4627,3 +4627,44 @@ map (it drove from the open airfield to the trestle and stayed framed); a plain 
 follow additions are inert when `Follow` is null). Build clean. The dynamic controls only an interactive
 run can exercise — the P/button pause toggle, the Ambient on→off click, follow-cancel on WASD — are
 structurally in place for the user's playtest.
+
+## 2026-07-23 — Anim-debugger Wave 5: stage placeless on-call defs in front of the camera (crash puffers visible)
+
+**PLAN-anim-debugger Wave 5** landed, folding in a user request from the same session — "we can't
+play most on-call animations because they have no anchor; would it be good to place them just in
+front of the camera with an offset?" The answer turned out to be the crash plan's Wave 2a/2b
+scaffolding, so both were delivered together (design confirmed with the user: *snapshot ahead of
+camera*, *fold into Wave 5*).
+
+**The discovery that shaped it.** An effect template hosts its puffers on its OWN root, not on the
+`AtNode` the caller passes: `small_yellow_sparks`' `PufferState.at_node` is `yellow_spark_01`,
+`call_crash_trails`' are `fly_trail1..5`. Those roots are world-gamez nodes `WorldBuilder`
+deliberately skips, so playing `player_crash_dirt` fired every `CallAnimation` but every puffer hit
+"no host node" and nothing rendered. Re-scoping the call (the existing `CallTargetAnchor`) is not
+enough — the template root has to be MOVED to the call site. And a second trap: the crash def's
+`healthy`/`destroyed` targets are generic (C1 ships 217 `healthy` nodes), so on the shared world
+runtime they resolve GLOBALLY to arbitrary buildings — the effects staged onto a distant refinery.
+
+**What landed (all additive, ambient world byte-identical — `PlaceCalledTemplates` default off, no
+stage built outside `--anim-lab`):**
+- `AnimRuntime`: `CallTargetAnchor`→**`CallTargetSite`** (now returns the `AtNode` offset too);
+  **`PlaceCalledTemplates`** + **`PlaceTemplateAt`** (relocate a called template's own root onto the
+  call site, gated + non-instant); **`IndexStage`** (index a post-bootstrap subtree + run its defs'
+  reset states, no re-`Bind`); `Play(name, fallbackAnchor)` (a placeless def anchors to the fallback).
+- `PlaneViewer` (`--anim-lab` only): `BuildEffectStage` (six effect-template roots from world gamez)
+  + `BuildCrashAnchorSet` (a meshless `player`/`healthy`/`destroyed`/`piece*` set so the crash def's
+  names resolve LOCALLY, in front of the camera) → one `labStage`, `IndexStage`d, `PlaceCalledTemplates`
+  on, handed to the lab.
+- `AnimLab`: repositions `labStage` 55 m in front of the camera on each fresh Play (snapshot reused on
+  Restart), passes it as the fallback anchor, and frames/follows it when the played def resolves onto it.
+
+**Verified (`.scratch/`, git-ignored — game geometry):** `--anim-lab --play-anim=player_crash_dirt`
+renders the fireball + spark cluster centred in front of the camera (retargets resolve to the local
+`healthy`/`destroyed`; was a bare terrain vista before); `--play-anim=large_10sec_fire` shows fire
+that used to render nothing; the quiet stage (no play) is clean (templates hidden by their reset
+states); `train_on_track` still frames + tracks its own moving engine (anchored def, ignores the
+stage); C1 `--fly` boot census byte-identical to known-good (616 ON_STARTUP + 5 start anims, 615
+instances, 4 puffers, 35 lights, 31 hidden). **Determinism boundary confirmed:** two same-seed crash
+screenshots differ (puffer particle spread is `GD.Randf`, outside the runtime's seeded RNG — the
+documented v1 boundary); the stage *placement* is deterministic. The piece ballistics + dust
+opacity/scale dispatch-but-inert, awaiting `PLAN-data-driven-crash.md` Layer 1. Build clean.

@@ -215,6 +215,19 @@ hand-code) after the data-driven path reproduces slices 1–2 at least as well. 
 - **Wave 2 — Layer 2 scaffolding.** Build the crash subtree + effect templates; bind a crash
   `AnimRuntime`; run reset states. Verify the templates build in all 8 chapters (node/mesh counts,
   zero errors), still no trigger.
+  **⚠ Partly delivered by PLAN-anim-debugger Wave 5 (2026-07-23), inside `--anim-lab`:** the six
+  effect-template roots build from world gamez (`BuildEffectStage`) and index into a runtime; the
+  reset states hide them (`AnimRuntime.IndexStage`); and — the piece the plan under-specified — the
+  **template-instancing** now exists: `AnimRuntime.PlaceCalledTemplates` + `PlaceTemplateAt` relocate
+  a called template's OWN root (where its puffers ride: `yellow_spark_01`, `fly_trail1..5`) onto the
+  call site, without which every crash puffer emits at its gamez origin. The flight crash runtime
+  reuses all of this (turn on `PlaceCalledTemplates`). **What the lab deliberately faked and Wave 2
+  here must do for real:** the lab uses a *meshless* `player`/`healthy`/`destroyed`/`piece*` anchor
+  set so the names resolve; flight needs the real `PlaneBuilder.BuildDestroyed` geometry. **And the
+  name-ambiguity trap the lab surfaced (`docs/architecture.md` AnimRuntime bullet): `healthy`/
+  `destroyed` are generic (217 in C1), so bind the crash runtime to a per-player subtree whose
+  `_index` is ONLY that subtree** — then `healthy` is unique and resolves to the right plane, which
+  the shared world runtime cannot guarantee.
 - **Wave 3 — trigger + verify end-to-end.** `Crash` triggers the def. Verify each effect appears
   (a forward-dive crash screenshot burst), diffing against slices 1–2's known-good output. Resolve
   the opacity risk here (dust fade visible or fall back).
