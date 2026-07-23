@@ -18,3 +18,6 @@ when more than one is present.
 | [PLAN-anim-rendering-followups.md](PLAN-anim-rendering-followups.md) | Conditions, lights, world setup, UV scroll, audio (4 items) | 2026-07-22 |
 | [PLAN-docs-cleanup.md](PLAN-docs-cleanup.md) | Shrink CLAUDE.md back to an index (10 items) | 2026-07-22 |
 | [PLAN-M2-polish-3.md](PLAN-M2-polish-3.md) | M2 polish run 3 (10 items; 3 and 11 closed as disproven) | 2026-07-22 |
+| [PLAN-M2-polish-4.md](PLAN-M2-polish-4.md) | M2/2.5 polish run 4 (10 items; item 3 returned to backlog) | 2026-07-23 |
+| [PLAN-anim-debugger.md](PLAN-anim-debugger.md) | The `--anim-lab` animation debugger (Waves 1–5) | 2026-07-23 |
+| [PLAN-data-driven-crash.md](PLAN-data-driven-crash.md) | Data-driven crash: generic anim handlers + the crash plays its def (4 waves) | 2026-07-23 |

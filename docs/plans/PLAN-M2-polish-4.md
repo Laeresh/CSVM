@@ -1,15 +1,16 @@
 # Milestone 2 / 2.5 polish run 4
 
-**🟢 LIVE — written 2026-07-22.** Ten items selected from `backlog.md` against three criteria the
-user set: **feasibility, little or no user input required, and a preference for long-running work.**
-Items needing a playtest, two controllers, or a fidelity judgement the data cannot settle were
-deliberately excluded — they stay in `backlog.md` under "Owed playtests", "TUNE constants pending
-playtest" and "Open fidelity questions".
+**✅ COMPLETE — all items landed 2026-07-22 → 2026-07-23 (archived to `docs/plans/` 2026-07-23).**
+Ten items selected from `backlog.md` against three criteria the user set: **feasibility, little or no
+user input required, and a preference for long-running work.** Items 1, 2, 4, 5, 6, 7, 8, 9, 10 all
+landed; **item 3** (oil tanks destroyed at spawn) proved a data-correct non-bug and was **moved back
+to `backlog.md`** under "Open fidelity questions" (blocked on user testing), not delivered here.
+**Item 8** (the crash choreography) was completed by the data-driven crash — see
+[`PLAN-data-driven-crash.md`](PLAN-data-driven-crash.md). Kept for its evidence and recorded dead ends.
 
-**Scope: Milestone 2 / 2.5 only.** `docs/PLAN-M3-weapons.md` remains written but unstarted; every
-M3-deferred and M4 item in the backlog (gun heat/jam, ammo pickups, the loadout configurator,
-turrets, AI armour) is out of scope here, as is anything blocked on weapons or a cutscene player.
-**When both plans sit in `docs/`, this one is the active plan** and M3 is queued behind it.
+**Scope: Milestone 2 / 2.5 only.** `docs/PLAN-M3-weapons.md` (the now-active plan) was out of scope
+here; every M3-deferred and M4 item in the backlog (gun heat/jam, ammo pickups, the loadout
+configurator, turrets, AI armour) was excluded, as was anything blocked on weapons or a cutscene player.
 
 **Every item below was verified still open on 2026-07-22** — against `docs/HISTORY.md` *and* against
 the code itself, because a backlog entry is not evidence that the work is undone. Two backlog claims

@@ -1,8 +1,8 @@
 # Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
-`docs/PLAN-M2-polish-4.md`**, with `docs/PLAN-M3-weapons.md` queued behind it; completed plans are
-in `docs/plans/`. Per-item history/diagnosis
+`docs/PLAN-M3-weapons.md`** (Milestone 3, weapons); the M2/2.5 polish runs plus the anim-debugger and
+data-driven-crash plans are complete and archived in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -134,7 +134,7 @@ had landed, been disproven, or been measured gone were deleted (their records ar
 it is not re-derived; where it did not, the item says so rather than guessing. Paths are relative
 to the Godot project's `src/`.
 
-**Most of this section moved into `docs/PLAN-M2-polish-4.md` on 2026-07-22** — the knife-edge nose
+**Most of this section moved into `docs/plans/PLAN-M2-polish-4.md` on 2026-07-22** — the knife-edge nose
 drop, the C5 sunk zeppelin, the C1B z-fighting, the C1 IA1 oil tanks, the bowl sign, the C1 car
 rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all scheduled there, each
 with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
@@ -286,10 +286,11 @@ unscheduled.
      (`player-player_crash_*.json` + the effect defs); full decode in `docs/HISTORY.md` (2026-07-23).
 - **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
-  faithful data-driven crash, so it was preserved on that branch rather than deleted. Once the faithful
-  recreation is settled, revisit blending its nicer breaking-apart (free-body scatter + down-ray
-  ground-rest) into (or over) the data-driven path — an explicit "improve on the original" opportunity,
-  not a faithfulness regression. The branch is also the A/B reference for the owed crash playtest.
+  faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest
+  passed (2026-07-23) — the faithful data-driven crash is confirmed as the default**, so this is now the
+  standing follow-up: once the faithful recreation is fully settled, revisit blending the branch's nicer
+  breaking-apart (free-body scatter + down-ray ground-rest) into (or over) the data-driven path — an
+  explicit "improve on the original" opportunity, not a faithfulness regression.
   ⚠ **Traps (from slices 1–2, 2026-07-23).** The `blend`/`softParticles` `Puffer.Create` overrides
   exist and default to a byte-identical shader — reuse them; a MIX-blend dark puffer near the
   ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
@@ -368,7 +369,7 @@ unscheduled.
 
 - **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.** *(Three of the
   original five — the `csky_fog_on` uniform ordering, the missing `csky_opacity`, and
-  `FlightController`'s dead soft-tree branch — were scheduled into `docs/PLAN-M2-polish-4.md`
+  `FlightController`'s dead soft-tree branch — were scheduled into `docs/plans/PLAN-M2-polish-4.md`
   items 10 and 6 on 2026-07-22. These two remain.)*
   - **C5's `poleflare` clutter renders with the wrong billboard axis.** The `cblock*` templates
     ship `lightpole` (`CylindricalY`) posts *and* `poleflare` (`SphericalY`) glows — 33,682 of

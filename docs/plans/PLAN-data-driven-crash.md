@@ -1,15 +1,15 @@
 # Data-driven crash — generic animation handlers + the crash plays its def
 
-**✅ COMPLETE — all four waves landed 2026-07-23 (archive to `docs/plans/` on the next cleanup).** The
+**✅ COMPLETE — all four waves landed 2026-07-23; archived to `docs/plans/` 2026-07-23.** The
 crash is now data-driven **by default**: every flown plane gets a per-player scoped crash `AnimRuntime`
 that plays `player_crash_dirt`. Wave 4 (2026-07-23) flipped it to the default, removed the `--data-crash`
 flag, scoped the session texture archive (disposed on teardown), and closed `PLAN-M2-polish-4.md` item 8.
 **The bespoke `CrashChoreography`/`CrashBreakup` trio was NOT deleted per the user's instruction — it is
 preserved on branch `bespoke-crash-animation`** (the user judged its breaking-apart nicer; a candidate to
-improve on the original after faithful recreation — see `backlog.md`). Verified: C1 dive crash builds the
-runtime by default, 9 puffers baked at crash time, no disposal/leak errors, screenshot rendered. Owed
-(user-gated, needs the controls): the A/B playtest across planes/chapters, and the `WreckMomentum` /
-`forward_rotation`-÷-run_time TUNE calls.
+improve on the original after faithful recreation — see `backlog.md`). **✅ The user's A/B playtest passed
+(2026-07-23): the data-driven crash is confirmed** as the default. The `WreckMomentum` /
+`forward_rotation`-÷-run_time constants stayed at their landed values through the A/B and remain in the
+TUNE list only as fine-tuning handles (`backlog.md`), no longer a blocker.
 
 **🟢 Originally written 2026-07-23** as a handoff plan from the session that landed polish-4 item 8
 slices 1–2 (the bespoke crash choreography). Scope decided **with the user**: make the crash
@@ -18,7 +18,7 @@ slices 1–2 (the bespoke crash choreography). Scope decided **with the user**: 
 `CrashChoreography` / hand-rolled debris / `CrashBreakup` scatter. This is also the **Milestone 3
 foundation**: every weapon-hit destruction and kill-chain in the game uses these same handlers.
 
-**This supersedes the open half of `docs/PLAN-M2-polish-4.md` item 8.** When this plan's Layer 2
+**This supersedes the open half of `docs/plans/PLAN-M2-polish-4.md` item 8.** When this plan's Layer 2
 lands, item 8 closes (the dirt crash is complete, data-driven). Until then item 8 stays ◐.
 
 **⚠ Sequencing update 2026-07-23:** [`PLAN-anim-debugger.md`](PLAN-anim-debugger.md) runs **first**.
@@ -337,7 +337,7 @@ A/B reference for it.
 - **Keep the bespoke code until the data-driven path is verified** — it is the visual reference.
 - **`plane_destroy_sg` audio is already done** (`FlightAudio` snd_exp_plane1..4); the def's `Sound
   snd_exp_ground_a` is `OnGroundExplosion`. Do not double-play if the def's `Sound` events start
-  driving audio through the runtime — pick one path (`docs/PLAN-M2-polish-4.md` item 8 trap).
+  driving audio through the runtime — pick one path (`docs/plans/PLAN-M2-polish-4.md` item 8 trap).
 - **Air/water variants stay unreachable** (air = mid-air destruct = M3; water = a sea-surface signal
   the collision system does not expose). This plan completes the **dirt** crash only.
 

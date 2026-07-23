@@ -339,7 +339,7 @@ correctly does not override it.
 
 ## 6. Proposed deltas to the files this analysis must not edit
 
-**`docs/PLAN-M2-polish-4.md` item 9** — the fifth mechanism, and the one that survives:
+**`docs/plans/PLAN-M2-polish-4.md` item 9** — the fifth mechanism, and the one that survives:
 
 > The C5 half is **not a depth-precision problem**. The polygon flag `unk3` (raw `0x0800`) is the
 > original's OpenFlight **subface** mark, and `support\init.gw` applies
