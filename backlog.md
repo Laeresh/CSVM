@@ -263,30 +263,33 @@ unscheduled.
 
 ## Feature backlog
 
-- **Crash choreography — the remaining slices (polish-4 item 8; slices 1–2 landed 2026-07-23).**
-  The dirt/ground variant is complete in `CrashChoreography.cs`: sparks, the delayed fireball
-  cluster, the black smokeball (slice 1), plus the five burning debris arcs (`call_crash_trails`,
-  via a reconstructed `fly_trailN` ballistic) and the earth-impact boom (`snd_exp_ground_a`)
-  (slice 2). These remaining slices extend it. Data is in `extracted/C1/cam_anim/`
-  (`player-player_crash_*.json` + the effect defs); the full decode is in `docs/HISTORY.md`
-  (2026-07-23) and the plan file item 8. Independently verifiable slices:
-  1. **`flydirt_plane` dust** (dirt) + the **water splash+steam** (`plane_big_splash`,
-     `large_steam_spray`): these are mesh/scale/opacity effects (`ObjectMotion` scale +
-     `ObjectOpacityFromTo`), not puffers — need the anim/mesh path (`AnimRuntime.SetSubtreeOpacity`
-     exists). `large_steam_spray` alone IS a puffer (`trailpuffer2` with a white alpha ramp).
-  2. **Per-piece `large_firetrail` + bounces** (air variant only): `pieceNseq` → `large_firetrail
-     WithNode pieceN` (`lgpuffer` DISTANCE trail) → `ObjectMotion gravity −9.8 do_intersections` →
-     `bounce_sequence [p1hit]` which plays `air_mixed_exp_sg` and a second ranged `ObjectMotion`.
-     `CrashBreakup.Piece.Resting` already tracks the bounce moment. Needs a real `SOUND_GROUPS`
-     resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already plays,
-     hardcoded like `plane_destroy_sg`).
-  3. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
-     returns Ground for every crash. **Water** needs a sea-surface signal the collision system does
-     not expose (a water crash today falls through the collider-less sea to the under-map backstop,
-     which respawns rather than crashing). **Air** (`player_crash_default`, no-impact destruct,
-     `destroyed=false`, pieces arc away) has **no trigger until weapons (M3)** can down a plane
-     mid-flight — a building crash is `_dirt`, not air. When wiring them, note `snd_exp_water_a`
-     (splash) and that the water sequence is named `destroy_crash`, not `destroy_it`.
+- **Data-driven crash — the remaining variants/follow-ups (PLAN-data-driven-crash COMPLETE for the
+  dirt crash, default since Wave 4 2026-07-23).** The dirt/ground crash plays `player_crash_dirt`
+  end-to-end through the per-player scoped `AnimRuntime` — sparks, fireball cluster, black smokeball,
+  the `flydirt`/`dust` burst (via the Layer-1 `OpacityFade` + `MotionRuntime` scale handlers), the five
+  burning debris arcs, and the earth-impact boom all fire from the data. What is still open:
+  1. **`bounce_sequence` re-launch (Layer-1.5).** The piece/debris `ObjectMotion`s carry
+     `do_intersections` + a `bounce_sequence` (`pNhit` → `ground_mixed_exp_sg` + a second ranged
+     launch) that `MotionRuntime` does not yet act on — it needs a ground-contact physics ray
+     (`CrashBreakup.Advance`, on branch `bespoke-crash-animation`, is the reference integrator). The
+     pieces tumble to rest fine without it; the bounce is an embellishment. Also needs a real
+     `SOUND_GROUPS` resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already
+     plays, hardcoded like `plane_destroy_sg`).
+  2. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
+     (`FlightController.cs`) returns `CrashSurface.Ground` for every crash. **Water**
+     (`player_crash_water`: `plane_big_splash` + `large_steam_spray`, the `destroy_crash` sequence)
+     needs a sea-surface signal the collision system does not expose (a water crash today falls
+     through the collider-less sea to the under-map backstop, which respawns rather than crashing);
+     note `snd_exp_water_a`. **Air** (`player_crash_default`, no-impact destruct, `destroyed=false`,
+     pieces arc away, per-piece `large_firetrail`) has **no trigger until weapons (M3)** can down a
+     plane mid-flight — a building crash is `_dirt`, not air. Data: `extracted/C1/cam_anim/`
+     (`player-player_crash_*.json` + the effect defs); full decode in `docs/HISTORY.md` (2026-07-23).
+- **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
+  User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
+  faithful data-driven crash, so it was preserved on that branch rather than deleted. Once the faithful
+  recreation is settled, revisit blending its nicer breaking-apart (free-body scatter + down-ray
+  ground-rest) into (or over) the data-driven path — an explicit "improve on the original" opportunity,
+  not a faithfulness regression. The branch is also the A/B reference for the owed crash playtest.
   ⚠ **Traps (from slices 1–2, 2026-07-23).** The `blend`/`softParticles` `Puffer.Create` overrides
   exist and default to a byte-identical shader — reuse them; a MIX-blend dark puffer near the
   ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
@@ -578,13 +581,18 @@ scripted screenshot.
 - **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick, tree softness,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
   real flight (the thresholds need states normal play actually reaches).
-- **Crash choreography (polish-4 item 8)** — the **debris-arc trajectory** (`translation_range` read
-  as travel distance over `run_time` in a fanned azimuth; the `fly_trailN` anchor is invisible, so
-  only the arc's rough scale reads — this is `CrashChoreography.StartDebris`), and the **overall
-  crash intensity**: the primary fireball, the 3-fireball cluster, the debris fire, and the wreck
-  fire are all additive, so a dirt crash reads as one large fireball — judge the whole against the
-  original. Also `snd_exp_ground_a` mix level and whether it should layer over `plane_destroy_sg` at
-  all (the dirt def's only Sound is `snd_exp_ground_a`; we keep both, per the plan).
+- **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
+  all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
+  fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
+  up); the **`forward_rotation.Time.initial` ÷ run_time** tumble-rate reading in `AnimRuntime`'s
+  `MotionRuntime` (the pieces carry clean π multiples read as a *total* angle, not a rate); the
+  **debris-arc trajectory** (`translation_range` read as travel distance over `run_time` in a fanned
+  azimuth — the `fly_trailN` anchor is invisible, so only the arc's rough scale reads; `MotionRuntime`,
+  `initial`/`delta` unmapped); the **overall crash intensity** (the fireball, the cluster, the debris
+  fire and the wreck fire are all additive, so a dirt crash can read as one big fireball — judge the
+  whole against the original); and `snd_exp_ground_a` mix level + whether it should layer over
+  `plane_destroy_sg` (the dirt def's only Sound is `snd_exp_ground_a`; we keep both). The retired
+  bespoke crash on branch `bespoke-crash-animation` is the A/B reference for these.
 - **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B a dive against the original.
 - **Knife-edge nose sag (polish-4 item 6, landed 2026-07-23)** — `KnifeNoseSag` **0.07 rad (≈4°)**,
   the bound the nose settles to at full knife-edge, and `KnifeNoseRate` **0.2 rad/s**, how fast it

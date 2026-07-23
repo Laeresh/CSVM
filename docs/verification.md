@@ -336,7 +336,7 @@ rotation ~57× too small and nothing visibly turned, while the system ran the wh
 The measuring tool has been the bug more often than is comfortable:
 
 - **`IsVisibleInTree() == true` is necessary but NOT sufficient for "it renders."** The data-driven
-  crash (`--data-crash`, 2026-07-23) built its effect puffers, positioned every particle at the crash
+  crash (2026-07-23) built its effect puffers, positioned every particle at the crash
   site, reported `IsVisibleInTree` true, and had the multimesh *drawing* them (`VisibleInstanceCount`
   = 462) — and nothing appeared on screen. Every visibility/position/emission instrument I added
   agreed the effect was live; the screenshot was the only one that disagreed, and it was right. The

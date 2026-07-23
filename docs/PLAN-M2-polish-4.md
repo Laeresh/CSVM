@@ -44,7 +44,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done — keep this in sync as items
 5. ☑ **C2 stunt: the Seaplane Hangar objective sits at (0,0,0)** **(done 2026-07-22 — `StuntMission.GeometryAnchor` anchors a geometry-node zone on the aperture between its door leaves, (−5770.4, 23.5, −5623.9), and returns null for anything that draws nothing, so it provably cannot fire for the 53 ordinary `dzN` markers (all measured childless `model_index -1`). No parser change was needed — the plan predicted `child_bbox` parsing; mesh vertices gave the same answer. Corroborated independently by `dzpath1`'s gate polygon, 1.9 m away. Measured: exactly one position line changed across all 6 stunt chapters; flown through and scored; control run with the fallback off scores nothing. One plan detail was wrong and harmless — `sghangar`'s parent is −1, not `world1`. Decoded on the way: `dzpathN` is gate geometry, not a route ribbon → `backlog.md`. `docs/HISTORY.md`)**
 6. ☑ **Knife-edge: the nose should drop, not just the path** (+ delete the dead soft-tree branch) **(done 2026-07-23, and independently re-verified after the first agent's own verification was judged untrustworthy and its work backed out. Measured: nose −0°→**−4°**, level cruise byte-identical 25/25 lines, determinism proven first by two identical baseline runs. **Two things the plan did not anticipate, both quantified:** the sag carries into the path **1:1** (settled −6°→−10°, sink +64%), so "leave the path unchanged" is unachievable by construction — the constant was sized so the settled path lands on the documented −10°; and the term fires on **steep pitch at zero bank** too (wings-level zoom apex +81°→+70°), since `knife` grows with pure pitch. User accepted both and will tune. Constants `KnifeNoseSag`/`KnifeNoseRate` → TUNE list. **The rider's commit message was FALSE and was rewritten before landing:** it claimed no collider ever carried the name `clutter_col` and that the user's 7-tree forest plow was flying through never-solid sprites — `git grep` at `a795548~1` shows the name was live 2026-07-17→2026-07-22, so the plow was the branch working as designed. Deletion itself verified byte-identical on two collision paths, with a binary DLL marker closing the stale-build loophole. `docs/HISTORY.md`)**
 7. ☑ **Mute on focus loss** (+ the pad-read-on-focus question, settled) **(done 2026-07-22 — `PlaneViewer._Notification`, the project's first, mutes the `AudioServer` master bus on `NOTIFICATION_APPLICATION_FOCUS_OUT` and unmutes on `_IN`. The engine-loop regression the item warned about cannot occur: the bus mute never touches `FlightAudio`, measured `volDb=-13.98 pitch=0.778 ramp=1.000` identically before/during/after two focus cycles, with the same probe shown able to print `-60.00` at startup. The pad half landed as a SEPARATE, user-vetoable commit (`78acbbc`). Found and corrected on the way: the plan's proposed choke point `Pads.Connected()` is the wrong one — it misses the flight path (`For(bound)` never consults it, and every splitscreen/menu player has a binding) and would break the launchscreen (`SyncDevices` reads the roster to drop *disconnected* players; `AssignPads` reads it at session build). Gate went on `Pads.For` instead, `Connected()` left as the ungated roster. Also found: `--headless` + `--screenshot` never terminates → `backlog.md`. `docs/HISTORY.md`)**
-8. ◐ **The full `player_plane_destruct` crash choreography** — surface variants, sparks, debris arcs **(FIRST SLICE landed 2026-07-23 — the ground/dirt variant's pure-puffer effects: 2 `small_yellow_sparks` bursts, the `large_black_smokeball`, and the delayed 3-fireball cluster, surface-selected in `FlightController.Crash` and anchored at the plane centre, atop the pre-existing primary fireball + wreck fire. New `CrashChoreography.cs` + two `Puffer.Create` overrides (`blend`, `softParticles`), both no-ops at their defaults. Three bugs found and fixed on the way, all the same "instrument lies" class: the blend-override param was initially dead (smoke stayed additive = invisible); the anchor was the impact point not the `healthy` plane-centre the data uses; and the shader soft-particle fade zeroed the fresh smoke's alpha against the ground — the "smokeball works" call was first made by mistaking a fading fireball for smoke, corrected by isolating the emitter. 8-chapter `--fly` build: choreography builds, zero errors. `docs/HISTORY.md`. **SLICE 2 landed 2026-07-23 — the rest of the dirt variant: the five burning debris arcs (`call_crash_trails`) and the earth-impact boom (`snd_exp_ground_a`).** `FromAnimEvent` now reads the `interval_type: "Distance"` case (⚠ its flag shape is inverted); each `spurtpufferN` is a DISTANCE trail riding a *reconstructed* ballistic `fly_trailN` anchor (the node is never built — invisible carrier; `translation_range` is undocumented + unimplemented in `AnimRuntime`, so `xz`/`y` are read as travel distance over `run_time` in a fanned azimuth under the anim's own gravity — arc shape is TUNE). Ground sound layered over `plane_destroy_sg` via `FlightAudio.OnGroundExplosion`, gated on Ground. Verified: forward-dive crashes into C1 show the arcs streak out (`.scratch/obl_06.png`), 8-chapter build all report `5 debris-arc emitters`, zero hard errors, DISTANCE change proven a no-op for world puffers by construction. DEFERRED to later slices → `backlog.md`: `flydirt_plane` dust + water splash+steam (mesh/scale/`ObjectOpacityFromTo` path, not puffers), per-piece `large_firetrail`+bounces, and the water/air variants (need a surface signal / a mid-air destruct trigger).)**
+8. ☑ **The full `player_plane_destruct` crash choreography** — surface variants, sparks, debris arcs **(CLOSED 2026-07-23 — superseded and completed by the data-driven crash (`PLAN-data-driven-crash.md`): the crash now PLAYS `player_crash_dirt` through a per-player scoped `AnimRuntime` (default since Wave 4), so the whole dirt choreography — sparks, fireball cluster, black smokeball, dirt burst, burning-debris arcs — fires from the extracted data. The two bespoke slices below (`CrashChoreography.cs`/`CrashBreakup.cs`) were preserved on branch `bespoke-crash-animation` per the user (the breaking-apart looked better — a future improve-on-the-original candidate), not deleted. Historical record of those slices: FIRST SLICE landed 2026-07-23 — the ground/dirt variant's pure-puffer effects: 2 `small_yellow_sparks` bursts, the `large_black_smokeball`, and the delayed 3-fireball cluster, surface-selected in `FlightController.Crash` and anchored at the plane centre, atop the pre-existing primary fireball + wreck fire. New `CrashChoreography.cs` + two `Puffer.Create` overrides (`blend`, `softParticles`), both no-ops at their defaults. Three bugs found and fixed on the way, all the same "instrument lies" class: the blend-override param was initially dead (smoke stayed additive = invisible); the anchor was the impact point not the `healthy` plane-centre the data uses; and the shader soft-particle fade zeroed the fresh smoke's alpha against the ground — the "smokeball works" call was first made by mistaking a fading fireball for smoke, corrected by isolating the emitter. 8-chapter `--fly` build: choreography builds, zero errors. `docs/HISTORY.md`. **SLICE 2 landed 2026-07-23 — the rest of the dirt variant: the five burning debris arcs (`call_crash_trails`) and the earth-impact boom (`snd_exp_ground_a`).** `FromAnimEvent` now reads the `interval_type: "Distance"` case (⚠ its flag shape is inverted); each `spurtpufferN` is a DISTANCE trail riding a *reconstructed* ballistic `fly_trailN` anchor (the node is never built — invisible carrier; `translation_range` is undocumented + unimplemented in `AnimRuntime`, so `xz`/`y` are read as travel distance over `run_time` in a fanned azimuth under the anim's own gravity — arc shape is TUNE). Ground sound layered over `plane_destroy_sg` via `FlightAudio.OnGroundExplosion`, gated on Ground. Verified: forward-dive crashes into C1 show the arcs streak out (`.scratch/obl_06.png`), 8-chapter build all report `5 debris-arc emitters`, zero hard errors, DISTANCE change proven a no-op for world puffers by construction. DEFERRED to later slices → `backlog.md`: `flydirt_plane` dust + water splash+steam (mesh/scale/`ObjectOpacityFromTo` path, not puffers), per-piece `large_firetrail`+bounces, and the water/air variants (need a surface signal / a mid-air destruct trigger).)**
 9. ☑ **~~Conflict-local depth bias~~ → the OpenFlight subface flag** **(done 2026-07-23, and the item's own title is the sixth and last wrong framing: it is not a depth-bias problem and no bias constant was touched. `unk3`/`0x0800` is the OpenFlight SUBFACE mark — coplanar with and contained in the face beneath, drawn on top — and `support\init.gw` applies `GameGenSetSubfacePriorityOffset 1` to it globally. We parsed it nowhere. Fix is the predicted 3 edits: parse in `GameZ.cs`, `Subface` into the surface-group + material-cache key, `SubfaceBias` = half a priority level (1e-4, deliberately not the original's literal 1 level — priority 1 is authored). Measured at the C5 repro pose, jitter burst: ground crop **28.87% → 0.41%**, buildings crop **7.13% → 7.13%** (27,367 vs 27,373 px — untouched, as a ground-only fix must be), `--jitter=0` noise floor exactly **0.00%** on both builds so the residual is not temporal noise. Rule 4 satisfied the right way round: the metric fell AND the picture went to the authored layer — the baseline's washed-out daylit grey ground became near-black night blocks with street lights, matching `OriginalScreenshots/C5 IA1 Terrain.png`. **User confirmed at the controls: "no more z-fighting on the C5 ground."** 8-chapter regression: node/mesh/collider counts **identical everywhere**, zero errors; uv-clamped surfaces moved only in the four chapters with textured subfaces (C2 +3, C3 **+1** — and C3 has exactly **1** `unk3` polygon in the whole chapter, C4 +15, C5 +18), and C1B/C1C/C2B/C1 are unchanged. Aircraft carry **0** `unk3` polygons and the static plane viewer is byte-identical (md5 `F1290254…`). C1B is provably untouched, independently corroborating the user's not-a-bug ruling. `docs/HISTORY.md`)**
 
    <details><summary>The research trail that led here (kept — it is four retired mechanisms)</summary>
@@ -126,7 +126,7 @@ contend on that file — **do not run them in parallel worktrees.**
 
 # Wave A — the animation runtime
 
-## 1. ☐ `NextDue` applies each event's `START_TIME` to the *following* event
+## 1. `NextDue` applies each event's `START_TIME` to the *following* event
 
 **Goal.** Fix the sequence scheduler so an event's start offset gates the event that carries it.
 The bowl sign stops blacking out and flashes as authored; every other sequence in the install stops
@@ -198,7 +198,7 @@ precedes the next one).
   flash mechanism; there is no texture-cycle or flash primitive involved.
 - This item will change item 2's repro. Land it first, then re-baseline.
 
-## 2. ☐ `FromToMotion` resets orientation to the authored rest pose
+## 2. `FromToMotion` resets orientation to the authored rest pose
 
 **Goal.** A translate-only event holds the last rotation the script wrote, instead of snapping the
 node back to its authored rest orientation.
@@ -268,7 +268,7 @@ sequence plus `--debug-anim` pose lines); the car should point along its directi
 
 # Wave B — placement
 
-## 4. ☐ C5 IA1: the sunk zeppelin is `piratezep` at the world origin
+## 4. C5 IA1: the sunk zeppelin is `piratezep` at the world origin
 
 **Goal.** C5 IA1 stops showing a zeppelin buried in the ground.
 
@@ -317,7 +317,7 @@ of (b), and it is the whole verification (`docs/verification.md`: verify by what
   keys on "identity transform" could plausibly catch parked zeppelins that are *supposed* to be at
   their gamez position elsewhere.
 
-## 5. ☐ C2 stunt: the Seaplane Hangar objective sits at (0, 0, 0)
+## 5. C2 stunt: the Seaplane Hangar objective sits at (0, 0, 0)
 
 **Goal.** The C2 Seaplane Hangar danger zone sits on the hangar.
 
@@ -386,7 +386,7 @@ not fire for a normal `dzN`.
 
 # Wave C — flight and audio
 
-## 6. ☐ Knife-edge: the nose should drop, not just the flight path
+## 6. Knife-edge: the nose should drop, not just the flight path
 
 **Goal.** In a sustained knife-edge the nose drops slightly as the aircraft sinks, instead of the
 plane descending wings-level-nosed.
@@ -487,7 +487,13 @@ connected, confirm a held stick does not fly the plane while unfocused.
 
 # Wave D — the crash
 
-## 8. ◐ The full `player_plane_destruct` crash choreography — FIRST SLICE landed 2026-07-23
+## 8. The full `player_plane_destruct` crash choreography — ✅ CLOSED 2026-07-23 (data-driven crash)
+
+> **Closed by [`PLAN-data-driven-crash.md`](PLAN-data-driven-crash.md), Wave 4 (2026-07-23).** The crash
+> is now data-driven by default (plays `player_crash_dirt` through a scoped `AnimRuntime`), completing
+> this item. The bespoke slices described below were preserved on branch `bespoke-crash-animation` (the
+> user's call — the breaking-apart looked better), not deleted. The rest of this section is the original
+> plan + the bespoke-slice history, kept for evidence.
 
 **Goal.** A crash plays the original's authored choreography — the right variant for the surface,
 sparks, dust or splash, the smokeball, the debris arcs — instead of one generic fireball.
@@ -586,7 +592,7 @@ persistent wreck in air. `--debug-anim` to confirm the right def is driving.
 
 # Wave E — rendering
 
-## 9. ☐ Conflict-local depth bias — the surviving direction on C1B/C5 z-fighting
+## 9. Conflict-local depth bias — the surviving direction on C1B/C5 z-fighting
 
 **Goal.** Separate coplanar sibling nodes without scrambling the authored layering — or produce a
 clean, recorded disproof.

@@ -1,6 +1,17 @@
 # Data-driven crash — generic animation handlers + the crash plays its def
 
-**🟢 LIVE — written 2026-07-23.** Handoff plan from the session that landed polish-4 item 8
+**✅ COMPLETE — all four waves landed 2026-07-23 (archive to `docs/plans/` on the next cleanup).** The
+crash is now data-driven **by default**: every flown plane gets a per-player scoped crash `AnimRuntime`
+that plays `player_crash_dirt`. Wave 4 (2026-07-23) flipped it to the default, removed the `--data-crash`
+flag, scoped the session texture archive (disposed on teardown), and closed `PLAN-M2-polish-4.md` item 8.
+**The bespoke `CrashChoreography`/`CrashBreakup` trio was NOT deleted per the user's instruction — it is
+preserved on branch `bespoke-crash-animation`** (the user judged its breaking-apart nicer; a candidate to
+improve on the original after faithful recreation — see `backlog.md`). Verified: C1 dive crash builds the
+runtime by default, 9 puffers baked at crash time, no disposal/leak errors, screenshot rendered. Owed
+(user-gated, needs the controls): the A/B playtest across planes/chapters, and the `WreckMomentum` /
+`forward_rotation`-÷-run_time TUNE calls.
+
+**🟢 Originally written 2026-07-23** as a handoff plan from the session that landed polish-4 item 8
 slices 1–2 (the bespoke crash choreography). Scope decided **with the user**: make the crash
 **fully data-driven** — the player crash def (`player_crash_dirt`) runs through a real
 `AnimRuntime`, with **generic motion/opacity handlers** doing the work, retiring the hand-written
@@ -239,7 +250,15 @@ hand-code) after the data-driven path reproduces slices 1–2 at least as well. 
 - **Wave 3 — trigger + verify end-to-end.** `Crash` triggers the def. Verify each effect appears
   (a forward-dive crash screenshot burst), diffing against slices 1–2's known-good output. Resolve
   the opacity risk here (dust fade visible or fall back).
-- **Wave 4 — retire the bespoke code**, update docs, close item 8.
+- **Wave 4 — retire the bespoke code, update docs, close item 8. ✅ LANDED 2026-07-23.** Flipped the
+  data-driven crash to the default (removed the `_dataCrash` gate + the `--data-crash` flag; the crash
+  runtime now builds for every flown plane), removed the bespoke `CrashEffect`/`Breakup`/`Choreography`
+  fields + their build/advance/reset wiring, moved the `CrashSurface` enum out of the deleted
+  `CrashChoreography.cs` to the top of `FlightController.cs`, and **scoped the session texture archive**
+  (`_sessionTextures`, disposed by `ReturnToMenu` on teardown + the failed-build catch) so a map reload
+  drops the previous archive instead of leaking it. **Per the user, the bespoke `CrashChoreography.cs` /
+  `CrashBreakup.cs` were preserved on branch `bespoke-crash-animation` rather than deleted** — the
+  breaking-apart looked better and is a candidate to improve on the original after faithful recreation.
 
 ### ✅ Waves 2–3 LANDED 2026-07-23 (behind `--data-crash`, default off)
 
@@ -279,10 +298,11 @@ plan's sketch — each a trap worth keeping:
 9 emitters spawn 460+ live particles); default (bespoke) flight and `--anim-lab` unregressed; 8-chapter
 ambient census byte-identical to the Wave 1 baseline (all crash-runtime capabilities default off).
 
-**Wave 4 still owed:** flip `--data-crash` to the default, delete `CrashChoreography.cs`/`CrashBreakup.cs`
-+ the `CrashEffect`/`Choreography`/`Breakup` fields, scope the texture archive to the session lifetime
-(the `--data-crash` path leaks it today — a build-scope `using`), and close `PLAN-M2-polish-4` item 8 —
-after the user's A/B playtest across planes/chapters signs off on the data-driven crash.
+**Wave 4 landed 2026-07-23** (see the Build order note above): the data-driven crash is the default and
+only path, the `--data-crash` flag is gone, the texture archive is session-scoped, and item 8 is closed.
+The bespoke trio was preserved on branch `bespoke-crash-animation` (the user's call), not deleted. The
+user's A/B playtest across planes/chapters is still owed — it needs the controls, and the branch is the
+A/B reference for it.
 
 ---
 

@@ -4785,3 +4785,45 @@ and the next crash still spawns its 9 emitters.
 **Wave 4 owed:** flip `--data-crash` to the default, delete the bespoke trio, scope the texture archive
 to the session lifetime (the flag keeps it open past the build scope today), and close
 `PLAN-M2-polish-4` item 8 — after the user's A/B playtest across planes/chapters.
+
+## 2026-07-23 — Data-driven crash Wave 4: default flip + bespoke crash preserved on a branch
+
+**PLAN-data-driven-crash Wave 4** landed, closing the plan (all four waves done) and closing
+`PLAN-M2-polish-4` item 8. The data-driven crash is now the **default and only** crash path on `main`.
+
+**The user's amendment.** The plan's Wave 4 said *delete* the bespoke `CrashChoreography`/`CrashBreakup`
+trio. The user instead directed: *"don't delete the old crash animation — the breaking apart looked
+better and this could be a point where we can improve on the original if we have finished recreating it
+faithfully. Move those files into an extra branch."* So before any removal, branch
+**`bespoke-crash-animation`** was created at the pre-Wave-4 `main` tip (`0d00b79`), where the bespoke
+crash is fully wired as the default and `--data-crash` is the A/B toggle. The files were then removed
+from `main` — *moved* to the branch, not deleted — as the visual A/B reference and the raw material for a
+future "improve on the original" pass. Recorded as a feature-backlog item + a TUNE-list A/B pointer.
+
+**What landed on `main`.**
+- **Default flip.** Removed the `_dataCrash` field, the `--data-crash` arg (silently ignored now), and
+  every `if (_dataCrash)` / `if (!_dataCrash)` branch. `BuildFlightCrashRuntime` now runs for every
+  flown plane (gated only on the crash program/scene being available). `FlightController.Crash` plays
+  `player_crash_dirt` unconditionally when `CrashRuntime` is set; the bespoke `else` arm is gone.
+- **Removed the bespoke wiring.** Deleted `CrashChoreography.cs` + `CrashBreakup.cs`, the
+  `CrashEffect`/`Breakup`/`Choreography` fields, their `Respawn`/`Crash`/`_PhysicsProcess` calls, the
+  `crashEffects` `EffectSet.Load`, and the two per-player bespoke build blocks in `PlaneViewer`.
+- **Relocated the `Surface` enum.** It lived in the deleted `CrashChoreography.cs`; moved to the top of
+  `FlightController.cs` as a standalone `CrashSurface` enum (`ClassifySurface` still returns
+  `CrashSurface.Ground`, the seam kept real for M3's air/water variants).
+- **Scoped the session texture archive.** The `--data-crash` path had leaked it (a `using` skipped past
+  the build scope with nothing owning disposal). Now non-lab builds hand it to `_sessionTextures`, which
+  `ReturnToMenu` disposes on teardown (and the failed-build `catch` disposes) — a map reload drops the
+  previous archive instead of leaking it. The anim-lab path (lab-owned `labTextures`) is unchanged.
+
+**Verified.** A C1 nose-dive crash (`--hold=-1,0,0,1`, no flag) with `--debug-anim`: the log shows
+`data-crash: 6 effect template(s) + 9 wreck node(s) — crash runtime bound` built **by default**, the
+`CRASH into g27884/col` at 127 m/s triggers `player_crash_dirt` with all its effect defs retargeting
+onto `healthy`/`destroyed`, and the puffer count jumps 4→**9 active / 72 live particles** at crash time
+— proving the session-scoped archive stays open for lazy puffer baking. No disposal/leak/null-texture
+errors, clean exit; the rendered `--shots` burst shows the broken-apart wreck + fireball + "CRASHED" HUD.
+Build clean (0 warnings, 0 errors), which itself proves no dangling refs to the removed types.
+
+**Still owed (user-gated):** the A/B playtest of the data-driven crash across planes/chapters (the
+`bespoke-crash-animation` branch is the reference), and the `WreckMomentum` / `forward_rotation`-÷-run_time
+TUNE calls.
