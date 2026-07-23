@@ -4942,3 +4942,28 @@ names. No session/flight/freecam path touched (the dump quits before any world b
 architecture.md + CLAUDE.md module index (WeaponDefs), cli.md (`--dump-weapons`), plan B11 ticked.
 **B12–B20 unblocked. Next: B12 (`Loadout.cs`) — read `stock_loadouts.json`, resolve markers against
 a built plane, expose gun groups + hardpoints.**
+
+**M3 Wave B item B12 — the loadout reader + marker resolution (2026-07-24).** Landed
+`src/Flight/Loadout.cs` — placed in Flight, not Mech3 (it depends on `WeaponDefs`, so Mech3→Flight
+would invert the layering; A7's stale `src/Mech3/Loadout.cs` pointers in `stock_loadouts.json` and
+`loadouts.md` were corrected). Two layers: `StockLoadouts.Load` parses `CSVM/data/stock_loadouts.json`
+(default `res://data/`, deliberately not under `--data-root` — it is committed engine config, not
+extracted data) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
+each gun slot's authored markers to live muzzle `Node3D`s (by `cs_name` meta, as MarkerOverlay reads)
+and its caliber+ammo to a `WeaponDef` via `GunWeaponId` (`wep_{N+k}`), and each hardpoint to its
+`pylonN`, yielding `GunGroup`s (independent ammo counters seeded from `CLUSTER_SIZE`) and
+`Hardpoint`s (per-pylon `CLUSTER_SIZE`). Turret slots bind but carry `IsTurret` and are excluded from
+`FirableGuns` (inert in M3, decision 10). A missing marker throws a loud error naming plane/slot/
+marker — never a silent skip, since a silent one would fire a gun from nowhere. Verified with a new
+headless tool `--dump-loadout[=plane]` (builds each plane, binds, reports gun groups + hardpoints):
+**all 11 bind with every marker resolved.** The Balmoral reports **two separate .50 counters** (slot1
++ slot2 `wep_50`, 2000 each) plus its two inert turrets; the Bloodhawk's counters differ (`wep_40`
+2400 / `wep_30` 2800) and its **9 total HE rockets (3 pylons × 3) reproduce the A9 playtest**; the
+Kestrel's W1 resolves to the lone centreline `firepoint7`. The loud-error path was demonstrated with
+`--dump-loadout=Kestrel --loadout=pbloodhawk` (the Bloodhawk loadout wants `firepoint8`, absent on
+the 7-firepoint Kestrel) → `!! marker 'firepoint8' not found on the built plane`. `--loadout=<def>`
+overrides which def binds (its flight effect lands with B16). No session/flight/freecam path touched
+(the dump quits before any world builds). Docs: architecture.md + CLAUDE.md module index (Loadout),
+cli.md (`--dump-loadout`/`--loadout=`), loadouts.md pointer fixed, plan B12 ticked. **B16/B17/B18
+unblocked. Next: B13 (`Projectile.cs`) — a pooled projectile integrating VELOCITY/ACCELERATION/
+GRAVITY, expiring at RANGE.**

@@ -6,8 +6,10 @@ hand-authored config describing the original game's default weapon fit for the 1
 aircraft — the same category as this reference, **not a game asset** (so the no-assets rule does
 not apply; it is committed). It synthesises facts already decoded in [markers.md](markers.md)
 (mounts + the slot→firepoint binding rule) and [weapons.md](weapons.md) (the `wep_*` catalogue),
-and is the seed the flight engine's loadout reader (`src/Mech3/Loadout.cs`, M3 wave B item B12)
-will consume.
+and is the seed the flight engine's loadout reader (`src/Flight/Loadout.cs`, M3 wave B item B12)
+consumes: it resolves each slot's `markers` against a built plane and each `caliber`+`ammo` /
+`stock` id against `weapons.json`, exposing live gun groups (independent ammo counters) and
+hardpoints. Inspect the binding for any plane with `--dump-loadout`.
 
 The data is the user's stock table read off the original's Ammo Selection / configurator UI
 (delivered 2026-07-22), corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /

@@ -289,6 +289,18 @@ Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
 ⚠ `UnhandledKeys` is a tripwire: empty for this install (asserted by `--dump-weapons`); non-empty
   means the data grew a key `KnownKeys` hasn't learned — update the reader, don't ignore it.
 
+## src/Flight/Loadout.cs
+Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file (default
+`res://data/`) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
+each gun slot's markers to live muzzle `Node3D`s and its caliber+ammo to a `WeaponDef` (via
+`GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylon`, yielding `GunGroup`s (independent
+ammo counters from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert, M4).
+Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
+⚠ A missing marker is a LOUD throw naming plane/slot/marker — never a silent skip (a silent one
+  fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
+⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
+  (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
+
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals, the `engine_sound` def name with its

@@ -445,7 +445,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 ### Wave B — weapons core
 
 11. ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **landed** (`--dump-weapons` verifies)
-12. ☐ `Loadout.cs` — stock-loadout reader, slot model, marker resolution
+12. ☑ `Loadout.cs` — stock-loadout reader, slot model, marker resolution — **landed** (`--dump-loadout` verifies)
 13. ☐ `Projectile.cs` — spawn and integration
 14. ☐ `FLYOUT` model instancing — projectile visuals from the gamez prototypes
 15. ☐ Hit detection + surface classification for `IMPACT` variant selection
@@ -761,18 +761,26 @@ reader over a zrdr file. Parse the flat `BALLISTICS` alternating list; expose ba
 ammo, the class flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TARGETABLE`/…), and the `FIRE`/`FLYOUT`/
 `IMPACT` bindings with `IMPACT` keyed by surface class. Resolve `DESC` through `Messages`.
 
-### B12 ☐ `Loadout.cs` — loadout reader, slot model, marker resolution
+### B12 ☑ `Loadout.cs` — loadout reader, slot model, marker resolution — **LANDED**
 
-**Goal.** Turn A7's file plus a built plane into a live set of gun groups and hardpoints with
-resolved muzzle transforms.
+**Landed.** `src/Flight/Loadout.cs` (in Flight, not Mech3 — it depends on `WeaponDefs`, so that
+keeps the layering; A7's stale `src/Mech3/` pointers were corrected). Two layers: `StockLoadouts.Load`
+parses `stock_loadouts.json` (default `res://data/`, not `--data-root` — it is committed engine
+config) into `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves each gun slot's
+markers to live muzzle `Node3D`s (by `cs_name`, like MarkerOverlay) and its caliber+ammo to a
+`WeaponDef` (`GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylonN`, yielding `GunGroup`s
+(independent ammo from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert).
+`--loadout=<def>` overrides which def binds.
 
-**Approach.** Read the loadout file, resolve each slot's `markers` against the built plane's
-node tree, and expose gun groups (with **independent ammo counters** — confirmed by playtest)
-and hardpoints. Turret slots parse but are constructed inert. `--loadout=` overrides the plane's
-stock entry for testing.
-
-**Verify.** All 11 planes resolve every named marker; a missing marker is a loud error, not a
-silent skip; the Balmoral reports two separate .50 counters.
+**Verified** with a new headless tool `--dump-loadout[=plane]` (builds each plane, binds, reports):
+**all 11 bind with every marker resolved.** The Balmoral reports **two separate .50 counters** (slot1
++ slot2 `wep_50`, 2000 each) plus its two inert turrets; the Bloodhawk's counters differ (`wep_40`
+2400 / `wep_30` 2800) and its **9 total HE rockets (3×3) match the A9 playtest**; the Kestrel's W1
+resolves to the lone centreline `firepoint7`. The missing-marker path is a **loud throw**, not a
+silent skip — demonstrated with `--dump-loadout=Kestrel --loadout=pbloodhawk` (the Bloodhawk
+loadout wants `firepoint8`, which the 7-firepoint Kestrel lacks): `!! marker 'firepoint8' not found
+on the built plane`. **B16/B17/B18 unblocked.** The `--loadout=` flight-side effect lands with the
+firing code (B16).
 
 ### B13 ☐ `Projectile.cs` — spawn and integration
 

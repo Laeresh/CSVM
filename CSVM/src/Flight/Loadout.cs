@@ -1,0 +1,287 @@
+using System;
+using System.Collections.Generic;
+using System.IO;
+using System.Text.Json;
+using CSVM.Mech3;
+using Godot;
+
+namespace CSVM.Flight;
+
+/// <summary>The parsed <c>CSVM/data/stock_loadouts.json</c> — the 11 aircraft's default weapon
+/// fit, hand-authored config (see <see href="../../docs/formats/loadouts.md">loadouts.md</see>).
+/// Pure data: no plane binding, no weapon resolution — <see cref="Loadout.Bind"/> does that
+/// against a built plane.</summary>
+public sealed class StockLoadouts
+{
+    // ammo name -> the offset into a caliber's four consecutive wep ids (slug X0 .. magnesium X3).
+    private static readonly Dictionary<string, int> AmmoIndex = new(StringComparer.OrdinalIgnoreCase)
+    {
+        ["slug"] = 0, ["dumdum"] = 1, ["ap"] = 2, ["magnesium"] = 3,
+    };
+
+    private readonly Dictionary<string, LoadoutDef> _byDef = new(StringComparer.OrdinalIgnoreCase);
+
+    public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
+
+    /// <summary>The def's stock loadout, or null when the plane isn't in the file.</summary>
+    public LoadoutDef? For(string defName) => _byDef.TryGetValue(defName, out var d) ? d : null;
+
+    /// <summary>A gun's stock weapon id: caliber N + ammo k → <c>wep_{N+k}</c> (the wep_30..73
+    /// player matrix, each caliber's four ammo types consecutive). Stock ammo <c>slug</c> → <c>wep_N</c>.</summary>
+    public static string GunWeaponId(int caliber, string ammo) =>
+        $"wep_{caliber + (AmmoIndex.TryGetValue(ammo, out var k) ? k : 0)}";
+
+    /// <summary>The committed config's default location (res://), independent of <c>--data-root</c>:
+    /// it is engine config, not extracted game data.</summary>
+    public static string DefaultPath => ProjectSettings.GlobalizePath("res://data/stock_loadouts.json");
+
+    /// <summary>Loads the stock-loadout file (defaults to <see cref="DefaultPath"/>).</summary>
+    public static StockLoadouts Load(string? path = null)
+    {
+        path ??= DefaultPath;
+        var loadouts = new StockLoadouts();
+        if (!File.Exists(path))
+        {
+            GD.PushWarning($"stock loadouts: file not found, no loadouts loaded: {path}");
+            return loadouts;
+        }
+        using var doc = JsonDocument.Parse(File.ReadAllBytes(path));
+        if (!doc.RootElement.TryGetProperty("planes", out var planes) || planes.ValueKind != JsonValueKind.Object)
+        {
+            throw new InvalidDataException($"stock loadouts: no 'planes' object in {path}");
+        }
+        foreach (var plane in planes.EnumerateObject())
+        {
+            var body = plane.Value;
+            var def = new LoadoutDef
+            {
+                Def = plane.Name,
+                Model = Str(body, "model"),
+                Display = Str(body, "display"),
+            };
+            if (body.TryGetProperty("guns", out var guns) && guns.ValueKind == JsonValueKind.Array)
+            {
+                foreach (var g in guns.EnumerateArray())
+                {
+                    var spec = new GunSpec
+                    {
+                        Slot = Int(g, "slot"),
+                        Mount = Str(g, "mount"),
+                        Caliber = Int(g, "caliber"),
+                        Ammo = Str(g, "ammo"),
+                        Turret = g.TryGetProperty("turret", out var t) && t.ValueKind == JsonValueKind.True,
+                    };
+                    if (g.TryGetProperty("markers", out var markers) && markers.ValueKind == JsonValueKind.Array)
+                    {
+                        foreach (var m in markers.EnumerateArray())
+                        {
+                            if (m.GetString() is { } name)
+                            {
+                                spec.Markers.Add(name);
+                            }
+                        }
+                    }
+                    def.Guns.Add(spec);
+                }
+            }
+            if (body.TryGetProperty("hardpoints", out var hp) && hp.ValueKind == JsonValueKind.Object)
+            {
+                def.Hardpoints = new HardpointSpec { Count = Int(hp, "count"), Stock = Str(hp, "stock") };
+            }
+            loadouts._byDef[def.Def] = def;
+        }
+        return loadouts;
+    }
+
+    private static string Str(JsonElement e, string key) =>
+        e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
+
+    private static int Int(JsonElement e, string key) =>
+        e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.Number ? v.GetInt32() : 0;
+}
+
+/// <summary>One plane's stock loadout, as authored — before binding to a model.</summary>
+public sealed class LoadoutDef
+{
+    public string Def = "";       // "pbloodhawk"
+    public string Model = "";     // "player_bhawk"
+    public string Display = "";
+    public List<GunSpec> Guns = new();
+    public HardpointSpec? Hardpoints;
+}
+
+/// <summary>One authored gun slot (W1–W4).</summary>
+public sealed class GunSpec
+{
+    public int Slot;
+    public string Mount = "";
+    public int Caliber;
+    public string Ammo = "slug";
+    public List<string> Markers = new();
+    public bool Turret;           // an AI turret slot — parsed but built inert (M4)
+}
+
+/// <summary>The authored hardpoint block: pylon count + the stock ordnance id.</summary>
+public sealed class HardpointSpec
+{
+    public int Count;
+    public string Stock = "";
+}
+
+/// <summary>
+/// A plane's stock loadout <b>bound to its built model</b>: each gun group's authored markers
+/// resolved to live muzzle <see cref="Node3D"/>s and its caliber+ammo resolved to a
+/// <see cref="WeaponDef"/>, each hardpoint bound to its pylon node — a live set of gun groups and
+/// hardpoints with independent ammo counters, ready for the firing code (B16/B17) to draw from.
+///
+/// <para>Marker resolution is against the built tree's <c>cs_name</c> meta (as
+/// <see cref="UI.MarkerOverlay"/> reads it). A named marker that is absent is a <b>loud error</b>
+/// — a thrown exception naming the plane, slot and marker — never a silent skip, since a wrong
+/// binding would silently fire a gun from nowhere.</para>
+/// </summary>
+public sealed class Loadout
+{
+    public LoadoutDef Def { get; }
+    public IReadOnlyList<GunGroup> Guns { get; }
+    public IReadOnlyList<Hardpoint> Hardpoints { get; }
+
+    private Loadout(LoadoutDef def, List<GunGroup> guns, List<Hardpoint> hardpoints)
+    {
+        Def = def;
+        Guns = guns;
+        Hardpoints = hardpoints;
+    }
+
+    /// <summary>The gun groups the player can actually fire (turret slots excluded — inert in M3).</summary>
+    public IEnumerable<GunGroup> FirableGuns
+    {
+        get
+        {
+            foreach (var g in Guns)
+            {
+                if (!g.IsTurret)
+                {
+                    yield return g;
+                }
+            }
+        }
+    }
+
+    /// <summary>Binds an authored loadout to a built plane and the weapon catalogue. Throws if a
+    /// named marker is absent on the model or a resolved <c>wep_*</c> id is missing.</summary>
+    public static Loadout Bind(LoadoutDef def, Node3D plane, WeaponDefs weapons)
+    {
+        var markerNodes = CollectMarkers(plane);
+
+        var guns = new List<GunGroup>();
+        foreach (var spec in def.Guns)
+        {
+            var weaponId = StockLoadouts.GunWeaponId(spec.Caliber, spec.Ammo);
+            var weapon = weapons.Get(weaponId)
+                ?? throw new InvalidOperationException(
+                    $"loadout {def.Def} slot {spec.Slot} ({spec.Mount}): weapon '{weaponId}' " +
+                    $"(caliber {spec.Caliber} + {spec.Ammo}) not in weapons.json");
+            var muzzles = new List<Node3D>();
+            foreach (var name in spec.Markers)
+            {
+                muzzles.Add(Resolve(markerNodes, name, def, $"slot {spec.Slot} ({spec.Mount})"));
+            }
+            int capacity = weapon.ClusterSize ?? 0;
+            guns.Add(new GunGroup
+            {
+                Slot = spec.Slot,
+                Mount = spec.Mount,
+                Weapon = weapon,
+                Muzzles = muzzles,
+                Capacity = capacity,
+                Ammo = capacity,
+                IsTurret = spec.Turret,
+            });
+        }
+
+        var hardpoints = new List<Hardpoint>();
+        if (def.Hardpoints is { } hp && hp.Count > 0)
+        {
+            var weapon = weapons.Get(hp.Stock)
+                ?? throw new InvalidOperationException(
+                    $"loadout {def.Def}: hardpoint stock '{hp.Stock}' not in weapons.json");
+            // Pylons bind sequentially: count N -> pylon1..pylonN (markers.md).
+            int perPylon = weapon.ClusterSize ?? 0;
+            for (int i = 1; i <= hp.Count; i++)
+            {
+                var pylon = Resolve(markerNodes, $"pylon{i}", def, "hardpoint");
+                hardpoints.Add(new Hardpoint
+                {
+                    Index = i,
+                    Pylon = pylon,
+                    Weapon = weapon,
+                    Capacity = perPylon,
+                    Ammo = perPylon,
+                });
+            }
+        }
+
+        return new Loadout(def, guns, hardpoints);
+    }
+
+    private static Node3D Resolve(Dictionary<string, Node3D> markers, string name, LoadoutDef def, string where)
+    {
+        if (markers.TryGetValue(name, out var node))
+        {
+            return node;
+        }
+        throw new InvalidOperationException(
+            $"loadout {def.Def} ({def.Model}) {where}: marker '{name}' not found on the built plane");
+    }
+
+    /// <summary>Builds a <c>cs_name → Node3D</c> map of the plane's marker nodes (firepoints,
+    /// pylons, target) from the built tree — the same <c>cs_name</c> meta SceneBuilder stamps.</summary>
+    private static Dictionary<string, Node3D> CollectMarkers(Node3D plane)
+    {
+        var map = new Dictionary<string, Node3D>(StringComparer.OrdinalIgnoreCase);
+        void Walk(Node node)
+        {
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+                    && MarkerRig.Classify(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), out _, out _))
+                {
+                    // First-wins: marker names are unique per plane.
+                    map.TryAdd(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), n3d);
+                }
+                Walk(child);
+            }
+        }
+        Walk(plane);
+        return map;
+    }
+}
+
+/// <summary>One live gun group: its resolved weapon, muzzle nodes, and an <b>independent</b> ammo
+/// counter (the Balmoral's two .50 groups each carry their own — playtest-confirmed). Turret
+/// groups are bound but inert in M3 (<see cref="IsTurret"/>).</summary>
+public sealed class GunGroup
+{
+    public int Slot;
+    public string Mount = "";
+    public WeaponDef Weapon = null!;
+    public IReadOnlyList<Node3D> Muzzles = Array.Empty<Node3D>();
+    public int Capacity;          // CLUSTER_SIZE — the full per-group load
+    public int Ammo;              // mutable remaining rounds
+    public bool IsTurret;
+
+    public bool Empty => Ammo <= 0;
+}
+
+/// <summary>One live hardpoint (pylon): its resolved ordnance weapon and a per-pylon ammo counter
+/// (rocket capacity = pylon count × CLUSTER_SIZE, per pylon — A9).</summary>
+public sealed class Hardpoint
+{
+    public int Index;             // pylon number, 1-based
+    public Node3D Pylon = null!;
+    public WeaponDef Weapon = null!;
+    public int Capacity;          // CLUSTER_SIZE per pylon
+    public int Ammo;
+
+    public bool Empty => Ammo <= 0;
+}

@@ -45,6 +45,11 @@ namespace CSVM;
 ///                                per def with ballistics, flags and FIRE/FLYOUT/IMPACT bindings
 ///                                — to stdout and ./.scratch/weapons_dump.txt, then quit; a clean
 ///                                run reports no unhandled keys. Optional filter by id / NAME
+///   --dump-loadout[=plane]       build each plane and bind its stock loadout (Loadout), printing
+///                                the resolved gun groups + hardpoints to ./.scratch/loadout_dump.txt,
+///                                then quit; a missing marker prints a loud error. Filter by plane
+///   --loadout=<def>              bind this loadout def instead of the plane's own (testing override;
+///                                exercises the missing-marker error with --dump-loadout)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -218,6 +223,9 @@ public partial class PlaneViewer : Node3D
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
     private bool _dumpWeapons;         // --dump-weapons[=wep_NN]: print the typed weapons.json table and quit
     private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
+    private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
+    private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
+    private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -414,6 +422,9 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
             else if (arg == "--dump-weapons") _dumpWeapons = true;
             else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
+            else if (arg == "--dump-loadout") _dumpLoadout = true;
+            else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
+            else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -531,6 +542,14 @@ public partial class PlaneViewer : Node3D
         if (_dumpWeapons)
         {
             DumpWeapons();
+            GetTree().Quit();
+            return;
+        }
+        // --dump-loadout: bind each plane's stock loadout to its built model and report the
+        // resolved gun groups + hardpoints (B12) — a missing marker is a loud error here.
+        if (_dumpLoadout)
+        {
+            DumpLoadout();
             GetTree().Quit();
             return;
         }
@@ -2288,6 +2307,118 @@ public partial class PlaneViewer : Node3D
         GD.Print(unhandledTotal == 0
             ? $"weapons dump: {shown} entr(y/ies), NO unhandled keys → ./.scratch/weapons_dump.txt"
             : $"weapons dump: {shown} entr(y/ies), {unhandledTotal} UNHANDLED key(s) — see the !! lines above");
+    }
+
+    /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
+    /// model and bind the stock loadout (<see cref="Flight.Loadout"/>, B12), reporting the resolved
+    /// gun groups (mount, weapon, per-group ammo, muzzle nodes) and hardpoints — or the loud error
+    /// if a marker doesn't resolve. Writes to stdout and <c>./.scratch/loadout_dump.txt</c>, then
+    /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
+    /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
+    /// the missing-marker error fires). An optional value filters by def / model / display.</summary>
+    private void DumpLoadout()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        Flight.StockLoadouts stock;
+        Flight.WeaponDefs weapons;
+        GameZ planesGamez;
+        TextureArchive textures;
+        try
+        {
+            stock = Flight.StockLoadouts.Load();
+            weapons = Flight.WeaponDefs.Load(_zrdrPath, Messages.Load(_messagesPath));
+            planesGamez = GameZ.Load(_planesGamezPath);
+            // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
+            textures = new TextureArchive(SessionPaths.ChapterTextures(_dataRoot, "C1"));
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"--dump-loadout: could not load inputs: {e.Message}");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Stock loadouts bound to models — CSVM/data/stock_loadouts.json");
+        if (_loadoutOverride != null)
+        {
+            sb.AppendLine($"# --loadout override: binding every plane to '{_loadoutOverride}'");
+        }
+        sb.AppendLine();
+
+        int ok = 0, failed = 0;
+        using (textures)
+        {
+            foreach (var def in stock.All.Values)
+            {
+                if (_dumpLoadoutFilter.Length > 0
+                    && !def.Def.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase)
+                    && !def.Model.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase)
+                    && !def.Display.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var bindDef = _loadoutOverride != null ? stock.For(_loadoutOverride) : def;
+                sb.Append($"=== {def.Display} ({def.Def} / {def.Model}) ===");
+                if (bindDef == null)
+                {
+                    sb.AppendLine($"\n  !! --loadout='{_loadoutOverride}' is not a known loadout def");
+                    sb.AppendLine();
+                    failed++;
+                    continue;
+                }
+                Node3D? plane = null;
+                try
+                {
+                    plane = new PlaneBuilder(planesGamez, textures).Build(def.Model);
+                    var loadout = Flight.Loadout.Bind(bindDef, plane, weapons);
+                    sb.Append("\n  guns:");
+                    foreach (var g in loadout.Guns)
+                    {
+                        var names = new List<string>();
+                        foreach (var m in g.Muzzles)
+                        {
+                            names.Add(m.HasMeta(AnimRuntime.NameMeta) ? m.GetMeta(AnimRuntime.NameMeta).AsString() : m.Name);
+                        }
+                        sb.Append($"\n    slot{g.Slot} {g.Mount,-22} {g.Weapon.Id} ({g.Weapon.Name})"
+                                  + $" ammo {g.Ammo}{(g.IsTurret ? "  [TURRET, inert]" : "")}"
+                                  + $"  muzzles: {string.Join(", ", names)}");
+                    }
+                    if (loadout.Hardpoints.Count > 0)
+                    {
+                        var hp = loadout.Hardpoints[0];
+                        int total = 0;
+                        foreach (var h in loadout.Hardpoints) { total += h.Capacity; }
+                        sb.Append($"\n  hardpoints: {loadout.Hardpoints.Count} x {hp.Weapon.Id} ({hp.Weapon.Name}),"
+                                  + $" {hp.Capacity} per pylon = {total} total  (pylon1..pylon{loadout.Hardpoints.Count})");
+                    }
+                    else
+                    {
+                        sb.Append("\n  hardpoints: none");
+                    }
+                    sb.AppendLine();
+                    ok++;
+                }
+                catch (Exception e)
+                {
+                    sb.AppendLine($"\n  !! {e.Message}");
+                    failed++;
+                }
+                finally
+                {
+                    plane?.Free();
+                }
+                sb.AppendLine();
+            }
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "loadout_dump.txt"), text);
+        GD.Print(failed == 0
+            ? $"loadout dump: {ok} plane(s) bound, every marker resolved → ./.scratch/loadout_dump.txt"
+            : $"loadout dump: {ok} ok, {failed} FAILED — see the !! lines above");
     }
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";
