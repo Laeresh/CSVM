@@ -125,9 +125,23 @@ name for now (renaming it is the future split's business).
   (per-view horizon/weather/edge/unplaced stay in PlaneViewer; `KeepArchivesOpen` opt-out wired for the
   lab; crash-effects load left in PlaneViewer so no Mech3→Flight dep). Plane-viewer md5 unchanged + the
   full `--fly` world boot census byte-identical HEAD-vs-after on **both C1 and C5**.
-  **✅ Wave 1 (the PlaneViewer split, A1-A3) COMPLETE. Wave 2 (additive AnimRuntime capabilities) next.**
+  **✅ Wave 1 (the PlaneViewer split, A1-A3) COMPLETE.**
 - **Wave 2 — runtime capabilities** (B1-B5). Additive, defaults = live behavior; world regression
   must be unchanged.
+  **✅ Wave 2 landed 2026-07-23** (`src/Mech3/AnimRuntime.cs` only). B1 `_Process` body → `public
+  void Advance(float dt)` (`_Process` delegates); B2 `AutoStart` flag gating passes 2/3 + idempotent
+  `StartAmbient()` (extracted `RunAmbientPasses`); B3 `Seed` init-property on `_rng` (default
+  unseeded); B4 null-by-default hooks `OnEventDispatched` (record struct `EventDispatch`, raised in
+  the sequence runner) + `OnInstanceStarted/Finished`; B5 `Stop` now tears down the stopped def's
+  motions/puffers/lights/sounds via `TearDownResourcesOf` (motions/puffers owner-tagged by
+  `(def, anchor)`; lights/sounds by anchor). **The B5 trap:** `Start`'s own restart must NOT tear
+  down — it keeps the resources for seamless re-assertion (C1 hangar-door handoff, C5 crane/spark
+  restart), so it calls a private `RemoveInstances(tearDown:false)` and only explicit Stop
+  (STOP_ANIMATION / debugger / crash respawn) tears down. **Verified:** C1 & C5 boot census
+  byte-identical HEAD-vs-after, plane-viewer md5 unchanged, all 8 chapters no unexplained boot
+  change; and flipped on in a throwaway — `AutoStart=false` → "0 ON_STARTUP + 0 start anims" with
+  passes 0/1/4 still run, `StartAmbient()` reaches the exact normal state, hooks fire 1330×
+  balanced. See `docs/HISTORY.md`.
 - **Wave 3 — lab MVP** (C). Quiet stage, transport, fixed dt + seed, `--play-anim`, auto-frame.
   **No timeline yet.** Verified by playing known-good world defs (see Verification).
 - **Wave 4 — picker + timeline** (D), fed by the B4 hooks.

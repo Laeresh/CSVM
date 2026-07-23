@@ -4401,3 +4401,50 @@ status" down to its two live facts (the vetoable pad-read-on-focus gate, the owe
 blocker) — every deleted item has a dated entry here, and the opaque-sprite-preamble trap lives in
 architecture.md's SceneBuilder bullet; trimmed the M3 research detail (recorded in the plan doc);
 merged the empty "Known issues" stub into the backlog pointer. CLAUDE.md → 25.9 KB.
+
+**Animation debugger Wave 2 — additive `AnimRuntime` capabilities (2026-07-23):** the five runtime
+hooks the `--anim-lab` mode drives, all additive with defaults that preserve live behavior, landed
+in `src/Mech3/AnimRuntime.cs` **only** (`+241/-53`; the WorldSession throwaway probe reverted to a
+zero-line diff). **B1 manual advance:** the `_Process` body moved to `public void Advance(float dt)`
+and `_Process` delegates, so the lab can `SetProcess(false)` and feed a fixed-dt clock through the
+**same code path** the game uses. **B2 quiet stage:** an `AutoStart` flag (default true) gates
+bootstrap passes 2 (ON_STARTUP) and 3 (startanims), which were extracted verbatim into
+`RunAmbientPasses()`; when false, passes 0/1/4 still run (mission setup, reset states, the safety
+net) so the stage is fully *set up* but *still*, and an idempotent `StartAmbient()` runs the deferred
+passes on demand. **B3 seedable RNG:** `_rng` gained a `Seed` init-property (default unseeded = game
+unchanged) — the constraint the crash plan's Layer-1 handlers must route their randomness through.
+**B4 dispatch observability:** three null-by-default hooks — `OnEventDispatched` (a public
+`readonly record struct EventDispatch{Def,Anchor,Sequence,EventIndex,EventKind,EventName}`, raised in
+`SequenceRunner.Advance` right after a timed dispatch) plus `OnInstanceStarted`/`OnInstanceFinished`
+— so Wave 4's timeline reads fired marks straight from the runtime instead of parsing `--debug-anim`
+text. The `?.Invoke(new EventDispatch(…))` short-circuits argument construction when the hook is null,
+so it is zero cost on the hot dispatch path. **B5 `Stop` cleanup:** `Stop` now tears down the stopped
+def's live motions/puffers/lights/sounds via `TearDownResourcesOf` — motions and puffers attributed
+to the exact `(def, anchor)` that registered them (a new `Owner` on `IAnimMotion`, set in
+`AddMotion`; a `(Puffer, Def, Anchor)` value in `_puffers`), lights and sounds cleared by anchor
+(their `(name, anchor)` key already collapses cross-def name collisions). **The B5 trap, found by the
+regression, not by reading:** `Start`'s *own* restart (`Stop` at its top) must **not** tear down —
+the whole codebase relies on resources *surviving* an instance swap so re-assertion is a seamless
+no-op (motions replaced by target in `AddMotion`; puffers/lights/sounds short-circuit on
+re-assertion). Tearing down there broke that and rebuilt every resource. It surfaced as a
+deterministic **C5 `+2 state ops`** (4146→4148, and C5 rolls no `RandomWeight`, so not dice noise);
+a guarded teardown probe traced it to C5 restarting `m_crane_go` and `please_go_spark` at boot. The
+fix routes `Start`'s restart through a private `RemoveInstances(tearDown:false)`, leaving only
+explicit `Stop` (STOP_ANIMATION / the debugger / the crash respawn) to tear down. A second, subtler
+bug the throwaway probe's accounting caught: the Start-internal finish notified `OnInstanceFinished`
+even when `_instances.Remove(inst)` no-oped (a t=0 STOP_ANIMATION had already removed it), so
+`started − finished ≠ live` by one; gating the notify on the actual removal (`inst.Finished &&
+_instances.Remove(inst)`) made the hook accounting exact. **Verification (rule 5 both directions):**
+*inert with defaults* — C1 and C5 boot census **byte-identical** HEAD-vs-after (C1's `hangar3_doors`
+StopAnimation *does* now tear down 3 door motions, but `mp_hangar3_open` re-adds them, so the count
+nets out — the documented "later-registration-wins" door handoff, still correct), the static
+plane-viewer md5 unchanged (`5832b6f9…`), and all 8 chapters show **no real boot teardown** except
+that C1 handoff; *able to change* — a throwaway `AutoStart=false` gives "0 ON_STARTUP + 0 start anims
+running, 0 live instance(s)" with reset states (3511 ops) and the safety net (31 hidden) still run,
+`StartAmbient()` then reaches the **exact** normal live state (616 ON_STARTUP + 5 startanims, 615
+instances, 39 motions), and the hooks fire 1330 dispatches / 623 starts / 8 finishes with
+`623 − 8 = 615` balancing the live count. The lone stderr "error" is the pre-existing `snd_police`
+"requested after the world build" `GD.PushWarning` (present in the HEAD baseline too, under `--mute`);
+the only backtrace difference is the new `Advance` frame from B1. Build clean, 0 warnings. Evidence:
+`.scratch/wave2/`. **Wave 2 complete; Wave 3 (the lab MVP — quiet stage, transport, fixed dt + seed,
+`--play-anim`, auto-frame) is next.**

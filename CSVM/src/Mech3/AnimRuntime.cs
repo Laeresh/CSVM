@@ -108,9 +108,37 @@ public sealed partial class AnimRuntime : Node
     /// exists yet (backlog), so false.</summary>
     public bool FirstPerson;
 
-    // RANDOM_WEIGHT dice. A field rather than GD.Randf() so a seed can be pinned later if a
-    // reproducible --debug-anim run is ever wanted.
-    private readonly Random _rng = new();
+    /// <summary>Whether <see cref="Bootstrap"/> runs the ambient-playback passes — pass 2
+    /// (<c>ON_STARTUP</c> definitions) and pass 3 (the mission's startanims). True in every
+    /// game/viewer/flight session: the world plays itself. The animation debugger sets it false
+    /// for a <b>quiet stage</b> — passes 0 (mission setup), 1 (reset states) and 4 (the safety
+    /// net) still run, so every base state and mission-entity setup is applied, but nothing starts
+    /// animating until <see cref="StartAmbient"/> is called (the lab's ambient toggle). Set before
+    /// <see cref="Bind"/>.</summary>
+    public bool AutoStart = true;
+
+    // Whether the ambient passes have already run — set when Bootstrap runs them inline
+    // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
+    // and a normal bootstrap's ambient toggle is a no-op rather than a second bootstrap.
+    private bool _ambientStarted;
+
+    // RANDOM_WEIGHT dice. A field rather than GD.Randf() so a seed can be pinned — the animation
+    // debugger sets one (see Seed) for a reproducible fixed-dt run; the game leaves it unseeded
+    // and so is unchanged. Any future WeaponHit/crash handler's randomness must route through this
+    // same _rng, or a lab restart stops being identical the day the handler lands.
+    private Random _rng = new();
+
+    /// <summary>Pins the runtime's RNG for a reproducible run (the debugger's deterministic
+    /// clock). Null — the default — leaves it unseeded, so the game is unchanged. Set at
+    /// construction through the object initializer, before <see cref="Bind"/>.</summary>
+    public int? Seed
+    {
+        init
+        {
+            if (value is { } s)
+                _rng = new Random(s);
+        }
+    }
 
     /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),
     /// run as bootstrap pass 0. It is what decides which world entities this mission shows —
@@ -148,40 +176,18 @@ public sealed partial class AnimRuntime : Node
         }
         long resetMs = sw.ElapsedMilliseconds;
 
-        // Pass 2: ON_STARTUP definitions run for real (zepstate's roster is instantaneous
-        // ObjectActiveStates, so this still settles on frame 0 for those).
+        // Passes 2 and 3 START the world animating (ON_STARTUP defs, then the mission's
+        // startanims). A quiet-stage bootstrap (AutoStart=false, the debugger) skips them and runs
+        // them later through StartAmbient; the passes around them still run, so the stage is fully
+        // set up, just still. When AutoStart is true this is byte-for-byte the inline passes 2/3,
+        // in the same place, before the pass-4 safety net.
         int startupRun = 0;
-        foreach (var def in program.Defs.Where(d => d.OnStartup))
-            foreach (var anchor in Anchors(def))
-            {
-                Start(def, anchor);
-                startupRun++;
-            }
-
-        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order.
         var ran = new List<string>();
         var missing = new List<string>();
-        foreach (var animName in program.StartAnims)
+        if (AutoStart)
         {
-            var matches = program.ByAnimName(animName);
-            if (matches.Count == 0)
-            {
-                missing.Add(animName);
-                continue;
-            }
-            ran.Add(animName);
-            foreach (var def in matches)
-            {
-                var anchors = Anchors(def);
-                if (anchors.Count == 0)
-                    anchors.Add(null); // global resolution: the def names world nodes directly
-                foreach (var anchor in anchors)
-                {
-                    if (def.ResetState != null)
-                        ApplyInstant(def.ResetState.Events, def, anchor);
-                    Start(def, anchor);
-                }
-            }
+            _ambientStarted = true;
+            (startupRun, ran, missing) = RunAmbientPasses();
         }
 
         // Pass 4: safety net for destroyed-variant subtrees no definition covered.
@@ -230,6 +236,68 @@ public sealed partial class AnimRuntime : Node
         ReportUnhandled();
     }
 
+    /// <summary>Runs the two ambient-playback bootstrap passes — pass 2 (ACTIVATION ON_STARTUP
+    /// definitions) and pass 3 (the mission's startanims, by ANIMATION_NAME, in list order) —
+    /// and returns their tallies for the census. Extracted verbatim from <see cref="Bootstrap"/>
+    /// so a quiet-stage bootstrap can defer them to <see cref="StartAmbient"/>.</summary>
+    private (int StartupRun, List<string> Ran, List<string> Missing) RunAmbientPasses()
+    {
+        // Pass 2: ON_STARTUP definitions run for real (zepstate's roster is instantaneous
+        // ObjectActiveStates, so this still settles on frame 0 for those).
+        int startupRun = 0;
+        foreach (var def in _program.Defs.Where(d => d.OnStartup))
+            foreach (var anchor in Anchors(def))
+            {
+                Start(def, anchor);
+                startupRun++;
+            }
+
+        // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order.
+        var ran = new List<string>();
+        var missing = new List<string>();
+        foreach (var animName in _program.StartAnims)
+        {
+            var matches = _program.ByAnimName(animName);
+            if (matches.Count == 0)
+            {
+                missing.Add(animName);
+                continue;
+            }
+            ran.Add(animName);
+            foreach (var def in matches)
+            {
+                var anchors = Anchors(def);
+                if (anchors.Count == 0)
+                    anchors.Add(null); // global resolution: the def names world nodes directly
+                foreach (var anchor in anchors)
+                {
+                    if (def.ResetState != null)
+                        ApplyInstant(def.ResetState.Events, def, anchor);
+                    Start(def, anchor);
+                }
+            }
+        }
+        return (startupRun, ran, missing);
+    }
+
+    /// <summary>Runs the ambient-playback passes a quiet-stage bootstrap (<see cref="AutoStart"/>
+    /// = false) skipped: the ON_STARTUP definitions and the mission's startanims begin playing.
+    /// Idempotent — a second call is a no-op, and it is already a no-op after a normal
+    /// (AutoStart=true) bootstrap — so the debugger can bind it to a toggle without stacking
+    /// instances.</summary>
+    public void StartAmbient()
+    {
+        if (_ambientStarted)
+            return;
+        _ambientStarted = true;
+        var (startupRun, ran, missing) = RunAmbientPasses();
+        GD.Print($"anim: ambient start — {startupRun} ON_STARTUP + {ran.Count} start anims running, "
+                 + $"{_instances.Count} live instance(s), {_motions.Count} live motion(s)");
+        if (ran.Count > 0 || missing.Count > 0)
+            GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
+                     (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
+    }
+
     private readonly Dictionary<int, Node3D> _byIndex = new();
 
     private void IndexWorld(Node3D worldRoot)
@@ -247,11 +315,48 @@ public sealed partial class AnimRuntime : Node
         Walk(worldRoot);
     }
 
+    // ---- observability (the animation debugger's timeline; null = zero cost in the game) ----
+
+    /// <summary>One runtime event dispatch, reported to <see cref="OnEventDispatched"/>. Carries
+    /// what the debugger's timeline needs to stamp a "fired" mark on the right authored block: the
+    /// running definition and its anchor (the instance identity), the sequence lane, the event's
+    /// index within that sequence, and its kind and target name. Raised only for real timed
+    /// dispatches from a sequence runner, never for the instant RESET_STATE posing — so a mark
+    /// always corresponds to something the clock actually reached.</summary>
+    public readonly record struct EventDispatch(
+        AnimDefinition Def, Node3D? Anchor, string Sequence, int EventIndex,
+        string EventKind, string? EventName);
+
+    /// <summary>Raised as each sequence event fires at runtime. Null by default → zero cost in the
+    /// game; the debugger sets it to feed its timeline's fired marks straight from the runtime,
+    /// rather than parsing --debug-anim log text.</summary>
+    public Action<EventDispatch>? OnEventDispatched;
+
+    /// <summary>Raised when a definition becomes a live instance and when that instance finishes,
+    /// each carrying the (def, anchor) identity. Null by default → zero cost in the game; the
+    /// debugger uses the pair to place a CALL_ANIMATION child def's timeline lane group at the
+    /// playhead time it began, and to drop it when it ends.</summary>
+    public Action<AnimDefinition, Node3D?>? OnInstanceStarted;
+    public Action<AnimDefinition, Node3D?>? OnInstanceFinished;
+
+    // Best-effort target/name an event carries, for the timeline mark's label — the different
+    // event kinds spell it under different keys. Nothing load-bearing hangs off it; the event's
+    // index within its sequence is what identifies the authored block.
+    private static string? EventDisplayName(AnimEvent ev) =>
+        ev.Data.Str("name") ?? ev.Data.Str("node") ?? ev.Data.Str("child");
+
     // ---- live execution ----
 
-    public override void _Process(double delta)
+    public override void _Process(double delta) => Advance((float)delta);
+
+    /// <summary>Advances the whole runtime by <paramref name="dt"/> seconds: motions, puffers,
+    /// lights and sounds, then every live instance's sequences. <see cref="_Process"/> calls this
+    /// once a frame with the real frame delta; the animation debugger disables <c>_Process</c>
+    /// (<see cref="Node.SetProcess"/>(false)) and drives this itself off a fixed-dt clock — pause =
+    /// don't call, step = one fixed call, slow-mo = a scaled accumulator. Same classes and same
+    /// code path either way, so the game's behaviour is untouched.</summary>
+    public void Advance(float dt)
     {
-        float dt = (float)delta;
         // Motions advance ONCE per frame, here — not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4× speed.
         TickMotions(dt);
@@ -266,7 +371,10 @@ public sealed partial class AnimRuntime : Node
             var inst = _instances[i];
             inst.Advance(this, dt);
             if (inst.Finished)
+            {
                 _instances.RemoveAt(i);
+                OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+            }
         }
     }
 
@@ -285,13 +393,20 @@ public sealed partial class AnimRuntime : Node
             Count("CallAnimation(depth limit)");
             return;
         }
-        Stop(def.AnimName, anchor);
+        // Restart: drop any existing instance of this def on this anchor, but LEAVE its live
+        // resources so the new instance re-establishes them idempotently (motions replaced by
+        // target in AddMotion, puffers/lights/sounds re-asserted as no-ops). Tearing them down
+        // here would break that seamless restart and rebuild every resource — measured on C5's
+        // bootstrap, which restarts m_crane_go and please_go_spark. A caller that wants the
+        // resources cleared (STOP_ANIMATION, the debugger/crash respawn) calls Stop directly.
+        RemoveInstances(def.AnimName, anchor, tearDown: false);
         var inst = new AnimInstance(def, anchor);
         foreach (var seq in def.Sequences.Where(s => !s.OnCallOnly))
             inst.Runners.Add(new SequenceRunner(seq));
         if (inst.Runners.Count == 0)
             return;
         _instances.Add(inst);
+        OnInstanceStarted?.Invoke(def, anchor);
         // Fire whatever is due at t=0 immediately, so instantaneous sequences (zepstate's
         // active-state roster) settle during the build rather than one frame later.
         _startDepth++;
@@ -303,8 +418,11 @@ public sealed partial class AnimRuntime : Node
         {
             _startDepth--;
         }
-        if (inst.Finished)
-            _instances.Remove(inst);
+        // Its t=0 events can finish the instance — or a t=0 STOP_ANIMATION can already have
+        // removed it — so only notify a finish that actually removed something, keeping the
+        // start/finish notifications balanced against the live count for the timeline.
+        if (inst.Finished && _instances.Remove(inst))
+            OnInstanceFinished?.Invoke(def, anchor);
     }
 
     private const int MaxStartDepth = 8;
@@ -315,15 +433,70 @@ public sealed partial class AnimRuntime : Node
     private bool IsLive(AnimDefinition def, Node3D? anchor) =>
         _instances.Any(i => i.Def == def && i.Anchor == anchor);
 
-    /// <summary>Stops every live instance of an animation name (optionally only on one
-    /// anchor). Used by STOP_ANIMATION and by restart-on-call.</summary>
-    public void Stop(string? animName, Node3D? anchor = null)
+    /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
+    /// tears down the live resources it created. Used by STOP_ANIMATION / INVALIDATE_ANIMATION, and
+    /// — through the explicit Restart it enables (Stop → re-apply RESET_STATE → Start) — by the
+    /// animation debugger and the crash plan's respawn. Removing the instance alone left the
+    /// definition's motions driving nodes, its puffers emitting, its lights lit and its sounds
+    /// playing; <see cref="TearDownResourcesOf"/> clears all four. Start's own restart deliberately
+    /// does NOT come through here — it keeps the resources so re-assertion is a seamless no-op
+    /// (see <see cref="Start"/>).</summary>
+    public void Stop(string? animName, Node3D? anchor = null) =>
+        RemoveInstances(animName, anchor, tearDown: true);
+
+    /// <summary>Removes matching live instances. <paramref name="tearDown"/> chooses whether to
+    /// also clear each instance's motions/puffers/lights/sounds: true for an explicit Stop, false
+    /// for Start's seamless restart, which leaves them for the new instance to re-assert.</summary>
+    private void RemoveInstances(string? animName, Node3D? anchor, bool tearDown)
     {
         if (string.IsNullOrEmpty(animName))
             return;
-        _instances.RemoveAll(i =>
-            string.Equals(i.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase)
-            && (anchor == null || i.Anchor == anchor));
+        for (int i = _instances.Count - 1; i >= 0; i--)
+        {
+            var inst = _instances[i];
+            if (!string.Equals(inst.Def.AnimName, animName, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (anchor != null && inst.Anchor != anchor)
+                continue;
+            _instances.RemoveAt(i);
+            if (tearDown)
+                TearDownResourcesOf(inst.Def, inst.Anchor);
+            OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+        }
+    }
+
+    /// <summary>Tears down every live resource a stopped instance created — its motions, puffers,
+    /// lights and sounds — so nothing of the definition keeps running after <see cref="Stop"/>.
+    /// Motions and puffers are attributed to the exact <c>(def, anchor)</c> that registered them
+    /// (see <see cref="AddMotion"/> and <see cref="_puffers"/>). Lights and sounds are keyed by
+    /// <c>(name, anchor)</c>, so they are cleared by anchor — the anchor is the instance identity,
+    /// and a name colliding on one anchor across two defs already shares a single entry (last
+    /// writer wins), so there is nothing finer to attribute to.</summary>
+    private void TearDownResourcesOf(AnimDefinition def, Node3D? anchor)
+    {
+        _motions.RemoveAll(m => m.Owner.Def == def && m.Owner.Anchor == anchor);
+
+        var pufferKeys = _puffers
+            .Where(kv => kv.Value.Def == def && kv.Value.Anchor == anchor)
+            .Select(kv => kv.Key)
+            .ToList();
+        foreach (var key in pufferKeys)
+        {
+            var puffer = _puffers[key].Puffer;
+            puffer.SustainEnd();
+            _activePuffers.RemoveAll(a => a.Puffer == puffer);
+            _puffers.Remove(key);
+        }
+
+        foreach (var key in _lights.Keys.Where(k => k.Anchor == anchor).ToList())
+            _lights.Remove(key);
+
+        if (Sounds != null)
+            foreach (var key in _soundEmitters.Keys.Where(k => k.Anchor == anchor).ToList())
+            {
+                Sounds.SetActive(_soundEmitters[key], false);
+                _soundEmitters.Remove(key);
+            }
     }
 
     /// <summary>Applies a list of events with no clock — the RESET_STATE path, where every
@@ -393,7 +566,7 @@ public sealed partial class AnimRuntime : Node
                     if (instant || runTime <= 0f)
                         tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
                     else
-                        AddMotion(tween);
+                        AddMotion(tween, def, anchor);
                     _opsApplied++;
                 }
                 duration = instant ? 0f : runTime;
@@ -467,7 +640,7 @@ public sealed partial class AnimRuntime : Node
                     if (instant)
                         motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
                     else
-                        AddMotion(motion);
+                        AddMotion(motion, def, anchor);
                     _opsApplied++;
                 }
                 duration = instant ? 0f : spinFor;
@@ -489,7 +662,7 @@ public sealed partial class AnimRuntime : Node
                     if (instant)
                         playback.Seek(0f); // pose at the script's first frame
                     else
-                        AddMotion(playback);
+                        AddMotion(playback, def, anchor);
                     _opsApplied++;
                     duration = Mathf.Max(duration, script.Duration);
                 }
@@ -594,8 +767,9 @@ public sealed partial class AnimRuntime : Node
     // One emitter per (puffer name, emitter node). Definitions re-assert their PUFFER_STATE
     // every loop iteration — C1's waterfall is [PufferState ×3, Loop{-1}] — so the handler has
     // to be idempotent: re-asserting an already-running emitter must be a no-op, not a
-    // second emitter.
-    private readonly Dictionary<(string Name, Node3D Node), Effects.Puffer> _puffers = new();
+    // second emitter. The value carries the owning (def, anchor) so Stop can tear down exactly
+    // the emitters a stopped instance created.
+    private readonly Dictionary<(string Name, Node3D Node), (Effects.Puffer Puffer, AnimDefinition Def, Node3D? Anchor)> _puffers = new();
     private readonly List<(Effects.Puffer Puffer, Node3D Node)> _activePuffers = new();
 
     private void HandlePufferState(AnimEvent ev, AnimDefinition def, Node3D? anchor)
@@ -619,8 +793,8 @@ public sealed partial class AnimRuntime : Node
         {
             if (_puffers.TryGetValue(key, out var running))
             {
-                running.SustainEnd();
-                _activePuffers.RemoveAll(a => a.Puffer == running);
+                running.Puffer.SustainEnd();
+                _activePuffers.RemoveAll(a => a.Puffer == running.Puffer);
             }
             return;
         }
@@ -650,7 +824,7 @@ public sealed partial class AnimRuntime : Node
             return;
         }
         (PufferParent ?? _root).AddChild(puffer);
-        _puffers[key] = puffer;
+        _puffers[key] = (puffer, def, anchor);
         _activePuffers.Add((puffer, host));
         _opsApplied++;
     }
@@ -1221,6 +1395,10 @@ public sealed partial class AnimRuntime : Node
     private interface IAnimMotion
     {
         Node3D Target { get; }
+        // The (def, anchor) instance that registered this motion, so Stop can tear down exactly
+        // the motions a stopped instance drives. Set by AddMotion; ownership transfers when a
+        // later instance's motion replaces an earlier one on the same target.
+        (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
         bool Finished { get; }
         void Tick(float dt);
         void Seek(float t);
@@ -1265,8 +1443,9 @@ public sealed partial class AnimRuntime : Node
     /// startanims run `hangar3_doors` (doors to ±50) and then `mp_hangar3_open` (the same
     /// doors to ±25), where the later one is meant to win. Without this both tween the same
     /// node every frame and the outcome depends on list order.</summary>
-    private void AddMotion(IAnimMotion motion)
+    private void AddMotion(IAnimMotion motion, AnimDefinition def, Node3D? anchor)
     {
+        motion.Owner = (def, anchor);
         _motions.RemoveAll(m => m.Target == motion.Target);
         _motions.Add(motion);
     }
@@ -1301,6 +1480,7 @@ public sealed partial class AnimRuntime : Node
     private sealed class ScriptPlayback : IAnimMotion
     {
         public Node3D Target { get; }
+        public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
         private readonly SiScript _script;
         private Basis _rot;      // orthonormal; the scale is kept out of it on purpose
         private Vector3 _scale;
@@ -1348,6 +1528,7 @@ public sealed partial class AnimRuntime : Node
     private sealed class SpinMotion : IAnimMotion
     {
         public Node3D Target { get; }
+        public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
         private readonly Basis _rest;
         private readonly Vector3 _rate; // radians/second, local axes
         private readonly float _runTime; // 0 = endless
@@ -1438,6 +1619,7 @@ public sealed partial class AnimRuntime : Node
     private sealed class FromToMotion : IAnimMotion
     {
         public Node3D Target { get; private init; } = null!;
+        public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
         // The pose this event starts from, as components: an absent channel carries its
         // component through untouched. Orthonormal rotation with the scale kept out of it,
         // exactly as ScriptPlayback holds them.
@@ -1611,6 +1793,12 @@ public sealed partial class AnimRuntime : Node
                 var ev = _seq.Events[_pc];
                 if (rt.Dispatch(ev, inst.Def, inst.Anchor, instant: false, out float duration))
                 {
+                    // The debugger timeline's "fired" mark: this event, in this sequence lane, at
+                    // the playhead time the runner reached it. The null-conditional short-circuits
+                    // the whole invocation — including the record construction — when no hook is
+                    // attached, so this is zero cost in the game (it is on the hot dispatch path).
+                    rt.OnEventDispatched?.Invoke(new EventDispatch(
+                        inst.Def, inst.Anchor, _seq.Name, _pc, ev.Kind, EventDisplayName(ev)));
                     // This event has fired. The NEXT event's offset is measured from this
                     // moment plus this event's own run time — the offset belongs to the
                     // event that CARRIES it, not to its successor. See SetDue().
