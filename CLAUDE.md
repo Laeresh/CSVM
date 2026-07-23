@@ -145,7 +145,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/Effects/Puffer.cs` — data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
 - `src/Effects/CloudPuffs.cs` — synthetic ambient cloud field: one alpha-blended MultiMesh of billboards anchored to the CLOUD_COVER band.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
-- `src/Flight/SpectatorCamera.cs` — the `--freecam` observation camera: RMB-look + WASD over the live world, no aircraft, no collision, no roll.
+- `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD, no roll; `Frame`/`FollowNode` let the lab frame + track an object.
 - `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, per-axis calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
@@ -167,7 +167,7 @@ Compact module index — **deep implementation notes, verified diagnoses, and de
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
-- `src/UI/AnimLab.cs` — the `--anim-lab` animation debugger: quiet stage, fixed-dt clock, def-playback transport, seeded replay, def picker.
+- `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport button panel, seeded replay, def picker, freecam camera, click-to-follow.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
@@ -186,7 +186,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
 | `--viewer` | the static inspection view; hosts the damage (H), livery (L) and mesh (M) labs |
 | `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera |
-| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock with transport keys |
+| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |

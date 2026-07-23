@@ -531,7 +531,7 @@ public partial class PlaneViewer : Node3D
                 GD.Print($"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = _fly || _freecam ? 62 : 50, Far = 40000f };
+        _camera = new Camera3D { Fov = _fly || _freecam || _animLab ? 62 : 50, Far = 40000f };
         AddChild(_camera);
         _orbit = new OrbitCamera(_camera);
         if (_argYaw is { } argYaw) _orbit.Yaw = argYaw;
@@ -559,7 +559,7 @@ public partial class PlaneViewer : Node3D
     {
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
-        _camera.Fov = _fly || _freecam ? 62 : 50;
+        _camera.Fov = _fly || _freecam || _animLab ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
         BuildRigs(_fly ? _players : 1);
@@ -738,9 +738,25 @@ public partial class PlaneViewer : Node3D
                     // at 2× (fixed steps + wall dt). See AnimRuntime.ManualAdvance.
                     session.Runtime.ManualAdvance = true;
 
+                    // The spawn the mission would place the player at — the camera starts here so
+                    // the interesting part of the map is in view, and (below) an optional parked
+                    // plane sits on it. Resolved once so the camera and plane agree.
+                    var labSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                    var (spawnPos, spawnLook) = ChooseSpawn(labSpawns, missionZrdrPath,
+                        ChooseSpawnBase(labSpawns), 0, "");
+
+                    // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
+                    // in place of the orbit view — the lab drives it (Frame/FollowNode) on
+                    // play/pick. Starts at the mission spawn; --campos/--lookat override.
+                    var camPos = _camPos ?? spawnPos;
+                    var camLook = _lookAt ?? spawnLook;
+                    var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
+                    _worldRoot!.AddChild(labCam);
+                    _spectator = labCam;
+
                     // Optional stage prop: --plane= parks that aircraft at the mission spawn
-                    // point (--spawn-at/--spawn-dir override). No FlightController — unpainted
-                    // by default like every static view (--paint still applies one).
+                    // point. No FlightController — unpainted by default like every static view
+                    // (--paint still applies one).
                     if (_planeNames.Count > 0)
                     {
                         var planesGamez = GameZ.Load(planesGamezPath);
@@ -750,20 +766,17 @@ public partial class PlaneViewer : Node3D
                             patterns: Patterns);
                         var parked = parkedBuilder.Build(_planeName);
                         meshInstances += parkedBuilder.MeshInstanceCount;
-                        var labSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
-                        var (parkPos, parkLook) = ChooseSpawn(labSpawns, missionZrdrPath,
-                            ChooseSpawnBase(labSpawns), 0, "");
                         _worldRoot!.AddChild(parked);
-                        parked.Position = parkPos;
-                        if ((parkLook - parkPos).LengthSquared() > 1e-6f)
+                        parked.Position = spawnPos;
+                        if ((spawnLook - spawnPos).LengthSquared() > 1e-6f)
                         {
-                            parked.LookAtFromPosition(parkPos, parkLook, Vector3.Up);
+                            parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
                         }
                         what += $" + parked '{_planeName}'";
                     }
 
-                    animLab = new UI.AnimLab(session.Runtime, session.Program, _orbit, textures,
-                        sounds, _labSeed, _playAnim,
+                    animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
+                        textures, sounds, _labSeed, _playAnim,
                         autoFrame: _camPos == null && _lookAt == null,
                         fixedFrameStep: _screenshotPath != null)
                     {
@@ -775,7 +788,8 @@ public partial class PlaneViewer : Node3D
                     _worldRoot!.AddChild(animLab);
                     GD.Print($"anim-lab: quiet stage, seed {_labSeed}, fixed dt 1/60"
                              + (_playAnim != null ? $", playing '{_playAnim}'" : "")
-                             + " — Space pause · . step · R restart · S stop · A ambient · 1/2/3 speed");
+                             + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
+                             + " P pause · . step · R restart · F picker; click an object to follow");
                     what += " + anim lab";
                 }
             }
@@ -1213,9 +1227,10 @@ public partial class PlaneViewer : Node3D
             return false;
         }
 
-        // Only the static views frame their subject; flight and the spectator camera place
-        // their own eye (FrameCamera would yank the freecam back to the world's AABB orbit).
-        if (!_fly && !_freecam)
+        // Only the static views frame their subject; flight and the spectator camera (both
+        // --freecam and --anim-lab) place their own eye (FrameCamera would yank the freecam back
+        // to the world's AABB orbit).
+        if (!_fly && !_freecam && !_animLab)
             FrameCamera();
 
         // Node-name labels (T) — in BOTH the viewer and flight: reading a misplaced object's
@@ -2024,7 +2039,7 @@ public partial class PlaneViewer : Node3D
             PrintCameraPose();
             return;
         }
-        if (_fly || _freecam)
+        if (_fly || _freecam || _animLab)
             return; // the FlightController / SpectatorCamera owns the camera; no orbit controls
         _orbit.HandleInput(@event);
     }
@@ -2189,7 +2204,7 @@ public partial class PlaneViewer : Node3D
         // origin. Projected a long way out because the args round to 3 decimals: at world
         // coordinates in the thousands, a 1 m offset quantises the reconstructed direction to
         // ~0.06°, which is visible when the pose is pasted back.
-        var lookAt = _fly || _freecam
+        var lookAt = _fly || _freecam || _animLab
             ? pos - _camera.GlobalTransform.Basis.Z * PoseLookAtDistance
             : _orbit.OrbitCenter;
         GD.Print($"camera pose: --campos={Vec3Arg(pos)} --lookat={Vec3Arg(lookAt)}");

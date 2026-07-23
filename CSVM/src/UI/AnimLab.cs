@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Flight;
 using CSVM.Mech3;
 using Godot;
 
@@ -8,39 +9,33 @@ namespace CSVM.UI;
 
 /// <summary>
 /// The animation debugger (<c>--anim-lab</c>): the chapter world as a <b>quiet stage</b> — reset
-/// states and mission setup applied, nothing playing — with def playback under transport
-/// controls, on a deterministic fixed-dt clock (Wave 3), plus a filterable def <b>picker</b> and
-/// an authored-vs-fired <b>timeline</b> (Wave 4, <see cref="AnimTimeline"/>).
+/// states and mission setup applied, nothing playing — with def playback under a deterministic
+/// fixed-dt clock, a filterable def <b>picker</b>, an authored-vs-fired <b>timeline</b>
+/// (<see cref="AnimTimeline"/>), and a <b>transport button panel</b>.
 ///
-/// <para>The session is built by <see cref="WorldSession"/> with <c>AutoStart=false</c> and a
-/// pinned RNG seed, and the runtime's own <c>_Process</c> is disabled: this node owns the clock
-/// and feeds <see cref="AnimRuntime.Advance"/> in exact 1/60 s steps, so pause = no calls, step
-/// = one call, slow-mo = a scaled accumulator, and the render rate never changes simulation
-/// results. In a scripted run (<c>--screenshot</c>) wall time is ignored entirely — every frame
-/// advances exactly <c>timeScale × 1</c> step, so a <c>--frames</c>/<c>--shots</c> capture lands
-/// on exact step counts. The RNG is re-pinned on every Play/Restart, so a seeded replay rolls
-/// the same dice.</para>
+/// <para>The camera is the <see cref="SpectatorCamera"/> freecam (RMB look, WASD/QE move, Shift
+/// boost, wheel speed) — the same one <c>--freecam</c> uses — so transport is on <b>buttons</b>
+/// (plus a few non-clashing key shortcuts: P pause · <c>.</c> step · R restart · F picker),
+/// because WASD/QE now drive the camera. Clicking any object frames and <b>follows</b> it (the
+/// camera position tracks it as it moves); WASD/QE cancels the follow, mouse-look and the wheel
+/// keep it.</para>
 ///
-/// <para>Transport keys: Space pause/resume · <c>.</c> step one frame (pauses first) · R restart
-/// · S stop · A start ambient playback (ON_STARTUP defs + startanims; one-way in v1) · 1/2/3
-/// time scale 0.1×/0.25×/1× · P toggle the picker. <c>--play-anim=&lt;name&gt;</c> plays a def
-/// at launch and auto-frames the orbit camera on its anchor (skipped when
-/// <c>--campos</c>/<c>--lookat</c> placed the camera by hand).</para>
+/// <para>The clock: this node feeds <see cref="AnimRuntime.Advance"/> in exact 1/60 s steps, so
+/// pause = no calls, step = one call, and the time scale (0.1×–4×) scales the accumulator; the
+/// render rate never changes simulation results. A scripted run (<c>--screenshot</c>) substitutes
+/// the fixed step for wall time, so a <c>--frames</c>/<c>--shots</c> capture lands on exact step
+/// counts. The RNG is re-pinned on every Play/Restart, so a seeded replay rolls the same dice.
+/// Ambient playback (ON_STARTUP defs + startanims) toggles on <i>and</i> off (off returns to the
+/// quiet stage, keeping the played def running).</para>
 ///
-/// <para>The picker and timeline are fed straight from the runtime's <c>OnEventDispatched</c> /
-/// <c>OnInstanceStarted</c> / <c>OnInstanceFinished</c> hooks (Wave 2 B4). They are the whole
-/// interactive UI, hidden in a scripted <c>--screenshot</c> so those shots stay byte-identical;
-/// <c>--debug-anim-ui</c> forces them visible in a screenshot (the timeline-verification path,
-/// like <c>--debug-livery</c>). The hooks are attached only when the UI is shown, so a plain
-/// scripted run pays nothing for them.</para>
+/// <para>The picker/timeline/transport are fed from the runtime's Wave-2 B4 hooks and are the
+/// whole interactive UI, hidden in a scripted <c>--screenshot</c> so those shots stay
+/// byte-identical; <c>--debug-anim-ui</c> forces them visible. The hooks are attached only when
+/// the UI is shown, so a plain scripted run pays nothing.</para>
 ///
-/// <para>Accepted v1 limits (the plan's Traps): pausing pauses the RUNTIME, not the renderer —
-/// shader-time effects (UV scroll, GPU precipitation), the texture cycler, puffer sprite
-/// animation and already-playing audio streams keep going. Determinism's boundary is the
-/// runtime, so screenshot comparisons should frame runtime-driven subjects (doors, vehicles),
-/// not water or puffers. The timeline tracks one instance of the played def (the first anchor)
-/// plus its CALL_ANIMATION children; sibling defs sharing an ANIMATION_NAME and children started
-/// after the A ambient toggle are not tracked.</para>
+/// <para>Accepted v1 limits: pausing pauses the RUNTIME, not the renderer (UV scroll, texture
+/// cycles, puffer sprites and playing audio continue); the timeline tracks one instance of the
+/// played def plus its CALL_ANIMATION children.</para>
 /// </summary>
 public sealed partial class AnimLab : Node
 {
@@ -52,13 +47,19 @@ public sealed partial class AnimLab : Node
     /// what matters is that every launch shares it, so two runs replay the same dice.</summary>
     public const int DefaultSeed = 1;
 
+    /// <summary>The transport time scales, slowest to fastest (buttons + the current-speed
+    /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
+    /// fast-forward for skimming a long loop.</summary>
+    private static readonly float[] Speeds = { 0.1f, 0.25f, 1f, 2f, 4f };
+
     // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
     // slow frames honest without turning a debugger breakpoint stall into fast-forward.
     private const float MaxAccum = 0.25f;
 
     private readonly AnimRuntime _runtime;
     private readonly AnimProgram _program;
-    private readonly OrbitCamera _orbit;
+    private readonly SpectatorCamera _cam;
+    private readonly Node3D _world;           // the world content root, walked for pick rays
     private readonly int _seed;
     private readonly string? _playOnLaunch;   // --play-anim=<name>
     private readonly bool _autoFrame;         // no --campos/--lookat: frame the played def
@@ -74,6 +75,7 @@ public sealed partial class AnimLab : Node
     private LineEdit? _filter;
     private ItemList? _list;
     private Control? _pickerPanel;
+    private Button? _pauseBtn;
     // ItemList row → index into _program.Defs (the filtered view).
     private readonly List<int> _rows = new();
 
@@ -84,8 +86,9 @@ public sealed partial class AnimLab : Node
     private int _steps;          // playhead = steps × FixedDt, zeroed on Play/Restart
     private string? _defName;    // the selected def (null until --play-anim / Play)
     private int _instances;      // how many (def, anchor) instances the last Play started
-    private bool _stopped;       // S: _defName kept for the status line, playback torn down
-    private bool _ambient;       // A pressed: ambient passes started
+    private bool _stopped;       // Stop: _defName kept for the status line, playback torn down
+    private bool _ambient;       // ambient passes running
+    private string _followName = "";  // the object the camera is following, for the status
 
     // Timeline tracking. Set up BEFORE AnimRuntime.Play, so the def's t=0 dispatches (which fire
     // synchronously inside Play) are attributed to the right lane.
@@ -94,18 +97,19 @@ public sealed partial class AnimLab : Node
     private bool _anchorCaptured;
     private bool _trackChildren;           // CALL_ANIMATION children tracked (off once ambient runs)
 
-    /// <summary>Show the interactive UI — status line, picker and timeline. On by default; off
-    /// for a scripted <c>--screenshot</c> (kept byte-identical) unless <c>--debug-anim-ui</c>
-    /// forces it on. When off, the runtime hooks are never attached.</summary>
+    /// <summary>Show the interactive UI — status line, transport, picker and timeline. On by
+    /// default; off for a scripted <c>--screenshot</c> (kept byte-identical) unless
+    /// <c>--debug-anim-ui</c> forces it on. When off, the runtime hooks are never attached.</summary>
     public bool ShowUi = true;
 
-    public AnimLab(AnimRuntime runtime, AnimProgram program, OrbitCamera orbit,
+    public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam, Node3D world,
         TextureArchive textures, SoundArchive? sounds,
         int seed, string? playAnim, bool autoFrame, bool fixedFrameStep)
     {
         _runtime = runtime;
         _program = program;
-        _orbit = orbit;
+        _cam = cam;
+        _world = world;
         _textures = textures;
         _sounds = sounds;
         _seed = seed;
@@ -121,9 +125,9 @@ public sealed partial class AnimLab : Node
             return;
         }
         BuildUi();
-        // Feed the picker/timeline from the runtime, not from --debug-anim log text. Attached
-        // here (only when the UI is shown) so a plain scripted run leaves them null and the
-        // runtime's null-conditional dispatch stays zero-cost.
+        // Feed the picker/timeline/transport from the runtime, not from --debug-anim log text.
+        // Attached here (only when the UI is shown) so a plain scripted run leaves them null and
+        // the runtime's null-conditional dispatch stays zero-cost.
         _runtime.OnEventDispatched = OnDispatch;
         _runtime.OnInstanceStarted = OnInstanceStarted;
         _runtime.OnInstanceFinished = OnInstanceFinished;
@@ -142,8 +146,7 @@ public sealed partial class AnimLab : Node
         if (!_launched)
         {
             // Deferred to the first frame rather than done at construction, so the auto-frame
-            // wins over StartSession's whole-world FrameCamera and the play start is
-            // frame-exact for a scripted --frames/--shots run.
+            // wins over any startup framing and the play start is frame-exact for a scripted run.
             _launched = true;
             if (_playOnLaunch != null)
             {
@@ -171,68 +174,89 @@ public sealed partial class AnimLab : Node
     private void Step()
     {
         // _steps is bumped BEFORE Advance so that during the runtime's dispatch hooks the
-        // playhead (_steps × dt) equals the runner's clock — which is incremented at the top of
-        // Advance — and a fired mark lands at the time it actually fired. The t=0 events fired
-        // by AnimRuntime.Play use dt=0 and see _steps=0, so they stamp at t=0, matching.
+        // playhead (_steps × dt) equals the runner's clock — incremented at the top of Advance —
+        // and a fired mark lands at the time it actually fired. The t=0 events fired by
+        // AnimRuntime.Play use dt=0 and see _steps=0, so they stamp at t=0, matching.
         _steps++;
         _runtime.Advance(FixedDt);
     }
 
+    // ---- transport --------------------------------------------------------------------------
+
     public override void _UnhandledInput(InputEvent @event)
     {
+        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb)
+        {
+            // A click in the 3D area (UI controls consume their own clicks first) releases the
+            // picker's text field — Godot does NOT defocus a LineEdit on a click into empty
+            // space, so without this the camera keys stay dead after typing a filter
+            // (user-reported) — then focuses and orbits the object under the cursor.
+            GetViewport().GuiReleaseFocus();
+            PickObject(mb.Position);
+            GetViewport().SetInputAsHandled();
+            return;
+        }
+        // Only a few keys — the camera owns WASD/QE/arrows/Space/C/IJKL/Shift/Ctrl/RMB/wheel.
         if (@event is not InputEventKey { Pressed: true, Echo: false } key)
         {
             return;
         }
         switch (key.Keycode)
         {
-            case Key.Space:
+            case Key.P:
                 _paused = !_paused;
-                break;
-            case Key.Period:
-                // Stepping is a paused-state concept; pressing it while playing pauses first,
-                // so one key reaches "frozen, advance one frame" from any state.
-                if (_paused)
-                {
-                    Step();
-                }
-                else
-                {
-                    _paused = true;
-                }
                 break;
             case Key.R:
                 Restart();
                 break;
-            case Key.S:
-                StopPlayback();
+            case Key.Period:
+                StepFrame();
                 break;
-            case Key.A:
-                _runtime.StartAmbient();
-                _ambient = true;
-                // Ambient defs start their own instances; stop attributing new instance-starts
-                // to the played def's CALL_ANIMATION cascade so they don't pollute the timeline.
-                _trackChildren = false;
-                break;
-            case Key.Key1:
-                _timeScale = 0.1f;
-                break;
-            case Key.Key2:
-                _timeScale = 0.25f;
-                break;
-            case Key.Key3:
-                _timeScale = 1f;
-                break;
-            case Key.P:
-                if (_pickerPanel != null)
-                {
-                    _pickerPanel.Visible = !_pickerPanel.Visible;
-                }
+            case Key.F:
+                TogglePicker();
                 break;
             default:
                 return;
         }
         GetViewport().SetInputAsHandled();
+    }
+
+    // A single frame step, freezing playback first — the "step" transport action for both the
+    // button and the . key.
+    private void StepFrame()
+    {
+        _paused = true;
+        Step();
+    }
+
+    private void SetSpeed(float scale) => _timeScale = scale;
+
+    private void SetAmbient(bool on)
+    {
+        if (on == _ambient)
+        {
+            return;
+        }
+        if (on)
+        {
+            _runtime.StartAmbient();
+            _trackChildren = false; // don't attribute the ambient cascade to the played def's timeline
+        }
+        else
+        {
+            // Keep the played def running (by name) as the rest of the world returns to quiet.
+            _runtime.StopAmbient(_defName);
+            _trackChildren = _defName != null;
+        }
+        _ambient = on;
+    }
+
+    private void TogglePicker()
+    {
+        if (_pickerPanel != null)
+        {
+            _pickerPanel.Visible = !_pickerPanel.Visible;
+        }
     }
 
     /// <summary>Plays one def by ANIMATION_NAME the way a startanim starts (RESET_STATE, then
@@ -263,7 +287,7 @@ public sealed partial class AnimLab : Node
         if (started.Count == 0)
         {
             GD.Print($"anim-lab: no definition named '{name}' among this program's " +
-                     $"{_program.Defs.Count} defs — check --chapter/--mission (P lists them)");
+                     $"{_program.Defs.Count} defs — check --chapter/--mission (F lists them)");
             _timeline?.Clear();
             return;
         }
@@ -279,8 +303,7 @@ public sealed partial class AnimLab : Node
 
     /// <summary>Restart = <see cref="AnimRuntime.Stop"/> (tear down the def's live
     /// motions/puffers/lights/sounds) → re-pin the RNG → re-apply RESET_STATE → Start, playhead
-    /// back at step 0 — the visually-identical replay the fixed clock + seed exist for. Keeps
-    /// the same timeline focus def as the last Play.</summary>
+    /// back at step 0 — the visually-identical replay the fixed clock + seed exist for.</summary>
     private void Restart()
     {
         if (_defName == null)
@@ -299,6 +322,102 @@ public sealed partial class AnimLab : Node
         _runtime.Stop(_defName);
         _stopped = true;
         GD.Print($"anim-lab: stopped '{_defName}'");
+    }
+
+    // ---- object pick + follow ----------------------------------------------------------------
+
+    // The largest a followable object's world-space AABB diagonal can be. Terrain tiles span the
+    // whole map, so without this a click almost always hits one and frames the tile (zooming far
+    // out); buildings, vehicles and animated props are all well under this. TUNE.
+    private const float MaxPickDiag = 350f;
+
+    // Casts a ray from the camera through the click and follows the nearest mesh it hits. There
+    // are no physics colliders in the lab (Collision is off), so this is a manual ray-vs-AABB
+    // scan over the built mesh instances — one walk per click, cheap.
+    private void PickObject(Vector2 screenPos)
+    {
+        var cam = _cam.Camera;
+        var from = cam.ProjectRayOrigin(screenPos);
+        var dir = cam.ProjectRayNormal(screenPos);
+        Node3D? best = null;
+        float bestT = float.MaxValue;
+        void Walk(Node n)
+        {
+            if (n is MeshInstance3D { Mesh: { } mesh } mi && mi.IsVisibleInTree())
+            {
+                var aabb = mesh.GetAabb();
+                var xf = mi.GlobalTransform;
+                // Skip terrain-scale meshes so a click follows the object under it, not the map.
+                if ((xf.Basis * aabb.Size).Length() < MaxPickDiag)
+                {
+                    // The parameter along the local ray equals the world distance (the inverse
+                    // transform is affine and dir is unit), so it compares directly across nodes.
+                    var inv = xf.AffineInverse();
+                    if (RayAabb(inv * from, inv.Basis * dir, aabb, out float t) && t < bestT)
+                    {
+                        bestT = t;
+                        best = mi;
+                    }
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(_world);
+        if (best != null)
+        {
+            FocusNode(best);
+            GD.Print($"anim-lab: following '{_followName}'");
+        }
+    }
+
+    // Slab test. Returns the near intersection parameter (>= 0) of the ray o + t·d with the box.
+    private static bool RayAabb(Vector3 o, Vector3 d, Aabb box, out float tHit)
+    {
+        tHit = 0f;
+        float tmin = 0f, tmax = float.MaxValue;
+        Vector3 lo = box.Position, hi = box.End;
+        for (int a = 0; a < 3; a++)
+        {
+            float da = d[a], oa = o[a];
+            if (Mathf.Abs(da) < 1e-9f)
+            {
+                if (oa < lo[a] || oa > hi[a])
+                {
+                    return false;
+                }
+                continue;
+            }
+            float t1 = (lo[a] - oa) / da, t2 = (hi[a] - oa) / da;
+            if (t1 > t2)
+            {
+                (t1, t2) = (t2, t1);
+            }
+            tmin = Mathf.Max(tmin, t1);
+            tmax = Mathf.Min(tmax, t2);
+            if (tmin > tmax)
+            {
+                return false;
+            }
+        }
+        tHit = tmin;
+        return tmax >= 0f;
+    }
+
+    // Frame the camera on a node and start following it (position tracks the node as it moves).
+    private void FocusNode(Node3D node)
+    {
+        var aabb = OrbitCamera.MergedAabb(node);
+        if (aabb.Size.LengthSquared() < 1e-4f)
+        {
+            // A mesh-less pivot/group node: orbit a nominal box around it, not the world origin.
+            aabb = new Aabb(node.GlobalPosition - Vector3.One * 10f, Vector3.One * 20f);
+        }
+        _cam.Frame(aabb);
+        _cam.FollowNode(node);
+        _followName = NodeName(node);
     }
 
     // ---- runtime → picker/timeline hooks -----------------------------------------------------
@@ -368,36 +487,23 @@ public sealed partial class AnimLab : Node
         !string.IsNullOrEmpty(a.AnimName)
         && string.Equals(a.AnimName, b.AnimName, StringComparison.OrdinalIgnoreCase);
 
-    private static string AnchorLabel(Node3D? anchor)
-    {
-        if (anchor == null)
-        {
-            return "(global)";
-        }
-        return anchor.HasMeta(AnimRuntime.NameMeta)
-            ? anchor.GetMeta(AnimRuntime.NameMeta).AsString()
-            : anchor.Name.ToString();
-    }
+    private static string NodeName(Node3D n) =>
+        n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
 
-    /// <summary>Frames the orbit camera on the played def: the first started instance whose
-    /// anchor (or first resolved target node — <see cref="AnimRuntime.FrameTarget"/>) exists. A
-    /// mesh-less target (an empty pivot/group node) gets a nominal 20 m box around its position,
-    /// because a zero AABB would orbit the world origin instead.</summary>
+    private static string AnchorLabel(Node3D? anchor) => anchor == null ? "(global)" : NodeName(anchor);
+
+    /// <summary>Frames the camera on the played def and follows its anchor (or first resolved
+    /// target node — <see cref="AnimRuntime.FrameTarget"/>), so a moving def (the train) stays in
+    /// view until the user takes the camera somewhere with WASD/QE.</summary>
     private void FrameOn(List<(AnimDefinition Def, Node3D? Anchor)> started)
     {
         foreach (var (def, anchor) in started)
         {
-            if (_runtime.FrameTarget(def, anchor) is not { } node)
+            if (_runtime.FrameTarget(def, anchor) is { } node)
             {
-                continue;
+                FocusNode(node);
+                return;
             }
-            var aabb = OrbitCamera.MergedAabb(node);
-            if (aabb.Size.LengthSquared() < 1e-4f)
-            {
-                aabb = new Aabb(node.GlobalPosition - Vector3.One * 10f, Vector3.One * 20f);
-            }
-            _orbit.Frame(aabb, null, null);
-            return;
         }
         GD.Print($"anim-lab: '{_defName}' resolves no frameable node — camera left as-is");
     }
@@ -417,15 +523,71 @@ public sealed partial class AnimLab : Node
         _status.AddThemeFontSizeOverride("font_size", 14);
         layer.AddChild(_status);
 
+        BuildTransport(layer);
         BuildPicker(layer);
         BuildTimeline(layer);
     }
 
+    private void BuildTransport(CanvasLayer layer)
+    {
+        // Anchored just ABOVE the timeline (which owns the bottom 210 px) so it never clashes
+        // with the status line + key-hint at top-left.
+        var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.85f) };
+        panel.SetAnchorsPreset(Control.LayoutPreset.BottomLeft);
+        panel.GrowVertical = Control.GrowDirection.Begin;
+        panel.Position = new Vector2(8, -214);
+        var margin = new MarginContainer();
+        foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
+        {
+            margin.AddThemeConstantOverride(side, 6);
+        }
+        var row = new HBoxContainer();
+        row.AddThemeConstantOverride("separation", 4);
+
+        _pauseBtn = TBtn("⏸ Pause", () => _paused = !_paused);
+        row.AddChild(_pauseBtn);
+        row.AddChild(TBtn("⏭ Step", StepFrame));
+        row.AddChild(TBtn("⟲ Restart", Restart));
+        row.AddChild(TBtn("⏹ Stop", StopPlayback));
+
+        var ambient = new CheckButton { Text = "Ambient", FocusMode = Control.FocusModeEnum.None };
+        ambient.Toggled += on => { GetViewport().GuiReleaseFocus(); SetAmbient(on); };
+        row.AddChild(ambient);
+
+        row.AddChild(new VSeparator());
+        row.AddChild(Small("speed"));
+        var group = new ButtonGroup();
+        foreach (var s in Speeds)
+        {
+            float captured = s;
+            var b = new Button
+            {
+                Text = $"{s:0.##}×",
+                ToggleMode = true,
+                ButtonGroup = group,
+                FocusMode = Control.FocusModeEnum.None,
+                ButtonPressed = Mathf.IsEqualApprox(s, 1f),
+            };
+            b.Pressed += () => { GetViewport().GuiReleaseFocus(); SetSpeed(captured); };
+            row.AddChild(b);
+        }
+
+        margin.AddChild(row);
+        panel.AddChild(margin);
+        layer.AddChild(panel);
+    }
+
     private void BuildPicker(CanvasLayer layer)
     {
+        // Anchored top-RIGHT (inside a full-rect Control, growing left) so it never collides with
+        // the status/transport at top-left — the same layout the livery lab uses.
+        var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
+        root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.85f) };
-        panel.SetAnchorsPreset(Control.LayoutPreset.TopLeft);
-        panel.Position = new Vector2(12, 56);
+        panel.SetAnchorsPreset(Control.LayoutPreset.TopRight);
+        panel.GrowHorizontal = Control.GrowDirection.Begin;
+        panel.Position = new Vector2(-8, 8);
+
         var margin = new MarginContainer();
         foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
         {
@@ -433,10 +595,8 @@ public sealed partial class AnimLab : Node
         }
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 4);
-
-        var title = new Label { Text = $"DEF PICKER  ({_program.Defs.Count} defs)" };
-        box.AddChild(title);
-        box.AddChild(Small("type to filter · Enter plays · P hides"));
+        box.AddChild(new Label { Text = $"DEF PICKER  ({_program.Defs.Count} defs)" });
+        box.AddChild(Small("type to filter · Enter plays · F hides"));
 
         _filter = new LineEdit
         {
@@ -453,16 +613,15 @@ public sealed partial class AnimLab : Node
 
         margin.AddChild(box);
         panel.AddChild(margin);
-        layer.AddChild(panel);
-        _pickerPanel = panel;
+        root.AddChild(panel);
+        layer.AddChild(root);
+        _pickerPanel = root;
         RefreshList();
     }
 
     private void BuildTimeline(CanvasLayer layer)
     {
         _timeline = new AnimTimeline();
-        // A bottom strip spanning the full width. Height fixed; lanes past it are clipped, which
-        // is fine — the played defs of interest have a handful of sequences.
         _timeline.SetAnchorsPreset(Control.LayoutPreset.BottomWide);
         _timeline.OffsetTop = -210;
         _timeline.OffsetBottom = 0;
@@ -530,13 +689,16 @@ public sealed partial class AnimLab : Node
             return;
         }
         Play(def.AnimName!, def);
-        // Drop focus off the filter/list so the transport keys (Space/R/S/…) go to the lab, not
-        // into the LineEdit, the moment a def is picked.
+        // Drop focus off the filter/list so the transport keys go to the lab, not into the field.
         GetViewport().GuiReleaseFocus();
     }
 
     private void UpdateStatus()
     {
+        if (_pauseBtn != null)
+        {
+            _pauseBtn.Text = _paused ? "▶ Play" : "⏸ Pause";
+        }
         if (_status == null)
         {
             return;
@@ -544,11 +706,23 @@ public sealed partial class AnimLab : Node
         string def = _defName == null ? "(none — pick one or --play-anim=<name>)"
             : _stopped ? $"{_defName} (stopped)"
             : $"{_defName} ({_instances} instance{(_instances == 1 ? "" : "s")})";
+        string follow = _cam.Follow != null ? $"orbiting {_followName} (RMB to rotate)" : "free camera";
         _status.Text =
             $"anim-lab  t {_steps * FixedDt:0.00} s (step {_steps})  {_timeScale:0.##}×  " +
-            $"{(_paused ? "PAUSED" : "PLAYING")}   seed {_seed}   " +
-            $"ambient {(_ambient ? "on" : "off")}   def: {def}\n" +
-            "[Space pause · . step · R restart · S stop · A ambient · 1/2/3 speed · P picker]";
+            $"{(_paused ? "PAUSED" : "PLAYING")}   seed {_seed}   ambient {(_ambient ? "on" : "off")}\n" +
+            $"def: {def}   {follow}   " +
+            "[P pause · . step · R restart · F picker · click an object to orbit it · RMB look · WASD/QE move]";
+    }
+
+    private Button TBtn(string text, Action pressed)
+    {
+        // FocusMode None keeps a clicked button from holding keyboard focus and swallowing the
+        // transport keys — the failure that made Space (formerly pause) re-trigger the picker.
+        // Every press also releases the picker's text field, so clicking any transport control
+        // hands the keyboard (camera + shortcuts) back after typing a filter (user-reported).
+        var b = new Button { Text = text, FocusMode = Control.FocusModeEnum.None };
+        b.Pressed += () => { GetViewport().GuiReleaseFocus(); pressed(); };
+        return b;
     }
 
     private static Label Small(string text)

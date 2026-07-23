@@ -4574,3 +4574,56 @@ byte-identical). C1 `--fly` boot unchanged (616 ON_STARTUP + 5 start anims, 615 
 — the full ambient world, since the non-lab path never attaches the hooks). Build clean (0 warnings).
 **Next: Wave 5, the crash stage** — build the plane's `destroyed` subtree + effect templates into the lab
 and wire the puffer factory (the crash plan's Wave 2a/2b scaffolding).
+
+**Anim-lab interaction overhaul — freecam camera, transport panel, click-to-follow, ambient off (2026-07-23).**
+Five changes from the first `--anim-lab` playtest, agreed with the user before building:
+
+- **Camera is now the `SpectatorCamera` freecam** (RMB look, WASD/QE move, Shift boost, wheel speed) in
+  place of the orbit view — "the camera should work just like freecam". PlaneViewer builds it for the lab
+  (started at the mission spawn, `--campos`/`--lookat` override) and the four `_fly || _freecam`
+  camera-mode conditionals (FOV 62, FrameCamera-skip, `_orbit.HandleInput`-skip, F11 pose) now include
+  `_animLab`.
+- **Transport moved to an on-screen button panel** (Pause/Step/Restart/Stop, an Ambient toggle, a
+  0.1×/0.25×/1×/2×/4× speed `ButtonGroup`) because the freecam took over WASD/QE. Four non-clashing key
+  shortcuts kept: **P** pause · **`.`** step · **R** restart · **F** picker.
+- **Fixed "pause resets the animation, then does nothing"**: the old **Space** pause reached a
+  focused picker `ItemList` as `ui_accept`, which *activated the selected row* (replaying from step 0)
+  instead of toggling pause. Fix: Space is no longer a transport key, every transport button is
+  `FocusMode = None` so it never holds keyboard focus, and `PlayRow` releases GUI focus after a pick.
+- **Ambient toggles both ways**: new `AnimRuntime.StopAmbient(keepAnim)` tears down every live instance
+  and its resources except the played def (kept by name at its playhead), re-applies the pass-1
+  RESET_STATE base poses for the torn-down defs + the pass-4 safety net, and clears `_ambientStarted` —
+  symmetric with `StartAmbient`.
+- **Click any object to focus + orbit it**: an LMB click in the 3-D area ray-casts through the camera
+  (`PickObject`/`RayAabb` — a manual ray-vs-AABB scan over the built `MeshInstance3D`s, since the lab
+  builds no physics colliders; the local-ray parameter equals the world distance, so hits compare across
+  nodes, and terrain-scale meshes are skipped by `MaxPickDiag`) and locks the camera onto the nearest
+  mesh, which the `SpectatorCamera` then **orbits** (RMB rotates, wheel zooms, target stays centred as it
+  moves). Auto-frame on Play locks onto the played def's anchor the same way. WASD/QE releases the lock.
+- **Speeds** extended to `{0.1, 0.25, 1, 2, 4}` ("add a speed up to" → up to 4×).
+
+**Playtest-round fixes (same day)**, from the user flying it: (1) LMB picking almost always hit the
+terrain and zoomed out → `PickObject` skips meshes whose world-AABB diagonal exceeds `MaxPickDiag` (350 m),
+so a click follows the object, not the map tile. (2) The follow became a proper **orbit-around-target**
+(RMB rotates around the object like the static viewer's orbit camera, wheel zooms `_orbitDist`, WASD/QE
+releases) instead of position-follow + free-look — the user asked for orbit behaviour on a lock; orbit
+pitch is clamped to ~80° so `Basis.LookingAt` never gimbals. (3) **Typing a filter in the picker flew the
+camera** — the camera polls raw key state, bypassing GUI focus; `SpectatorCamera.KeyboardCaptured`
+(`GuiGetFocusOwner() is LineEdit or TextEdit`) now zeroes the keyboard axes while a text field has focus.
+**Follow-up (same round):** the field then wouldn't give the keyboard *back* — Godot does not defocus a
+`LineEdit` on a click into empty/3-D space — so a world click and every transport-panel button now call
+`GuiReleaseFocus`; clicking the def list also hands control back (an `ItemList` isn't a text field, so it
+doesn't gate). The keyboard stays captured only while you're actually focused in the filter.
+(4) The transport panel **moved from top-left to just above the timeline**, where it no longer clashes with
+the status line + key-hint. (5) Confirmed working by the user: pause toggle, follow-cancel, speed-up (minor
+particle quirks at off-speeds, expected), ambient on/off (it stops without fully re-posing SI-driven nodes
+— accepted, a data limitation of the reset states).
+
+**Verified** (`.scratch/anim-lab-verify/`, git-ignored — game geometry): the overhauled UI renders (transport
+panel with 1× active, freecam framed on the bowl, "following bowl" status, picker top-right); playing
+`train_on_track` and capturing at t≈1 s and t≈15 s shows the camera **tracked the moving engine** across the
+map (it drove from the open airfield to the trestle and stayed framed); a plain `--anim-lab --screenshot`
+(no `--debug-anim-ui`) still renders an overlay-free frame; `--freecam` unaffected (the `SpectatorCamera`
+follow additions are inert when `Follow` is null). Build clean. The dynamic controls only an interactive
+run can exercise — the P/button pause toggle, the Ambient on→off click, follow-cancel on WASD — are
+structurally in place for the user's playtest.

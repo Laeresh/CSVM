@@ -352,6 +352,43 @@ public sealed partial class AnimRuntime : Node
                      (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
     }
 
+    /// <summary>Reverses <see cref="StartAmbient"/> — the animation debugger's ambient <b>off</b>
+    /// half. Tears down every live instance and its resources <b>except</b> the one carrying
+    /// <paramref name="keepAnim"/> (the def the lab is currently playing, which survives at its
+    /// playhead), then re-applies the quiet stage's base states for every torn-down def, so the
+    /// world returns to the quiet stage a <c>AutoStart=false</c> bootstrap leaves. A no-op unless
+    /// ambient is running, so the toggle is symmetric with <see cref="StartAmbient"/>.</summary>
+    public void StopAmbient(string? keepAnim = null)
+    {
+        if (!_ambientStarted)
+            return;
+        for (int i = _instances.Count - 1; i >= 0; i--)
+        {
+            var inst = _instances[i];
+            if (keepAnim != null && string.Equals(inst.Def.AnimName, keepAnim, StringComparison.OrdinalIgnoreCase))
+                continue;
+            _instances.RemoveAt(i);
+            TearDownResourcesOf(inst.Def, inst.Anchor);
+            OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
+        }
+        // Re-quiet the torn-down defs' nodes: re-apply their RESET_STATE base poses (the same
+        // pass 1 the bootstrap runs), skipping the kept def whose live motions still drive it.
+        foreach (var def in _program.Defs)
+        {
+            if (keepAnim != null && string.Equals(def.AnimName, keepAnim, StringComparison.OrdinalIgnoreCase))
+                continue;
+            if (def.ResetState == null)
+                continue;
+            var anchors = Anchors(def);
+            foreach (var anchor in anchors)
+                ApplyInstant(def.ResetState.Events, def, anchor);
+        }
+        HideUncoveredDestroyed();
+        _ambientStarted = false;
+        GD.Print($"anim: ambient stopped — {_instances.Count} live instance(s) kept, "
+                 + $"{_motions.Count} live motion(s)");
+    }
+
     private readonly Dictionary<int, Node3D> _byIndex = new();
 
     private void IndexWorld(Node3D worldRoot)
