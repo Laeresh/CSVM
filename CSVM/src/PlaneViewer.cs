@@ -183,6 +183,10 @@ public partial class PlaneViewer : Node3D
     private bool _animLab;
     private string? _playAnim;                      // --play-anim=<name>: play at launch (implies --anim-lab)
     private int _labSeed = UI.AnimLab.DefaultSeed;  // --seed=N: the lab's pinned RNG seed
+    // --debug-anim-ui: force the lab's picker + timeline visible in a scripted --screenshot run
+    // (the timeline-verification path — the UI is otherwise hidden there so shots stay
+    // byte-identical), the same house convention as --debug-livery.
+    private bool _debugAnimUi;
     // --debug-anim: log every live animation motion once a second (headless verification
     // that the train/doors actually move, without flying a camera at them).
     private bool _debugAnim;
@@ -304,6 +308,9 @@ public partial class PlaneViewer : Node3D
     private string _texturesPath = "";      // --textures= override value (verbatim when set)
     private bool _gamezOverridden, _texturesOverridden, _zrdrOverridden, _soundsOverridden;
     private bool _mute, _debugCollision;
+    // --no-focus (also implied by --screenshot): set the NoFocus window flag
+    // (WS_EX_NOACTIVATE on Windows) so the window doesn't steal foreground focus.
+    private bool _noFocus;
     // --no-fog: an inspection aid, not a weather zone. Neutralises the distance-fog RANGE and
     // the cloud-band whiteout so geometry is visible to the horizon. Deliberately leaves
     // WorldLight and FOG_COLOR alone — the point is to remove obscuration without changing how
@@ -357,6 +364,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--anim-lab") { _animLab = true; hasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { _playAnim = arg["--play-anim=".Length..]; _animLab = true; hasContentArg = true; }
             else if (arg.StartsWith("--seed=")) { _labSeed = int.Parse(arg["--seed=".Length..]); }
+            else if (arg == "--debug-anim-ui") { _debugAnimUi = true; _animLab = true; hasContentArg = true; }
             else if (arg == "--debug-anim") _debugAnim = true;
             // A connected pad with stick drift steers the free camera and nudges the flight
             // model, which quietly makes a "deterministic" scripted screenshot not one. SDL's
@@ -394,6 +402,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--sounds=")) { _soundsPath = arg["--sounds=".Length..]; _soundsOverridden = true; }
             else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
             else if (arg == "--no-fog") _noFog = true;
+            else if (arg == "--no-focus") _noFocus = true;
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
             else if (arg.StartsWith("--players=")) { _players = int.Parse(arg["--players=".Length..]); playersExplicit = true; }
@@ -407,6 +416,14 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--campos=")) _camPos = ParseVec3(arg["--campos=".Length..]);
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
+
+        // Don't steal the user's foreground focus. Screenshot mode always opts in (it renders a
+        // few frames and quits, needing no input); --no-focus is the manual lever (e.g. --freecam
+        // observation). Sets WS_EX_NOACTIVATE on Windows so the window won't hold or re-grab focus.
+        // Rendering is unaffected — a non-minimized background window still composites, so the
+        // capture stays valid. Set here (earliest we know the flags), before any world build.
+        if (_noFocus || _screenshotPath != null)
+            DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
 
         // --stunt is free flight over the mission's danger zones: force the flight path and the
         // stunt_flying spawn list (unless the tester pinned another scenario for a specific spawn).
@@ -750,7 +767,10 @@ public partial class PlaneViewer : Node3D
                         autoFrame: _camPos == null && _lookAt == null,
                         fixedFrameStep: _screenshotPath != null)
                     {
-                        ShowStatus = _screenshotPath == null,
+                        // Interactive shows the whole lab UI; a scripted --screenshot hides it so
+                        // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
+                        // to capture the timeline (the same convention as --debug-livery).
+                        ShowUi = _screenshotPath == null || _debugAnimUi,
                     };
                     _worldRoot!.AddChild(animLab);
                     GD.Print($"anim-lab: quiet stage, seed {_labSeed}, fixed dt 1/60"

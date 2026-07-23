@@ -157,6 +157,18 @@ name for now (renaming it is the future split's business).
   control differs; seeds 3/5/6 take a different `RandomWeight` branch than 1/2/4 while same-seed
   reruns match. See `docs/HISTORY.md`.
 - **Wave 4 — picker + timeline** (D), fed by the B4 hooks.
+  **✅ Wave 4 landed 2026-07-23** — `src/UI/AnimTimeline.cs` (a custom-drawn `Control`: authored event
+  blocks per Initial sequence vs runtime-fired ticks, playhead, indented CALL_ANIMATION child groups)
+  + a filterable def picker (`LineEdit` + `ItemList` over `program.Defs`, **P** toggles it) in
+  `src/UI/AnimLab.cs`, both fed from the Wave-2 B4 hooks (attached only when the UI is shown, so a
+  plain scripted run pays nothing). The authored schedule is re-derived independently of the
+  `SequenceRunner` (the whole point — a runner bug diverges from it rather than matching it). New flag
+  `--debug-anim-ui` forces the UI on in a `--screenshot` (else hidden, keeping shots byte-identical);
+  `AnimLab.ShowStatus` → `ShowUi`. **Verified:** `desert_onoff` (the bowl sign — the polish-4 `NextDue`
+  regression) shows every des_on/des_off fired tick landing on its authored block across the 4.6 s
+  loop; `train_on_track` shows four SI-script car lanes + `steamplume` with ~327 s authored bars and
+  t=0 fired ticks; a plain `--anim-lab --screenshot` (no `--debug-anim-ui`) renders a clean overlay-free
+  frame; C1 `--fly` boot unchanged (616 ON_STARTUP + 5 start anims, 615 instances). See `docs/HISTORY.md`.
 - **Wave 5 — crash stage** = the crash plan's Wave 2a/2b, delivered here: build the plane's
   `destroyed` subtree (`PlaneBuilder.BuildDestroyed` :133) + the effect templates
   (`carnage_trails` → `fly_trail1..5`, `flydirt` → `flydirt`/`dust` — world-gamez roots

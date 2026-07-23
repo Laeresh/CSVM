@@ -4500,3 +4500,77 @@ relative-path-resolves-against-`CSVM/` gotcha). The PNGs were deliberately NOT p
 rendered frames are game-derived and never enter version control; the md5s in FINDINGS carry
 the comparisons. The five HISTORY "Evidence:" citations above now point at the analysis dir,
 and the swept `.scratch` dirs were deleted.
+
+**Screenshot mode no longer steals foreground focus — `--no-focus` (2026-07-23):** the automated
+`--screenshot=` verification runs (fired constantly to check rendering) opened a real Godot window
+that grabbed the user's foreground focus off their editor/terminal for the ~15 frames it rendered
+before quitting, interrupting them every capture. Fixed in `PlaneViewer._Ready` (see the
+PlaneViewer bullet's no-focus note): right after the arg loop, `DisplayServer.WindowSetFlag(WindowFlags.NoFocus, true)`
+is set whenever `--screenshot=` is present (or the new manual `--no-focus` flag, for `--freecam`
+observation), so every existing screenshot command is now non-focus-stealing with **zero change to
+how the capture is launched**. On Windows this sets `WS_EX_NOACTIVATE`; rendering is unaffected (a
+non-minimized background window still composites, so the PNG stays valid). Verified: `dotnet build`
+clean; a `--chapter=C1 --screenshot=` capture with a text editor focused leaves the editor focused
+and writes a correct non-black render; a normal `RunGame.ps1` launch is unchanged (the flag is only
+set for `--screenshot`/`--no-focus`). **Research findings, recorded so they aren't re-chased:** Godot
+4.7 has **no** CLI arg or project setting to launch a window unfocused (`--fullscreen`/`--maximized`/
+`--always-on-top`/`--position` and the `display/window/size/always_on_top`/`…/borderless` settings
+exist; a no-focus equivalent does not); the `FLAG_NO_FOCUS` window flag set from C# is the only
+in-engine lever, and because the engine creates the window before any C# runs it can't be guaranteed
+to suppress a sub-second first-frame flash (escalation if it ever matters: an OS-level launch wrapper
+that saves `GetForegroundWindow` and hands focus back — not built). `--headless` is a dead end for
+screenshots — it forces the dummy display+rendering driver, so `GetViewport().GetTexture().GetImage()`
+returns a blank PNG. `FLAG_NO_FOCUS` also makes the window ignore keyboard input (docs: "will ignore
+all input, except mouse clicks"), which is why it's scoped to captures/observation, not keyboard flying.
+
+**Anim-debugger Wave 4 — the def picker + authored-vs-fired timeline (2026-07-23).** PLAN-anim-debugger
+Wave 4 (D), the last piece of the `--anim-lab` UI before the crash stage. Two additions, both fed
+straight from the Wave-2 B4 runtime hooks (`OnEventDispatched`/`OnInstanceStarted`/`OnInstanceFinished`),
+no `--debug-anim` log-parsing:
+
+- **Def picker** (in `src/UI/AnimLab.cs`): a `LineEdit` filter + `ItemList` over `program.Defs`, one row
+  per def as `anim-name · activation · @anchor`. Type to substring-filter across all three columns; Enter
+  plays the first filtered playable row, double-click/activate plays that one; defs with no ANIMATION_NAME
+  are disabled (Play keys off the name). **P** toggles the panel.
+- **Timeline** (`src/UI/AnimTimeline.cs`, a custom-drawn `Control`): one lane per Initial (non-on-call)
+  sequence of the played def, the events drawn as **authored** blocks in an upper band, the runtime's
+  **actual** dispatch ticks in a lower band, a moving playhead, and any CALL_ANIMATION child def as an
+  appended indented lane group offset at the playhead time it started. The authored schedule is computed
+  by `BuildLane`, a single linear pass that re-derives the *documented* rule (an event's own `start`
+  gates it; "Event"/absent measured from the previous event's completion = its fire time plus its run
+  time; control-flow events placed but taking no time) — deliberately **not** by calling the runtime's
+  `SequenceRunner`, so a runner bug diverges from this rather than matching it. `StaticDuration` mirrors
+  `Dispatch`'s `duration` out-param (FromTo/spin `run_time`, SI-script length) so a timed block is a bar
+  of the right width. A near-vertical connector on each event's first firing = "fired on schedule"; a
+  slant is the divergence — this is the instrument that would have caught the polish-4 `NextDue`
+  off-by-one. The axis auto-scales to `max(2 s, last authored, last fired) × 1.05`, so a loop's period
+  reads off the tick spacing (ticks accumulate across passes, capped 600/lane; Restart clears).
+
+**Wiring.** Three ordering details are load-bearing and were verified by measurement: (1) `AnimLab.Play`
+sets the timeline focus + clears marks **before** `AnimRuntime.Play`, because that call fires the def's
+t=0 events synchronously and the dispatch hook needs `_timelineDef` in place; the anchor is captured from
+the first `OnInstanceStarted` of the focus def, which the runtime raises before the t=0 `inst.Advance`.
+(2) `Step()` bumps `_steps` **before** `Advance`, so during a dispatch the playhead (`_steps × dt`) equals
+the runner's clock (incremented at the top of `Advance`) and a fired tick lands at the time it actually
+fired; the t=0 events (dt=0, `_steps=0`) stamp at t=0. (3) A sibling def sharing the played def's
+ANIMATION_NAME is another template instance, not a CALL_ANIMATION child (`SameAnimName` excludes it), and
+pressing **A** (ambient) sets `_trackChildren=false` so the cascade it launches doesn't pollute the strip.
+The hooks are attached in `_Ready` **only when the UI is shown**, so a plain scripted run leaves them null
+and the runtime's null-conditional dispatch stays zero-cost. New flag `--debug-anim-ui` (implies
+`--anim-lab`) forces the whole lab UI visible in a `--screenshot` — the timeline-verification path;
+otherwise the UI is hidden there so shots stay byte-identical (`AnimLab.ShowStatus` → `ShowUi`, now gating
+status + picker + timeline together).
+
+**Verified** (`.scratch/anim-lab-verify/`, git-ignored — the shots frame game-asset geometry so they can't
+be committed): `--anim-lab --chapter=C1 --play-anim=desert_onoff --debug-anim-ui` — the **bowl sign**, the
+very def the polish-4 `NextDue` fix was proven on — draws its single `on_off` lane with each des_on/des_off
+pair's fired tick landing on its authored block at 0/1/1.5/1.65/1.8/2.45/2.85/3.2/3.4 s and the second loop
+iteration re-firing at ~4.6 s (all times exact 1/60 multiples, so the connectors are vertical = no
+divergence, exactly as the fix intends). `--play-anim=train_on_track` renders four SI-script car lanes +
+`steamplume` with ~327 s authored duration bars and t=0 fired ticks (authored blocks visibly render as
+wide blue bars across multiple lanes). A plain `--anim-lab --play-anim=desert_onoff --screenshot` with
+**no** `--debug-anim-ui` renders a clean overlay-free 3D frame (the scripted-screenshot path stays
+byte-identical). C1 `--fly` boot unchanged (616 ON_STARTUP + 5 start anims, 615 live instances, 39 motions
+— the full ambient world, since the non-lab path never attaches the hooks). Build clean (0 warnings).
+**Next: Wave 5, the crash stage** — build the plane's `destroyed` subtree + effect templates into the lab
+and wire the puffer factory (the crash plan's Wave 2a/2b scaffolding).
