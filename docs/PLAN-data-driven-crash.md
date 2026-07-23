@@ -208,10 +208,18 @@ hand-code) after the data-driven path reproduces slices 1–2 at least as well. 
 
 ## Build order
 
-- **Wave 1 — Layer 1 handlers (no crash wiring yet).** 1a `ObjectOpacityFromTo`, then 1b
-  `ObjectMotion` ballistic/scale/tumble. Both are additive to `AnimRuntime` and cannot regress the
-  world (all usages are trigger-gated; nothing ambient fires them — the 8-chapter world regression
-  should be **byte-identical**, which is itself the safety proof). `bounce_sequence` can defer.
+- **Wave 1 — Layer 1 handlers (no crash wiring yet). ✅ LANDED 2026-07-23.** 1a
+  `ObjectOpacityFromTo` → `OpacityFade`, 1b `ObjectMotion` ballistic/scale/tumble → `MotionRuntime`,
+  plus an `IAnimMotion.Channel` discriminator so opacity + transform coexist on one node. `bounce_sequence`
+  deferred (Layer-1.5, needs a physics ray). **Verified:** true before/after 8-chapter regression
+  byte-identical **except C3** — its one `ON_STARTUP` opacity fade (`spiderweb_gone`) is now handled
+  (the census's predicted single ambient trigger; a free live sighting). Lab play
+  (`--anim-lab --play-anim=player_crash_dirt`, seeded/fixed-dt): `fly_trail*` debris integrate + tumble,
+  `dust` scales+fades together, `flydirt` sinks; the rendered frame fans the debris fireballs out.
+  ⚠ **Handed to Layer 2:** `Targets()` prefers the compiled `NodeRefs` index and does **not**
+  name-fall-back (unlike `ResolveOne`), so the lab's meshless `piece1..4` (no gamez index) leave the
+  piece `ObjectMotion`s unresolved — `BuildDestroyed` geometry must carry matching indices, or `Targets`
+  needs the fallback. The piece launch itself is the same `translation` path `flydirt` already proves.
 - **Wave 2 — Layer 2 scaffolding.** Build the crash subtree + effect templates; bind a crash
   `AnimRuntime`; run reset states. Verify the templates build in all 8 chapters (node/mesh counts,
   zero errors), still no trigger.

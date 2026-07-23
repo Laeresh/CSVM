@@ -314,6 +314,14 @@ An unchanged output has at least four innocent explanations, and they look ident
 - **The change is inert by construction in that chapter.** 7 of 8 chapters were byte-identical
   after the point-light work *because C1 is the only chapter with `OnStartup` light defs* — worth
   stating, because "byte-identical" otherwise reads as "didn't work".
+- **The mirror: the ONE chapter that deviated was the change working, not regressing.** Adding the
+  `OBJECT_OPACITY_FROM_TO` handler (believed fully trigger-gated) left 7 of 8 chapters byte-identical
+  and moved C3 by exactly one live motion — because C3 ships the single `ON_STARTUP` opacity fade in
+  the install (`spiderweb_gone`), which the handler now correctly runs. A lone deviation in an
+  otherwise-identical regression is **not** automatically a regression: identify *what* moved before
+  "restoring" identity, or you gate off the one case the feature exists to handle. Corollary: a
+  reachability census ("only 1 of 9,917 reached at boot") is a claim to **grep the activations for**,
+  not assume — and that one ambient trigger is a free live sighting (rule 5), no crash wiring needed.
 - **The metric legitimately must not move.** The anim dedupe fix correctly left the op count at
   3531 throughout; expecting movement would have read as failure.
 - **Two different failures look the same from outside.** "The key handler doesn't fire" and "the

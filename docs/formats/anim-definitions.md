@@ -65,7 +65,7 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `OBJECT_TRANSLATE_STATE` | `NAME`, `STATE` [x,y,z], `RELATIVE` | **Absolute** position in the node's parent frame (see below). `RELATIVE` is `false` in all 1143 uses in this install. |
 | `OBJECT_ROTATE_STATE` | `NAME`, `STATE` [x,y,z], `BASIS` | **Absolute** orientation in the parent frame, **radians**. `BASIS` is `"Absolute"` in 6430 of ~6600 uses; the rest are `AtNodeXYZ`/`AtNodeMatrix` look-at forms (zeppelins, cameras). |
 | `OBJECT_MOTION_FROM_TO` | `NAME`, `TRANSLATE`/`ROTATE`/`SCALE` `{from,to}` (+ `*_DELTA` variants), `RUN_TIME` [s] | Timed motion between two **absolute** parent-frame poses (C1 hangar 3: four `h3_dr*` doors over 9–10 s). |
-| `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the unreached `GRAVITY`/`TRANSLATION`/`BOUNCE_SEQUENCE`/`SCALE` channels | Steady spin about the node's **own** axes at `initial` rad/s (deg/s in the reader), endless without `RUN_TIME`. The zeppelin nacelle props. See "`OBJECT_MOTION` is two ops sharing one event". |
+| `OBJECT_MOTION` | `NAME`, `XYZ_ROTATION` [ix,iy,iz,dx,dy,dz], optional `RUN_TIME` [s] — plus the `GRAVITY`/`TRANSLATION[_RANGE]`/`FORWARD_ROTATION`/`SCALE`/`BOUNCE_SEQUENCE` channels | Two ops in one: a **steady spin** (`XYZ_ROTATION` alone, at `initial` rad/s — deg/s in the reader — endless without `RUN_TIME`; the zeppelin nacelle props) OR a **ballistic body** (translate/launch + scale ramp + tumble under gravity; the crash pieces and debris arcs). See "`OBJECT_MOTION` is two ops sharing one event". |
 
 ### `OBJECT_OPACITY_STATE` is translucency, not visibility
 
@@ -82,7 +82,17 @@ five spellings occur: `["ON", 0.6]`, `[0.4, "ON"]`, `["OFF", 1]`, `[1, "OFF"]` a
 `OBJECT_OPACITY_FROM_TO` tweens the same pair with a `RUN_TIME`; a fade-out is
 `(true,1.0) → (false,0.0)` ×5073 and a fade-in `(true,0.0) → (false,1.0)` ×4609, i.e. the end
 state disables translucency once the object is fully opaque again (or is deactivated outright).
-Only ONE of its 9,917 uses is ever reached at bootstrap, so it is not implemented.
+**Implemented 2026-07-23** (`AnimRuntime.OpacityFade`, the biggest un-handled kind at 9,917
+events): a linear lerp of the two `opacity` numbers over `RUN_TIME`, driven through the same
+per-instance `csky_opacity` parameter `OBJECT_OPACITY_STATE` writes. ⚠ **The endpoint `state`
+flag does NOT invert the value** — surveyed across all 9,917, `(state=false, opacity=0)` fades to
+invisible and `(state=false, opacity=1)` to opaque — so it is a literal lerp of the opacity, not
+the "false → render normally (1.0)" rule `OBJECT_OPACITY_STATE` uses. `opacity_delta` is null in
+100% of them (the dead relative form, like `OBJECT_MOTION_FROM_TO`'s `*_delta`). Opacity is a
+separate channel from the transform, so a fade coexists with a live motion on the same node (the
+crash `dust` scales and fades at once). **Only ONE of the 9,917 is ever reached at bootstrap** —
+C3's `spiderweb_gone` (`ON_STARTUP`, fades `spiderweb` 1→0 over 0.7 s so the web is gone by
+default); the rest are `ON_CALL`/`WEAPON_HIT`, fired by a crash or (in M3) a kill.
 
 **What is reachable:** 683 dispatches across C1/C3/C4/C5, **zero unresolvable**. C1's
 `cloudparent#` — `ON_STARTUP`, `EXECUTION_BY_RANGE 1900`, a `LOOP{-1}` re-asserting every frame
@@ -133,10 +143,33 @@ two jobs that have nothing to do with each other. Surveyed across all 8 chapters
 | `SCALE` only | 114 | A scale ramp (`ballflare`, the explosion flare, 65→75 over 1.75 s). |
 
 **The split is exactly the reachability boundary.** All 590 `ON_STARTUP` uses are
-rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, which needs weapons this project
-does not have. So the rotation half is implemented (`AnimRuntime.SpinMotion`) and the other two
-stay counted — confirmed at runtime, where **no chapter reports a single `ObjectMotion(ballistic)`
-dispatch** and the whole residual is one `ballflare` scale ramp per chapter.
+rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, fired by a crash or (in M3) a kill.
+So the rotation half runs through the lightweight `AnimRuntime.SpinMotion` (unchanged — the
+ambient world boots byte-for-byte the same), and the ballistic/scale/tumble half is **implemented
+2026-07-23** through `AnimRuntime.MotionRuntime`, a full rigid body seeded from the node's live
+parent-frame pose:
+
+- `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
+  per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
+  is deterministic); `delta` a velocity ramp over `RUN_TIME`, 0 on every reachable piece.
+- `TRANSLATION_RANGE` is a **ranged** ballistic launch (the burning-debris arcs): random
+  horizontal `xz` and vertical `y` distance travelled over `RUN_TIME`, fired in a random azimuth —
+  `vHoriz = xz/RUN_TIME`, `vVert = y/RUN_TIME − ½·g·RUN_TIME`. ⚠ **a reading, not a decode** —
+  never simulated before, `initial`/`delta` unmapped, the anchor invisible so only the arc's rough
+  scale reads (TUNE).
+- `GRAVITY.value` (negative) accelerates the launch. `DO_INTERSECTIONS` ground-rest and the
+  `BOUNCE_SEQUENCE` re-launch are a **Layer-1.5 follow-up** (they need a physics ray) — the body
+  integrates freely over `RUN_TIME` then finishes.
+- `FORWARD_ROTATION.Time.initial` is a tumble **rate** (rad/s) — a piece = 15.708 = 900°/s. ⚠ the
+  axis is a reasoned choice (local X): the data carries a scalar rate, not an axis.
+- `SCALE.initial`/`delta` a linear scale ramp (absolute, like `OBJECT_SCALE_STATE`) — the crash
+  `dust` grows and shrinks over 6 s.
+
+Verified 2026-07-23 in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
+`fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while
+the others do not, `dust` runs a scale ramp and an `OpacityFade` at once, `flydirt` sinks on its
+`TRANSLATION`. An 8-chapter ambient regression is byte-identical bar C3's one reachable opacity
+fade — because nothing ambient fires the ballistic half (see the reachability boundary above).
 
 What the reachable spins are: 576 of 590 are zeppelin nacelle propellers — `spin` at −40°/s and
 `counterspin` at +30°/s about local Z, counter-rotating — plus rotating signage (`ammosign`,
@@ -248,12 +281,14 @@ No `RESET_STATE` in either source contains control flow (verified across the ins
 instantaneous base-state pass never has to interpret a branch.
 
 Playback ops seen and deferred: `OBJECT_DELETE_CHILD`,
-`SOUND` (the one-shot form — see below), `OBJECT_OPACITY_STATE`/`OBJECT_OPACITY_FROM_TO`,
-`OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`, `FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
+`SOUND` (the one-shot form — see below), `OBJECT_CYCLE_TEXTURE`, `CAMERA_STATE`,
+`FBFX_COLOR_FROM_TO`, `CALLBACK`, `DETONATE_WEAPON`.
 (`LIGHT_STATE`/`LIGHT_ANIMATION` landed 2026-07-21 — see below;
 `SOUND_NODE` + the sound half of `OBJECT_ADD_CHILD` landed 2026-07-22 — see "SOUND_NODE is a
-three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 — see "OBJECT_MOTION is
-two ops in one" — leaving only its ballistic and scale halves, both unreachable.)
+three-event triple"; `OBJECT_MOTION`'s rotation half landed 2026-07-22 and its
+ballistic/scale/tumble half 2026-07-23 — see "OBJECT_MOTION is two ops in one";
+`OBJECT_OPACITY_STATE` landed 2026-07-22 and `OBJECT_OPACITY_FROM_TO` 2026-07-23 — see
+"OBJECT_OPACITY_STATE is translucency".)
 
 `CALL_ANIMATION` dispatched from the start but **ignored its target node** until 2026-07-21 —
 see "CALL_ANIMATION carries a target node" below; that is the data's template-instancing

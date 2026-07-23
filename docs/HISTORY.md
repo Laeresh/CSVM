@@ -4668,3 +4668,57 @@ instances, 4 puffers, 35 lights, 31 hidden). **Determinism boundary confirmed:**
 screenshots differ (puffer particle spread is `GD.Randf`, outside the runtime's seeded RNG — the
 documented v1 boundary); the stage *placement* is deterministic. The piece ballistics + dust
 opacity/scale dispatch-but-inert, awaiting `PLAN-data-driven-crash.md` Layer 1. Build clean.
+
+## 2026-07-23 — Data-driven crash Layer 1 (Wave 1): generic ObjectMotion + ObjectOpacityFromTo handlers
+
+**PLAN-data-driven-crash Wave 1** landed — the two reusable, generic animation handlers that make
+the crash (and every M3 weapon-hit destruction) data-driven, added to `AnimRuntime` with **no crash
+wiring yet** (Layer 2). Both are additive and trigger-gated, so the ambient world is unaffected.
+
+**1a. `OBJECT_OPACITY_FROM_TO` → `OpacityFade`** — the single biggest un-handled event kind (9,917
+events install-wide, zero prior `case`). A linear lerp of the two `opacity` numbers over `run_time`
+through the existing `SetSubtreeOpacity` (`csky_opacity` per-instance param). Schema censused across
+**all 9,917**: always `{name, opacity_from{opacity,state}, opacity_to{opacity,state}, run_time,
+opacity_delta(null)}`. ⚠ **The endpoint `state` flag does NOT invert the value** — `(false,0)` fades
+to invisible and `(false,1)` to opaque (the two dominant combos, 5073 + 4609) — so unlike
+`OBJECT_OPACITY_STATE`'s "false→1.0" rule this is a literal opacity lerp; `opacity_delta` is null in
+100% of them (the dead relative form).
+
+**1b. `OBJECT_MOTION` ballistic/scale/tumble → `MotionRuntime`** — the rigid-body half the old
+handler only counted. A full body seeded from the node's live parent-frame pose: `translation.initial`
+= launch velocity (+`rnd_xz` spread through the runtime's **seedable** `_rng`, +`delta` velocity-ramp),
+`translation_range` = ranged launch in a random azimuth (`vHoriz=xz/rt`, `vVert=y/rt−½·g·rt` — TUNE,
+`initial`/`delta` unmapped), `gravity.value` accelerates, `forward_rotation.Time.initial` a tumble rate
+about local X, `scale.initial/delta` a linear ramp. `do_intersections` ground-rest + `bounce_sequence`
+re-launch deferred to Layer-1.5 (need a physics ray); the body integrates over `run_time` then finishes.
+Integrator math ported from `CrashChoreography.StartDebris`/`CrashBreakup.Advance`.
+
+**The safety invariant, censused:** the new `MotionRuntime` path activates only when
+`translation`/`translation_range`/`scale`/`forward_rotation` is present, and **all 590 `ON_STARTUP`
+`OBJECT_MOTION` events install-wide are pure `xyz_rotation` spins** — which stay on the untouched
+lightweight `SpinMotion` path. So no boot event can hit the new path.
+
+**A channel discriminator** was added to `IAnimMotion` (`MotionChannel {Transform, Opacity}`, a C#8
+default-interface member so the 3 existing motions needed no change): `AddMotion` now evicts only a
+prior motion on the **same channel**, because the crash `dust` carries a `MotionRuntime` (scale) AND
+an `OpacityFade` at once and neither should displace the other.
+
+**Verified.** A **true before/after** (git-stash baseline, rebuild, re-run) 8-chapter
+`--freecam`/`--screenshot` census is byte-identical **except C3** — whose one `ON_STARTUP`
+`OBJECT_OPACITY_FROM_TO` (`spiderweb_gone`, fading `spiderweb` 1→0 over 0.7 s so the web is gone by
+default) is now handled: live motions 24→25 and it drops off the "not yet acted on" list. That is the
+single ambient trigger the plan's reachability census predicted, and a free live sighting (verification
+rule 5) — not a regression. In `--anim-lab --play-anim=player_crash_dirt` (`--seed=1`, fixed-dt,
+`--debug-anim`): the five `fly_trail*` debris anchors integrate outward and the two carrying
+`forward_rotation` tumble (fly_trail1 40.7°→81.3°, fly_trail3 142.3°→−75.3°) while the others hold rot 0;
+`dust` appears twice in the motion dump (scale motion + opacity fade, both live on separate channels);
+`flydirt` sinks on its `translation`; the rendered frame fans the debris fireballs across the C1 valley
+around the central fireball/smokeball/spark cluster. Build clean, 0 warnings.
+
+**⚠ Handed to Layer 2:** `Targets()` (state ops / `OBJECT_MOTION`) prefers the compiled `NodeRefs`
+**index** and — unlike `ResolveOne` (`CALL_ANIMATION` retargets) — does **not** name-fall-back, so the
+lab's meshless `piece1..4` anchors (no gamez index) leave the piece `OBJECT_MOTION`s unresolved even
+though `healthy`/`destroyed` retarget fine by name. The piece launch is the same `translation` path
+`flydirt` already proves; Layer 2's real `PlaneBuilder.BuildDestroyed` geometry must carry the matching
+indices (or `Targets` needs the fallback). `CrashChoreography.cs`/`CrashBreakup.cs` stay as the working
+fallback until Layer 2 is verified end-to-end.

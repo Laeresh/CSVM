@@ -733,26 +733,88 @@ public sealed partial class AnimRuntime : Node
                 return true;
             }
 
+            case "ObjectOpacityFromTo":
+            {
+                // A timed translucency fade — the single biggest un-handled event kind (9,917
+                // events install-wide, all trigger-gated OnCall/WeaponHit, so none fire at
+                // bootstrap). Unlike OBJECT_OPACITY_STATE, the endpoint `state` flag does NOT
+                // invert the value: (state=false, opacity=0) fades to invisible and
+                // (state=false, opacity=1) fades to opaque — surveyed across all 9,917 events
+                // (the two dominant combos), so this is a literal lerp of the two opacity
+                // numbers through SetSubtreeOpacity. `opacity_delta` is null in 100% of them
+                // (the relative form, like FromToMotion's dead *_delta channels); report it if
+                // one ever appears rather than silently ignoring it.
+                float runTime = ev.Data.Num("run_time") ?? 0f;
+                var from = ev.Data.Obj("opacity_from");
+                var to = ev.Data.Obj("opacity_to");
+                if (from == null || to == null)
+                {
+                    Count("ObjectOpacityFromTo(no endpoints)");
+                    return true;
+                }
+                if (ev.Data.Has("opacity_delta"))
+                    Count("ObjectOpacityFromTo(delta)");
+                float o0 = from.Num("opacity") ?? 1f;
+                float o1 = to.Num("opacity") ?? 1f;
+                foreach (var t in Targets(ev, def, anchor))
+                {
+                    var fade = new OpacityFade(this, t, o0, o1, runTime);
+                    if (instant || runTime <= 0f)
+                        fade.Seek(runTime); // RESET_STATE / zero-length: land on the end opacity
+                    else
+                        AddMotion(fade, def, anchor);
+                    _opsApplied++;
+                }
+                duration = instant ? 0f : runTime;
+                return true;
+            }
+
             case "ObjectMotion":
             {
                 // OBJECT_MOTION is the original's rigid-body descriptor, and it spans two very
-                // different jobs. Rotation-only events are steady spins — zeppelin nacelle
-                // props (`spin`/`counterspin`, ∓40°/30°/s counter-rotating) and rotating
-                // signage — and every one of the 590 OnStartup events install-wide is exactly
-                // that shape. The rest pair rotation with GRAVITY/TRANSLATION/BOUNCE_SEQUENCE:
-                // ballistic debris thrown by a kill, reachable only from OnCall/WeaponHit,
-                // which this project has no weapons to fire. So the spin lands and the
-                // ballistic half stays counted rather than half-simulated.
-                bool ballistic = ev.Data.Has("gravity") || ev.Data.Has("translation")
-                                 || ev.Data.Has("translation_range") || ev.Data.Has("bounce_sequence")
-                                 || ev.Data.Has("forward_rotation");
-                if (ev.Data.Obj("xyz_rotation") is not { } spin)
+                // different jobs. Rotation-only events (XYZ_ROTATION alone) are steady spins —
+                // zeppelin nacelle props (`spin`/`counterspin`, ∓40°/30°/s counter-rotating) and
+                // rotating signage — and every one of the 590 OnStartup events install-wide is
+                // exactly that shape, so the lightweight SpinMotion path below stays byte-for-byte
+                // what the ambient world boots with. The rest pair motion with
+                // GRAVITY/TRANSLATION/SCALE/FORWARD_ROTATION: ballistic debris and dust thrown by
+                // a kill or a CRASH — reachable only from OnCall/WeaponHit (2,900+ events, zero at
+                // bootstrap), which is why the MotionRuntime path here cannot regress the world.
+                bool hasBallistic = ev.Data.Has("translation") || ev.Data.Has("translation_range")
+                                    || ev.Data.Has("scale") || ev.Data.Has("forward_rotation");
+                if (hasBallistic)
                 {
-                    Count(ballistic ? "ObjectMotion(ballistic)" : ev.Kind);
+                    // The full rigid-body simulation: a ballistic translate/launch, a scale ramp
+                    // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
+                    // See MotionRuntime for the semantics and the TUNE caveats.
+                    float ballTime = ev.Data.Num("run_time") ?? 0f;
+                    foreach (var t in Targets(ev, def, anchor))
+                    {
+                        var motion = MotionRuntime.Create(this, t, ev.Data, ballTime);
+                        if (motion == null)
+                            continue;
+                        if (instant || ballTime <= 0f)
+                            motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
+                        else
+                            AddMotion(motion, def, anchor);
+                        _opsApplied++;
+                    }
+                    // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up
+                    // — it needs do_intersections + a ground ray; the pieces read fine tumbling to
+                    // rest without it. Report it so --debug-anim shows it is deferred, not missed.
+                    if (ev.Data.Has("bounce_sequence"))
+                        Count("ObjectMotion(bounce_sequence deferred)");
+                    duration = instant ? 0f : ballTime;
                     return true;
                 }
-                if (ballistic)
-                    Count("ObjectMotion(ballistic part)");
+                // No motion channel: either a steady spin (below) or a bare GRAVITY/BOUNCE stub
+                // with nothing to drive (meaningless without translation — reported, not acted on).
+                if (ev.Data.Obj("xyz_rotation") is not { } spin)
+                {
+                    bool bareBallistic = ev.Data.Has("gravity") || ev.Data.Has("bounce_sequence");
+                    Count(bareBallistic ? "ObjectMotion(ballistic)" : ev.Kind);
+                    return true;
+                }
 
                 var rate = spin.Vec3("initial");
                 // `delta` is a second rate triple whose meaning the data does not settle: it
@@ -1566,9 +1628,18 @@ public sealed partial class AnimRuntime : Node
 
     private readonly List<IAnimMotion> _motions = new();
 
-    /// <summary>A motion that owns a node's pose over time (an SI script playback or a
-    /// from→to tween). The runtime ticks them centrally so a node driven by two motions
-    /// resolves to the later one deterministically.</summary>
+    /// <summary>Which of a node's channels a motion drives. A node carries at most ONE motion
+    /// per channel (see <see cref="AddMotion"/>): the transform channel (translate/rotate/scale,
+    /// all held in <c>Target.Transform</c>) and the opacity channel (the <c>csky_opacity</c>
+    /// shader parameter). They are independent — the crash dust ramps its scale via a
+    /// <see cref="MotionRuntime"/> while an <see cref="OpacityFade"/> fades it out — so a fade
+    /// must not evict a live transform motion, nor a transform motion a live fade.</summary>
+    private enum MotionChannel { Transform, Opacity }
+
+    /// <summary>A motion that owns one of a node's channels over time (an SI script playback, a
+    /// from→to tween, a ballistic body, or an opacity fade). The runtime ticks them centrally so
+    /// a node driven by two motions on the SAME channel resolves to the later one
+    /// deterministically.</summary>
     private interface IAnimMotion
     {
         Node3D Target { get; }
@@ -1577,6 +1648,9 @@ public sealed partial class AnimRuntime : Node
         // later instance's motion replaces an earlier one on the same target.
         (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
         bool Finished { get; }
+        // Almost every motion drives the transform; only OpacityFade overrides this. A default
+        // interface member (C# 8) so the three pre-existing transform motions need no change.
+        MotionChannel Channel => MotionChannel.Transform;
         void Tick(float dt);
         void Seek(float t);
     }
@@ -1623,7 +1697,10 @@ public sealed partial class AnimRuntime : Node
     private void AddMotion(IAnimMotion motion, AnimDefinition def, Node3D? anchor)
     {
         motion.Owner = (def, anchor);
-        _motions.RemoveAll(m => m.Target == motion.Target);
+        // Evict only a prior motion on the SAME channel: a node can carry one transform motion
+        // AND one opacity fade at once (the crash dust scales via a MotionRuntime while an
+        // OpacityFade fades it), and those write different data, so neither displaces the other.
+        _motions.RemoveAll(m => m.Target == motion.Target && m.Channel == motion.Channel);
         _motions.Add(motion);
     }
 
@@ -1887,6 +1964,200 @@ public sealed partial class AnimRuntime : Node
         }
 
         private static Basis Euler(Vector3 radians) => Basis.FromEuler(radians, EulerOrder.Yxz);
+    }
+
+    /// <summary>A timed translucency fade (OBJECT_OPACITY_FROM_TO): lerp the subtree's opacity
+    /// from one value to another over the run time, through the same per-instance
+    /// <c>csky_opacity</c> shader parameter <see cref="SetSubtreeOpacity"/> writes. This is the
+    /// opacity channel — it does not touch the transform — so it coexists with a transform motion
+    /// on the same node (see <see cref="MotionChannel"/>). The endpoints are literal opacity
+    /// values (the endpoint `state` flag does not invert them; see the dispatch case), so no rest
+    /// pose is needed: the two numbers fully determine the fade.</summary>
+    private sealed class OpacityFade : IAnimMotion
+    {
+        public Node3D Target { get; }
+        public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
+        public MotionChannel Channel => MotionChannel.Opacity;
+        private readonly AnimRuntime _rt;
+        private readonly float _from, _to, _runTime;
+        private float _t;
+
+        public OpacityFade(AnimRuntime rt, Node3D target, float from, float to, float runTime)
+        {
+            _rt = rt;
+            Target = target;
+            _from = from;
+            _to = to;
+            _runTime = Mathf.Max(runTime, 0f);
+            Seek(0f);
+        }
+
+        public bool Finished => _t >= _runTime;
+
+        public void Tick(float dt) => Seek(_t + dt);
+
+        public void Seek(float t)
+        {
+            _t = t;
+            float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
+            _rt.SetSubtreeOpacity(Target, Mathf.Lerp(_from, _to, u));
+        }
+    }
+
+    /// <summary>
+    /// The full OBJECT_MOTION rigid body: a ballistic translate/launch, a scale ramp and a
+    /// tumble, driving one node over its run time, in the node's own parent frame (the same
+    /// absolute-in-parent-frame convention as <see cref="FromToMotion"/>). Each channel is
+    /// optional and an absent one holds the node's live value, seeded once at creation so the
+    /// motion cannot compound into itself. This is the reachable half of OBJECT_MOTION that the
+    /// old handler only counted — thrown by a crash or (in M3) a weapon hit; nothing ambient
+    /// fires it.
+    ///
+    /// <para><b>Semantics</b> (established from <c>player_crash_dirt</c>'s pieces,
+    /// <c>call_crash_trails</c> and <c>flydirt</c>; ⚠ several are TUNE, not a settled decode):
+    /// <list type="bullet">
+    /// <item><c>translation.initial</c> is the launch VELOCITY (a piece leaves at y=10 m/s);
+    ///   <c>rnd_xz</c> a per-axis random spread added to it (through the runtime's seedable
+    ///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a velocity ramp over the
+    ///   run time (change from initial to initial+delta) — 0 on every reachable piece, so its
+    ///   exact reading is near-invisible.</item>
+    /// <item><c>translation_range</c> is a RANGED ballistic launch (the burning-debris arcs): a
+    ///   random horizontal distance <c>xz</c> and vertical <c>y</c> travelled over the run time,
+    ///   fired in a random azimuth — <c>vHoriz = xz/run_time</c>,
+    ///   <c>vVert = y/run_time − ½·g·run_time</c> (so the arc reaches <c>y</c> at the end).
+    ///   ⚠ undocumented and never simulated before; <c>initial</c>/<c>delta</c> are unmapped.</item>
+    /// <item><c>gravity.value</c> (negative) accelerates the launch; folded straight into the
+    ///   constant acceleration. <c>do_intersections</c> ground-rest and the <c>bounce_sequence</c>
+    ///   re-launch are a Layer-1.5 follow-up (they need a physics ray) — the body integrates
+    ///   freely over the run time and then finishes.</item>
+    /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
+    ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
+    ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
+    ///   scattered wreckage.</item>
+    /// <item><c>xyz_rotation.initial</c> a steady multi-axis spin (rad/s), composed like
+    ///   <see cref="SpinMotion"/>; present only on the rare spin+ballistic events.</item>
+    /// <item><c>scale.initial</c> a start scale and <c>scale.delta</c> the change over the run
+    ///   time, a linear ramp (the dust: (3.5,10,3.5) → (2.5,5,2.5) over 6 s). Absolute, like
+    ///   <see cref="PoseScale"/>, so it replaces the held scale rather than multiplying it.</item>
+    /// </list></para>
+    /// </summary>
+    private sealed class MotionRuntime : IAnimMotion
+    {
+        public Node3D Target { get; private init; } = null!;
+        public (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
+
+        // Held pose, seeded once from the live transform: an absent channel carries it through.
+        private Basis _heldRot;      // orthonormal; scale kept out
+        private Vector3 _heldScale;
+        private Vector3 _heldOrigin;
+
+        // Ballistic: origin(t) = held + v0·t + ½·accel·t²  (accel folds gravity + any velocity ramp).
+        private Vector3 _v0, _accel;
+        private bool _hasBallistic;
+
+        // Scale ramp: scale(t) = init + delta·u,  u = t/run_time clamped.
+        private Vector3 _scaleInit, _scaleDelta;
+        private bool _hasScale;
+
+        private float _tumbleRate;   // rad/s about local X (forward_rotation)
+        private Vector3 _spinRate;   // rad/s per local axis (xyz_rotation)
+
+        private float _t, _runTime;
+
+        public bool Finished => _t >= _runTime;
+
+        public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
+        {
+            var rest = rt.RestOf(target); // records the authored pose; the fallback for a bad live basis
+            var held = target.Transform;
+            float det = held.Basis.Determinant();
+            if (!float.IsFinite(det) || Mathf.Abs(det) < 1e-9f || !held.Origin.IsFinite())
+                held = rest;
+
+            float rtSafe = Mathf.Max(runTime, 0f);
+            var m = new MotionRuntime
+            {
+                Target = target,
+                _heldRot = held.Basis.Orthonormalized(),
+                _heldScale = held.Basis.Scale,
+                _heldOrigin = held.Origin,
+                _runTime = rtSafe,
+            };
+
+            float RandSym() => (float)(rt._rng.NextDouble() * 2.0 - 1.0); // [-1, 1] via the seedable RNG
+            float Rand(float a, float b) => a + (float)rt._rng.NextDouble() * (b - a);
+
+            float gravity = data.Obj("gravity")?.Num("value") ?? 0f;
+
+            if (data.Obj("translation") is { } tr)
+            {
+                var v0 = tr.Vec3("initial");
+                var rnd = tr.Vec3("rnd_xz");
+                v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
+                var delta = tr.Vec3("delta");
+                // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
+                var rampAccel = rtSafe > 0f ? delta / rtSafe : Vector3.Zero;
+                m._v0 = v0;
+                m._accel = rampAccel + new Vector3(0f, gravity, 0f);
+                m._hasBallistic = true;
+            }
+            else if (data.Obj("translation_range") is { } range)
+            {
+                float horiz = Rand(range.Obj("xz")?.Num("min") ?? 0f, range.Obj("xz")?.Num("max") ?? 0f)
+                              / Mathf.Max(rtSafe, 0.1f);
+                float vVert = Rand(range.Obj("y")?.Num("min") ?? 0f, range.Obj("y")?.Num("max") ?? 0f)
+                              / Mathf.Max(rtSafe, 0.1f)
+                              - 0.5f * gravity * rtSafe; // gravity < 0 → the second term adds launch speed
+                float azimuth = Rand(0f, Mathf.Tau);
+                m._v0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz);
+                m._accel = new Vector3(0f, gravity, 0f);
+                m._hasBallistic = true;
+            }
+
+            if (data.Obj("scale") is { } sc)
+            {
+                m._scaleInit = sc.Vec3("initial");
+                m._scaleDelta = sc.Vec3("delta");
+                m._hasScale = m._scaleInit.LengthSquared() > 1e-9f;
+            }
+
+            m._tumbleRate = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
+            m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
+
+            // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
+            bool any = m._hasBallistic || m._hasScale || m._tumbleRate != 0f || !m._spinRate.IsZeroApprox();
+            return any ? m : null;
+        }
+
+        public void Tick(float dt) => Seek(_t + dt);
+
+        public void Seek(float t)
+        {
+            _t = t;
+            float u = _runTime <= 0f ? 1f : Mathf.Clamp(t / _runTime, 0f, 1f);
+            // Clamp the ballistic clock too so a finished body holds its last pose (it is removed
+            // the frame it finishes, but Seek can be called past run_time by an instant land).
+            float tb = _runTime > 0f ? Mathf.Min(t, _runTime) : t;
+
+            var origin = _heldOrigin;
+            if (_hasBallistic)
+                origin = _heldOrigin + _v0 * tb + 0.5f * tb * tb * _accel;
+
+            var basis = _heldRot;
+            if (_tumbleRate != 0f)
+                basis = basis.Rotated(basis.X.Normalized(), _tumbleRate * tb);
+            if (!_spinRate.IsZeroApprox())
+            {
+                var a = _spinRate * tb;
+                if (a.X != 0f) basis = basis.Rotated(basis.X.Normalized(), a.X);
+                if (a.Y != 0f) basis = basis.Rotated(basis.Y.Normalized(), a.Y);
+                if (a.Z != 0f) basis = basis.Rotated(basis.Z.Normalized(), a.Z);
+            }
+
+            var scale = _hasScale ? _scaleInit + _scaleDelta * u : _heldScale;
+
+            Target.Transform = new Transform3D(basis.Scaled(scale), origin);
+        }
     }
 
     // ---- instances and sequence timing ----
