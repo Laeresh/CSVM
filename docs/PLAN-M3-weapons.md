@@ -444,7 +444,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 ### Wave B — weapons core
 
-11. ☐ `WeaponDefs.cs` — typed reader over `weapons.json`
+11. ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **landed** (`--dump-weapons` verifies)
 12. ☐ `Loadout.cs` — stock-loadout reader, slot model, marker resolution
 13. ☐ `Projectile.cs` — spawn and integration
 14. ☐ `FLYOUT` model instancing — projectile visuals from the gamez prototypes
@@ -735,16 +735,31 @@ are the rule's two soft spots.
 
 ---
 
-### B11 ☐ `WeaponDefs.cs` — typed reader over `weapons.json`
+### B11 ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **LANDED**
 
-**Goal.** `ZrdrDict` → typed `WeaponDef` for all 48 entries. Blocks every other wave-B item.
+**Landed.** `src/Flight/WeaponDefs.cs` (modelled on `PlaneStats`): `WeaponDefs.Load` → 48 typed
+`WeaponDef`s keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. Exposes ballistics,
+damage, allotment, the class flags, the specials (BEEPER/TANGLER/…), and the `FIRE`/`FLYOUT`/
+`IMPACT` bindings with `IMPACT` keyed by a `SurfaceClass` enum (the six classes A1 corrected —
+`default`/`water`/`buildings`/`player`/`enemy`/`quicksand`). `DESC` resolves through `Messages`.
+Each def carries an `UnhandledKeys` tripwire (empty for this install).
 
-**Approach.** Follow `PlaneStats.cs`'s shape as the model for a typed reader over a zrdr file.
-Parse the flat `BALLISTICS` alternating list; expose ballistics, damage, ammo, the class flags
-(`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TARGETABLE`/…), and the `FIRE`/`FLYOUT`/`IMPACT` bindings
-with `IMPACT` keyed by surface class. Resolve `DESC` through `Messages`.
+**Verified.** `--dump-weapons` (a new headless verification tool, mirroring `--dump-markers`) parses
+**all 48 with NO unhandled keys**, and the dump cross-checks against A1's `weapons.md`: the
+`wep_50`–`53` damage matrix (slug 6.25/6.25, dum-dum 3.125/9.375, AP 9.375/3.125, mag 6.75/5.75),
+the turret gun's `AMMO_LIMIT 9999` + no `CLUSTER_SIZE`, `wep_06` HE (`CLUSTER_SIZE 3`, no
+`AMMO_LIMIT`), the torpedo's `TORPEDO`/`TARGETABLE`/`DAMAGES_ZEPPELIN` flags + `FLYOUT_HEALTH`, and
+DESC display names ("30-cal. slug machine gun"). **B12–B20 unblocked.**
 
-**Verify.** All 48 parse with no unhandled key; a dump of every parsed def matches A1's page.
+**Implementation notes for the rest of wave B.** Flags are `KEY,null` in the data → `ZrdrDict`
+bare-flag handling → `Has(key)`. `IMPACT` is walked as raw class/value pairs (not via `ZrdrDict`)
+so a null class value (`enemy` = "no effect") is skipped, not read back as an empty binding. Added
+`ZrdrDict.Keys` for the unhandled-key check.
+
+**Original approach (for reference).** Follow `PlaneStats.cs`'s shape as the model for a typed
+reader over a zrdr file. Parse the flat `BALLISTICS` alternating list; expose ballistics, damage,
+ammo, the class flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TARGETABLE`/…), and the `FIRE`/`FLYOUT`/
+`IMPACT` bindings with `IMPACT` keyed by surface class. Resolve `DESC` through `Messages`.
 
 ### B12 ☐ `Loadout.cs` — loadout reader, slot model, marker resolution
 

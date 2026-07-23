@@ -167,6 +167,11 @@ public sealed class ZrdrDict
 
     public bool Has(string key) => _props.ContainsKey(key);
 
+    /// <summary>Every key present, in no particular order (duplicates already collapsed). Lets a
+    /// typed reader assert it consumed every key its source file carries — see
+    /// <see cref="Flight.WeaponDefs"/>'s unhandled-key check.</summary>
+    public IReadOnlyCollection<string> Keys => _props.Keys;
+
     public List<object?>? List(string key) => _props.TryGetValue(key, out var v) ? v : null;
 
     public bool TryFloat(string key, out float value, int index = 0)

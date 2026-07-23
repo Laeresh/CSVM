@@ -275,6 +275,20 @@ WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavF
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry
 grammar and flag/key meanings are in `docs/formats/sounds.md`.
 
+## src/Flight/WeaponDefs.cs
+Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /
+rockets / ordnance) keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. Ballistics,
+damage, allotment, the class flags, the specials, and the `FIRE`/`FLYOUT`/`IMPACT` bindings
+(`IMPACT` keyed by `SurfaceClass`); `DESC` resolved through `Messages`. Modelled on PlaneStats.
+Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
+⚠ Flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/…) are `KEY,null` in the data — `ZrdrDict` bare-flag
+  handling makes them present-but-empty, so `Has` is the test; a valued struct (`BEEPER`/`TANGLER`)
+  is `Has`+`Dict`.
+⚠ `IMPACT` is walked as raw class/value pairs, not via `ZrdrDict` — a null class value (`enemy`,
+  "no effect on that surface") must be skipped, not read back as an empty binding.
+⚠ `UnhandledKeys` is a tripwire: empty for this install (asserted by `--dump-weapons`); non-empty
+  means the data grew a key `KnownKeys` hasn't learned — update the reader, don't ignore it.
+
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals, the `engine_sound` def name with its

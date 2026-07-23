@@ -41,6 +41,10 @@ namespace CSVM;
 ///                                (name, plane-frame position, gun pair, shared mounts) to
 ///                                stdout and ./.scratch/markers_dump.txt, then quit; the
 ///                                optional value filters to one plane (model or display name)
+///   --dump-weapons[=id|name]     print the typed weapons.json table (WeaponDefs) — one block
+///                                per def with ballistics, flags and FIRE/FLYOUT/IMPACT bindings
+///                                — to stdout and ./.scratch/weapons_dump.txt, then quit; a clean
+///                                run reports no unhandled keys. Optional filter by id / NAME
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -212,6 +216,8 @@ public partial class PlaneViewer : Node3D
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
+    private bool _dumpWeapons;         // --dump-weapons[=wep_NN]: print the typed weapons.json table and quit
+    private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -406,6 +412,8 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
+            else if (arg == "--dump-weapons") _dumpWeapons = true;
+            else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -515,6 +523,14 @@ public partial class PlaneViewer : Node3D
         if (_dumpMarkers)
         {
             DumpMarkers();
+            GetTree().Quit();
+            return;
+        }
+        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader (B11) —
+        // dump every def and assert no key went unmapped.
+        if (_dumpWeapons)
+        {
+            DumpWeapons();
             GetTree().Quit();
             return;
         }
@@ -2181,6 +2197,126 @@ public partial class PlaneViewer : Node3D
         var outPath = Path.Combine(scratch, "markers_dump.txt");
         File.WriteAllText(outPath, text);
         GD.Print($"markers dump: {done} airframe(s) → ./.scratch/markers_dump.txt");
+    }
+
+    /// <summary>--dump-weapons[=id|name]: load the typed <see cref="Flight.WeaponDefs"/> reader
+    /// (B11) over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
+    /// bindings) to stdout and <c>./.scratch/weapons_dump.txt</c>, and report any unmapped keys,
+    /// then quit. The committed verification instrument the weapons.md table is checked against —
+    /// a clean run (no UNHANDLED lines) is the B11 pass. An optional value filters by id
+    /// (<c>wep_06</c>) or <c>NAME</c> substring, matched case-insensitively.</summary>
+    private void DumpWeapons()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        // Locale-independent output: float.ToString() is culture-sensitive, so without this a
+        // German machine writes "6,25" where an invariant one writes "6.25" — the dump is a
+        // committed verification artifact and must read the same everywhere.
+        System.Threading.Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+        Flight.WeaponDefs weapons;
+        try
+        {
+            var messages = Messages.Load(_messagesPath);
+            weapons = Flight.WeaponDefs.Load(_zrdrPath, messages);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"--dump-weapons: could not load weapons.json ({_zrdrPath}): {e.Message}");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# weapons.json — {_zrdrPath}");
+        sb.AppendLine($"# {weapons.All.Count} BALLISTICS entries; empty-clip sound = {weapons.EmptyClipSound}");
+        sb.AppendLine("# See docs/formats/weapons.md.");
+        sb.AppendLine();
+
+        int shown = 0, unhandledTotal = 0;
+        foreach (var w in weapons.All)
+        {
+            if (_dumpWeaponsFilter.Length > 0
+                && !w.Id.Contains(_dumpWeaponsFilter, StringComparison.OrdinalIgnoreCase)
+                && !w.Name.Contains(_dumpWeaponsFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            shown++;
+            var flags = new List<string>();
+            if (w.IsCannon) { flags.Add("CANNON"); }
+            if (w.IsRocket) { flags.Add("ROCKET"); }
+            if (w.HighExplosive) { flags.Add("HE"); }
+            if (w.Sonic) { flags.Add("SONIC"); }
+            if (w.Flash) { flags.Add("FLASH"); }
+            if (w.BeeperSeeker) { flags.Add("BEEPER_SEEKER"); }
+            if (w.Rear) { flags.Add("REAR"); }
+            if (w.Torpedo) { flags.Add("TORPEDO"); }
+            if (w.Targetable) { flags.Add("TARGETABLE"); }
+            if (w.DamagesZeppelin) { flags.Add("DMG_ZEP"); }
+            if (w.ShakesCamera) { flags.Add("SHAKE"); }
+            if (w.Crater) { flags.Add("CRATER"); }
+            sb.Append($"{w.Id}  {w.Name,-8}  \"{w.DisplayName}\"");
+            sb.Append($"\n    cal={Opt(w.Caliber)} rate={w.FireRate} vel={Opt(w.Velocity)} range={Opt(w.Range)}"
+                      + $" acc={Opt(w.Acceleration)} turn={Opt(w.TurnRate)} spread={Opt(w.CannonSpread)}");
+            sb.Append($"\n    dmg armor={Opt(w.ArmorDamage)} health={Opt(w.HealthDamage)} combined={Opt(w.Damage)}"
+                      + $" | cluster={Opt(w.ClusterSize)} ammo_limit={Opt(w.AmmoLimit)}");
+            sb.Append($"\n    lock={Opt(w.LockOn)} det_dist={Opt(w.DetonationDistance)} proximity={Opt(w.ImpactProximity)}"
+                      + $" priority={Opt(w.Priority)}");
+            sb.Append($"\n    flags: [{string.Join(", ", flags)}]");
+            sb.Append($"\n    fire={FmtEffect(w.Fire)} flyout={FmtFlyout(w.Flyout)} looped={w.LoopedSoundName ?? "-"}");
+            sb.Append("\n    impact:");
+            foreach (var kv in w.Impact)
+            {
+                sb.Append($" {kv.Key}={FmtEffect(kv.Value)}");
+            }
+            if (w.Impact.Count == 0)
+            {
+                sb.Append(" (none)");
+            }
+            if (w.UnhandledKeys.Count > 0)
+            {
+                unhandledTotal += w.UnhandledKeys.Count;
+                sb.Append($"\n    !! UNHANDLED KEYS: {string.Join(", ", w.UnhandledKeys)}");
+            }
+            sb.AppendLine();
+            sb.AppendLine();
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "weapons_dump.txt"), text);
+        GD.Print(unhandledTotal == 0
+            ? $"weapons dump: {shown} entr(y/ies), NO unhandled keys → ./.scratch/weapons_dump.txt"
+            : $"weapons dump: {shown} entr(y/ies), {unhandledTotal} UNHANDLED key(s) — see the !! lines above");
+    }
+
+    private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";
+
+    private static string FmtEffect(Flight.WeaponEffect? e)
+    {
+        if (e == null)
+        {
+            return "-";
+        }
+        var parts = new List<string>();
+        if (e.Animation != null) { parts.Add($"anim:{e.Animation}"); }
+        if (e.SurfaceAnimation != null) { parts.Add($"surf:{e.SurfaceAnimation}"); }
+        if (e.Effect != null) { parts.Add($"fx:{e.Effect}"); }
+        if (e.Sound != null) { parts.Add($"snd:{e.Sound}"); }
+        return "{" + string.Join("/", parts) + "}";
+    }
+
+    private static string FmtFlyout(Flight.WeaponFlyout? f)
+    {
+        if (f == null)
+        {
+            return "-";
+        }
+        var parts = new List<string>();
+        if (f.Model != null) { parts.Add($"model:{f.Model}"); }
+        if (f.ModelAnimation != null) { parts.Add($"anim:{f.ModelAnimation}"); }
+        if (f.Sound != null) { parts.Add($"snd:{f.Sound}"); }
+        return "{" + string.Join("/", parts) + "}";
     }
 
     private static Vector3 ParseVec3(string s)

@@ -4919,3 +4919,26 @@ authoring bug — an early draft resolved stock guns as `wep_N0` (`wep_300`) ins
 changed (B12 `Loadout.cs` is the wave-B reader). Docs: new `loadouts.md` + README index entry;
 plan A7 ticked; CLAUDE.md repo-layout + status updated. **Wave A is now complete bar A10** (waits
 on D29). **Next: Wave B — B11 (`WeaponDefs.cs`) blocks the rest, so it goes first.**
+
+**M3 Wave B item B11 — the typed weapons.json reader (2026-07-24).** Landed `src/Flight/WeaponDefs.cs`,
+the reader every other wave-B weapon handler reads a def from. `WeaponDefs.Load` types all 48
+`weapons.zrd.json` `BALLISTICS` entries into `WeaponDef`s keyed by `wep_*` (plus the shared
+`NO_AMMO_WARNING` empty-clip sound): ballistics, damage, allotment (`CLUSTER_SIZE`/`AMMO_LIMIT`),
+the class flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TORPEDO`/`TARGETABLE`/…), the specials
+(`BEEPER`/`TANGLER`/`SMOKE_SCREEN`/…), and the `FIRE`/`FLYOUT`/`IMPACT` bindings with `IMPACT` keyed
+by a `SurfaceClass` enum over the six classes A1 established (`default`/`water`/`buildings`/`player`/
+`enemy`/`quicksand`). `DESC` resolves through `Messages`. Modelled on `PlaneStats`. Two data
+subtleties handled: flags are `KEY,null` pairs, so `ZrdrDict`'s bare-flag path (present-but-empty)
+makes `Has(key)` the correct test; and `IMPACT` is walked as raw class/value pairs rather than
+through `ZrdrDict`, so a class whose value is null (`enemy`, "no effect on that surface") is skipped
+rather than read back as an empty binding. Added `ZrdrDict.Keys` so each def can report
+`UnhandledKeys` — a tripwire that stays empty unless the data grows a key the reader hasn't learned.
+Verified with a new headless tool, `--dump-weapons[=id|name]` (mirrors `--dump-markers`,
+locale-independent output → `./.scratch/weapons_dump.txt`): **all 48 parse with NO unhandled keys**,
+and the dump cross-checks A1's `weapons.md` — the `wep_50`–`53` damage matrix (slug 6.25/6.25,
+dum-dum 3.125/9.375, AP 9.375/3.125, mag 6.75/5.75), the turret gun's `AMMO_LIMIT 9999` + no
+`CLUSTER_SIZE`, `wep_06`'s HE fields, the torpedo's flags + `FLYOUT_HEALTH`, and resolved display
+names. No session/flight/freecam path touched (the dump quits before any world builds). Docs:
+architecture.md + CLAUDE.md module index (WeaponDefs), cli.md (`--dump-weapons`), plan B11 ticked.
+**B12–B20 unblocked. Next: B12 (`Loadout.cs`) — read `stock_loadouts.json`, resolve markers against
+a built plane, expose gun groups + hardpoints.**
