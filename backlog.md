@@ -263,40 +263,40 @@ unscheduled.
 
 ## Feature backlog
 
-- **Crash choreography — the remaining slices (polish-4 item 8; first slice landed 2026-07-23).**
-  The dirt/ground variant's pure-puffer effects (sparks, delayed fireball cluster, black smokeball)
-  shipped in `CrashChoreography.cs`; these extend it. All data is in `extracted/C1/cam_anim/`
+- **Crash choreography — the remaining slices (polish-4 item 8; slices 1–2 landed 2026-07-23).**
+  The dirt/ground variant is complete in `CrashChoreography.cs`: sparks, the delayed fireball
+  cluster, the black smokeball (slice 1), plus the five burning debris arcs (`call_crash_trails`,
+  via a reconstructed `fly_trailN` ballistic) and the earth-impact boom (`snd_exp_ground_a`)
+  (slice 2). These remaining slices extend it. Data is in `extracted/C1/cam_anim/`
   (`player-player_crash_*.json` + the effect defs); the full decode is in `docs/HISTORY.md`
-  (2026-07-23) and the plan file item 8. Independently verifiable slices, roughly in order:
-  1. **Debris arcs — `call_crash_trails`.** Five `spurtpuffer` DISTANCE-interval fire trails on
-     `fly_trail1..5`, each an `ObjectMotion` ballistic arc (gravity −1..−3, `translation_range xz`
-     35–255). ⚠ **`PufferState.FromAnimEvent` does NOT yet read DISTANCE intervals** — it sets
-     `TimeInterval` from `interval_garbage.interval_value` but never `DistanceInterval`, and for
-     `Distance` puffers the flag shape is inverted (`has_interval_type` true, `has_interval_value`
-     **false**, yet `interval_value` holds the real distance). Fix that first, then the arcs need
-     the `ObjectMotion` ballistic path (a mini-`AnimRuntime`, or hand-integrated like `CrashBreakup`).
+  (2026-07-23) and the plan file item 8. Independently verifiable slices:
+  1. **`flydirt_plane` dust** (dirt) + the **water splash+steam** (`plane_big_splash`,
+     `large_steam_spray`): these are mesh/scale/opacity effects (`ObjectMotion` scale +
+     `ObjectOpacityFromTo`), not puffers — need the anim/mesh path (`AnimRuntime.SetSubtreeOpacity`
+     exists). `large_steam_spray` alone IS a puffer (`trailpuffer2` with a white alpha ramp).
   2. **Per-piece `large_firetrail` + bounces** (air variant only): `pieceNseq` → `large_firetrail
      WithNode pieceN` (`lgpuffer` DISTANCE trail) → `ObjectMotion gravity −9.8 do_intersections` →
      `bounce_sequence [p1hit]` which plays `air_mixed_exp_sg` and a second ranged `ObjectMotion`.
      `CrashBreakup.Piece.Resting` already tracks the bounce moment. Needs a real `SOUND_GROUPS`
-     resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg`/`snd_exp_ground_a` (sounds.zrd.json).
-  3. **`flydirt_plane` dust** (dirt) + the **water splash+steam** (`plane_big_splash`,
-     `large_steam_spray`): these are mesh/scale/opacity effects (`ObjectMotion` scale +
-     `ObjectOpacityFromTo`), not puffers — need the anim/mesh path (`AnimRuntime.SetSubtreeOpacity`
-     exists). `large_steam_spray` alone IS a puffer (`trailpuffer2` with a white alpha ramp).
-  4. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
+     resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already plays,
+     hardcoded like `plane_destroy_sg`).
+  3. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
      returns Ground for every crash. **Water** needs a sea-surface signal the collision system does
      not expose (a water crash today falls through the collider-less sea to the under-map backstop,
      which respawns rather than crashing). **Air** (`player_crash_default`, no-impact destruct,
      `destroyed=false`, pieces arc away) has **no trigger until weapons (M3)** can down a plane
      mid-flight — a building crash is `_dirt`, not air. When wiring them, note `snd_exp_water_a`
      (splash) and that the water sequence is named `destroy_crash`, not `destroy_it`.
-  ⚠ **Traps (from the first slice, 2026-07-23).** The `blend`/`softParticles` `Puffer.Create`
-  overrides exist and default to a byte-identical shader — reuse them; a MIX-blend dark puffer near
-  the ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive
-  fireball reads as smoke in a screenshot — isolate the emitter (suppress the others, freeze the
-  crash with no `--hold`) before believing an effect is present. Anchor at the plane centre
-  (`pose.Origin` = `healthy`), not the impact point.
+  ⚠ **Traps (from slices 1–2, 2026-07-23).** The `blend`/`softParticles` `Puffer.Create` overrides
+  exist and default to a byte-identical shader — reuse them; a MIX-blend dark puffer near the
+  ground also needs `softParticles: false` or the depth-fade zeroes it. A fading additive fireball
+  reads as smoke in a screenshot — isolate the emitter (suppress the others, freeze the crash with
+  no `--hold`) before believing an effect is present. Anchor at the plane centre (`pose.Origin` =
+  `healthy`), not the impact point. For the debris arcs: `translation_range` is undocumented and
+  `AnimRuntime` never simulates it, so the `fly_trailN` trajectory is a *reasoned reading* (`xz`/`y`
+  = travel distance over `run_time`), not a settled decode — the anchor is invisible, only the
+  trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
+  inverted flag (`has_interval_value` false, key off `interval_type`).
 
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
   sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
@@ -578,6 +578,13 @@ scripted screenshot.
 - **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick, tree softness,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
   real flight (the thresholds need states normal play actually reaches).
+- **Crash choreography (polish-4 item 8)** — the **debris-arc trajectory** (`translation_range` read
+  as travel distance over `run_time` in a fanned azimuth; the `fly_trailN` anchor is invisible, so
+  only the arc's rough scale reads — this is `CrashChoreography.StartDebris`), and the **overall
+  crash intensity**: the primary fireball, the 3-fireball cluster, the debris fire, and the wreck
+  fire are all additive, so a dirt crash reads as one large fireball — judge the whole against the
+  original. Also `snd_exp_ground_a` mix level and whether it should layer over `plane_destroy_sg` at
+  all (the dirt def's only Sound is `snd_exp_ground_a`; we keep both, per the plan).
 - **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B a dive against the original.
 - **Knife-edge nose sag (polish-4 item 6, landed 2026-07-23)** — `KnifeNoseSag` **0.07 rad (≈4°)**,
   the bound the nose settles to at full knife-edge, and `KnifeNoseRate` **0.2 rad/s**, how fast it

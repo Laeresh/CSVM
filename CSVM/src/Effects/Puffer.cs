@@ -116,9 +116,15 @@ public sealed class PufferState
     /// shared field is identical (interval 0.03, LOCAL_VELOCITY 0/15/0, SIZE_RANGE 0.8–1.5,
     /// LIFETIME_RANGE 0.5–4.5, friction 3, the five texture names, the three-stop colour ramp).
     ///
-    /// Two shape differences worth knowing:
+    /// Three shape differences worth knowing:
     /// - the emission interval is **always** in `interval_garbage.interval_value` — the
     ///   `interval` field itself is null in all 4,387 PUFFER_STATE events of this install;
+    /// - that interval is in SECONDS for a burst/sustained emitter but in METERS for a
+    ///   DISTANCE_INTERVAL trail (the crash-debris `spurtpuffer`s), told apart by
+    ///   `interval_garbage.interval_type` (`"Time"` vs `"Distance"`). ⚠ For a Distance
+    ///   puffer the flag shape is INVERTED — `has_interval_type` is true but
+    ///   `has_interval_value` is **false**, yet `interval_value` still holds the real
+    ///   distance — so key off `interval_type`, never off `has_interval_value`;
     /// - `GROWTH_FACTOR` arrives as a two-entry `growth_factors` array whose **second entry's
     ///   max** is the reader's scalar (matches on 172 of 177 puffers whose name resolves to a
     ///   single reader definition; the five outliers are names defined differently in
@@ -130,11 +136,17 @@ public sealed class PufferState
         float Range(string key, string end, float fallback) =>
             d.Obj(key)?.Num(end) ?? fallback;
 
+        // The one interval number is seconds (Time) or meters (Distance) — see the remark above.
+        var ig = d.Obj("interval_garbage");
+        bool byDistance = string.Equals(ig?.Str("interval_type"), "Distance",
+            StringComparison.OrdinalIgnoreCase);
+        float intervalValue = d.Obj("interval")?.Num("value") ?? ig?.Num("interval_value") ?? 0.1f;
+
         var s = new PufferState
         {
             Name = d.Str("name") ?? "",
-            TimeInterval = d.Obj("interval")?.Num("value")
-                           ?? d.Obj("interval_garbage")?.Num("interval_value") ?? 0.1f,
+            TimeInterval = byDistance ? 0.1f : intervalValue,
+            DistanceInterval = byDistance ? intervalValue : 0f,
             LocalVelocity = Vec("local_velocity"),
             WorldVelocity = Vec("world_velocity"),
             MinRandomVelocity = Vec("min_random_velocity"),

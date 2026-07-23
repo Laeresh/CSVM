@@ -1079,7 +1079,8 @@ public partial class PlaneViewer : Node3D
                             controller.AddChild(emitter);
                         if (verbose)
                             GD.Print($"crash choreography: {choreo.SparkCount} spark + " +
-                                     $"{choreo.FireballCount} fireball emitters, smoke={(choreo.HasSmoke ? "on" : "off")}");
+                                     $"{choreo.FireballCount} fireball + {choreo.DebrisCount} debris-arc emitters, " +
+                                     $"smoke={(choreo.HasSmoke ? "on" : "off")}");
                     }
 
                     if (sounds != null && soundDefs != null)

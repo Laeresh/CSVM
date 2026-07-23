@@ -4261,3 +4261,59 @@ viewer / damage-lab renders are unaffected. User-confirmed the earlier "no black
 mesh/`ObjectOpacityFromTo` path), and the water/air *variants* (water needs a sea-surface signal
 the collision system does not expose; the air/no-impact variant has no trigger until weapons, M3 —
 a building crash is `_dirt`, not air).
+
+## 2026-07-23 — Crash choreography, second slice (polish-4 item 8): the debris arcs + the ground boom
+
+The rest of the dirt/ground crash variant, on top of slice 1's sparks + fireball cluster + black
+smokeball: the **five burning debris arcs** (`call_crash_trails`) and the **earth-impact boom**
+(`snd_exp_ground_a`). The dirt `destroy_it` sequence's remaining unimplemented events were `flydirt_plane`
+(event 9), `call_crash_trails` (event 12) and `Sound snd_exp_ground_a` (event 13); this landed 12 and 13.
+`flydirt_plane` stays deferred — it is `puffers: null`, a mesh/scale/`ObjectOpacityFromTo` animation on
+unbuilt `flydirt`/`dust` effect-root meshes, a different subsystem the plan groups in a later slice.
+
+**The debris arcs.** `call_crash_trails` is five `spurtpufferN` DISTANCE_INTERVAL fire trails
+(6-frame `fire_f01..06` flipbook, spacing 1.5–2.5 m), each attached to a `fly_trailN` node flung by
+an `ObjectMotion` ballistic (`gravity` −1..−3, `translation_range xz` 35–255 / `y` 20–70, `run_time`
+2.0–3.5 s). Two pieces were needed:
+
+- **DISTANCE-interval support in `PufferState.FromAnimEvent`** (`Puffer.cs`). It previously always read
+  `interval_garbage.interval_value` into `TimeInterval`; now `interval_type: "Distance"` routes it to
+  `DistanceInterval` instead. ⚠ The flag shape is **inverted** for Distance — `has_interval_type` true
+  but `has_interval_value` **false**, yet `interval_value` still holds the real distance — so it keys off
+  `interval_type`, never `has_interval_value`. **Proven a no-op for every world puffer by construction:**
+  `AnimRuntime` only ever *sustains* puffers (`SustainAt`, which ignores `DistanceInterval`, and whose
+  pool sizing checks `sustained` first), so only the non-sustained crash trails read the new field; sparks
+  and the smokeball are `interval_type: "Time"` (checked), unchanged.
+- **A reconstructed ballistic anchor** (`CrashChoreography.StartDebris`/`Advance`). The `fly_trailN` node
+  is never built (WorldBuilder builds only World-children + partition subtrees; the `carnage_trails.flt`
+  effect roots are neither) — it is an invisible carrier, and only the fire it trails is seen. Crucially,
+  `translation_range` is **undocumented and `AnimRuntime` does not implement it** (ballistic OBJECT_MOTION
+  is counted, never simulated — no weapons trigger it), so there is no reference decode. The reading here
+  is a *reasoned interpretation*, flagged TUNE: `xz`/`y` are the horizontal/vertical distance the debris
+  travels over `run_time`, launched in a fanned random azimuth under the anim's own `gravity`; the
+  `initial`/`delta` range fields are left unmapped (as `AnimRuntime` leaves the rotation `delta` it cannot
+  place). Each frame while crashed, the virtual anchor's ballistic position drives `Puffer.TrailAdvance`,
+  and `TrailEnd` fires at `run_time`.
+
+**The ground boom.** `FlightAudio.OnGroundExplosion` plays `snd_exp_ground_a`, called by
+`FlightController.Crash` **only for a Ground surface**, layered over the plane explosion `OnCrash`
+already fired (`plane_destroy_sg`). The plan directs layering rather than replacing (`plane_destroy_sg`
+is treated as done and correct); strictly the dirt def's only Sound event is `snd_exp_ground_a`, so
+"keep both" is a judgement call on the TUNE list. A real `SOUND_GROUPS` resolver is still owed for the
+piece-bounce `air_mixed_exp_sg`/`ground_mixed_exp_sg` (later slice).
+
+**Verified.** Build clean, 0 warnings. Forward-dive crashes into C1 (`--spawn-at`/`--spawn-dir`, no
+`--hold` so the crash freezes): the ground/dirt variant selected (`CRASH into g28031/col`), and the
+frame burst shows the fireball cluster, scattered sparks, tumbling wreck pieces, and **fire-trail debris
+streaking outward** from the blast (`.scratch/obl_06.png`), with the black smokeball still developing
+(slice 1). 8-chapter `--fly` build: every chapter reports `3 spark + 3 fireball + 5 debris-arc emitters,
+smoke=on`, **zero hard errors** — the per-chapter `carnage_trails` load works everywhere. The lone log
+"error" under `--mute` is the benign `snd_police` late-SOUND_NODE warning (no audio session), unrelated.
+The one interpretive risk is honest and recorded: the arc *shape* is a reading of `translation_range`,
+not a decode — but the anchor is invisible, so only its scale reads, and that is TUNE for the user.
+
+**Deferred to later slices** (each independently verifiable, all in `backlog.md`): `flydirt_plane` dust
++ the water splash+steam (mesh/scale/`ObjectOpacityFromTo` path, not puffers), the per-piece
+`large_firetrail`+bounce sub-sequences (need a `SOUND_GROUPS` resolver), and the water/air *variants*
+(water needs a sea-surface signal the collision system does not expose; the air/no-impact variant has no
+trigger until weapons, M3 — a building crash is `_dirt`, not air).

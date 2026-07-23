@@ -315,15 +315,18 @@ public partial class FlightController : Node3D
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
+        var surface = ClassifySurface(hitName);
         Audio?.OnCrash();
+        if (surface == CrashChoreography.Surface.Ground)
+            Audio?.OnGroundExplosion(); // snd_exp_ground_a, over the plane explosion (item 8)
         CrashEffect?.Burst(impact); // the game's large_fireball at the impact point
         // the wreck: destroyed-subtree pieces scatter with the impact velocity and
         // the fire/smoke burn at the impact point (item 10d)
         var crashPose = PlaneModel?.GlobalTransform ?? GlobalTransform;
         Breakup?.Begin(crashPose, impact, _model.VelocityDir * _model.Speed);
-        // the authored crash effects (item 8): sparks + the delayed fireball cluster + the
-        // black smokeball, for the surface hit
-        Choreography?.Begin(crashPose, impact, ClassifySurface(hitName));
+        // the authored crash effects (item 8): sparks, the delayed fireball cluster, the black
+        // smokeball, and the five burning debris arcs (call_crash_trails), for the surface hit
+        Choreography?.Begin(crashPose, impact, surface);
         GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");

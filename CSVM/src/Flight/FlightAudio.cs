@@ -19,6 +19,8 @@ public partial class FlightAudio : Node
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
     private readonly List<(AudioStreamWav stream, float volume)> _crashSounds = new();
+    private AudioStreamPlayer? _groundExp;
+    private float _groundExpVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
     private float _propStartVol = 1f, _propStopVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
@@ -61,6 +63,12 @@ public partial class FlightAudio : Node
             _crash = new AudioStreamPlayer();
             AddChild(_crash);
         }
+
+        // The ground/dirt crash choreography (polish-4 item 8) layers snd_exp_ground_a — the
+        // heavy earth-impact boom — over the plane_destroy_sg explosion above; the dirt anim
+        // def fires it as its Sound event. Air/water hits use their own sounds, so this stays
+        // gated on the surface in FlightController (OnGroundExplosion), not folded into OnCrash.
+        _groundExp = MakeOneShot(archive, defs, "snd_exp_ground_a", out _groundExpVol);
     }
 
     private AudioStreamPlayer? MakeLoop(SoundArchive archive,
@@ -144,6 +152,11 @@ public partial class FlightAudio : Node
         _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, volume));
         _crash.Play();
     }
+
+    /// <summary>The ground/dirt crash's earth-impact boom (snd_exp_ground_a), layered over the
+    /// plane explosion <see cref="OnCrash"/> already fired. Called only for a Ground surface
+    /// (FlightController.Crash), so it does not sound on a future air or water destruct.</summary>
+    public void OnGroundExplosion() => PlayOneShot(_groundExp, _groundExpVol);
 
     /// <summary>Graceful engine wind-down (future landing/parking): plays snd_propstop and
     /// kills the loops. NOT called on crash — the explosion one-shot already covers that
