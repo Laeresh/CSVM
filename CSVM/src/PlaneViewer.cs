@@ -34,6 +34,13 @@ namespace CSVM;
 ///                                Optional presets (fraction 0–1, or a percent when >1):
 ///                                --damage=leftwing:0.25,nose:40. H hides the sliders;
 ///                                combine with --screenshot for deterministic damage shots
+///   --markers                    (implies --viewer) open the marker overlay at launch: the
+///                                firepoint / pylon / target gizmos on the parked aircraft,
+///                                shared mounts flagged. Toggle in a plain --viewer with K
+///   --dump-markers[=plane]       print each player airframe's firepoint / pylon / target rig
+///                                (name, plane-frame position, gun pair, shared mounts) to
+///                                stdout and ./.scratch/markers_dump.txt, then quit; the
+///                                optional value filters to one plane (model or display name)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -202,6 +209,9 @@ public partial class PlaneViewer : Node3D
     private int? _debugLivery;
     private string? _debugMesh;  // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
     private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
+    private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
+    private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
+    private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -393,6 +403,9 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-mesh=")) _debugMesh = arg["--debug-mesh=".Length..];
             else if (arg == "--debug-names") _debugNames ??= "meshes";
             else if (arg.StartsWith("--debug-names=")) _debugNames = arg["--debug-names=".Length..];
+            else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--dump-markers") _dumpMarkers = true;
+            else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -495,6 +508,16 @@ public partial class PlaneViewer : Node3D
         _planesGamezPath = SessionPaths.PreferUnzipped(planesGamezPath);
         if (!_zrdrOverridden) _zrdrPath = SessionPaths.PreferUnzipped(_zrdrPath);
         if (!_soundsOverridden) _soundsPath = SessionPaths.PreferUnzipped(_soundsPath);
+
+        // --dump-markers: a pure-data report (no world, no camera) — print the marker rig table(s)
+        // and quit. Placed here, once planes.zbd's path is known, so it runs whether or not any
+        // content arg was given; --headless makes it windowless.
+        if (_dumpMarkers)
+        {
+            DumpMarkers();
+            GetTree().Quit();
+            return;
+        }
 
         // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
         // shader references, before any material using it is built. Defaults are a no-op
@@ -912,6 +935,15 @@ public partial class PlaneViewer : Node3D
             if (_viewerMode && _plane != null)
                 _worldRoot!.AddChild(new UI.MeshLab(_plane, PlaneCollider.Build(_plane),
                     _sun, _env, _camera) { DebugSpec = _debugMesh });
+            // Marker overlay (--viewer --plane, key K): the firepoint / pylon / target gizmos on the
+            // parked aircraft (item A3). Only on the parked plane — a chapter world has no marker rig
+            // — and after the plane joins the tree, since it reads each marker's GlobalPosition. Built
+            // hidden unless --markers opened it, so an unadorned viewer screenshot is unchanged.
+            if (_viewerMode && !_worldMode && _plane != null)
+            {
+                _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_markersOverlay });
+                what += _markersOverlay ? " + marker overlay" : " + marker overlay (K)";
+            }
             // The deck is now in the tree at its original position; remember its centre so
             // _Process can re-anchor it under each player every frame, and give every rig past
             // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
@@ -2081,6 +2113,75 @@ public partial class PlaneViewer : Node3D
     }
 
     private void FrameCamera() => _orbit.Frame(OrbitCamera.MergedAabb(_plane!), _camPos, _lookAt);
+
+    /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
+    /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and
+    /// <c>./.scratch/markers_dump.txt</c>, then quit (see <see cref="Mech3.MarkerRig"/>). This is
+    /// the committed instrument the <c>docs/formats/markers.md</c> tables regenerate from, so the
+    /// user can see and name every mount when handing back the airframe gun-group table (item A3).
+    /// An optional value filters to one plane by model node (<c>player_bhawk</c>) or display name
+    /// (<c>Bloodhawk</c>), matched case-insensitively as a substring.</summary>
+    private void DumpMarkers()
+    {
+        // Windowed launches shouldn't steal focus for a report that renders nothing and quits.
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        GameZ gamez;
+        try
+        {
+            gamez = GameZ.Load(_planesGamezPath);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"--dump-markers: could not load planes gamez ({_planesGamezPath}): {e.Message}");
+            return;
+        }
+
+        var wanted = new List<(string Model, string Display)>();
+        foreach (var plane in Mech3.MarkerRig.PlayerAirframes)
+        {
+            if (_dumpMarkersPlane.Length == 0
+                || plane.Model.Contains(_dumpMarkersPlane, StringComparison.OrdinalIgnoreCase)
+                || plane.Display.Contains(_dumpMarkersPlane, StringComparison.OrdinalIgnoreCase))
+            {
+                wanted.Add(plane);
+            }
+        }
+        if (wanted.Count == 0)
+        {
+            var names = new List<string>();
+            foreach (var p in Mech3.MarkerRig.PlayerAirframes)
+                names.Add($"{p.Display} ({p.Model})");
+            GD.PrintErr($"--dump-markers: '{_dumpMarkersPlane}' matched no airframe. Available: "
+                        + string.Join(", ", names));
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# Aircraft marker rig — {_planesGamezPath}");
+        sb.AppendLine("# Positions are plane frame, metres (nose -Z, right +X, up +Y). See docs/formats/markers.md.");
+        sb.AppendLine();
+        int done = 0;
+        foreach (var (model, display) in wanted)
+        {
+            var rig = Mech3.MarkerRig.Extract(gamez, model);
+            if (rig == null)
+            {
+                sb.AppendLine($"=== {display} ({model}) — root node not found ===").AppendLine();
+                continue;
+            }
+            sb.Append(rig.Format(display)).AppendLine();
+            done++;
+        }
+        var text = sb.ToString();
+        GD.Print(text);
+
+        // ./.scratch/ inside the workspace, per CLAUDE.md — never the OS temp dir.
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        var outPath = Path.Combine(scratch, "markers_dump.txt");
+        File.WriteAllText(outPath, text);
+        GD.Print($"markers dump: {done} airframe(s) → ./.scratch/markers_dump.txt");
+    }
 
     private static Vector3 ParseVec3(string s)
     {

@@ -433,7 +433,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 1. ☑ `docs/formats/weapons.md` — the ballistics table — **landed**
 2. ☑ `docs/formats/markers.md` — gun mounts, markers and the airframe gun-group enum — **landed**
-3. ☐ **Marker reference tool** — `--dump-markers` + labelled viewer overlay
+3. ☑ **Marker reference tool** — `--dump-markers` + labelled viewer overlay (`--viewer --markers`, key K) — **landed**
 4. ☑ `docs/formats/destructibles.md` — the world-destructible model — **landed**
 5. ☑ `docs/formats/weapon-effects.md` — the weapon effect-reader family — **landed**
 6. ☑ `vehicle.md` — retire the "undecoded here" deferral — **landed**
@@ -563,20 +563,30 @@ duplicate-coordinate claim is reproduced for both Balmoral and Brigand.
 
 ⚠ **Do not restate the disproven index-arithmetic rule as fact anywhere on this page.**
 
-### A3 ☐ Marker reference tool — `--dump-markers` + viewer overlay
+### A3 ☑ Marker reference tool — `--dump-markers` + viewer overlay — **LANDED**
 
 **Goal.** Let the user see and name every firepoint and pylon on a plane, so A8 is fillable.
-**This is wave A's highest-priority item** — it is on the critical path.
+(A8 has since been delivered by the user; A3's live value is now the committed instrument
+`markers.md` regenerates from, and the overlay A10 will use for in-engine placement checks.)
 
-**Approach.** Two halves. (a) A `--dump-markers[=plane]` flag printing a per-plane table of
-marker name, local position, and mirror-pair grouping, to stdout and `./.scratch/`. (b) A
-`--viewer` overlay drawing each marker as a labelled gizmo on the model, reusing `NodeLabels`'
-existing anchoring and de-cluttering. Colour firepoints and pylons differently; group
-duplicate-coordinate markers visibly, since that is the case the user most needs to disambiguate.
+**Landed.** `src/Mech3/MarkerRig.cs` extracts the rig from planes.zbd; two front-ends share it:
+(a) `--dump-markers[=plane]` prints a per-plane table (name, plane-frame position, mirror pair,
+co-located mounts) to stdout and `./.scratch/markers_dump.txt`, windowless under `--headless`;
+(b) `src/UI/MarkerOverlay.cs` (`--viewer`, key K, opened at launch by `--markers`) draws each
+marker as a coloured gizmo + label — firepoints orange, **shared-mount firepoints magenta**,
+pylons cyan, target green. Every gizmo dot always shows; the labels de-clutter nearest-first
+(firepoints before pylons) with co-located names stacked so both read.
 
-**Verify.** The overlay's Bloodhawk labels agree with the dumped table; the known duplicates on
-Balmoral and Brigand render as visibly co-located pairs; a screenshot of each of the 11 planes
-lands in `./.scratch/`.
+**Verified.** The dump reproduces `markers.md` exactly (Bloodhawk x-values, Devastator's two-axis
+triples, Peacemaker's asymmetric layout, Kestrel's lone centreline fp7, and both Balmoral
+`fp1≡fp5…` and Brigand `fp1≡fp4…` co-located sets). The overlay's Bloodhawk labels agree with the
+dump; Balmoral/Brigand duplicates render as visibly magenta co-located dots; screenshots of all
+11 planes are in `./.scratch/`.
+
+⚠ **Correction to markers.md folded in:** `target` is **not** always the plane origin — Bloodhawk
+(0,0,−1), Warhawk (0,+0.59,+0.67), Firebrand (0,+1.08,−0.98) and Hoplite (+0.06,+0.04,+0.33)
+carry offsets; the other seven sit at the origin. M4-scope, but the "identity transform" claim was
+overstated.
 
 ### A4 ☐ `docs/formats/destructibles.md` — the world-destructible model
 

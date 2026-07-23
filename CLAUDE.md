@@ -118,6 +118,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: billboard sprites, plus C2/C5's solid 3D city blocks.
 - `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 - `src/Mech3/Messages.cs` — the game's localized string table: a plain `messages.json` key→value map resolving the `MSG_*` keys missions reference.
+- `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and the overlay.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into the same `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs` — merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
@@ -165,6 +166,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
+- `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels, shared mounts flagged magenta.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, click-to-follow; stages placeless on-call defs (the crash) in front of the camera.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
@@ -194,7 +196,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn, P pause, T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`.
+In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn, P pause, T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`. In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay.
 
 ### Format gotchas
 
@@ -208,7 +210,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
 
-**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`; corrections folded back into the plan). Next step: A3 (the `--dump-markers` marker tool) and A7 (the stock-loadout data file, commit user-gated), then Wave B.
+**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`), and A3 landed (the `--dump-markers` tool + the `--viewer --markers` overlay, key K). Next step: A7 (the stock-loadout data file, commit user-gated), then Wave B. A10 (in-engine firing-placement check) waits on D29.
 
 Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
 

@@ -19,7 +19,10 @@ Weapon-relevant members:
 |---|---|---|
 | `firepoint1`…`firepoint8` | 8 (Kestrel 7) | gun muzzle points |
 | `pylon1`…`pylon8` | 8 | ordnance hardpoints |
-| `target` | 1 | aim / lock-on point (identity transform → plane origin) |
+| `target` | 1 | aim / lock-on point (at or near the plane origin — some airframes offset it) |
+
+The `--dump-markers[=plane]` tool (`src/Mech3/MarkerRig.cs`) regenerates every position table
+below straight from `planes.zbd`; `--viewer --markers` (key K) draws the same rig on the model.
 
 The same group also holds non-weapon reference nodes (`cockpit_camera`, `exhaust1`/`exhaust2`,
 `ground_level`, `ladder_pos`, `cf_light`) — out of scope here.
@@ -79,9 +82,12 @@ here. (AI-plane models instead name their pylons `lpylon*`/`rpylon*` — not the
 
 ## The target marker and gun nodes
 
-`target` — one per plane, identity transform (the plane origin), mesh-less. It is the
-aim / lock-on point, **not** a firing muzzle and not part of the gun geometry — out of scope
-for gun firing. There are 22 in all: one under each of the 11 player and 11 AI plane roots.
+`target` — one per plane, mesh-less. It is the aim / lock-on point, **not** a firing muzzle and
+not part of the gun geometry — out of scope for gun firing. It sits **at or near the plane
+origin**, but is not uniformly identity: seven airframes place it exactly at the origin, while
+the Bloodhawk (0, 0, −1), Warhawk (0, +0.59, +0.67), Firebrand (0, +1.08, −0.98) and Hoplite
+(+0.06, +0.04, +0.33) offset it (measured by `--dump-markers`). There are 22 in all: one under
+each of the 11 player and 11 AI plane roots.
 
 Turret **gun nodes** `fgun` / `rgun` / `bgun0`…`bgun3` / `hgun` / `hgun2` are likewise
 mesh-less (`model_index -1`). They hang inside the turret subtrees (`hturret`/`hturret2`,

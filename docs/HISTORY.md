@@ -4873,3 +4873,28 @@ their index wiring, all verified against the extraction and correcting the plan'
 and carries a "Wave A landed — corrections" block. Docs only — no engine code changed. A1/A2/A4
 were parallel sub-agents; A5's agent stalled and its page was written directly. **Next: A3 (the
 `--dump-markers` tool) and A7 (the stock-loadout file, commit user-gated).**
+
+**M3 Wave A item A3 — the marker reference tool (2026-07-24).** Landed the instrument the
+`markers.md` mount tables regenerate from, in two front-ends over one extractor. `src/Mech3/MarkerRig.cs`
+walks a `player_*` root in planes.zbd, accumulates locals down to each `firepoint*`/`pylon*`/`target`,
+and reports plane-frame positions plus co-located groups (two gun groups on one physical mount).
+(a) `--dump-markers[=plane]` prints a per-plane table — name, position, firepoint mirror pair,
+`≡` shared mounts — to stdout and `./.scratch/markers_dump.txt`, then quits; needs no world or
+camera, so `--headless` runs it windowless. (b) `src/UI/MarkerOverlay.cs` (`--viewer`, key K,
+opened at launch by `--markers`) draws each marker on the parked plane as a coloured gizmo +
+billboarded label — firepoints orange, **shared-mount firepoints magenta**, pylons cyan, target
+green; every gizmo dot always shows so no position is lost, while the labels de-clutter
+nearest-first (firepoints before pylons, co-located names stacked) exactly as `NodeLabels` does.
+Verified: the dump reproduces `markers.md` **exactly** — Bloodhawk x-values, Devastator's
+two-axis (height × spread) triples, Peacemaker's left/right-asymmetric layout, Kestrel's lone
+centreline `fp7`, and both Balmoral (`fp1≡fp5, fp2≡fp6, fp3≡fp7, fp4≡fp8`) and Brigand
+(`fp1≡fp4, fp2≡fp3, fp5≡fp8, fp6≡fp7` — co-location crosses the mirror-pair boundaries) shared
+sets. The overlay's Bloodhawk labels agree with the dump; Balmoral/Brigand duplicates render as
+visibly magenta co-located dots; screenshots of all 11 planes captured to `./.scratch/`.
+One data correction folded back into `markers.md`: the `target` marker is **not** uniformly the
+plane origin — seven airframes sit at (0,0,0) but the Bloodhawk (0,0,−1), Warhawk (0,+0.59,+0.67),
+Firebrand (0,+1.08,−0.98) and Hoplite (+0.06,+0.04,+0.33) offset it (M4-scope; the "identity
+transform" claim was overstated). `PlaneViewer` gained `--markers`/`--dump-markers`; docs updated
+in `architecture.md`, `cli.md`, `markers.md`, CLAUDE.md's module index + viewer-keys line.
+**Next: A7 (the stock-loadout file, commit user-gated), then Wave B.** A10 (in-engine
+firing-placement check) waits on D29.

@@ -158,6 +158,17 @@ The game's localized string table: plain `System.Text.Json` over the extracted `
 ⚠ Degrades, never throws: a missing file yields an empty table, and `Get` returns the raw key for
   an unknown entry (visible, not blank) — display strings are cosmetic.
 
+## src/Mech3/MarkerRig.cs
+A player airframe's weapon marker rig read from planes.zbd GameZ: `Extract` walks a `player_*`
+root, accumulating locals down to each `firepoint*`/`pylon*`/`target`, and reports plane-frame
+positions + co-located groups (two gun groups on one mount). `Format` prints one dump block per
+plane; `PlayerAirframes` is the model→display list. The committed instrument `docs/formats/markers.md`
+regenerates from, and the source of truth `--dump-markers` and `UI.MarkerOverlay` share.
+⚠ `Classify` requires a numeric suffix, so the AI airframes' bare `firepoint`/`pylon` are excluded;
+  only the 11 player roots are walked.
+⚠ Co-location is exact-position (1 cm tol) and crosses mirror-pair boundaries — Brigand fp1≡fp4,
+  not fp1≡fp2 — so group by position, never by consecutive index.
+
 ## src/Mech3/CompiledAnim.cs
 Reader for the fork's compiled `cam_anim`/`mis_anim` extraction (zip or dir): typed defs, events,
 and the SI-script pool — `Script(index)` parses lazily, ordered by `metadata.json`. Decode facts
@@ -594,6 +605,17 @@ Floating node-name labels (key T) in both the static viewer and flight, cycling 
   from the geometry and are shared, which collapsed all labels into a single screen cell.
 ⚠ The nearest-first grid de-clutter (3×3 neighbourhood) is the readability limiter, not `Radius` (1500 m).
 ⚠ Own plane deprioritised, not excluded; rescans on a 0.35 s timer; builds nothing until enabled.
+
+## src/UI/MarkerOverlay.cs
+The `--viewer` marker overlay (key K): draws every firepoint / pylon / target on the parked
+aircraft as a coloured gizmo + billboarded label (firepoints orange, shared-mount firepoints
+magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `MarkerRig.Classify`
++ `GroupCoLocated`, so its gizmos agree with `--dump-markers` by construction.
+⚠ Markers come from the built plane tree via the `cs_name` meta, not GameZ — the same source
+  `NodeLabels` reads; a co-located pair's labels are stacked up the airframe so both survive.
+⚠ Gizmo dots always show (no mount position is ever lost); only the LABELS de-clutter, nearest-
+  first with firepoints prioritised over pylons — the full named table stays in `--dump-markers`.
+⚠ Builds nothing until first shown, so an unadorned `--viewer` screenshot is byte-identical.
 
 ## src/UI/MeshLab.cs
 The `--viewer` geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider
