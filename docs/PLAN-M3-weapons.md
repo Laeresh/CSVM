@@ -461,7 +461,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 22. ☑ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation — **landed** (`AnimDefs` parse + `AnimRuntime.ApplyDamageStages`; stages fire once per threshold, `--damage-test` verifies)
 23. ☑ `WeaponHit` activation and damage application — **landed** (`AnimRuntime.DamageAt` + `Registry.Resolve`; HE 1-hit / AP 2-hit a HEALTH-60 tower, `--damage-hd` verifies)
 24. ☑ Death sequence execution + healthy→destroyed swap — **landed** (`RunDeathSequence` plays the def's death via `Start`; RESET-derived swap fallback for the ~10% that author none; `--damage-hd` swap check verifies)
-25. ☐ Collider removal on destruction (the doors)
+25. ☑ Collider removal on destruction (the doors) — **landed** (no new code: C24's swap runs `SetSubtreeActive`, which toggles colliders with visibility; `--damage-hd` `col[off,on]` census proves it, C2 doors off 1/on 8; propane→door chain confirmed)
 26. ☐ Ballistic `ObjectMotion` — debris tumble (`AnimRuntime.cs:429`)
 27. ☐ The 44 `WeaponOrCollideHit` collision path
 28. ☐ Destructible reset/restore (for the debug tools)
@@ -1178,7 +1178,26 @@ Its known substring-match bug (`ref_tank_dest`) is documented in A4.
 **Verify.** `--destroy=` (F42) on a representative object in each of the 8 chapters produces
 the correct visual swap; the 8-chapter regression is otherwise unchanged.
 
-### C25 ☐ Collider removal on destruction
+### C25 ☑ Collider removal on destruction — **LANDED (2026-07-24)**
+
+**Landed — no new runtime code.** C24's death swap already does it: the healthy→destroyed
+`OBJECT_ACTIVE_STATE` swap runs `SetSubtreeActive`, which toggles `CollisionShape3D.Disabled`
+(`SetCollidersEnabled`) alongside `Visible`, so the death that hides the healthy geometry un-solids
+it and the wreck it shows becomes solid. C25's deliverable is the **proof + traps**: the `--damage-hd`
+harness gained a `col[off N, on M]` census (world colliders switched off vs on by a kill). Measured:
+C2 (Hollywood) `gate1`/`gate2` doors off 1/on 8, `kkgate` off 4/on 12, C1 `m_build01` off 1/on 10, AA
+gun off 2/on 1 — every destructible removes its healthy collision on death. **The propane→door chain
+is confirmed handled** (`kkgate`'s root is the collidable, shootable `propane` tank, HEALTH 10;
+shooting it swaps the gate and chains `genx12`/`tbridg1_fire`/`tbridg2_fire`/`free_the_goose`; the
+door is not directly damageable — exactly the original). Two measurement traps → `verification.md`
+72/73: (1) collision exists ONLY in the flight build (`Collision = _fly`), so a freecam census reads
+zero and lies — the harness forces `|| _damageTest`; (2) a *net* collider delta hides the healthy
+removal behind the wreck it adds, so split off/on. 8-chapter freecam regression byte-identical
+(`Collision` change gated on `_damageTest`).
+
+**Verified.** `--damage-hd` `col[off,on]` per kill across C1/C2. **Owed playtest:** the destroyed
+variant re-adds colliders, so whether a blown-open door leaves a clear passage is the original data's
+call — fly through a killed door to confirm (same in-flight aim the C23 playtest owes).
 
 **Goal.** Destroyed doors stop blocking flight.
 

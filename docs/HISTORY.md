@@ -5214,3 +5214,36 @@ playtest. Docs: `AnimRuntime` architecture entry, `destructibles.md` "Engine sta
 `--damage-hd` swap check, PLAN-M3-weapons.md (checklist 24 ☐→☑, `### C24` landed note), CLAUDE.md
 status. **Next: C25 (collider removal on destruction — the doors) or C26 (ballistic ObjectMotion
 debris); C26 is independent and wakes a path skipped since M2.**
+
+**Collider removal on destruction — M3 Wave C item C25 (2026-07-24):** destroyed doors, gates and
+buildings stop blocking flight — and it turns out this needed **no new runtime code**, because C24's
+death swap already does it. The `OBJECT_ACTIVE_STATE` swap runs through `SetSubtreeActive`, which
+toggles the subtree's `CollisionShape3D.Disabled` (`SetCollidersEnabled`) *alongside* its
+`Visible` — so the same swap that hides the healthy geometry also un-solids it, and the wreck it
+reveals becomes solid. The item was written (before C24 landed) anticipating separate collider code;
+the swap made it free. **What C25 actually delivers is the proof and the traps.** The `--damage-hd`
+harness gained a `col[off N, on M]` census — the world colliders a kill switches off (the healthy
+door/building) vs on (the wreck + any chained animation). Measured: C2 (Hollywood) `gate1`/`gate2`
+(the studio doors) kill with **off 1, on 8**; `kkgate` off 4, on 12; C1 `m_build01` off 1, on 10; the
+C1 AA gun off 2, on 1 — every destructible removes its healthy collision on death. **Two measurement
+traps cost the most and are now `verification.md` rules 72/73:** (1) colliders exist ONLY in the
+flight build (`WorldSession.Options.Collision = _fly`), so the first census — run under
+`--damage-test`, which is freecam — found "0 world colliders" and nearly concluded destructibles were
+non-collidable; forcing `Collision = _fly || _damageTest` revealed 1848 in C2, doors and the propane
+tank among them. (2) A *net* collider delta (`+8` for `kkgate`) hides the healthy removal behind the
+larger wreck it adds — the off/on split is mandatory. **The propane→door chain is confirmed handled:**
+Hollywood's `kkgate` is a WeaponHit destructible whose root is the collidable (shootable) `propane`
+tank, HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap (collider off) plus
+`CallAnimation` to `genx12`, `tbridg1_fire`/`tbridg2_fire` (the bridges catch fire) and
+`free_the_goose`; the door itself is not directly damageable, exactly as the original plays it.
+(`sghangar-opensgdoors` is a *different* HEALTH-0 OnStartup open, not the propane target.) The
+discrete-hit harness was also broadened to cover EVERY destructible, not only `DAMAGE_SEQUENCE`-carrying
+ones — the doors instant-die with no stages, so the old gate would have hidden C25's own cases. The
+8-chapter `--freecam` regression is byte-identical to the C21/C24 baseline (the `Collision` change is
+gated on `_damageTest`, so freecam builds no collision as before). **Owed playtest:** the destroyed
+variant re-adds its own colliders, so whether a blown-open door leaves a clear passage is the original
+data's call — fly through a killed door in flight to confirm (the same in-flight aim the C23 playtest
+owes). Docs: `destructibles.md` "Engine status", `architecture.md` (`AnimRuntime` + `PlaneViewer`
+entries), `verification.md` rules 72/73/74, `cli.md` `--damage-hd`, PLAN-M3-weapons.md (checklist 25
+☐→☑, `### C25` landed note), CLAUDE.md status. **Next: C26 (ballistic ObjectMotion debris tumble —
+independent, wakes a path skipped since M2) or C27 (the WeaponOrCollideHit collision path).**

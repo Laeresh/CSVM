@@ -163,9 +163,9 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 
 The destructible model is complete in the data and the engine now drives most of it: live
 per-instance HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23),
-and the death sequence that runs at zero (C24). What remains is the debris **tumble** (the
-ballistic `OBJECT_MOTION` that flings wreck pieces — C26) and the death **audio** (the one-shot
-`Sound` events — D31). A format reader should know the current wiring:
+the death sequence that runs at zero (C24), and the collision that goes with it (C25). What remains
+is the debris **tumble** (the ballistic `OBJECT_MOTION` that flings wreck pieces — C26) and the
+death **audio** (the one-shot `Sound` events — D31). A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -214,6 +214,25 @@ ballistic `OBJECT_MOTION` that flings wreck pieces — C26) and the death **audi
     wreck and smokes, but the ballistic `OBJECT_MOTION` pieces do not yet fly and the explosion is
     silent. `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`),
     not a child of the anchor — it stages correctly, alongside its `large_fireball`.
+- **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
+  `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
+  the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
+  becomes solid, with **no separate collider code**. Measured on the C2 (Hollywood) gates: killing
+  `gate1`/`gate2` (the studio doors) switches **off 1** healthy collider and **on 8** wreck ones;
+  killing `kkgate` switches off 4 and on 12 (it also chains the bridge fires). C1 buildings match
+  (`m_build01`: off 1, on 10). The one caveat is the **owed in-flight playtest**: the destroyed
+  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage is
+  the original data's call, not something the swap can decide — fly through one to confirm.
+  - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
+    whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),
+    HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap plus `CallAnimation`
+    to `genx12`, `tbridg1_fire`/`tbridg2_fire` (the bridges catch fire) and `free_the_goose`. The
+    door itself is not directly damageable; the propane tank is the trigger, exactly as the original
+    plays it. (`sghangar-opensgdoors` is a *different*, HEALTH-0 OnStartup animation, not weapon-
+    destructible.)
+  - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
+    (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
+    census run there reads zero and lies. See `docs/verification.md`.
 
 Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs`,
 `DestructibleRegistry` and `Projectile` entries); this page states the fact, not the wiring.

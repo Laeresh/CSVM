@@ -739,7 +739,10 @@ public partial class PlaneViewer : Node3D
                         PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                             ? cam.GlobalPosition
                             : Vector3.Zero,
-                        Collision = _fly,
+                        // The damage-test needs the collidable world (its C25 census measures which
+                        // destructible geometry is solid and whether death removes it) even though it
+                        // runs in the freecam (non-fly) harness.
+                        Collision = _fly || _damageTest,
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
@@ -2528,6 +2531,42 @@ public partial class PlaneViewer : Node3D
         static bool HasDamage(Mech3.AnimDefinition d) => d.Sequences.Any(s =>
             string.Equals(s.Name, "DAMAGE_SEQUENCE", StringComparison.OrdinalIgnoreCase));
 
+        // Colliders (C25): SceneBuilder attaches a StaticBody3D "col" with a CollisionShape3D per
+        // collidable mesh, and SetSubtreeActive toggles that shape's Disabled as it swaps
+        // healthy→destroyed. The swap targets nodes via the compiled symbol table (NodeRefs), which
+        // can resolve to geometry OUTSIDE the small anim anchor — so counting under the anchor misses
+        // it. Census the WHOLE world instead and report the per-kill delta: a quiet harness kills one
+        // object at a time, so (enabled before − after) is exactly the collision it switched off.
+        static HashSet<CollisionShape3D> EnabledColliders(Node root)
+        {
+            var set = new HashSet<CollisionShape3D>();
+            void Walk(Node n)
+            {
+                if (n is CollisionShape3D cs && !cs.Disabled)
+                {
+                    set.Add(cs);
+                }
+                foreach (var c in n.GetChildren())
+                {
+                    Walk(c);
+                }
+            }
+            Walk(root);
+            return set;
+        }
+
+        // The top Node3D above an anchor — the world subtree root, so the census excludes the UI /
+        // Window and only walks placed + partition geometry.
+        static Node3D WorldRoot(Node3D n)
+        {
+            var t = n;
+            while (t.GetParent() is Node3D p)
+            {
+                t = p;
+            }
+            return t;
+        }
+
         // One representative instance per distinct def — a wildcard NAME binds many identical
         // towers, and sweeping every one would just repeat the same result and start hundreds of
         // effects. Capped so a chapter full of destructibles stays a readable report.
@@ -2535,7 +2574,10 @@ public partial class PlaneViewer : Node3D
         var seenDefs = new HashSet<Mech3.AnimDefinition>();
         foreach (var inst in runtime.Destructibles.All)
         {
-            if (!HasDamage(inst.Def))
+            // Continuous-sweep mode (C22) only makes sense for staged DAMAGE_SEQUENCE defs; the
+            // discrete-kill mode (C23/C24/C25) applies to EVERY destructible — the doors and gates
+            // instant-die with no stages, so gating them out would hide exactly C25's cases.
+            if (_damageHd <= 0f && !HasDamage(inst.Def))
             {
                 continue;
             }
@@ -2556,8 +2598,9 @@ public partial class PlaneViewer : Node3D
 
         var sb = new System.Text.StringBuilder();
         string mode = _damageHd > 0f ? $"weapon hits, {_damageHd:0.##} HEALTH_DAMAGE each" : "continuous HP sweep";
+        string kind = _damageHd > 0f ? "destructible def(s)" : "DAMAGE_SEQUENCE def(s)";
         sb.AppendLine($"damage-test: chapter {_chapter}, filter '{_damageTestFilter}', mode = {mode} — "
-            + $"{chosen.Count} DAMAGE_SEQUENCE def(s) of "
+            + $"{chosen.Count} {kind} of "
             + $"{runtime.Destructibles.Count} destructible instance(s)");
         foreach (var inst in chosen)
         {
@@ -2579,6 +2622,7 @@ public partial class PlaneViewer : Node3D
             target.Health = target.MaxHealth;
             target.Status = Mech3.DestructibleRegistry.State.Healthy;
             target.DamageStage = 0;
+            var colBefore = _damageHd > 0f ? EnabledColliders(WorldRoot(target.Anchor)) : new HashSet<CollisionShape3D>();
             runtime.OnInstanceStarted += OnStarted;
             if (_damageHd > 0f)
             {
@@ -2647,6 +2691,14 @@ public partial class PlaneViewer : Node3D
                 {
                     swap = $"swap[healthy {hVis}/{hAll} shown, destroyed {dVis}/{dAll} shown]; ";
                 }
+                // Collider census (C25), split by direction: how many colliders this kill switched
+                // OFF (the healthy door/building collision that stops blocking flight) vs. ON (the
+                // wreck/debris the death — and any chained animation — brings solid). A net count
+                // hides the door removal when the death also spawns a solid wreck.
+                var colAfter = EnabledColliders(WorldRoot(target.Anchor));
+                int off = colBefore.Count(cs => !colAfter.Contains(cs));
+                int on = colAfter.Count(cs => !colBefore.Contains(cs));
+                swap += $"col[off {off}, on {on}]; ";
             }
 
             string src = target.Def.Archive != null ? "compiled" : "reader";
@@ -2666,6 +2718,41 @@ public partial class PlaneViewer : Node3D
         var scratch = Path.Combine(_repoRoot, ".scratch");
         Directory.CreateDirectory(scratch);
         File.WriteAllText(Path.Combine(scratch, "damage_test.txt"), text);
+
+        // C25 diagnostic: the world's collidable-geometry inventory, so we can confirm destructible
+        // roles (healthy / destroyed / door*) are among the solid geometry — collision is built here
+        // only because --damage-test forces it (--freecam alone builds none). Counts per owning-mesh
+        // cs_name; no positions, because this runs before the world is added to the tree so every
+        // GlobalPosition would read (0,0,0) — a lie, like the C23 anchor-position trap.
+        if (chosen.Count > 0)
+        {
+            var byName = new SortedDictionary<string, int>();
+            int cols = 0;
+            void Walk(Node n, string parentName)
+            {
+                string name = n is Node3D n3 && n3.HasMeta(Mech3.AnimRuntime.NameMeta)
+                    ? n3.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                    : n.Name.ToString();
+                if (n is StaticBody3D body && body.Name.ToString() == "col")
+                {
+                    cols++;
+                    byName.TryGetValue(parentName, out int c);
+                    byName[parentName] = c + 1;
+                }
+                foreach (var c in n.GetChildren())
+                {
+                    Walk(c, name);
+                }
+            }
+            Walk(WorldRoot(chosen[0].Anchor), "");
+            var inv = new System.Text.StringBuilder($"{cols} collidable meshes, by owner cs_name:\n");
+            foreach (var (nm, c) in byName)
+            {
+                inv.AppendLine($"  {c,4}  {nm}");
+            }
+            File.WriteAllText(Path.Combine(scratch, "world_colliders.txt"), inv.ToString());
+            GD.Print($"damage-test: {cols} collidable meshes → ./.scratch/world_colliders.txt");
+        }
         GD.Print($"damage-test: {chosen.Count} def(s) swept → ./.scratch/damage_test.txt");
     }
 

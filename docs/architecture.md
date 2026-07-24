@@ -281,6 +281,11 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   healthy/destroyed pair but author no swap: flip the roles the def's own RESET_STATE named, only
   when RESET declares a `destroyed` node — the def's explicit targets, NOT a world scan (C24).
   Debris ballistic ObjectMotion (C26) + one-shot Sound (D31) still stubbed.
+⚠ Collider removal on death is FREE (C25), not separate code: `SetSubtreeActive` toggles
+  `SetCollidersEnabled` with `Visible`, so the swap that hides `healthy`/shows `destroyed` also
+  un-solids the door/building and solids the wreck. Measured off/on per kill (C2 gates: off 1, on 8).
+  The healthy collider only exists in the FLIGHT build — `Collision` is `_fly` — so a `--freecam`
+  census reads zero; the C25 harness forces it with `|| _damageTest`.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -781,3 +786,10 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
 ⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
   has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
+⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
+  HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
+  (C23/C24/C25) — resolve✓ walk-up, healthy/destroyed swap, and `col[off,on]` (colliders switched by
+  the kill). It forces `Collision = _fly || _damageTest` so those colliders EXIST; `--freecam` alone
+  builds none. Discrete mode covers EVERY destructible (doors instant-die, no `DAMAGE_SEQUENCE`),
+  continuous mode only the staged ones. Positions read (0,0,0) — world isn't in the tree — so it
+  reports none (the C23 anchor-position trap).

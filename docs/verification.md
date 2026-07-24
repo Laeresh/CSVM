@@ -185,6 +185,25 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     flag; `--headless` is only for the windowless dump tools (`--dump-markers`/`--dump-weapons`/
     `--dump-loadout`) that never read back pixels. ("Headless screenshots" above means the
     automated `--screenshot` workflow, not the `--headless` flag.)
+72. **Colliders exist only in the flight build — a collision census in any non-fly mode reads
+    zero and lies.** `WorldSession.Options.Collision` is `_fly`, so `--freecam`, `--viewer` and
+    `--anim-lab` build the world with NO `StaticBody3D`/`CollisionShape3D` at all. A C25 collider
+    check that ran under `--damage-test` (which is freecam) found "0 world colliders" and nearly
+    concluded destructibles were non-collidable — false: force `Collision` on (the harness now does
+    `|| _damageTest`) and the same world has 1848 colliders, doors and propane tanks among them.
+    Before measuring what is solid, confirm the mode you are in actually built collision.
+73. **A net collider delta hides a real removal — split it by direction.** Killing a destructible
+    both switches its healthy collider OFF and (via the destroyed swap + any chained animation)
+    switches wreck colliders ON. The C2 propane gate nets **+8** enabled, which reads as "death adds
+    collision" — but the door's healthy collider *did* turn off; the death just added more wreck than
+    it removed. Report `off` and `on` counts separately, never the signed sum.
+74. **`--screenshot=` takes an ABSOLUTE path, and the run exits 0 even when the save fails — always
+    confirm the file exists afterward.** The CLI path is handed verbatim to `Image.SavePng`, which
+    does NOT `GlobalizePath` it (unlike the in-game F12 capture), so a relative `--screenshot=.scratch/x.png`
+    resolves against Godot's own dir — not your shell's CWD — and logs only a quiet `ERROR: Can't
+    save PNG at path` on stderr while the process still returns 0. A screenshot loop can "succeed"
+    and write nothing. Pass a fully-qualified path (the scratch dir from the environment, or
+    `$(pwd)/.scratch/x.png`), and `ls`/`Test-Path` the output before trusting it.
 
 ## What this project cannot verify itself
 

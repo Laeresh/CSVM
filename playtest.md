@@ -78,6 +78,14 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   Debris does NOT tumble yet (C26) and the death explosion is silent (D31), so the wreck just appears
   and smokes. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
   *Blocks:* end-to-end sign-off on C23 + C24 (weapon damage → destruction visual).
+- **C25 — flying through a killed door.** In C2 (Hollywood), a destructible door is solid until
+  destroyed. Headless proof: killing a door switches its healthy collider **off** (C2 `gate1`/`gate2`
+  off 1, on 8) — but the destroyed variant re-adds its own colliders, so whether the blown-open door
+  leaves a *clear passage* is the original data's call, not something the swap can decide. Also the
+  **propane→door chain**: `kkgate`'s trigger is its collidable `propane` tank — shoot the tank (not the
+  gate) and the gate destroys + the bridges catch fire. Watch for: fly into an intact door → collide;
+  destroy it → fly through the opening. Needs the same in-flight aim the C23 playtest owes.
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`. *Blocks:* C25 sign-off.
 
 ---
 
