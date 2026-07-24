@@ -487,10 +487,10 @@ New files and docs only; touches no module M2 polish 3 is editing.
 ### Wave F — debug & verification
 
 39. ☐ Weapon lab in `--viewer`
-40. ☐ Freecam raycast pick + HP control
-41. ☐ Destructible list overlay + camera jump
+40. ⊘ Freecam raycast pick + HP control — **superseded by PLAN-testing D31/D34** (2026-07-24)
+41. ⊘ Destructible list overlay + camera jump — **superseded by PLAN-testing D32** (2026-07-24)
 42. ☐ `--destroy=` CLI trigger
-43. ☐ `--infinite-ammo` / `--loadout=` overrides
+43. ☑ `--infinite-ammo` / `--loadout=` overrides — **landed** (both flags live + documented in `docs/cli.md`; found delivered on the 2026-07-24 Wave-F review — they shipped with B12/B16)
 
 ---
 
@@ -1618,23 +1618,26 @@ Include a copy-CLI-args affordance, as `LiveryLab` does.
 
 **Verify.** Every one of the 48 entries can be mounted and fired without error.
 
-### F40 ☐ Freecam raycast pick + HP control
+### F40 ⊘ Freecam raycast pick + HP control — superseded by PLAN-testing
 
-**Approach.** Crosshair raycast resolves the destructible instance behind it; display name,
-HP, activation kind, root node and sequence list. Keys: chip damage, kill outright, reset
-(C28), cycle to next destructible. Reuse `NodeLabels`' node-resolution.
+**Superseded (2026-07-24).** `docs/PLAN-testing.md` D31 + D34 deliver a strictly richer shape:
+click-selection with an ancestor-ladder breadcrumb (D31) plus an HP slider with kill/reset on
+the selected destructible (D34), integrated with the node/mesh labs, instead of this item's
+crosshair raycast + chip/kill/reset keys. `--damage-test`/`--damage-hd` remain the headless
+verification tools in the meantime (cli.md points at F40 as their sunset — that pointer now
+means D31/D34).
 
-**Verify.** Picking works in all 8 chapters; reset restores exactly.
+**Verify (moved).** D34 carries the reset-idempotency and all-chapters checks.
 
-### F41 ☐ Destructible list overlay + camera jump
+### F41 ⊘ Destructible list overlay + camera jump — superseded by PLAN-testing
 
-**Approach.** An overlay listing every destructible in the chapter; selecting one warps the
-freecam to it. **Additionally show, per entry, whether its `ANIMATION_ROOT_NAME` resolves to
-real nodes and whether its sequences reference only implemented event kinds** — this is the
-coverage instrument, folded in rather than shipped as a separate flag (per the user's scoping).
+**Superseded (2026-07-24).** `docs/PLAN-testing.md` D32 (the Node Lab) absorbs this whole item:
+its destructibles-filtered view lists every destructible with camera-jump, **including this
+item's coverage instrument** (per entry: does `ANIMATION_ROOT_NAME` resolve to real nodes, do
+its sequences reference only implemented event kinds — unresolved entries shown loudly), and
+the census-totals check also stands as PLAN-testing B12's `destructible-census` suite.
 
-**Verify.** The list's totals per chapter match A4's census; unresolved entries are reported
-rather than hidden.
+**Verify (moved).** D32 asserts the per-chapter totals against A4's census.
 
 ### F42 ☐ `--destroy=` CLI trigger
 
@@ -1644,11 +1647,17 @@ verifiable the way everything else here is verified.
 
 **Verify.** A scripted run in each of the 8 chapters produces a destruction screenshot.
 
-### F43 ☐ `--infinite-ammo` / `--loadout=` overrides
+### F43 ☑ `--infinite-ammo` / `--loadout=` overrides — **LANDED (found delivered 2026-07-24)**
 
-**Approach.** Two testing switches. `--infinite-ammo` suppresses depletion; `--loadout=`
-overrides a plane's stock entry. Document both in `docs/cli.md` — CLAUDE.md keeps only the
-day-to-day table.
+**Found already delivered on the Wave-F review:** both switches shipped alongside B12/B16 and
+are documented in `docs/cli.md` (`--infinite-ammo`: guns/hardpoints never deplete, HUD shows
+`∞`, `PlaneViewer.cs:467`/`FlightController.InfiniteAmmo`; `--loadout=`: binds a named def
+instead of the plane's own, in flight and under `--dump-loadout`). Nothing remained to build —
+the item predates their landing and was never ticked.
+
+**Original approach (kept for reference).** Two testing switches. `--infinite-ammo` suppresses
+depletion; `--loadout=` overrides a plane's stock entry. Document both in `docs/cli.md` —
+CLAUDE.md keeps only the day-to-day table.
 
 ---
 

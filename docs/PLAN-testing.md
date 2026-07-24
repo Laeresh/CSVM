@@ -39,15 +39,15 @@ This plan replaces the project's screenshot-first verification culture with dete
 
 ## Overlap with PLAN-M3-weapons Wave F (checked 2026-07-24)
 
-M3's Wave F ("debug & verification", F39–F43) predates this plan and overlaps it. Recommended disposition (the ❌ marks in M3 are applied when the user confirms):
+M3's Wave F ("debug & verification", F39–F43) predates this plan and overlaps it. Disposition, confirmed by the user and applied to M3's plan on 2026-07-24:
 
 | M3 item | Disposition |
 |---|---|
 | F39 weapon lab (`--viewer`) | **Stays in M3** — no counterpart here; its "all 48 mount and fire" verify additionally becomes a B12 suite so the check is automated, not lab-only. |
-| F40 freecam pick + HP control | **Superseded by D31 + D34** (ancestor-ladder selection + HP slider/kill/reset) — mark it ❌ in M3 with a pointer here. |
-| F41 destructible list + camera jump + coverage columns | **Superseded by D32**, which now explicitly carries F41's coverage instrument (root-resolves / event-kinds-implemented) and census-totals verify — mark it ❌ in M3 with a pointer here. |
+| F40 freecam pick + HP control | **⊘ superseded by D31 + D34** (ancestor-ladder selection + HP slider/kill/reset). |
+| F41 destructible list + camera jump + coverage columns | **⊘ superseded by D32**, which explicitly carries F41's coverage instrument (root-resolves / event-kinds-implemented) and census-totals verify. |
 | F42 `--destroy=` trigger | **Stays in M3** — exit criterion 2 depends on it; later composes with `--det`/`--pos`/`--view`. |
-| F43 `--infinite-ammo` / `--loadout=` | **Already delivered** (both flags live and documented in `docs/cli.md`) — confirm and tick in M3. |
+| F43 `--infinite-ammo` / `--loadout=` | **☑ found already delivered** (both flags live in `PlaneViewer.cs:466–467` and documented in `docs/cli.md`) — ticked in M3. |
 
 ## Ground rules
 

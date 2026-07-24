@@ -5757,3 +5757,26 @@ ballistic-projection behaviour + the convergence TUNE), `docs/architecture.md` (
 entry + FlightController `UpdateReticle` note), `playtest.md` (new E37 item + the convergence TUNE),
 PLAN-M3-weapons.md (E37 ☐→☑, open question 4, Wave-E-complete position), CLAUDE.md (module index +
 Current-status → Wave F).
+
+## 2026-07-24 — PLAN-testing authored (testing & verification infrastructure) + M3 Wave F reconciled
+
+**What landed.** `docs/PLAN-testing.md` — a 20-item, 4-wave plan scoped in a grilling session:
+determinism core (shared `GameClock` with halt/step in every mode, sim-clock-driven shader time
+for byte-identical frames, per-subsystem seeded RNGs, a `--det` bundle implied by scripted runs,
+`--pos`/`--direction` unified placement), harness + logging (`Log`, in-engine `--run-tests`
+suites with exit codes, a `CSVM.Tests` xUnit project on local-data golden invariants +
+hand-authored fixtures, `RunTests.ps1`), perf + visual instruments (startup-phase stopwatches,
+an A/B perf suite with git-ignored history, a golden-image md5 tripwire, `--tex-override`/
+`--tex-census`, `--stage=empty` + `--node=` stages, the original's numpad flight-camera views +
+`--view=`), and a freecam inspect layer (click + ancestor-ladder selection, Node Lab, mesh/damage
+labs on the selection, collider wireframes). Execution queued behind M3's remaining F39/F42.
+
+**M3 Wave F reconciliation (user-confirmed).** F40 ⊘ superseded by PLAN-testing D31/D34; F41 ⊘
+superseded by D32 (its coverage instrument + census verify absorbed there, the census also a B12
+suite); F43 ☑ found already delivered (`--infinite-ammo`/`--loadout=` live in `PlaneViewer.cs`
+and documented in cli.md since B12/B16 — the item predated their landing and was never ticked).
+F39 and F42 stay in M3 (F42 is exit-criterion 2's instrument).
+
+**Verified.** Plan evidence lines cite code greps (TIME sites, unseeded RNG sites, `GD.Print`
+census, `ManualAdvance`/`FixedDt` mechanics); F43's tick verified against `PlaneViewer.cs:466–467`
+and `FlightController.InfiniteAmmo`, not the docs alone. No engine code changed.

@@ -223,6 +223,6 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Active plan: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** — Milestone 3, weapons and destruction. **Per-item status (☑/☐, landed notes, decisions, deferrals) is the plan's checklist and item notes — read those, not this section, for what is done and how it was verified.** Position: Wave A complete; Wave B complete (B19/B20 guided flight deferred to M4); Wave C complete; Wave D complete; Wave E complete (E34–E37 done; E38 ⊘ deferred to M4). Waves A–E done; Wave F (debug) remains.
 
-**Next: F39** (weapon lab in `--viewer`), then F40–F43 (freecam raycast pick + HP control, destructible list overlay, `--destroy=` trigger, `--infinite-ammo`/`--loadout=` overrides). Wave F is the last M3 wave.
+**Next: F39** (weapon lab in `--viewer`), then F42 (`--destroy=` trigger) — the last two open M3 items (the rest of Wave F is closed in the plan's checklist). Then **[`docs/PLAN-testing.md`](docs/PLAN-testing.md)**, authored 2026-07-24 and queued as the next plan.
 
 **Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
