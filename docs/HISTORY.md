@@ -5413,3 +5413,37 @@ degenerate transforms (present in the `--mute` baseline too), C2B `clutter templ
 `architecture.md` (`SoundDefs`, `SoundArchive`, `WorldSounds`, `AnimRuntime`), PLAN-M3-weapons.md
 (checklist 31 ☐→☑, `### D31` reconciled), `backlog.md` (the dead-`Sound`-path note closed), CLAUDE.md
 status.
+
+**Config tuning-override layer (`src/Utils/Config.cs`) + FlightModel wired (2026-07-24, on the
+`worktree-config-module` side branch).** A static `Config` reads an optional sparse
+`res://config.json` (`CSVM/config.json`, git-ignored) whose values override the hand-tuned `const`s
+for fine-tuning without a recompile. Design decided by a grilling pass: **override, not replace** — the
+`const`s stay in-code as the DEFAULT with their rationale comments, and `Config.GetFloat/GetInt/GetBool/
+GetString(key, const)` returns the file's value if the key is present, else the `const` returned
+**verbatim**. Keys are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON; access
+is **read-through** at the point of use (per-frame dict lookup, negligible; keeps future live-reload a
+cheap mtime-reparse instead of an event system). Every getter self-registers `(key, default)`, so
+`--dump-config` writes a fully-populated nested template to `./.scratch/config.dump.json`; a file key
+that matches no tunable is warned loudly (typo detector, `ReportOrphans`), and a queried key missing
+from a loaded file warns once. `WarmTuningRegistry` (PlaneViewer) steps a throwaway `FlightModel` with
+a default `PlaneStats` once at startup so orphan-check + dump are complete with **no world / no game
+data**. Comment + trailing-comma tolerant on input; malformed JSON → one error line, never throws.
+Scope this pass: **`FlightModel`'s 15 `TUNE` consts only** (read into locals at the top of `Step` so
+every key registers even on a frame that skips the stall/knife branches; `MaxDiveSpeedFrac`, marked
+"hard cap" not TUNE, left alone). **Read-only** — nothing writes the file; `res://` chosen so a writable
+`user://` layer can later stack under the getters (the "save player configs" direction) without touching
+a call site. Deferred: write/save + `user://` layer, live-reload, the other 13 TUNE-bearing files,
+`Vector3`/`Color` getters.
+
+Verified: build clean (0 warnings). `--dump-config` writes the 15-key `flightModel` template with exact
+defaults. With a deliberately-broken `config.json` (one valid override, one string where a number
+belongs, one typo'd key, plus a `//` comment + trailing comma): 3 overrides parsed, the valid override
+silent, the string caught as a type mismatch, the 13 absent keys reported once each, and the typo'd key
+flagged as an orphan — all as designed. Regression: a static-viewer md5 A/B (`--viewer
+--plane=player_bhawk --paint-seed=1 --no-pads`, worktree-new vs the same shot with the two edits stashed
+back to `f5b3a26` baseline) is **byte-identical** (`f1290254…`), proving `Config.Load()` + the startup
+warmup/orphan pass are side-effect-free on the build/render path. The flight math itself is inert **by
+construction** — with no config.json every getter returns its `const` fallback verbatim and no operation
+was reordered — which is the accepted verification here since `--fly` screenshots are not
+frame-deterministic (`verification.md` rules 44, and the non-determinism table). Docs: `architecture.md`
+(`src/Utils/Config.cs`), `cli.md` + CLAUDE.md module index (`--dump-config`).

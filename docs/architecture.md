@@ -845,3 +845,22 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   is scheduled (t≈2.2 s), so it needs the clock ticked — and ticking an out-of-tree world spams
   `!is_inside_tree` (global-transform reads). Swap/col are measured pre-tick (immediate post-death),
   debris post-tick; being in-tree also makes positions real (no more C23 (0,0,0) trap).
+
+## src/Utils/Config.cs
+Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
+the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's value for a present
+key, else the caller's in-code `const` default — read-through at the point of use, keys
+`moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to dot-keys.
+⚠ Absent file / absent key / wrong-typed value all fall through to the passed default, returned
+  **verbatim** — so no config.json ⇒ behaviour byte-identical to the consts (scripted shots stay inert).
+  Malformed JSON / non-object root → one error line, no overrides, never throws.
+⚠ Every getter self-registers `(key, default)`. `--dump-config` emits that registry as a full nested
+  template; `ReportOrphans` warns loudly about file keys no getter queried (the typo detector); a
+  queried-but-missing key on a *loaded* file warns once. `WarmTuningRegistry` (PlaneViewer) steps a
+  throwaway `FlightModel` once so both are complete with **no built world / no game data**.
+⚠ Read-only this pass — nothing writes the file; `res://` was chosen so a writable `user://` layer
+  can later stack UNDER the getters without touching a call site. Loaded once at `_Ready`; live-reload
+  (re-parse on mtime) is deferred but cheap because reads are already read-through.
+⚠ Only `FlightModel` is wired so far (its 15 `TUNE` consts, read into locals at the top of `Step`
+  so every key registers even on a frame that skips the stall/knife branches); other modules still
+  read their consts directly. `config.json` is git-ignored — the consts stay the canonical values.

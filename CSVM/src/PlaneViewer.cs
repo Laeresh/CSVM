@@ -6,6 +6,7 @@ using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM;
@@ -237,6 +238,7 @@ public partial class PlaneViewer : Node3D
     private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
     private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
+    private bool _dumpConfig;          // --dump-config: write a populated tuning-config template and quit
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
@@ -367,6 +369,10 @@ public partial class PlaneViewer : Node3D
 
     public override void _Ready()
     {
+        // Load the optional tuning-override file first, before any module reads a Config value.
+        // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
+        Config.Load();
+
         var projectDir = ProjectSettings.GlobalizePath("res://");
         _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
 
@@ -443,6 +449,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
             else if (arg == "--dump-loadout") _dumpLoadout = true;
             else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
+            else if (arg == "--dump-config") _dumpConfig = true;
             // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
             // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
             else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
@@ -578,6 +585,23 @@ public partial class PlaneViewer : Node3D
         if (_dumpLoadout)
         {
             DumpLoadout();
+            GetTree().Quit();
+            return;
+        }
+
+        // Populate Config's tuning registry by exercising the wired modules once (WarmTuningRegistry),
+        // then flag any config.json key that matched no tunable. Both run on every launch, are
+        // data-free, and print before flight — so a typo'd or misplaced override is caught loudly at
+        // startup rather than silently doing nothing.
+        WarmTuningRegistry();
+        Config.ReportOrphans();
+        // --dump-config: write a fully-populated tuning template (every registered key + its default,
+        // nested by block) to the scratch folder and quit — the copy-and-edit source for config.json.
+        if (_dumpConfig)
+        {
+            string dumpPath = Path.Combine(_repoRoot, ".scratch", "config.dump.json");
+            Config.DumpConfig(dumpPath);
+            GD.Print($"config: wrote {Config.RegisteredCount}-key tuning template to ./.scratch/config.dump.json");
             GetTree().Quit();
             return;
         }
@@ -2256,6 +2280,25 @@ public partial class PlaneViewer : Node3D
     }
 
     private void FrameCamera() => _orbit.Frame(OrbitCamera.MergedAabb(_plane!), _camPos, _lookAt);
+
+    /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
+    /// no game data, so Config's registry knows the full key set. That lets <see cref="Config.ReportOrphans"/>
+    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template — without a
+    /// built world. Read-through means the reads register on execution, so a single dummy step is the
+    /// cheapest way to run them. Add a line here as each module is wired to Config.</summary>
+    private static void WarmTuningRegistry()
+    {
+        try
+        {
+            var fm = new FlightModel(new PlaneStats());
+            fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
+            fm.Step(default, 1f / 60f);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
+        }
+    }
 
     /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
     /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and

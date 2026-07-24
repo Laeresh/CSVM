@@ -40,6 +40,12 @@ CopyToOneDrive.ps1
 # NOTE: /.claude/skills/ is deliberately NOT ignored; project skills are committed.
 /.claude/worktrees/
 /.claude/workspaces/
+# Dev-facing tuning-override file (src/Utils/Config.cs). A personal, sparse scratchpad: the in-code
+# consts are the canonical values, config.json only overrides while fine-tuning. Kept out of
+# version control so scripted --screenshot runs see no file → pure defaults → byte-identical.
+# Values worth keeping get baked back into the const (with its rationale) and cleared from here.
+/CSVM/config.json
+
 # Personal backlog, ideas and other things
 NOTES.md
 # Python bytecode from analysis/ scripts

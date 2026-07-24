@@ -1,4 +1,5 @@
 using Godot;
+using CSVM.Utils;
 
 namespace CSVM.Flight;
 
@@ -92,7 +93,8 @@ public sealed class FlightModel
     public FlightModel(PlaneStats stats)
     {
         Stats = stats;
-        _maxThrustAccel = stats.EnginePower * ThrustConst / (stats.VehWeight / 1000f);
+        _maxThrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", ThrustConst)
+                          / (stats.VehWeight / 1000f);
     }
 
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
@@ -110,16 +112,36 @@ public sealed class FlightModel
         Throttle = Mathf.Clamp(input.Throttle, 0f, 1f);
         var s = Stats;
 
+        // Tunable scale constants, read through Config so config.json can override them without a
+        // recompile; each falls back to the in-code const default (and the rationale beside it)
+        // above. Read unconditionally here — once per step — so every key registers even on a frame
+        // that never enters the stall or knife-edge branches below, which keeps --dump-config's
+        // template complete and the orphan/missing checks honest.
+        float minControlEff = Config.GetFloat("flightModel.minControlEff", MinControlEff);
+        float maxControlEff = Config.GetFloat("flightModel.maxControlEff", MaxControlEff);
+        float pitchTune = Config.GetFloat("flightModel.pitchTune", PitchTune);
+        float yawTune = Config.GetFloat("flightModel.yawTune", YawTune);
+        float rollTune = Config.GetFloat("flightModel.rollTune", RollTune);
+        float stallSpeedFrac = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac);
+        float stallNoseRate = Config.GetFloat("flightModel.stallNoseRate", StallNoseRate);
+        float climbGravityScale = Config.GetFloat("flightModel.climbGravityScale", ClimbGravityScale);
+        float knifeAlignFloor = Config.GetFloat("flightModel.knifeAlignFloor", KnifeAlignFloor);
+        float knifeNoseSag = Config.GetFloat("flightModel.knifeNoseSag", KnifeNoseSag);
+        float knifeNoseRate = Config.GetFloat("flightModel.knifeNoseRate", KnifeNoseRate);
+        float lowSpeedDragBlend = Config.GetFloat("flightModel.lowSpeedDragBlend", LowSpeedDragBlend);
+        float liftSpeedFrac = Config.GetFloat("flightModel.liftSpeedFrac", LiftSpeedFrac);
+        float alignRate = Config.GetFloat("flightModel.alignRate", AlignRate);
+
         // --- rotation: torque·recInertia vs momentum damping (all from the dynamics block).
         // Control surfaces bite proportionally to airspeed; return_rate adds extra
         // centering on an axis while its stick is released.
         // Inverted eff. Turns faster the slower the plane is. Still not same as original
-        float eff = 1.4f - Mathf.Clamp(Speed / s.FdSpeed, MinControlEff, MaxControlEff);
+        float eff = 1.4f - Mathf.Clamp(Speed / s.FdSpeed, minControlEff, maxControlEff);
         var cmd = new Vector3(
-            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * PitchTune,
+            Mathf.Clamp(input.Pitch, -1f, 1f) * s.PitchTorque * s.RecInertia.X * pitchTune,
             //eff only works on Yaw like the original
-            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * YawTune * eff,
-            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * RollTune);
+            Mathf.Clamp(input.Yaw, -1f, 1f) * s.RudderTorque * s.RecInertia.Y * yawTune * eff,
+            Mathf.Clamp(input.Roll, -1f, 1f) * s.RollTorque * s.RecInertia.Z * rollTune);
         var damp = new Vector3(
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Pitch))),
             s.AngMomentumDamp + s.ReturnRate * (1f - Mathf.Min(1f, Mathf.Abs(input.Yaw))),
@@ -131,7 +153,7 @@ public sealed class FlightModel
         // attitude including inverted). Deep-stall rate exceeds full-elevator authority
         // (~0.58 rad/s steady after the item-12 calibration), so the drop is decisive
         // until airspeed recovers.
-        float stallSpeed = StallSpeedFrac * s.FdSpeed;
+        float stallSpeed = stallSpeedFrac * s.FdSpeed;
         bool stalled = isStalled();
         float noseYBefore = (-Attitude.Z).Y;  // the nose's world elevation entering this frame
         if (stalled)
@@ -141,7 +163,7 @@ public sealed class FlightModel
             var axis = noseNow.Cross(Vector3.Down);
             if (axis.LengthSquared() > 1e-8f)
             {
-                float angle = Mathf.Min(s.StallMag * StallNoseRate * depth * dt,
+                float angle = Mathf.Min(s.StallMag * stallNoseRate * depth * dt,
                                         noseNow.AngleTo(Vector3.Down));
                 Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
             }
@@ -206,13 +228,13 @@ public sealed class FlightModel
             {
                 var noseKnife = -Attitude.Z;
                 float noseElev = Mathf.Asin(Mathf.Clamp(noseKnife.Y, -1f, 1f));
-                float sagTarget = -KnifeNoseSag * knife;
+                float sagTarget = -knifeNoseSag * knife;
                 if (noseElev > sagTarget + 1e-5f)
                 {
                     var axis = noseKnife.Cross(Vector3.Down);
                     if (axis.LengthSquared() > 1e-8f)
                     {
-                        float angle = Mathf.Min(KnifeNoseRate * knife * dt,
+                        float angle = Mathf.Min(knifeNoseRate * knife * dt,
                                                 noseElev - sagTarget);
                         Attitude = Attitude.Rotated(axis.Normalized(), angle).Orthonormalized();
                     }
@@ -229,7 +251,7 @@ public sealed class FlightModel
         // lift fraction: quadratic in speed up to the lift speed, scaled by how much of
         // the wings' lift points vertically — |up·Y| is 1 level OR inverted (arcade:
         // inverted flight still carries), 0 in knife-edge (near-ballistic, nose sags).
-        float liftSpeed = LiftSpeedFrac * s.FdSpeed;
+        float liftSpeed = liftSpeedFrac * s.FdSpeed;
         float speedLift = Mathf.Min(1f, (Speed / liftSpeed) * (Speed / liftSpeed));
         float wingVert = Mathf.Abs(Attitude.Y.Dot(Vector3.Up));
         float liftFrac = speedLift * wingVert;
@@ -245,13 +267,13 @@ public sealed class FlightModel
         // bleeds/returns speed — reduced climbing (climb retention: the original bleeds
         // noticeably less speed in a sustained climb), full when diving.
         float xSpd = Speed / s.FdSpeed;
-        float dragAccel = _maxThrustAccel * Mathf.Lerp(xSpd * xSpd, xSpd, LowSpeedDragBlend);
+        float dragAccel = _maxThrustAccel * Mathf.Lerp(xSpd * xSpd, xSpd, lowSpeedDragBlend);
         var gravity = Vector3.Down * s.Gravity;
         var gAlong = VelocityDir * gravity.Dot(VelocityDir);
         var gAcross = gravity - gAlong;
         var accel = nose * (Throttle * _maxThrustAccel)
                     - VelocityDir * dragAccel
-                    + gAlong * (VelocityDir.Y > 0f ? ClimbGravityScale : 1f)
+                    + gAlong * (VelocityDir.Y > 0f ? climbGravityScale : 1f)
                     + gAcross * (1f - liftFrac);
         var vel = VelocityDir * Speed + accel * dt;
         Speed = Mathf.Min(vel.Length(), MaxDiveSpeedFrac * s.FdSpeed);
@@ -264,8 +286,8 @@ public sealed class FlightModel
         // to the nose, so the sag equilibrium sits visibly below it — the nose-drop).
         // (Skip when path ≈ opposite the nose — slerp axis degenerates; gravity will
         // swing the path around within a few frames anyway.)
-        float align = AlignRate * Mathf.Clamp(Speed / liftSpeed, 0f, 1f)
-                      * (KnifeAlignFloor + (1f - KnifeAlignFloor) * wingVert);
+        float align = alignRate * Mathf.Clamp(Speed / liftSpeed, 0f, 1f)
+                      * (knifeAlignFloor + (1f - knifeAlignFloor) * wingVert);
         // Near-parallel is the normal cruise state, and there Slerp is unusable: it builds its
         // rotation axis from the cross product, whose float error swamps a sub-degree angle, and
         // Godot then throws "Argument is not normalized" — which aborts the whole physics frame,
@@ -286,7 +308,7 @@ public sealed class FlightModel
 
     public bool isStalled()
     {
-        float stallSpeed = StallSpeedFrac * Stats.FdSpeed;
+        float stallSpeed = Config.GetFloat("flightModel.stallSpeedFrac", StallSpeedFrac) * Stats.FdSpeed;
         return Speed < stallSpeed;
     }
 }
