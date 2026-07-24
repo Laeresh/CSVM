@@ -479,7 +479,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 ### Wave E — HUD
 
 34. ☑ Bitmap-font HUD text renderer (`5pointhud`) — **landed** (2026-07-24): `HudFont.cs` — printable-ASCII `0x20`–`0x7e` proportional 5px font, auto-segmented from the atlas, sized via `HudMetrics`; `--hud-font-test` proves 1P == 4P-pane (scaled)
-35. ☐ `gungauge` + `missilegauge` in `GaugeCluster`
+35. ☑ `gungauge` + `missilegauge` in `GaugeCluster` — **landed** (2026-07-24): both dials render on all 11 planes (uniform subtree; the face hangs off the generic `g815`/`g819` on every plane, no Bloodhawk special case). 4-digit `4char_ammo` + 6-char `6char_type` cycles show the selected weapon's rounds + NAME; `ggindicator`/`mgindicator` belt lights step green/yellow/red per slot fraction; the arrow tracks the selected gun group / next-armed pylon. **Gun count is per-group, rocket count is per-pylon** (user-corrected — the original's Warhawk reads `BOOM 3`, not the 24-round total). Windowed captures verify the roster, per-group/per-pylon counters, and the green→yellow→red step (Bloodhawk rocket depletion). The green/yellow/red thresholds are a TUNE pending an original playtest (see `playtest.md`).
 36. ☐ Selected-weapon readout (`MSG_HUD_GUNGAUGE`)
 37. ☐ Impact-point reticle — ballistic projection
 38. ☐ Lock-on indicator
@@ -1506,16 +1506,36 @@ sqrt-damped 0.707 ratio, not a naive 0.50), `Measure()`'s underline ending exact
 Screenshots run **windowed** (verification.md rule 71). Additive + gated: flag off ⇒ font not loaded,
 flight HUD unchanged.
 
-### E35 ☐ `gungauge` + `missilegauge`
+### E35 ☑ `gungauge` + `missilegauge` — **LANDED (2026-07-24)**
 
 **Approach.** Extend `GaugeCluster`, which already extracts `altimeter`/`speedometer`/
 `damageindicator` from the same `gauges` subtree. Both gauges exist on all 11 planes with
 letter/digit texture cycles and `ggindicatorN`/`mgindicatorN` belt lights.
 
-⚠ **Read `docs/formats/hud.md` first.** It records that gauge geometry is parented differently
-per aircraft — on `player_bhawk` the dial's mesh is on the node itself, on every other plane it
-hangs off a generically-named child (`g951`, `g927`, …). A reader that only checks the dial
-node's own mesh works for the Bloodhawk and fails for the other ten.
+**Landed.** `GaugeCluster.ExtractWeaponGauge` reads both dials; `FlightController.UpdateWeaponGauges`
+feeds a `WeaponGauge` (count / type / selected slot / per-slot fractions) each frame from the live
+loadout. The `4char_ammo` digit cycle (`zero.tif`…`SPACE.tif`) is drawn right-aligned; the
+`6char_type` cycle (`A`…`Z`,`zero`…`nine`,`SPACE`) shows the weapon `NAME` upper-cased; the
+`ggindicator`/`mgindicator` belt lights step green/yellow/red by that slot's fraction; the
+`gg`/`mgarrow` pointer rotates to the selected gun group / next-armed pylon. Full decode +
+`cockpit.gw` drive in `docs/formats/hud.md`. **Guns read per-group, rockets per-pylon** (the arrow's
+pylon), not a total — the user's correction, matching the original's `BOOM 3` Warhawk readout.
+
+⚠ **The per-plane parenting warning turned out NOT to apply to these two gauges.** Verified across
+the whole roster: the `gungauge`/`missilegauge` node is mesh-less on every plane and the face hangs
+off the generic child (`g815`/`g819`) uniformly — there is **no Bloodhawk special case** here (that
+was the `damageindicator`). The extraction still uses the safe "any unrecognised child = face" rule,
+so it is robust either way.
+
+**Verified.** All 11 planes render both gauges (including the Devastator's inherited
+`player_pfighter`); firable-group counts exclude turrets (Balmoral/Kestrel/Firebrand/Brigand/Hellhound
+show only their non-turret groups). Counters track B16/B17 ammo: each plane's W1 caliber → capacity
+(70→1200 … 30→2800) on the gun gauge, `BOOM 3` per full HE pylon on the missile gauge. Belt stepping
+proven by Bloodhawk rocket depletion — full = green, `1` remaining = **yellow**, `0` = **red**, the
+arrow tracking the yellow (next-to-fire) pylon. Captures windowed (verification.md rule 71).
+
+**TUNE (→ `playtest.md`).** The green/yellow/red thresholds are inferred (yellow ≤ 0.34); the user
+will confirm against the original that ammo gauges show a yellow state at all, and at what fraction.
 
 **Verify.** All 11 planes render both gauges; the counters track B16/B17's ammo; belt lights
 step correctly.

@@ -244,6 +244,14 @@ public partial class FlightController : Node3D
     private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector button
     private string[] _ordnanceTypes = Array.Empty<string>(); // distinct hardpoint weapon ids, in pylon order
 
+    // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
+    // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
+    // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
+    private GaugeCluster.WeaponGauge? _gunGaugeState;
+    private GaugeCluster.WeaponGauge? _missileGaugeState;
+    private readonly List<float> _gunGaugeSlots = new();
+    private readonly List<float> _missileGaugeSlots = new();
+
     /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
     /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
     /// the empty-clip warning has already sounded since it last had ammo.</summary>
@@ -374,6 +382,21 @@ public partial class FlightController : Node3D
             _ordnanceTypes = types.ToArray();
             // Apply the --gun-select testing override (0-based group index, clamped into range).
             _gunSel = n > 0 ? Mathf.Clamp(InitialGunSelect, 0, n - 1) : 0;
+
+            // Bind the two weapon gauges (E35) — only for a system this plane actually carries.
+            if (Gauges != null)
+            {
+                if (n > 0)
+                {
+                    _gunGaugeState = new GaugeCluster.WeaponGauge { Slots = _gunGaugeSlots };
+                    Gauges.GunGauge = _gunGaugeState;
+                }
+                if (Loadout.Hardpoints.Count > 0)
+                {
+                    _missileGaugeState = new GaugeCluster.WeaponGauge { Slots = _missileGaugeSlots };
+                    Gauges.MissileGauge = _missileGaugeState;
+                }
+            }
         }
     }
 
@@ -451,6 +474,89 @@ public partial class FlightController : Node3D
             }
         }
         return sb.ToString();
+    }
+
+    /// <summary>Feeds the two cockpit weapon gauges (E35) from the same live ammo the firing code
+    /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
+    /// light per firable group by remaining fraction, the arrow on the selected one); the missile
+    /// gauge shows the SELECTED ordnance type's total, its NAME, one belt light per pylon, and points
+    /// the arrow at the next pylon that will fire. With <c>--infinite-ammo</c> the counters sit at
+    /// capacity (the counters never deplete), so the gauges read full and never step.</summary>
+    private void UpdateWeaponGauges()
+    {
+        if (Loadout == null)
+        {
+            return;
+        }
+        if (_gunGaugeState != null)
+        {
+            _gunGaugeSlots.Clear();
+            GunGroup? selected = null;
+            int gi = 0;
+            foreach (var g in Loadout.FirableGuns)
+            {
+                _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
+                if (gi == _gunSel)
+                {
+                    selected = g;
+                }
+                gi++;
+            }
+            _gunGaugeState.Selected = gi > 0 ? Mathf.Clamp(_gunSel, 0, gi - 1) : 0;
+            _gunGaugeState.Count = selected?.Ammo ?? 0;
+            _gunGaugeState.Type = selected?.Weapon.Name ?? "";
+        }
+        if (_missileGaugeState != null)
+        {
+            _missileGaugeSlots.Clear();
+            var hps = Loadout.Hardpoints;
+            string? type = _ordnanceTypes.Length > 0
+                ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
+                : null;
+            WeaponDef? typeWeapon = null;
+            for (int i = 0; i < hps.Count; i++)
+            {
+                var h = hps[i];
+                _missileGaugeSlots.Add(h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f);
+                if ((type == null || h.Weapon.Id == type) && typeWeapon == null)
+                {
+                    typeWeapon = h.Weapon;
+                }
+            }
+            // The count reads the pylon the arrow points at (the next to fire) — per-pylon rounds
+            // (a full HE pylon = 3), NOT the sum across pylons; that pylon's own belt light is the one
+            // it sits on. The original's gauge is per-pylon (its Warhawk shows BOOM 3, not 24).
+            int next = NextArmedPylon(type);
+            _missileGaugeState.Selected = next;
+            _missileGaugeState.Count = next < hps.Count ? hps[next].Ammo : 0;
+            _missileGaugeState.Type = typeWeapon?.Name ?? "";
+        }
+    }
+
+    /// <summary>The pylon the next rocket would launch from (the arrow target on the missile gauge):
+    /// the first armed pylon of <paramref name="type"/> scanning from <see cref="_nextPylon"/> and
+    /// wrapping — a read-only mirror of <see cref="NextArmedHardpoint"/> that does NOT advance the
+    /// cursor. Falls back to the cursor position when every matching pylon is empty.</summary>
+    private int NextArmedPylon(string? type)
+    {
+        var hps = Loadout!.Hardpoints;
+        if (hps.Count == 0)
+        {
+            return 0;
+        }
+        for (int k = 0; k < hps.Count; k++)
+        {
+            int idx = (_nextPylon + k) % hps.Count;
+            if (type != null && hps[idx].Weapon.Id != type)
+            {
+                continue;
+            }
+            if (hps[idx].Ammo > 0 || InfiniteAmmo)
+            {
+                return idx;
+            }
+        }
+        return _nextPylon % hps.Count;
     }
 
     /// <summary>Advances every gun group's fire clock: while the trigger is held, each group spawns
@@ -1277,6 +1383,7 @@ public partial class FlightController : Node3D
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
             Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
+            UpdateWeaponGauges();
         }
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at

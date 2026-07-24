@@ -41,6 +41,24 @@ public sealed partial class GaugeCluster : Control
     /// Flight binds PlaneDamage, the damage lab binds its sliders. Null = all green.</summary>
     public Func<string, float>? PartFraction;
 
+    /// <summary>Live state for one weapon gauge (gun or rocket), pushed by the FlightController each
+    /// frame. Positions map 1:1 onto the gauge's belt indicators: <see cref="Slots"/>[i] drives
+    /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty), the arrow points at
+    /// <see cref="Selected"/>, <see cref="Count"/> fills the 4-digit readout and <see cref="Type"/>
+    /// the 6-char name. Left null (the default) hides that gauge — the static viewer has no loadout.</summary>
+    public sealed class WeaponGauge
+    {
+        public int Count;                                       // rounds shown in 4char_ammo (0..9999)
+        public string Type = "";                                // 6char_type name (weapon NAME, upper-cased)
+        public int Selected;                                    // 0-based belt position the arrow points at
+        public IReadOnlyList<float> Slots = Array.Empty<float>(); // per-indicator ammo fraction 0..1
+    }
+
+    /// <summary>The gun gauge's per-frame state (selected gun group). Null hides it (no loadout).</summary>
+    public WeaponGauge? GunGauge;
+    /// <summary>The missile gauge's per-frame state (selected ordnance type). Null hides it.</summary>
+    public WeaponGauge? MissileGauge;
+
     // ---- tuning ----
     private const float LowAltAglM = 50f;     // LOW ALT below this height over ground (user spec)
     private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT / STALL (TUNE)
@@ -62,6 +80,16 @@ public sealed partial class GaugeCluster : Control
     private const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
     private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
     private const float DmgRadius = 85f;
+    // The two weapon gauges (measured off OriginalScreenshots/HUD.png): the ROCKETS dial sits one
+    // dial-pitch (190.5 px, the alt→damage spacing) above the altimeter, the GUNS dial the same
+    // above the speedometer. Same radius as the other dials.
+    private static readonly Vector2 MissileCenter = new(425.5f, 918f);
+    private const float MissileRadius = 85f;
+    private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
+    // A belt indicator's colour by remaining fraction: green healthy, yellow low, red empty. The
+    // low threshold is picked so a per-pylon rocket (3 rounds) steps green(3/2)→yellow(1)→red(0)
+    // AND a gun group only warns near empty. TUNE.
+    private const float IndicatorLowFrac = 0.34f;
 
     /// <summary>One flat gauge polygon extracted from the mesh: dial-local points
     /// (x right, y up, radius 1), normalized UVs, source texture, draw priority.</summary>
@@ -94,6 +122,29 @@ public sealed partial class GaugeCluster : Control
     // color-variant textures for the zone swap (0 green / 1 yellow / 2 orange / 3 red)
     private readonly Texture2D?[] _hilite = new Texture2D?[4];
     private readonly Texture2D?[] _hatch = new Texture2D?[4];
+
+    /// <summary>One weapon gauge's extracted geometry (gungauge or missilegauge). All flat, dial-local
+    /// like the other dials. The digit / type quads are ordered left→right; each indicator's polys sit
+    /// at its parsed index (ggindicator3 → <see cref="Indicators"/>[3]); the arrow rotates about the
+    /// centre to point at a belt position.</summary>
+    private sealed class GaugeGeom
+    {
+        public readonly List<GaugePoly> Face = new();          // the labelled dial face (gungauge/missilegauge.tif + ring)
+        public readonly List<GaugePoly> Digits = new();        // 4char_ammo quads, left→right
+        public readonly List<GaugePoly> TypeChars = new();     // 6char_type quads, left→right
+        public readonly List<List<GaugePoly>> Indicators = new(); // belt lights by index (0 = top, CCW)
+        public GaugePoly? Arrow;                               // gg/mgarrow, rest points up (belt position 0)
+        public int Positions;                                  // belt positions (4 gun / 8 missile) → arrow step
+        public bool HasGeometry => Face.Count > 0 || Digits.Count > 0;
+    }
+
+    private readonly GaugeGeom _gunGaugeGeom = new();
+    private readonly GaugeGeom _missileGaugeGeom = new();
+    // Glyph atlas for the digit/type cycles: char → texture (zero..nine, A..Z; space/unknown = null).
+    private readonly Dictionary<char, Texture2D?> _glyphs = new();
+    // Belt-indicator colour variants (0 green / 1 yellow / 2 red) — the hilite bar and the light.
+    private readonly Texture2D?[] _indHilite = new Texture2D?[3];
+    private readonly Texture2D?[] _indLight = new Texture2D?[3];
 
     private double _time;
 
@@ -139,7 +190,20 @@ public sealed partial class GaugeCluster : Control
                 case "damageindicator":
                     cluster.ExtractDamageDial(planes, textures, dial, parts);
                     break;
+                case "gungauge":
+                    cluster.ExtractWeaponGauge(planes, textures, dial, cluster._gunGaugeGeom, "gg");
+                    break;
+                case "missilegauge":
+                    cluster.ExtractWeaponGauge(planes, textures, dial, cluster._missileGaugeGeom, "mg");
+                    break;
             }
+        }
+
+        // Load the shared digit/letter atlas + belt-indicator colour variants once, only if a weapon
+        // gauge was actually found (all 11 flyable models carry both, but a lab plane may not).
+        if (cluster._gunGaugeGeom.HasGeometry || cluster._missileGaugeGeom.HasGeometry)
+        {
+            cluster.LoadGaugeTextures(textures);
         }
 
         if (cluster._altFace.Count == 0 && cluster._spdFace.Count == 0 && cluster._dmgFace.Count == 0)
@@ -305,6 +369,105 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
+    /// <summary>A weapon gauge (gungauge/missilegauge): the same circular-dial layout on all 11
+    /// planes. Its named children are the 4-digit ammo readout (<c>4char_ammo</c>), the 6-char type
+    /// name (<c>6char_type</c>), the belt lights (<c>{prefix}indicator0..</c>) and the pointer
+    /// (<c>{prefix}arrow</c>); anything else (the generically-named face child <c>g815</c>/<c>g819</c>)
+    /// is dial face — the same "unrecognised child = face" rule the damage dial needs. The digit/type
+    /// glyphs and the indicator colours are texture cycles the FlightController drives via
+    /// <see cref="WeaponGauge"/>; here we only extract the fixed geometry and the belt order.</summary>
+    private void ExtractWeaponGauge(GameZ gz, TextureArchive textures, GameZNode dial, GaugeGeom geom, string prefix)
+    {
+        geom.Face.AddRange(MeshPolys(gz, textures, dial)); // -1 on every plane, but follows the face rule
+        var byIndex = new SortedDictionary<int, List<GaugePoly>>();
+        foreach (int ci in dial.Children)
+        {
+            var child = gz.Nodes[ci];
+            string name = child.Name.ToLowerInvariant();
+            if (name == "4char_ammo")
+            {
+                geom.Digits.AddRange(MeshPolys(gz, textures, child));
+            }
+            else if (name == "6char_type")
+            {
+                geom.TypeChars.AddRange(MeshPolys(gz, textures, child));
+            }
+            else if (name == prefix + "arrow")
+            {
+                var polys = MeshPolys(gz, textures, child);
+                if (polys.Count > 0)
+                {
+                    geom.Arrow = polys[0]; // a single needle quad
+                }
+            }
+            else if (name.StartsWith(prefix + "indicator", StringComparison.Ordinal))
+            {
+                byIndex[TrailingInt(name)] = MeshPolys(gz, textures, child);
+            }
+            else
+            {
+                geom.Face.AddRange(MeshPolys(gz, textures, child)); // the generic face child
+            }
+        }
+        geom.Digits.Sort((a, b) => CenterX(a).CompareTo(CenterX(b)));
+        geom.TypeChars.Sort((a, b) => CenterX(a).CompareTo(CenterX(b)));
+        int max = -1;
+        foreach (int k in byIndex.Keys)
+        {
+            max = Math.Max(max, k);
+        }
+        for (int i = 0; i <= max; i++)
+        {
+            geom.Indicators.Add(byIndex.TryGetValue(i, out var polys) ? polys : new List<GaugePoly>());
+        }
+        geom.Positions = geom.Indicators.Count; // 4 (gun) or 8 (missile) — the arrow's step angle
+        geom.Face.Sort((a, b) => a.Priority.CompareTo(b.Priority));
+    }
+
+    /// <summary>Loads the shared digit/letter atlas (the <c>zero.tif</c>…<c>nine.tif</c> + <c>A.tif</c>…
+    /// <c>Z.tif</c> cycle both readouts index) and the belt-indicator colour variants
+    /// (green/yellow/red). Space and unrepresented chars stay absent → drawn as a blank cell.</summary>
+    private void LoadGaugeTextures(TextureArchive textures)
+    {
+        string[] digits = { "zero", "one", "two", "three", "four", "five", "six", "seven", "eight", "nine" };
+        for (int d = 0; d < 10; d++)
+        {
+            _glyphs[(char)('0' + d)] = textures.Find(digits[d]);
+        }
+        for (char c = 'A'; c <= 'Z'; c++)
+        {
+            _glyphs[c] = textures.Find(c.ToString());
+        }
+        string[] hilite = { "greenhilite", "yellowhilite", "redhilite" };
+        string[] light = { "greenindicator", "yellowindicator", "redindicator" };
+        for (int i = 0; i < 3; i++)
+        {
+            _indHilite[i] = textures.Find(hilite[i]);
+            _indLight[i] = textures.Find(light[i]);
+        }
+    }
+
+    private static float CenterX(GaugePoly p)
+    {
+        float sum = 0f;
+        foreach (var pt in p.Points)
+        {
+            sum += pt.X;
+        }
+        return p.Points.Length > 0 ? sum / p.Points.Length : 0f;
+    }
+
+    /// <summary>The trailing integer of a name like "ggindicator3" (→ 3); 0 if it ends in no digits.</summary>
+    private static int TrailingInt(string name)
+    {
+        int i = name.Length;
+        while (i > 0 && char.IsDigit(name[i - 1]))
+        {
+            i--;
+        }
+        return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
+    }
+
     // The needle texture's shaft is a flat full-width slab (32×128, no alpha; the hub
     // box with its two black discs fills the tail rows), but the original renders a
     // slim pointer that tapers to a point at the tip (reference: the HUD screenshot
@@ -426,6 +589,84 @@ public sealed partial class GaugeCluster : Control
             foreach (var p in z.Fill)
                 DrawGaugePoly(p, dmgC, dmgR, 0f, _hatch[color], ZoneFlat[color]);
         }
+
+        // The two weapon gauges: the ROCKETS dial above the altimeter, the GUNS dial above the
+        // speedometer (mirrored from the right edge). Each renders only when the FlightController is
+        // feeding it — hidden in the static viewer, which carries no loadout.
+        if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
+        {
+            var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
+            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s);
+        }
+        if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
+        {
+            var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
+            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s);
+        }
+    }
+
+    /// <summary>Draws one weapon gauge: the labelled face, the belt lights for the slots the plane
+    /// actually has (each green/yellow/red by remaining fraction — the "step"), the right-aligned
+    /// digit count, the left-aligned type name, then the pointer rotated to the selected belt slot.</summary>
+    private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius)
+    {
+        foreach (var p in geom.Face)
+            DrawGaugePoly(p, center, radius);
+        for (int i = 0; i < geom.Indicators.Count; i++)
+        {
+            if (i >= state.Slots.Count)
+                continue; // a belt position this airframe does not use stays dark
+            int color = IndicatorColor(state.Slots[i]);
+            foreach (var p in geom.Indicators[i])
+            {
+                bool bar = p.TexName.Contains("hilite", StringComparison.OrdinalIgnoreCase);
+                DrawGaugePoly(p, center, radius, 0f, bar ? _indHilite[color] : _indLight[color], IndicatorFlat[color]);
+            }
+        }
+        DrawGlyphs(geom.Digits, FormatCount(state.Count, geom.Digits.Count), center, radius);
+        DrawGlyphs(geom.TypeChars, FormatType(state.Type, geom.TypeChars.Count), center, radius);
+        if (geom.Arrow != null && geom.Positions > 0)
+            DrawGaugePoly(geom.Arrow, center, radius, -(360f / geom.Positions) * state.Selected);
+    }
+
+    /// <summary>Draws each fixed glyph quad with the atlas texture for its character; a space or an
+    /// unrepresented char leaves that cell blank (the atlas has no space glyph — that IS the space).</summary>
+    private void DrawGlyphs(List<GaugePoly> quads, string text, Vector2 center, float radius)
+    {
+        for (int i = 0; i < quads.Count && i < text.Length; i++)
+        {
+            if (_glyphs.TryGetValue(text[i], out var g) && g != null)
+                DrawGaugePoly(quads[i], center, radius, 0f, g);
+        }
+    }
+
+    // green > low > empty, indexing the 3 indicator colour variants.
+    private static int IndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
+
+    // flat indicator tints when a colour-variant png is missing from the archive
+    private static readonly Color[] IndicatorFlat =
+    {
+        new(0.2f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f), new(0.9f, 0.15f, 0.15f),
+    };
+
+    /// <summary>A count right-aligned into <paramref name="width"/> digit cells, space-padded
+    /// (clamped 0..9999, the 4-cell readout's range).</summary>
+    private static string FormatCount(int count, int width)
+    {
+        string s = Mathf.Clamp(count, 0, 9999).ToString();
+        if (s.Length > width)
+            s = s[^width..];
+        return s.PadLeft(width);
+    }
+
+    /// <summary>A weapon name upper-cased, left-aligned and padded/truncated to the type readout's
+    /// <paramref name="width"/> cells (the atlas is uppercase-only).</summary>
+    private static string FormatType(string type, int width)
+    {
+        string s = type.ToUpperInvariant();
+        if (s.Length > width)
+            s = s[..width];
+        return s.PadRight(width);
     }
 
     // flat zone tints when a color-variant png is missing from the archive

@@ -117,9 +117,58 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
   the altimeter. (The two reference screenshots place the cluster slightly
   differently — HUD.png is the canonical one, matching the compass metrics.)
-- Also in the subtree, unwired in the remake: `gungauge`/`missilegauge` (ammo
-  counters via letter/digit texture cycles, `ggindicatorN`/`mgindicatorN` belt
-  lights), `nitrogauge`, the artificial-horizon `horizn` and drum `comp` compass.
+- Also in the subtree, still unwired in the remake: `nitrogauge`, the
+  artificial-horizon `horizn` and drum `comp` compass. The `gungauge` /
+  `missilegauge` are decoded below.
+
+## The weapon gauges (gun / missile)
+
+Decoded 2026-07-24 from the planes.zbd `gungauge` / `missilegauge` subtrees +
+`support\cockpit.gw` (the interp boot script that wires their texture cycles);
+remake implementation extends `src/Flight/GaugeCluster.cs`. Screen placement is
+ours (measured off `OriginalScreenshots/HUD.png`, the Warhawk): the **ROCKETS**
+dial sits one dial-pitch (190.5 px, the alt→damage spacing) above the altimeter,
+the **GUNS** dial the same above the speedometer; both share the other dials'
+radius (≈85 px at 1440p).
+
+Both are circular dials laid out **identically on all 11 flyable models** (unlike
+the damage dial, there is no per-plane parenting quirk — verified across the whole
+roster): the `gungauge`/`missilegauge` node is always mesh-less (`model_index` −1)
+and the labelled face (`gungauge.tif` / `missilegauge.tif`, a 12-gon, priority 1,
+carrying the baked **GUNS** / **ROCKETS** legend) hangs off a generically-named
+child (`g815` / `g819`). The safe reader rule is the damage dial's:
+**anything under the dial that is not a recognised functional child is face.**
+
+The functional children, and how `cockpit.gw` drives each:
+
+- **`4char_ammo`** — a row of **4 digit quads** (priority 7, lower centre). Each
+  carries `CycleTextureSet` 11 mapping `zero.tif`…`nine.tif` then `SPACE.tif`
+  (frames 0–10); the engine sets each cell's frame to spell the count. The remake
+  shows it **right-aligned, space-padded**. **Guns: the *selected* gun group's own
+  rounds** (per group — the Balmoral's two .50s count independently). **Rockets:
+  the *per-pylon* rounds of the pylon the arrow points at (the next to fire) — NOT
+  the sum across pylons** (a full HE pylon reads `3`; the original's Warhawk shows
+  `BOOM 3`, not `24`).
+- **`6char_type`** — a row of **6 glyph quads** (priority 7, upper centre).
+  `CycleTextureSet` 37 maps `A.tif`…`Z.tif`, then `zero.tif`…`nine.tif`, then
+  `SPACE.tif`. Shows the selected weapon's short **`NAME`** from `weapons.json`,
+  upper-cased and left-aligned (`30slug`→`30SLUG`, `BOOM`, `SONIC`).
+- **`ggindicator0..3`** (gun, 4) / **`mgindicator0..7`** (missile, 8) — the **belt
+  lights**, one per gun slot / pylon, arranged around the ring: index 0 at the top
+  (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). Each is a
+  `Xhilite.tif` bezel bar + a `Xindicator.tif` light, both carrying a **3-frame**
+  cycle green→yellow→red (`CycleTextureSet` 3). The remake lights only the slots the
+  airframe actually has (turret gun groups are inert, so a 2-gun plane lights 2) and
+  **steps the colour by that slot's remaining fraction** — green healthy, yellow low,
+  red empty; a per-pylon HE rocket (3 rounds) steps green(3/2)→yellow(1)→red(0). The
+  green/yellow/red **thresholds are a TUNE** pending an original playtest.
+- **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
+  up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
+  the **selected gun group**, the missile arrow to the **next pylon that will fire**.
+
+⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
+`greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
+**every chapter's `texture.zbd`**, like the other gauge art — not in `rimage.zbd`.
 
 ## The HUD bitmap font (`5pointhud`)
 

@@ -82,6 +82,20 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   Does the D-pad register on your controller (some pads report it as a hat)?
   *Blocks:* nothing hard — one-line rebinds in `FlightController` if any feels wrong.
 
+- **E35 — gun / missile gauges (the cockpit dials).** The two weapon dials now render: **GUNS**
+  (above the speedometer) shows the selected gun group's per-group rounds + its `NAME`; **ROCKETS**
+  (above the altimeter) shows the next-to-fire pylon's **per-pylon** rounds (a full HE pylon reads
+  `3`, not the fleet total) + `NAME`. Belt lights ring each dial (one per gun group / pylon), the
+  arrow points at the selected group / next pylon. *Look for:* dials sized/placed like the original;
+  the count and type read right as you fire and switch weapons (**G** guns, **H** ordnance).
+  `./RunGame.ps1 --plane=player_warhawk --chapter=C1`. *Blocks:* E35 sign-off.
+  - **⚠ Yellow ammo state — verify against the original.** The belt lights step **green → yellow →
+    red** by remaining fraction, but the yellow threshold (currently `≤ 0.34`, i.e. 1 of a 3-round
+    HE pylon) is *inferred* — the data only says the indicators carry a 3-frame green/yellow/red
+    cycle, not when each fires. **Open the original and confirm the ammo gauge actually shows a
+    yellow state at all (not just green→red), and at roughly what fraction it turns.** *Blocks:*
+    retiring the `IndicatorLowFrac` TUNE in `GaugeCluster`.
+
 - **A10 — muzzle placement per airframe.** Fire each of the 11 planes and confirm the flashes appear
   on the mounts the loadout names. *Look for especially:* Bloodhawk (40-cal **inner** wing, 30-cal
   **outer**) and Brigand (W1+W2 **share the outer** mount) against your own earlier observations;

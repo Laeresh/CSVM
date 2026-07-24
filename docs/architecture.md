@@ -730,14 +730,22 @@ HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchor
   FlightController's one-line assumption (open question in hud.md).
 
 ## src/Flight/GaugeCluster.cs
-The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, all
-geometry extracted from the plane's own gauges subtree (structure/scales/quirks:
-docs/formats/hud.md); polys draw by data priority, rest rotations ignored; PartFraction binds
-flight or the lab; dial centres are bottom-anchored (FromBottom) so panes keep them on screen.
+The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
+the gun + missile weapon gauges (E35), all geometry extracted from the plane's own gauges subtree
+(structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
+ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
+panes keep them on screen.
 ⚠ Never color-key needle.tif — a black key erases the hub's two black discs; the engine-side slim
   taper is replicated as a load-time alpha mask (Needle*Frac constants, TUNE).
 ⚠ The face textures hold dark UNLIT copies of the STALL / LOW ALT windows — compare pixel values
   (~58,0,0 unlit vs 180+,0,0 lit) before concluding a warning state is wrong; bitten twice.
+⚠ The two weapon gauges (gungauge above the speedometer, missilegauge above the altimeter) render
+  only when FlightController pushes a `WeaponGauge` each frame — null in the labs (no loadout). The
+  4-digit readout is per-GROUP for guns, per-PYLON for rockets (the arrow's pylon), NOT a total;
+  the type row shows the weapon NAME upper-cased; belt lights step green/yellow/red by that slot's
+  fraction (thresholds TUNE). Digit/letter/indicator glyphs are chapter textures, not rimage.
+⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
+  special case, unlike the damage dial) — so "any unrecognised child = face" is the extraction rule.
 
 ## src/UI/LaunchMenu.cs
 The in-game launchscreen CanvasLayer: Mode → Chapter → Plane, input polled every frame through

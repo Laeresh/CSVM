@@ -5638,3 +5638,42 @@ Purely additive and gated — with the flag off, `HudFont` is not loaded and the
 **Docs.** `docs/formats/hud.md` (new "HUD bitmap font (`5pointhud`)" section), `docs/architecture.md`
 (new `src/Flight/HudFont.cs` entry), `docs/cli.md` (`--hud-font-test`), PLAN-M3-weapons.md (E34 ☐→☑),
 CLAUDE.md (module index + Current-status Next E34→E35).
+
+## 2026-07-24 — M3 Wave E E35: gun + missile cockpit gauges (`gungauge`/`missilegauge`)
+
+The two weapon dials the `gauges` subtree carried but nothing wired. `GaugeCluster.ExtractWeaponGauge`
+reads both (extending the same extractor as the altimeter/speedometer/damage dials), and
+`FlightController.UpdateWeaponGauges` pushes a `WeaponGauge` (count / type / selected slot / per-slot
+fractions) each frame from the live loadout. Placed off `OriginalScreenshots/HUD.png` (the Warhawk):
+**ROCKETS** one dial-pitch above the altimeter, **GUNS** above the speedometer.
+
+**How the original drives them** (decoded from planes.zbd + `support\cockpit.gw`, full page in
+`docs/formats/hud.md`): the dial node is mesh-less on **every** plane and the labelled face
+(`gungauge.tif`/`missilegauge.tif`) hangs off a generic child (`g815`/`g819`) — **the per-plane
+parenting quirk the plan warned about is the `damageindicator`'s, NOT these two** (verified across the
+whole roster); the extractor still uses the safe "any unrecognised child = face" rule. `4char_ammo` is a
+`zero.tif`…`nine.tif`,`SPACE.tif` digit cycle (drawn right-aligned); `6char_type` an `A`…`Z`,`zero`…
+`nine`,`SPACE` cycle showing the weapon `NAME` upper-cased; `ggindicator0..3`/`mgindicator0..7` are belt
+lights (one per gun group / pylon, top = 0, CCW) each carrying a 3-frame green/yellow/red cycle; the
+`gg`/`mgarrow` needle rotates to the selected slot.
+
+**Semantics (user-corrected mid-implementation):** the gun count is **per gun group** (the selected
+group's own counter — already independent from B12), the rocket count is **per pylon** (the next-to-fire
+pylon's rounds — a full HE pylon reads `3`), **not** a fleet total. This matches the original's Warhawk
+reading `BOOM 3`. Belt lights step green → yellow (≤ 0.34 fraction) → red (empty); turret gun slots are
+excluded (a 2-gun plane lights 2). The green/yellow/red thresholds are inferred (the data only says the
+indicators *can* be those three colours, not when) → a `IndicatorLowFrac` TUNE, with a `playtest.md`
+item for the user to confirm the yellow state exists in the original and at what fraction.
+
+**Verified** (windowed captures, verification.md rule 71): all 11 flyable planes render both gauges —
+including the Devastator's inherited `player_pfighter` and the five turret airframes (only firable groups
+lit). Counters track B16/B17: each plane's W1 caliber → its capacity on the gun gauge (70→1200 …
+30→2800), `BOOM 3` per full HE pylon on the missile gauge. Belt stepping proven by depleting the
+Bloodhawk's rockets — full = green, `1` remaining = **yellow**, `0` = **red**, the arrow tracking the
+yellow next-to-fire pylon. Purely additive: the gauges render only when the FlightController feeds them,
+so the `--viewer`/lab builds (no loadout) are unchanged.
+
+**Docs.** `docs/formats/hud.md` (new "weapon gauges" section + the `cockpit.gw` drive),
+`docs/architecture.md` (`GaugeCluster` entry — the two gauges, per-group/per-pylon rule, generic-face
+rule), `playtest.md` (E35 gauge item + the yellow-state A/B), PLAN-M3-weapons.md (E35 ☐→☑),
+CLAUDE.md (Current-status Next E35→E36).
