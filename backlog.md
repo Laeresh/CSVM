@@ -523,10 +523,15 @@ unscheduled.
   Also check whether `t_truck` (`armor 0 / health 40`, no injure_anims), `fueltruck` and
   `armytruck_destruct` show the same duplication.
 
-- **Rocket firing cooldown.** Every rocket entry has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns),
-  i.e. one launch per second. The user confirmed one trigger pull = one rocket from one
-  hardpoint but was **not sure whether a cooldown exists**, so 1.0 is the data's answer rather
-  than an observed fact. A/B against the original.
+- **Rocket firing cooldown (LANDED B17, 2026-07-24 — now a playtest A/B).** Every rocket entry
+  has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns), i.e. one launch per second. The user confirmed one
+  trigger pull = one rocket from one hardpoint but was **not sure whether a cooldown exists**, so
+  B17 uses 1.0 as the data's answer rather than an observed fact (`FlightController.UpdateRockets`).
+  A/B the 1 s gate against the original.
+- **Rocket fire binding (design choice, LANDED B17).** Rockets fire on **F** / gamepad **A** (guns
+  are Space / pad-B), one per pull. Pad-A doubles as respawn but only from the crashed / run-complete
+  screens, which the live-flight firing path never shares — so no collision. If the mapping feels
+  wrong in the cockpit it is a one-line change in `FlightController.RocketFirePressed`.
 
 - ⚠ **Never infer a damage threshold from an animation's name.** `ptboat_50damage` fires at
   **60 %** health remaining and `ptboat_75damage` at **30 %** — the names lag their trigger,

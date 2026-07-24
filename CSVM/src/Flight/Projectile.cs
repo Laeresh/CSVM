@@ -44,6 +44,8 @@ public sealed partial class ProjectilePool : Node3D
     private const int MaxFlashes = 128;
     private const float TracerLength = 14f;   // streak length behind the round, m
     private const float TracerWidth = 0.7f;   // m
+    private const float RocketStreakScale = 2.4f; // rockets get a fatter/longer streak than gun tracers
+                                                  // (a stand-in until the FLYOUT he_rocket MODEL, B14)
     private const float MuzzleSize = 2.2f;    // m
     private const float MuzzleLife = 0.05f;   // s
     private const float ImpactSize = 3.0f;    // m
@@ -332,8 +334,9 @@ public sealed partial class ProjectilePool : Node3D
                 zAxis = yAxis.Cross(Vector3.Right);
             zAxis = zAxis.Normalized();
             var xAxis = yAxis.Cross(zAxis).Normalized();
-            var basis = new Basis(xAxis * TracerWidth, yAxis * TracerLength, zAxis);
-            _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (TracerLength * 0.5f)));
+            float scale = p.Weapon.IsRocket ? RocketStreakScale : 1f;
+            var basis = new Basis(xAxis * (TracerWidth * scale), yAxis * (TracerLength * scale), zAxis);
+            _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (TracerLength * scale * 0.5f)));
             _tracerMm.SetInstanceColor(n, p.Tint);
             n++;
         }

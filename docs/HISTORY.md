@@ -4996,3 +4996,23 @@ not yet screenshot), the empty-clip drain (2000+ rounds — a playtest check), a
 polish. **Owed playtest: firing feel.** Docs: architecture.md (Projectile) + CLAUDE.md module index +
 in-flight keys, cli.md (`--fire`/`--infinite-ammo`), plan items 13/15/16/29/33 ticked (14/30 partial).
 **Next: B17 (rocket/hardpoint firing — where B14's FLYOUT MODEL instancing lands), then B18 selectors.**
+
+**M3 Wave B — rockets fire (B17, 2026-07-24).** Hardpoints now launch. `FlightController.UpdateRockets`
++ `NextArmedHardpoint`: the rocket trigger (**F** / gamepad **A**, `--fire-rockets` for scripted runs)
+fires **one HE rocket per discrete pull** — a human pull fires once, only `--fire-rockets` auto-repeats —
+drawn from the next pylon that still holds ordnance, **round-robin across the pylons**, gated by the
+weapon's `FIRE_RATE` (1.0/s for every rocket = one launch per second). Each launch depletes that pylon's
+own `CLUSTER_SIZE` counter; an all-empty pull sounds the empty-clip cue once; respawn refills. The pad-A
+binding does not collide with pad-A respawn — respawn only fires from the crashed / run-complete screens,
+early-return states this live-flight path never reaches. Rockets reuse the B13 `ProjectilePool` via the
+same `Spawn` (VELOCITY 1200 / RANGE 1000 / no accel-or-gravity need no special path); `IsRocket` tints
+them orange and `RocketStreakScale` fattens the streak as a stand-in until the `FLYOUT` `he_rocket` MODEL
+mesh lands (B14, still ◐). New flag `--fire-rockets`. Verified: a headless stock-Bloodhawk soak launched
+**exactly 9 `wep_06` (HE) rockets** — 3 pylons × `CLUSTER_SIZE 3`, matching the A9 playtest — cycling
+`pylon1→pylon2→pylon3→pylon1…`, each depleting 3→2→1→0 independently, then stopping (dry); the infinite-ammo
+run confirmed the 1 s cadence. (Headless framebuffer capture is unavailable in this build, so an in-flight
+rocket screenshot is deferred to the owed playtest; per-pylon origin is proven by the launch log naming each
+`pylonN`.) TUNE/playtest: the 1.0 s cooldown is the data's `FIRE_RATE` not a measured feel, and the F/pad-A
+binding is a design choice — both flagged in `backlog.md`. Docs: architecture.md (FlightController +
+Projectile), cli.md (`--fire-rockets`), CLAUDE.md (in-flight keys + status), plan item 17 ticked (14 still ◐).
+**Owed playtest: does firing feel right — guns *and* rockets. Next: B18 (weapon selectors).**

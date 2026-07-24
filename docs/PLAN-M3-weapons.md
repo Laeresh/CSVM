@@ -447,10 +447,10 @@ New files and docs only; touches no module M2 polish 3 is editing.
 11. ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **landed** (`--dump-weapons` verifies)
 12. ☑ `Loadout.cs` — stock-loadout reader, slot model, marker resolution — **landed** (`--dump-loadout` verifies)
 13. ☑ `Projectile.cs` — spawn and integration — **landed** (`ProjectilePool`)
-14. ◐ `FLYOUT` model instancing — guns use the tracer path (D33); rocket `MODEL` instancing pending B17
+14. ◐ `FLYOUT` model instancing — guns use the tracer path (D33); rockets reuse the pool with a chunkier orange streak (B17); the `he_rocket` `MODEL` mesh instancing is the remaining wiring
 15. ☑ Hit detection + surface classification for `IMPACT` variant selection — **landed** (world raycast + collider surface tag)
 16. ☑ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip — **landed** (Space/pad-B, `--fire`)
-17. ☐ Hardpoint firing — per-pylon allotment and depletion
+17. ☑ Hardpoint firing — per-pylon allotment and depletion — **landed** (F/pad-A, one rocket per pull, round-robin pylons)
 18. ☐ Weapon selectors — gun-group cycle (+ALL) and hardpoint cycle
 19. ☐ Guided flight — `TURN_RATE`, `IMPACT_PROXIMITY`, `DETONATION_DISTANCE`
 20. ☐ Ground lock-on — acquisition against destructibles
@@ -873,7 +873,30 @@ ignore, and add the backlog entry rather than implementing them opportunisticall
 matches the `CANNON_SPREAD` cone; the counter empties at the expected round count and the
 empty-clip sound plays exactly once.
 
-### B17 ☐ Hardpoint firing
+### B17 ☑ Hardpoint firing — **LANDED (2026-07-24)**
+
+**Landed.** `FlightController.UpdateRockets` + `NextArmedHardpoint`: the rocket trigger (**F** /
+gamepad **A**, `--fire-rockets` for scripted runs) launches **one rocket per discrete pull** — a
+human pull fires once; only `--fire-rockets` auto-repeats — drawn from the next pylon that still
+holds ordnance, **round-robin across the pylons**, gated by the weapon's `FIRE_RATE` (1.0/s for
+every rocket, i.e. one launch per second). Each launch depletes that pylon's own `CLUSTER_SIZE`
+counter; a pull with every pylon empty sounds the empty-clip cue once. Refill on respawn.
+The pad-A binding does not collide with pad-A respawn: respawn only fires from the crashed /
+run-complete screens, which this live-flight path early-returns before reaching. Rockets reuse the
+B13 `ProjectilePool` via the same `Spawn` (their VELOCITY 1200 / RANGE 1000 / no accel-or-gravity
+need no special integration path); `IsRocket` already tints them orange, plus a chunkier streak
+(`RocketStreakScale`) as a stand-in until the `FLYOUT` `he_rocket` MODEL mesh lands (B14, still ◐).
+
+**Verified.** A headless stock-Bloodhawk soak (`--fire-rockets`, finite ammo) launched **exactly
+9 `wep_06` (HE) rockets** — 3 pylons × `CLUSTER_SIZE 3`, matching the A9 playtest — cycling
+`pylon1 → pylon2 → pylon3 → pylon1 …` and depleting each 3→2→1→0 independently, then stopped (dry).
+The infinite-ammo run confirmed the 1 s cadence holds. (The headless framebuffer capture is
+unavailable in this build, so the in-flight rocket screenshot is deferred to the owed playtest;
+per-pylon origin is proven by the launch log naming each `pylonN`.)
+
+**⚠ TUNE / playtest.** The 1.0 s cooldown is the data's `FIRE_RATE`, not a measured feel; the
+F / pad-A binding is a design choice (guns=B, rockets=A is the natural two-weapon pad layout).
+Both are flagged in `backlog.md` for the owed firing playtest.
 
 **Goal.** Rockets launch from pylons and deplete correctly.
 

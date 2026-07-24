@@ -98,6 +98,10 @@ public partial class FlightController : Node3D
     /// <see cref="HoldSegments"/> does for flight input.</summary>
     public bool AutoFire;
 
+    /// <summary>--fire-rockets: hold the rocket trigger down (scripted screenshot / soak runs).
+    /// Unlike a human pull (one rocket per press), this auto-repeats at the launch cooldown.</summary>
+    public bool AutoFireRockets;
+
     /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
     /// <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that PLAYS the
@@ -209,6 +213,11 @@ public partial class FlightController : Node3D
     private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
     private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
     private bool _gunLoopOn;                     // the firing loop sound is currently playing
+    private float _rocketCooldown;               // s until the next rocket may launch (FIRE_RATE gate, one at a time)
+    private int _nextPylon;                      // which hardpoint sources the next rocket (cycles across pylons)
+    private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
+    private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
+    private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
 
     /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
     /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
@@ -326,6 +335,12 @@ public partial class FlightController : Node3D
     /// <c>--fire</c> holds it down for unattended runs.</summary>
     private bool FirePressed() => AutoFire || KeyDown(Key.Space) || PadPressed(JoyButton.B);
 
+    /// <summary>F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
+    /// does NOT auto-repeat; only the 1.0 s cooldown gates it), and <c>--fire-rockets</c> auto-repeats
+    /// for unattended runs. Gamepad A also respawns, but only from the crashed / run-complete screens
+    /// — states this live-flight firing path never shares — so the two never collide.</summary>
+    private bool RocketFirePressed() => AutoFireRockets || KeyDown(Key.F) || PadPressed(JoyButton.A);
+
     /// <summary>The interim HUD ammo line: <c>GUNS 40:2398 30:2799  ROCKETS 9</c>.</summary>
     private string AmmoLine()
     {
@@ -420,6 +435,73 @@ public partial class FlightController : Node3D
         _firePrev = fire;
     }
 
+    /// <summary>Launches rockets from the hardpoints: one per discrete trigger pull, drawn from the
+    /// next pylon that still has ordnance (cycling across them), gated by the weapon's <c>FIRE_RATE</c>
+    /// — 1.0/s for every rocket, i.e. one launch per second. Depletes that pylon's own counter; a pull
+    /// with every pylon empty sounds the dry cue once. No-op without hardpoints / a pool.</summary>
+    private void UpdateRockets(float dt)
+    {
+        if (Loadout == null || Projectiles == null || Loadout.Hardpoints.Count == 0)
+        {
+            return;
+        }
+        if (_rocketCooldown > 0f)
+        {
+            _rocketCooldown -= dt;
+        }
+        bool fire = RocketFirePressed();
+        // A human pull fires one rocket; holding does not auto-repeat. Only --fire-rockets (soak
+        // runs) auto-repeats — and either way the FIRE_RATE cooldown caps the launch rate.
+        bool pull = AutoFireRockets ? fire : (fire && !_rocketFirePrev);
+        _rocketFirePrev = fire;
+        if (!pull || _rocketCooldown > 0f)
+        {
+            return;
+        }
+        var hp = NextArmedHardpoint();
+        if (hp == null)
+        {
+            if (!_rocketDryWarned)
+            {
+                _rocketDryWarned = true;
+                Audio?.PlayEmptyClip();
+            }
+            return;
+        }
+        _rocketDryWarned = false;
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel);
+        if (!InfiniteAmmo)
+        {
+            hp.Ammo--;
+        }
+        _rocketCooldown = hp.Weapon.FireRate > 0f ? 1f / hp.Weapon.FireRate : 1f;
+        if (_rocketsLaunched < 12)
+        {
+            _rocketsLaunched++;
+            GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
+                     $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
+        }
+    }
+
+    /// <summary>The next hardpoint with ordnance, scanning from <see cref="_nextPylon"/> and wrapping,
+    /// then advancing the cursor so consecutive pulls spread across the pylons. Null when every pylon
+    /// is empty. With <c>--infinite-ammo</c> the first-scanned pylon always qualifies.</summary>
+    private Hardpoint? NextArmedHardpoint()
+    {
+        var hps = Loadout!.Hardpoints;
+        for (int k = 0; k < hps.Count; k++)
+        {
+            int idx = (_nextPylon + k) % hps.Count;
+            if (hps[idx].Ammo > 0 || InfiniteAmmo)
+            {
+                _nextPylon = (idx + 1) % hps.Count;
+                return hps[idx];
+            }
+        }
+        return null;
+    }
+
     /// <summary>Refills every gun group to its full load and re-arms the dry warnings (respawn).</summary>
     private void RefillWeapons()
     {
@@ -444,6 +526,10 @@ public partial class FlightController : Node3D
                 st.NextMuzzle = 0;
             }
         }
+        _rocketCooldown = 0f;
+        _nextPylon = 0;
+        _rocketFirePrev = false;
+        _rocketDryWarned = false;
         if (_gunLoopOn)
         {
             _gunLoopOn = false;
@@ -715,8 +801,9 @@ public partial class FlightController : Node3D
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
 
-        // Guns: advance the fire clock and spawn rounds into the shared projectile pool.
+        // Guns + rockets: advance the fire clocks and spawn into the shared projectile pool.
         UpdateGuns(dt);
+        UpdateRockets(dt);
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);

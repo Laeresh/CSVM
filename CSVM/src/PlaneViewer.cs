@@ -52,7 +52,9 @@ namespace CSVM;
 ///                                exercises the missing-marker error with --dump-loadout; in flight
 ///                                the flown plane carries that loadout)
 ///   --fire                       hold the gun trigger down (scripted firing runs); in interactive
-///                                flight the trigger is Space / gamepad B
+///                                flight the gun trigger is Space / gamepad B
+///   --fire-rockets               hold the rocket trigger down (scripted runs); in interactive flight
+///                                the rocket trigger is F / gamepad A (one rocket per pull, 1 s cooldown)
 ///   --infinite-ammo              guns/hardpoints fire without depleting (weapon testing)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
@@ -231,7 +233,8 @@ public partial class PlaneViewer : Node3D
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
-    private bool _autoFire;             // --fire: hold the trigger (scripted screenshots / soak runs)
+    private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
+    private bool _autoFireRockets;      // --fire-rockets: hold the rocket trigger (scripted screenshots / soak runs)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -433,6 +436,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
+            else if (arg == "--fire-rockets") _autoFireRockets = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1136,12 +1140,14 @@ public partial class PlaneViewer : Node3D
                             controller.Projectiles = projectiles;
                             controller.InfiniteAmmo = _infiniteAmmo;
                             controller.AutoFire = _autoFire;
+                            controller.AutoFireRockets = _autoFireRockets;
                             if (verbose)
                             {
                                 int groups = 0;
                                 foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
                                 GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
-                                         $"hardpoint(s), fire=Space/pad-B" + (_infiniteAmmo ? " (infinite ammo)" : ""));
+                                         $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A" +
+                                         (_infiniteAmmo ? " (infinite ammo)" : ""));
                             }
                         }
                         catch (Exception e)

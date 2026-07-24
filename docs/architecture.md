@@ -313,6 +313,9 @@ the muzzle; it runs itself each physics frame. One pool per session, fed by ever
   stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
   screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
+⚠ Rockets (B17) reuse this pool via the same `Spawn` (their VELOCITY/RANGE need no special path);
+  `IsRocket` tints them orange + a chunkier streak (`RocketStreakScale`) as a stand-in for the
+  FLYOUT `he_rocket` MODEL mesh, which is still pending (B14).
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
@@ -532,6 +535,11 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).
 ⚠ The crash is data-driven: CrashRuntime plays player_crash_dirt (InheritedWorldVelocity = impact
   velocity × WreckMomentum); Respawn resets it and re-homes CrashRestPoses; null runtime = hide only.
+⚠ Firing (needs Loadout + Projectiles): UpdateGuns holds Space/pad-B → each group fires at its
+  FIRE_RATE from its own ammo; UpdateRockets F/pad-A → ONE rocket per pull from the next armed pylon
+  (round-robin), FIRE_RATE-gated (1 s). `--fire`/`--fire-rockets` auto-hold; `--infinite-ammo`.
+⚠ Rocket pad button A also respawns, but only from the crashed / run-complete screens (early-return
+  states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard
   gates keys to P1; AllowPause is false in splitscreen — the freeze halts the shared world.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
