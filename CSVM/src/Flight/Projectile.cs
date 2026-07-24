@@ -7,8 +7,10 @@ namespace CSVM.Flight;
 /// <summary>
 /// The weapon-fire subsystem for a shared world: a pool of projectiles integrated with the data's
 /// own ballistics (<c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c>, expiring at <c>RANGE</c>),
-/// plus their visuals and impacts — tracer streaks, muzzle flashes, per-surface impact sprites and
-/// the <c>IMPACT</c> sound. Guns and hardpoints feed it through <see cref="Spawn"/>; it runs itself
+/// plus their visuals and impacts — tracer streaks, muzzle flashes, the per-surface <c>IMPACT</c>
+/// sound, and the named IMPACT effect: its <c>ANIMATION</c> model is instanced at the hit point when
+/// it is a chapter-gamez prototype (the water splash), else a stand-in spark sprite shows. Guns and
+/// hardpoints feed it through <see cref="Spawn"/>; it runs itself
 /// each physics frame. One pool serves every player (projectiles live in the shared world, so every
 /// splitscreen pane sees them).
 ///
@@ -41,6 +43,15 @@ public sealed partial class ProjectilePool : Node3D
         public Color Tint;
     }
 
+    // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
+    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point and shown briefly (D30).
+    private struct ImpactFx
+    {
+        public Node3D Model;
+        public float Age;
+        public float Life;
+    }
+
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
     private const float TracerLength = 14f;   // streak length behind the round, m
@@ -53,6 +64,7 @@ public sealed partial class ProjectilePool : Node3D
     private const float MuzzleLife = 0.05f;   // s
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
+    private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
     private const float WorldGravity = 20f;   // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
 
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
@@ -78,6 +90,16 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SceneBuilder? _flyoutScene;
     private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
+
+    // The named IMPACT effect models (D30): a per-surface IMPACT `ANIMATION` whose name is a chapter
+    // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
+    // GameZ/SceneBuilder above. Names that resolve to a reader/control def or nothing (the gun
+    // `3040slug_gunhit` smoke, `he_ground_effect`, `bld_damage.flt`) stay on the stand-in spark —
+    // their runtime PUFFER_STATE half is D32 (the puffer factory is torn down after the world build).
+    private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
+    private readonly HashSet<string> _impactFxLogged = new();
+    private readonly List<ImpactFx> _impactFx = new();
+    private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
 
     private MultiMesh _tracerMm = null!;
     private MultiMesh _muzzleMm = null!;
@@ -118,6 +140,8 @@ public sealed partial class ProjectilePool : Node3D
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: true, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
+        _impactFxModels = new Node3D { Name = "impact_fx" };
+        AddChild(_impactFxModels);
         for (int i = 0; i < 8; i++)
         {
             var p = new AudioStreamPlayer();
@@ -252,6 +276,45 @@ public sealed partial class ProjectilePool : Node3D
         return inst;
     }
 
+    /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point, when the
+    /// name resolves to a chapter-gamez node carrying geometry (the water splash <c>splash1.flt</c> /
+    /// <c>bsplsh.flt</c>). Reuses the flyout <see cref="GameZ"/>/<see cref="SceneBuilder"/>, is
+    /// collision-exempt, and sits upright at the point; the instance is tracked for a short life and
+    /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
+    /// name is a reader/control def or an unresolved binding (no such node), or the node built no
+    /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
+    private bool SpawnImpactModel(string animName, Vector3 point)
+    {
+        if (_flyoutScene == null || _flyoutGamez == null)
+            return false;
+        if (!_impactNodes.TryGetValue(animName, out var node))
+        {
+            node = _flyoutGamez.FindByName(animName);
+            _impactNodes[animName] = node;
+        }
+        if (node == null)
+            return false;
+        var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        if (inst == null)
+            return false;
+        int meshes = CountMeshes(inst);
+        if (meshes == 0)
+        {
+            // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render — drop it
+            // and keep the spark. Logged once so the data fact is visible, not silently swallowed.
+            if (_impactFxLogged.Add(animName))
+                GD.Print($"impact effect '{animName}' is a geometry-less node — spark stands in");
+            inst.QueueFree();
+            return false;
+        }
+        _impactFxModels.AddChild(inst);
+        inst.GlobalTransform = new Transform3D(Basis.Identity, point); // splash geometry stands upright at the hit
+        _impactFx.Add(new ImpactFx { Model = inst, Age = 0f, Life = ImpactModelLife });
+        if (_impactFxLogged.Add(animName))
+            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)");
+        return true;
+    }
+
     private readonly HashSet<string> _flyoutLogged = new();
     private bool _flyoutPoseLogged;
 
@@ -327,6 +390,20 @@ public sealed partial class ProjectilePool : Node3D
 
         AgeSprites(_muzzle, dt);
         AgeSprites(_impact, dt);
+        for (int i = _impactFx.Count - 1; i >= 0; i--)
+        {
+            var f = _impactFx[i];
+            f.Age += dt;
+            if (f.Age >= f.Life)
+            {
+                f.Model.QueueFree();
+                _impactFx.RemoveAt(i);
+            }
+            else
+            {
+                _impactFx[i] = f;
+            }
+        }
     }
 
     private static void AgeSprites(List<Sprite> sprites, float dt)
@@ -359,17 +436,25 @@ public sealed partial class ProjectilePool : Node3D
             GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface} at " +
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}");
         }
-        if (_impact.Count < MaxFlashes)
+        // The per-surface IMPACT binding: the struck surface's entry, else the weapon's `default`.
+        if (!weapon.Impact.TryGetValue(surface, out var effect))
+            weapon.Impact.TryGetValue(SurfaceClass.Default, out effect);
+
+        // The named IMPACT effect (D30): when its `ANIMATION`/`SURFACE_ANIMATION` names a chapter
+        // gamez node (the water splash prototypes), instance it at the hit point and skip the spark
+        // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
+        // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE is D32).
+        bool showedModel = effect != null
+            && (effect.Animation ?? effect.SurfaceAnimation) is { } fxName
+            && SpawnImpactModel(fxName, point);
+        if (!showedModel && _impact.Count < MaxFlashes)
         {
             var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
             _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint });
         }
-        // Per-surface IMPACT sound (D30). The animation names resolve to the effect readers, a
-        // deeper wiring (D30/D32); the sprite above stands in for now.
-        if (weapon.Impact.TryGetValue(surface, out var effect) && effect.Sound is { } snd)
+        // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
+        if (effect?.Sound is { } snd)
             PlaySound(snd);
-        else if (weapon.Impact.TryGetValue(SurfaceClass.Default, out var d) && d.Sound is { } snd2)
-            PlaySound(snd2);
         // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
         DamageSink?.Invoke(collider, weapon.HealthDamage ?? 0f);
     }
@@ -485,5 +570,8 @@ public sealed partial class ProjectilePool : Node3D
         _projHigh = 0;
         _muzzle.Clear();
         _impact.Clear();
+        foreach (var f in _impactFx)
+            f.Model.QueueFree();
+        _impactFx.Clear();
     }
 }

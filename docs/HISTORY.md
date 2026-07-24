@@ -5335,3 +5335,36 @@ die (C24), lose+gain collision (C25), throw debris (C26), break on contact (C27)
 status" (Wave C complete), `architecture.md` (`AnimRuntime`), `cli.md` `--damage-hd`, PLAN-M3-weapons.md
 (checklist 28 ☐→☑, `### C28` landed note), CLAUDE.md status. **Next: Wave D (weapon effects) — D29
 muzzle flash, D30 tracers/impacts polish, D31 death audio — and the owed in-flight playtests.**
+
+## 2026-07-24 — M3 Wave D D30: impact effect models (water splash) + puffer-effect finding
+
+The per-surface `IMPACT` **effect animation** is now wired at the hit point, not just the sound.
+`ProjectilePool.Impact` resolves the struck surface's `ANIMATION`/`SURFACE_ANIMATION` and, when the
+name IS a chapter-gamez model root, `SpawnImpactModel` instances that prototype's subtree at the
+point (reusing the flyout `GameZ`/`SceneBuilder`, collision-exempt, upright, freed after 0.4 s) and
+suppresses the stand-in spark — the authored model is the effect. In practice this is the **water
+splash**: gun `splash1.flt` and HE `bsplsh.flt` each instance 2 meshes, verified reproducibly on
+C1B/C2B (both dive-reliably over water). Names that resolve to a reader/control def (`3040slug_gunhit`,
+`he_ground_effect`, `large_fireball`) or are undefined (`bld_damage.flt`, `rcochet1`, `call_small_flash`,
+`f18sparks2`, `flak_effectplayer`) name no root, so nothing instances and the spark stands in — the 5
+undefined names thereby **confirmed inert** (no crash) on C4/C5 building hits.
+
+**Finding (the plan's "Puffer.cs already implements puffer emission" premise, corrected):** the
+**puffer/particle** half of the named impact effects (the `gunhit` `blacksmokepuffer` smoke, the
+fireball puffs) does **not** render at runtime in flight, because the puffer factory + `TextureArchive`
+are torn down after the world build (`KeepArchivesOpen` is `--anim-lab`-only). Rendering them needs a
+dedicated world-effects runtime that keeps textures open and relocates the effect templates onto the
+hit point — exactly the pattern the per-player crash runtime already proves (`BuildFlightCrashRuntime`:
+live `PufferFactory` + `PlaceCalledTemplates` + `BuildEffectStage`). That machinery is shared with
+**destruction effects (D32)** (the same `CallAnimation`/puffer templates), so the impact-puffer wiring
+folds into D32; D30 lands the model-based effects + sound + spark.
+
+Verified: build clean; guns+rockets dived-and-fired over all 8 chapters with no error tracing to
+`Projectile.cs`; water → `splash1.flt`/`bsplsh.flt` instance (2 meshes each); terrain/buildings →
+spark, no crash; the 1-instance ObjectDB exit leak reproduced on the no-fire baseline (pre-existing).
+8-chapter `--freecam` regression err=0 with baseline mesh counts (the pool is flight-only, so freecam
+is untouched by construction). **Owed playtest:** the on-screen look of the water splash at speed.
+Docs: `weapon-effects.md` (Engine wiring D30 + 5-name inert confirmation), `architecture.md`
+(`Projectile.cs`), `verification.md` rules 76 (runtime puffers dead in the flight build) + 77
+(`CANNON_SPREAD` non-determinism in impact tests), PLAN-M3-weapons.md (checklist 30 ◐→☑, `### D30`
+reconciled, `### D32` expanded), `playtest.md`, CLAUDE.md status.

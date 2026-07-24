@@ -360,9 +360,9 @@ Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem (B13/B14/B15/D29/D30/D33): a fixed pool of
 projectiles integrated with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at
-RANGE), plus tracer streaks, muzzle flashes, per-surface impact sprites and the IMPACT sound.
-`Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a CANNON_SPREAD cone) and flashes
-the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
+RANGE), plus tracer streaks, muzzle flashes, the per-surface IMPACT sound + effect model, and the
+stand-in spark. `Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a CANNON_SPREAD cone)
+and flashes the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
 ⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
   hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `DamageSink` (wired to `AnimRuntime.DamageAt` in flight, C23) turns a hit into destructible damage:
@@ -370,6 +370,12 @@ the muzzle; it runs itself each physics frame. One pool per session, fed by ever
   Null in views with no anim runtime, where impacts stay cosmetic.
 ⚠ Surface class comes from the struck collider's `SceneBuilder.SurfaceMeta` (water/buildings),
   stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
+⚠ IMPACT effect (D30): `SpawnImpactModel` instances the per-surface `ANIMATION`/`SURFACE_ANIMATION`
+  when its name IS a chapter-gamez root (reusing the flyout GameZ/SceneBuilder) — the water splash
+  `splash1.flt`/`bsplsh.flt`; a geometry-less or unresolved name (`3040slug_gunhit`, `bld_damage.flt`,
+  `he_ground_effect`, `large_fireball`) instances nothing and the spark stands in. The puffer half of
+  those named effects can't render in flight (the puffer factory is torn down after the world build —
+  `KeepArchivesOpen` is lab-only), so it is D32's world-effects-runtime work, not the pool's.
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
   screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
 ⚠ Rockets fly the FLYOUT MODEL body (B14): `Spawn` instances the weapon's `.flt` prototype root

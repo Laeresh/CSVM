@@ -38,10 +38,13 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
   *Blocks:* sign-off on B17 + B14; the 1 s cooldown is the data's `FIRE_RATE`, not measured feel (TUNE).
 
-- **Impacts.** Shoot the **ground** and the **sea**. *Look for:* a splash + water hit sound over
-  water, a spark + ground hit sound over dirt; the right sound on each. (The exact named impact
-  animations — `gunhit`/`splash1`/fireballs — are still stand-in sprites, D30/D32.)
-  *Blocks:* D30/D32 effect wiring priorities.
+- **Impacts (D30).** Shoot the **sea** and the **ground**. *Look for:* over water, the authored
+  **splash model** now instances at the hit (guns `splash1.flt`, HE rockets `bsplsh.flt` — a real
+  splash shape, not the old blue spark); over dirt/buildings, still a spark + the right hit sound.
+  Does the water splash read at speed / the right size / vanish cleanly (it shows ~0.4 s)?
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1B` (dives reliably over water) or `--chapter=C2`.
+  *Blocks:* D30 sign-off. (The `gunhit` smoke + fireball **puffs** are still absent — deferred to
+  D32's world-effects runtime, since a runtime puffer can't build in the flight world.)
 
 - **Empty-clip.** Hold fire until a group runs dry (guns carry 2000–2800 rounds; rockets 9).
   *Look for:* the empty-clip cue sounds once, not repeatedly.

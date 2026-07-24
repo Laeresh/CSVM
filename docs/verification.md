@@ -212,6 +212,25 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     out-of-tree world spams `!is_inside_tree` (global-transform reads return identity):** add the
     subtree to the tree first and set `ManualAdvance` so `_Process` doesn't also drive it. Measure
     immediate state (swap, colliders) BEFORE the tick, scheduled state (debris) after.
+76. **A runtime `PUFFER_STATE` renders NOTHING in the flight build — the puffer factory is torn
+    down after the world build.** `WorldSession` nulls `AnimRuntime.PufferFactory` (and disposes the
+    `TextureArchive`) once the bootstrap finishes unless `KeepArchivesOpen` is set, and that flag is
+    **lab-only** (`--anim-lab`). So any effect first reached at runtime in flight — a weapon-impact
+    `gunhit` smoke, a destruction fireball puff — hits `Count("PufferState(after build)")` and draws
+    nothing, even though the def resolves and its instance starts. The only runtime puffers that
+    render in flight are the per-player **crash** runtime's, because `BuildFlightCrashRuntime` builds
+    its own live `PufferFactory` over textures it deliberately keeps open. Do not "verify" a
+    runtime-played puffer effect by confirming its def started — confirm a `Puffer` was *built*
+    (a non-null factory), or you are measuring a no-op. Rendering impact/destruction puffers needs a
+    dedicated world-effects runtime on that crash-runtime pattern (D32), not a call into the world runtime.
+77. **`CANNON_SPREAD` makes weapon-impact tests non-deterministic — a round hitting a given surface
+    is chance, not choice.** Each gun round's direction is jittered by `GD.Randf()` inside the spread
+    cone (unseeded), so whether the stream finds a specific patch (a lake, one building) varies
+    run-to-run even with a fixed `--hold` dive and `--no-pads`. Don't rely on "I hit water once";
+    pick a chapter whose **spawn sits over** the surface you want (measured: C1B/C2B dive → all water,
+    C4 → all buildings) so hits are reliable, and assert on the **once-per-name** effect breadcrumb,
+    not on a fixed impact count (the impact log itself caps at 8, so a later water hit still logs its
+    effect while the surface line is capped out).
 
 ## What this project cannot verify itself
 

@@ -44,6 +44,25 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
 distant hit shows nothing.
 
+### Engine wiring (M3, D30)
+
+On a projectile impact `ProjectilePool` plays the struck surface's `IMPACT` sound and, for the
+effect **animation**, splits by what the bound name resolves to:
+
+- **A gamez model prototype** (the name IS a `nodes.json` root) → the model is instanced at the
+  hit point and shown briefly. In practice this is the **water splash**: `splash1.flt` (guns) and
+  `bsplsh.flt` (HE) each instance 2 meshes (`splash1_base`/`splash1_splash`, …) — verified on
+  C1B/C2B.
+- **A reader/control def** (`3040slug_gunhit`, `he_ground_effect`, `large_fireball`) or an
+  **undefined** name (`bld_damage.flt`, …) names no root, so nothing instances and a stand-in
+  spark shows. The authored **puffer/particle** half of these (the `blacksmokepuffer` smoke, the
+  fireball puffs) does **not** render at runtime in flight: the puffer factory + `TextureArchive`
+  are torn down after the world build (`KeepArchivesOpen` is lab-only), so a runtime `PUFFER_STATE`
+  builds nothing. Rendering them needs a dedicated world-effects runtime that keeps textures open
+  and relocates the effect templates onto the hit point — the same machinery the per-player crash
+  runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
+  so the impact-puffer wiring folds into D32.
+
 ## Ordnance effect readers
 
 An ordnance weapon splits its effects across a `*_control` reader (the impact/ground burst) plus
@@ -115,5 +134,6 @@ in any of the 8 chapters:
 | `flak_effectplayer` | flak `IMPACT` `player` | IMPACT | a player-surface flak variant (cf. `flak_effect`) |
 
 These are **leads for Wave D**, not confirmed content: each is a named binding whose asset was
-not found in this install's extraction. Confirm each renders (or is inert) when wiring impact
-and muzzle effects.
+not found in this install's extraction. **D30 confirmed all five inert for impacts:** none names
+a gamez model root, so `ProjectilePool` instances nothing for them and the stand-in spark shows
+(no crash) — measured on C4/C5 building hits (`bld_damage.flt`, `large_fireball`).

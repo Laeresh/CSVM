@@ -469,9 +469,9 @@ New files and docs only; touches no module M2 polish 3 is editing.
 ### Wave D — presentation & audio
 
 29. ☑ Muzzle flash — flash sprite at the firepoint on each shot — **landed** (billboard burst; exact `muzzle_burst_*` anim = refinement)
-30. ◐ Impact effects — per-surface `IMPACT` **sound** + a stand-in spark sprite land; the named `IMPACT` effect animations (`gunhit`, `splash1`, `large_fireball`) are the remaining wiring
+30. ☑ Impact effects — **landed** (2026-07-24): per-surface `IMPACT` **sound** + the named effect **model** at the hit point (the water splash `splash1.flt`/`bsplsh.flt` instance; C1B/C2B verified), + spark fallback. The **puffer** half (`gunhit` smoke, `large_fireball`) is blocked at runtime in flight (puffer factory torn down after build) → folded into D32's world-effects runtime; the 5 undefined names confirmed inert
 31. ☐ The `Sound` anim-event family — unblocks ~6,000 events
-32. ☐ Destruction effects wiring — `large_30sec_fire`, `great_balls_of_fire`, puffers
+32. ☐ Destruction **+ impact** effects wiring — the world-effects runtime (`large_30sec_fire`, `great_balls_of_fire`, fireballs, **and** the impact puffers D30 deferred: `gunhit` smoke, `he_ground_effect`); generalizes `BuildFlightCrashRuntime`
 33. ☑ Tracers — **landed** (velocity-aligned additive streaks; per-ammo tracer texture = refinement)
 44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
 
@@ -1314,13 +1314,29 @@ Reference captures: `OriginalScreenshots/MuzzleFlash1-3.png`.
 **Verify.** Flash appears at every marker of the firing group and nowhere else; A10's
 comparison passes.
 
-### D30 ☐ Impact effects
+### D30 ☑ Impact effects — **LANDED (2026-07-24)**
 
-**Approach.** `IMPACT` → per-surface `ANIMATION` + `SOUND`, using B15's classification.
-`gunhit.zrd.json` gates on `PLAYER_RANGE 500` and drives `PUFFER_STATE blacksmokepuffer` —
-`Puffer.cs` already implements puffer emission.
+**Landed.** `ProjectilePool.Impact` plays the struck surface's `IMPACT` `SOUND` (already landed)
+and, for the effect **animation**, splits by what the bound name resolves to: a **gamez model root**
+(the name IS a `nodes.json` root) is instanced at the hit point via `SpawnImpactModel` (reusing the
+flyout `GameZ`/`SceneBuilder`, collision-exempt, freed after 0.4 s), suppressing the spark; a
+reader/control def or undefined name instances nothing and the stand-in spark shows. In practice the
+model path is the **water splash** — gun `splash1.flt` + HE `bsplsh.flt`, 2 meshes each, verified
+reproducibly on C1B/C2B. The 5 undefined names (`bld_damage.flt`, `rcochet1`, `call_small_flash`,
+`f18sparks2`, `flak_effectplayer`) confirmed **inert** on C4/C5 building hits.
 
-**Verify.** Each of the five surface classes plays its authored effect and sound.
+**⚠ Premise corrected.** This item assumed "`Puffer.cs` already implements puffer emission" ⇒ just
+call the effect. It doesn't hold at runtime in flight: the puffer factory + `TextureArchive` are torn
+down after the world build (`KeepArchivesOpen` is `--anim-lab`-only), so a runtime `PUFFER_STATE`
+builds nothing (`verification.md` rule 76). So the **puffer/particle** half of the named effects (the
+`gunhit` `blacksmokepuffer` smoke, the fireball puffs) is **not** rendered here — it needs the
+world-effects runtime that keeps textures open and relocates templates onto the hit point (the
+`BuildFlightCrashRuntime` pattern), which is **D32's** shared machinery. D30 delivers the model-based
+effects + sound + spark; the impact puffers fold into D32.
+
+**Verify (met, as reconciled).** Water surfaces instance their authored splash model + play the
+sound; the reader/undefined-name surfaces play the sound + spark with no crash; on-screen splash look
+is an **owed playtest** (`playtest.md`). The five undefined names render nothing (inert).
 
 ### D31 ☐ The `Sound` anim-event family
 
@@ -1338,14 +1354,29 @@ not. Note the recorded gotcha: the one-shot `Sound` in C3 names a sound *definit
 **Verify.** Destruction sounds play (`air_mixed_exp_sg` on the worked example); the unhandled-
 event counter drops by the expected amount; `--debug-anim` shows the emitters.
 
-### D32 ☐ Destruction effects wiring
+### D32 ☐ Destruction + impact effects wiring (the world-effects runtime)
 
-**Approach.** Mostly already implemented — `CallAnimation` and `PufferState` both work. This is
-wiring plus verification that the named effects resolve: `large_30sec_fire` ×1035,
+**Scope now also covers the impact puffers D30 deferred.** D30 established that a runtime
+`PUFFER_STATE` renders nothing in the flight build (puffer factory torn down after world build;
+`verification.md` rule 76). The named destruction effects (`large_30sec_fire` ×1035,
 `great_balls_of_fire` ×432, `large_fireball` ×307, `large_black_smokeball` ×288,
-`biggun_flying_parts` ×84, `big_splash`.
+`biggun_flying_parts` ×84, `big_splash`) and the named **impact** puffers (`gunhit`'s
+`blacksmokepuffer` smoke, the HE `large_fireball`/`he_ground_effect` fireball) are the **same
+machinery** — `ON_CALL` effect defs relocated onto a call/hit site with live puffers — so both wire
+through one **world-effects runtime**.
 
-**Verify.** Each of the top effect names resolves and renders; report any that do not.
+**Approach.** Generalize `BuildFlightCrashRuntime` (which already proves the pattern in flight: a
+live `PufferFactory` over kept-open textures, `PlaceCalledTemplates`, a `BuildEffectStage` of the
+relocatable template roots, `NameResolveFallback`) into a world-level effects runtime bound to the
+closure of the impact/destruction effect names, exposing a `PlayEffectAt(name, worldPoint)` that
+stages the named effect at a synthetic site. `ProjectilePool` calls it on impact; the death sequences
+already `CallAnimation` these effects. **⚠ Singleton-template limitation:** the shared template roots
+are relocated per call (not copied), and the puffer key is `(name, host)`, so sustained gunfire
+collapses the `gunhit` smoke onto one jumping/first-wins puff — fine for rockets/deaths (≤1/s),
+a fidelity follow-up for guns (the `PlaceTemplateAt` note already flags the staggered-cluster nuance).
+
+**Verify.** Each of the top effect names resolves and a `Puffer` is *built* (not just the def
+started — rule 76); a rocket/destruction fireball renders at its site; report any name that does not.
 
 ### D33 ☐ Tracers
 
