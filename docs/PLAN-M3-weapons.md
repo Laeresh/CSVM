@@ -464,7 +464,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 25. ☑ Collider removal on destruction (the doors) — **landed** (no new code: C24's swap runs `SetSubtreeActive`, which toggles colliders with visibility; `--damage-hd` `col[off,on]` census proves it, C2 doors off 1/on 8; propane→door chain confirmed)
 26. ☑ Ballistic `ObjectMotion` — debris tumble — **landed** (already implemented by the M2 crash `MotionRuntime`; reached on death via C24's `Start`; the C24 "stubbed" note was a no-clock-tick harness artifact — water tower launches 2 visible pieces, buildings 7, verified by `--damage-hd` `debris[N]`)
 27. ☑ The 44 `WeaponOrCollideHit` collision path — **landed** (`FlightController` collide-through + `AnimRuntime.CollideDamageAt`, gated on `ACTIVATION`; facades/windows/`agyrobus` break on contact and the plane flies through, `WeaponHit` towers/gates ignore collision — `--damage-hd` `collide[✓/✗]` verifies)
-28. ☐ Destructible reset/restore (for the debug tools)
+28. ☑ Destructible reset/restore (for the debug tools) — **landed** (`AnimRuntime.ResetDestructible`: Stop death + restore debris rest poses + re-apply RESET_STATE + restore HP; destroy→reset→destroy idempotent, `--damage-hd` `reset[…]` verifies across C1/C2/C5). **Wave C complete.**
 
 ### Wave D — presentation & audio
 
@@ -1278,7 +1278,22 @@ you these were authored as fly-through set dressing.
 **Verify.** Flying through a C2 facade panel destroys it and the plane survives; flying into a
 C2 water tower kills the plane and leaves the tower intact.
 
-### C28 ☐ Destructible reset/restore
+### C28 ☑ Destructible reset/restore — **LANDED (2026-07-24)** — Wave C complete
+
+**Landed.** `AnimRuntime.ResetDestructible(inst)` is the death's inverse (feeds the debug tools F40/F41
+and respawn): `Stop` the def's live death (tearing down its motions/puffers/fires); `RestoreRestPoses`
+— put any node the death physically MOVED back to its authored pose (the ballistic debris pieces:
+`Stop` removes the motion but leaves the piece wherever it flew, so a re-destroy would launch from the
+wrong place; `_rest` holds each moved node's rest transform); re-apply `RESET_STATE` (its
+`OBJECT_ACTIVE_STATE` base states restore the healthy subtree visible+collidable and hide the destroyed
+one — `SetSubtreeActive` restores colliders with visibility, undoing both the swap and the
+`ApplyDeathSwap` fallback); and restore the instance's HP/Status/DamageStage.
+
+**Verified.** `--damage-hd` gained a `reset[…]` check — after the kill, reset then re-kill and compare.
+Idempotent across **C1/C2/C5**: every type returns `healthy=✓` (healthy shown, destroyed hidden) and
+re-kills in the same hit count — buildings/towers (with debris), passenger planes, `air_gen`, the AA
+gun `aagun32` (RESET-derived swap), the doors `gate1`/`gate2` (rotated leaves restored), the propane
+`kkgate`, the C2 facades, and C5's `agyrobus`. 8-chapter freecam regression byte-identical.
 
 **Goal.** Return an instance to healthy, for the debug tools and for respawn.
 

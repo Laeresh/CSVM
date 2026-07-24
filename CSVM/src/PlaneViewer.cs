@@ -2736,14 +2736,53 @@ public partial class PlaneViewer : Node3D
                 collide = $"collide[{(accepted ? (broke ? "✓ broke" : "✓ hit, survived") : "✗ ignored")}, {target.Def.Activation}]; ";
             }
 
+            // C28 reset/restore check: from a destroyed state, ResetDestructible returns the object to
+            // healthy (full HP, healthy subtree visible, destroyed hidden, debris flown home), and an
+            // identical second kill takes the same hits — proving destroy→reset→destroy is idempotent.
+            string reset = "";
+            if (_damageHd > 0f)
+            {
+                int cap2 = (int)(target.MaxHealth / _damageHd) + 4;
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && cap2-- > 0)
+                {
+                    runtime.DamageAt(target.Anchor, _damageHd);   // ensure dead before resetting
+                }
+                runtime.ResetDestructible(target);
+                bool backHp = target.Status == Mech3.DestructibleRegistry.State.Healthy
+                    && target.Health >= target.MaxHealth - 1e-3f;
+                int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
+                void Scan(Node3D n)
+                {
+                    string cs = n.HasMeta(Mech3.AnimRuntime.NameMeta)
+                        ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString() : n.Name.ToString();
+                    if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase)) { hAll++; if (n.Visible) { hVis++; } }
+                    if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase)) { dAll++; if (n.Visible) { dVis++; } }
+                    foreach (var c in n.GetChildren())
+                    {
+                        if (c is Node3D c3) { Scan(c3); }
+                    }
+                }
+                Scan(target.Anchor);
+                bool backVis = hAll == 0 || (hVis == hAll && dVis == 0);   // healthy shown, destroyed hidden
+                int rekap = (int)(target.MaxHealth / _damageHd) + 4;
+                int hits2 = 0;
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && hits2 < rekap)
+                {
+                    hits2++;
+                    runtime.DamageAt(target.Anchor, _damageHd);
+                }
+                reset = $"reset[healthy={(backHp && backVis ? "✓" : "✗")} (h{hVis}/{hAll},d{dVis}/{dAll}), "
+                    + $"rekill {hits2}h {(hits2 == hit ? "✓" : $"✗ vs {hit}")}]; ";
+            }
+
             string src = target.Def.Archive != null ? "compiled" : "reader";
             string stages = fired.Count == 0
                 ? "no stage effect fired"
                 : string.Join(", ", fired.Select(f => $"{f.At} → {f.Effect}"));
             string outcome = _damageHd > 0f
                 ? (target.Status == Mech3.DestructibleRegistry.State.Destroyed
-                    ? $"DESTROYED in {hit} hit(s); {swap}{collide}"
-                    : $"SURVIVED {hit} hit(s); {collide}")
+                    ? $"DESTROYED in {hit} hit(s); {swap}{collide}{reset}"
+                    : $"SURVIVED {hit} hit(s); {collide}{reset}")
                 : "";
             sb.AppendLine($"  {target.Def.Name} (HEALTH {target.MaxHealth:0.##}, {src}) {resolve}: {outcome}{stages}");
         }

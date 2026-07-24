@@ -5305,3 +5305,33 @@ flying into a water tower (plane dies, tower stands) — the same aim the C23 pl
 `--damage-hd`, PLAN-M3-weapons.md (checklist 27 ☐→☑, `### C27` landed note), CLAUDE.md status. **Next:
 C28 (destructible reset/restore — re-apply RESET_STATE, restore HP + colliders, for the debug tools),
 the last Wave C item.**
+
+**Destructible reset/restore — M3 Wave C item C28 (2026-07-24) — Wave C complete:** a destroyed object
+can be returned to healthy, for the debug tools (F40/F41) and respawn. `AnimRuntime.ResetDestructible`
+is the death's inverse, in four steps: (1) `Stop` the def's live death, tearing down its
+motions/puffers/fires; (2) `RestoreRestPoses` — restore the authored pose of any node the death
+physically MOVED, i.e. the ballistic debris pieces (C26): `Stop` removes the motion but leaves the
+piece wherever it flew (y≈19 for the water tower's middle section), so a re-destroy would launch from
+the wrong place — `_rest` already holds each moved node's rest transform (MotionRuntime records it on
+launch), and the membership check confines the restore to nodes that actually moved, leaving the
+visibility-only healthy/destroyed nodes to RESET_STATE; (3) re-apply the def's `RESET_STATE`, whose
+`OBJECT_ACTIVE_STATE` base states make the healthy subtree visible+collidable and hide the destroyed
+one (`SetSubtreeActive` restores colliders with visibility, C25), undoing both the C24 swap and the
+`ApplyDeathSwap` RESET-derived fallback; and (4) restore the instance's HP/Status/DamageStage (the C21
+fields). Idempotent by construction — destroy→reset→destroy produces identical results. Verified with a
+new `--damage-hd` `reset[…]` check (kill, reset, re-kill, compare): across **C1/C2/C5** every
+destructible type returns `healthy=✓` (healthy shown, destroyed hidden) and re-kills in the SAME hit
+count as the first kill — buildings/towers with debris (`m_build01` 2h, `ap_h2otwr1` 1h), passenger
+planes (1h), `air_gen` (2h), the AA gun `aagun32` whose death used the RESET-derived swap fallback
+(1h), the doors `gate1`/`gate2` with their rotated-open leaves restored (1h), the propane `kkgate` with
+its CallAnimation chain (1h), the C2 facades `fcpan*` (WeaponOrCollideHit, 1h), and C5's substantial
+`agyrobus` (health 70, 2h). Objects with no NAMED healthy/destroyed node (the signs, the facades) still
+reset cleanly — HP+status restore and the re-kill is idempotent. The 8-chapter `--freecam` regression
+is byte-identical to the C21–C27 baseline (`ResetDestructible` is only called from the harness/debug
+path, never at world build). **This completes Wave C (destruction):** objects now damage (C21–C23),
+die (C24), lose+gain collision (C25), throw debris (C26), break on contact (C27), and reset (C28).
+**Still deferred out of the wave:** the death `Sound` (D31) and the debris `do_intersections`/
+`bounce_sequence` ground-rest (a Layer-1.5 physics-ray follow-up). Docs: `destructibles.md` "Engine
+status" (Wave C complete), `architecture.md` (`AnimRuntime`), `cli.md` `--damage-hd`, PLAN-M3-weapons.md
+(checklist 28 ☐→☑, `### C28` landed note), CLAUDE.md status. **Next: Wave D (weapon effects) — D29
+muzzle flash, D30 tracers/impacts polish, D31 death audio — and the owed in-flight playtests.**

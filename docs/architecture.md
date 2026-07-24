@@ -297,6 +297,11 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   `def.Activation`, then applied through `DamageAt` — and returns true so the caller flies the plane
   THROUGH it; a `WeaponHit` object returns false and stays solid (ram it → crash, decision 6). Wired to
   `FlightController.CollideDamageSink`.
+⚠ `ResetDestructible(inst)` (C28) is the death's inverse — for the debug tools + respawn: `Stop` the
+  def's death, `RestoreRestPoses` (put the flown debris back — `_rest` holds each moved node's authored
+  pose; `Stop` alone leaves it displaced), re-apply `RESET_STATE` (healthy visible+collidable/destroyed
+  hidden — undoes the swap AND the `ApplyDeathSwap` fallback), then restore HP/Status/DamageStage.
+  Idempotent: destroy→reset→destroy is identical.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with

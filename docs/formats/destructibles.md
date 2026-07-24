@@ -159,15 +159,15 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — objects die and throw debris now; death audio is next
+## Engine status — Wave C complete: objects damage, die, throw debris, break on contact, and reset
 
-The destructible model is complete in the data and the engine now drives nearly all of it: live
-per-instance HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23),
-the death sequence that runs at zero (C24), the collision that goes with it (C25), the debris
-**tumble** (C26), and the **`WeaponOrCollideHit` collision path** (C27). What remains is the death
-**audio** (the one-shot `Sound` events — D31) and the debris **ground-rest** (the
-`do_intersections`/`bounce_sequence` half — a deferred Layer-1.5 follow-up needing a physics ray). A
-format reader should know the current wiring:
+**Wave C (destruction) is complete.** The engine drives the whole destructible model: live per-instance
+HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23), the death
+sequence at zero (C24), the collision that goes with it (C25), the debris **tumble** (C26), the
+**`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). Two pieces are deliberately
+deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and the debris
+**ground-rest** (the `do_intersections`/`bounce_sequence` half — a Layer-1.5 follow-up needing a
+physics ray). A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -244,6 +244,15 @@ format reader should know the current wiring:
   identical whether shot or rammed. Verified headlessly: the facades/windows/`agyrobus`
   `collide[✓ broke]`, the signs and `kkgate` `collide[✗ ignored]`. The **owed playtest** is the
   in-flight feel — flying through a facade cleanly vs. crashing into a tower.
+- **A destroyed object can be reset to healthy (C28).** `AnimRuntime.ResetDestructible` is the inverse
+  of the death, for the debug tools (F40/F41) and respawn: it `Stop`s the def's live death, restores
+  the authored pose of any node the death physically MOVED (the ballistic debris — `Stop` removes the
+  motion but leaves the piece where it flew), re-applies the def's `RESET_STATE` (healthy visible +
+  collidable, destroyed hidden — undoing both the swap and the `ApplyDeathSwap` fallback), and restores
+  the instance's HP/status/stage. It is idempotent: **destroy → reset → destroy produces identical
+  results.** Verified across C1/C2/C5 — every type (buildings, towers, the AA gun's RESET-derived swap,
+  the doors' rotated leaves, the propane gate, agyrobus, the facades) returns `healthy=✓` and re-kills
+  in the same hit count.
 - **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows

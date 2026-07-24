@@ -1742,6 +1742,50 @@ public sealed partial class AnimRuntime : Node
         return true;
     }
 
+    /// <summary>Returns a destroyed destructible to healthy (C28) — for the debug tools (F40/F41) and
+    /// respawn. The inverse of the death: (1) <see cref="Stop"/> the def's live death, tearing down its
+    /// motions/puffers/fires; (2) restore the authored pose of any node the death physically MOVED —
+    /// the ballistic debris pieces, whose motion Stop removes but leaves wherever they flew, so a
+    /// re-destroy would launch from the wrong place; (3) re-apply the def's <c>RESET_STATE</c>, whose
+    /// <c>OBJECT_ACTIVE_STATE</c> base states make the <c>healthy</c> subtree visible+collidable again
+    /// and hide the <c>destroyed</c> one (<see cref="SetSubtreeActive"/> restores colliders with
+    /// visibility, C25), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
+    /// (4) restore the live HP pool. Idempotent — destroy→reset→destroy produces the same result each
+    /// time.</summary>
+    public void ResetDestructible(DestructibleRegistry.Instance inst)
+    {
+        var def = inst.Def;
+        Stop(def.AnimName, inst.Anchor);
+        RestoreRestPoses(def, inst.Anchor);
+        if (def.ResetState != null)
+            ApplyInstant(def.ResetState.Events, def, inst.Anchor);
+        inst.Health = inst.MaxHealth;
+        inst.Status = DestructibleRegistry.State.Healthy;
+        inst.DamageStage = 0;
+    }
+
+    /// <summary>Restores every node a def's events touched to its authored rest pose (<see cref="_rest"/>,
+    /// recorded the first time a motion disturbed it). The membership check confines this to nodes that
+    /// actually MOVED — the ballistic debris and any <c>FROM_TO</c> movers — so healthy/destroyed
+    /// visibility nodes (never transformed) are left to <c>RESET_STATE</c>.</summary>
+    private void RestoreRestPoses(AnimDefinition def, Node3D? anchor)
+    {
+        var seqs = def.ResetState != null ? def.Sequences.Append(def.ResetState) : def.Sequences;
+        foreach (var seq in seqs)
+        {
+            foreach (var ev in seq.Events)
+            {
+                foreach (var node in Targets(ev, def, anchor))
+                {
+                    if (_rest.TryGetValue(node, out var rest))
+                    {
+                        node.Transform = rest;
+                    }
+                }
+            }
+        }
+    }
+
     /// <summary>Runs a destructible's death sequence (C24) the instant its HP reaches zero: the
     /// healthy→destroyed <c>OBJECT_ACTIVE_STATE</c> swap, the debris sequences and the puffer
     /// calls. Those ARE the definition's own Initial sequences — the def's <c>anim_name</c> is the
