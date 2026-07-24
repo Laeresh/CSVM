@@ -5278,3 +5278,30 @@ status", `architecture.md` (`AnimRuntime` + `PlaneViewer`), `verification.md` ru
 `--damage-hd`, PLAN-M3-weapons.md (checklist 26 ☐→☑, `### C26` landed note), CLAUDE.md status. **Next:
 C27 (the 44 `WeaponOrCollideHit` collision path — facades/windows break on contact) or C28
 (destructible reset/restore, for the debug tools).**
+
+**The 44 WeaponOrCollideHit collision path — M3 Wave C item C27 (2026-07-24):** flying into the
+Hollywood facades, the warehouse windows and `agyrobus` now breaks them and the plane passes through;
+ramming anything else (water towers, gates, signs) still kills the plane and leaves the object intact.
+`ACTIVATION` is the switch. `SweepAirframe`/`HitWorld` (`FlightController`'s swept-box + center-ray
+collision probes) now also out the struck `Node`; before the crash/graze decision, the controller
+offers the hit to a new `CollideDamageSink` → `AnimRuntime.CollideDamageAt`, which resolves the node to
+its destructible (`Registry.Resolve`) and gates on `def.Activation`. A `WeaponOrCollideHit` instance —
+the **44** collide-destructibles (C2 `fcpan01`–`39`, C5 `w_win01`–`04` at health 0.01, C5 `agyrobus`
+at 70; verified as exactly 44 across cam_anim) — takes `vn × 8` HEALTH_DAMAGE through the SAME
+`DamageAt` a weapon spends (so the object's death — the healthy→destroyed swap, the debris tumble, the
+collider removal from C24/C25/C26 — is identical whether shot or rammed), and the hit is CLEARED so the
+plane keeps its full-motion pose and flies through. A `WeaponHit` object returns false and stays solid,
+so the crash/graze path runs unchanged — ⚠ decision 6 upheld: collision damage is **not** extended to
+`WeaponHit` set dressing (their 0.01-vs-real health is the tell). The `vn × 8` scale means a real
+flight-speed hit (vn ≥ ~9 m/s) breaks even `agyrobus` (70), while the 43 windows/facades (0.01) shatter
+at any motion; a stationary kiss (vn ≈ 0) breaks nothing. Verified headlessly with a new `--damage-hd`
+`collide[✓/✗, ACTIVATION]` probe (reset the instance, apply a collision, report accept + destroy): the
+C2 facades, C5 windows and `agyrobus` all `collide[✓ broke, WeaponOrCollideHit]`; the C2 signs and
+`kkgate` `collide[✗ ignored, WeaponHit]`. The 8-chapter `--freecam` regression is byte-identical to the
+C21–C26 baseline (the collide path is `--fly`-only; `CollideDamageAt` is never called at world build).
+**Owed playtest:** the in-flight feel — flying through a facade cleanly (it breaks, plane survives) vs.
+flying into a water tower (plane dies, tower stands) — the same aim the C23 playtest owes. Docs:
+`destructibles.md` "Engine status", `architecture.md` (`AnimRuntime` + `FlightController`), `cli.md`
+`--damage-hd`, PLAN-M3-weapons.md (checklist 27 ☐→☑, `### C27` landed note), CLAUDE.md status. **Next:
+C28 (destructible reset/restore — re-apply RESET_STATE, restore HP + colliders, for the debug tools),
+the last Wave C item.**

@@ -292,6 +292,11 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   The launch is SCHEDULED mid-sequence (water tower at t=2.2 s), so it only fires as the death plays
   out — a kill-and-check must `Advance` the clock to see it (`BallisticMotionsLaunched` counts them).
   `do_intersections`/`bounce_sequence` ground-rest stays deferred.
+⚠ `CollideDamageAt(struck, healthDamage)` is the plane-COLLISION entry (C27): only a
+  `WeaponOrCollideHit` destructible (the 44 facades/windows/`agyrobus`) accepts it — gated on
+  `def.Activation`, then applied through `DamageAt` — and returns true so the caller flies the plane
+  THROUGH it; a `WeaponHit` object returns false and stays solid (ram it → crash, decision 6). Wired to
+  `FlightController.CollideDamageSink`.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -585,6 +590,11 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ SurviveHit reads the contact normal at a pose 5 cm past the cast hit — at just-touching the rest
   query finds nothing and the head-on fallback turns shallow grazes into crashes; don't shallow it.
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).
+⚠ C27 collide-through: SweepAirframe/HitWorld now also out the struck `Node`; before the crash/graze
+  decision, `CollideDamageSink` (→ `AnimRuntime.CollideDamageAt`) is offered the hit. If it returns
+  true (a `WeaponOrCollideHit` facade/window/`agyrobus`) the hit is CLEARED — the plane keeps its
+  full-motion pose and flies through, the object taking `vn × CollideDamagePerVn` HEALTH_DAMAGE. Every
+  other object stays solid. Null sink (viewer/static) = every collision solid, as before.
 ⚠ The crash is data-driven: CrashRuntime plays player_crash_dirt (InheritedWorldVelocity = impact
   velocity × WreckMomentum); Respawn resets it and re-homes CrashRestPoses; null runtime = hide only.
 ⚠ Firing (needs Loadout + Projectiles): UpdateGuns holds Space/pad-B → the SELECTED group fires at

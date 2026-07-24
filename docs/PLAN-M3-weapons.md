@@ -463,7 +463,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 24. ☑ Death sequence execution + healthy→destroyed swap — **landed** (`RunDeathSequence` plays the def's death via `Start`; RESET-derived swap fallback for the ~10% that author none; `--damage-hd` swap check verifies)
 25. ☑ Collider removal on destruction (the doors) — **landed** (no new code: C24's swap runs `SetSubtreeActive`, which toggles colliders with visibility; `--damage-hd` `col[off,on]` census proves it, C2 doors off 1/on 8; propane→door chain confirmed)
 26. ☑ Ballistic `ObjectMotion` — debris tumble — **landed** (already implemented by the M2 crash `MotionRuntime`; reached on death via C24's `Start`; the C24 "stubbed" note was a no-clock-tick harness artifact — water tower launches 2 visible pieces, buildings 7, verified by `--damage-hd` `debris[N]`)
-27. ☐ The 44 `WeaponOrCollideHit` collision path
+27. ☑ The 44 `WeaponOrCollideHit` collision path — **landed** (`FlightController` collide-through + `AnimRuntime.CollideDamageAt`, gated on `ACTIVATION`; facades/windows/`agyrobus` break on contact and the plane flies through, `WeaponHit` towers/gates ignore collision — `--damage-hd` `collide[✓/✗]` verifies)
 28. ☐ Destructible reset/restore (for the debug tools)
 
 ### Wave D — presentation & audio
@@ -1247,7 +1247,21 @@ integration and ground-rest logic may be directly reusable.
 
 **Verify.** The water tower's middle section tumbles and settles; run time matches 5 s.
 
-### C27 ☐ The 44 `WeaponOrCollideHit` collision path
+### C27 ☑ The 44 `WeaponOrCollideHit` collision path — **LANDED (2026-07-24)**
+
+**Landed.** `SweepAirframe`/`HitWorld` now also out the struck `Node`; before the crash/graze
+decision `FlightController` offers the hit to `CollideDamageSink` → `AnimRuntime.CollideDamageAt`,
+which gates on `def.Activation`. A `WeaponOrCollideHit` object (the **44** — C2 `fcpan01`–`39`, C5
+`w_win01`–`04` at 0.01, C5 `agyrobus` at 70) takes `vn × 8` HEALTH_DAMAGE through the same `DamageAt`
+a weapon uses (so its death — swap, debris, collider removal — is identical), and the plane flies
+**through** it; every `WeaponHit` object (towers, gates, signs) returns false and stays solid, so
+ramming it crashes the plane and leaves it intact (⚠ decision 6 upheld — collision damage is NOT
+extended to `WeaponHit`). Data confirmed: exactly 44 `WeaponOrCollideHit` defs across cam_anim.
+
+**Verified.** `--damage-hd` gained a `collide[✓/✗, ACTIVATION]` probe: the facades, windows and
+`agyrobus` `collide[✓ broke]`; the C2 signs and `kkgate` `collide[✗ ignored]`. 8-chapter freecam
+regression byte-identical. **Owed playtest:** the in-flight feel — flying through a C2 facade panel
+(it breaks, plane survives) vs. flying into a water tower (plane dies, tower stands).
 
 **Goal.** The Hollywood facades and warehouse windows break on contact — and nothing else does.
 

@@ -1162,6 +1162,9 @@ public partial class PlaneViewer : Node3D
                         // per-part HP from destroyable_parts — collisions below
                         // the crash threshold damage the struck part instead of crashing
                         Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
+                        // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
+                        // breaks it and passes through; every other collision stays solid.
+                        CollideDamageSink = worldRuntime != null ? worldRuntime.CollideDamageAt : null,
                         // splitscreen: this player's own device(s), own pane for the HUD,
                         // and no debug freeze (it would halt the shared world for everyone)
                         PadDevices = padAssignment?[pi],
@@ -2719,14 +2722,28 @@ public partial class PlaneViewer : Node3D
                 runtime.Stop(anim, anchor);
             }
 
+            // C27 collide-gate probe: reset and apply a plane COLLISION via CollideDamageAt. Only a
+            // WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus) accepts it and breaks;
+            // a WeaponHit object (tower, gate) ignores the collision and stands (decision 6).
+            string collide = "";
+            if (_damageHd > 0f)
+            {
+                target.Health = target.MaxHealth;
+                target.Status = Mech3.DestructibleRegistry.State.Healthy;
+                target.DamageStage = 0;
+                bool accepted = runtime.CollideDamageAt(target.Anchor, target.MaxHealth + 1f);
+                bool broke = target.Status == Mech3.DestructibleRegistry.State.Destroyed;
+                collide = $"collide[{(accepted ? (broke ? "✓ broke" : "✓ hit, survived") : "✗ ignored")}, {target.Def.Activation}]; ";
+            }
+
             string src = target.Def.Archive != null ? "compiled" : "reader";
             string stages = fired.Count == 0
                 ? "no stage effect fired"
                 : string.Join(", ", fired.Select(f => $"{f.At} → {f.Effect}"));
             string outcome = _damageHd > 0f
                 ? (target.Status == Mech3.DestructibleRegistry.State.Destroyed
-                    ? $"DESTROYED in {hit} hit(s); {swap}"
-                    : $"SURVIVED {hit} hit(s); ")
+                    ? $"DESTROYED in {hit} hit(s); {swap}{collide}"
+                    : $"SURVIVED {hit} hit(s); {collide}")
                 : "";
             sb.AppendLine($"  {target.Def.Name} (HEALTH {target.MaxHealth:0.##}, {src}) {resolve}: {outcome}{stages}");
         }

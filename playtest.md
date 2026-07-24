@@ -88,6 +88,13 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   gate) and the gate destroys + the bridges catch fire. Watch for: fly into an intact door → collide;
   destroy it → fly through the opening. Needs the same in-flight aim the C23 playtest owes.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`. *Blocks:* C25 sign-off.
+- **C27 — flying THROUGH a facade vs. crashing into a tower.** In C2 (Hollywood), fly straight into a
+  storefront **facade panel** (`fcpan*`): it should shatter and the plane pass through unharmed. Then
+  fly into a **water tower** or **gate**: the plane should crash and the tower stand. The `ACTIVATION`
+  gate is verified headless (facades/windows/`agyrobus` `collide[✓ broke]`, towers/gates
+  `collide[✗ ignored]`), but the in-flight *feel* — a clean fly-through vs. a solid crash — needs the
+  controls (same aim the C23 playtest owes). `./RunGame.ps1 --plane=player_pfighter --chapter=C2`.
+  *Blocks:* C27 sign-off.
 
 ---
 

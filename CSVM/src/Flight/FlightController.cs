@@ -79,6 +79,12 @@ public partial class FlightController : Node3D
     /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
     public PlaneDamage? Damage;
 
+    /// <summary>C27: applies a plane collision to the struck world node, returning true iff it was a
+    /// <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus) — in which case the
+    /// object breaks and the plane flies THROUGH it. Wired to <c>AnimRuntime.CollideDamageAt</c>; null
+    /// (a viewer/static build with no world runtime) makes every collision solid, as before.</summary>
+    public System.Func<Node?, float, bool>? CollideDamageSink;
+
     /// <summary>Visible damage: torn-skin pdpanel flips + the low-HP
     /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
     public DamageVisuals? Visuals;
@@ -259,6 +265,10 @@ public partial class FlightController : Node3D
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
     private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
+    private const float CollideDamagePerVn = 8f;  // C27: HEALTH_DAMAGE a collision deals to a WeaponOrCollideHit
+                                                  // object, per m/s of impact severity — a real flight-speed
+                                                  // hit (vn≥~9) breaks even agyrobus (health 70); the 43
+                                                  // 0.01-health facades/windows shatter at any motion.
     private const float WreckMomentum = 0.4f;    // TUNE: fraction of impact velocity the crash wreck pieces inherit
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
@@ -683,10 +693,11 @@ public partial class FlightController : Node3D
     /// <paramref name="point"/> is the impact position (else the segment end) and
     /// <paramref name="hitName"/> names the collider (parent/body — e.g. a terrain
     /// tile's "g27889/col", or a clutter city block's "world1/clutter_bld_3_7").</summary>
-    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName)
+    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName, out Node? hitBody)
     {
         point = to;
         hitName = "";
+        hitBody = null;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
@@ -695,7 +706,10 @@ public partial class FlightController : Node3D
             return false;
         point = (Vector3)hit["position"];
         if (hit["collider"].Obj is Node body)
+        {
+            hitBody = body;
             hitName = $"{body.GetParent()?.Name}/{body.Name}";
+        }
         return true;
     }
 
@@ -871,8 +885,8 @@ public partial class FlightController : Node3D
         float margin = Collider == null ? CollisionMargin : 0f;
         var probeEnd = len > 1e-4f ? to + step / len * margin : to;
         bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
-            out var normal, out float stopFrac);
-        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName))
+            out var normal, out float stopFrac, out var hitBody);
+        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
         {
             hit = true;
             part = "center";
@@ -881,6 +895,19 @@ public partial class FlightController : Node3D
         }
         if (_probe != null)
             DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
+        // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
+        // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
+        // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
+        // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
+        if (hit && CollideDamageSink != null)
+        {
+            var cv = _model.VelocityDir * _model.Speed;
+            float cvn = Mathf.Abs(cv.Dot(normal));
+            if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+            {
+                hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+            }
+        }
         if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
         {
             Crash(impact, hitName, part);
@@ -902,7 +929,7 @@ public partial class FlightController : Node3D
         // down per physics frame (world + map-edge extension colliders)
         if (Gauges != null)
             Gauges.AglMeters = HitWorld(_model.Position,
-                _model.Position + Vector3.Down * 1000f, out var ground, out _)
+                _model.Position + Vector3.Down * 1000f, out var ground, out _, out _)
                 ? _model.Position.Y - ground.Y
                 : float.MaxValue;
 
@@ -1085,11 +1112,12 @@ public partial class FlightController : Node3D
     /// struck, and the motion fraction where it stopped (for the debug draw). False
     /// when no collider was built or nothing is in the way.</summary>
     private bool SweepAirframe(Vector3 from, Vector3 motion, out Vector3 impact,
-        out string hitName, out string part, out Vector3 normal, out float stopFrac)
+        out string hitName, out string part, out Vector3 normal, out float stopFrac, out Node? hitBody)
     {
         impact = _model.Position;
         hitName = "";
         part = "";
+        hitBody = null;
         float mLen = motion.Length();
         normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
         stopFrac = 1f;
@@ -1127,14 +1155,14 @@ public partial class FlightController : Node3D
             {
                 impact = (Vector3)rest["point"];
                 normal = (Vector3)rest["normal"];
-                hitName = GodotObject.InstanceFromId((ulong)rest["collider_id"]) is Node body
-                    ? $"{body.GetParent()?.Name}/{body.Name}"
-                    : "world";
+                hitBody = GodotObject.InstanceFromId((ulong)rest["collider_id"]) as Node;
+                hitName = hitBody != null ? $"{hitBody.GetParent()?.Name}/{hitBody.Name}" : "world";
             }
             else
             {
                 impact = (baseXf * p.Local).Origin + motion * cast[1];
                 normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
+                hitBody = null;
                 hitName = "world";
             }
         }

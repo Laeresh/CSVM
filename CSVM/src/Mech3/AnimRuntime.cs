@@ -1721,6 +1721,27 @@ public sealed partial class AnimRuntime : Node
         return true;
     }
 
+    /// <summary>A plane <b>collision</b> with a world node (C27). Only the 44
+    /// <c>WeaponOrCollideHit</c> destructibles — the Hollywood facades, the warehouse windows and
+    /// <c>agyrobus</c> — take collision damage; a <c>WeaponHit</c> object (water tower, gate) is left
+    /// untouched, so ramming it kills the plane and the object stands (decision 6: the 0.01 health
+    /// marks these as fly-through set dressing). Returns true when the struck node is a
+    /// <c>WeaponOrCollideHit</c> destructible — the caller then flies the plane THROUGH it — and false
+    /// for everything else (a <c>WeaponHit</c> object, plain geometry, terrain), which the caller
+    /// treats as a solid crash/graze. The damage itself runs through <see cref="DamageAt"/>, identical
+    /// to a weapon hit, so the object's death (swap, debris, collider removal) is the same.</summary>
+    public bool CollideDamageAt(Node? struck, float healthDamage)
+    {
+        var inst = _destructibles.Resolve(struck);
+        if (inst == null
+            || !inst.Def.Activation.Equals("WeaponOrCollideHit", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        DamageAt(struck, healthDamage);
+        return true;
+    }
+
     /// <summary>Runs a destructible's death sequence (C24) the instant its HP reaches zero: the
     /// healthy→destroyed <c>OBJECT_ACTIVE_STATE</c> swap, the debris sequences and the puffer
     /// calls. Those ARE the definition's own Initial sequences — the def's <c>anim_name</c> is the

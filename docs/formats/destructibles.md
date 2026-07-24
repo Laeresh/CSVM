@@ -163,10 +163,11 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 
 The destructible model is complete in the data and the engine now drives nearly all of it: live
 per-instance HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23),
-the death sequence that runs at zero (C24), the collision that goes with it (C25), and the debris
-**tumble** (C26). What remains is the death **audio** (the one-shot `Sound` events — D31) and the
-debris **ground-rest** (the `do_intersections`/`bounce_sequence` half — a deferred Layer-1.5 follow-up
-needing a physics ray). A format reader should know the current wiring:
+the death sequence that runs at zero (C24), the collision that goes with it (C25), the debris
+**tumble** (C26), and the **`WeaponOrCollideHit` collision path** (C27). What remains is the death
+**audio** (the one-shot `Sound` events — D31) and the debris **ground-rest** (the
+`do_intersections`/`bounce_sequence` half — a deferred Layer-1.5 follow-up needing a physics ray). A
+format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -230,6 +231,19 @@ needing a physics ray). A format reader should know the current wiring:
     and are then hidden by the sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it.
 - **Death audio (D31) is still stubbed.** The explosion is silent; the one-shot `Sound` events are
   not yet played.
+- **Flying into a collide-destructible breaks it (C27).** `ACTIVATION` decides what a plane
+  *collision* does. The **44** `WeaponOrCollideHit` objects — the C2 Hollywood facades
+  (`fcpan01`–`39`), the C5 warehouse windows (`w_win01`–`04`, all health 0.01) and the lone
+  substantial `agyrobus` (health 70) — take collision damage and shatter, and the plane flies
+  **through** them (they are set dressing). Every `WeaponHit` object (water towers, gates, signs) is
+  **untouched** by a collision — ram one and it kills the plane and stands (decision 6; the 0.01
+  health is the tell). `FlightController` resolves the struck collider (`Registry.Resolve`) and calls
+  `AnimRuntime.CollideDamageAt`, which gates on `ACTIVATION` and, when it matches, spends a
+  severity-scaled `HEALTH_DAMAGE` (`vn × 8`, so a real flight-speed hit breaks even `agyrobus`) through
+  the same `DamageAt` a weapon uses — so the object's death (swap, debris, collider removal) is
+  identical whether shot or rammed. Verified headlessly: the facades/windows/`agyrobus`
+  `collide[✓ broke]`, the signs and `kkgate` `collide[✗ ignored]`. The **owed playtest** is the
+  in-flight feel — flying through a facade cleanly vs. crashing into a tower.
 - **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
