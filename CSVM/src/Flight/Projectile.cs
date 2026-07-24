@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -67,6 +68,10 @@ public sealed partial class ProjectilePool : Node3D
     private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
     internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
                                               // (shared: FlightController's reticle integration reads it too)
+    internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
+                                                // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
+                                                // both launch velocity and acceleration together so the whole
+                                                // profile stays proportional and the round still expires at RANGE.
 
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
@@ -200,6 +205,16 @@ public sealed partial class ProjectilePool : Node3D
         var forward = -muzzle.Basis.Z.Normalized();
         forward = ApplySpread(forward, weapon.CannonSpread ?? 0f);
         float speed = weapon.Velocity ?? 500f;
+        float accel = weapon.Acceleration ?? 0f;
+        // Rockets only: scale launch velocity and acceleration by the same dev factor. Guns stay
+        // byte-identical (the impact reticle reads weapon.Velocity separately), and default 1.0
+        // leaves rocket flight unchanged.
+        if (weapon.IsRocket)
+        {
+            float scale = Config.GetFloat("weapons.rocketSpeedScale", RocketSpeedScale);
+            speed *= scale;
+            accel *= scale;
+        }
         var tint = weapon.IsRocket ? RocketTint : SlugTint;
 
         int slot = -1;
@@ -223,7 +238,7 @@ public sealed partial class ProjectilePool : Node3D
                 Pos = muzzle.Origin,
                 Vel = vel,
                 DistLeft = weapon.Range ?? 1000f,
-                Accel = weapon.Acceleration ?? 0f,
+                Accel = accel,
                 Grav = (weapon.Gravity ?? 0f) * WorldGravity,
                 Weapon = weapon,
                 Tint = tint,

@@ -2494,6 +2494,9 @@ public partial class PlaneViewer : Node3D
             var fm = new FlightModel(new PlaneStats());
             fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
             fm.Step(default, 1f / 60f);
+            // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
+            // register it here so --dump-config still documents the weapon-fire tunable.
+            Config.GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
         }
         catch (Exception e)
         {
