@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -20,28 +21,30 @@ namespace CSVM.UI;
 /// camera position tracks it as it moves); WASD/QE cancels the follow, mouse-look and the wheel
 /// keep it.</para>
 ///
-/// <para>The clock: this node feeds <see cref="AnimRuntime.Advance"/> in exact 1/60 s steps, so
-/// pause = no calls, step = one call, and the time scale (0.1×–4×) scales the accumulator; the
-/// render rate never changes simulation results. A scripted run (<c>--screenshot</c>) substitutes
-/// the fixed step for wall time, so a <c>--frames</c>/<c>--shots</c> capture lands on exact step
-/// counts. The RNG is re-pinned on every Play/Restart, so a seeded replay rolls the same dice.
-/// Ambient playback (ON_STARTUP defs + startanims) toggles on <i>and</i> off (off returns to the
-/// quiet stage, keeping the played def running).</para>
+/// <para>The clock is the session's <see cref="GameClock"/>, which the lab only drives: pause =
+/// halt it, step = queue one step, and the speed selector (0.1×–4×) is its scale. The mode is the
+/// session's choice — an accumulator emitting whole 1/60 s steps when interactive, exactly one
+/// fixed step per rendered frame in a scripted <c>--screenshot</c> run, so a
+/// <c>--frames</c>/<c>--shots</c> capture lands on exact step counts. The render rate never
+/// changes simulation results. The RNG is re-pinned on every Play/Restart, so a seeded replay
+/// rolls the same dice. Ambient playback (ON_STARTUP defs + startanims) toggles on <i>and</i> off
+/// (off returns to the quiet stage, keeping the played def running).</para>
 ///
 /// <para>The picker/timeline/transport are fed from the runtime's Wave-2 B4 hooks and are the
 /// whole interactive UI, hidden in a scripted <c>--screenshot</c> so those shots stay
 /// byte-identical; <c>--debug-anim-ui</c> forces them visible. The hooks are attached only when
 /// the UI is shown, so a plain scripted run pays nothing.</para>
 ///
-/// <para>Accepted v1 limits: pausing pauses the RUNTIME, not the renderer (UV scroll, texture
-/// cycles, puffer sprites and playing audio continue); the timeline tracks one instance of the
-/// played def plus its CALL_ANIMATION children.</para>
+/// <para>Accepted limits: pausing freezes everything the CPU drives (the runtime, texture cycles,
+/// puffer particles) but not the GPU — shader-driven UV scroll keeps flowing, and audio already
+/// playing plays out; the timeline tracks one instance of the played def plus its CALL_ANIMATION
+/// children.</para>
 /// </summary>
 public sealed partial class AnimLab : Node
 {
     /// <summary>The simulation step: the runtime advances in exact 1/60 s steps whatever the
     /// render rate, so a playback's dispatch times are a function of the step count alone.</summary>
-    public const float FixedDt = 1f / 60f;
+    public const float FixedDt = GameClock.FixedDt;
 
     /// <summary>The pinned default RNG seed (<c>--seed=N</c> overrides). Any constant works;
     /// what matters is that every launch shares it, so two runs replay the same dice.</summary>
@@ -51,10 +54,6 @@ public sealed partial class AnimLab : Node
     /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
     /// fast-forward for skimming a long loop.</summary>
     private static readonly float[] Speeds = { 0.1f, 0.25f, 1f, 2f, 4f };
-
-    // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
-    // slow frames honest without turning a debugger breakpoint stall into fast-forward.
-    private const float MaxAccum = 0.25f;
 
     private readonly AnimRuntime _runtime;
     private readonly AnimProgram _program;
@@ -67,7 +66,6 @@ public sealed partial class AnimLab : Node
     private readonly int _seed;
     private readonly string? _playOnLaunch;   // --play-anim=<name>
     private readonly bool _autoFrame;         // no --campos/--lookat: frame the played def
-    private readonly bool _fixedFrameStep;    // --screenshot: exactly timeScale×1 step per frame
     // The session archives, kept open for the whole lab session (WorldSession.Options
     // .KeepArchivesOpen) so puffers/decals can be built at any playhead time. The lab owns
     // their disposal — every other mode closes them when the build scope ends.
@@ -84,10 +82,8 @@ public sealed partial class AnimLab : Node
     private readonly List<int> _rows = new();
 
     private bool _launched;      // first-frame housekeeping (the --play-anim auto-play) done
-    private bool _paused;
-    private float _timeScale = 1f;
-    private float _accum;
-    private int _steps;          // playhead = steps × FixedDt, zeroed on Play/Restart
+    private int _steps;          // sim steps since Play/Restart (status readout)
+    private float _playhead;     // sim seconds since Play/Restart
     private string? _defName;    // the selected def (null until --play-anim / Play)
     private int _instances;      // how many (def, anchor) instances the last Play started
     private bool _stopped;       // Stop: _defName kept for the status line, playback torn down
@@ -108,7 +104,7 @@ public sealed partial class AnimLab : Node
 
     public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam, Node3D world,
         Node3D stageAnchor, TextureArchive textures, SoundArchive? sounds,
-        int seed, string? playAnim, bool autoFrame, bool fixedFrameStep)
+        int seed, string? playAnim, bool autoFrame)
     {
         _runtime = runtime;
         _program = program;
@@ -120,8 +116,11 @@ public sealed partial class AnimLab : Node
         _seed = seed;
         _playOnLaunch = playAnim;
         _autoFrame = autoFrame;
-        _fixedFrameStep = fixedFrameStep;
     }
+
+    /// <summary>The session clock the transport drives. The lab never owns it — the session picks
+    /// the mode (accumulator when interactive, one fixed step per frame when scripted).</summary>
+    private static GameClock? Clock => GameClock.Current;
 
     public override void _Ready()
     {
@@ -158,32 +157,30 @@ public sealed partial class AnimLab : Node
                 Play(_playOnLaunch);
             }
         }
-        if (!_paused)
+        // The clock decides how many sim steps this rendered frame is worth (none while halted);
+        // each one is a separate Advance, because the event scheduler resolves per step.
+        if (Clock is { } clock)
         {
-            // Scripted runs substitute the fixed step for wall time, so frame N is always step
-            // N (at 1×) and a capture lands on exact step counts, run after run.
-            _accum += (_fixedFrameStep ? FixedDt : (float)delta) * _timeScale;
-            _accum = Mathf.Min(_accum, MaxAccum);
-            while (_accum >= FixedDt)
+            for (int i = 0; i < clock.Steps; i++)
             {
-                _accum -= FixedDt;
-                Step();
+                Step(clock.Dt);
             }
         }
         _timeline?.SetPlayhead(PlayheadTime);
         UpdateStatus();
     }
 
-    private float PlayheadTime => _steps * FixedDt;
+    private float PlayheadTime => _playhead;
 
-    private void Step()
+    private void Step(float dt)
     {
-        // _steps is bumped BEFORE Advance so that during the runtime's dispatch hooks the
-        // playhead (_steps × dt) equals the runner's clock — incremented at the top of Advance —
-        // and a fired mark lands at the time it actually fired. The t=0 events fired by
-        // AnimRuntime.Play use dt=0 and see _steps=0, so they stamp at t=0, matching.
+        // The playhead is advanced BEFORE Advance so that during the runtime's dispatch hooks it
+        // equals the runner's clock — incremented at the top of Advance — and a fired mark lands
+        // at the time it actually fired. The t=0 events fired by AnimRuntime.Play use dt=0 and see
+        // a zero playhead, so they stamp at t=0, matching.
         _steps++;
-        _runtime.Advance(FixedDt);
+        _playhead += dt;
+        _runtime.Advance(dt);
     }
 
     // ---- transport --------------------------------------------------------------------------
@@ -209,7 +206,7 @@ public sealed partial class AnimLab : Node
         switch (key.Keycode)
         {
             case Key.P:
-                _paused = !_paused;
+                TogglePause();
                 break;
             case Key.R:
                 Restart();
@@ -226,15 +223,33 @@ public sealed partial class AnimLab : Node
         GetViewport().SetInputAsHandled();
     }
 
-    // A single frame step, freezing playback first — the "step" transport action for both the
-    // button and the . key.
-    private void StepFrame()
+    private void TogglePause()
     {
-        _paused = true;
-        Step();
+        if (Clock is { } clock)
+        {
+            clock.Halted = !clock.Halted;
+        }
     }
 
-    private void SetSpeed(float scale) => _timeScale = scale;
+    // A single frame step, freezing playback first — the "step" transport action for both the
+    // button and the . key. The step itself lands in this frame's _Process, where every other
+    // sim consumer takes the same one step.
+    private void StepFrame()
+    {
+        if (Clock is { } clock)
+        {
+            clock.Halted = true;
+            clock.StepOnce();
+        }
+    }
+
+    private void SetSpeed(float scale)
+    {
+        if (Clock is { } clock)
+        {
+            clock.Scale = scale;
+        }
+    }
 
     private void SetAmbient(bool on)
     {
@@ -278,8 +293,12 @@ public sealed partial class AnimLab : Node
         }
         _runtime.Reseed();
         _steps = 0;
-        _accum = 0f;
-        _paused = false;
+        _playhead = 0f;
+        if (Clock is { } clock)
+        {
+            clock.Halted = false;
+            clock.ResetAccumulator();
+        }
         // Set the timeline focus BEFORE Start: AnimRuntime.Play fires the def's t=0 events
         // synchronously, and the dispatch hooks need _timelineDef already in place to attribute
         // them. The anchor is captured from the first instance-start (which precedes any dispatch).
@@ -589,7 +608,7 @@ public sealed partial class AnimLab : Node
         var row = new HBoxContainer();
         row.AddThemeConstantOverride("separation", 4);
 
-        _pauseBtn = TBtn("⏸ Pause", () => _paused = !_paused);
+        _pauseBtn = TBtn("⏸ Pause", TogglePause);
         row.AddChild(_pauseBtn);
         row.AddChild(TBtn("⏭ Step", StepFrame));
         row.AddChild(TBtn("⟲ Restart", Restart));
@@ -740,9 +759,10 @@ public sealed partial class AnimLab : Node
 
     private void UpdateStatus()
     {
+        bool paused = Clock is { Halted: true };
         if (_pauseBtn != null)
         {
-            _pauseBtn.Text = _paused ? "▶ Play" : "⏸ Pause";
+            _pauseBtn.Text = paused ? "▶ Play" : "⏸ Pause";
         }
         if (_status == null)
         {
@@ -753,8 +773,8 @@ public sealed partial class AnimLab : Node
             : $"{_defName} ({_instances} instance{(_instances == 1 ? "" : "s")})";
         string follow = _cam.Follow != null ? $"orbiting {_followName} (RMB to rotate)" : "free camera";
         _status.Text =
-            $"anim-lab  t {_steps * FixedDt:0.00} s (step {_steps})  {_timeScale:0.##}×  " +
-            $"{(_paused ? "PAUSED" : "PLAYING")}   seed {_seed}   ambient {(_ambient ? "on" : "off")}\n" +
+            $"anim-lab  t {_playhead:0.00} s (step {_steps})  {Clock?.Scale ?? 1f:0.##}×  " +
+            $"{(paused ? "PAUSED" : "PLAYING")}   seed {_seed}   ambient {(_ambient ? "on" : "off")}\n" +
             $"def: {def}   {follow}   " +
             "[P pause · . step · R restart · F picker · click an object to orbit it · RMB look · WASD/QE move]";
     }

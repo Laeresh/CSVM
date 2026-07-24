@@ -64,7 +64,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Determinism core
 
-1. ☐ A1 — `GameClock`: one shared sim clock; halt (P) + frame-step (`.`) in every mode; fixed-dt under `--det`
+1. ☑ A1 — `GameClock`: one shared sim clock; halt (P) + frame-step (`.`) in every mode; fixed-dt under `--det`
 2. ☐ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
 3. ☐ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
 4. ☐ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out
@@ -104,7 +104,15 @@ A1 blocks A2 (the uniform is driven by the clock) and A4; A3 blocks A4. A5 is in
 
 # Wave A — Determinism core
 
-## A1 ☐ `GameClock`: shared sim clock, halt + step everywhere, fixed-dt under `--det`
+## A1 ☑ `GameClock`: shared sim clock, halt + step everywhere, fixed-dt under `--det`
+
+**Landed 2026-07-25** — `src/Utils/GameClock.cs` (Realtime / FixedAccum / FixedStep + `Halted`),
+every sim consumer converted, `--det` = the fixed clock only. Evidence in `docs/HISTORY.md`.
+Residuals: the halt/step keys are verified by construction (live keypresses are unscriptable here);
+one-shot audio plays through a halt; shader `TIME` still runs on wall time until A2, so a `--det`
+world shot has a measured 1.60 % pixel floor rather than zero; and the playhead in `AnimLab` stayed
+its own counter rather than `GameClock.Frame`, because the clock advances `Frame` by the whole
+frame's `Steps` at once and that would stamp every sub-step at the frame's end time.
 
 **Goal.** One clock object owns sim time for a session. Every sim consumer — `FlightModel`, `AnimRuntime.Advance`, `TextureCycler`, `Puffer`, `ProjectilePool`, prop/control-surface/wing-light animators, stunt clocks — receives dt from it, never raw `_Process` delta. Interactively, **P halts and `.` steps one frame in every mode** (fly, freecam, viewer, anim-lab). Under `--det` the clock is fixed-dt: frame N is the same sim state on every run, regardless of render rate.
 

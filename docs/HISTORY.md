@@ -5891,3 +5891,46 @@ with a `COMPLETE` banner and a `plans.md` row. `PLAN-testing.md` is now the sole
 "queued behind M3" banner cleared); CLAUDE.md's "Current status" + charter and the reference links
 across `backlog.md` and the archived plans were repointed to the new path. M3's remaining sign-off is
 the at-the-controls re-tests owed in `playtest.md` §1 (user-owned).
+
+## 2026-07-25 — PLAN-testing A1: `GameClock`, the session simulation clock
+
+**Landed.** New `CSVM/src/Utils/GameClock.cs`: one object per session owning how much sim time a
+rendered frame is worth. Three run modes plus an orthogonal halt — **Realtime** (one step at the
+wall delta, arithmetically what every consumer used before, so the shipped modes are unchanged),
+**FixedAccum** (whole 1/60 s steps from a clamped wall accumulator — the interactive anim lab's old
+accumulator, moved), **FixedStep** (exactly one fixed step per rendered frame — a scripted lab run,
+and the new `--det`). Every sim consumer now takes dt from it: `AnimRuntime` (one `Advance` per
+sub-step, never a summed step), `TextureCycler`, `Puffer`, `CloudPuffs`, `ProjectilePool`,
+`FlightController` (sim + the prop/wing-light/control-surface animators + `FlightAudio`),
+`WeaponLab`, `DamageLab`. UI and camera code deliberately stays on the raw delta, so a halted world
+can still be looked at and the HUD still draws. `_PhysicsProcess` bodies became `public SimStep(dt)`;
+`GameClock.PhysicsDt` returns 0 in any non-realtime mode and `PlaneViewer.DriveSimSteps` calls them
+itself in the old tree order (pool → controllers; weapon lab → its own pool). `FlightController`'s
+`_paused` is gone — P / gamepad Start (still `AllowPause`-gated, so splitscreen cannot freeze the
+shared world) toggles `GameClock.Halted` from `_Process`; `PlaneViewer._UnhandledInput` binds P and
+`.` for freecam/viewer; the anim lab's transport routes P/`.`/speed through the clock. New `--det`
+flag = fixed-dt clock and nothing else yet (A4 makes it the full bundle).
+
+**Verified.** *Inertness (headline):* `--viewer --plane=player_bhawk` at `--frames=30`, raw
+32-bpp pixel buffers md5'd (rule 36) — baseline build `7c2b7274…`, twice; refactored build the same
+hash. *The compare can fail (rule 15):* the same clock forced to `Scale = 2` moves **88.27 %** of the
+pixels of a `--det --fly` C1 shot at `--frames=180`, against a **1.60 %** same-build floor; reverting
+returns to 1.75 %, inside the floor. *Fixed-dt:* two `--det` scripted `--hold` flights over C1 log
+**15 of 15 identical** telemetry lines. That check alone cannot fail (Godot's physics tick is already
+60 Hz), so the discriminating control is render-rate independence: at `--max-fps 30`, 900 rendered
+frames give **15 sim seconds and the byte-identical final pose** under `--det`, versus **30 sim
+seconds and a different pose** without it. *Regression:* 8-chapter `--freecam` (`--quit-after 200`,
+full-stderr grep per rule 61/71) — 0 errors, every gamez-node / mesh-instance / collider /
+uv-clamped-surface count identical to the pre-change build; the only log diff is warning-backtrace
+line numbers. Mode battery clean (0 errors): stunt, 4P race, weapon lab firing, damage lab, menu,
+firing flight, `--dump-weapons`/`--dump-loadout`/`--dump-markers`, `--effects-test`,
+`--weapon-test`, `--damage-test` (its 4 `det == 0` errors are the open backlog item, pre-existing).
+`--det` drives both projectile pools from `_Process` and still logs impacts (8, the log cap).
+
+**Residuals.** The interactive halt/step keys are verified **by construction only** — live keypresses
+are not scriptable here (`docs/verification.md`, "what this project cannot verify itself"). Audio: the
+own-plane engine/whine/rattle loops pause via `StreamPaused`; one-shots and world ambience play out.
+Shader-driven motion (UV scroll, precipitation, skydome) still runs on wall `TIME` until A2, so a
+`--det` world screenshot is not yet byte-identical — measured 1.60 % floor. In `--anim-lab` only,
+CPU-driven texture cycles and puffer particles now follow the lab clock instead of wall time (they
+freeze on pause and scale with the speed selector) — the item's intent, not inertness drift.

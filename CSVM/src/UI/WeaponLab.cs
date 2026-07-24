@@ -4,6 +4,7 @@ using System.Globalization;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
@@ -75,6 +76,11 @@ public sealed partial class WeaponLab : Node3D
     private readonly List<Mount> _pylonMounts = new();
 
     private ProjectilePool _pool = null!;
+
+    /// <summary>The lab's own projectile pool, a child of this node — so a session driving the
+    /// sim explicitly can step it right after this node, keeping the tree order.</summary>
+    public ProjectilePool Pool => _pool;
+
     private StaticBody3D _target = null!;
     private MeshInstance3D _targetMesh = null!;
     private StandardMaterial3D _targetMat = null!;
@@ -382,6 +388,18 @@ public sealed partial class WeaponLab : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
+        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
+        if (dt <= 0f)
+        {
+            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
+        }
+        SimStep(dt);
+    }
+
+    /// <summary>One auto-fire step: advance the trigger clock and fire whatever volleys it owes.
+    /// Public because a non-realtime clock has the session call this instead of the physics tick.</summary>
+    public void SimStep(float dt)
+    {
         bool firing = _engaged && (_autoFire || _spaceHeld);
         if (!firing || SelectedWeapon is not { } w || BankMounts.Count == 0)
         {
@@ -397,7 +415,7 @@ public sealed partial class WeaponLab : Node3D
             _wasFiring = true;
             _fireAccum = interval; // the first shot leaves the moment the trigger goes down
         }
-        _fireAccum += (float)delta;
+        _fireAccum += dt;
         int guard = 0;
         while (_fireAccum >= interval && guard++ < 64)
         {

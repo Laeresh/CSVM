@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -233,8 +234,8 @@ public partial class FlightController : Node3D
     private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
     private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
     private float _holdElapsed;                  // sim time into the HoldSegments sequence
-    private bool _paused;                        // debug screenshot freeze (P): whole sim halts in place
     private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
+    private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private ImmediateMesh? _probe;               // debug collision-probe line
@@ -1037,25 +1038,22 @@ public partial class FlightController : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        float dt = (float)delta;
-
-        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole
-        // simulation in place (physics, input, collision, audio, props) so successive
-        // screenshots frame the plane from the same spot. Checked even while crashed.
-        bool pausePressed = PauseTogglePressed();
-        if (pausePressed && !_pausePrev)
+        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
+        if (dt <= 0f)
         {
-            _paused = !_paused;
-            if (_paused)
-                SeedOrbit(); // start the orbit where the chase camera left off (no jump)
+            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
         }
-        _pausePrev = pausePressed;
-        if (_paused)
-            return;
+        SimStep(dt);
+    }
 
+    /// <summary>One flight step: input, the flight model, collision, weapons and the stunt clock.
+    /// Public because a non-realtime clock has the session call this instead of Godot's physics
+    /// tick — the halt (P / gamepad Start) simply stops the calls.</summary>
+    public void SimStep(float dt)
+    {
         // Advance the stunt clock every physics frame — including through the crash freeze so the
-        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). Frozen
-        // while paused (returned above — a debug screenshot freeze must not run the timer).
+        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
+        // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
         Stunt?.Tick(dt);
 
         // Debug: force-complete the run so the results board renders for a deterministic
@@ -1095,9 +1093,11 @@ public partial class FlightController : Node3D
         if (_crashed)
         {
             // The wreck + effects run on the crash AnimRuntime, which advances itself in its own
-            // _Process even through this sim freeze (motions, the played def, every puffer).
-            // frozen at the impact point until the pilot respawns (R / gamepad Y or A);
-            // unattended HoldSegments runs respawn on a timer instead
+            // _Process through this crash freeze (motions, the played def, every puffer) — but not
+            // through a clock halt, which stops that runtime with everything else, so P during a
+            // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
+            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs respawn
+            // on a timer instead
             if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
                 Respawn();
             return;
@@ -1173,7 +1173,7 @@ public partial class FlightController : Node3D
         if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
             Respawn();
 
-        _sinceTelemetry += delta;
+        _sinceTelemetry += dt;
         if (_sinceTelemetry >= 1.0)
         {
             _sinceTelemetry = 0;
@@ -1466,7 +1466,32 @@ public partial class FlightController : Node3D
 
     public override void _Process(double delta)
     {
-        if (_paused)
+        var clock = GameClock.Current;
+        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole simulation
+        // in place (physics, input, collision, audio, props) so successive screenshots frame the
+        // plane from the same spot. Polled here rather than in the sim step because a halted sim
+        // takes no steps and could never resume itself. Checked even while crashed.
+        bool pausePressed = PauseTogglePressed();
+        if (pausePressed && !_pausePrev && clock != null)
+        {
+            clock.Halted = !clock.Halted;
+        }
+        _pausePrev = pausePressed;
+        bool halted = clock?.Halted ?? false;
+        if (halted != _haltPrev)
+        {
+            _haltPrev = halted;
+            if (halted)
+            {
+                SeedOrbit();   // start the orbit where the chase camera left off (no jump)
+            }
+            // The engine/whine/rattle loops hold their sample position through the freeze; the
+            // one-shots already in flight are left to play out.
+            Audio?.SetPaused(halted);
+        }
+        // The cameras and the HUD run on wall time even through a halt: the point of the freeze is
+        // to look around a stopped world.
+        if (halted)
         {
             // free orbit around the frozen plane for framing screenshots
             UpdateOrbitCamera((float)delta);
@@ -1475,6 +1500,8 @@ public partial class FlightController : Node3D
         {
             UpdateChaseCamera((float)delta);
         }
+        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
+        float simDt = clock?.FrameDt ?? (float)delta;
 
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;
@@ -1501,7 +1528,7 @@ public partial class FlightController : Node3D
         {
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
-            Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
+            Gauges.Stalled = !_crashed && !halted && _model.isStalled();
         }
         // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.
@@ -1526,7 +1553,7 @@ public partial class FlightController : Node3D
         _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
         if(_model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
-        if (!_paused && !_crashed && _damageFlash > 0f)
+        if (!halted && !_crashed && _damageFlash > 0f)
         {
             _damageFlash -= (float)delta;
             _hud.Text += $"\n{_damageFlashText}";
@@ -1539,26 +1566,32 @@ public partial class FlightController : Node3D
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)
             _hud.Text += $"\n{Stunt.StatusLine()}";
-        if (_paused)
-            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume";
+        if (halted)
+        {
+            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
+        }
         else if (_crashed)
+        {
             _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
+        }
         else
-            Audio?.Update((float)delta, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+        {
+            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+        }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
         // and speed up with throttle. Frozen while crashed or paused (a still disc reads
         // the same at any angle, and freezing it keeps screenshots deterministic).
-        Props?.Advance(delta, _crashed || _paused ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
+        Props?.Advance(simDt, _crashed || halted ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
 
         // Blink the wingtip flares on the data's 1.5 s cycle, and track the stick with
         // the control surfaces. Frozen while paused (so a screenshot catches a fixed
         // state — the paused orbit camera can inspect the held deflection) and while
         // crashed (the airframe is hidden anyway).
-        if (!_crashed && !_paused)
+        if (!_crashed && !halted)
         {
-            WingLights?.Advance(delta);
-            Surfaces?.Advance(delta, _lastInput);
+            WingLights?.Advance(simDt);
+            Surfaces?.Advance(simDt, _lastInput);
             Visuals?.Update(_model.Position, _model.Attitude); // smoke/fire trail emission
         }
     }

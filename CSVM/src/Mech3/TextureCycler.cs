@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -66,7 +67,8 @@ public sealed partial class TextureCycler : Node
 
     public override void _Process(double delta)
     {
-        float dt = (float)delta;
+        // Flipbook time is sim time: a halted or scaled clock must hold or scale the water.
+        float dt = GameClock.Current?.FrameDt ?? (float)delta;
         if (Debug)
         {
             _debugClock += dt;

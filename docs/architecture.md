@@ -265,6 +265,9 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + report
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims,
 a safety net), then dispatch-table event playback; unhandled event kinds are counted, never fatal.
 ⚠ `FindAll` is memoized (`_findCache`); adding or reparenting world nodes at runtime must invalidate it.
+⚠ `_Process` runs `GameClock.Current.Steps` separate `Advance(Dt)` calls, never one summed step —
+  the scheduler resolves per step, so N small steps ≠ one big one. Zero steps (a halted clock)
+  means no call at all, not `Advance(0)`, which would still dispatch a frame's worth of t=0 events.
 ⚠ A no-time loop iteration yields a frame — the test is `_iterScheduledTime`, not the clock; authored
   `Loop` count 0 = INFINITE, normalised to -1 where first read, never at the `_loopsLeft == 0` test.
 ⚠ Absent tween channels HOLD the live value; `FromToMotion`/`ScriptPlayback` keep rot/scale/origin separate.
@@ -719,6 +722,11 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
   states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard
   gates keys to P1; AllowPause is false in splitscreen — the freeze halts the shared world.
+⚠ The sim half is `SimStep(dt)`, called either by `_PhysicsProcess` (realtime clock) or by
+  `PlaneViewer` (fixed/halted clock — `GameClock.PhysicsDt` returns 0). There is no local `_paused`
+  any more: P / gamepad Start is polled in `_Process` (which keeps running) and toggles
+  `GameClock.Halted`; the halt then simply stops the SimStep calls, and `_Process` seeds the orbit
+  camera on the transition and pauses the engine loops. The cameras and HUD stay on wall time.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
 
 ## src/Flight/PlaneDamage.cs
@@ -894,11 +902,16 @@ and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with 
 The `--anim-lab` debugger: a quiet `WorldSession` stage (`AutoStart=false`, seed pinned), fixed-dt
 clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam with
 click-to-follow, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
-⚠ The clock is a fixed-dt accumulator (`FixedDt` 1/60, clamped 0.25 s); a scripted run adds exactly
-  `FixedDt` × speed per frame, ignoring wall time — captures land on exact step counts.
+⚠ The lab does not own its clock: it drives the session `GameClock` (P → `Halted`, `.` →
+  `StepOnce`, the speed buttons → `Scale`) and takes `Steps`/`Dt` from it. The mode is
+  `PlaneViewer`'s choice — FixedAccum interactively, FixedStep in a scripted `--screenshot` run, so
+  captures land on exact step counts.
 ⚠ The clock hand-off is `AnimRuntime.ManualAdvance`, NOT `SetProcess(false)` (READY auto-enable trap).
 ⚠ Ordering: `Play` sets the timeline focus BEFORE `AnimRuntime.Play` (t=0 events dispatch
-  synchronously); `Step` bumps `_steps` before `Advance` so the playhead equals the runner's clock.
+  synchronously); `Step` bumps `_steps` + `_playhead` before `Advance` so the playhead equals the
+  runner's clock. The playhead is the lab's own accumulation, NOT `GameClock.Frame`/`Time`: the
+  clock advances those by the whole frame's `Steps` at once, which would stamp every sub-step of a
+  multi-step frame at the frame's end time.
 ⚠ `ShowUi` gates all UI — hidden in `--screenshot` runs; `--debug-anim-ui` forces it back on.
 ⚠ The stage parks `StageAnchorDist` (55 m) ahead on each fresh Play — Restart reuses the snapshot —
   and passes as `fallbackAnchor`; framed/followed only when the def actually resolved onto it.
@@ -938,6 +951,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   world rebuild must never double-Add (that errors).
 ⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
   null-guards cover the frame before the deferred free lands.
+⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
+  `GameClock.Current`, nulled on teardown. `ProcessPriority = -1000` so `BeginFrame` runs before
+  any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
+  `SimStep` consumers when the clock is not realtime; P/`.` are bound in `_UnhandledInput` for
+  freecam/viewer only (flight polls P itself, the anim lab owns its own transport).
 ⚠ `LoadWeather` precedes the per-rig horizon loop; everything reads `_activeZone` (assigned
   unconditionally per load) — dome + fog always share a zone, rebuilds never inherit a stale one.
 ⚠ Per-rig: the skydome is REBUILT per rig (star mesh `csky_light_fade` instance uniform); the cloud
@@ -967,6 +985,26 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
   auto-frames the killed object (unless `--campos`/`--lookat` set) and builds the world-effects runtime
   itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
+
+## src/Utils/GameClock.cs
+The session's simulation clock: one object deciding how much sim time a rendered frame is worth.
+`BeginFrame(wallDelta)` (first thing in `PlaneViewer._Process`) sets `Steps` + `Dt`; consumers read
+`FrameDt` once per frame, or loop `Steps` times on `Dt` when they must see each sub-step.
+Published as `GameClock.Current` (session-scoped, nulled by `ReturnToMenu`); a null means "use your
+raw frame delta", so nothing outside a session breaks.
+⚠ Modes: **Realtime** (`Steps` 1, `Dt` = wall delta — arithmetically what every consumer used
+  before this class, which is what makes the shipped modes byte-identical), **FixedAccum** (whole
+  1/60 s steps from a wall accumulator clamped at 0.25 s — the interactive anim lab),
+  **FixedStep** (exactly one `FixedDt × Scale` step per rendered frame — a scripted lab run and
+  `--det`). `Halted` is orthogonal to all three: 0 steps until `StepOnce`.
+⚠ `PhysicsDt` returns 0 in every non-realtime mode and while halted, and **0 means the consumer
+  returns without stepping** — `PlaneViewer.DriveSimSteps` calls its `SimStep` instead, `Steps`
+  times, in the tree order Godot's physics tick used (projectile pool → flight controllers;
+  weapon lab → the pool it owns). Godot's physics tick keeps its own 60 Hz cadence regardless, so
+  it cannot be the sim clock.
+⚠ UI and camera code deliberately stays on the raw frame delta (HUD widgets, `SpectatorCamera`,
+  the launchscreen, the flight chase/orbit camera, the `--perf` and unplaced-entity instruments):
+  a halt must still let you look around, draw the HUD, and measure frame budgets.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

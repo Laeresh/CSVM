@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text.RegularExpressions;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -611,6 +612,16 @@ public sealed partial class AnimRuntime : Node
     {
         if (ManualAdvance)
         {
+            return;
+        }
+        // Each sub-step is advanced separately rather than summed: the event scheduler resolves
+        // per step, so one 4/60 s call and four 1/60 s calls are not the same playback.
+        if (GameClock.Current is { } clock)
+        {
+            for (int i = 0; i < clock.Steps; i++)
+            {
+                Advance(clock.Dt);
+            }
             return;
         }
         Advance((float)delta);
