@@ -302,7 +302,7 @@ Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
   (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
 
 ## src/Flight/Projectile.cs
-`ProjectilePool` — the shared-world weapon-fire subsystem (B13/B15/D29/D30/D33): a fixed pool of
+`ProjectilePool` — the shared-world weapon-fire subsystem (B13/B14/B15/D29/D30/D33): a fixed pool of
 projectiles integrated with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at
 RANGE), plus tracer streaks, muzzle flashes, per-surface impact sprites and the IMPACT sound.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a CANNON_SPREAD cone) and flashes
@@ -313,9 +313,12 @@ the muzzle; it runs itself each physics frame. One pool per session, fed by ever
   stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
   screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
-⚠ Rockets (B17) reuse this pool via the same `Spawn` (their VELOCITY/RANGE need no special path);
-  `IsRocket` tints them orange + a chunkier streak (`RocketStreakScale`) as a stand-in for the
-  FLYOUT `he_rocket` MODEL mesh, which is still pending (B14).
+⚠ Rockets fly the FLYOUT MODEL body (B14): `Spawn` instances the weapon's `.flt` prototype root
+  (`he_rocket` …) from the chapter gamez via the world `SceneBuilder` (collision-exempt, so rounds
+  don't obstruct one another), posed nose-along-(-Z) down the velocity via `Basis.LookingAt`. Only
+  rockets get a mesh (≤1 alive at 1/s); guns stay on the MultiMesh tracer quad (≈10/s, dozens alive).
+  A rocket with a body trails a slim exhaust streak; `RocketStreakScale` is now only the fallback
+  when a chapter lacks the prototype. The FLYOUT `MODEL_ANIMATION` smoke trail is still pending (D-wave).
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +

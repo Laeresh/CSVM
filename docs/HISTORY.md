@@ -5049,3 +5049,36 @@ Docs updated: PLAN-M3-weapons.md (decision 3, checklist 19/20, B19/B20 detail �
 preserve the M4 design), CLAUDE.md status, weapons.md. Build clean. **Wave B's remaining in-scope work
 is B14 (the `he_rocket` `FLYOUT` MODEL mesh) + D30/D32 polish; the next major thrust is Wave C
 (destruction), starting with C21 (per-instance HP + destructible registry).**
+
+**M3 Wave B B14 — rockets fly the `FLYOUT` MODEL body (2026-07-24):** rockets no longer render as an
+orange stand-in streak; each launched rocket now instances the original's own projectile mesh. The
+`FLYOUT` field of a `weapons.zrd.json` entry names a gamez prototype root (`MODEL`), and for the 15
+`ROCKET` entries those are: `he_rocket` (BOOM/stock HE `wep_06`/`wep_24`), `ap_rocket` (ARMOR),
+`incendiary` (9M/SEEKER/FW), `flak`, `sonic`, `flash`, `beeper`, `scatter` (CHOKER), `smoker`,
+`a_torpedo` (TORPDO), `reararc` (FLARE), `aaflak` (AA FLAK) — 12 distinct roots, all present as named
+nodes in every chapter's gamez (`he_rocket` confirmed 1 per chapter, C1–C5). `ProjectilePool` gained
+the chapter world gamez + its `SceneBuilder` (threaded through the pool's ctor at the `PlaneViewer`
+creation site) and, on a rocket `Spawn`, resolves `weapon.Flyout.Model` via `GameZ.FindByName` and
+`SceneBuilder.BuildSubtree` **collision-exempt** (`collisionSkip: _ => true` — a rocket must not
+obstruct another round or the world hit-test), caching the resolved node per model name; the built body
+is freed on impact/expiry/`Clear`. **Orientation:** every rocket mesh is authored nose-along-(-Z)
+(measured: `he_rocket`'s rendered LOD is mesh 66, 0.3 m dia × 1.5 m long, `z ∈ [-1.5, 0]`; all 12
+distinct models share the −Z-nose convention), so `Basis.LookingAt(velocityDir)` — which aims local −Z
+down its argument — points the nose along flight. **Measure-before-choosing (the plan's explicit
+caveat): guns keep the tracer quad, rockets get a mesh** — a rocket lives ~0.83 s at `FIRE_RATE` 1/s
+(`VELOCITY` 1200 / `RANGE` 1000), so ≤1 is ever alive per player, whereas a gun fires ~10/s living ~1 s
+(dozens alive) → a mesh-per-round for guns would be wasteful against the existing MultiMesh tracer.
+A rocket with a body now trails a slim exhaust streak (`RocketExhaustScale`); the old chunky
+`RocketStreakScale` survives only as the fallback for a chapter missing the prototype. The `FLYOUT`
+`MODEL_ANIMATION` smoke trail (`he_rocket` anim → the `he_effects`/`pufftrails` readers) stays deferred
+to the D-wave. **Verified:** build clean (0/0); an 8-chapter (`C1`/`C1B`/`C1C`/`C2`/`C2B`/`C3`/`C4`/`C5`)
+headless `--fire-rockets` flight regression — `he_rocket` instances (breadcrumb: 1 mesh) in **every**
+chapter with **zero** real errors and unchanged gamez-node load counts; a runtime breadcrumb reading the
+model's **applied** world basis back through its full parent chain reports **`nose·velocity = 1.000`**
+(nose-forward, non-circular). Windowed captures over C1 (level, climbing, diving; in `./.scratch/`) show
+rockets leaving the pylons and flying forward, impacting terrain ahead (`impact … -> Default`). A
+pixel-crisp in-flight close-up remains an owed at-the-controls playtest (already listed for B17): a 1.5 m
+projectile at ~1260 m/s is not chase-cam-photographable without its (deferred) smoke trail. Docs:
+architecture.md (Projectile.cs entry), PLAN-M3-weapons.md (checklist 14 ☐→☑, `### B14` landed note),
+CLAUDE.md status. **Wave B's remaining in-scope work is the D30/D32 named-effect polish; the next major
+thrust is Wave C (destruction), starting with C21.**

@@ -1063,10 +1063,13 @@ public partial class PlaneViewer : Node3D
                 // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
                 // once, and ONE shared projectile/effect pool every player's guns fire into
                 // (projectiles live in the shared world, so every splitscreen pane sees them). The
-                // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds).
+                // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
+                // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
+                // (`he_rocket` …) from the chapter's own prototype roots (B14).
                 var weaponDefs = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
                 var stockLoadouts = StockLoadouts.Load();
-                var projectiles = new ProjectilePool(textures, sounds, soundDefs)
+                var projectiles = new ProjectilePool(textures, sounds, soundDefs,
+                    flyoutGamez: gamez, flyoutScene: worldScene)
                 {
                     Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
                 };

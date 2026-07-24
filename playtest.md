@@ -28,12 +28,15 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (add `--infinite-ammo` to not run dry).
   *Blocks:* sign-off on B16 (gun firing) + tuning of tracer/flash/rate.
 
-- **Rocket firing feel.** Press **F** for one HE rocket per pull (hold does not auto-repeat; a 1 s
-  cooldown gates it). *Look for:* does one-per-pull feel right, does the 1 s cooldown feel too slow
-  or fine, does the rocket read as a rocket (orange chunky streak — the real `he_rocket` model is
-  still pending, B14). Stock Bloodhawk carries 9 (3 pylons × 3).
+- **Rocket firing feel + model look.** Press **F** for one HE rocket per pull (hold does not
+  auto-repeat; a 1 s cooldown gates it). *Look for:* does one-per-pull feel right, does the 1 s
+  cooldown feel too slow or fine; and — the owed **B14** close-up — watch a launched rocket leave the
+  pylon: it now flies the real `he_rocket` MODEL body nose-forward (verified in-engine at
+  `nose·velocity = 1.000`, but never caught crisp in a chase-cam screenshot), with a slim exhaust
+  streak. Does the body read at speed / the right size? (Its `MODEL_ANIMATION` smoke trail is still
+  pending, D-wave.) Stock Bloodhawk carries 9 (3 pylons × 3).
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
-  *Blocks:* sign-off on B17; the 1 s cooldown is the data's `FIRE_RATE`, not measured feel (TUNE).
+  *Blocks:* sign-off on B17 + B14; the 1 s cooldown is the data's `FIRE_RATE`, not measured feel (TUNE).
 
 - **Impacts.** Shoot the **ground** and the **sea**. *Look for:* a splash + water hit sound over
   water, a spark + ground hit sound over dirt; the right sound on each. (The exact named impact

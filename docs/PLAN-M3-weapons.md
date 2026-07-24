@@ -447,7 +447,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 11. ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **landed** (`--dump-weapons` verifies)
 12. ☑ `Loadout.cs` — stock-loadout reader, slot model, marker resolution — **landed** (`--dump-loadout` verifies)
 13. ☑ `Projectile.cs` — spawn and integration — **landed** (`ProjectilePool`)
-14. ◐ `FLYOUT` model instancing — guns use the tracer path (D33); rockets reuse the pool with a chunkier orange streak (B17); the `he_rocket` `MODEL` mesh instancing is the remaining wiring
+14. ☑ `FLYOUT` model instancing — **landed** (2026-07-24): rockets fly the `FLYOUT` MODEL body instanced from the chapter gamez prototype root, nose-forward; guns keep the tracer path (measured)
 15. ☑ Hit detection + surface classification for `IMPACT` variant selection — **landed** (world raycast + collider surface tag)
 16. ☑ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip — **landed** (Space/pad-B, `--fire`)
 17. ☑ Hardpoint firing — per-pylon allotment and depletion — **landed** (F/pad-A, one rocket per pull, round-robin pylons)
@@ -794,17 +794,42 @@ generates a lot of entities. Keep the integration step fixed and independent of 
 **Verify.** Measured muzzle-to-impact time over a known distance matches `RANGE`/`VELOCITY`;
 no allocation churn in a sustained-fire `--perf` run.
 
-### B14 ☐ `FLYOUT` model instancing
+### B14 ☑ `FLYOUT` model instancing — **LANDED (2026-07-24)**
 
-**Goal.** Projectiles look like the original's projectiles.
+**Landed.** Rockets fly the original's own projectile mesh instead of the B17 orange stand-in
+streak. On a rocket `Spawn`, `ProjectilePool` resolves `weapon.Flyout.Model` (the `FLYOUT` `MODEL`
+name) to a chapter-gamez prototype root via `GameZ.FindByName` and instances it with the world
+`SceneBuilder.BuildSubtree` **collision-exempt** (`collisionSkip: _ => true`, so a rocket obstructs
+neither another round nor the world hit-test); the pool gained the world gamez + its `SceneBuilder`,
+threaded through its constructor at the `PlaneViewer` creation site. The resolved node is cached per
+model name; the body is freed on impact / expiry / `Clear`. The 15 `ROCKET` entries name **12
+distinct** prototype roots — `he_rocket` (BOOM/stock HE), `ap_rocket`, `incendiary` (9M/SEEKER/FW),
+`flak`, `sonic`, `flash`, `beeper`, `scatter`, `smoker`, `a_torpedo`, `reararc`, `aaflak` — all
+present as named nodes in every chapter's gamez.
 
-**Approach.** `FLYOUT` names either a `MODEL` (`slug.flt`, `ap_rocket`, `a_torpedo`) or a
-`MODEL` + `MODEL_ANIMATION` pair. Instance from the gamez prototype roots via `SceneBuilder`.
-Guns need the cheap path (tracer quad, item D33) rather than a mesh per round — measure before
-choosing.
+**Orientation** is uniform: every rocket mesh is authored **nose-along-(-Z)** (measured — `he_rocket`'s
+rendered LOD is mesh 66, 0.3 m dia × 1.5 m long, `z ∈ [-1.5, 0]`), matching the muzzle-forward
+convention, so `Basis.LookingAt(velocityDir)` aims the nose down the round's flight.
 
-**Verify.** Each of the 15 `ROCKET` entries instances its named model; a screenshot shows a
-rocket in flight with correct orientation.
+**Measure-before-choosing (the plan's caveat), resolved: guns keep the tracer quad, only rockets get
+a mesh.** A rocket lives ~0.83 s at `FIRE_RATE` 1/s (≤1 alive per player); a gun fires ~10/s living
+~1 s (dozens alive), so a mesh per gun round would be wasteful against the existing MultiMesh tracer.
+A rocket with a body trails a slim exhaust streak (`RocketExhaustScale`); the old chunky
+`RocketStreakScale` is now only the fallback for a chapter missing the prototype. The `FLYOUT`
+`MODEL_ANIMATION` smoke trail stays deferred to the D-wave.
+
+**Verified.** Build clean; an 8-chapter headless `--fire-rockets` regression instances `he_rocket`
+(breadcrumb: 1 mesh) in every chapter with **zero** real errors and unchanged node counts; a runtime
+breadcrumb reading the model's applied world basis back reports **`nose·velocity = 1.000`**
+(nose-forward, non-circular). Windowed C1 captures (`./.scratch/`) show rockets leaving the pylons,
+flying forward, and impacting terrain ahead. **A pixel-crisp in-flight close-up remains the owed
+at-the-controls playtest (shared with B17)** — a 1.5 m round at ~1260 m/s is not chase-cam-photographable
+without its (deferred) smoke trail.
+
+**Original approach (for reference).** `FLYOUT` names either a `MODEL` (`slug.flt`, `ap_rocket`,
+`a_torpedo`) or a `MODEL` + `MODEL_ANIMATION` pair. Instance from the gamez prototype roots via
+`SceneBuilder`. Guns need the cheap path (tracer quad, item D33) rather than a mesh per round —
+measure before choosing.
 
 ### B15 ☑ Hit detection + surface classification — **LANDED (with the B13/B16/D29/D30/D33 batch, 2026-07-24)**
 

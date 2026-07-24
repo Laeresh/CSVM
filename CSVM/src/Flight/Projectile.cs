@@ -29,6 +29,7 @@ public sealed partial class ProjectilePool : Node3D
         public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
         public WeaponDef Weapon;
         public Color Tint;
+        public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
     }
 
     private struct Sprite
@@ -44,8 +45,10 @@ public sealed partial class ProjectilePool : Node3D
     private const int MaxFlashes = 128;
     private const float TracerLength = 14f;   // streak length behind the round, m
     private const float TracerWidth = 0.7f;   // m
-    private const float RocketStreakScale = 2.4f; // rockets get a fatter/longer streak than gun tracers
-                                                  // (a stand-in until the FLYOUT he_rocket MODEL, B14)
+    private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
+                                                  // NO FLYOUT model (a chapter missing the prototype)
+    private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
+                                                   // MODEL body (B14): the body is the round, this is its trail
     private const float MuzzleSize = 2.2f;    // m
     private const float MuzzleLife = 0.05f;   // s
     private const float ImpactSize = 3.0f;    // m
@@ -65,6 +68,17 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SoundArchive? _sounds;
     private readonly IReadOnlyDictionary<string, SoundDef>? _soundDefs;
 
+    // The FLYOUT MODEL body (B14): rockets fly the original's own projectile mesh, instanced from a
+    // chapter-gamez prototype root (`he_rocket`, `ap_rocket`, …) via the world's SceneBuilder — the
+    // roots exist once per chapter and their geometry is nose-along-(-Z). Only rockets get a body:
+    // guns fire ≤~10 rounds/s that live ~1 s each (dozens alive) and stay on the cheap MultiMesh
+    // tracer quad, while a rocket lives ~0.8 s at 1/s (≤1 alive per player), so a full mesh per
+    // rocket is cheap. Null archives (no world, or a chapter lacking the root) ⇒ streak-only fallback.
+    private readonly GameZ? _flyoutGamez;
+    private readonly SceneBuilder? _flyoutScene;
+    private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
+    private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
+
     private MultiMesh _tracerMm = null!;
     private MultiMesh _muzzleMm = null!;
     private MultiMesh _impactMm = null!;
@@ -74,11 +88,14 @@ public sealed partial class ProjectilePool : Node3D
     private int _sfxNext;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
-        IReadOnlyDictionary<string, SoundDef>? soundDefs)
+        IReadOnlyDictionary<string, SoundDef>? soundDefs,
+        GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null)
     {
         _textures = textures;
         _sounds = sounds;
         _soundDefs = soundDefs;
+        _flyoutGamez = flyoutGamez;
+        _flyoutScene = flyoutScene;
         Name = "projectiles";
     }
 
@@ -93,6 +110,8 @@ public sealed partial class ProjectilePool : Node3D
         _tracerMm = AddMultiMesh("tracer1", MaxProjectiles, additive: true, billboard: false, out _);
         _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: true, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: true, out _);
+        _flyoutModels = new Node3D { Name = "flyout" };
+        AddChild(_flyoutModels);
         for (int i = 0; i < 8; i++)
         {
             var p = new AudioStreamPlayer();
@@ -156,16 +175,21 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (slot >= 0)
         {
+            var vel = forward * speed + inheritVel;
+            var model = weapon.IsRocket ? BuildFlyoutModel(weapon) : null;
+            if (model != null)
+                model.GlobalTransform = FlyoutPose(muzzle.Origin, vel);
             _proj[slot] = new Proj
             {
                 Alive = true,
                 Pos = muzzle.Origin,
-                Vel = forward * speed + inheritVel,
+                Vel = vel,
                 DistLeft = weapon.Range ?? 1000f,
                 Accel = weapon.Acceleration ?? 0f,
                 Grav = (weapon.Gravity ?? 0f) * WorldGravity,
                 Weapon = weapon,
                 Tint = tint,
+                Model = model,
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
@@ -191,6 +215,65 @@ public sealed partial class ProjectilePool : Node3D
             Mathf.Sin(polar) * Mathf.Sin(azimuth),
             -Mathf.Cos(polar));
         return tilted.Normalized();
+    }
+
+    /// <summary>Instances the rocket's <c>FLYOUT</c> <c>MODEL</c> body (its <c>.flt</c> prototype root
+    /// in the chapter gamez) as a live, collision-exempt mesh under <see cref="_flyoutModels"/>. The
+    /// resolved prototype node is cached per model name. Null when no world scene is bound (viewer /
+    /// headless dump) or the chapter lacks the root — the caller falls back to the exhaust streak.</summary>
+    private Node3D? BuildFlyoutModel(WeaponDef weapon)
+    {
+        if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
+            return null;
+        if (!_flyoutNodes.TryGetValue(modelName, out var node))
+        {
+            node = _flyoutGamez.FindByName(modelName);
+            _flyoutNodes[modelName] = node;
+            if (node == null)
+                GD.Print($"flyout model '{modelName}' ({weapon.Id}) absent from this chapter gamez — rocket flies streak-only");
+        }
+        if (node == null)
+            return null;
+        // Collision-exempt: rockets carry no collider (they raycast for their own hits and must not
+        // obstruct one another or the world hit-test); the world builder would otherwise attach one.
+        var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        if (inst != null)
+            _flyoutModels.AddChild(inst);
+        // Verification breadcrumb (once per model name): confirms the named prototype resolved and
+        // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
+        if (inst != null && _flyoutLogged.Add(modelName))
+            GD.Print($"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
+        return inst;
+    }
+
+    private readonly HashSet<string> _flyoutLogged = new();
+    private bool _flyoutPoseLogged;
+
+    private static int CountMeshes(Node n)
+    {
+        int c = n is MeshInstance3D ? 1 : 0;
+        foreach (var child in n.GetChildren())
+            c += CountMeshes(child);
+        return c;
+    }
+
+    // The flyout body's world pose: its geometry is authored nose-along-(-Z) (uniform across all 15
+    // ROCKET models), so LookingAt(velDir) — which aims local -Z down the argument — points the nose
+    // along the round's flight direction. `pos` is the tail (the model origin sits at the exhaust end).
+    private static Transform3D FlyoutPose(Vector3 pos, Vector3 vel)
+    {
+        var dir = vel.LengthSquared() > 1e-6f ? vel.Normalized() : Vector3.Forward;
+        var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
+        return new Transform3D(Basis.LookingAt(dir, up), pos);
+    }
+
+    private static void KillModel(ref Proj p)
+    {
+        if (p.Model != null)
+        {
+            p.Model.QueueFree();
+            p.Model = null;
+        }
     }
 
     public override void _PhysicsProcess(double delta)
@@ -223,13 +306,17 @@ public sealed partial class ProjectilePool : Node3D
                 {
                     Impact(p.Weapon, (Vector3)hit["position"], hit["collider"].Obj as Node);
                     p.Alive = false;
+                    KillModel(ref p);
                     continue;
                 }
             }
             p.Pos = next;
             p.DistLeft -= stepLen;
             if (p.DistLeft <= 0f)
+            {
                 p.Alive = false;   // spent — expires without an impact
+                KillModel(ref p);
+            }
         }
 
         AgeSprites(_muzzle, dt);
@@ -327,6 +414,21 @@ public sealed partial class ProjectilePool : Node3D
             ref var p = ref _proj[i];
             if (!p.Alive)
                 continue;
+            // Carry the rocket body along with the round, nose down its velocity (B14).
+            if (p.Model != null)
+            {
+                p.Model.GlobalTransform = FlyoutPose(p.Pos, p.Vel);
+                // Verification breadcrumb (once): read the APPLIED world basis back — through the
+                // prototype's own parent chain — and confirm the body's nose (local -Z) actually
+                // aligns with the round's flight direction. dot≈1 ⇒ nose-forward.
+                if (!_flyoutPoseLogged)
+                {
+                    _flyoutPoseLogged = true;
+                    var nose = -p.Model.GlobalTransform.Basis.Z.Normalized();
+                    var vdir = p.Vel.Normalized();
+                    GD.Print($"flyout orientation: nose·velocity = {nose.Dot(vdir):0.000} (1.000 = nose-forward)");
+                }
+            }
             var yAxis = p.Vel.Normalized();
             var toEye = eye is { } e ? (e - p.Pos).Normalized() : Vector3.Up;
             var zAxis = (toEye - yAxis * toEye.Dot(yAxis)); // camera dir, projected ⟂ to the streak
@@ -334,7 +436,11 @@ public sealed partial class ProjectilePool : Node3D
                 zAxis = yAxis.Cross(Vector3.Right);
             zAxis = zAxis.Normalized();
             var xAxis = yAxis.Cross(zAxis).Normalized();
-            float scale = p.Weapon.IsRocket ? RocketStreakScale : 1f;
+            // A rocket with a MODEL body trails a slim exhaust; one without (chapter missing the
+            // prototype) keeps the fatter stand-in streak so it still reads; guns stay at 1×.
+            float scale = p.Model != null ? RocketExhaustScale
+                : p.Weapon.IsRocket ? RocketStreakScale
+                : 1f;
             var basis = new Basis(xAxis * (TracerWidth * scale), yAxis * (TracerLength * scale), zAxis);
             _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (TracerLength * scale * 0.5f)));
             _tracerMm.SetInstanceColor(n, p.Tint);
@@ -364,7 +470,10 @@ public sealed partial class ProjectilePool : Node3D
     public void Clear()
     {
         for (int i = 0; i < _projHigh; i++)
+        {
+            KillModel(ref _proj[i]);
             _proj[i].Alive = false;
+        }
         _projHigh = 0;
         _muzzle.Clear();
         _impact.Clear();
