@@ -159,26 +159,122 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — the data models this fully; the engine does not yet wire it
+## Engine status — Wave C complete: objects damage, die, throw debris, break on contact, and reset
 
-The destructible model is complete in the data, but the remake does not yet drive it, and a
-format reader should know why the branches look dead in the live engine:
+**Wave C (destruction) is complete.** The engine drives the whole destructible model: live per-instance
+HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23), the death
+sequence at zero (C24), the collision that goes with it (C25), the debris **tumble** (C26), the
+**`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). Two pieces are deliberately
+deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and the debris
+**ground-rest** (the `do_intersections`/`bounce_sequence` half — a Layer-1.5 follow-up needing a
+physics ray). A format reader should know the current wiring:
 
-- **The reader front-end drops `DAMAGE_SEQUENCE` silently.** `AnimDefs.cs`'s `ParseDef` switch
-  handles `NAME`/`ANIMATION_NAME`/`ANIMATION_ROOT_NAME`/`ACTIVATION`/`HEALTH`/`RESET_STATE`/
-  `SEQUENCE_DEFINITION` but has **no `DAMAGE_SEQUENCE` case**, so a reader-sourced damage script
-  is discarded. The compiled front-end delivers it fine (as the ordinary `DAMAGE_SEQUENCE`-named
-  sequence above), so a compiled destructible keeps its script.
-- **`HEALTH` is a static per-def value, never a mutable per-instance one.** It is read once and
-  used only in condition evaluation (`AnimRuntime`'s `EvaluateCondition`: `AnimHealth => def.Health
-  <= num`); nothing decrements it. So every `ANIM_HEALTH` branch evaluates against the def's full
-  health and is **uniformly false** — an undamaged object never smokes, which is correct for a
-  world with no weapons, but means the whole progression is inert until per-instance mutable HP
-  exists. (It is also moot for `WeaponHit` defs at world build: they never bootstrap — only
-  `ON_STARTUP` defs do.)
+- **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
+  ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
+  the reader `DAMAGE_SEQUENCE` block into the same-named sequence (it once dropped it silently —
+  its `ParseDef` switch had no case for it). So a reader-only destructible keeps its damage script,
+  identical in shape to its compiled twin.
+- **`HEALTH` is a mutable per-instance value, and the stages escalate against it.** At world build
+  a `DestructibleRegistry` records one live HP pool per destructible node group, keyed by the
+  `(def, anchor)` pair and seeded from the def's authored `HEALTH`; `AnimRuntime`'s
+  `EvaluateCondition` reads that live value (`AnimHealth => registry HP <= num`) instead of the
+  static `def.Health`, and `AnimRuntime.ApplyDamageStages(instance)` runs the cascade so the one
+  effect for the stage the live HP now sits in fires (the water tower: black smoke at ≤36, fire
+  smoke at ≤18; a three-stage object at ≤0.85/≤0.50/≤0.25 of its `HEALTH`). It escalates only when
+  HP crosses a new, deeper threshold, so each stage's effect fires exactly once. Because one def's
+  `NAME` is a wildcard, a single def can bind several node groups; each is an independent pool, so
+  one tower's damage will not break its siblings.
+- **Weapon fire reaches it (C23).** A projectile's raycast reports the struck collider; the runtime
+  walks up from it to the owning destructible (`DestructibleRegistry.Resolve`), spends the weapon's
+  `HEALTH_DAMAGE` — world destructibles carry HEALTH only, so there is **no armour pool** and
+  `ARMOR_DAMAGE` does nothing to them — runs the damage stages, and marks the instance destroyed at
+  zero. HE does 60 health damage and AP 40, so a HEALTH-60 tower dies to **one** HE rocket but
+  **two** AP (AP is the worse building-buster, exactly inverting its anti-armour advantage); a
+  40-cal gun at 4.5 each takes 14.
+  - ⚠ **`Resolve` prefers the compiled def.** A wildcard reader `NAME` can grab an inner node the
+    compiled def does not (the tower's `ap_h2otwr*` also matches `ap_h2otwr.flt`, which sits
+    *between* the collider and the compiled `ap_h2otwr1` root), so the walk-up climbs the whole
+    chain and takes the nearest **compiled** anchor — the def whose `DAMAGE_SEQUENCE` and death
+    sequence are the real ones — not simply the first anchor it meets.
+  - The patrol boat and truck are the only world objects also described by an AI-**vehicle** def
+    (armour+health). M3 sees them only as scenery, so they are damaged through their **anim** def
+    (`patrolboat` HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
+- **The object dies at zero (C24).** When `DamageAt` empties an instance's HP the engine plays the
+  def's death via `Start(def)` — its Initial sequences: the healthy→destroyed `OBJECT_ACTIVE_STATE`
+  swap, the debris sequences and the puffer calls. Those sequences ARE the destruction (the def's
+  `anim_name` is `h2twr_destruction1`/`destroy_mp1zreng11`), and the swap lives in a sequence whose
+  name varies wildly (`destroyit`, `destroy_h2twr`, or unnamed — and never reliably `unknown_seq`)
+  but is always `Initial`, so playing them all reaches every case without keying on a name.
+  - **~90 % author their own swap; the rest don't.** Of the ~100 C1/C5 destructible defs surveyed,
+    ~90 carry the healthy→destroyed swap in a sequence; ~10 (the C1 AA guns) declare the pair but
+    author no swap. For those a generic fallback derives it from the def's own **RESET_STATE** —
+    flipping the healthy/destroyed/dbase roles that base state named — applied only when RESET
+    declares a `destroyed` node, so an object with no destroyed variant (a mission gun that dies by
+    effect alone, `noseballgun`) is left intact rather than blanked. It reads the def's explicit
+    RESET targets, never a world-wide name scan (the `ref_tank_dest` trap below).
+  - `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`), not a
+    child of the anchor — it stages correctly, alongside its `large_fireball`.
+- **The debris tumbles (C26).** The wreck pieces fly: on death the def's `OBJECT_MOTION` events —
+  gravity, a `translation_range` ballistic arc, a `forward_rotation` tumble and a `scale` ramp over a
+  `run_time` — launch the pieces, driven by the generic `MotionRuntime` the M2 crash work already
+  built (this was **not** new code for M3; the ballistic path was already implemented and only needed
+  to be *reached* by a weapon-hit death, which C24's `Start` does). **It fires from the death, not the
+  hit:** the launch is *scheduled* mid-sequence (the water tower's at t=2.2 s), so it only appears
+  once the death animation plays out — a synchronous kill-and-check that never advances the clock sees
+  no debris (which is why C24 wrongly recorded it "stubbed"). Measured by advancing the death: the
+  water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
+  `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
+  `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
+  - **Ground-rest is deferred (Layer-1.5).** `MotionRuntime` integrates the piece freely over its
+    `run_time` then holds its final pose; the `do_intersections` ground-collision and the
+    `bounce_sequence` re-launch (both need a physics ray) are not simulated. The pieces arc and tumble
+    and are then hidden by the sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it.
+- **Death audio (D31) is still stubbed.** The explosion is silent; the one-shot `Sound` events are
+  not yet played.
+- **Flying into a collide-destructible breaks it (C27).** `ACTIVATION` decides what a plane
+  *collision* does. The **44** `WeaponOrCollideHit` objects — the C2 Hollywood facades
+  (`fcpan01`–`39`), the C5 warehouse windows (`w_win01`–`04`, all health 0.01) and the lone
+  substantial `agyrobus` (health 70) — take collision damage and shatter, and the plane flies
+  **through** them (they are set dressing). Every `WeaponHit` object (water towers, gates, signs) is
+  **untouched** by a collision — ram one and it kills the plane and stands (decision 6; the 0.01
+  health is the tell). `FlightController` resolves the struck collider (`Registry.Resolve`) and calls
+  `AnimRuntime.CollideDamageAt`, which gates on `ACTIVATION` and, when it matches, spends a
+  severity-scaled `HEALTH_DAMAGE` (`vn × 8`, so a real flight-speed hit breaks even `agyrobus`) through
+  the same `DamageAt` a weapon uses — so the object's death (swap, debris, collider removal) is
+  identical whether shot or rammed. Verified headlessly: the facades/windows/`agyrobus`
+  `collide[✓ broke]`, the signs and `kkgate` `collide[✗ ignored]`. The **owed playtest** is the
+  in-flight feel — flying through a facade cleanly vs. crashing into a tower.
+- **A destroyed object can be reset to healthy (C28).** `AnimRuntime.ResetDestructible` is the inverse
+  of the death, for the debug tools (F40/F41) and respawn: it `Stop`s the def's live death, restores
+  the authored pose of any node the death physically MOVED (the ballistic debris — `Stop` removes the
+  motion but leaves the piece where it flew), re-applies the def's `RESET_STATE` (healthy visible +
+  collidable, destroyed hidden — undoing both the swap and the `ApplyDeathSwap` fallback), and restores
+  the instance's HP/status/stage. It is idempotent: **destroy → reset → destroy produces identical
+  results.** Verified across C1/C2/C5 — every type (buildings, towers, the AA gun's RESET-derived swap,
+  the doors' rotated leaves, the propane gate, agyrobus, the facades) returns `healthy=✓` and re-kills
+  in the same hit count.
+- **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
+  `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
+  the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows
+  becomes solid, with **no separate collider code**. Measured on the C2 (Hollywood) gates: killing
+  `gate1`/`gate2` (the studio doors) switches **off 1** healthy collider and **on 8** wreck ones;
+  killing `kkgate` switches off 4 and on 12 (it also chains the bridge fires). C1 buildings match
+  (`m_build01`: off 1, on 10). The one caveat is the **owed in-flight playtest**: the destroyed
+  variant re-adds its own colliders, so whether a blown-open door actually leaves a clear passage is
+  the original data's call, not something the swap can decide — fly through one to confirm.
+  - **The propane→door chain works end to end.** Hollywood's `kkgate` is a WeaponHit destructible
+    whose `ANIMATION_ROOT_NAME` is the **`propane` tank** (a collidable, therefore shootable node),
+    HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap plus `CallAnimation`
+    to `genx12`, `tbridg1_fire`/`tbridg2_fire` (the bridges catch fire) and `free_the_goose`. The
+    door itself is not directly damageable; the propane tank is the trigger, exactly as the original
+    plays it. (`sghangar-opensgdoors` is a *different*, HEALTH-0 OnStartup animation, not weapon-
+    destructible.)
+  - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
+    (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
+    census run there reads zero and lies. See `docs/verification.md`.
 
-Engine internals belong in `docs/architecture.md` (see the `AnimRuntime` and `AnimDefs` entries);
-this page states the fact, not the wiring.
+Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs`,
+`DestructibleRegistry` and `Projectile` entries); this page states the fact, not the wiring.
 
 ### ⚠ Trap: never key the healthy↔destroyed convention on a substring
 

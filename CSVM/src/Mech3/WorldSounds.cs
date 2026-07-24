@@ -10,14 +10,13 @@ namespace CSVM.Mech3;
 /// warning beeper. One pooled <see cref="AudioStreamPlayer3D"/> per live emitter, positioned each
 /// frame from the world node the animation attached it to.
 ///
-/// Why this is a separate kind from <c>SOUND</c>: measured across the whole install the two event
-/// kinds are cleanly different animals, and only this one is ambient world audio.
-/// <c>SOUND_NODE</c> uses exactly **10 distinct names**, every one of them present in sounds.json,
-/// every one <c>3D</c>, and 9 of 10 <c>LOOPED</c> with a RANGE — a looping positional emitter bound
-/// to a node. <c>SOUND</c> is 87 names of one-shot, 4,378 of them <c>OnCall</c> and 1,650
-/// <c>WeaponHit</c> (combat/destruction this project has no weapons to trigger), 21 of which are
-/// not plain entries at all but <c>DYNAMIC_WEIGHTS</c> groups needing their own decode. So the
-/// ambient half is small, fully resolvable and audible today; the one-shot half is neither.
+/// Why <c>SOUND_NODE</c> is a separate kind from one-shot <c>SOUND</c>: measured across the whole
+/// install the two event kinds are cleanly different animals, and only this one is ambient world
+/// audio. <c>SOUND_NODE</c> uses exactly **10 distinct names**, every one of them present in
+/// sounds.json, every one <c>3D</c>, and 9 of 10 <c>LOOPED</c> with a RANGE — a looping positional
+/// emitter bound to a node, handled by this pool. <c>SOUND</c> is 87 names of one-shot combat/
+/// destruction audio, 21 of which are <c>DYNAMIC_WEIGHTS</c> groups; it is handled by the
+/// fire-and-forget <see cref="PlayOneShot"/>, which the <c>Sound</c> anim event drives.
 ///
 /// Emitters are pooled here rather than parented into the world subtree they follow, for the same
 /// reason puffers are: <see cref="AnimRuntime"/>'s <c>FindAll</c> memoization is sound only while
@@ -41,10 +40,14 @@ public sealed partial class WorldSounds : Node3D
     /// in a cacheable position at all (<c>snd_fire1</c> ×363, <c>snd_beeper</c> ×16,
     /// <c>snd_firetruck</c>, <c>snd_police</c>, …). Those failed silently. Prewarm decodes every
     /// name the loaded program can ever ask for, while the archive is still open.</para>
+    ///
+    /// <para>The bool is <c>warn</c>: false on the speculative prewarm decode (a per-chapter archive
+    /// legitimately lacks WAVs the program can reference), true at the point of use.</para>
     /// </summary>
-    public Func<SoundDef, AudioStreamWav?>? Loader;
+    public Func<SoundDef, bool, AudioStreamWav?>? Loader;
 
     private readonly Dictionary<string, SoundDef> _defs;
+    private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
     private readonly Dictionary<string, AudioStreamWav?> _streams = new(StringComparer.OrdinalIgnoreCase);
 
     /// <summary>One live emitter: the player plus the world node whose pose it rides.</summary>
@@ -60,7 +63,18 @@ public sealed partial class WorldSounds : Node3D
 
     private readonly List<Emitter> _emitters = new();
 
-    public WorldSounds(Dictionary<string, SoundDef> defs) => _defs = defs;
+    // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list —
+    // swept in Tick once they stop. The grace lets Play() take effect before a not-yet-playing one
+    // is mistaken for finished. FlushOneShots frees them for a harness that pumps no frames.
+    private readonly List<(AudioStreamPlayer3D Player, float Age)> _oneShots = new();
+    private const float OneShotGrace = 0.5f; // s before a non-playing one-shot is swept
+
+    public WorldSounds(Dictionary<string, SoundDef> defs,
+        IReadOnlyDictionary<string, SoundGroup>? groups = null)
+    {
+        _defs = defs;
+        _groups = groups ?? new Dictionary<string, SoundGroup>();
+    }
 
     public int Count => _emitters.Count;
 
@@ -94,14 +108,29 @@ public sealed partial class WorldSounds : Node3D
         int decoded = 0;
         foreach (var name in names)
         {
-            if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
+            // A one-shot SOUND may name a SOUND_GROUPS group rather than a definition; prewarm each
+            // of the group's members, since any of them may be the one Pick returns at runtime.
+            if (_groups.TryGetValue(name, out var group))
             {
+                foreach (var (member, _) in group.Members)
+                {
+                    decoded += PrewarmOne(member);
+                }
                 continue;
             }
-            _streams[name] = Loader(def);
-            decoded++;
+            decoded += PrewarmOne(name);
         }
         return decoded;
+    }
+
+    private int PrewarmOne(string name)
+    {
+        if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
+        {
+            return 0;
+        }
+        _streams[name] = Loader!(def, false);   // quiet: a missing WAV here is reported at the point of use
+        return 1;
     }
 
     /// <summary>
@@ -118,7 +147,7 @@ public sealed partial class WorldSounds : Node3D
         {
             if (Loader == null)
                 return null;
-            stream = Loader(def);
+            stream = Loader(def, true);
             _streams[name] = stream;
         }
         if (stream == null)
@@ -141,6 +170,62 @@ public sealed partial class WorldSounds : Node3D
         return emitter;
     }
 
+    /// <summary>
+    /// Fires a one-shot <c>SOUND</c> at a world point — the fire-and-forget destruction/impact/damage
+    /// audio a sequence emits (<c>air_mixed_exp_sg</c> when a building is struck, <c>snd_gasbagexp1</c>
+    /// on a zeppelin kill). Unlike the pooled ambient emitters this is throwaway: a player that frees
+    /// itself when the clip ends, so nothing has to track or re-assert it.
+    ///
+    /// <para>When <paramref name="name"/> is a <see cref="SoundGroup"/> it resolves to one member by
+    /// weight through <paramref name="rng"/> first (the runtime's seedable RNG, so a lab replay is
+    /// deterministic). Returns the resolved definition name on success, or null when the name is
+    /// unknown to sounds.json / SOUND_GROUPS or its stream was never prewarmed (the archive is shut by
+    /// the time most one-shots fire — see <see cref="Prewarm"/>).</para>
+    /// </summary>
+    public string? PlayOneShot(string name, Vector3 worldPos, Random rng)
+    {
+        string resolved = _groups.TryGetValue(name, out var group)
+            ? group.Pick(rng) ?? name
+            : name;
+        if (!_defs.TryGetValue(resolved, out var def))
+        {
+            return null;
+        }
+        if (!_streams.TryGetValue(resolved, out var stream))
+        {
+            if (Loader == null)
+            {
+                return null;
+            }
+            stream = Loader(def, true);
+            _streams[resolved] = stream;
+        }
+        if (stream == null)
+        {
+            return null;
+        }
+
+        var player = new AudioStreamPlayer3D
+        {
+            Stream = stream,
+            UnitSize = def.RangeMin,
+            MaxDistance = def.RangeMax,
+            VolumeDb = Mathf.LinearToDb(Mathf.Max(def.Volume, 0.0001f)),
+            AttenuationModel = AudioStreamPlayer3D.AttenuationModelEnum.InverseDistance,
+        };
+        AddChild(player);
+        player.GlobalPosition = worldPos;
+        _oneShots.Add((player, 0f));   // swept when it stops (Tick) — no reliance on the Finished signal
+        player.Play();
+        if (Debug)
+        {
+            GD.Print($"sound one-shot: {name}"
+                     + (resolved != name ? $" → {resolved}" : "")
+                     + $" @ {worldPos.Snapped(Vector3.One)}");
+        }
+        return resolved;
+    }
+
     /// <summary>Attaches an emitter to the world node that gives it its position — the reader's
     /// <c>OBJECT_ADD_CHILD</c> or the compiled event's <c>AT_NODE</c>.</summary>
     public void Attach(object handle, Node3D host, Vector3 offset = default)
@@ -160,6 +245,25 @@ public sealed partial class WorldSounds : Node3D
         e.Active = active;
         if (!active && e.Player.Playing)
             e.Player.Stop();
+    }
+
+    /// <summary>Immediately frees every live one-shot player. For the synchronous damage-test
+    /// harness, which pumps no frames — so neither <see cref="Tick"/>'s sweep nor a deferred
+    /// <c>QueueFree</c> ever runs, and the players would otherwise leak at process exit.</summary>
+    public void FlushOneShots()
+    {
+        foreach (var (player, _) in _oneShots)
+        {
+            if (IsInstanceValid(player))
+            {
+                if (player.Playing)
+                {
+                    player.Stop();
+                }
+                player.Free();
+            }
+        }
+        _oneShots.Clear();
     }
 
     /// <summary>
@@ -186,6 +290,25 @@ public sealed partial class WorldSounds : Node3D
 
     public void Tick()
     {
+        // Sweep finished one-shots. A stopped player past the start grace is done; free it.
+        for (int i = _oneShots.Count - 1; i >= 0; i--)
+        {
+            var (player, age) = _oneShots[i];
+            if (!IsInstanceValid(player))
+            {
+                _oneShots.RemoveAt(i);
+                continue;
+            }
+            age += 1f / 60f;
+            if (!player.Playing && age > OneShotGrace)
+            {
+                player.QueueFree();
+                _oneShots.RemoveAt(i);
+                continue;
+            }
+            _oneShots[i] = (player, age);
+        }
+
         for (int i = _emitters.Count - 1; i >= 0; i--)
         {
             var e = _emitters[i];

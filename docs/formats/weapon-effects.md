@@ -44,6 +44,55 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
 distant hit shows nothing.
 
+### Engine wiring (M3, D30)
+
+On a projectile impact `ProjectilePool` plays the struck surface's `IMPACT` sound and, for the
+effect **animation**, splits by what the bound name resolves to:
+
+- **A gamez model prototype** (the name IS a `nodes.json` root) → the model is instanced at the
+  hit point and shown briefly. In practice this is the **water splash**: `splash1.flt` (guns) and
+  `bsplsh.flt` (HE) each instance 2 meshes (`splash1_base`/`splash1_splash`, …) — verified on
+  C1B/C2B.
+- **A reader/control def** (`3040slug_gunhit`, `he_ground_effect`, `large_fireball`) or an
+  **undefined** name (`bld_damage.flt`, …) names no root, so nothing instances and a stand-in
+  spark shows. The authored **puffer/particle** half of these (the `blacksmokepuffer` smoke, the
+  fireball puffs) does **not** render at runtime in flight: the puffer factory + `TextureArchive`
+  are torn down after the world build (`KeepArchivesOpen` is lab-only), so a runtime `PUFFER_STATE`
+  builds nothing. Rendering them needs a dedicated world-effects runtime that keeps textures open
+  and relocates the effect templates onto the hit point — the same machinery the per-player crash
+  runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
+  so the impact-puffer wiring folds into D32.
+
+### Engine wiring (M3, D32) — the world-effects runtime
+
+That dedicated runtime is now built (`PlaneViewer.BuildWorldEffectsRuntime`): one per session, a
+world-scoped `AnimRuntime` bound to the closure of every impact/destruction effect name, over a
+**hidden** stage of their gamez template roots (`gunhit`, `flame_ball_01`, `he_ring`, …), with a
+live puffer factory (the session textures stay open for the crash runtime already).
+`PlayEffectAt(name, worldPoint)` relocates the effect's template root onto the point and starts the
+def — its puffers ride that root and parent at world level, so they render. Two callers:
+
+- **Rocket/ordnance impact** → `ProjectilePool.EffectSink`. The rocket ground/building bursts
+  (`large_fireball`, `he_ground_effect`, `ap_ground_effect`, `flak_effect`, …) render their smoke/
+  fire at the hit. **Guns are excluded** (`!weapon.IsGun`): the `gunhit` `blacksmokepuffer` has no
+  `ACTIVE_STATE 0` stop, so a per-round shared emitter would collapse onto one ever-emitting puff — a
+  documented follow-up, not wired per-round (the names are still bound, testable via `--effects-test`).
+- **Destructible death** → the world runtime's `ExternalEffect` routes a death sequence's
+  `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, `great_balls_of_fire`, …) here.
+
+`--effects-test` is the headless verify: it plays each of the 28 bound names at the camera point and
+reports which resolve and which actually **build a puffer** (`verification.md` rule 76 — a started
+def whose factory/textures are absent renders nothing). Deterministic (seeded, `StopAll` between
+names): **16 build a puffer** — the fireballs (`large_fireball`/`small_fireball`/`large_30sec_fire`/
+`great_balls_of_fire`/`large_black_smokeball`/`big_splash`), the gun `*_gunhit` smoke, and the
+`ap`/`sonic`/`flak`/`scatter`/`torpedo` ground bursts. The rest are light/model/container effects
+(`he_ground_effect`/`flash_effect` are point-light flashes; `biggun_flying_parts` rides unstaged
+`fly_trail*` sub-trails) or `RANDOM_WEIGHT`-gated gun variants. The template **meshes** (the `gunhit`
+debris bits, the `he_ring`/splash models) stay hidden — only the puffers render; the mesh half is a
+follow-up. A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the effect's
+own relocated root (the sentinel = "the node this def was invoked on"; see
+[anim-definitions.md](anim-definitions.md)).
+
 ## Ordnance effect readers
 
 An ordnance weapon splits its effects across a `*_control` reader (the impact/ground burst) plus
@@ -115,5 +164,6 @@ in any of the 8 chapters:
 | `flak_effectplayer` | flak `IMPACT` `player` | IMPACT | a player-surface flak variant (cf. `flak_effect`) |
 
 These are **leads for Wave D**, not confirmed content: each is a named binding whose asset was
-not found in this install's extraction. Confirm each renders (or is inert) when wiring impact
-and muzzle effects.
+not found in this install's extraction. **D30 confirmed all five inert for impacts:** none names
+a gamez model root, so `ProjectilePool` instances nothing for them and the stand-in spark shows
+(no crash) — measured on C4/C5 building hits (`bld_damage.flt`, `large_fireball`).

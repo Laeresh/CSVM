@@ -117,9 +117,135 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   (426.5, 1299), speedometer mirrored ≈ 420 px from the right edge, same height as
   the altimeter. (The two reference screenshots place the cluster slightly
   differently — HUD.png is the canonical one, matching the compass metrics.)
-- Also in the subtree, unwired in the remake: `gungauge`/`missilegauge` (ammo
-  counters via letter/digit texture cycles, `ggindicatorN`/`mgindicatorN` belt
-  lights), `nitrogauge`, the artificial-horizon `horizn` and drum `comp` compass.
+- Also in the subtree, still unwired in the remake: `nitrogauge`, the
+  artificial-horizon `horizn` and drum `comp` compass. The `gungauge` /
+  `missilegauge` are decoded below.
+
+## The weapon gauges (gun / missile)
+
+Decoded 2026-07-24 from the planes.zbd `gungauge` / `missilegauge` subtrees +
+`support\cockpit.gw` (the interp boot script that wires their texture cycles);
+remake implementation extends `src/Flight/GaugeCluster.cs`. Screen placement is
+ours (measured off `OriginalScreenshots/HUD.png`, the Warhawk): the **ROCKETS**
+dial sits one dial-pitch (190.5 px, the alt→damage spacing) above the altimeter,
+the **GUNS** dial the same above the speedometer; both share the other dials'
+radius (≈85 px at 1440p).
+
+Both are circular dials laid out **identically on all 11 flyable models** (unlike
+the damage dial, there is no per-plane parenting quirk — verified across the whole
+roster): the `gungauge`/`missilegauge` node is always mesh-less (`model_index` −1)
+and the labelled face (`gungauge.tif` / `missilegauge.tif`, a 12-gon, priority 1,
+carrying the baked **GUNS** / **ROCKETS** legend) hangs off a generically-named
+child (`g815` / `g819`). The safe reader rule is the damage dial's:
+**anything under the dial that is not a recognised functional child is face.**
+
+The functional children, and how `cockpit.gw` drives each:
+
+- **`4char_ammo`** — a row of **4 digit quads** (priority 7, lower centre). Each
+  carries `CycleTextureSet` 11 mapping `zero.tif`…`nine.tif` then `SPACE.tif`
+  (frames 0–10); the engine sets each cell's frame to spell the count. The remake
+  shows it **right-aligned, space-padded**. **Guns: the *selected* gun group's own
+  rounds** (per group — the Balmoral's two .50s count independently). **Rockets:
+  the *per-pylon* rounds of the pylon the arrow points at (the next to fire) — NOT
+  the sum across pylons** (a full HE pylon reads `3`; the original's Warhawk shows
+  `BOOM 3`, not `24`).
+- **`6char_type`** — a row of **6 glyph quads** (priority 7, upper centre).
+  `CycleTextureSet` 37 maps `A.tif`…`Z.tif`, then `zero.tif`…`nine.tif`, then
+  `SPACE.tif`. Shows the selected weapon's short **`NAME`** from `weapons.json`,
+  upper-cased and left-aligned (`30slug`→`30SLUG`, `BOOM`, `SONIC`).
+- **`ggindicator0..3`** (gun, 4) / **`mgindicator0..7`** (missile, 8) — the **belt
+  lights**, one per gun slot / pylon, arranged around the ring: index 0 at the top
+  (90°) and running **counter-clockwise** (gun 90° apart, missile 45°). Each is a
+  `Xhilite.tif` bezel bar + a `Xindicator.tif` light, both carrying a **3-frame**
+  cycle green→yellow→red (`CycleTextureSet` 3). The remake lights only the slots the
+  airframe actually has (turret gun groups are inert, so a 2-gun plane lights 2) and
+  **steps the colour by that slot's remaining fraction** — green healthy, yellow low,
+  red empty; a per-pylon HE rocket (3 rounds) steps green(3/2)→yellow(1)→red(0). The
+  green/yellow/red **thresholds are a TUNE** pending an original playtest.
+- **`ggarrow`/`mgarrow`** — a `smallneedle.tif` pointer (priority 49, rest points
+  up at slot 0) rotated about the dial centre to the selected slot: the gun arrow to
+  the **selected gun group**, the missile arrow to the **next pylon that will fire**.
+
+⚠ The digit/letter/indicator textures (`zero.tif`…, `A.tif`…, `greenindicator.tif`,
+`greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
+**every chapter's `texture.zbd`**, like the other gauge art — not in `rimage.zbd`.
+
+### The text readout (`MSG_HUD_GUNGAUGE` / `MSG_HUD_MISSLES`)
+
+The message table (`extracted/messages.json`) carries a parallel **text** form of the gauges,
+alongside `MSG_HUD_AIRSPEED` / `MSG_HUD_ALTIMETER` / `MSG_HUD_HEALTH` (the "hudSWGauges" software
+gauges):
+
+- **`MSG_HUD_GUNGAUGE`** (id 188) = `"GUNS: %1: %2!d!"`
+- **`MSG_HUD_MISSLES`** (id 189) = `"MISSILES: %1: %2!d!"` (the table's own misspelling)
+
+`%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
+per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
+The remake (E36, `src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
+gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's
+resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and `%2` with the
+selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. It draws in the
+`5pointhud` font at the pane's bottom centre. The placeholder grammar (`%N`, a trailing `!spec!`
+consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
+
+## The HUD bitmap font (`5pointhud`)
+
+Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+
+Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
+archives that carry the compass/gauge art):
+
+- **`5pointhud.png`** — the normal font.
+- **`5pointhudbrite.png`** — the brighter highlight variant, **pixel-for-pixel the same
+  geometry**, differing only in green level.
+
+Both are **463×6**, a proportional **1-bit** font. Glyphs occupy **rows 0–4** (five pixels tall —
+hence "5point"); row 5 is blank spacing. Colours are exactly two green levels plus a dim outline
+on black: normal core **(0,150,0)**, highlight core **(0,255,0)**, both edged with **(0,32,0)**;
+the background is pure black.
+
+**Character range: printable ASCII `0x20`–`0x7e`.** Space (`0x20`) is a blank leading cell, so the
+atlas holds **94 ink glyphs, one per code `0x21`–`0x7e` laid left-to-right in code order** — i.e.
+`glyph(code)` is the `(code − 0x21)`-th maximal run of inked columns. (The PLAN's shorthand
+"`0123456789:;<=>?@A…z`" understates it: the set begins at `!` and runs through `~`, digits and
+punctuation included.) **Letters are uppercase-only** — the `a`–`z` cells carry the `A`–`Z`
+shapes. No glyph has a fully-blank interior column, so the run-per-code segmentation is exact
+(94 runs = 94 codes, verified); glyph widths vary **1–6 px**, inter-glyph gaps **1–3 px**.
+
+The reader segments the source rects at load (one per inked-column run, assigned from `0x21` up),
+keys the black background to transparent (every non-black texel kept as-is, so a white modulate
+reproduces the original green), and draws each glyph with `DrawTextureRectRegion` under a
+**Nearest** filter (a pixel font). It inserts a **1 px tracking** gap after each glyph and treats
+space / unrepresented codes as a **3 px** advance. Sizing routes through `HudMetrics` like every
+other HUD element, so a splitscreen pane damps the text the same way the dials do.
+
+## The gun aiming reticle (`impact_point.png`)
+
+The aiming pipper is a single image in **`extracted/rimage/`** (the UI set, alongside the
+`5pointhud` font — *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
+sprite. It is a filled warm-white disc — core `(255,247,222)`, ring `(247,227,181)` — with a
+**cross-shaped transparent notch** cut through the centre (the PLAN's "four tick marks around an
+open centre"). The alpha channel is authored (transparent background, anti-aliased edges), so it
+draws directly with no colour-keying — unlike the black-backed font atlas.
+
+**Behaviour (remake E37, `src/Flight/ImpactReticle.cs`).** The reticle is **not pinned to screen
+centre.** It marks the **projected ballistic impact point of the selected gun group's rounds at a
+fixed convergence distance**, computed with the *same* `VELOCITY`/`ACCELERATION`/`GRAVITY`
+integration `ProjectilePool` fires each round with (dropping only the random `CANNON_SPREAD` — the
+pipper marks the cone centre), from the averaged muzzle pose. Because the rounds inherit the
+plane's velocity — which lags the nose during a hard roll or pull — the reticle **trails the nose**
+in a hard manoeuvre and sits on the rounds in steady flight (measured: `nose→reticle = 0.00°`
+level, up to `~0.77°` below the nose toward the velocity vector at ~15° angle-of-attack; the small
+angle is physics — bullets travel ~900 m/s against a ~55 m/s plane). It is a fixed-screen-size HUD
+element (drawn via `Camera3D.UnprojectPosition` at `_Draw` time so it never lags the chase camera),
+scaled through `HudMetrics` like every other widget, one per player pane.
+
+⚠ **The convergence distance is a TUNE, not in the data.** `weapons.json` carries no
+harmonisation/convergence field (player guns are `RANGE 1000`, `VELOCITY 750–1000`, no
+`ACCELERATION`/`GRAVITY`). The remake uses **250 m** (`GunConvergenceDist` in `FlightController`),
+pending an original-game playtest. Note the on-screen *trailing angle* is set by the
+velocity/bullet-speed ratio and is essentially independent of this distance; the distance mainly
+sets where a toed-in mount would harmonise and the pipper's parallax off screen-centre.
 
 ## Open question
 

@@ -155,8 +155,11 @@ and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
 (NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
+`Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format, E36).
 ⚠ Degrades, never throws: a missing file yields an empty table, and `Get` returns the raw key for
   an unknown entry (visible, not blank) — display strings are cosmetic.
+⚠ `Fill` grammar: `%N` = arg N (missing ⇒ empty), a trailing bang-spec like `!d!` is consumed (the
+  arg is already a formatted string), `%%` = literal `%`. Resolve the key via `Get` first, then fill.
 
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from planes.zbd GameZ: `Extract` walks a `player_*`
@@ -188,6 +191,9 @@ under `raw`). Exists because compiled archives are incomplete: `zepstate`/`start
 ⚠ `AddCallTarget` must NOT touch `data["node"]`/`data["name"]` — for CALL_ANIMATION those hold the CALLED animation's name.
 ⚠ `ReaderCondition` is the ONE place reader↔compiled unit conversions live (PLAYER_RANGE m→m²,
   ANIMATION_LOD HIGH→2); `AddPufferState` bridges the PUFFER_STATE shape differences.
+⚠ `DAMAGE_SEQUENCE` parses into a sequence literally named `DAMAGE_SEQUENCE` (the compiled twin's
+  name) — the magic name `AnimRuntime.ApplyDamageStages` invokes; it is otherwise an ordinary
+  IF/ELSEIF `ANIM_HEALTH` event list (docs/formats/destructibles.md).
 
 ## src/Mech3/AnimProgram.cs
 Merges the compiled + reader front-ends for one mission — load both, prefer compiled on collision,
@@ -211,13 +217,19 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled AudioStreamPlayer3D per live emitter,
-following its host's pose per frame; one-shot `SOUND` is a separate mechanism, NOT landed.
-⚠ Pooled, never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
+following its host's pose per frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
+half (D31): fire-and-forget destruction/impact audio, resolving a `SOUND_GROUPS` name to a member
+first; the `Sound` anim event calls it.
+⚠ Pooled emitters are never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
 ⚠ An emitter is silenced while its host is not visible in tree (the point-light rule) — what makes
   raw emitter counts harmless; a blown-up host pose is silenced + logged (an anim-runtime defect).
-⚠ `Prewarm(AnimProgram.SoundNodeNames())` must run BEFORE the sound archive closes: the Loader
-  dies with the world build and most SOUND_NODE events first fire at runtime; late failures warn
-  via `AnimRuntime.ReportLateSoundFailure` (the bootstrap census is a snapshot and cannot see them).
+⚠ `Prewarm` (SoundNode + one-shot `Sound` names, the latter expanded through `SOUND_GROUPS`) must
+  run BEFORE the sound archive closes: the Loader dies with the world build and most events first
+  fire at runtime; late failures warn via `AnimRuntime.ReportLateSoundFailure`. Prewarm decodes
+  quietly (`Loader(def, warn: false)`) — a chapter archive lacking a referenced WAV is normal.
+⚠ One-shot players are fire-and-forget: registered in `_oneShots`, swept in `Tick` once they stop
+  (no reliance on the `Finished` signal). `FlushOneShots` frees them for the synchronous damage-test
+  harness, which pumps no frames so neither the sweep nor a deferred `QueueFree` ever runs.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
@@ -262,6 +274,76 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
 ⚠ The safety net matches ONLY `destroyed` — a `*_dest` suffix names healthy destructible groups.
 ⚠ Crash runtime: `NameResolveFallback` keeps `_byIndex` EMPTY (non-portable ptrs, colliding index
   spaces); `Targets()` never falls back to names; crash puffers must parent at world level.
+⚠ `ANIM_HEALTH`/`ANIM_HEALTH_RANGE` read LIVE HP via `HealthOf` → `DestructibleRegistry`, not
+  `def.Health`; the registry is built in bootstrap pass 1 beside RESET_STATE. Nothing damages HP
+  in normal play yet, so every instance is at full health and the read is a no-op today.
+⚠ `ApplyDamageStages(instance)` runs a destructible's `DAMAGE_SEQUENCE` against its live HP (C22),
+  firing the ONE stage effect for the crossed threshold. It escalates via `DamageStage` (only
+  when a deeper threshold is crossed) — do NOT lean on `CALL_ANIMATION`'s live guard for "once":
+  a one-shot damage effect (`damage3_mp1zreng11`) finishes and would re-fire without the gate.
+⚠ `DamageAt(struck, healthDamage)` is the weapon-hit entry (C23): resolves the struck collider to
+  its destructible (`Registry.Resolve`), spends `HEALTH_DAMAGE` (world objects have HEALTH only —
+  no armour pool), escalates, and marks it `Destroyed` at zero. Fed by `ProjectilePool.DamageSink`.
+⚠ At zero, `RunDeathSequence` plays the def's death via `Start(def)` — its Initial sequences ARE the
+  destruction (the swap sequence's name varies: `destroyit`/`destroy_h2twr`/unnamed, always Initial,
+  so don't pick by name). `ApplyDeathSwap` is the fallback for the ~10% (AA guns) that declare the
+  healthy/destroyed pair but author no swap: flip the roles the def's own RESET_STATE named, only
+  when RESET declares a `destroyed` node — the def's explicit targets, NOT a world scan (C24).
+⚠ `HandleSound` (D31) fires the one-shot `SOUND` — the death/damage/impact audio a sequence emits
+  (`air_mixed_exp_sg` on a struck building) — as a fire-and-forget `WorldSounds.PlayOneShot` at the
+  event's AT_NODE (`{name,pos}` compiled / flat `at_node`+`translate` reader). NAME is a sound
+  *definition* or a `SOUND_GROUPS` name, never a node. `OneShotSoundsPlayed` counts successful
+  plays for the damage-test (audio can't be screenshot-verified). With this landed the death path
+  has no stubbed event kind left (its swap, debris tumble, effects and now sound all run).
+⚠ World-effects runtime (D32): a second, world-scoped AnimRuntime (like the crash runtime but not
+  per-player) bound to the impact/destruction effect closure over a hidden template stage. `Handles`
+  tests a name; `PlayEffectAt(name, worldPoint)` relocates the template root onto the point and
+  `Start`s the def — the puffers ride the (relocated) root, parented at world level, so they render;
+  `ProjectilePool.EffectSink` calls it on a rocket impact, and the WORLD runtime's `ExternalEffect`
+  routes a death's CALL_ANIMATION of a curated effect here (its own factory is gone post-build).
+  `EffectTtl` bounds a stop-less sustained emitter (`large_30sec_fire`); `SoundHandledElsewhere`
+  makes its SOUND/SOUND_NODE no-ops (D30/D31 own that audio); `StopAll`/`PuffersBuilt` serve the
+  `--effects-test` verify. `SweepEffectTtls` runs each Advance. Guns don't route (documented follow-up).
+⚠ PUFFER_STATE AT_NODE `INPUT_NODE`/`MAIN_ROOT_NODE` resolve to the anchor (`IsSelfNodeRef`, the same
+  rule ConditionNode applies) — so a `PufferState(fire_n_smoke, at=INPUT_NODE)` death fire emits on
+  the effect's own relocated root instead of nowhere. Before D32 it fell to `ResolveOne`→null→no host.
+⚠ Collider removal on death is FREE (C25), not separate code: `SetSubtreeActive` toggles
+  `SetCollidersEnabled` with `Visible`, so the swap that hides `healthy`/shows `destroyed` also
+  un-solids the door/building and solids the wreck. Measured off/on per kill (C2 gates: off 1, on 8).
+  The healthy collider only exists in the FLIGHT build — `Collision` is `_fly` — so a `--freecam`
+  census reads zero; the C25 harness forces it with `|| _damageTest`.
+⚠ Debris tumble (C26) is FREE too: the ballistic `ObjectMotion` half (`MotionRuntime` —
+  translation_range/gravity/forward_rotation/scale over a run_time) was built by the M2 crash work and
+  is REACHED on death because the death's `OBJECT_MOTION` events are `Initial`, so `Start` runs them.
+  The launch is SCHEDULED mid-sequence (water tower at t=2.2 s), so it only fires as the death plays
+  out — a kill-and-check must `Advance` the clock to see it (`BallisticMotionsLaunched` counts them).
+  `do_intersections`/`bounce_sequence` ground-rest stays deferred.
+⚠ `CollideDamageAt(struck, healthDamage)` is the plane-COLLISION entry (C27): only a
+  `WeaponOrCollideHit` destructible (the 44 facades/windows/`agyrobus`) accepts it — gated on
+  `def.Activation`, then applied through `DamageAt` — and returns true so the caller flies the plane
+  THROUGH it; a `WeaponHit` object returns false and stays solid (ram it → crash, decision 6). Wired to
+  `FlightController.CollideDamageSink`.
+⚠ `ResetDestructible(inst)` (C28) is the death's inverse — for the debug tools + respawn: `Stop` the
+  def's death, `RestoreRestPoses` (put the flown debris back — `_rest` holds each moved node's authored
+  pose; `Stop` alone leaves it displaced), re-apply `RESET_STATE` (healthy visible+collidable/destroyed
+  hidden — undoes the swap AND the `ApplyDeathSwap` fallback), then restore HP/Status/DamageStage.
+  Idempotent: destroy→reset→destroy is identical.
+
+## src/Mech3/DestructibleRegistry.cs
+Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
+`HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
+coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`; built during AnimRuntime's
+bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged via `DamageAt`.
+`Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
+⚠ Keyed per `(def, anchor)`, NOT per def — a wildcard NAME binds many node groups, each an
+  independent pool (one tower's damage must not touch its siblings).
+⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
+  the compiler's per-instance defs both bind the same nodes, so one object carries several pools
+  (same HEALTH). `_authoritative` keeps ONE per anchor node, compiled-preferred.
+⚠ `Resolve` walks the WHOLE parent chain and takes the nearest COMPILED anchor, not the first hit:
+  a reader wildcard can grab an inner node the compiled def doesn't (tower `ap_h2otwr*` matches
+  `ap_h2otwr.flt`, between the collider and the compiled `ap_h2otwr1` root), and the compiled def
+  owns the real DAMAGE_SEQUENCE + death sequence.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -270,10 +352,83 @@ Godot cannot load the game's WAV format (see `docs/formats/sounds.md`).
 ## src/Mech3/SoundArchive.cs
 WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavFile` into cached
 `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked.
+⚠ `Find(…, warn: false)` is the speculative bulk-decode path (the sound prewarm): a per-chapter
+  archive legitimately lacks WAVs the program can reference, so a "not found" there is quiet — the
+  authoritative "silent for the session" report is at the point of use, not here.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry
-grammar and flag/key meanings are in `docs/formats/sounds.md`.
+grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` parses the sibling
+`SOUND_GROUPS` block into `SoundGroup`s — the weighted random destruction/impact sounds a one-shot
+`SOUND` event resolves through (`air_mixed_exp_sg` → `snd_exp_hit*`).
+⚠ `SoundGroup.Pick(rng)` is weighted-random with a recency scalar: `DYNAMIC_WEIGHTS factor` (0.5)
+  halves the last pick's weight so a variant does not repeat back-to-back. Pass the runtime's
+  seedable `_rng` (a lab replay must be deterministic), not `GD.Randf`.
+⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are skipped;
+  music `*_sg` groups parse but no `SOUND` event names them.
+
+## src/Flight/WeaponDefs.cs
+Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /
+rockets / ordnance) keyed by `wep_*`, plus the `NO_AMMO_WARNING` empty-clip sound. Ballistics,
+damage, allotment, the class flags, the specials, and the `FIRE`/`FLYOUT`/`IMPACT` bindings
+(`IMPACT` keyed by `SurfaceClass`); `DESC` resolved through `Messages`. Modelled on PlaneStats.
+Schema: docs/formats/weapons.md. Verify/inspect with `--dump-weapons`.
+⚠ Flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/…) are `KEY,null` in the data — `ZrdrDict` bare-flag
+  handling makes them present-but-empty, so `Has` is the test; a valued struct (`BEEPER`/`TANGLER`)
+  is `Has`+`Dict`.
+⚠ `IMPACT` is walked as raw class/value pairs, not via `ZrdrDict` — a null class value (`enemy`,
+  "no effect on that surface") must be skipped, not read back as an empty binding.
+⚠ `UnhandledKeys` is a tripwire: empty for this install (asserted by `--dump-weapons`); non-empty
+  means the data grew a key `KnownKeys` hasn't learned — update the reader, don't ignore it.
+
+## src/Flight/Loadout.cs
+Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the file (default
+`res://data/`) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
+each gun slot's markers to live muzzle `Node3D`s and its caliber+ammo to a `WeaponDef` (via
+`GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylon`, yielding `GunGroup`s (independent
+ammo counters from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert, M4).
+Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
+⚠ A missing marker is a LOUD throw naming plane/slot/marker — never a silent skip (a silent one
+  fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
+⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
+  (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
+
+## src/Flight/Projectile.cs
+`ProjectilePool` — the shared-world weapon-fire subsystem (B13/B14/B15/D29/D30/D33): a fixed pool of
+projectiles integrated with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at
+RANGE), plus tracer streaks, muzzle flashes, the per-surface IMPACT sound + effect model, and the
+stand-in spark. `Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a CANNON_SPREAD cone)
+and flashes the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
+⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
+  hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
+⚠ `DamageSink` (wired to `AnimRuntime.DamageAt` in flight, C23) turns a hit into destructible damage:
+  every `Impact` invokes it with the struck collider + `HEALTH_DAMAGE`; a no-op for terrain/water.
+  Null in views with no anim runtime, where impacts stay cosmetic.
+⚠ Surface class comes from the struck collider's `SceneBuilder.SurfaceMeta` (water/buildings),
+  stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
+⚠ IMPACT effect (D30): `SpawnImpactModel` instances the per-surface `ANIMATION`/`SURFACE_ANIMATION`
+  when its name IS a chapter-gamez root (reusing the flyout GameZ/SceneBuilder) — the water splash
+  `splash1.flt`/`bsplsh.flt`; a geometry-less or unresolved name (`3040slug_gunhit`, `bld_damage.flt`,
+  `he_ground_effect`, `large_fireball`) instances nothing and the spark stands in. The puffer half of
+  those named effects can't render in flight (the puffer factory is torn down after the world build —
+  `KeepArchivesOpen` is lab-only), so it is D32's world-effects-runtime work, not the pool's.
+⚠ `EffectSink` (D32) plays the puffer half of a named IMPACT effect through the world-effects runtime
+  (`AnimRuntime.PlayEffectAt`) when the effect is NOT a gamez model — the rocket fireballs/smoke
+  (`large_fireball`, `he_ground_effect`, …). Gated to `!weapon.IsGun`: the `gunhit` smoke has no stop
+  event, so a per-round shared emitter would collapse onto one ever-emitting puff (guns follow-up).
+  The runtime no-ops on a name it doesn't carry, so the spark still stands in for the inert names.
+⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
+  screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
+⚠ Rockets fly the FLYOUT MODEL body (B14): `Spawn` instances the weapon's `.flt` prototype root
+  (`he_rocket` …) from the chapter gamez via the world `SceneBuilder` (collision-exempt, so rounds
+  don't obstruct one another), posed nose-along-(-Z) down the velocity via `Basis.LookingAt`. Only
+  rockets get a mesh (≤1 alive at 1/s); guns stay on the MultiMesh tracer quad (≈10/s, dozens alive).
+  A rocket with a body trails a slim exhaust streak; `RocketStreakScale` is now only the fallback
+  when a chapter lacks the prototype. The FLYOUT `MODEL_ANIMATION` smoke trail is still pending (D-wave).
+⚠ `BuildFlyoutBody(weapon)` (public) is the shared "FLYOUT MODEL name → fresh un-parented instance"
+  path — resolve+cache the prototype, `BuildSubtree` collision-exempt. The private `BuildFlyoutModel`
+  wraps it for the in-flight round (parents under the pool); `PylonOrdnance` (D44) calls it for the
+  mounted body — the round on the wing and the round that flies off it are the same asset.
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
@@ -322,6 +477,39 @@ StuntScoreboard and FlightController's text block all route through it.
   `Scale` returns the plain height ratio unchanged.
 ⚠ Damped sizes only stay on screen if positions anchor to a pane EDGE — see GaugeCluster's
   bottom-anchored dials and FlightController's text block.
+
+## src/Flight/HudFont.cs
+The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` (+ the brighter
+`5pointhudbrite.png` highlight variant): a proportional 5-px font covering printable ASCII
+`0x20`–`0x7e` (layout/colours: docs/formats/hud.md). `Load` returns null (one log line) if the
+atlas is absent; `Draw(CanvasItem,…)`/`Measure` render onto any caller's canvas, sized via
+`HudMetrics`. The E34 foundation E35/E36 draw with.
+⚠ Source rects are auto-segmented at load as maximal inked-column runs assigned from `0x21` up —
+  exact only because no glyph has a blank interior column (94 runs = 94 codes); it warns if the
+  count drifts. Black is keyed transparent, green kept — a white modulate reproduces the original.
+⚠ The drawing control MUST set a Nearest texture filter (it is a pixel font); `HudFontTest.cs` is
+  the `--hud-font-test` proof overlay (added per pane, so 1P vs a 4P pane compare).
+⚠ In flight the font now loads unconditionally (E36 uses it), not only under `--hud-font-test`; that
+  flag now gates only the `HudFontTest` overlay, not the font load.
+
+## src/Flight/WeaponReadout.cs
+The selected-weapon text readout (E36): a bottom-centre two-line `Control` drawing the current gun
+group + rocket type and their live ammo in `HudFont`, from the game's own `MSG_HUD_GUNGAUGE` /
+`MSG_HUD_MISSLES` templates (`Messages.Fill`, never hardcoded). FlightController pushes the state
+each frame (`%1` = gun mount name / rocket display name, `%2` = per-group / per-pylon rounds).
+⚠ A null name hides that line (no guns / no hardpoints / no loadout); bottom-anchored like the dials
+  so a damped splitscreen pane keeps it on screen. This replaced the interim `FlightController.AmmoLine`.
+
+## src/Flight/ImpactReticle.cs
+The gun aiming reticle (E37): a viewport-filling `Control` drawing `impact_point.png` (the game's
+pipper, from `extracted/rimage/`) at a world impact point fed each frame by FlightController,
+projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors MarkerHud, never cached).
+Fixed screen size scaled by `HudMetrics`; one per player pane.
+⚠ NOT pinned to screen centre — the point is FlightController's `BallisticImpactPoint` of the
+  SELECTED gun group at `GunConvergenceDist` (a TUNE, 250 m — no data field), integrated exactly as
+  `ProjectilePool` fires, so it trails the nose in a hard turn and sits on the rounds level.
+⚠ `Active=false` hides it (crashed / no firable gun / behind-camera); `_Draw` early-returns at zero
+  height (can run before the pane is sized).
 
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
@@ -473,6 +661,19 @@ Flashes the wingtip flares for FlashDuration 0.08 s (TUNE — the source flash i
 widened so the blink reads) each WingLights.BlinkPeriod; Reset (respawn) restarts the cycle with
 the flares off. Advanced each _Process, frozen while paused or crashed. --fly only.
 
+## src/Flight/PylonOrdnance.cs
+The rockets mounted under a plane's wings (D44): `Build` instances ONE FLYOUT MODEL body per loaded
+pylon via `ProjectilePool.BuildFlyoutBody` (the SAME gamez prototype the round flies), parents it to
+that pylon marker at identity local transform (nose -Z forward, tail at the mount = the launch pose),
+and `Update` shows/hides each per its live `Hardpoint.Ammo`. FlightController drives `Update` after
+UpdateRockets; the mounted body rides the plane and is freed with it. --fly only.
+⚠ ONE model per pylon, not one per CLUSTER_SIZE round — the original shows a single rocket per
+  hardpoint (D44 trap). Show while `Ammo > 0`, hide at zero; a respawn refill re-shows next frame.
+⚠ No double-up with airframe geometry: NO plane model carries static ordnance mesh — every
+  rocket/missile/bomb/torpedo name search is empty and pylon nodes are all `model_index -1` markers.
+⚠ Null when nothing mounts (viewer, or a chapter gamez lacking the prototype root) — the round then
+  flies its streak-only fallback and the wing simply shows no ordnance; never a hard failure.
+
 ## src/Flight/PlaneCollider.cs
 Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
 data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
@@ -491,8 +692,28 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ SurviveHit reads the contact normal at a pose 5 cm past the cast hit — at just-touching the rest
   query finds nothing and the head-on fallback turns shallow grazes into crashes; don't shallow it.
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).
+⚠ C27 collide-through: SweepAirframe/HitWorld now also out the struck `Node`; before the crash/graze
+  decision, `CollideDamageSink` (→ `AnimRuntime.CollideDamageAt`) is offered the hit. If it returns
+  true (a `WeaponOrCollideHit` facade/window/`agyrobus`) the hit is CLEARED — the plane keeps its
+  full-motion pose and flies through, the object taking `vn × CollideDamagePerVn` HEALTH_DAMAGE. Every
+  other object stays solid. Null sink (viewer/static) = every collision solid, as before.
 ⚠ The crash is data-driven: CrashRuntime plays player_crash_dirt (InheritedWorldVelocity = impact
   velocity × WreckMomentum); Respawn resets it and re-homes CrashRestPoses; null runtime = hide only.
+⚠ Firing (needs Loadout + Projectiles): UpdateGuns holds Space/pad-B → the SELECTED group fires at
+  its FIRE_RATE from its own ammo (ONE group at a time, no ALL — user-confirmed); UpdateRockets F/pad-A
+  → ONE rocket per pull from the next armed pylon (round-robin), FIRE_RATE-gated (1 s). `--fire`/
+  `--fire-rockets` auto-hold; `--infinite-ammo`.
+⚠ Two selectors (CycleWeaponSelectors, edge-detected, --no-pads-safe): guns G/dpad-L cycles the
+  firable groups; hardpoints H/dpad-R cycles ordnance types (stock = one, so a no-op). `--gun-select=N`
+  (0-based) seeds the gun group for headless tests; selections survive respawn.
+⚠ `Ordnance?.Update()` runs after UpdateRockets each physics frame — hides a pylon's mounted rocket
+  (PylonOrdnance, D44) the instant its ammo hits zero; RefillWeapons/respawn re-arms and re-shows.
+⚠ UpdateReticle (E37, in `_Process`): `BallisticImpactPoint` marches a round of the SELECTED group's
+  weapon from the averaged muzzle pose through the pool's own VELOCITY/ACCEL/GRAVITY to
+  `GunConvergenceDist` (TUNE 250 m) and feeds the world point to `ImpactReticle` — hidden when crashed
+  or no firable gun. Shares `ProjectilePool.WorldGravity` (now `internal`) so reticle and rounds agree.
+⚠ Rocket pad button A also respawns, but only from the crashed / run-complete screens (early-return
+  states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard
   gates keys to P1; AllowPause is false in splitscreen — the freeze halts the shared world.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
@@ -537,14 +758,22 @@ HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchor
   FlightController's one-line assumption (open question in hud.md).
 
 ## src/Flight/GaugeCluster.cs
-The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, all
-geometry extracted from the plane's own gauges subtree (structure/scales/quirks:
-docs/formats/hud.md); polys draw by data priority, rest rotations ignored; PartFraction binds
-flight or the lab; dial centres are bottom-anchored (FromBottom) so panes keep them on screen.
+The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
+the gun + missile weapon gauges (E35), all geometry extracted from the plane's own gauges subtree
+(structure/scales/quirks: docs/formats/hud.md); polys draw by data priority, rest rotations
+ignored; PartFraction binds flight or the lab; dial centres are bottom-anchored (FromBottom) so
+panes keep them on screen.
 ⚠ Never color-key needle.tif — a black key erases the hub's two black discs; the engine-side slim
   taper is replicated as a load-time alpha mask (Needle*Frac constants, TUNE).
 ⚠ The face textures hold dark UNLIT copies of the STALL / LOW ALT windows — compare pixel values
   (~58,0,0 unlit vs 180+,0,0 lit) before concluding a warning state is wrong; bitten twice.
+⚠ The two weapon gauges (gungauge above the speedometer, missilegauge above the altimeter) render
+  only when FlightController pushes a `WeaponGauge` each frame — null in the labs (no loadout). The
+  4-digit readout is per-GROUP for guns, per-PYLON for rockets (the arrow's pylon), NOT a total;
+  the type row shows the weapon NAME upper-cased; belt lights step green/yellow/red by that slot's
+  fraction (thresholds TUNE). Digit/letter/indicator glyphs are chapter textures, not rimage.
+⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
+  special case, unlike the damage dial) — so "any unrecognised child = face" is the extraction rule.
 
 ## src/UI/LaunchMenu.cs
 The in-game launchscreen CanvasLayer: Mode → Chapter → Plane, input polled every frame through
@@ -689,3 +918,40 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
 ⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
   has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
+⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
+  HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
+  (C23/C24/C25/C26) — resolve✓ walk-up, healthy/destroyed swap, `col[off,on]` (colliders switched by
+  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision = _fly ||
+  _damageTest` so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
+  destructible (doors instant-die, no `DAMAGE_SEQUENCE`), continuous mode only the staged ones.
+⚠ Discrete mode adds the world subtree to the tree (`ManualAdvance` so `_Process` doesn't
+  double-drive) and `Advance`s the death ~3.5 s AFTER the swap/col census: the debris `OBJECT_MOTION`
+  is scheduled (t≈2.2 s), so it needs the clock ticked — and ticking an out-of-tree world spams
+  `!is_inside_tree` (global-transform reads). Swap/col are measured pre-tick (immediate post-death),
+  debris post-tick; being in-tree also makes positions real (no more C23 (0,0,0) trap).
+⚠ `BuildWorldEffectsRuntime` (D32) builds the one world-effects runtime: a hidden `world_effects`
+  stage of the `EffectStageRoots` gamez templates + an `AnimRuntime` bound to `EffectAnimNames`'
+  closure, wired to `ProjectilePool.EffectSink` and the world runtime's `ExternalEffect`. Built only
+  in `--fly` (and `--effects-test`), needs the session textures kept open (they already are, for the
+  crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
+  camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
+  and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
+
+## src/Utils/Config.cs
+Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
+the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's value for a present
+key, else the caller's in-code `const` default — read-through at the point of use, keys
+`moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON and flattened to dot-keys.
+⚠ Absent file / absent key / wrong-typed value all fall through to the passed default, returned
+  **verbatim** — so no config.json ⇒ behaviour byte-identical to the consts (scripted shots stay inert).
+  Malformed JSON / non-object root → one error line, no overrides, never throws.
+⚠ Every getter self-registers `(key, default)`. `--dump-config` emits that registry as a full nested
+  template; `ReportOrphans` warns loudly about file keys no getter queried (the typo detector); a
+  queried-but-missing key on a *loaded* file warns once. `WarmTuningRegistry` (PlaneViewer) steps a
+  throwaway `FlightModel` once so both are complete with **no built world / no game data**.
+⚠ Read-only this pass — nothing writes the file; `res://` was chosen so a writable `user://` layer
+  can later stack UNDER the getters without touching a call site. Loaded once at `_Ready`; live-reload
+  (re-parse on mtime) is deferred but cheap because reads are already read-through.
+⚠ Only `FlightModel` is wired so far (its 15 `TUNE` consts, read into locals at the top of `Step`
+  so every key registers even on a frame that skips the stall/knife branches); other modules still
+  read their consts directly. `config.json` is git-ignored — the consts stay the canonical values.

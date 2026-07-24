@@ -178,6 +178,65 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 70. **To verify one effect, isolate it and remove whatever clears it early.** A fireball's haze
     was read as the (broken) smokeball, and the 1.5 s auto-respawn kept clearing smoke that
     develops at ~2–3 s.
+71. **`--screenshot` needs a real GPU context — never pass `--headless` with it.** `--headless`
+    selects Godot's dummy renderer, whose `texture_2d_get` returns null, so
+    `GetViewport().GetTexture().GetImage()` throws a `NullReferenceException` and writes no file
+    (a loud failure, but the run still exits 0). Screenshots run windowed/offscreen without the
+    flag; `--headless` is only for the windowless dump tools (`--dump-markers`/`--dump-weapons`/
+    `--dump-loadout`) that never read back pixels. ("Headless screenshots" above means the
+    automated `--screenshot` workflow, not the `--headless` flag.)
+    **And its failure is not one clean NRE — it can FLOOD.** A `--headless --screenshot` run has been
+    seen spew `ERROR: Parameter "t" is null` + `NullReferenceException` by the thousand (the dummy
+    renderer failing draw-by-draw), which **poisons any `grep -c ERROR` error census** — the noise
+    swamps and masks real errors. So never trust a headless run's error count when `--screenshot` is
+    present: re-run the exact scenario **without** `--screenshot`, using Godot's `--quit-after <frames>`
+    to auto-terminate, and take THAT run's count as authoritative (a clean feature soak reads 0).
+72. **Colliders exist only in the flight build — a collision census in any non-fly mode reads
+    zero and lies.** `WorldSession.Options.Collision` is `_fly`, so `--freecam`, `--viewer` and
+    `--anim-lab` build the world with NO `StaticBody3D`/`CollisionShape3D` at all. A C25 collider
+    check that ran under `--damage-test` (which is freecam) found "0 world colliders" and nearly
+    concluded destructibles were non-collidable — false: force `Collision` on (the harness now does
+    `|| _damageTest`) and the same world has 1848 colliders, doors and propane tanks among them.
+    Before measuring what is solid, confirm the mode you are in actually built collision.
+73. **A net collider delta hides a real removal — split it by direction.** Killing a destructible
+    both switches its healthy collider OFF and (via the destroyed swap + any chained animation)
+    switches wreck colliders ON. The C2 propane gate nets **+8** enabled, which reads as "death adds
+    collision" — but the door's healthy collider *did* turn off; the death just added more wreck than
+    it removed. Report `off` and `on` counts separately, never the signed sum.
+74. **`--screenshot=` takes an ABSOLUTE path, and the run exits 0 even when the save fails — always
+    confirm the file exists afterward.** The CLI path is handed verbatim to `Image.SavePng`, which
+    does NOT `GlobalizePath` it (unlike the in-game F12 capture), so a relative `--screenshot=.scratch/x.png`
+    resolves against Godot's own dir — not your shell's CWD — and logs only a quiet `ERROR: Can't
+    save PNG at path` on stderr while the process still returns 0. A screenshot loop can "succeed"
+    and write nothing. Pass a fully-qualified path (the scratch dir from the environment, or
+    `$(pwd)/.scratch/x.png`), and `ls`/`Test-Path` the output before trusting it.
+75. **A synchronous "do X, then check" reads only the IMMEDIATE (t=0) effects — SCHEDULED effects
+    need the clock advanced.** An anim death's debris `OBJECT_MOTION` is scheduled mid-sequence (the
+    water tower's at t=2.2 s), so the C24 kill-and-check saw zero debris and wrongly recorded it
+    "stubbed" — it fired fine in real gameplay, where `_Process` ticks the clock to 2.2 s. To observe
+    a scheduled effect headlessly, call `runtime.Advance(dt)` past the schedule. **But advancing an
+    out-of-tree world spams `!is_inside_tree` (global-transform reads return identity):** add the
+    subtree to the tree first and set `ManualAdvance` so `_Process` doesn't also drive it. Measure
+    immediate state (swap, colliders) BEFORE the tick, scheduled state (debris) after.
+76. **A runtime `PUFFER_STATE` renders NOTHING in the flight build — the puffer factory is torn
+    down after the world build.** `WorldSession` nulls `AnimRuntime.PufferFactory` (and disposes the
+    `TextureArchive`) once the bootstrap finishes unless `KeepArchivesOpen` is set, and that flag is
+    **lab-only** (`--anim-lab`). So any effect first reached at runtime in flight — a weapon-impact
+    `gunhit` smoke, a destruction fireball puff — hits `Count("PufferState(after build)")` and draws
+    nothing, even though the def resolves and its instance starts. The only runtime puffers that
+    render in flight are the per-player **crash** runtime's, because `BuildFlightCrashRuntime` builds
+    its own live `PufferFactory` over textures it deliberately keeps open. Do not "verify" a
+    runtime-played puffer effect by confirming its def started — confirm a `Puffer` was *built*
+    (a non-null factory), or you are measuring a no-op. Rendering impact/destruction puffers needs a
+    dedicated world-effects runtime on that crash-runtime pattern (D32), not a call into the world runtime.
+77. **`CANNON_SPREAD` makes weapon-impact tests non-deterministic — a round hitting a given surface
+    is chance, not choice.** Each gun round's direction is jittered by `GD.Randf()` inside the spread
+    cone (unseeded), so whether the stream finds a specific patch (a lake, one building) varies
+    run-to-run even with a fixed `--hold` dive and `--no-pads`. Don't rely on "I hit water once";
+    pick a chapter whose **spawn sits over** the surface you want (measured: C1B/C2B dive → all water,
+    C4 → all buildings) so hits are reliable, and assert on the **once-per-name** effect breadcrumb,
+    not on a fixed impact count (the impact log itself caps at 8, so a later water hit still logs its
+    effect while the surface line is capped out).
 
 ## What this project cannot verify itself
 

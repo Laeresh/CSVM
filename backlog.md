@@ -11,6 +11,13 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Blocked / deferred
 
+- **Pad-read-on-focus gate — user may veto (shipped 2026-07-22 alongside polish-4 item 7's focus
+  mute).** Pads are read only while the window has focus. It is its own commit, so reverting it
+  alone keeps the mute; the cost while active is that an unfocused window ignores the controller.
+  Waiting on the user's verdict from normal play — delete this entry if it feels right, revert
+  that commit if it does not (see `docs/HISTORY.md` 2026-07-22 "Focus mute, and the
+  pad-read-on-focus question closed").
+
 - **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
   so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
@@ -76,10 +83,10 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   |---|---|---|
   | `Callback` | ×8 every chapter | Every dispatch is `def=camera1`, **unanchored**, values 1/2/10/11/14/20/913/914 — engine notifications for the intro **cutscene** camera. This project has no cutscenes, and a callback's whole purpose is to notify mission logic that does not exist here. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
-  | one-shot `Sound` | ×1, C3 only | `def=spew node=snd_waterfall`, **`targets=0`** — it names a sound *definition*, not a node. That waterfall already sounds through `SOUND_NODE`. The family at large is 4,378 `OnCall` + 1,650 `WeaponHit` combat audio (21 names are `DYNAMIC_WEIGHTS` groups needing a further decode), which needs weapons this project does not have. |
+  | one-shot `Sound` | — | **LANDED M3 D31 (2026-07-24).** `AnimRuntime.HandleSound` fires it as a fire-and-forget `WorldSounds.PlayOneShot`; the 4,378 `OnCall` + 1,650 `WeaponHit` combat audio now sound on deaths/hits, and the 21 `DYNAMIC_WEIGHTS` groups are decoded (`SoundDefs.LoadGroups`). No longer in the report. |
 
-  **Pick these up when the thing they depend on exists** — weapons for `SOUND`, a cutscene player
-  for `Callback` — not before. `ObjectCycleTexture` needs neither; it needs a mission that
+  **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
+  before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
   The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, landed 2026-07-22
   (`docs/HISTORY.md`) — which is why it is not in this table.
@@ -302,6 +309,46 @@ unscheduled.
   trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
   inverted flag (`has_interval_value` false, key off `interval_type`).
 
+- **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
+  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; three threads
+  it left open:
+  1. **Gun-impact `gunhit` smoke.** Not wired — `ProjectilePool.EffectSink` is gated `!weapon.IsGun`.
+     The plan assumed the shared per-round emitter would *collapse onto one puff*; the real blocker is
+     that `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE 0` stop**, so one shared emitter
+     (`_puffers` key `(name, host)`, one `gunhit` template root) emits **forever** at the last hit.
+     A guns pass needs a per-hit emitter that copies (not relocates) the template and self-expires —
+     either a pool of `gunhit` roots or a burst-mode puffer with a bounded life.
+  2. **The template MESH half.** The effects stage is hidden, so only the puffers render; the
+     `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their `OBJECT_MOTION`), the `he_ring` ground
+     shockwave, and the `huge_splash_model`/`zep_ng_dstry1.flt` models do **not** show. Rendering them
+     needs the mesh visible-at-the-site without flashing at the stage origin (per-def visibility, or a
+     copied instance per call rather than a hidden shared template).
+  3. **`biggun_flying_parts`** (the zeppelin-destruction container) builds no puffer in `--effects-test`
+     — its `spurtpuffer1..5` ride `fly_trail1..5` sub-trail roots that are gamez nodes but **not in
+     `EffectStageRoots`**. Stage the `fly_trail*`/`*_trails` sub-templates (and check whether it needs
+     the `OPERAND_NODE` call path, not a bare point) if zeppelin kills are ever wanted to smoke.
+  ⚠ **Traps.** The `--effects-test` census is only reproducible **seeded** — several gun `*_gunhit`
+  variants gate their puffer behind `RANDOM_WEIGHT`, so an unseeded run reports a different set each
+  time (a manufactured answer). And these effects **share puffer names** (`trailpuffer2` across
+  `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
+  if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
+
+- **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24).**
+  The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
+  next. Current code (`FlightController.NextArmedHardpoint`, B17) instead spreads pulls **round-robin**
+  across the pylons. On a stock Bloodhawk (3 pylons × 3 HE) the depletion order differs:
+  - **Original:** pylon1 empties on the **3rd** pull, pylon2 on the **6th**, pylon3 on the **9th**.
+  - **Current:** pylon1 on the **7th**, pylon2 on the **8th**, pylon3 on the **9th** (only the last pull
+    agrees). Confirmed by the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
+
+  Fix is a localized change to `NextArmedHardpoint`: keep firing the current pylon (of the selected
+  ordnance type) until it is dry, then advance the cursor — rather than advancing every pull. **D44's
+  pylon-ordnance visual needs no rework** — it already hides each pylon's mounted rocket the instant
+  *that pylon* hits zero, so the wing simply empties one rocket at a time in the correct order once the
+  firing order is fixed. Nuance to settle while there: the H selector currently cycles ordnance *types*;
+  check in the original whether the player also selects an individual hardpoint or the game just drains
+  them in pylon order. Total capacity and the one-rocket-per-pull cadence are unchanged.
+
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
   sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
   mechanism). It appears on **56,750 `CallAnimation` events** across the install and on **no other
@@ -523,10 +570,15 @@ unscheduled.
   Also check whether `t_truck` (`armor 0 / health 40`, no injure_anims), `fueltruck` and
   `armytruck_destruct` show the same duplication.
 
-- **Rocket firing cooldown.** Every rocket entry has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns),
-  i.e. one launch per second. The user confirmed one trigger pull = one rocket from one
-  hardpoint but was **not sure whether a cooldown exists**, so 1.0 is the data's answer rather
-  than an observed fact. A/B against the original.
+- **Rocket firing cooldown (LANDED B17, 2026-07-24 — now a playtest A/B).** Every rocket entry
+  has `FIRE_RATE 1.0` (vs 8.0–10.5 for guns), i.e. one launch per second. The user confirmed one
+  trigger pull = one rocket from one hardpoint but was **not sure whether a cooldown exists**, so
+  B17 uses 1.0 as the data's answer rather than an observed fact (`FlightController.UpdateRockets`).
+  A/B the 1 s gate against the original.
+- **Rocket fire binding (design choice, LANDED B17).** Rockets fire on **F** / gamepad **A** (guns
+  are Space / pad-B), one per pull. Pad-A doubles as respawn but only from the crashed / run-complete
+  screens, which the live-flight firing path never shares — so no collision. If the mapping feels
+  wrong in the cockpit it is a one-line change in `FlightController.RocketFirePressed`.
 
 - ⚠ **Never infer a damage threshold from an animation's name.** `ptboat_50damage` fires at
   **60 %** health remaining and `ptboat_75damage` at **30 %** — the names lag their trigger,
@@ -564,7 +616,7 @@ unscheduled.
 
 The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned constant that is
 plausible but unvalidated against the original — they need the user in the cockpit, not another
-scripted screenshot.
+scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
 - **Compass tape** — north = −Z convention (unverified vs the original; one-line flip in
   `FlightController`'s heading line), plus `TileOverscan` / `RimGain` / the nearest-tick look.
@@ -638,6 +690,11 @@ scripted screenshot.
   videos is unassessed.
 
 ## Owed playtests (need hardware or a human at the controls)
+
+> **The actionable, consolidated checklist is [`playtest.md`](playtest.md)** (root) — what to look
+> for, the launch command, and what each blocks. This section keeps the deep evidence/traps; keep
+> the two in step.
+
 
 - **The M2.5 playtest pass.** Items 6 and 7 of `docs/plans/PLAN-M2.5-prototype.md` — the
   launchscreen join flow and the splitscreen stunt race — rest on construction plus scripted

@@ -6,6 +6,10 @@ evidence and recorded dead ends, and read as history, not live work. **A plan si
 `docs/` rather than in here is live** — CLAUDE.md's "Current status" names the active one
 when more than one is present.
 
+**Starting a new plan?** Run **`/new-plan`** — it scaffolds `docs/PLAN-<name>.md` from
+[`TEMPLATE.md`](TEMPLATE.md), the shared plan skeleton (status banner, ground rules, checklist,
+per-item shape), with the right sections stubbed for you to fill in.
+
 **When a plan completes:** move its file into this directory and append its row here.
 
 | Plan | Scope | Completed |

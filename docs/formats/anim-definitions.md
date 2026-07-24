@@ -460,10 +460,16 @@ Surveyed across the whole install:
 | activation | 951 `OnCall`, **293 `OnStartup`** | 4,378 `OnCall`, 1,650 `WeaponHit`, **8 `OnStartup`** |
 
 So `SOUND_NODE` is a small, fully-resolvable set of looping positional emitters bound to nodes,
-and `SOUND` is one-shot combat/destruction audio — gated behind weapon hits this project has no
-weapons to produce, and 21 of its names are not plain `sounds.json` entries at all but
+and `SOUND` is one-shot combat/destruction audio — gated behind the weapon hits and death
+sequences M3 now produces, and 21 of its names are not plain `sounds.json` entries at all but
 `DYNAMIC_WEIGHTS` groups (`air_mixed_exp_sg` picks one of five `snd_exp_hit*` at random) needing
-their own decode. That is why the ambient half landed and the one-shot half did not.
+their own decode. The ambient half landed first; the one-shot half **landed in M3 D31** —
+`AnimRuntime.HandleSound` fires a fire-and-forget `WorldSounds.PlayOneShot` at the event's
+AT_NODE, resolving a `SOUND_GROUPS` name through the decode now in
+[sounds.md](sounds.md#soundsjson--the-sound_groups-block). The event's NAME is a sound
+*definition* or a group, never a gamez node (the lone reader-scope one-shot names
+`snd_waterfall`, a definition, and resolves zero node targets — see the C3 note in
+`PLAN-anim-rendering-followups.md`).
 
 **The reader spells one emitter as three consecutive events**, which is the whole shape of the
 feature:
@@ -694,6 +700,9 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   **NODE_ACTIVE 0x2000** (node index); `NODE_NEAR_GROUND` compiles to NODE_UNDERCOVER
   (0x10) **with the value negated**; node references know two sentinels — **INPUT_NODE =
   −200** (also in SOUND AT_NODE and PUFFER_STATE AT_NODE) and **MAIN_ROOT_NODE = −100**
+  (both resolve to the def's anchor — `AnimRuntime.IsSelfNodeRef`; a `PUFFER_STATE` with
+  `AT_NODE INPUT_NODE`, e.g. `large_30sec_fire`'s `fire_n_smoke`, thus emits on the effect's own
+  relocated root, which is what puts a called destruction fire at the D32 call/hit site)
   (`OPERAND_NODE ["MAIN_ROOT_NODE"]`, and plain node refs); e27 INVALIDATE_ANIMATION
   carries index 0 or −100; e24 CALL_ANIMATION has stale small `wait_for` values without
   the flag; e10 OBJECT_MOTION adds flag bit 15 = **`GRAVITY [..., DO_INTERSECTIONS]`** and

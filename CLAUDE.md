@@ -9,14 +9,14 @@
 - Format / reverse-engineering knowledge → `docs/formats/`.
 - The extraction pipeline, the launch scripts, or the mech3ax fork → `docs/tooling.md`.
 - A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A dated `HISTORY.md` entry alone buries it — nobody reads a chronological log before starting work. Shape: a bold 1–2-line imperative + at most one sentence of measured evidence — no narrative.
-- Landed work → a dated entry appended to `docs/HISTORY.md` — a few lines: what landed, how verified, outcome — plus refresh "Current status" here (current state + next step only — it is not a log).
+- Landed work → a dated entry appended to `docs/HISTORY.md` — a few lines: what landed, how verified, outcome — plus tick the active plan's checklist and **swap** the "Current status" next-step pointer. The status section must be no longer after the landing edit than before it; the description of what landed lives in those two files, never here.
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
 
 **Budget and shape — this file is an index, not a narrative.** It once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
 
 - **Budget: CLAUDE.md stays under ~35 KB.** If a change would push it over, the content belongs in `docs/` and this file gets a *pointer* instead. Check with `(Get-Item CLAUDE.md).Length` before adding a paragraph, not after.
 - **Shape: a module index entry is ONE line** (~120 chars: path, what the module is, its role). If it needs a second sentence, that sentence is an `docs/architecture.md` edit, not a CLAUDE.md edit. The same goes for any list here that another file already indexes — point at that file rather than restating it.
-- **"Current status" is current state + next step ONLY.** Landed work goes to a dated `docs/HISTORY.md` entry and is **removed** from here, not also summarised here. A status section that accumulates finished work is the single biggest way this file regrows.
+- **"Current status" holds pointers and item IDs — never a description of landed work, in any tense.** The loophole that keeps regrowing it is present-tense narrative: "C25 removes colliders on death, proven by the col census" reads like current state but is a log line; its home is the plan's item note and `docs/HISTORY.md`, and here the item is an ID at most. The section's fixed shape and permitted edits are spelled out in the section itself; the tripwire is size — over ~15 lines / ~2 KB means history crept back in.
 
 **Standing rule — AI-assistance disclosure (decided 2026-07-21).** Every outward-facing communication about this work discloses that it was done with the help of Claude Code: PR bodies, issues, discussion posts, comments, and any community writeup — not only an initial submission. Commits carry a `Co-Authored-By: Claude` trailer. The user owns all upstream/community communication, so this is a constraint on what gets *drafted* for them, not an instruction to post anything.
 
@@ -72,6 +72,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 
 - `CSVM/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CSVM/shaders/` — shared `.gdshaderinc` blocks `#include`d by the generated shaders (instance-uniform order, sRGB, fog, lights).
+- `CSVM/data/` — **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`).
 - `CrimsonSkiesGame/` — the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/` — extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
@@ -88,6 +89,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `docs/HISTORY.md` — chronological development log: every landed change with its verification details. Append a dated entry when work lands.
 - `docs/plans/` — completed plans, indexed in `plans.md` there; each banner-marked `COMPLETE`, kept for evidence and dead ends, read as history. **A plan sitting in `docs/` rather than in here is live** — see "Current status" for which is active.
 - `backlog.md` — unscheduled work: blocked/deferred items, feature backlog, open fidelity questions, and the TUNE list. Move items into a plan when scheduled; **delete when landed — a `FIXED`/closed entry does not stay here.** Its record belongs in `docs/HISTORY.md`; its traps in `docs/verification.md` or `docs/architecture.md`. **If closing it leaves follow-up work, that follow-up becomes its own new entry with a `⚠ Traps` section** naming the rejected fixes and the misleading instruments — an open thread buried inside a section headed `FIXED` is invisible to anyone scanning for work.
+- `playtest.md` — the consolidated at-the-controls checklist: every owed playtest + TUNE, each with what to look for, the launch command, and what it blocks. Deep evidence stays in `backlog.md`; keep the two in step.
 - `OriginalScreenshots/` — user-captured reference shots + videos from the original game (git-ignored). `docs/` cites these by filename as evidence, so those citations resolve only in the user's local tree — **ask the user if a referenced capture is missing.**
 
 ## Godot project (`CSVM/`)
@@ -123,20 +125,27 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into the same `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs` — merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
 - `src/Mech3/TextureCycler.cs` — runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`.
-- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (waterfalls, train, sirens, engines), one pooled player per host node.
+- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot`, the fire-and-forget one-shot `SOUND` (destruction/impact audio, D31).
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
-- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers.
+- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers; `PlayEffectAt`/`ExternalEffect` drive the D32 world-effects runtime.
+- `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; feeds `ANIM_HEALTH` eval + `DAMAGE_SEQUENCE` stages, `Resolve` maps a struck collider back to its instance (weapon damage, C23).
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
-- `src/Mech3/SoundDefs.cs` — sounds.json SETS parser: `snd_*` → `SoundDef` (wav, flags, range, volume).
+- `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → `SoundGroup` (the `SOUND_GROUPS` weighted-random destruction sounds, `DYNAMIC_WEIGHTS`).
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
+- `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s (ballistics/damage/ammo/flags + FIRE/FLYOUT/IMPACT bindings); inspect with `--dump-weapons`.
+- `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups (independent ammo) + hardpoints, markers→muzzle nodes, turrets inert; inspect with `--dump-loadout`.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics integration, tracers, muzzle flashes, per-surface impact sound + effect model (water splash instanced at the hit, D30) with a spark fallback, hits damage world destructibles (`DamageSink`, C23); guns tracer-quad, rockets fly the FLYOUT MODEL body; a rocket impact plays its named IMPACT puffer effect via `EffectSink` (D32); `Spawn` into it.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen panes.
+- `src/Flight/HudFont.cs` — the game's own HUD bitmap font (`extracted/rimage/5pointhud*.png`): a 5px printable-ASCII atlas, auto-segmented, drawn onto any canvas sized via `HudMetrics`; `--hud-font-test` overlay (`HudFontTest.cs`) proves it.
+- `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo in the HUD font, from `MSG_HUD_GUNGAUGE`/`MSG_HUD_MISSLES` via `Messages.Fill`.
+- `src/Flight/ImpactReticle.cs` — the gun aiming pipper (`impact_point.png`): the selected group's ballistic impact point at a convergence distance, projected each frame; trails the nose, not screen-locked.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -152,12 +161,13 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
+- `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon (same asset the round flies), hidden as that pylon's ammo depletes; `--fly` only.
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's mesh triangles, with no per-plane data.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the viewer's `--damage` slider UI: one HP slider per part driving flight's own DamageVisuals.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
-- `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage), geometry extracted from the plane's `gauges` subtree.
+- `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile gauges), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn.
 - `src/UI/MenuInput.cs` — one launchscreen player's input source: keyboard flag + a `Pads` array, edge/auto-repeat `Poll(dt)`.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
@@ -170,6 +180,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, click-to-follow; stages placeless on-call defs (the crash) in front of the camera.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
+- `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`; `--dump-config` writes a template.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
@@ -196,7 +207,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, R respawn, P pause, T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`. In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay.
+In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause, T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`. In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay.
 
 ### Format gotchas
 
@@ -206,14 +217,12 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 ## Current status / next step
 
-**This section is current state and next step ONLY — it is not a log.** Landed work goes to a dated entry in `docs/HISTORY.md` and is *removed* from here, not also summarised here; ignoring that rule once grew this section to 65 KB.
+**Fixed shape — five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense** — "C25 removes colliders on death" is a log line even though it reads like current state; its home is the plan's item note and `docs/HISTORY.md`, and here the item is an ID at most. If this section is longer after your edit than before it, the edit was wrong. (The weaker version of this rule let the section hit 65 KB once, and 6 KB again by 2026-07-24.)
 
-**Where the project is.** Milestones 1, 2 and 2.5 are delivered; the completed plans that got them there are indexed in [`docs/plans/plans.md`](docs/plans/plans.md).
+**Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**The active plan is [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** (written 2026-07-22) — Milestone 3, weapons and destruction, 44 items in six waves. Wave A's docs are done (A1/A2/A4/A5/A6 → `weapons.md`, `markers.md`, `destructibles.md`, `weapon-effects.md`, `vehicle.md`), and A3 landed (the `--dump-markers` tool + the `--viewer --markers` overlay, key K). Next step: A7 (the stock-loadout data file, commit user-gated), then Wave B. A10 (in-engine firing-placement check) waits on D29.
+**Active plan: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** — Milestone 3, weapons and destruction. **Per-item status (☑/☐, landed notes, decisions, deferrals) is the plan's checklist and item notes — read those, not this section, for what is done and how it was verified.** Position: Wave A complete; Wave B complete (B19/B20 guided flight deferred to M4); Wave C complete; Wave D complete; Wave E complete (E34–E37 done; E38 ⊘ deferred to M4). Waves A–E done; Wave F (debug) remains.
 
-Concretely: the player flies any of 11 aircraft over any of 8 chapter worlds — free flight, stunt mode, or 2–4-player splitscreen racing — launched from an in-game menu, in a livery painted the way the original paints it, over a world that is **animated** (trains, doors, road vehicles, propellers, point lights, ambient sound, UV-scrolled water, and per-mission entity setup). Extraction is complete: every ZBD type this install ships round-trips byte-identically in the fork, and `extracted/` is fork-produced.
+**Next: F39** (weapon lab in `--viewer`), then F40–F43 (freecam raycast pick + HP control, destructible list overlay, `--destroy=` trigger, `--infinite-ammo`/`--loadout=` overrides). Wave F is the last M3 wave.
 
-**One landed change is user-vetoable:** the pad-read-on-focus gate shipped as its own commit alongside polish-4 item 7's focus mute; reverting it alone leaves the mute intact, and it will stop a pad working while the window is unfocused. **The owed playtests remain the real blocker on calling Milestone 2.5 done**, and they need the user at the controls — several need **two controllers**, which this machine does not have. Both lists live in `backlog.md`: "Owed playtests" and "TUNE constants pending playtest".
-
-**Everything else unscheduled** — known issues (diagnosed there so they are not re-chased), blocked/deferred items, the feature backlog, open original-game fidelity questions, and the TUNE list — is in `backlog.md`. Keep it updated as items land or get scheduled.
+**Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

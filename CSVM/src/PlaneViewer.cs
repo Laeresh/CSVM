@@ -2,9 +2,11 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM;
@@ -41,6 +43,29 @@ namespace CSVM;
 ///                                (name, plane-frame position, gun pair, shared mounts) to
 ///                                stdout and ./.scratch/markers_dump.txt, then quit; the
 ///                                optional value filters to one plane (model or display name)
+///   --dump-weapons[=id|name]     print the typed weapons.json table (WeaponDefs) — one block
+///                                per def with ballistics, flags and FIRE/FLYOUT/IMPACT bindings
+///                                — to stdout and ./.scratch/weapons_dump.txt, then quit; a clean
+///                                run reports no unhandled keys. Optional filter by id / NAME
+///   --dump-loadout[=plane]       build each plane and bind its stock loadout (Loadout), printing
+///                                the resolved gun groups + hardpoints to ./.scratch/loadout_dump.txt,
+///                                then quit; a missing marker prints a loud error. Filter by plane
+///   --loadout=<def>              bind this loadout def instead of the plane's own (testing override;
+///                                exercises the missing-marker error with --dump-loadout; in flight
+///                                the flown plane carries that loadout)
+///   --fire                       hold the gun trigger down (scripted firing runs); in interactive
+///                                flight the gun trigger is Space / gamepad B
+///   --fire-rockets               hold the rocket trigger down (scripted runs); in interactive flight
+///                                the rocket trigger is F / gamepad A (one rocket per pull, 1 s cooldown)
+///   --gun-select=N               initial gun group (0-based; 0 = first group, the default). Only one
+///                                group fires at a time (a testing hook; interactively cycle with G / D-pad Left)
+///   --infinite-ammo              guns/hardpoints fire without depleting (weapon testing)
+///   --damage-test[=name]         build the --chapter world, then drive one destructible's HP from
+///                                full to zero, logging which DAMAGE_SEQUENCE stage effect fires at
+///                                which health, then quit (C22 verify until F40; optional name filter)
+///   --effects-test               build the --chapter world, play every impact/destruction effect
+///                                through the world-effects runtime and report which build a puffer,
+///                                then quit (D32 verify: a started def that renders nothing vs one that does)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -212,6 +237,23 @@ public partial class PlaneViewer : Node3D
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
+    private bool _dumpWeapons;         // --dump-weapons[=wep_NN]: print the typed weapons.json table and quit
+    private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
+    private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
+    private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
+    private bool _dumpConfig;          // --dump-config: write a populated tuning-config template and quit
+    private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
+    private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
+    private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
+    private bool _effectsTest;         // --effects-test: play every impact/destruction effect through the world-effects runtime, report which build a puffer, quit (D32)
+    private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
+    private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
+    private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
+    private bool _autoFireRockets;      // --fire-rockets: hold the rocket trigger (scripted screenshots / soak runs)
+    private int _gunSelect;             // --gun-select=N: initial gun group (0-based; only one fires at a time)
+    private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
+    private bool _hudFontTest;          // --hud-font-test: overlay the E34 bitmap-font sample on each pane
+    private string _hudFontTestText = "GUNS 30: 2000  ROCKETS 06: 9"; // the sample string
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -334,6 +376,10 @@ public partial class PlaneViewer : Node3D
 
     public override void _Ready()
     {
+        // Load the optional tuning-override file first, before any module reads a Config value.
+        // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
+        Config.Load();
+
         var projectDir = ProjectSettings.GlobalizePath("res://");
         _repoRoot = Path.GetFullPath(Path.Combine(projectDir, ".."));
 
@@ -406,6 +452,25 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
+            else if (arg == "--dump-weapons") _dumpWeapons = true;
+            else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
+            else if (arg == "--dump-loadout") _dumpLoadout = true;
+            else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
+            else if (arg == "--dump-config") _dumpConfig = true;
+            // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
+            // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
+            else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg == "--effects-test") { _effectsTest = true; _freecam = true; hasContentArg = true; }
+            else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
+            else if (arg == "--infinite-ammo") _infiniteAmmo = true;
+            else if (arg == "--fire") _autoFire = true;
+            else if (arg == "--fire-rockets") _autoFireRockets = true;
+            else if (arg.StartsWith("--gun-select=")) _gunSelect = int.Parse(arg["--gun-select=".Length..]);
+            else if (arg.StartsWith("--rocket=")) _rocketOverride = arg["--rocket=".Length..];
+            else if (arg == "--hud-font-test") _hudFontTest = true;
+            else if (arg.StartsWith("--hud-font-test=")) { _hudFontTest = true; _hudFontTestText = arg["--hud-font-test=".Length..]; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -515,6 +580,39 @@ public partial class PlaneViewer : Node3D
         if (_dumpMarkers)
         {
             DumpMarkers();
+            GetTree().Quit();
+            return;
+        }
+        // --dump-weapons: the same pure-data pattern for the typed weapons.json reader (B11) —
+        // dump every def and assert no key went unmapped.
+        if (_dumpWeapons)
+        {
+            DumpWeapons();
+            GetTree().Quit();
+            return;
+        }
+        // --dump-loadout: bind each plane's stock loadout to its built model and report the
+        // resolved gun groups + hardpoints (B12) — a missing marker is a loud error here.
+        if (_dumpLoadout)
+        {
+            DumpLoadout();
+            GetTree().Quit();
+            return;
+        }
+
+        // Populate Config's tuning registry by exercising the wired modules once (WarmTuningRegistry),
+        // then flag any config.json key that matched no tunable. Both run on every launch, are
+        // data-free, and print before flight — so a typo'd or misplaced override is caught loudly at
+        // startup rather than silently doing nothing.
+        WarmTuningRegistry();
+        Config.ReportOrphans();
+        // --dump-config: write a fully-populated tuning template (every registered key + its default,
+        // nested by block) to the scratch folder and quit — the copy-and-edit source for config.json.
+        if (_dumpConfig)
+        {
+            string dumpPath = Path.Combine(_repoRoot, ".scratch", "config.dump.json");
+            Config.DumpConfig(dumpPath);
+            GD.Print($"config: wrote {Config.RegisteredCount}-key tuning template to ./.scratch/config.dump.json");
             GetTree().Quit();
             return;
         }
@@ -640,6 +738,9 @@ public partial class PlaneViewer : Node3D
             using var soundsScope = _animLab ? null : sounds;
             labSounds = _animLab ? sounds : null;
             var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
+            // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
+            // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
+            var soundGroups = haveSounds ? SoundDefs.LoadGroups(zrdrPath) : null;
             if (!mute && !haveSounds)
                 GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
             int meshInstances;
@@ -651,6 +752,7 @@ public partial class PlaneViewer : Node3D
             // builds the effect-template roots from the world gamez.
             AnimProgram? crashProgram = null;
             SceneBuilder? worldScene = null;
+            AnimRuntime? worldRuntime = null;   // the world's anim runtime — C23 routes weapon damage through it
             if (_worldMode)
             {
                 // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
@@ -675,7 +777,10 @@ public partial class PlaneViewer : Node3D
                         PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                             ? cam.GlobalPosition
                             : Vector3.Zero,
-                        Collision = _fly,
+                        // The damage-test needs the collidable world (its C25 census measures which
+                        // destructible geometry is solid and whether death removes it) even though it
+                        // runs in the freecam (non-fly) harness.
+                        Collision = _fly || _damageTest,
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
@@ -685,7 +790,7 @@ public partial class PlaneViewer : Node3D
                         AutoStart = !_animLab,
                         RuntimeSeed = _animLab ? _labSeed : null,
                     },
-                    gamez, textures, sounds, soundDefs);
+                    gamez, textures, sounds, soundDefs, soundGroups);
                 _plane = session.Root;
                 var builder = session.Builder;
                 cloudDeck = session.CloudDeck;
@@ -693,6 +798,36 @@ public partial class PlaneViewer : Node3D
                 _worldLights = session.Lights;
                 crashProgram = session.Program;
                 worldScene = session.Builder.Scene;
+                worldRuntime = session.Runtime;
+
+                // --damage-test: with the world built and its AnimRuntime bound, drive one
+                // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
+                // stand-in until F40's interactive HP control lands. The world subtree is added to
+                // the tree (ManualAdvance so _Process doesn't double-drive) because C26 ticks the
+                // death sequences forward, which reads global transforms — invalid on an out-of-tree
+                // node (`!is_inside_tree()` spam). It also makes the C25 collider positions real.
+                if (_damageTest)
+                {
+                    _worldRoot!.AddChild(_plane);
+                    session.Runtime.ManualAdvance = true;
+                    RunDamageTest(session.Runtime);
+                    GetTree().Quit();
+                    return false;
+                }
+
+                // --effects-test: build the world-effects runtime and play every impact/destruction
+                // effect through it, reporting which resolve and which actually build a puffer (rule
+                // 76: a started def that renders nothing vs one that does), then quit — the D32
+                // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
+                // is real; the world plane subtree is added so the templates' global transforms hold.
+                if (_effectsTest && worldScene != null)
+                {
+                    _worldRoot!.AddChild(_plane);
+                    var effects = BuildWorldEffectsRuntime(gamez, worldScene, textures, session.Program);
+                    RunEffectsTest(effects);
+                    GetTree().Quit();
+                    return false;
+                }
 
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
@@ -1009,6 +1144,39 @@ public partial class PlaneViewer : Node3D
                 var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
 
+                // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
+                // once, and ONE shared projectile/effect pool every player's guns fire into
+                // (projectiles live in the shared world, so every splitscreen pane sees them). The
+                // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
+                // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
+                // (`he_rocket` …) from the chapter's own prototype roots (B14).
+                var weaponMessages = Messages.Load(messagesPath);
+                var weaponDefs = WeaponDefs.Load(zrdrPath, weaponMessages);
+                var stockLoadouts = StockLoadouts.Load();
+                var projectiles = new ProjectilePool(textures, sounds, soundDefs,
+                    flyoutGamez: gamez, flyoutScene: worldScene)
+                {
+                    Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
+                    // Route weapon hits to the world's destructibles (C23): the pool's raycast
+                    // reports the struck collider, the runtime resolves it to a destructible and
+                    // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
+                    DamageSink = worldRuntime != null ? worldRuntime.DamageAt : null,
+                };
+                _worldRoot!.AddChild(projectiles);
+
+                // The world-effects runtime (D32): one per session, rendering the impact/destruction
+                // puffer effects the world runtime cannot (its factory is gone after the build). A
+                // rocket impact plays its named effect here; the world runtime routes a death's
+                // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
+                // the templates, so it is built only when the world was.
+                if (worldScene != null)
+                {
+                    var effects = BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
+                    projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
+                    if (worldRuntime != null)
+                        worldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+                }
+
                 // Stunt run: the mission's danger-zone objectives from ia.json
                 // dzones, positions resolved against this chapter world's gamez, display strings
                 // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
@@ -1026,6 +1194,18 @@ public partial class PlaneViewer : Node3D
                     else if (_rigs.Count > 1)
                         race = new StuntRace(); // splitscreen: a race, ranked on the shared board
                 }
+
+                // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
+                // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
+                // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
+                // simply not built.
+                HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
+
+                // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
+                // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
+                // simply omits the reticle.
+                Texture2D? reticleTex = LoadRimageTexture(
+                    Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
@@ -1060,6 +1240,9 @@ public partial class PlaneViewer : Node3D
                         // per-part HP from destroyable_parts — collisions below
                         // the crash threshold damage the struck part instead of crashing
                         Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
+                        // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
+                        // breaks it and passes through; every other collision stays solid.
+                        CollideDamageSink = worldRuntime != null ? worldRuntime.CollideDamageAt : null,
                         // splitscreen: this player's own device(s), own pane for the HUD,
                         // and no debug freeze (it would halt the shared world for everyone)
                         PadDevices = padAssignment?[pi],
@@ -1068,6 +1251,57 @@ public partial class PlaneViewer : Node3D
                         AllowPause = _rigs.Count == 1,
                     };
                     controller.AddChild(planeModel);
+
+                    // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
+                    // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
+                    // Set before the controller enters the tree (its _Ready builds the fire state).
+                    var loadoutDefName = _loadoutOverride ?? stats.DefName;
+                    if (stockLoadouts.For(loadoutDefName) is { } ldef)
+                    {
+                        try
+                        {
+                            controller.Loadout = Loadout.Bind(ldef, planeModel, weaponDefs);
+                            controller.Projectiles = projectiles;
+                            controller.InfiniteAmmo = _infiniteAmmo;
+                            controller.AutoFire = _autoFire;
+                            controller.AutoFireRockets = _autoFireRockets;
+                            controller.InitialGunSelect = _gunSelect;
+                            // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is
+                            // mounted and the ordnance-type list is built (controller._Ready). A
+                            // testing hook — all 11 stock loadouts carry HE (wep_06), so this is the
+                            // only way to prove the mounted model varies by rocket type.
+                            if (_rocketOverride != null)
+                            {
+                                ApplyRocketOverride(controller.Loadout, weaponDefs, _rocketOverride, verbose);
+                            }
+                            // D44: hang the FLYOUT-model ordnance under the pylons — one body per pylon,
+                            // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
+                            controller.Ordnance = PylonOrdnance.Build(controller.Loadout, projectiles);
+                            if (verbose)
+                            {
+                                int groups = 0;
+                                foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
+                                GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
+                                         $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
+                                         $"select guns=G/dpad-L rockets=H/dpad-R" +
+                                         (_gunSelect != 0 ? $" [gun-select={_gunSelect}]" : "") +
+                                         (_infiniteAmmo ? " (infinite ammo)" : ""));
+                                if (controller.Ordnance is { } ord)
+                                {
+                                    GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +
+                                             (_rocketOverride != null ? $" (--rocket={_rocketOverride})" : ""));
+                                }
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            GD.PushWarning($"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
+                        }
+                    }
+                    else if (verbose)
+                    {
+                        GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
+                    }
                     if (verbose && controller.Props != null)
                         GD.Print($"props: {controller.Props.Count} spinning blur nodes");
                     if (verbose && controller.WingLights != null)
@@ -1110,6 +1344,36 @@ public partial class PlaneViewer : Node3D
                                 damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
                         if (verbose)
                             GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
+                    }
+
+                    // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
+                    // and a 4P pane can be compared (--hud-font-test). Set before the controller
+                    // enters the tree — its _Ready adds this to the HUD canvas.
+                    if (hudFont != null && _hudFontTest)
+                    {
+                        controller.FontTest = new HudFontTest(hudFont, _hudFontTestText);
+                        if (verbose)
+                            GD.Print($"hud-font-test: '{_hudFontTestText}' via 5pointhud font");
+                    }
+
+                    // The selected-weapon text readout (E36): the gun group + rocket type and their
+                    // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
+                    // templates. Built whenever the font loaded and the plane carries a loadout.
+                    if (hudFont != null && controller.Loadout != null)
+                    {
+                        controller.WeaponReadout = WeaponReadout.Build(hudFont, weaponMessages);
+                        if (verbose)
+                            GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
+                    }
+
+                    // The gun aiming reticle (E37): the ballistic impact point of the selected gun
+                    // group at the convergence distance, drawn as the game's pipper — visibly
+                    // trailing the nose in a hard turn, on the rounds in steady flight.
+                    if (reticleTex != null && controller.Loadout != null)
+                    {
+                        controller.Reticle = ImpactReticle.Build(reticleTex, rig.Camera);
+                        if (verbose)
+                            GD.Print("gun reticle: ballistic impact point via impact_point.png");
                     }
 
                     // Visible damage: torn-skin panel flips + the low-HP smoke/fire
@@ -1760,6 +2024,41 @@ public partial class PlaneViewer : Node3D
     private static readonly string[] EffectTemplateRoots =
         { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
 
+    // The impact/destruction effect ANIMATION names the world-effects runtime (D32) is bound to —
+    // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
+    // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance; the gun
+    // `*_gunhit` family is bound so a later guns pass can reach it, but is not fired per-round);
+    // destruction names are the ones death sequences CALL_ANIMATION. `random_gun_impact` (root
+    // `player`, a player-plane hit) is excluded — unreachable in M3 and its generic root would
+    // mis-anchor. Verified against extracted/*/cam_anim: every name resolves in all 8 chapters.
+    private static readonly string[] EffectAnimNames =
+    {
+        // rocket / ordnance IMPACT (default + buildings), puffer-bearing and otherwise
+        "large_fireball", "small_fireball", "he_ground_effect", "ap_ground_effect", "flak_effect",
+        "flash_effect", "sonic_ground_effect", "scatter_effect", "torpedo_ground_effect",
+        "rear_flash_effect", "torpedo_water_effect",
+        // gun IMPACT family (bound for a later guns pass; see ProjectilePool.EffectSink)
+        "3040slug_gunhit", "3040ap_gunhit", "3040dum_gunhit", "3040mag_gunhit",
+        "5060slug_gunhit", "5060ap_gunhit", "5060dum_gunhit", "5060mag_gunhit",
+        "70slug_gunhit", "70ap_gunhit", "70dum_gunhit", "70mag_gunhit",
+        // destruction effects death sequences call
+        "large_30sec_fire", "great_balls_of_fire", "large_black_smokeball", "biggun_flying_parts",
+        "big_splash",
+    };
+
+    // The gamez template roots those effects' puffers ride — staged (hidden) under the world-effects
+    // stage so a PlayEffectAt relocates one onto the hit/death point. Union of the anim defs'
+    // anchor roots; all present in every chapter's gamez (checked). The stage is hidden, so the
+    // roots' own meshes (gunhit debris bits, the he_ring/splash models) do not render — the puffers,
+    // parented at world level, do; the mesh half is a documented follow-up.
+    private static readonly string[] EffectStageRoots =
+    {
+        "gunhit", "dum_gunhit", "mag_gunhit", "flame_ball_01", "flame_ball_02", "he_ring",
+        "ap_effect", "flak_control", "flash_control", "sonic_effect", "scatter_trails",
+        "torp_effects", "rear_flash_control", "fire_here", "moving_fire_ball_01",
+        "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model",
+    };
+
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
     // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
     // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
@@ -1772,10 +2071,14 @@ public partial class PlaneViewer : Node3D
     /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
     /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
     /// CALL_ANIMATION relocates them onto the call site. Returns how many built.</summary>
-    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent)
+    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent) =>
+        BuildEffectStage(gamez, scene, parent, EffectTemplateRoots);
+
+    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent,
+        IEnumerable<string> roots)
     {
         int n = 0;
-        foreach (var rootName in EffectTemplateRoots)
+        foreach (var rootName in roots)
         {
             if (gamez.FindByName(rootName) is { } node && scene.BuildSubtree(node) is { } built)
             {
@@ -1785,6 +2088,56 @@ public partial class PlaneViewer : Node3D
             }
         }
         return n;
+    }
+
+    // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
+    // world-effects runtime bounds every PlayEffectAt instance to this many seconds (past the 30 s
+    // fire, so it completes), then tears its puffers down.
+    private const float EffectRuntimeTtl = 32f;
+
+    /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
+    /// per-player crash runtime. It stages the impact/destruction effect templates (hidden) under a
+    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
+    /// roots, keeps a live <c>PufferFactory</c> over the session textures, and binds the closure of
+    /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
+    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a rocket impact,
+    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
+    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the hidden stage does
+    /// not suppress them.</summary>
+    private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
+        TextureArchive textures, AnimProgram worldProgram)
+    {
+        var stage = new Node3D { Name = "world_effects", Visible = false };
+        _worldRoot!.AddChild(stage);
+        int staged = BuildEffectStage(gamez, worldScene, stage, EffectStageRoots);
+        var effects = new AnimRuntime
+        {
+            AutoStart = false,
+            DebugMotions = _debugAnim,
+            PufferParent = _worldRoot,
+            PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+            PlaceCalledTemplates = true,
+            NameResolveFallback = true,
+            EffectTtl = EffectRuntimeTtl,
+            // The impact/death SOUND an effect def carries is already played by the projectile pool
+            // (D30) or the world runtime (D31); this runtime only renders the puffers.
+            SoundHandledElsewhere = true,
+            // The verify census must be reproducible; several gun effects gate their puffer behind
+            // RANDOM_WEIGHT, so an unseeded run reports a different set each time. The game leaves it
+            // unseeded (per-hit variety intact).
+            Seed = _effectsTest ? 20260724 : (int?)null,
+            PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                ? cam.GlobalPosition
+                : Vector3.Zero,
+        };
+        // Bind name resolution to the (hidden) template stage — so the effect names resolve to
+        // these templates and not to the world's or the crash roots' same-named nodes — but parent
+        // the runtime node itself under the visible world root, a plain logic node that self-ticks.
+        effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
+        _worldRoot.AddChild(effects);
+        GD.Print($"world-effects runtime: {staged}/{EffectStageRoots.Length} effect template(s) staged, "
+                 + $"{EffectAnimNames.Length} effect name(s) bound");
+        return effects;
     }
 
     /// <summary>Builds the per-player crash runtime.
@@ -1902,6 +2255,21 @@ public partial class PlaneViewer : Node3D
     /// emitter under <paramref name="parent"/>; null (logged by PufferState.Load) when
     /// the reader or its textures are missing. Shared by the flight assembly and the
     /// static damage lab.</summary>
+    /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
+    /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
+    /// so no colour-keying is needed — unlike the HUD font atlas.</summary>
+    private static Texture2D? LoadRimageTexture(string rimageDir, string file)
+    {
+        var path = Path.Combine(rimageDir, file);
+        if (!File.Exists(path))
+        {
+            GD.Print($"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
+            return null;
+        }
+        var img = Image.LoadFromFile(path);
+        return img != null ? ImageTexture.CreateFromImage(img) : null;
+    }
+
     private static Effects.Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
         string file, string name, float duration = 0.3f)
     {
@@ -2114,6 +2482,25 @@ public partial class PlaneViewer : Node3D
 
     private void FrameCamera() => _orbit.Frame(OrbitCamera.MergedAabb(_plane!), _camPos, _lookAt);
 
+    /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
+    /// no game data, so Config's registry knows the full key set. That lets <see cref="Config.ReportOrphans"/>
+    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template — without a
+    /// built world. Read-through means the reads register on execution, so a single dummy step is the
+    /// cheapest way to run them. Add a line here as each module is wired to Config.</summary>
+    private static void WarmTuningRegistry()
+    {
+        try
+        {
+            var fm = new FlightModel(new PlaneStats());
+            fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
+            fm.Step(default, 1f / 60f);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
+        }
+    }
+
     /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
     /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and
     /// <c>./.scratch/markers_dump.txt</c>, then quit (see <see cref="Mech3.MarkerRig"/>). This is
@@ -2181,6 +2568,635 @@ public partial class PlaneViewer : Node3D
         var outPath = Path.Combine(scratch, "markers_dump.txt");
         File.WriteAllText(outPath, text);
         GD.Print($"markers dump: {done} airframe(s) → ./.scratch/markers_dump.txt");
+    }
+
+    /// <summary>--dump-weapons[=id|name]: load the typed <see cref="Flight.WeaponDefs"/> reader
+    /// (B11) over <c>weapons.json</c>, print one line per def (id, name, key ballistics, flags,
+    /// bindings) to stdout and <c>./.scratch/weapons_dump.txt</c>, and report any unmapped keys,
+    /// then quit. The committed verification instrument the weapons.md table is checked against —
+    /// a clean run (no UNHANDLED lines) is the B11 pass. An optional value filters by id
+    /// (<c>wep_06</c>) or <c>NAME</c> substring, matched case-insensitively.</summary>
+    private void DumpWeapons()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        // Locale-independent output: float.ToString() is culture-sensitive, so without this a
+        // German machine writes "6,25" where an invariant one writes "6.25" — the dump is a
+        // committed verification artifact and must read the same everywhere.
+        System.Threading.Thread.CurrentThread.CurrentCulture = System.Globalization.CultureInfo.InvariantCulture;
+        Flight.WeaponDefs weapons;
+        try
+        {
+            var messages = Messages.Load(_messagesPath);
+            weapons = Flight.WeaponDefs.Load(_zrdrPath, messages);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"--dump-weapons: could not load weapons.json ({_zrdrPath}): {e.Message}");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"# weapons.json — {_zrdrPath}");
+        sb.AppendLine($"# {weapons.All.Count} BALLISTICS entries; empty-clip sound = {weapons.EmptyClipSound}");
+        sb.AppendLine("# See docs/formats/weapons.md.");
+        sb.AppendLine();
+
+        int shown = 0, unhandledTotal = 0;
+        foreach (var w in weapons.All)
+        {
+            if (_dumpWeaponsFilter.Length > 0
+                && !w.Id.Contains(_dumpWeaponsFilter, StringComparison.OrdinalIgnoreCase)
+                && !w.Name.Contains(_dumpWeaponsFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            shown++;
+            var flags = new List<string>();
+            if (w.IsCannon) { flags.Add("CANNON"); }
+            if (w.IsRocket) { flags.Add("ROCKET"); }
+            if (w.HighExplosive) { flags.Add("HE"); }
+            if (w.Sonic) { flags.Add("SONIC"); }
+            if (w.Flash) { flags.Add("FLASH"); }
+            if (w.BeeperSeeker) { flags.Add("BEEPER_SEEKER"); }
+            if (w.Rear) { flags.Add("REAR"); }
+            if (w.Torpedo) { flags.Add("TORPEDO"); }
+            if (w.Targetable) { flags.Add("TARGETABLE"); }
+            if (w.DamagesZeppelin) { flags.Add("DMG_ZEP"); }
+            if (w.ShakesCamera) { flags.Add("SHAKE"); }
+            if (w.Crater) { flags.Add("CRATER"); }
+            sb.Append($"{w.Id}  {w.Name,-8}  \"{w.DisplayName}\"");
+            sb.Append($"\n    cal={Opt(w.Caliber)} rate={w.FireRate} vel={Opt(w.Velocity)} range={Opt(w.Range)}"
+                      + $" acc={Opt(w.Acceleration)} turn={Opt(w.TurnRate)} spread={Opt(w.CannonSpread)}");
+            sb.Append($"\n    dmg armor={Opt(w.ArmorDamage)} health={Opt(w.HealthDamage)} combined={Opt(w.Damage)}"
+                      + $" | cluster={Opt(w.ClusterSize)} ammo_limit={Opt(w.AmmoLimit)}");
+            sb.Append($"\n    lock={Opt(w.LockOn)} det_dist={Opt(w.DetonationDistance)} proximity={Opt(w.ImpactProximity)}"
+                      + $" priority={Opt(w.Priority)}");
+            sb.Append($"\n    flags: [{string.Join(", ", flags)}]");
+            sb.Append($"\n    fire={FmtEffect(w.Fire)} flyout={FmtFlyout(w.Flyout)} looped={w.LoopedSoundName ?? "-"}");
+            sb.Append("\n    impact:");
+            foreach (var kv in w.Impact)
+            {
+                sb.Append($" {kv.Key}={FmtEffect(kv.Value)}");
+            }
+            if (w.Impact.Count == 0)
+            {
+                sb.Append(" (none)");
+            }
+            if (w.UnhandledKeys.Count > 0)
+            {
+                unhandledTotal += w.UnhandledKeys.Count;
+                sb.Append($"\n    !! UNHANDLED KEYS: {string.Join(", ", w.UnhandledKeys)}");
+            }
+            sb.AppendLine();
+            sb.AppendLine();
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "weapons_dump.txt"), text);
+        GD.Print(unhandledTotal == 0
+            ? $"weapons dump: {shown} entr(y/ies), NO unhandled keys → ./.scratch/weapons_dump.txt"
+            : $"weapons dump: {shown} entr(y/ies), {unhandledTotal} UNHANDLED key(s) — see the !! lines above");
+    }
+
+    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
+    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
+    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
+    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
+    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
+    private static void ApplyRocketOverride(Loadout loadout, WeaponDefs weapons, string wepId, bool verbose)
+    {
+        if (weapons.Get(wepId) is not { } weapon)
+        {
+            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id — hardpoints keep their stock ordnance");
+            return;
+        }
+        int per = weapon.ClusterSize ?? 0;
+        foreach (var hp in loadout.Hardpoints)
+        {
+            hp.Weapon = weapon;
+            hp.Capacity = per;
+            hp.Ammo = per;
+        }
+        if (verbose)
+        {
+            GD.Print($"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), " +
+                     $"flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
+        }
+    }
+
+    /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
+    /// model and bind the stock loadout (<see cref="Flight.Loadout"/>, B12), reporting the resolved
+    /// gun groups (mount, weapon, per-group ammo, muzzle nodes) and hardpoints — or the loud error
+    /// if a marker doesn't resolve. Writes to stdout and <c>./.scratch/loadout_dump.txt</c>, then
+    /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
+    /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
+    /// the missing-marker error fires). An optional value filters by def / model / display.</summary>
+    private void DumpLoadout()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        Flight.StockLoadouts stock;
+        Flight.WeaponDefs weapons;
+        GameZ planesGamez;
+        TextureArchive textures;
+        try
+        {
+            stock = Flight.StockLoadouts.Load();
+            weapons = Flight.WeaponDefs.Load(_zrdrPath, Messages.Load(_messagesPath));
+            planesGamez = GameZ.Load(_planesGamezPath);
+            // Any texture archive resolves the (meshless) markers; the C1 set is the viewer default.
+            textures = new TextureArchive(SessionPaths.ChapterTextures(_dataRoot, "C1"));
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"--dump-loadout: could not load inputs: {e.Message}");
+            return;
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine("# Stock loadouts bound to models — CSVM/data/stock_loadouts.json");
+        if (_loadoutOverride != null)
+        {
+            sb.AppendLine($"# --loadout override: binding every plane to '{_loadoutOverride}'");
+        }
+        sb.AppendLine();
+
+        int ok = 0, failed = 0;
+        using (textures)
+        {
+            foreach (var def in stock.All.Values)
+            {
+                if (_dumpLoadoutFilter.Length > 0
+                    && !def.Def.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase)
+                    && !def.Model.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase)
+                    && !def.Display.Contains(_dumpLoadoutFilter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var bindDef = _loadoutOverride != null ? stock.For(_loadoutOverride) : def;
+                sb.Append($"=== {def.Display} ({def.Def} / {def.Model}) ===");
+                if (bindDef == null)
+                {
+                    sb.AppendLine($"\n  !! --loadout='{_loadoutOverride}' is not a known loadout def");
+                    sb.AppendLine();
+                    failed++;
+                    continue;
+                }
+                Node3D? plane = null;
+                try
+                {
+                    plane = new PlaneBuilder(planesGamez, textures).Build(def.Model);
+                    var loadout = Flight.Loadout.Bind(bindDef, plane, weapons);
+                    sb.Append("\n  guns:");
+                    foreach (var g in loadout.Guns)
+                    {
+                        var names = new List<string>();
+                        foreach (var m in g.Muzzles)
+                        {
+                            names.Add(m.HasMeta(AnimRuntime.NameMeta) ? m.GetMeta(AnimRuntime.NameMeta).AsString() : m.Name);
+                        }
+                        sb.Append($"\n    slot{g.Slot} {g.Mount,-22} {g.Weapon.Id} ({g.Weapon.Name})"
+                                  + $" ammo {g.Ammo}{(g.IsTurret ? "  [TURRET, inert]" : "")}"
+                                  + $"  muzzles: {string.Join(", ", names)}");
+                    }
+                    if (loadout.Hardpoints.Count > 0)
+                    {
+                        var hp = loadout.Hardpoints[0];
+                        int total = 0;
+                        foreach (var h in loadout.Hardpoints) { total += h.Capacity; }
+                        sb.Append($"\n  hardpoints: {loadout.Hardpoints.Count} x {hp.Weapon.Id} ({hp.Weapon.Name}),"
+                                  + $" {hp.Capacity} per pylon = {total} total  (pylon1..pylon{loadout.Hardpoints.Count})");
+                    }
+                    else
+                    {
+                        sb.Append("\n  hardpoints: none");
+                    }
+                    sb.AppendLine();
+                    ok++;
+                }
+                catch (Exception e)
+                {
+                    sb.AppendLine($"\n  !! {e.Message}");
+                    failed++;
+                }
+                finally
+                {
+                    plane?.Free();
+                }
+                sb.AppendLine();
+            }
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "loadout_dump.txt"), text);
+        GD.Print(failed == 0
+            ? $"loadout dump: {ok} plane(s) bound, every marker resolved → ./.scratch/loadout_dump.txt"
+            : $"loadout dump: {ok} ok, {failed} FAILED — see the !! lines above");
+    }
+
+    /// <summary>The C22 verification (until F40's interactive HP control lands): for one live
+    /// destructible instance per distinct DAMAGE_SEQUENCE-carrying def (optionally filtered by
+    /// NAME), sweep its HP from full to zero and record which stage effect the DAMAGE_SEQUENCE
+    /// fires at which health. Subscribing to <see cref="Mech3.AnimRuntime.OnInstanceStarted"/> is
+    /// how each fired CALL_ANIMATION is observed; the runtime's already-live guard means each
+    /// effect starts once, so its first-seen HP is its threshold. Reports to stdout and
+    /// <c>./.scratch/damage_test.txt</c>.</summary>
+    /// <summary>The D32 headless verify: play every impact/destruction effect through the
+    /// world-effects runtime at the camera point and report whether each RESOLVES (its def is bound)
+    /// and whether it BUILDS a puffer (rule 76 — a started def whose factory/textures are missing
+    /// renders nothing). Each effect is stopped before the next so effects sharing a template root
+    /// (the gun family shares <c>gunhit</c>) get an independent count. Reports to stdout and
+    /// <c>./.scratch/effects_test.txt</c>.</summary>
+    private void RunEffectsTest(Mech3.AnimRuntime effects)
+    {
+        // Play each effect at the player point so range-gated ones (gunhit's PLAYER_RANGE) pass.
+        var p = _camera.GlobalPosition;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"effects-test: chapter {_chapter}, {EffectAnimNames.Length} effect name(s), "
+                      + $"point ({p.X:0},{p.Y:0},{p.Z:0})");
+        int resolved = 0, puffered = 0;
+        foreach (var name in EffectAnimNames)
+        {
+            int before = effects.PuffersBuilt;
+            bool matched = effects.PlayEffectAt(name, p);
+            // Fixed ticks so the t=0 PUFFER_STATE emits and any one-CallSequence-deep puffer
+            // (large_black_smokeball's p1trail) reaches its first batch.
+            for (int f = 0; f < 30; f++)
+                effects.Advance(1f / 60f);
+            int built = effects.PuffersBuilt - before;
+            if (!matched)
+                sb.AppendLine($"  {name,-22} UNRESOLVED — no def bound");
+            else if (built > 0)
+            {
+                puffered++;
+                sb.AppendLine($"  {name,-22} puffer[{built}] rendered");
+            }
+            else
+                sb.AppendLine($"  {name,-22} started, built no puffer (light/model/container effect)");
+            if (matched)
+                resolved++;
+            // Full reset before the next name: these effects share puffer names (trailpuffer2) and
+            // template roots, so a lingering instance would let the next effect read as "no puffer".
+            effects.StopAll();
+        }
+        sb.AppendLine($"effects-test: {resolved}/{EffectAnimNames.Length} resolved, "
+                      + $"{puffered} built a puffer, {resolved - puffered} started but built none");
+        if (effects.UnhandledEventCounts.Count > 0)
+        {
+            sb.AppendLine("  reasons a start built no puffer: "
+                          + string.Join(", ", effects.UnhandledEventCounts
+                              .OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}×{kv.Value}")));
+        }
+        GD.Print(sb.ToString());
+        try
+        {
+            Directory.CreateDirectory(".scratch");
+            File.WriteAllText("./.scratch/effects_test.txt", sb.ToString());
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"effects-test: could not write ./.scratch/effects_test.txt — {e.Message}");
+        }
+    }
+
+    private void RunDamageTest(Mech3.AnimRuntime runtime)
+    {
+        static bool HasDamage(Mech3.AnimDefinition d) => d.Sequences.Any(s =>
+            string.Equals(s.Name, "DAMAGE_SEQUENCE", StringComparison.OrdinalIgnoreCase));
+
+        // Colliders (C25): SceneBuilder attaches a StaticBody3D "col" with a CollisionShape3D per
+        // collidable mesh, and SetSubtreeActive toggles that shape's Disabled as it swaps
+        // healthy→destroyed. The swap targets nodes via the compiled symbol table (NodeRefs), which
+        // can resolve to geometry OUTSIDE the small anim anchor — so counting under the anchor misses
+        // it. Census the WHOLE world instead and report the per-kill delta: a quiet harness kills one
+        // object at a time, so (enabled before − after) is exactly the collision it switched off.
+        static HashSet<CollisionShape3D> EnabledColliders(Node root)
+        {
+            var set = new HashSet<CollisionShape3D>();
+            void Walk(Node n)
+            {
+                if (n is CollisionShape3D cs && !cs.Disabled)
+                {
+                    set.Add(cs);
+                }
+                foreach (var c in n.GetChildren())
+                {
+                    Walk(c);
+                }
+            }
+            Walk(root);
+            return set;
+        }
+
+        // The top Node3D above an anchor — the world subtree root, so the census excludes the UI /
+        // Window and only walks placed + partition geometry.
+        static Node3D WorldRoot(Node3D n)
+        {
+            var t = n;
+            while (t.GetParent() is Node3D p)
+            {
+                t = p;
+            }
+            return t;
+        }
+
+        // One representative instance per distinct def — a wildcard NAME binds many identical
+        // towers, and sweeping every one would just repeat the same result and start hundreds of
+        // effects. Capped so a chapter full of destructibles stays a readable report.
+        var chosen = new List<Mech3.DestructibleRegistry.Instance>();
+        var seenDefs = new HashSet<Mech3.AnimDefinition>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            // Continuous-sweep mode (C22) only makes sense for staged DAMAGE_SEQUENCE defs; the
+            // discrete-kill mode (C23/C24/C25) applies to EVERY destructible — the doors and gates
+            // instant-die with no stages, so gating them out would hide exactly C25's cases.
+            if (_damageHd <= 0f && !HasDamage(inst.Def))
+            {
+                continue;
+            }
+            if (_damageTestFilter.Length > 0
+                && !inst.Def.Name.Contains(_damageTestFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (seenDefs.Add(inst.Def))
+            {
+                chosen.Add(inst);
+            }
+            if (chosen.Count >= 16)
+            {
+                break;
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        string mode = _damageHd > 0f ? $"weapon hits, {_damageHd:0.##} HEALTH_DAMAGE each" : "continuous HP sweep";
+        string kind = _damageHd > 0f ? "destructible def(s)" : "DAMAGE_SEQUENCE def(s)";
+        sb.AppendLine($"damage-test: chapter {_chapter}, filter '{_damageTestFilter}', mode = {mode} — "
+            + $"{chosen.Count} {kind} of "
+            + $"{runtime.Destructibles.Count} destructible instance(s)");
+        foreach (var inst in chosen)
+        {
+            // Discrete-hit mode (C23): spend a fixed HEALTH_DAMAGE per hit through DamageAt and
+            // count hits to destruction. DamageAt resolves a struck node to its AUTHORITATIVE
+            // instance, so drive the resolved one (the compiled def wins a shared node) — driving
+            // the picked reader twin would damage the compiled instance and never see HP fall.
+            var target = _damageHd > 0f ? (runtime.Destructibles.Resolve(inst.Anchor) ?? inst) : inst;
+            var fired = new List<(string At, string Effect)>();
+            var started = new List<(string? Anim, Node3D? Anchor)>();
+            int hit = 0;
+            float atHp = target.MaxHealth;
+            void OnStarted(Mech3.AnimDefinition def, Node3D? anchor)
+            {
+                fired.Add((_damageHd > 0f ? $"hit {hit}" : $"HP≤{atHp:0.##}", def.AnimName ?? def.Name));
+                started.Add((def.AnimName, anchor));
+            }
+
+            target.Health = target.MaxHealth;
+            target.Status = Mech3.DestructibleRegistry.State.Healthy;
+            target.DamageStage = 0;
+            var colBefore = _damageHd > 0f ? EnabledColliders(WorldRoot(target.Anchor)) : new HashSet<CollisionShape3D>();
+            int debrisBefore = runtime.BallisticMotionsLaunched;
+            int soundsBefore = runtime.OneShotSoundsPlayed;
+            runtime.OnInstanceStarted += OnStarted;
+            if (_damageHd > 0f)
+            {
+                int cap = (int)(target.MaxHealth / _damageHd) + 4;   // a few past the expected kill
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && hit < cap)
+                {
+                    hit++;
+                    runtime.DamageAt(target.Anchor, _damageHd);
+                }
+            }
+            else
+            {
+                // Fine enough to land on the round-fraction thresholds exactly (0.60/0.30 of HEALTH …).
+                const int steps = 240;
+                for (int i = 0; i <= steps; i++)
+                {
+                    atHp = target.MaxHealth * (1f - i / (float)steps);
+                    target.Health = atHp;
+                    runtime.ApplyDamageStages(target);
+                }
+            }
+            runtime.OnInstanceStarted -= OnStarted;
+
+            // Walk-up resolution check (C23): resolving from a deep descendant of the anchor —
+            // the kind of node a projectile's raycast actually strikes (a collider sits under the
+            // mesh under the anchor) — must land back on this same destructible.
+            Node3D deep = target.Anchor;
+            while (deep.GetChildCount() > 0 && deep.GetChild(0) is Node3D child)
+            {
+                deep = child;
+            }
+            var back = runtime.Destructibles.Resolve(deep);
+            string resolve = back?.Anchor == target.Anchor ? "resolve✓" : $"resolve✗({back?.Def.Name ?? "null"})";
+
+            // Death-swap check (C24): once killed, the healthy subtree should be hidden and the
+            // destroyed subtree shown. Scan the anchor's descendants by cs_name — a test
+            // diagnostic (the mechanism keys off the def's own OBJECT_ACTIVE_STATE, not names).
+            string swap = "";
+            if (_damageHd > 0f && target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
+                void Walk(Node3D n)
+                {
+                    string cs = n.HasMeta(Mech3.AnimRuntime.NameMeta)
+                        ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                        : n.Name.ToString();
+                    if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase)) { hAll++; if (n.Visible) hVis++; }
+                    if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase)) { dAll++; if (n.Visible) dVis++; }
+                    foreach (var c in n.GetChildren())
+                    {
+                        if (c is Node3D c3)
+                        {
+                            Walk(c3);
+                        }
+                    }
+                }
+                Walk(target.Anchor);
+                if (hAll > 0 || dAll > 0)
+                {
+                    swap = $"swap[healthy {hVis}/{hAll} shown, destroyed {dVis}/{dAll} shown]; ";
+                }
+                // Collider census (C25), split by direction: how many colliders this kill switched
+                // OFF (the healthy door/building collision that stops blocking flight) vs. ON (the
+                // wreck/debris the death — and any chained animation — brings solid). A net count
+                // hides the door removal when the death also spawns a solid wreck.
+                var colAfter = EnabledColliders(WorldRoot(target.Anchor));
+                int off = colBefore.Count(cs => !colAfter.Contains(cs));
+                int on = colAfter.Count(cs => !colBefore.Contains(cs));
+                swap += $"col[off {off}, on {on}]; ";
+                // Debris tumble (C26): the death's ballistic OBJECT_MOTION bodies — the wreck pieces
+                // that arc out under gravity and tumble (translation_range/forward_rotation). They are
+                // SCHEDULED (the water tower's at t=2.2 s), so advance the death forward past the
+                // schedule to let them launch — done AFTER swap/col so those stay the immediate
+                // post-death state (pre-tick). The world is in the tree (see the --damage-test hook,
+                // ManualAdvance) so the ticked global-transform reads are valid.
+                for (int i = 0; i < 7; i++)
+                {
+                    runtime.Advance(0.5f);   // 3.5 s — past the ~2.2 s schedule, into the tumble
+                }
+                int debris = runtime.BallisticMotionsLaunched - debrisBefore;
+                swap += $"debris[{debris} launched]; ";
+                // One-shot SOUND (D31): the death/damage sequence's explosion audio (air_mixed_exp_sg
+                // and the like). Audio cannot be screenshot-verified, so a nonzero count across the
+                // kill+advance is the headless proof the destruction sounded. Zero when run --mute
+                // (no audio session) or on a def whose death authors no Sound event.
+                int snd = runtime.OneShotSoundsPlayed - soundsBefore;
+                swap += $"snd[{snd} played]; ";
+            }
+            // Stop the effects this run started, AFTER the C26 tick so the debris actually launches
+            // first: reader-wildcard and compiled per-instance defs bind the SAME tower nodes (C21),
+            // so a leftover live effect would make the twin's identical CALL_ANIMATION a no-op and
+            // read as "no stage effect fired".
+            foreach (var (anim, anchor) in started)
+            {
+                runtime.Stop(anim, anchor);
+            }
+
+            // C27 collide-gate probe: reset and apply a plane COLLISION via CollideDamageAt. Only a
+            // WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus) accepts it and breaks;
+            // a WeaponHit object (tower, gate) ignores the collision and stands (decision 6).
+            string collide = "";
+            if (_damageHd > 0f)
+            {
+                target.Health = target.MaxHealth;
+                target.Status = Mech3.DestructibleRegistry.State.Healthy;
+                target.DamageStage = 0;
+                bool accepted = runtime.CollideDamageAt(target.Anchor, target.MaxHealth + 1f);
+                bool broke = target.Status == Mech3.DestructibleRegistry.State.Destroyed;
+                collide = $"collide[{(accepted ? (broke ? "✓ broke" : "✓ hit, survived") : "✗ ignored")}, {target.Def.Activation}]; ";
+            }
+
+            // C28 reset/restore check: from a destroyed state, ResetDestructible returns the object to
+            // healthy (full HP, healthy subtree visible, destroyed hidden, debris flown home), and an
+            // identical second kill takes the same hits — proving destroy→reset→destroy is idempotent.
+            string reset = "";
+            if (_damageHd > 0f)
+            {
+                int cap2 = (int)(target.MaxHealth / _damageHd) + 4;
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && cap2-- > 0)
+                {
+                    runtime.DamageAt(target.Anchor, _damageHd);   // ensure dead before resetting
+                }
+                runtime.ResetDestructible(target);
+                bool backHp = target.Status == Mech3.DestructibleRegistry.State.Healthy
+                    && target.Health >= target.MaxHealth - 1e-3f;
+                int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
+                void Scan(Node3D n)
+                {
+                    string cs = n.HasMeta(Mech3.AnimRuntime.NameMeta)
+                        ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString() : n.Name.ToString();
+                    if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase)) { hAll++; if (n.Visible) { hVis++; } }
+                    if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase)) { dAll++; if (n.Visible) { dVis++; } }
+                    foreach (var c in n.GetChildren())
+                    {
+                        if (c is Node3D c3) { Scan(c3); }
+                    }
+                }
+                Scan(target.Anchor);
+                bool backVis = hAll == 0 || (hVis == hAll && dVis == 0);   // healthy shown, destroyed hidden
+                int rekap = (int)(target.MaxHealth / _damageHd) + 4;
+                int hits2 = 0;
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && hits2 < rekap)
+                {
+                    hits2++;
+                    runtime.DamageAt(target.Anchor, _damageHd);
+                }
+                reset = $"reset[healthy={(backHp && backVis ? "✓" : "✗")} (h{hVis}/{hAll},d{dVis}/{dAll}), "
+                    + $"rekill {hits2}h {(hits2 == hit ? "✓" : $"✗ vs {hit}")}]; ";
+            }
+
+            string src = target.Def.Archive != null ? "compiled" : "reader";
+            string stages = fired.Count == 0
+                ? "no stage effect fired"
+                : string.Join(", ", fired.Select(f => $"{f.At} → {f.Effect}"));
+            string outcome = _damageHd > 0f
+                ? (target.Status == Mech3.DestructibleRegistry.State.Destroyed
+                    ? $"DESTROYED in {hit} hit(s); {swap}{collide}{reset}"
+                    : $"SURVIVED {hit} hit(s); {collide}{reset}")
+                : "";
+            sb.AppendLine($"  {target.Def.Name} (HEALTH {target.MaxHealth:0.##}, {src}) {resolve}: {outcome}{stages}");
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "damage_test.txt"), text);
+
+        // C25 diagnostic: the world's collidable-geometry inventory, so we can confirm destructible
+        // roles (healthy / destroyed / door*) are among the solid geometry — collision is built here
+        // only because --damage-test forces it (--freecam alone builds none). Counts per owning-mesh
+        // cs_name (a per-name census is enough to see what is solid; positions are not needed).
+        if (chosen.Count > 0)
+        {
+            var byName = new SortedDictionary<string, int>();
+            int cols = 0;
+            void Walk(Node n, string parentName)
+            {
+                string name = n is Node3D n3 && n3.HasMeta(Mech3.AnimRuntime.NameMeta)
+                    ? n3.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                    : n.Name.ToString();
+                if (n is StaticBody3D body && body.Name.ToString() == "col")
+                {
+                    cols++;
+                    byName.TryGetValue(parentName, out int c);
+                    byName[parentName] = c + 1;
+                }
+                foreach (var c in n.GetChildren())
+                {
+                    Walk(c, name);
+                }
+            }
+            Walk(WorldRoot(chosen[0].Anchor), "");
+            var inv = new System.Text.StringBuilder($"{cols} collidable meshes, by owner cs_name:\n");
+            foreach (var (nm, c) in byName)
+            {
+                inv.AppendLine($"  {c,4}  {nm}");
+            }
+            File.WriteAllText(Path.Combine(scratch, "world_colliders.txt"), inv.ToString());
+            GD.Print($"damage-test: {cols} collidable meshes → ./.scratch/world_colliders.txt");
+        }
+        GD.Print($"damage-test: {chosen.Count} def(s) swept → ./.scratch/damage_test.txt");
+        // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in WorldSounds.Tick
+        // — but this harness pumps no frames, so free them here or they leak at the (imminent) quit.
+        runtime.Sounds?.FlushOneShots();
+    }
+
+    private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";
+
+    private static string FmtEffect(Flight.WeaponEffect? e)
+    {
+        if (e == null)
+        {
+            return "-";
+        }
+        var parts = new List<string>();
+        if (e.Animation != null) { parts.Add($"anim:{e.Animation}"); }
+        if (e.SurfaceAnimation != null) { parts.Add($"surf:{e.SurfaceAnimation}"); }
+        if (e.Effect != null) { parts.Add($"fx:{e.Effect}"); }
+        if (e.Sound != null) { parts.Add($"snd:{e.Sound}"); }
+        return "{" + string.Join("/", parts) + "}";
+    }
+
+    private static string FmtFlyout(Flight.WeaponFlyout? f)
+    {
+        if (f == null)
+        {
+            return "-";
+        }
+        var parts = new List<string>();
+        if (f.Model != null) { parts.Add($"model:{f.Model}"); }
+        if (f.ModelAnimation != null) { parts.Add($"anim:{f.ModelAnimation}"); }
+        if (f.Sound != null) { parts.Add($"snd:{f.Sound}"); }
+        return "{" + string.Join("/", parts) + "}";
     }
 
     private static Vector3 ParseVec3(string s)

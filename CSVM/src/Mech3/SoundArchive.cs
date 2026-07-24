@@ -34,8 +34,11 @@ public sealed class SoundArchive : IDisposable
     }
 
     /// <summary>Loads a WAV by file name (e.g. "bloodhawk.wav"); null if missing/undecodable.
-    /// <paramref name="looped"/> marks the whole stream as a forward loop.</summary>
-    public AudioStreamWav? Find(string wavName, bool looped)
+    /// <paramref name="looped"/> marks the whole stream as a forward loop. <paramref name="warn"/>
+    /// is false for speculative bulk decodes (the sound prewarm): a per-chapter archive legitimately
+    /// lacks WAVs the program can reference, and the authoritative "silent for the session" report
+    /// happens at the point of use, not here.</summary>
+    public AudioStreamWav? Find(string wavName, bool looped, bool warn = true)
     {
         var key = $"{wavName}|{looped}";
         if (_cache.TryGetValue(key, out var cached))
@@ -45,7 +48,10 @@ public sealed class SoundArchive : IDisposable
         var bytes = ReadBytes(wavName);
         if (bytes == null)
         {
-            GD.PushWarning($"sound not found in archive: {wavName}");
+            if (warn)
+            {
+                GD.PushWarning($"sound not found in archive: {wavName}");
+            }
         }
         else
         {

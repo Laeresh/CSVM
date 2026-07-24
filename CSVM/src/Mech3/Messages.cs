@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using System.Text.Json;
 
 namespace CSVM.Mech3;
@@ -44,4 +45,52 @@ public sealed class Messages
         string.IsNullOrEmpty(key) ? ""
         : _byKey.TryGetValue(key, out var v) ? v
         : key;
+
+    /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
+    /// <c>Fill(Get(key), args)</c>.</summary>
+    public string Format(string? key, params string?[] args) => Fill(Get(key), args);
+
+    /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
+    /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
+    /// that follows a placeholder — e.g. the <c>!d!</c> in <c>%2!d!</c> — is consumed (the arg is
+    /// already a formatted string); and <c>%%</c> is a literal percent. The template is raw text, so
+    /// resolve it through <see cref="Get"/> first (keeps an unresolved key visible on load rather than
+    /// per draw).</summary>
+    public static string Fill(string template, params string?[] args)
+    {
+        if (string.IsNullOrEmpty(template))
+        {
+            return "";
+        }
+        var sb = new StringBuilder(template.Length + 8);
+        for (int i = 0; i < template.Length; i++)
+        {
+            char c = template[i];
+            if (c == '%' && i + 1 < template.Length)
+            {
+                char n = template[i + 1];
+                if (n == '%')
+                {
+                    sb.Append('%');
+                    i++;
+                    continue;
+                }
+                if (n >= '1' && n <= '9')
+                {
+                    int idx = n - '1';
+                    sb.Append(idx < args.Length ? args[idx] ?? "" : "");
+                    i++;
+                    // consume an optional !spec! type marker (e.g. !d!) that trails the placeholder
+                    if (i + 1 < template.Length && template[i + 1] == '!')
+                    {
+                        int close = template.IndexOf('!', i + 2);
+                        i = close > 0 ? close : i + 1;
+                    }
+                    continue;
+                }
+            }
+            sb.Append(c);
+        }
+        return sb.ToString();
+    }
 }

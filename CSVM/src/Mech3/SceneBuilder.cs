@@ -230,8 +230,68 @@ public sealed class SceneBuilder
             return;
         var body = new StaticBody3D { Name = "col" };
         body.AddChild(new CollisionShape3D { Shape = shape });
+        // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
+        // right IMPACT variant (B15). Derived once per mesh from its dominant material texture;
+        // 'default' (terrain / anything unclassified) is the common case and stamps nothing.
+        var surface = SurfaceForMesh(meshIndex);
+        if (surface != null)
+            body.SetMeta(SurfaceMeta, surface);
         parent.AddChild(body);
         ColliderCount++;
+    }
+
+    /// <summary>Meta key a collider carries when its dominant surface is water or buildings.</summary>
+    public const string SurfaceMeta = "csky_surface";
+
+    private readonly Dictionary<int, string?> _surfaceCache = new();
+
+    /// <summary>The dominant surface class of a mesh's colliding geometry — the majority material
+    /// texture, classified by name (water: <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>;
+    /// buildings: <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>). Null =
+    /// terrain / unclassified (the default IMPACT variant). Cached per mesh index.</summary>
+    private string? SurfaceForMesh(int meshIndex)
+    {
+        if (_surfaceCache.TryGetValue(meshIndex, out var cached))
+            return cached;
+        var counts = new Dictionary<string, int>();
+        string? best = null;
+        int bestN = 0;
+        foreach (var poly in _gamez.Meshes[meshIndex].Polygons)
+        {
+            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
+                continue;
+            var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
+            var tag = ClassifySurface(tex);
+            if (tag == null)
+                continue;
+            counts.TryGetValue(tag, out int n);
+            counts[tag] = ++n;
+            if (n > bestN)
+            {
+                bestN = n;
+                best = tag;
+            }
+        }
+        _surfaceCache[meshIndex] = best;
+        return best;
+    }
+
+    private static string? ClassifySurface(string? texture)
+    {
+        if (string.IsNullOrEmpty(texture))
+            return null;
+        var t = texture.ToLowerInvariant();
+        // 'bldgshadow'/'bld_shadow' are baked ground shadow decals, not building geometry.
+        if (t.Contains("shadow"))
+            return t.StartsWith("water") || t.Contains("splash") ? "water" : null;
+        if (t.StartsWith("water") || t.StartsWith("wtr") || t.StartsWith("srf")
+            || t.Contains("wakefront") || t.Contains("watersquirt"))
+            return "water";
+        if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
+            || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
+            || t.Contains("filmblock"))
+            return "buildings";
+        return null;
     }
 
     // Point-sprite lights: camera-facing soft radial glows, additive blend so they shine

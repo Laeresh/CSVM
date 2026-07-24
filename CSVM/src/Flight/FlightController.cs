@@ -69,6 +69,21 @@ public partial class FlightController : Node3D
     /// and fed altitude/AGL/speed/stall + part-damage events. Optional.</summary>
     public GaugeCluster? Gauges;
 
+    /// <summary>The <c>--hud-font-test</c> bitmap-font verification overlay: added to the HUD
+    /// canvas so it scales with the pane. Null unless the flag is set.</summary>
+    public HudFontTest? FontTest;
+
+    /// <summary>The selected-weapon text readout (E36): the gun group + rocket type and their live
+    /// ammo, drawn in the game's HUD font from the <c>MSG_HUD_GUNGAUGE</c>/<c>MSG_HUD_MISSLES</c>
+    /// templates. Added to the HUD canvas and fed each frame; null (no font / no loadout) hides it.</summary>
+    public WeaponReadout? WeaponReadout;
+
+    /// <summary>The gun aiming reticle (E37): the game's pipper drawn at the SELECTED gun group's
+    /// ballistic impact point at the convergence distance — trailing the nose in a hard turn, on the
+    /// rounds in steady flight. Added to the HUD canvas and fed the world impact point each frame;
+    /// null when the plane carries no firable gun (or the reticle texture was absent).</summary>
+    public ImpactReticle? Reticle;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -79,9 +94,44 @@ public partial class FlightController : Node3D
     /// part and the plane flies on; null keeps the old any-hit-crashes behavior.</summary>
     public PlaneDamage? Damage;
 
+    /// <summary>C27: applies a plane collision to the struck world node, returning true iff it was a
+    /// <c>WeaponOrCollideHit</c> destructible (the 44 facades/windows/agyrobus) — in which case the
+    /// object breaks and the plane flies THROUGH it. Wired to <c>AnimRuntime.CollideDamageAt</c>; null
+    /// (a viewer/static build with no world runtime) makes every collision solid, as before.</summary>
+    public System.Func<Node?, float, bool>? CollideDamageSink;
+
     /// <summary>Visible damage: torn-skin pdpanel flips + the low-HP
     /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
     public DamageVisuals? Visuals;
+
+    /// <summary>This plane's stock loadout bound to its model — the gun groups (with independent
+    /// ammo counters) + hardpoints the firing code draws from. Null disables weapons.</summary>
+    public Loadout? Loadout;
+
+    /// <summary>The shared world's projectile/effect pool guns and hardpoints fire into. Null
+    /// disables weapons.</summary>
+    public ProjectilePool? Projectiles;
+
+    /// <summary>D44: the FLYOUT-model rockets mounted under the wings, one per loaded pylon, hidden as
+    /// each pylon's ammo depletes. Rides the plane; null when nothing could be mounted (viewer, or a
+    /// chapter gamez lacking the prototype roots).</summary>
+    public PylonOrdnance? Ordnance;
+
+    /// <summary>--infinite-ammo: guns/hardpoints fire without depleting (frictionless testing).</summary>
+    public bool InfiniteAmmo;
+
+    /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as
+    /// <see cref="HoldSegments"/> does for flight input.</summary>
+    public bool AutoFire;
+
+    /// <summary>--fire-rockets: hold the rocket trigger down (scripted screenshot / soak runs).
+    /// Unlike a human pull (one rocket per press), this auto-repeats at the launch cooldown.</summary>
+    public bool AutoFireRockets;
+
+    /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
+    /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
+    /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Left.</summary>
+    public int InitialGunSelect;
 
     /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
@@ -191,12 +241,49 @@ public partial class FlightController : Node3D
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
+    private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
+    private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
+    private bool _gunLoopOn;                     // the firing loop sound is currently playing
+    private float _rocketCooldown;               // s until the next rocket may launch (FIRE_RATE gate, one at a time)
+    private int _nextPylon;                      // which hardpoint sources the next rocket (cycles across pylons)
+    private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
+    private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
+    private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
+    private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
+    private bool _gunSelPrev;                    // edge detection for the gun-selector button
+    private int _rocketSel;                      // hardpoint selector: index into _ordnanceTypes (which ordnance fires)
+    private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector button
+    private string[] _ordnanceTypes = Array.Empty<string>(); // distinct hardpoint weapon ids, in pylon order
+
+    // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
+    // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
+    // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
+    private GaugeCluster.WeaponGauge? _gunGaugeState;
+    private GaugeCluster.WeaponGauge? _missileGaugeState;
+    private readonly List<float> _gunGaugeSlots = new();
+    private readonly List<float> _missileGaugeSlots = new();
+
+    /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
+    /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
+    /// the empty-clip warning has already sounded since it last had ammo.</summary>
+    private sealed class GunState
+    {
+        public float Accum;
+        public int NextMuzzle;
+        public bool Warned;
+        public bool LoggedFirst;   // verification breadcrumb: the group logs its first live round once
+    }
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
                                                 // plane-dependent (TODO — kept fixed for now per user); the
                                                 // plane accelerates from here toward its cruise
+    private const float GunConvergenceDist = 250f; // m — the range the gun reticle projects the
+                                                   // ballistic solution to (the sight's zero range).
+                                                   // NOT in the data (weapons.json carries no
+                                                   // convergence field; guns have RANGE 1000) — a
+                                                   // TUNE pending an original-game playtest (E37).
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
@@ -211,6 +298,10 @@ public partial class FlightController : Node3D
     // struck part (quadratic in severity), slides the velocity along the surface
     // with some tangential loss, and kicks the attitude.
     private const float CrashSpeed = 25f;        // m/s along the normal ⇒ outright crash
+    private const float CollideDamagePerVn = 8f;  // C27: HEALTH_DAMAGE a collision deals to a WeaponOrCollideHit
+                                                  // object, per m/s of impact severity — a real flight-speed
+                                                  // hit (vn≥~9) breaks even agyrobus (health 70); the 43
+                                                  // 0.01-health facades/windows shatter at any motion.
     private const float WreckMomentum = 0.4f;    // TUNE: fraction of impact velocity the crash wreck pieces inherit
     private const float GrazeMaxDamage = 18f;    // HP at a just-under-crash graze (parts have 20–25)
     private const float GrazeFriction = 0.35f;   // tangential speed kill at full severity
@@ -253,10 +344,16 @@ public partial class FlightController : Node3D
             canvas.AddChild(Compass);
         if (Gauges != null)
             canvas.AddChild(Gauges);
+        if (Reticle != null)
+            canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
+        if (WeaponReadout != null)
+            canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
         if (Marker != null)
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         if (Scoreboard != null)
             canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
+        if (FontTest != null)
+            canvas.AddChild(FontTest); // --hud-font-test: the E34 bitmap-font proof overlay
         // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
         // only (and scales off the pane's height); single player keeps it on this node.
         (HudParent ?? this).AddChild(canvas);
@@ -277,6 +374,501 @@ public partial class FlightController : Node3D
             });
         }
         SnapCamera();
+
+        // One firing-state slot per firable gun group (turrets excluded — inert in M3).
+        if (Loadout != null)
+        {
+            int n = 0;
+            foreach (var _ in Loadout.FirableGuns)
+            {
+                n++;
+            }
+            _gunStates = new GunState[n];
+            for (int i = 0; i < n; i++)
+            {
+                _gunStates[i] = new GunState();
+            }
+            // The distinct ordnance types across the hardpoints, in pylon order — what the
+            // hardpoint selector cycles. Stock loadouts carry one type (all HE), so this is
+            // usually a single entry; it grows straight away once mixed loadouts land.
+            var types = new List<string>();
+            foreach (var h in Loadout.Hardpoints)
+            {
+                if (!types.Contains(h.Weapon.Id))
+                {
+                    types.Add(h.Weapon.Id);
+                }
+            }
+            _ordnanceTypes = types.ToArray();
+            // Apply the --gun-select testing override (0-based group index, clamped into range).
+            _gunSel = n > 0 ? Mathf.Clamp(InitialGunSelect, 0, n - 1) : 0;
+
+            // Bind the two weapon gauges (E35) — only for a system this plane actually carries.
+            if (Gauges != null)
+            {
+                if (n > 0)
+                {
+                    _gunGaugeState = new GaugeCluster.WeaponGauge { Slots = _gunGaugeSlots };
+                    Gauges.GunGauge = _gunGaugeState;
+                }
+                if (Loadout.Hardpoints.Count > 0)
+                {
+                    _missileGaugeState = new GaugeCluster.WeaponGauge { Slots = _missileGaugeSlots };
+                    Gauges.MissileGauge = _missileGaugeState;
+                }
+            }
+        }
+    }
+
+    /// <summary>Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
+    /// <c>--fire</c> holds it down for unattended runs.</summary>
+    private bool FirePressed() => AutoFire || KeyDown(Key.Space) || PadPressed(JoyButton.B);
+
+    /// <summary>F / gamepad A — the rocket trigger. One discrete pull launches one rocket (holding
+    /// does NOT auto-repeat; only the 1.0 s cooldown gates it), and <c>--fire-rockets</c> auto-repeats
+    /// for unattended runs. Gamepad A also respawns, but only from the crashed / run-complete screens
+    /// — states this live-flight firing path never shares — so the two never collide.</summary>
+    private bool RocketFirePressed() => AutoFireRockets || KeyDown(Key.F) || PadPressed(JoyButton.A);
+
+    /// <summary>G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
+    /// … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.</summary>
+    private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadLeft);
+
+    /// <summary>H / gamepad D-pad Right — cycles the hardpoint selector across the loaded ordnance
+    /// types. The rocket trigger then launches only the selected type. Caller edge-detects. (Stock
+    /// loadouts carry a single ordnance type, so this is a no-op until mixed loadouts land.)</summary>
+    private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
+
+    /// <summary>Advances each weapon selector on the rising edge of its button: the gun selector
+    /// through the firable groups (one active at a time), the hardpoint selector through the distinct
+    /// loaded ordnance types. Both are pure UI state — they survive a respawn (a player's pick is
+    /// not ammo).</summary>
+    private void CycleWeaponSelectors()
+    {
+        bool gunSel = GunSelectPressed();
+        if (gunSel && !_gunSelPrev && _gunStates is { Length: > 1 })
+        {
+            _gunSel = (_gunSel + 1) % _gunStates.Length;
+        }
+        _gunSelPrev = gunSel;
+
+        bool rocketSel = RocketSelectPressed();
+        if (rocketSel && !_rocketSelPrev && _ordnanceTypes.Length > 1)
+        {
+            _rocketSel = (_rocketSel + 1) % _ordnanceTypes.Length;
+        }
+        _rocketSelPrev = rocketSel;
+    }
+
+    /// <summary>Feeds the two cockpit weapon gauges (E35) from the same live ammo the firing code
+    /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
+    /// light per firable group by remaining fraction, the arrow on the selected one); the missile
+    /// gauge shows the SELECTED ordnance type's total, its NAME, one belt light per pylon, and points
+    /// the arrow at the next pylon that will fire. With <c>--infinite-ammo</c> the counters sit at
+    /// capacity (the counters never deplete), so the gauges read full and never step.</summary>
+    private void UpdateWeaponGauges()
+    {
+        if (Loadout == null)
+        {
+            return;
+        }
+
+        // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
+        // fractions; the readout (E36) takes the group's mount name and its per-group rounds.
+        GunGroup? selectedGun = null;
+        int firable = 0;
+        _gunGaugeSlots.Clear();
+        foreach (var g in Loadout.FirableGuns)
+        {
+            _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
+            if (firable == _gunSel)
+            {
+                selectedGun = g;
+            }
+            firable++;
+        }
+        if (_gunGaugeState != null)
+        {
+            _gunGaugeState.Selected = firable > 0 ? Mathf.Clamp(_gunSel, 0, firable - 1) : 0;
+            _gunGaugeState.Count = selectedGun?.Ammo ?? 0;
+            _gunGaugeState.Type = selectedGun?.Weapon.Name ?? "";
+        }
+        if (WeaponReadout != null)
+        {
+            WeaponReadout.GunGroupName = firable > 0 ? selectedGun?.Mount : null;
+            WeaponReadout.GunAmmo = selectedGun?.Ammo ?? 0;
+        }
+
+        // Rockets: the SELECTED ordnance type / next-to-fire pylon. The count reads that pylon (the
+        // arrow's) — per-pylon rounds (a full HE pylon = 3), NOT the sum across pylons; the original's
+        // gauge is per-pylon (its Warhawk shows BOOM 3, not 24). The readout takes the rocket's display
+        // name (MSG_WEAP_* through Messages, e.g. "High-explosive rocket"), the gauge its short NAME.
+        var hps = Loadout.Hardpoints;
+        if (hps.Count > 0)
+        {
+            string? type = _ordnanceTypes.Length > 0
+                ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
+                : null;
+            WeaponDef? typeWeapon = null;
+            _missileGaugeSlots.Clear();
+            for (int i = 0; i < hps.Count; i++)
+            {
+                var h = hps[i];
+                _missileGaugeSlots.Add(h.Capacity > 0 ? (float)h.Ammo / h.Capacity : 0f);
+                if ((type == null || h.Weapon.Id == type) && typeWeapon == null)
+                {
+                    typeWeapon = h.Weapon;
+                }
+            }
+            int next = NextArmedPylon(type);
+            int perPylon = next < hps.Count ? hps[next].Ammo : 0;
+            if (_missileGaugeState != null)
+            {
+                _missileGaugeState.Selected = next;
+                _missileGaugeState.Count = perPylon;
+                _missileGaugeState.Type = typeWeapon?.Name ?? "";
+            }
+            if (WeaponReadout != null)
+            {
+                WeaponReadout.MissileName = typeWeapon != null ? RocketReadoutName(typeWeapon) : null;
+                WeaponReadout.MissileAmmo = perPylon;
+            }
+        }
+        else if (WeaponReadout != null)
+        {
+            WeaponReadout.MissileName = null;
+        }
+    }
+
+    /// <summary>The rocket name the E36 readout shows: the resolved <c>MSG_WEAP_*</c> display name
+    /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
+    /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
+    private static string RocketReadoutName(WeaponDef w) =>
+        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
+            ? w.DisplayName
+            : w.Name;
+
+    /// <summary>The pylon the next rocket would launch from (the arrow target on the missile gauge):
+    /// the first armed pylon of <paramref name="type"/> scanning from <see cref="_nextPylon"/> and
+    /// wrapping — a read-only mirror of <see cref="NextArmedHardpoint"/> that does NOT advance the
+    /// cursor. Falls back to the cursor position when every matching pylon is empty.</summary>
+    private int NextArmedPylon(string? type)
+    {
+        var hps = Loadout!.Hardpoints;
+        if (hps.Count == 0)
+        {
+            return 0;
+        }
+        for (int k = 0; k < hps.Count; k++)
+        {
+            int idx = (_nextPylon + k) % hps.Count;
+            if (type != null && hps[idx].Weapon.Id != type)
+            {
+                continue;
+            }
+            if (hps[idx].Ammo > 0 || InfiniteAmmo)
+            {
+                return idx;
+            }
+        }
+        return _nextPylon % hps.Count;
+    }
+
+    /// <summary>Points the gun reticle (E37) at the SELECTED gun group's ballistic impact point at
+    /// the convergence distance. It integrates the round exactly as <see cref="ProjectilePool"/>
+    /// fires it — muzzle-forward × <c>VELOCITY</c> plus the plane's inherited velocity, stepped
+    /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree; it drops
+    /// only the random <c>CANNON_SPREAD</c> (the reticle marks the cone centre). Hidden while crashed
+    /// or when the plane has no firable gun / no muzzle to fire from. No-op without a reticle.</summary>
+    private void UpdateReticle()
+    {
+        if (Reticle == null)
+        {
+            return;
+        }
+        // Hidden while crashed (the airframe is gone) — a stale pipper must not hang in the sky —
+        // and when there is nothing to aim.
+        if (_crashed || Loadout == null || _gunStates == null)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        // The selected firable gun group — the one the trigger fires. Its muzzles' averaged world
+        // pose is where THAT group's fire converges.
+        GunGroup? sel = null;
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            if (gi == _gunSel)
+            {
+                sel = g;
+                break;
+            }
+            gi++;
+        }
+        if (sel == null || sel.Muzzles.Count == 0)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        var origin = Vector3.Zero;
+        var forward = Vector3.Zero;
+        foreach (var m in sel.Muzzles)
+        {
+            var xf = m.GlobalTransform;
+            origin += xf.Origin;
+            forward += -xf.Basis.Z.Normalized(); // each muzzle's own aim (as ProjectilePool.Spawn)
+        }
+        origin /= sel.Muzzles.Count;
+        if (forward.LengthSquared() < 1e-6f)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        forward = forward.Normalized();
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        Reticle.ImpactPoint = BallisticImpactPoint(sel.Weapon, origin, forward, inheritVel,
+            GunConvergenceDist);
+        Reticle.Active = true;
+    }
+
+    /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/> along
+    /// <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's velocity) sits
+    /// after travelling <paramref name="distance"/> m of path — the SAME
+    /// <c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c> integration <see cref="ProjectilePool"/>
+    /// steps each round with, so the reticle and the rounds agree. Player guns carry no
+    /// <c>ACCELERATION</c>/<c>GRAVITY</c>, so for them this is a straight line; the loop stays
+    /// faithful for any weapon that does. The march is capped at the weapon's <c>RANGE</c> (a round
+    /// never converges past where it expires) and a hard iteration bound.</summary>
+    private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
+        Vector3 inheritVel, float distance)
+    {
+        var vel = forward * (weapon.Velocity ?? 500f) + inheritVel;
+        float accel = weapon.Acceleration ?? 0f;
+        float grav = (weapon.Gravity ?? 0f) * ProjectilePool.WorldGravity;
+        float cap = Mathf.Min(distance, weapon.Range ?? distance);
+        const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
+        var pos = origin;
+        float travelled = 0f;
+        for (int i = 0; i < 4096 && travelled < cap; i++)
+        {
+            if (accel != 0f)
+            {
+                vel += vel.Normalized() * (accel * dt);
+            }
+            if (grav != 0f)
+            {
+                vel += Vector3.Down * (grav * dt);
+            }
+            var stepv = vel * dt;
+            float step = stepv.Length();
+            if (step < 1e-6f)
+            {
+                break; // a degenerate near-zero speed must never spin the loop
+            }
+            if (travelled + step > cap)
+            {
+                pos += stepv * ((cap - travelled) / step); // don't overshoot the convergence range
+                break;
+            }
+            pos += stepv;
+            travelled += step;
+        }
+        return pos;
+    }
+
+    /// <summary>Advances every gun group's fire clock: while the trigger is held, each group spawns
+    /// rounds at its <c>FIRE_RATE</c> (alternating muzzles so the group's total rate equals it),
+    /// drawing from its own ammo counter; a dry group sounds the empty-clip cue once. Also drives
+    /// the firing loop sound. No-op without a loadout / pool.</summary>
+    private void UpdateGuns(float dt)
+    {
+        if (Loadout == null || Projectiles == null || _gunStates == null)
+        {
+            return;
+        }
+        bool fire = FirePressed();
+        bool wantLoop = false;
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        string? loopSound = null;
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            int groupIndex = gi;
+            var st = _gunStates[gi++];
+            // Only the selected gun group fires — one at a time (the original's behaviour).
+            bool selected = groupIndex == _gunSel;
+            if (!fire || !selected || g.Weapon.FireRate <= 0f || g.Muzzles.Count == 0)
+            {
+                st.Accum = 0f;
+                continue;
+            }
+            float interval = 1f / g.Weapon.FireRate;
+            if (!_firePrev)
+            {
+                st.Accum = interval; // the first shot leaves the barrel the instant the trigger goes down
+            }
+            st.Accum += dt;
+            bool hasAmmo = g.Ammo > 0 || InfiniteAmmo;
+            if (hasAmmo)
+            {
+                wantLoop = true;
+                loopSound ??= g.Weapon.LoopedSoundName;
+            }
+            while (st.Accum >= interval)
+            {
+                st.Accum -= interval;
+                if (g.Ammo > 0 || InfiniteAmmo)
+                {
+                    var muzzle = g.Muzzles[st.NextMuzzle % g.Muzzles.Count];
+                    st.NextMuzzle++;
+                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel);
+                    if (!InfiniteAmmo)
+                    {
+                        g.Ammo--;
+                    }
+                    st.Warned = false; // it fired a real round — re-arm the dry warning
+                    if (!st.LoggedFirst)
+                    {
+                        st.LoggedFirst = true;   // verification breadcrumb: which groups actually fire
+                        GD.Print($"gun group {groupIndex + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
+                                 $"{g.Weapon.Id}) firing");
+                    }
+                }
+                else
+                {
+                    if (!st.Warned)
+                    {
+                        st.Warned = true;
+                        Audio?.PlayEmptyClip();
+                    }
+                    st.Accum = 0f;
+                    break;
+                }
+            }
+        }
+        if (wantLoop && !_gunLoopOn)
+        {
+            _gunLoopOn = true;
+            Audio?.StartGunLoop(loopSound);
+        }
+        else if (!wantLoop && _gunLoopOn)
+        {
+            _gunLoopOn = false;
+            Audio?.StopGunLoop();
+        }
+        _firePrev = fire;
+    }
+
+    /// <summary>Launches rockets from the hardpoints: one per discrete trigger pull, drawn from the
+    /// next pylon that still has ordnance (cycling across them), gated by the weapon's <c>FIRE_RATE</c>
+    /// — 1.0/s for every rocket, i.e. one launch per second. Depletes that pylon's own counter; a pull
+    /// with every pylon empty sounds the dry cue once. No-op without hardpoints / a pool.</summary>
+    private void UpdateRockets(float dt)
+    {
+        if (Loadout == null || Projectiles == null || Loadout.Hardpoints.Count == 0)
+        {
+            return;
+        }
+        if (_rocketCooldown > 0f)
+        {
+            _rocketCooldown -= dt;
+        }
+        bool fire = RocketFirePressed();
+        // A human pull fires one rocket; holding does not auto-repeat. Only --fire-rockets (soak
+        // runs) auto-repeats — and either way the FIRE_RATE cooldown caps the launch rate.
+        bool pull = AutoFireRockets ? fire : (fire && !_rocketFirePrev);
+        _rocketFirePrev = fire;
+        if (!pull || _rocketCooldown > 0f)
+        {
+            return;
+        }
+        var hp = NextArmedHardpoint();
+        if (hp == null)
+        {
+            if (!_rocketDryWarned)
+            {
+                _rocketDryWarned = true;
+                Audio?.PlayEmptyClip();
+            }
+            return;
+        }
+        _rocketDryWarned = false;
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel);
+        if (!InfiniteAmmo)
+        {
+            hp.Ammo--;
+        }
+        _rocketCooldown = hp.Weapon.FireRate > 0f ? 1f / hp.Weapon.FireRate : 1f;
+        if (_rocketsLaunched < 12)
+        {
+            _rocketsLaunched++;
+            GD.Print($"rocket: {hp.Weapon.Id} ({hp.Weapon.Name}) from pylon{hp.Index}, " +
+                     $"{(InfiniteAmmo ? "∞" : hp.Ammo.ToString())} left on that pylon");
+        }
+    }
+
+    /// <summary>The next hardpoint with ordnance, scanning from <see cref="_nextPylon"/> and wrapping,
+    /// then advancing the cursor so consecutive pulls spread across the pylons. Null when every pylon
+    /// is empty. With <c>--infinite-ammo</c> the first-scanned pylon always qualifies.</summary>
+    private Hardpoint? NextArmedHardpoint()
+    {
+        var hps = Loadout!.Hardpoints;
+        // The hardpoint selector restricts firing to one ordnance type (stock = the sole type).
+        string? type = _ordnanceTypes.Length > 0
+            ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
+            : null;
+        for (int k = 0; k < hps.Count; k++)
+        {
+            int idx = (_nextPylon + k) % hps.Count;
+            if (type != null && hps[idx].Weapon.Id != type)
+            {
+                continue;
+            }
+            if (hps[idx].Ammo > 0 || InfiniteAmmo)
+            {
+                _nextPylon = (idx + 1) % hps.Count;
+                return hps[idx];
+            }
+        }
+        return null;
+    }
+
+    /// <summary>Refills every gun group to its full load and re-arms the dry warnings (respawn).</summary>
+    private void RefillWeapons()
+    {
+        if (Loadout == null)
+        {
+            return;
+        }
+        foreach (var g in Loadout.Guns)
+        {
+            g.Ammo = g.Capacity;
+        }
+        foreach (var h in Loadout.Hardpoints)
+        {
+            h.Ammo = h.Capacity;
+        }
+        if (_gunStates != null)
+        {
+            foreach (var st in _gunStates)
+            {
+                st.Accum = 0f;
+                st.Warned = false;
+                st.NextMuzzle = 0;
+            }
+        }
+        _rocketCooldown = 0f;
+        _nextPylon = 0;
+        _rocketFirePrev = false;
+        _rocketDryWarned = false;
+        if (_gunLoopOn)
+        {
+            _gunLoopOn = false;
+            Audio?.StopGunLoop();
+        }
+        Projectiles?.Clear();
     }
 
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
@@ -292,6 +884,7 @@ public partial class FlightController : Node3D
         Damage?.Reset();     // every part back to full HP
         Gauges?.Reset();     // damage-dial blink timers cleared
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
+        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
         if (CrashRuntime != null)
         {
             // data-driven crash: hard-stop the played def (instances, motions, the fire +
@@ -335,10 +928,11 @@ public partial class FlightController : Node3D
     /// <paramref name="point"/> is the impact position (else the segment end) and
     /// <paramref name="hitName"/> names the collider (parent/body — e.g. a terrain
     /// tile's "g27889/col", or a clutter city block's "world1/clutter_bld_3_7").</summary>
-    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName)
+    private bool HitWorld(Vector3 from, Vector3 to, out Vector3 point, out string hitName, out Node? hitBody)
     {
         point = to;
         hitName = "";
+        hitBody = null;
         var space = GetWorld3D()?.DirectSpaceState;
         if (space == null)
             return false;
@@ -347,7 +941,10 @@ public partial class FlightController : Node3D
             return false;
         point = (Vector3)hit["position"];
         if (hit["collider"].Obj is Node body)
+        {
+            hitBody = body;
             hitName = $"{body.GetParent()?.Name}/{body.Name}";
+        }
         return true;
     }
 
@@ -523,8 +1120,8 @@ public partial class FlightController : Node3D
         float margin = Collider == null ? CollisionMargin : 0f;
         var probeEnd = len > 1e-4f ? to + step / len * margin : to;
         bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
-            out var normal, out float stopFrac);
-        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName))
+            out var normal, out float stopFrac, out var hitBody);
+        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
         {
             hit = true;
             part = "center";
@@ -533,6 +1130,19 @@ public partial class FlightController : Node3D
         }
         if (_probe != null)
             DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
+        // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
+        // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
+        // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
+        // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
+        if (hit && CollideDamageSink != null)
+        {
+            var cv = _model.VelocityDir * _model.Speed;
+            float cvn = Mathf.Abs(cv.Dot(normal));
+            if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+            {
+                hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+            }
+        }
         if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
         {
             Crash(impact, hitName, part);
@@ -541,6 +1151,13 @@ public partial class FlightController : Node3D
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
 
+        // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
+        // into the shared projectile pool.
+        CycleWeaponSelectors();
+        UpdateGuns(dt);
+        UpdateRockets(dt);
+        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
+
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
 
@@ -548,7 +1165,7 @@ public partial class FlightController : Node3D
         // down per physics frame (world + map-edge extension colliders)
         if (Gauges != null)
             Gauges.AglMeters = HitWorld(_model.Position,
-                _model.Position + Vector3.Down * 1000f, out var ground, out _)
+                _model.Position + Vector3.Down * 1000f, out var ground, out _, out _)
                 ? _model.Position.Y - ground.Y
                 : float.MaxValue;
 
@@ -731,11 +1348,12 @@ public partial class FlightController : Node3D
     /// struck, and the motion fraction where it stopped (for the debug draw). False
     /// when no collider was built or nothing is in the way.</summary>
     private bool SweepAirframe(Vector3 from, Vector3 motion, out Vector3 impact,
-        out string hitName, out string part, out Vector3 normal, out float stopFrac)
+        out string hitName, out string part, out Vector3 normal, out float stopFrac, out Node? hitBody)
     {
         impact = _model.Position;
         hitName = "";
         part = "";
+        hitBody = null;
         float mLen = motion.Length();
         normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
         stopFrac = 1f;
@@ -773,14 +1391,14 @@ public partial class FlightController : Node3D
             {
                 impact = (Vector3)rest["point"];
                 normal = (Vector3)rest["normal"];
-                hitName = GodotObject.InstanceFromId((ulong)rest["collider_id"]) is Node body
-                    ? $"{body.GetParent()?.Name}/{body.Name}"
-                    : "world";
+                hitBody = GodotObject.InstanceFromId((ulong)rest["collider_id"]) as Node;
+                hitName = hitBody != null ? $"{hitBody.GetParent()?.Name}/{hitBody.Name}" : "world";
             }
             else
             {
                 impact = (baseXf * p.Local).Origin + motion * cast[1];
                 normal = mLen > 1e-6f ? -motion / mLen : Vector3.Up;
+                hitBody = null;
                 hitName = "world";
             }
         }
@@ -884,6 +1502,11 @@ public partial class FlightController : Node3D
             Gauges.AltitudeFt = ft;
             Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
         }
+        // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
+        // loadout, so this runs whenever there is one, independent of the dial cluster.
+        UpdateWeaponGauges();
+        // Points the E37 gun reticle at the selected group's ballistic impact point (if built).
+        UpdateReticle();
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
@@ -909,6 +1532,8 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
+        // The weapon ammo readout is now the E35 gauges + the E36 WeaponReadout (drawn in the game's
+        // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
         // Stunt run status now lives in the marker HUD; keep the compact text line only
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)

@@ -4898,3 +4898,862 @@ transform" claim was overstated). `PlaneViewer` gained `--markers`/`--dump-marke
 in `architecture.md`, `cli.md`, `markers.md`, CLAUDE.md's module index + viewer-keys line.
 **Next: A7 (the stock-loadout file, commit user-gated), then Wave B.** A10 (in-engine
 firing-placement check) waits on D29.
+
+**M3 Wave A item A7 — the stock-loadout data file (2026-07-24).** Landed `CSVM/data/stock_loadouts.json`,
+the 11 player aircraft's default weapon fit, plus `docs/formats/loadouts.md`. Established a new
+committed-config home, `CSVM/data/` (hand-authored engine config, not extracted assets, loaded via
+`res://` — the first such file; everything else is read from git-ignored `extracted/`). Per plane:
+`guns[]` (slot, mount name verbatim from `IDS_AIRFRAMEGUNGROUPNAMES`, caliber, ammo, firepoint
+markers), turret slots flagged `"turret": true` (inert in M3, decision 10), and `hardpoints`
+(pylon count + stock `wep_06` HE). Seeded from the user's stock table (delivered 2026-07-22); the
+`markers` arrays are the binding rule's (`slot n → firepoint(9−2n),(10−2n)`) explicit output,
+checked in rather than runtime-computed so a wrong one is a visible data fix. Gun weapon ids
+resolve `caliber N + ammo k → wep_{N+k}` (stock slug → `wep_N`). **Verified independently against
+the committed file** (not the generator's memory): all 11 parse; every `markers` entry exists on
+that plane's model; every marker matches the binding rule; every derived gun `wep_*` and each
+`hardpoints.stock` resolves in `weapons.zrd.json`; the turret set is exactly the 5 airframes
+(`pavenger`/`pbalmoral`/`pbrigand`/`pfirebrand`/`pkestrel`), the Balmoral the only two-turret one;
+the Kestrel's W1 correctly resolves to the lone centreline `firepoint7`. The verify caught a real
+authoring bug — an early draft resolved stock guns as `wep_N0` (`wep_300`) instead of `wep_{N+k}`
+(`wep_30`) — exactly the visible-fix property the checked-in approach is for. No engine code
+changed (B12 `Loadout.cs` is the wave-B reader). Docs: new `loadouts.md` + README index entry;
+plan A7 ticked; CLAUDE.md repo-layout + status updated. **Wave A is now complete bar A10** (waits
+on D29). **Next: Wave B — B11 (`WeaponDefs.cs`) blocks the rest, so it goes first.**
+
+**M3 Wave B item B11 — the typed weapons.json reader (2026-07-24).** Landed `src/Flight/WeaponDefs.cs`,
+the reader every other wave-B weapon handler reads a def from. `WeaponDefs.Load` types all 48
+`weapons.zrd.json` `BALLISTICS` entries into `WeaponDef`s keyed by `wep_*` (plus the shared
+`NO_AMMO_WARNING` empty-clip sound): ballistics, damage, allotment (`CLUSTER_SIZE`/`AMMO_LIMIT`),
+the class flags (`CANNON`/`ROCKET`/`HIGH_EXPLOSIVE`/`TORPEDO`/`TARGETABLE`/…), the specials
+(`BEEPER`/`TANGLER`/`SMOKE_SCREEN`/…), and the `FIRE`/`FLYOUT`/`IMPACT` bindings with `IMPACT` keyed
+by a `SurfaceClass` enum over the six classes A1 established (`default`/`water`/`buildings`/`player`/
+`enemy`/`quicksand`). `DESC` resolves through `Messages`. Modelled on `PlaneStats`. Two data
+subtleties handled: flags are `KEY,null` pairs, so `ZrdrDict`'s bare-flag path (present-but-empty)
+makes `Has(key)` the correct test; and `IMPACT` is walked as raw class/value pairs rather than
+through `ZrdrDict`, so a class whose value is null (`enemy`, "no effect on that surface") is skipped
+rather than read back as an empty binding. Added `ZrdrDict.Keys` so each def can report
+`UnhandledKeys` — a tripwire that stays empty unless the data grows a key the reader hasn't learned.
+Verified with a new headless tool, `--dump-weapons[=id|name]` (mirrors `--dump-markers`,
+locale-independent output → `./.scratch/weapons_dump.txt`): **all 48 parse with NO unhandled keys**,
+and the dump cross-checks A1's `weapons.md` — the `wep_50`–`53` damage matrix (slug 6.25/6.25,
+dum-dum 3.125/9.375, AP 9.375/3.125, mag 6.75/5.75), the turret gun's `AMMO_LIMIT 9999` + no
+`CLUSTER_SIZE`, `wep_06`'s HE fields, the torpedo's flags + `FLYOUT_HEALTH`, and resolved display
+names. No session/flight/freecam path touched (the dump quits before any world builds). Docs:
+architecture.md + CLAUDE.md module index (WeaponDefs), cli.md (`--dump-weapons`), plan B11 ticked.
+**B12–B20 unblocked. Next: B12 (`Loadout.cs`) — read `stock_loadouts.json`, resolve markers against
+a built plane, expose gun groups + hardpoints.**
+
+**M3 Wave B item B12 — the loadout reader + marker resolution (2026-07-24).** Landed
+`src/Flight/Loadout.cs` — placed in Flight, not Mech3 (it depends on `WeaponDefs`, so Mech3→Flight
+would invert the layering; A7's stale `src/Mech3/Loadout.cs` pointers in `stock_loadouts.json` and
+`loadouts.md` were corrected). Two layers: `StockLoadouts.Load` parses `CSVM/data/stock_loadouts.json`
+(default `res://data/`, deliberately not under `--data-root` — it is committed engine config, not
+extracted data) into per-plane `LoadoutDef`s; `Loadout.Bind(def, builtPlane, WeaponDefs)` resolves
+each gun slot's authored markers to live muzzle `Node3D`s (by `cs_name` meta, as MarkerOverlay reads)
+and its caliber+ammo to a `WeaponDef` via `GunWeaponId` (`wep_{N+k}`), and each hardpoint to its
+`pylonN`, yielding `GunGroup`s (independent ammo counters seeded from `CLUSTER_SIZE`) and
+`Hardpoint`s (per-pylon `CLUSTER_SIZE`). Turret slots bind but carry `IsTurret` and are excluded from
+`FirableGuns` (inert in M3, decision 10). A missing marker throws a loud error naming plane/slot/
+marker — never a silent skip, since a silent one would fire a gun from nowhere. Verified with a new
+headless tool `--dump-loadout[=plane]` (builds each plane, binds, reports gun groups + hardpoints):
+**all 11 bind with every marker resolved.** The Balmoral reports **two separate .50 counters** (slot1
++ slot2 `wep_50`, 2000 each) plus its two inert turrets; the Bloodhawk's counters differ (`wep_40`
+2400 / `wep_30` 2800) and its **9 total HE rockets (3 pylons × 3) reproduce the A9 playtest**; the
+Kestrel's W1 resolves to the lone centreline `firepoint7`. The loud-error path was demonstrated with
+`--dump-loadout=Kestrel --loadout=pbloodhawk` (the Bloodhawk loadout wants `firepoint8`, absent on
+the 7-firepoint Kestrel) → `!! marker 'firepoint8' not found on the built plane`. `--loadout=<def>`
+overrides which def binds (its flight effect lands with B16). No session/flight/freecam path touched
+(the dump quits before any world builds). Docs: architecture.md + CLAUDE.md module index (Loadout),
+cli.md (`--dump-loadout`/`--loadout=`), loadouts.md pointer fixed, plan B12 ticked. **B16/B17/B18
+unblocked. Next: B13 (`Projectile.cs`) — a pooled projectile integrating VELOCITY/ACCELERATION/
+GRAVITY, expiring at RANGE.**
+
+**M3 Wave B/D — guns fire (the B13/B15/B16/D29/D30/D33 batch, 2026-07-24).** Landed the first playable
+weapons: hold Space (gamepad B) and the plane's guns fire. Done as one batch because no piece is
+testable alone. New `src/Flight/Projectile.cs` (`ProjectilePool`): a shared-world pool integrating the
+data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), inheriting launch velocity, with
+a fixed array (no per-round allocation; the raycast query object is reused too). `Spawn` applies the
+`CANNON_SPREAD` cone and flashes the muzzle. It renders three MultiMeshes — velocity-aligned tracer
+streaks (D33, NOT billboarded, or they collapse to a screen-vertical bar), billboarded muzzle-flash
+bursts (D29) and impact sprites — and plays the per-surface `IMPACT` sound (D30, the exact named effect
+animations are the remaining depth). **Hit detection (B15)** is a per-step world raycast; the flying
+plane has no physics body, so a round never hits its launcher and `player`/`enemy` are unreachable in
+M3. Surface class (`default`/`water`/`buildings`) comes from the struck collider's new
+`SceneBuilder.SurfaceMeta`, **stamped at build time in `AttachCollision`** from the mesh's dominant
+material texture (water: `water*`/`wtr*`/`srf*`/`wakefront`; buildings: `hangar*`/`*build*`/`cblock`/…)
+— data-driven, not a runtime name guess. **Gun firing (B16)** wires `Loadout` into `FlightController`:
+each firable group runs its own `FIRE_RATE` clock, alternating muzzles so the group's total rate equals
+FIRE_RATE, drawing from its own `CLUSTER_SIZE` ammo counter; a dry group sounds `snd_emptyclip` once;
+respawn refills; turrets excluded (inert). `FlightAudio` gained the firing loop (LOOPED_SOUND_NAME) +
+empty-clip. New flags: `--fire` (hold trigger, scripted runs), `--infinite-ammo`, and `--loadout=`'s
+flight effect. An interim HUD ammo line stands in until E36. Verified (C1, `./.scratch/`): guns fire;
+ammo depletes per group; the **Fury's 70-cal and 30-cal deplete 102:136 = a 6:8 ratio = their
+FIRE_RATEs** (the per-weapon rate is honoured); `--infinite-ammo` shows `∞`; tracers + muzzle flash
+render (streaks read against sky, wash a little over bright terrain — a visibility TUNE); rounds hit
+**terrain → `Default`** and **sea → `Water`** with correct collider tags and impact sound. Remaining:
+the named `IMPACT`/muzzle animations, per-ammo tracer textures, `buildings` (same code path as water,
+not yet screenshot), the empty-clip drain (2000+ rounds — a playtest check), and tracer/impact visual
+polish. **Owed playtest: firing feel.** Docs: architecture.md (Projectile) + CLAUDE.md module index +
+in-flight keys, cli.md (`--fire`/`--infinite-ammo`), plan items 13/15/16/29/33 ticked (14/30 partial).
+**Next: B17 (rocket/hardpoint firing — where B14's FLYOUT MODEL instancing lands), then B18 selectors.**
+
+**M3 Wave B — rockets fire (B17, 2026-07-24).** Hardpoints now launch. `FlightController.UpdateRockets`
++ `NextArmedHardpoint`: the rocket trigger (**F** / gamepad **A**, `--fire-rockets` for scripted runs)
+fires **one HE rocket per discrete pull** — a human pull fires once, only `--fire-rockets` auto-repeats —
+drawn from the next pylon that still holds ordnance, **round-robin across the pylons**, gated by the
+weapon's `FIRE_RATE` (1.0/s for every rocket = one launch per second). Each launch depletes that pylon's
+own `CLUSTER_SIZE` counter; an all-empty pull sounds the empty-clip cue once; respawn refills. The pad-A
+binding does not collide with pad-A respawn — respawn only fires from the crashed / run-complete screens,
+early-return states this live-flight path never reaches. Rockets reuse the B13 `ProjectilePool` via the
+same `Spawn` (VELOCITY 1200 / RANGE 1000 / no accel-or-gravity need no special path); `IsRocket` tints
+them orange and `RocketStreakScale` fattens the streak as a stand-in until the `FLYOUT` `he_rocket` MODEL
+mesh lands (B14, still ◐). New flag `--fire-rockets`. Verified: a headless stock-Bloodhawk soak launched
+**exactly 9 `wep_06` (HE) rockets** — 3 pylons × `CLUSTER_SIZE 3`, matching the A9 playtest — cycling
+`pylon1→pylon2→pylon3→pylon1…`, each depleting 3→2→1→0 independently, then stopping (dry); the infinite-ammo
+run confirmed the 1 s cadence. (Headless framebuffer capture is unavailable in this build, so an in-flight
+rocket screenshot is deferred to the owed playtest; per-pylon origin is proven by the launch log naming each
+`pylonN`.) TUNE/playtest: the 1.0 s cooldown is the data's `FIRE_RATE` not a measured feel, and the F/pad-A
+binding is a design choice — both flagged in `backlog.md`. Docs: architecture.md (FlightController +
+Projectile), cli.md (`--fire-rockets`), CLAUDE.md (in-flight keys + status), plan item 17 ticked (14 still ◐).
+**Owed playtest: does firing feel right — guns *and* rockets. Next: B18 (weapon selectors).**
+
+**M3 Wave B — weapon selectors (B18, 2026-07-24).** Two independent selectors, `FlightController.CycleWeaponSelectors`
++ `_gunSel`/`_rocketSel`, both edge-detected and `--no-pads`-safe. **Gun selector** (G / gamepad
+D-pad Left) cycles the firable groups; **hardpoint selector** (H / D-pad Right) cycles the distinct
+loaded ordnance types. `--gun-select=N` (0-based) seeds the gun group for headless tests; selections
+survive a respawn. **⚠ Design corrected mid-implementation (user, 2026-07-24): the original fires
+only ONE gun group at a time — there is no ALL.** Decision 7's "(plus ALL)" is struck, and the
+guns-batch behaviour of all groups firing at once (never playtested) is fixed: `UpdateGuns` now fires
+only the selected group. The hardpoint selector is a no-op with stock loadouts (all pylons carry HE),
+present and data-driven for when mixed loadouts land. Verified with a per-group first-shot breadcrumb:
+headless Balmoral soaks (two `wep_50` groups) fire **only "gun group 1 (Inner Wing Guns)" by default**
+and **only "gun group 2 (Outer Wing Guns)" under `--gun-select=1`** — exactly one group at a time,
+the right one. Docs: architecture.md (FlightController), cli.md (`--gun-select`), CLAUDE.md (keys +
+status), plan decision 7 corrected + item 18 ticked. **Next: B19/B20 (guided flight, ground lock-on).**
+
+**M3 — guided flight (B19/B20) deferred to M4 (2026-07-24, user decision).** Plan decision 3 is
+revised: guided ordnance is **out of M3 scope**, and **every rocket — the Seeker `wep_11` included —
+fires as dumbfire**. The reasoning is a corrected model of the original's mechanics, supplied by the
+user: the original has **no manual ground-target selection**; its auto-aim is game-handled and can
+only be pointed at **enemy planes** (the same target-cycle as stunt-race objective selection). M3 has
+no enemy planes, so nothing a guided missile could authentically lock exists — a ground-lock selector
+would be an interaction the original never had. No firing-path change was needed: `UpdateRockets`
+already spawns `hp.Weapon` into the ballistic `ProjectilePool` with no homing, so a Seeker on a pylon
+already flew straight. Two data facts, verified from `weapons.zrd.json` and now documented
+(`weapons.md`, `WeaponDef.IsGuided`): (1) **guidance is `TURN_RATE`, not a flag** — 13 of 14 rockets
+carry the 0.001 sentinel (fly-straight), only the Seeker's 1.25 homes; (2) **`LOCK_ON` is universal**
+(even dumbfire HE carries 1.3) because it is the auto-aim / lead-solution convergence time for every
+weapon, not a steering promise — so it is *not* the guided discriminator. Groundwork kept for M4: the
+`WeaponDef.IsGuided` convenience (`TURN_RATE > 0.01`) and the `weapons.md` "guided vs unguided" note.
+Docs updated: PLAN-M3-weapons.md (decision 3, checklist 19/20, B19/B20 detail → deferral notes that
+preserve the M4 design), CLAUDE.md status, weapons.md. Build clean. **Wave B's remaining in-scope work
+is B14 (the `he_rocket` `FLYOUT` MODEL mesh) + D30/D32 polish; the next major thrust is Wave C
+(destruction), starting with C21 (per-instance HP + destructible registry).**
+
+**M3 Wave B B14 — rockets fly the `FLYOUT` MODEL body (2026-07-24):** rockets no longer render as an
+orange stand-in streak; each launched rocket now instances the original's own projectile mesh. The
+`FLYOUT` field of a `weapons.zrd.json` entry names a gamez prototype root (`MODEL`), and for the 15
+`ROCKET` entries those are: `he_rocket` (BOOM/stock HE `wep_06`/`wep_24`), `ap_rocket` (ARMOR),
+`incendiary` (9M/SEEKER/FW), `flak`, `sonic`, `flash`, `beeper`, `scatter` (CHOKER), `smoker`,
+`a_torpedo` (TORPDO), `reararc` (FLARE), `aaflak` (AA FLAK) — 12 distinct roots, all present as named
+nodes in every chapter's gamez (`he_rocket` confirmed 1 per chapter, C1–C5). `ProjectilePool` gained
+the chapter world gamez + its `SceneBuilder` (threaded through the pool's ctor at the `PlaneViewer`
+creation site) and, on a rocket `Spawn`, resolves `weapon.Flyout.Model` via `GameZ.FindByName` and
+`SceneBuilder.BuildSubtree` **collision-exempt** (`collisionSkip: _ => true` — a rocket must not
+obstruct another round or the world hit-test), caching the resolved node per model name; the built body
+is freed on impact/expiry/`Clear`. **Orientation:** every rocket mesh is authored nose-along-(-Z)
+(measured: `he_rocket`'s rendered LOD is mesh 66, 0.3 m dia × 1.5 m long, `z ∈ [-1.5, 0]`; all 12
+distinct models share the −Z-nose convention), so `Basis.LookingAt(velocityDir)` — which aims local −Z
+down its argument — points the nose along flight. **Measure-before-choosing (the plan's explicit
+caveat): guns keep the tracer quad, rockets get a mesh** — a rocket lives ~0.83 s at `FIRE_RATE` 1/s
+(`VELOCITY` 1200 / `RANGE` 1000), so ≤1 is ever alive per player, whereas a gun fires ~10/s living ~1 s
+(dozens alive) → a mesh-per-round for guns would be wasteful against the existing MultiMesh tracer.
+A rocket with a body now trails a slim exhaust streak (`RocketExhaustScale`); the old chunky
+`RocketStreakScale` survives only as the fallback for a chapter missing the prototype. The `FLYOUT`
+`MODEL_ANIMATION` smoke trail (`he_rocket` anim → the `he_effects`/`pufftrails` readers) stays deferred
+to the D-wave. **Verified:** build clean (0/0); an 8-chapter (`C1`/`C1B`/`C1C`/`C2`/`C2B`/`C3`/`C4`/`C5`)
+headless `--fire-rockets` flight regression — `he_rocket` instances (breadcrumb: 1 mesh) in **every**
+chapter with **zero** real errors and unchanged gamez-node load counts; a runtime breadcrumb reading the
+model's **applied** world basis back through its full parent chain reports **`nose·velocity = 1.000`**
+(nose-forward, non-circular). Windowed captures over C1 (level, climbing, diving; in `./.scratch/`) show
+rockets leaving the pylons and flying forward, impacting terrain ahead (`impact … -> Default`). A
+pixel-crisp in-flight close-up remains an owed at-the-controls playtest (already listed for B17): a 1.5 m
+projectile at ~1260 m/s is not chase-cam-photographable without its (deferred) smoke trail. Docs:
+architecture.md (Projectile.cs entry), PLAN-M3-weapons.md (checklist 14 ☐→☑, `### B14` landed note),
+CLAUDE.md status. **Wave B's remaining in-scope work is the D30/D32 named-effect polish; the next major
+thrust is Wave C (destruction), starting with C21.**
+
+**Per-instance mutable HP + destructible registry — M3 Wave C item C21 (2026-07-24):** the first
+Wave-C landing gives the world's destructibles live, mutable hit points, replacing the static
+`def.Health` read that had made every `ANIM_HEALTH` branch uniformly false (see the new
+`DestructibleRegistry` + updated `AnimRuntime` entries in `docs/architecture.md` and the rewritten
+`destructibles.md` "Engine status"). A new `src/Mech3/DestructibleRegistry.cs` records one
+`Instance` — current HP, max HP, healthy/damaged/destroyed state — per `(def, anchor)` pair: every
+`AnimDefinition` with `HEALTH > 0`, resolved to each world node its (wildcard) `NAME` binds, built
+during AnimRuntime's bootstrap pass 1 beside the RESET_STATE application. `EvaluateCondition`'s
+`AnimHealth`/`AnimHealthRange` now read the live instance value via `HealthOf(def, anchor)`, falling
+back to the static `def.Health` for any unregistered pair (the exact pre-C21 read). **It applies no
+damage (C23) and runs no death sequence (C24)** — nothing decrements HP, so every instance sits at
+full health and the change is a *provable no-op*: `HealthOf` returns exactly `def.Health` everywhere,
+so every `ANIM_HEALTH` verdict is bit-identical to before. **Keyed per `(def, anchor)`, not per def**
+(the plan's ⚠): a wildcard `NAME` binds many node groups and each is an independent pool, so one
+tower's future damage will not break its siblings. Verified: the full 8-chapter `--freecam`
+regression runs clean (all exit 0, no exceptions, screenshots saved) with the registry count reported
+per chapter — C1 267 instances / 196 node groups, C1B 108/108, C1C 107/107, C2 574/201, C2B 104/104,
+C3 501/202, C4 225/194, C5 568/292 — sane against A4's census (2,603 health-defs across 61 archives).
+Instances exceed node groups where the reader's wildcard def and the compiler's per-instance defs
+both bind the same nodes (confirmed in C2: `fcpan**`/`grasshut#`/`sign*`/`police*` reader wildcards +
+their compiled twins — object-specific, not over-matching); each carries its own pool, which **C23
+must collapse to one authoritative instance per struck node (prefer the compiled def)** — recorded as
+a ⚠ on the registry's architecture entry. Node/mesh counts are unchanged (C21 is purely additive,
+post-world-build). Docs: new `DestructibleRegistry` architecture entry + `AnimRuntime` ⚠,
+`destructibles.md` "Engine status" rewrite, PLAN-M3-weapons.md (checklist 21 ☐→☑, `### C21` landed
+note), CLAUDE.md status. **Next: C22 (`DAMAGE_SEQUENCE` reader-front-end parsing + live threshold
+evaluation) and C23 (`WeaponHit` damage application), both hanging off this registry.**
+
+**DAMAGE_SEQUENCE parsing + live threshold evaluation — M3 Wave C item C22 (2026-07-24):** the
+destructibles' progressive damage stages now run — a hit-worn tower smokes, then catches fire, at
+the authored health thresholds (see the `AnimRuntime`/`AnimDefs`/`DestructibleRegistry` entries in
+`docs/architecture.md` and the rewritten `destructibles.md` "Engine status"). Two pieces landed.
+(1) `AnimDefs.cs`'s reader front-end now parses the `DAMAGE_SEQUENCE` block into a sequence
+literally named `DAMAGE_SEQUENCE` — the same shape the compiled archives already deliver, and the
+magic name the runtime invokes — closing the silent-drop gap (its `ParseDef` switch had no case for
+it). (2) `AnimRuntime.ApplyDamageStages(instance)` runs that cascade against the instance's live HP
+(C21's `HealthOf`): an IF/ELSEIF `ANIM_HEALTH` chain that fires the one effect for the stage the HP
+now sits in. **It escalates via a per-instance `DamageStage` — running the cascade only when a new,
+deeper threshold is crossed** — which is what makes "each stage once" hold for *every* effect kind:
+the sustained smoke loop would be spared re-firing by `CALL_ANIMATION`'s own live guard, but a
+one-shot damage effect that finishes (C5's `damage3_mp1zreng11`) is not, and re-fired on every step
+before the gate was added (the bug that surfaced the need). **Nothing calls `ApplyDamageStages` in
+normal play yet** — C23's `WeaponHit` path will, after decrementing HP; today the new `--damage-test`
+flag drives it. Verified with `--damage-test[=name]` (a new headless C22 verifier standing in until
+F40's interactive HP control): sweeping a destructible's HP full→zero and logging which stage effect
+fires at which health. The water tower (HEALTH 60, both compiled *and* the reader-parsed twin) fires
+black smoke at HP≤36 and fire smoke at HP≤18 (0.60/0.30 × 60); C1's HEALTH-30 AA guns fire at 18/9
+and HEALTH-60 buildings at 36/18 — proving the thresholds are absolute values derived per-def from
+each object's own `HEALTH`, evaluated against live per-instance HP; C5's `reng11` (HEALTH 40, the
+three-stage {0.85,0.50,0.25} progression) fires damage3→damage2→damage1 (each chaining its own
+smoke/fire) once each at HP≤34/20/10, with the re-fire gone. The full 8-chapter `--freecam`
+regression is **byte-identical to the C21 baseline** — same destructible counts (C1 267/196 … C5
+568/292), same node/mesh counts, all exit 0, no exceptions — confirming C22 is a no-op at world
+build: `ApplyDamageStages` runs only under `--damage-test`, and the reader-parsed `DAMAGE_SEQUENCE`
+sequences are inert because `WeaponHit` defs never bootstrap. Also recorded a verification.md rule
+(71): `--screenshot` needs a real GPU context — `--headless` selects the dummy renderer whose null
+texture readback throws, writing no file. Docs: `AnimDefs`/`AnimRuntime` ⚠ + expanded
+`DestructibleRegistry` architecture entries, `destructibles.md` "Engine status" rewrite, `cli.md`
+`--damage-test`, PLAN-M3-weapons.md (checklist 22 ☐→☑, `### C22` landed note), CLAUDE.md status.
+**Next: C23 (`WeaponHit` activation + damage application) — decrement HP on a projectile hit and
+call `ApplyDamageStages`, then C24's death sequence at zero.**
+
+**WeaponHit activation + damage application — M3 Wave C item C23 (2026-07-24):** the player can now
+shoot the world down — a projectile hit spends the weapon's `HEALTH_DAMAGE` on whatever destructible
+it struck, runs the damage stages, and kills the object at zero HP (the visible death swap is C24).
+Wiring: `ProjectilePool.Impact` (B15's raycast already reports the struck collider) invokes a new
+`DamageSink` delegate, wired in flight to `AnimRuntime.DamageAt(struck, healthDamage)`.
+`DamageAt` resolves the collider to its destructible via `DestructibleRegistry.Resolve`, subtracts
+`HEALTH_DAMAGE` (world destructibles carry HEALTH only — there is no armour pool, so `ARMOR_DAMAGE`
+is inert against them, the damage model the plan settled 2026-07-22), calls `ApplyDamageStages`, and
+sets `State.Destroyed` at zero. **The resolution was the crux.** A struck collider is a `StaticBody3D`
+deep under the anchor's subtree, so `Resolve` walks up the parent chain — but it must walk the WHOLE
+chain and prefer the **compiled** def, because a reader wildcard `NAME` grabs an inner node the
+compiled def does not: the tower's reader `ap_h2otwr*` matches `ap_h2otwr.flt`, which sits between the
+collider and the compiled `ap_h2otwr1` root, so "first anchor up the chain" wrongly picked the reader
+twin (an independent HP pool with no death sequence). Taking the nearest compiled anchor fixes it —
+`_authoritative` keeps one compiled-preferred instance per node. **Patrol-boat ⚠ resolved:** its anim
+def is HEALTH 20 `WeaponHit` (mission archives only, not the freecam IA1 chapters), so M3 damages it
+as scenery through that path; the AI-vehicle armour+health model (vehicle-def HP 40) stays M4.
+Verified with the new `--damage-hd=<n>` mode of `--damage-test` (discrete weapon hits via `DamageAt`,
+counting hits to destruction) — decisive and deterministic: a HEALTH-60 water tower dies in **1** hit
+at HD 60 (HE rocket), **2** at 40 (AP rocket — measurably worse against a building, exactly inverting
+AP's anti-armour advantage), and **14** at 4.5 (40-cal gun), crossing black smoke at hit 6 (HP 33) and
+fire at hit 10 (HP 15); a HEALTH-30 AA gun dies in **10** hits at 3.0 (30-cal), stages at 18/9. A
+`resolve✓` check (resolving from a deep descendant, the same node path a collider sits in) passes on
+**all 16** C1 `DAMAGE_SEQUENCE` destructibles. The full 8-chapter `--freecam` regression is
+byte-identical to the C21 baseline (same counts, no errors) — C23 is a no-op at world build
+(`DamageAt` only fires on real hits). An in-flight `--fly --fire` run over C1 confirmed the wiring
+end to end: `DamageSink` is invoked on every real impact and correctly no-ops terrain/water (no
+spurious damage). **Owed playtest:** watching a specific destructible take fire and die in interactive
+flight — the airport structures are placed by baked node transforms this session did not decode into
+aim points, and the *visible* death is C24's death swap, so this naturally pairs with C24 (added to
+`playtest.md`/`backlog.md`). Docs: `AnimRuntime`/`DestructibleRegistry`/`Projectile` architecture
+entries, `destructibles.md` "Engine status" rewrite, `cli.md` `--damage-hd`, PLAN-M3-weapons.md
+(checklist 23 ☐→☑, `### C23` landed note), CLAUDE.md status. **Next: C24 (death sequence execution +
+healthy→destroyed swap) — run `destroyit`/the death sequence when `DamageAt` reaches zero.**
+
+**Death sequence execution + healthy→destroyed swap — M3 Wave C item C24 (2026-07-24):** shot
+destructibles now die — at zero HP the object swaps to its wreck, its smoke/fire keeps burning, and
+its puffers fire. `AnimRuntime.DamageAt` (C23), on the transition to `Destroyed`, calls a new
+`RunDeathSequence` that plays the def's death via **`Start(def)`** — the def's own Initial sequences
+ARE the destruction (its `anim_name` is `h2twr_destruction1`/`destroy_mp1zreng11`): the
+healthy→destroyed `OBJECT_ACTIVE_STATE` swap, the debris sequences, and the puffer calls. **The key
+finding was that the death swap has no fixed name** — a census of ~100 C1/C5 destructibles found the
+swap sequence named `destroyit` (25), `destroy_h2twr` (4), `destroy_twr`, `litehouse_des`, or
+*unnamed* (56), and A4's ⚠ already ruled out `unknown_seq` — so rather than pick "the death
+sequence" out, `Start` plays them ALL (they are always `seq_state=Initial`, 90/90), which reaches
+every naming. The `DAMAGE_SEQUENCE` among them just re-fires the final smoke stage idempotently, as a
+one-shot kill wants. **A second finding drove the fallback:** ~10 of the 100 defs (the C1 AA guns
+`aagun32`–`36`) declare the healthy/destroyed node pair but author NO swap sequence, so `Start` alone
+left them standing. `ApplyDeathSwap` derives the swap from the def's **own RESET_STATE** — flipping
+the `healthy`/`destroyed`/`dbase` roles that base state explicitly named — applied only when RESET
+declares a `destroyed` node, so an object with no destroyed variant (`noseballgun`, which RESET shows
+has none; the fuel trucks, whose RESET is empty) is left intact, not blanked. This reads the def's
+explicit OBJECT_ACTIVE_STATE targets (A4's prescribed method), never a world-wide name scan (the
+`ref_tank_dest` trap), matches the exact role words (not a `_dest` suffix), and runs per-instance on
+real death — so it cannot fight the bootstrap safety net, which only runs at load. Verified via
+`--damage-test --damage-hd=` (extended with a `swap[healthy…, destroyed…]` check on the killed
+instance): the water tower (explicit `destroy_h2twr`), the AA gun (RESET fallback), and every one of
+the **16 C1 DAMAGE_SEQUENCE destructibles** end `healthy 0/1 shown, destroyed 1/1 shown` — healthy
+hidden, wreck shown; `reng11` hides its healthy subtree and stages its separately-`CALL_ANIMATION`'d
+`mp1reng_destroyed.flt` wreck + `large_fireball`; `noseballgun` dies without being blanked; the broad
+C1 sweep kills all 16 with zero errors. The 8-chapter `--freecam` regression is byte-identical to the
+C21 baseline (same counts, no errors) — C24 is a no-op at world build (death runs only on real
+hits). **Still stubbed:** the ballistic `OBJECT_MOTION` that flings wreck pieces (C26) and the
+one-shot death `Sound` (D31), so the wreck appears and smokes but the debris does not yet tumble and
+the explosion is silent; the in-flight *visual* of a specific object dying remains the C23 owed
+playtest. Docs: `AnimRuntime` architecture entry, `destructibles.md` "Engine status" rewrite, `cli.md`
+`--damage-hd` swap check, PLAN-M3-weapons.md (checklist 24 ☐→☑, `### C24` landed note), CLAUDE.md
+status. **Next: C25 (collider removal on destruction — the doors) or C26 (ballistic ObjectMotion
+debris); C26 is independent and wakes a path skipped since M2.**
+
+**Collider removal on destruction — M3 Wave C item C25 (2026-07-24):** destroyed doors, gates and
+buildings stop blocking flight — and it turns out this needed **no new runtime code**, because C24's
+death swap already does it. The `OBJECT_ACTIVE_STATE` swap runs through `SetSubtreeActive`, which
+toggles the subtree's `CollisionShape3D.Disabled` (`SetCollidersEnabled`) *alongside* its
+`Visible` — so the same swap that hides the healthy geometry also un-solids it, and the wreck it
+reveals becomes solid. The item was written (before C24 landed) anticipating separate collider code;
+the swap made it free. **What C25 actually delivers is the proof and the traps.** The `--damage-hd`
+harness gained a `col[off N, on M]` census — the world colliders a kill switches off (the healthy
+door/building) vs on (the wreck + any chained animation). Measured: C2 (Hollywood) `gate1`/`gate2`
+(the studio doors) kill with **off 1, on 8**; `kkgate` off 4, on 12; C1 `m_build01` off 1, on 10; the
+C1 AA gun off 2, on 1 — every destructible removes its healthy collision on death. **Two measurement
+traps cost the most and are now `verification.md` rules 72/73:** (1) colliders exist ONLY in the
+flight build (`WorldSession.Options.Collision = _fly`), so the first census — run under
+`--damage-test`, which is freecam — found "0 world colliders" and nearly concluded destructibles were
+non-collidable; forcing `Collision = _fly || _damageTest` revealed 1848 in C2, doors and the propane
+tank among them. (2) A *net* collider delta (`+8` for `kkgate`) hides the healthy removal behind the
+larger wreck it adds — the off/on split is mandatory. **The propane→door chain is confirmed handled:**
+Hollywood's `kkgate` is a WeaponHit destructible whose root is the collidable (shootable) `propane`
+tank, HEALTH 10; shooting *it* runs the gate's death — the healthy→destroyed swap (collider off) plus
+`CallAnimation` to `genx12`, `tbridg1_fire`/`tbridg2_fire` (the bridges catch fire) and
+`free_the_goose`; the door itself is not directly damageable, exactly as the original plays it.
+(`sghangar-opensgdoors` is a *different* HEALTH-0 OnStartup open, not the propane target.) The
+discrete-hit harness was also broadened to cover EVERY destructible, not only `DAMAGE_SEQUENCE`-carrying
+ones — the doors instant-die with no stages, so the old gate would have hidden C25's own cases. The
+8-chapter `--freecam` regression is byte-identical to the C21/C24 baseline (the `Collision` change is
+gated on `_damageTest`, so freecam builds no collision as before). **Owed playtest:** the destroyed
+variant re-adds its own colliders, so whether a blown-open door leaves a clear passage is the original
+data's call — fly through a killed door in flight to confirm (the same in-flight aim the C23 playtest
+owes). Docs: `destructibles.md` "Engine status", `architecture.md` (`AnimRuntime` + `PlaneViewer`
+entries), `verification.md` rules 72/73/74, `cli.md` `--damage-hd`, PLAN-M3-weapons.md (checklist 25
+☐→☑, `### C25` landed note), CLAUDE.md status. **Next: C26 (ballistic ObjectMotion debris tumble —
+independent, wakes a path skipped since M2) or C27 (the WeaponOrCollideHit collision path).**
+
+**Ballistic ObjectMotion — debris tumble — M3 Wave C item C26 (2026-07-24):** the wreck pieces fly.
+Like C25, this needed **no new runtime code** — and the plan's premise ("`AnimRuntime.cs:429`
+implements only the spin half and skips the ballistic half") was already outdated: the M2 crash Layer 1
+work (`ec8a731`) generalized that into `MotionRuntime`, a full ballistic rigid body handling gravity,
+a `translation_range` ballistic arc, a `forward_rotation` tumble, a `scale` ramp and `run_time` — the
+exact list C26's Approach asks for. It is REACHED on a weapon-hit death because the death's
+`OBJECT_MOTION` events sit in `Initial` sequences, so C24's `Start(def)` runs them. **The C24 HISTORY's
+"debris ballistic OBJECT_MOTION (C26) still stubbed" was a measurement artifact, not a real gap:** the
+launch is SCHEDULED mid-sequence (the water tower's `h2twr_middle` at t=2.2 s), and the C24/C25
+kill-and-check never advanced the animation clock — so it saw `debris[0]` and read as stubbed. In real
+gameplay `_Process` ticks the clock to 2.2 s and the pieces launch. Proven by advancing the death in
+the harness: the water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5.3 to y≈19.2 in
+0.8 s, `vis=True`, `run_time` 5 s; `h2twr_upper` likewise), C1 buildings **7** each, passenger planes
+**2**; deaths that author no `OBJECT_MOTION` (`air_gen`, the AA guns) correctly launch **0**. C26's
+deliverable is the durable instrument + the correction: a `BallisticMotionsLaunched` counter on
+`AnimRuntime`, and the `--damage-hd` harness now reports `debris[N launched]`. To measure it the harness
+adds the world subtree to the tree (with `ManualAdvance`, so `_Process` doesn't double-drive) and
+`Advance`s the death ~3.5 s AFTER the swap/col census — ticking an out-of-tree world spammed
+`!is_inside_tree` (global-transform reads), and the swap/col numbers must stay the immediate
+post-death state (C25's `col[off,on]` are unchanged: `m_build01` off 1/on 10, `aagun32` off 2/on 1).
+New `verification.md` rule 75 (a synchronous kill-and-check reads only t=0 effects; scheduled effects
+need the clock advanced, in-tree). **Still deferred:** the debris `do_intersections`/`bounce_sequence`
+ground-rest (a Layer-1.5 physics-ray follow-up — the pieces arc, tumble, and are then hidden by the
+sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it) and the death `Sound` (D31). The
+8-chapter `--freecam` regression is byte-identical to the C21/C24/C25 baseline (the harness changes are
+gated on `_damageTest`; the ballistic counter is zero at bootstrap). Docs: `destructibles.md` "Engine
+status", `architecture.md` (`AnimRuntime` + `PlaneViewer`), `verification.md` rule 75, `cli.md`
+`--damage-hd`, PLAN-M3-weapons.md (checklist 26 ☐→☑, `### C26` landed note), CLAUDE.md status. **Next:
+C27 (the 44 `WeaponOrCollideHit` collision path — facades/windows break on contact) or C28
+(destructible reset/restore, for the debug tools).**
+
+**The 44 WeaponOrCollideHit collision path — M3 Wave C item C27 (2026-07-24):** flying into the
+Hollywood facades, the warehouse windows and `agyrobus` now breaks them and the plane passes through;
+ramming anything else (water towers, gates, signs) still kills the plane and leaves the object intact.
+`ACTIVATION` is the switch. `SweepAirframe`/`HitWorld` (`FlightController`'s swept-box + center-ray
+collision probes) now also out the struck `Node`; before the crash/graze decision, the controller
+offers the hit to a new `CollideDamageSink` → `AnimRuntime.CollideDamageAt`, which resolves the node to
+its destructible (`Registry.Resolve`) and gates on `def.Activation`. A `WeaponOrCollideHit` instance —
+the **44** collide-destructibles (C2 `fcpan01`–`39`, C5 `w_win01`–`04` at health 0.01, C5 `agyrobus`
+at 70; verified as exactly 44 across cam_anim) — takes `vn × 8` HEALTH_DAMAGE through the SAME
+`DamageAt` a weapon spends (so the object's death — the healthy→destroyed swap, the debris tumble, the
+collider removal from C24/C25/C26 — is identical whether shot or rammed), and the hit is CLEARED so the
+plane keeps its full-motion pose and flies through. A `WeaponHit` object returns false and stays solid,
+so the crash/graze path runs unchanged — ⚠ decision 6 upheld: collision damage is **not** extended to
+`WeaponHit` set dressing (their 0.01-vs-real health is the tell). The `vn × 8` scale means a real
+flight-speed hit (vn ≥ ~9 m/s) breaks even `agyrobus` (70), while the 43 windows/facades (0.01) shatter
+at any motion; a stationary kiss (vn ≈ 0) breaks nothing. Verified headlessly with a new `--damage-hd`
+`collide[✓/✗, ACTIVATION]` probe (reset the instance, apply a collision, report accept + destroy): the
+C2 facades, C5 windows and `agyrobus` all `collide[✓ broke, WeaponOrCollideHit]`; the C2 signs and
+`kkgate` `collide[✗ ignored, WeaponHit]`. The 8-chapter `--freecam` regression is byte-identical to the
+C21–C26 baseline (the collide path is `--fly`-only; `CollideDamageAt` is never called at world build).
+**Owed playtest:** the in-flight feel — flying through a facade cleanly (it breaks, plane survives) vs.
+flying into a water tower (plane dies, tower stands) — the same aim the C23 playtest owes. Docs:
+`destructibles.md` "Engine status", `architecture.md` (`AnimRuntime` + `FlightController`), `cli.md`
+`--damage-hd`, PLAN-M3-weapons.md (checklist 27 ☐→☑, `### C27` landed note), CLAUDE.md status. **Next:
+C28 (destructible reset/restore — re-apply RESET_STATE, restore HP + colliders, for the debug tools),
+the last Wave C item.**
+
+**Destructible reset/restore — M3 Wave C item C28 (2026-07-24) — Wave C complete:** a destroyed object
+can be returned to healthy, for the debug tools (F40/F41) and respawn. `AnimRuntime.ResetDestructible`
+is the death's inverse, in four steps: (1) `Stop` the def's live death, tearing down its
+motions/puffers/fires; (2) `RestoreRestPoses` — restore the authored pose of any node the death
+physically MOVED, i.e. the ballistic debris pieces (C26): `Stop` removes the motion but leaves the
+piece wherever it flew (y≈19 for the water tower's middle section), so a re-destroy would launch from
+the wrong place — `_rest` already holds each moved node's rest transform (MotionRuntime records it on
+launch), and the membership check confines the restore to nodes that actually moved, leaving the
+visibility-only healthy/destroyed nodes to RESET_STATE; (3) re-apply the def's `RESET_STATE`, whose
+`OBJECT_ACTIVE_STATE` base states make the healthy subtree visible+collidable and hide the destroyed
+one (`SetSubtreeActive` restores colliders with visibility, C25), undoing both the C24 swap and the
+`ApplyDeathSwap` RESET-derived fallback; and (4) restore the instance's HP/Status/DamageStage (the C21
+fields). Idempotent by construction — destroy→reset→destroy produces identical results. Verified with a
+new `--damage-hd` `reset[…]` check (kill, reset, re-kill, compare): across **C1/C2/C5** every
+destructible type returns `healthy=✓` (healthy shown, destroyed hidden) and re-kills in the SAME hit
+count as the first kill — buildings/towers with debris (`m_build01` 2h, `ap_h2otwr1` 1h), passenger
+planes (1h), `air_gen` (2h), the AA gun `aagun32` whose death used the RESET-derived swap fallback
+(1h), the doors `gate1`/`gate2` with their rotated-open leaves restored (1h), the propane `kkgate` with
+its CallAnimation chain (1h), the C2 facades `fcpan*` (WeaponOrCollideHit, 1h), and C5's substantial
+`agyrobus` (health 70, 2h). Objects with no NAMED healthy/destroyed node (the signs, the facades) still
+reset cleanly — HP+status restore and the re-kill is idempotent. The 8-chapter `--freecam` regression
+is byte-identical to the C21–C27 baseline (`ResetDestructible` is only called from the harness/debug
+path, never at world build). **This completes Wave C (destruction):** objects now damage (C21–C23),
+die (C24), lose+gain collision (C25), throw debris (C26), break on contact (C27), and reset (C28).
+**Still deferred out of the wave:** the death `Sound` (D31) and the debris `do_intersections`/
+`bounce_sequence` ground-rest (a Layer-1.5 physics-ray follow-up). Docs: `destructibles.md` "Engine
+status" (Wave C complete), `architecture.md` (`AnimRuntime`), `cli.md` `--damage-hd`, PLAN-M3-weapons.md
+(checklist 28 ☐→☑, `### C28` landed note), CLAUDE.md status. **Next: Wave D (weapon effects) — D29
+muzzle flash, D30 tracers/impacts polish, D31 death audio — and the owed in-flight playtests.**
+
+## 2026-07-24 — M3 Wave D D30: impact effect models (water splash) + puffer-effect finding
+
+The per-surface `IMPACT` **effect animation** is now wired at the hit point, not just the sound.
+`ProjectilePool.Impact` resolves the struck surface's `ANIMATION`/`SURFACE_ANIMATION` and, when the
+name IS a chapter-gamez model root, `SpawnImpactModel` instances that prototype's subtree at the
+point (reusing the flyout `GameZ`/`SceneBuilder`, collision-exempt, upright, freed after 0.4 s) and
+suppresses the stand-in spark — the authored model is the effect. In practice this is the **water
+splash**: gun `splash1.flt` and HE `bsplsh.flt` each instance 2 meshes, verified reproducibly on
+C1B/C2B (both dive-reliably over water). Names that resolve to a reader/control def (`3040slug_gunhit`,
+`he_ground_effect`, `large_fireball`) or are undefined (`bld_damage.flt`, `rcochet1`, `call_small_flash`,
+`f18sparks2`, `flak_effectplayer`) name no root, so nothing instances and the spark stands in — the 5
+undefined names thereby **confirmed inert** (no crash) on C4/C5 building hits.
+
+**Finding (the plan's "Puffer.cs already implements puffer emission" premise, corrected):** the
+**puffer/particle** half of the named impact effects (the `gunhit` `blacksmokepuffer` smoke, the
+fireball puffs) does **not** render at runtime in flight, because the puffer factory + `TextureArchive`
+are torn down after the world build (`KeepArchivesOpen` is `--anim-lab`-only). Rendering them needs a
+dedicated world-effects runtime that keeps textures open and relocates the effect templates onto the
+hit point — exactly the pattern the per-player crash runtime already proves (`BuildFlightCrashRuntime`:
+live `PufferFactory` + `PlaceCalledTemplates` + `BuildEffectStage`). That machinery is shared with
+**destruction effects (D32)** (the same `CallAnimation`/puffer templates), so the impact-puffer wiring
+folds into D32; D30 lands the model-based effects + sound + spark.
+
+Verified: build clean; guns+rockets dived-and-fired over all 8 chapters with no error tracing to
+`Projectile.cs`; water → `splash1.flt`/`bsplsh.flt` instance (2 meshes each); terrain/buildings →
+spark, no crash; the 1-instance ObjectDB exit leak reproduced on the no-fire baseline (pre-existing).
+8-chapter `--freecam` regression err=0 with baseline mesh counts (the pool is flight-only, so freecam
+is untouched by construction). **Owed playtest:** the on-screen look of the water splash at speed.
+Docs: `weapon-effects.md` (Engine wiring D30 + 5-name inert confirmation), `architecture.md`
+(`Projectile.cs`), `verification.md` rules 76 (runtime puffers dead in the flight build) + 77
+(`CANNON_SPREAD` non-determinism in impact tests), PLAN-M3-weapons.md (checklist 30 ◐→☑, `### D30`
+reconciled, `### D32` expanded), `playtest.md`, CLAUDE.md status.
+
+## 2026-07-24 — M3 Wave D D31: the one-shot `Sound` anim event + `SOUND_GROUPS` decode
+
+**What landed.** The one-shot `SOUND` animation event — the fire-and-forget destruction/damage/impact
+audio a sequence emits (`air_mixed_exp_sg` when a building is struck, `snd_gasbagexp1` on a zeppelin
+kill) — now plays. Previously `Sound` fell through `AnimRuntime`'s `default` case and was only counted.
+Distinct from `SOUND_NODE` (the pooled looping ambient emitters, landed earlier): a one-shot plays
+once at a world point and disposes itself.
+
+- **`SoundGroup` + `SoundDefs.LoadGroups`** decode the `SOUND_GROUPS` block (docs: `sounds.md`).
+  A group is a weighted member set; `Pick(rng)` is weighted-random with a recency scalar —
+  `DYNAMIC_WEIGHTS factor` (0.5 everywhere) halves the last pick's weight so a variant does not
+  repeat back-to-back (that is what the bare `0.5` after the token decodes to). Explicit-`WEIGHT`
+  groups (`snd_plane_die`/`snd_plane_dmg`, `snd_nothing` at 0.7) get per-member weights and no
+  recency; VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are
+  skipped; music `*_sg` groups parse but no `SOUND` event names them.
+- **`WorldSounds.PlayOneShot(name, worldPos, rng)`** resolves a group→member first, then plays a
+  throwaway `AudioStreamPlayer3D` at the point. Registered in `_oneShots`, swept in `Tick` once it
+  stops (no reliance on the `Finished` signal); `FlushOneShots` frees them for the synchronous
+  damage-test harness, which pumps no frames.
+- **`AnimRuntime.HandleSound`** dispatches the event: NAME is a sound *definition* or a group, never
+  a gamez node (the recorded C3 gotcha — the lone reader-scope one-shot names `snd_waterfall`, a
+  definition, `targets=0`); position is the AT_NODE (`{name,pos}` compiled / flat `at_node`+`translate`
+  reader), or the anchor. `OneShotSoundsPlayed` counts successful plays for headless verification.
+- **Prewarm** now covers one-shot names too (`AnimProgram.OneShotSoundNames`, group names expanded to
+  members in `WorldSounds.Prewarm`), decoded quietly (`SoundArchive.Find(…, warn:false)`) so a
+  per-chapter archive legitimately lacking a referenced WAV (`hanger_door.wav` in C4) does not warn —
+  the authoritative "silent for the session" report stays at the point of use.
+
+**Verified.** Build clean, 0 warnings. `--damage-test --damage-hd=60` across **all 8 chapters**:
+`Sound` dropped off every "not yet acted on" list (was counted, now handled); death sounds play —
+switchhouse (the `air_mixed_exp_sg` worked example) `snd[2 played]`, C1 52, C2B 73, C3 4, C5 136 across
+the sweep. `--debug-anim` shows the emitters: `sound one-shot: air_mixed_exp_sg → snd_exp_hit1/2/3 @
+(-9096,774,-5637)` — the group resolves to *different* members (recency diversifying the picks) at the
+`dbase` node. One-shot cleanup is leak-free (C4, 26+ plays on the helium tanks → 0 ObjectDB leak with
+`FlushOneShots`). Frame-pumped `--freecam` C1 clean (38 ambient emitters unchanged, no per-frame
+errors, `Sound` handled). All residual log noise is pre-existing and non-sound: C2/C3 `det == 0`
+degenerate transforms (present in the `--mute` baseline too), C2B `clutter template not found`,
+`!is_inside_tree()` harness reads, the non-deterministic 0–6 ObjectDB exit leak, and the
+`timeout`-SIGKILL CLR error on a killed freecam.
+
+**Docs.** `sounds.md` (new `SOUND_GROUPS` section), `anim-definitions.md` (one-shot half landed),
+`architecture.md` (`SoundDefs`, `SoundArchive`, `WorldSounds`, `AnimRuntime`), PLAN-M3-weapons.md
+(checklist 31 ☐→☑, `### D31` reconciled), `backlog.md` (the dead-`Sound`-path note closed), CLAUDE.md
+status.
+
+**Config tuning-override layer (`src/Utils/Config.cs`) + FlightModel wired (2026-07-24, on the
+`worktree-config-module` side branch).** A static `Config` reads an optional sparse
+`res://config.json` (`CSVM/config.json`, git-ignored) whose values override the hand-tuned `const`s
+for fine-tuning without a recompile. Design decided by a grilling pass: **override, not replace** — the
+`const`s stay in-code as the DEFAULT with their rationale comments, and `Config.GetFloat/GetInt/GetBool/
+GetString(key, const)` returns the file's value if the key is present, else the `const` returned
+**verbatim**. Keys are `moduleCamelCase.fieldCamelCase`, grouped one nesting level in the JSON; access
+is **read-through** at the point of use (per-frame dict lookup, negligible; keeps future live-reload a
+cheap mtime-reparse instead of an event system). Every getter self-registers `(key, default)`, so
+`--dump-config` writes a fully-populated nested template to `./.scratch/config.dump.json`; a file key
+that matches no tunable is warned loudly (typo detector, `ReportOrphans`), and a queried key missing
+from a loaded file warns once. `WarmTuningRegistry` (PlaneViewer) steps a throwaway `FlightModel` with
+a default `PlaneStats` once at startup so orphan-check + dump are complete with **no world / no game
+data**. Comment + trailing-comma tolerant on input; malformed JSON → one error line, never throws.
+Scope this pass: **`FlightModel`'s 15 `TUNE` consts only** (read into locals at the top of `Step` so
+every key registers even on a frame that skips the stall/knife branches; `MaxDiveSpeedFrac`, marked
+"hard cap" not TUNE, left alone). **Read-only** — nothing writes the file; `res://` chosen so a writable
+`user://` layer can later stack under the getters (the "save player configs" direction) without touching
+a call site. Deferred: write/save + `user://` layer, live-reload, the other 13 TUNE-bearing files,
+`Vector3`/`Color` getters.
+
+Verified: build clean (0 warnings). `--dump-config` writes the 15-key `flightModel` template with exact
+defaults. With a deliberately-broken `config.json` (one valid override, one string where a number
+belongs, one typo'd key, plus a `//` comment + trailing comma): 3 overrides parsed, the valid override
+silent, the string caught as a type mismatch, the 13 absent keys reported once each, and the typo'd key
+flagged as an orphan — all as designed. Regression: a static-viewer md5 A/B (`--viewer
+--plane=player_bhawk --paint-seed=1 --no-pads`, worktree-new vs the same shot with the two edits stashed
+back to `f5b3a26` baseline) is **byte-identical** (`f1290254…`), proving `Config.Load()` + the startup
+warmup/orphan pass are side-effect-free on the build/render path. The flight math itself is inert **by
+construction** — with no config.json every getter returns its `const` fallback verbatim and no operation
+was reordered — which is the accepted verification here since `--fly` screenshots are not
+frame-deterministic (`verification.md` rules 44, and the non-determinism table). Docs: `architecture.md`
+(`src/Utils/Config.cs`), `cli.md` + CLAUDE.md module index (`--dump-config`).
+
+## 2026-07-24 — M3 Wave D D32: the world-effects runtime (destruction + impact puffers)
+
+The named destruction/impact effects now render their smoke and fire. D30 established that a runtime
+`PUFFER_STATE` builds nothing in the flight build — the puffer factory + `TextureArchive` are torn down
+after the world build (`KeepArchivesOpen` is lab-only, `verification.md` rule 76) — and deferred the
+puffer half of both impacts and deaths to a shared **world-effects runtime**. That runtime is the
+world-scoped generalization of the per-player crash runtime (`BuildFlightCrashRuntime`), which already
+proves the pattern: a live `PufferFactory` over kept-open textures, `PlaceCalledTemplates`,
+`NameResolveFallback`, and effect-template roots staged for a `CALL_ANIMATION` to relocate.
+
+**What landed.**
+- **`PlaneViewer.BuildWorldEffectsRuntime`** — one per session (built in the `--fly` path, needing the
+  session textures the crash runtime already keeps open): a **hidden** `world_effects` stage of the
+  `EffectStageRoots` gamez templates (`gunhit`/`dum_gunhit`/`mag_gunhit`/`flame_ball_01`/`flame_ball_02`/
+  `he_ring`/`ap_effect`/`flak_control`/… — 18, all present in every chapter's gamez), plus an
+  `AnimRuntime` (`AutoStart`=false, `PufferFactory` sustained, `PufferParent`=world root,
+  `PlaceCalledTemplates`+`NameResolveFallback` on) bound to the closure of the 28 `EffectAnimNames`.
+- **`AnimRuntime.PlayEffectAt(name, worldPoint)`** — relocates the effect def's template root onto the
+  point (`PlaceTemplateAt` gained an absolute-point overload) and `Start`s it. Its puffers ride that
+  relocated root and parent at world level, so they render even though the stage is hidden — which is
+  the point of hiding it: the template **meshes** (the `gunhit` debris bits, the `he_ring`/`huge_splash`
+  models) never flash at the stage origin (a documented mesh follow-up). `Handles(name)` gates the
+  routing so only curated effects are handed off.
+- **Two callers.** `ProjectilePool.EffectSink` on a **rocket/ordnance** impact (the non-model IMPACT
+  effect — `large_fireball`, `he_ground_effect`, …); the world runtime's new `ExternalEffect` delegate
+  routes a **death** sequence's `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, …) here
+  instead of starting it locally where its factory is gone.
+- **Bounds + hygiene.** `EffectTtl` (32 s) tears down a stop-less sustained emitter so
+  `large_30sec_fire`'s `fire_n_smoke` (a `Loop` with no `ACTIVE_STATE 0` until t=30) does not emit
+  forever; `SoundHandledElsewhere` makes the runtime's SOUND/SOUND_NODE no-ops (the impact/death audio
+  is already played by D30's pool / D31's world runtime — playing it again would double it and, with no
+  audio session, only spam "silent for the session").
+
+**Two decodes fixed on the way.**
+- A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` now resolves to the **anchor**
+  (`IsSelfNodeRef`, the same −200/−100 sentinel rule `ConditionNode` already applied). Before, the host
+  went through `ResolveOne`→null→"no host node", so `large_30sec_fire` (host `INPUT_NODE`) emitted
+  nowhere. With the fix its fire emits on the effect's own relocated root — the whole point of a
+  called destruction fire landing at the call site.
+- `AnimProgram.Subset` gained a multi-root overload for the effect closure.
+
+**Guns deferred — stronger than the plan's singleton note.** The plan expected the `gunhit` smoke to
+*collapse onto one puff* under rapid fire. In fact `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE
+0` stop**, so a per-round shared emitter would emit **forever** at the last hit — worse than a jumping
+puff, a leak. So gun impacts are **not** routed (`ProjectilePool.EffectSink` is gated `!weapon.IsGun`);
+the gun `*_gunhit` names stay bound and testable. A guns pass needs per-hit copied/expiring emitters.
+Rockets/ordnance (≤1/s, self-terminating fireballs) route now.
+
+**Verified.** New `--effects-test` (builds the world-effects runtime, plays each bound name at the
+camera point, reports resolve✓ + puffer-built per rule 76, to `./.scratch/effects_test.txt`, then
+quits). Made deterministic — the runtime RNG is seeded (several gun variants gate their puffer behind
+`RANDOM_WEIGHT`) and every effect is `StopAll`'d before the next (they share the `trailpuffer2` puffer
+name, so a lingering one reads as the next's "no puffer"). Reproducible and identical across C1/C2/C4/C5:
+**28/28 resolve, 16 build a puffer** — `large_fireball`/`small_fireball`/`large_30sec_fire`/
+`great_balls_of_fire`/`large_black_smokeball`/`big_splash`, the gun `*_gunhit` smoke, and the
+`ap`/`sonic`/`flak`/`scatter`/`torpedo` ground bursts. The 12 that build none are honest: point-light/
+model effects (`he_ground_effect`, `flash_effect`, `rear_flash_effect`), the `RANDOM_WEIGHT`-gated gun
+variants, and `biggun_flying_parts` (a zeppelin container whose puffers ride unstaged `fly_trail*`
+sub-trails). A C1 `--fly --fire-rockets` run routes HE impacts through `PlayEffectAt` (`impact: wep_06
+(BOOM) → …`) with no crash and no effects-runtime warning noise. Regression: 8-chapter `--damage-test
+--damage-hd=100` clean (0 hard errors, 16 defs swept each — unchanged); `--freecam` C1 ambient puffer
+census unchanged (`4 puffer emitter(s): splashpuffer1..3, steampuffer`, same 6 unhandled kinds), so the
+`INPUT_NODE`-host fix did not disturb the ambient world. The **on-screen** fireball look is an owed
+playtest (`playtest.md`), like D30's splash — headless `--screenshot` still NREs in `GetImage` (a
+pre-existing, unrelated harness limitation).
+
+**Docs.** `weapon-effects.md` (D32 engine-wiring section + the impact→effect render map),
+`anim-definitions.md` (`INPUT_NODE`/`MAIN_ROOT_NODE` AT_NODE → anchor), `architecture.md` (`AnimRuntime`,
+`Projectile`, `PlaneViewer`), `cli.md` + CLAUDE.md module index (`--effects-test`), PLAN-M3-weapons.md
+(checklist 32 ☐→☑, `### D32` reconciled), `backlog.md` (gunhit guns follow-up + the mesh-effects
+follow-up), `playtest.md` (the owed fireball/impact-effect listen-and-look).
+
+## 2026-07-24 — M3 Wave D D44: pylon ordnance visuals (mounted rockets that deplete)
+
+Rockets now hang under the wings and vanish as they are fired. The new `src/Flight/PylonOrdnance.cs`
+mounts one FLYOUT `MODEL` body per loaded pylon — the **same** chapter-gamez prototype the round
+itself flies (`he_rocket`, `sonic`, …) — so the thing on the wing and the thing that leaves it are one
+asset. `Build(loadout, pool)` calls the newly-public `ProjectilePool.BuildFlyoutBody(weapon)` (the
+resolve-cache-and-`BuildSubtree` path that `BuildFlyoutModel` was refactored to share), parents each
+body to its `pylonN` marker at **identity local transform** — the marker's −Z is the forward firing
+direction, so the body sits nose-forward at the exact pose the round launches in, tail at the mount —
+and `Update` (driven by `FlightController` after `UpdateRockets`) shows/hides each body per its live
+`Hardpoint.Ammo`, a respawn refill re-showing it. Mounted bodies ride the plane and are freed with it;
+they inherit the default visual layer, so every splitscreen camera sees them exactly as it sees the
+plane.
+
+**The two flagged traps, checked against the data, not assumed.** *(1) One model per pylon, not one
+per round:* a pylon carries `CLUSTER_SIZE` (3, stock HE) but the original shows a single rocket, so
+visibility keys on `Ammo > 0`, never a per-round stack. *(2) No double-up with airframe geometry:* a
+name search of the plane `nodes.json` for rocket/missile/bomb/torpedo/ordnance/munition mesh turned up
+**nothing** — the only pylon-named nodes are `pylon1..8` (the mesh-less firing markers) and one plane's
+structural `lpylon*`/`rpylon*`, all `model_index -1`. So the FLYOUT body adds ordnance where the model
+had none; it cannot z-fight a static rocket, because no plane ships one.
+
+**`--rocket=<wep_id>` added** (a testing hook, `PlaneViewer.ApplyRocketOverride`). The plan's verify
+says "swap rocket type via `--loadout=`", but all 11 stock loadouts carry HE (`wep_06`) and `--loadout=`
+only swaps whole plane defs — so no def-swap can change the mounted model. `--rocket=` replaces every
+hardpoint's ordnance (resetting each pylon to that weapon's `CLUSTER_SIZE`) and is the honest way to
+prove the model is data-derived; the general per-slot `--loadout=` override remains F43.
+
+**A `--screenshot` red herring, run to ground.** The first headless soaks flooded with `ERROR:
+Parameter "t" is null` / `NullReferenceException`. It was **not** the new code: those appear only with
+`--screenshot` in a headless build (the framebuffer-capture path, the same limitation D30/D32 hit in
+`GetImage`). A clean `--quit-after` soak with no `--screenshot` reports **zero** errors — that is the
+authoritative regression check here. Recorded as a `verification.md` rule so the next session doesn't
+re-chase it.
+
+**Verified** (headless, `--quit-after`, no `--screenshot`, zero errors): stock Bloodhawk / C1 logs
+`pylon ordnance: 3 mounted rocket model(s)` and `flyout model 'he_rocket' (wep_06) instanced: 1
+mesh(es)`; a `--fire-rockets` soak fires 9 HE round-robin across pylon1/2/3 (each 2→1→0) and hides
+`pylon1` on the 7th pull, `pylon2` on the 8th, **`pylon3` on the 9th** — the exact depletion the verify
+names. `--rocket=wep_08` instances `sonic` bodies instead (`flyout model 'sonic' (wep_08) instanced`),
+proving the model varies by type. The 8-pylon Warhawk mounts 8; Bloodhawk over C5 resolves the
+prototype too (the roots exist in every chapter — B14). The pixel-level z-fighting look is the owed
+at-the-controls playtest, shared with B14/B17 (a 1.5 m mounted round is not headless-screenshottable in
+this build).
+
+**Docs.** `architecture.md` (new `PylonOrdnance` entry + `Projectile`/`FlightController` ⚠ lines),
+CLAUDE.md (module index line, Current-status wave position + Next pointer), `cli.md` (`--rocket=`),
+`verification.md` (the `--screenshot`-floods-headless rule), PLAN-M3-weapons.md (checklist 44 ☐→☑,
+`### D44` landed note; Wave D now complete).
+
+## 2026-07-24 — M3 Wave A A10: the slot→firepoint binding rule confirmed in-engine (Wave A complete)
+
+The last open Wave A item, and — as the plan's preamble anticipates ("landing no code with a correct
+disproof is a success here") — a **verification, not code**. It closes the one thread the plan left
+open on the muzzle-mount binding: the reverse-index rule (slot _n_ → `firepoint(9−2n),(10−2n)`) was
+"strongly supported but pending in-engine confirmation" after two earlier binding hypotheses had been
+disproven. A10 confirms it.
+
+**Method — cross-reference two committed instruments, no new tooling.** `--dump-loadout` reports each
+gun slot's mount name → bound firepoints; `--dump-markers` reports each firepoint's plane-frame
+position (nose −Z, right +X, up +Y). For all 11 aircraft, every **firing** gun group's bound firepoint
+matches the geometry its mount name asserts:
+- **Devastator (decisive — the only two-axis airframe): 3/3 on both axes.** `Low Inner`→fp7,8 (y−0.6,
+  |x|1.2), `Low Outer`→fp5,6 (y−0.83, |x|2.12), `Upper Inner`→fp3,4 (y+0.44, |x|1.0). Low<Upper on y,
+  Inner<Outer on |x|.
+- **Peacemaker (decisive — the only asymmetric one): 2/2, sides correct.** `Center`→fp7,8 (x≈0),
+  `Right Fuselage`→fp5,6 (x+1.96/+1.66).
+- **Bloodhawk** reproduces the user's playtest (40-cal `Inner` |x|3.22 < 30-cal `Outer` |x|3.66);
+  **Brigand** reproduces "W1 and W2 share the outer mount" (both at |x|2.34, fp7≡fp6/fp8≡fp5).
+- **The Firebrand/Kestrel soft spot the plan flagged is resolved, not a discrepancy:** their firing
+  guns are correctly ordered (inner<middle<outer / on-centreline); the reverse-index rule only seats
+  the **inert `Rear Turret`** on the outermost firepoint (Firebrand |x|5.67, Kestrel |x|3.26), which
+  fires no flash in M3 — the turret firepoint binding is M4 scope.
+
+**Windowed corroboration (this machine has a real GPU — RTX 5080/Vulkan, so `--screenshot` WITHOUT
+`--headless` works; the absolute-path rule 74 applies).** A firing Bloodhawk shows a warm muzzle flash
+on the wing with the HUD depleting **only** the selected group (also re-confirming B18's one-group-at-
+a-time). The Peacemaker marker overlay shows `firepoint7` on the centreline and `firepoint5` on the
+right fuselage — the mount names made visible. **Appearance:** the game's own `slug_muzzle1`/`2`
+flipbook is a warm orange→yellow radial burst that matches `OriginalScreenshots/MuzzleFlash1.png`; D29
+draws `slug_muzzle1` and stock is all-slug, so the texture is correct (the 2-frame flip animation +
+per-ammo dum/ap/mag textures remain the documented D29 refinement).
+
+**No code changed** — the binding was already correct (the `markers` arrays in `stock_loadouts.json`
+are the rule's explicit output, checked A7) and D29 already rendered the flash at the resolved
+firepoint. Screenshots are rendered plane frames, so they stay in `./.scratch/` (swept) and are **not
+committed** — the no-assets rule covers rendered asset data; the durable evidence is the two dump
+instruments + `markers.md`, which cite only format-level firepoint positions.
+
+**Docs.** `markers.md` (binding section "pending A10" → "confirmed in-engine", with the method + the
+turret-soft-spot note), PLAN-M3-weapons.md (checklist A10 ☐→☑ + `### A10` landed note; the binding-rule
+subsection header/⚠ flipped to confirmed; Wave A now complete), CLAUDE.md Current-status (A10 done →
+Next is Wave E).
+
+**Bitmap-font HUD text renderer — M3 Wave E, item E34 (2026-07-24):** the game's own HUD font is now a
+reusable renderer (`src/Flight/HudFont.cs`), the foundation the rest of Wave E draws with. The two
+atlases in `extracted/rimage/` — `5pointhud.png` (normal) and `5pointhudbrite.png` (highlight) — were
+pixel-probed and are **463×6, a proportional 1-bit font, five px tall (rows 0–4), covering printable
+ASCII `0x20`–`0x7e`**: space is a blank leading cell, so the 94 ink glyphs map one-per-code
+`0x21`–`0x7e` in code order (`glyph(code) = run[code−0x21]`), letters uppercase-only (`a`–`z` reuse
+`A`–`Z`). Colours are two green levels on black (normal core (0,150,0), highlight core (0,255,0), a
+dim (0,32,0) outline). **The PLAN's shorthand "`0123456789:;<=>?@A…z`" understated the range** — the
+probe found it begins at `!`; corrected in `docs/formats/hud.md`, which now carries the full decode.
+The reader auto-segments source rects at load (maximal inked-column runs, exact because no glyph has a
+blank interior column — 94 runs = 94 codes, verified; it warns if the count drifts), keys the black
+background transparent (green kept, so a white modulate reproduces the original), and draws each glyph
+with `DrawTextureRectRegion` under a Nearest filter, 1 px tracking, 3 px space; sizing routes through
+`HudMetrics` like every other HUD element. **Verified** (`--hud-font-test`, a flag-gated per-pane proof
+overlay `src/Flight/HudFontTest.cs`): the sample `GUNS 30: 2000  ROCKETS 06: 9` renders correctly in
+both variants at 1P and in a 4-way splitscreen pane, the glyphs identical and the size differing only by
+the HudMetrics factor (1P Scale 0.50 vs 4P pane 0.354 — the sqrt-damped 0.707 ratio, not a naive 0.50),
+with the `Measure()` underline ending exactly at the last glyph in both. `--screenshot` was run
+**windowed** (verification.md rule 71: `--headless` floods `Parameter "t" is null` and never captures).
+Purely additive and gated — with the flag off, `HudFont` is not loaded and the flight HUD is unchanged.
+
+**Docs.** `docs/formats/hud.md` (new "HUD bitmap font (`5pointhud`)" section), `docs/architecture.md`
+(new `src/Flight/HudFont.cs` entry), `docs/cli.md` (`--hud-font-test`), PLAN-M3-weapons.md (E34 ☐→☑),
+CLAUDE.md (module index + Current-status Next E34→E35).
+
+## 2026-07-24 — M3 Wave E E35: gun + missile cockpit gauges (`gungauge`/`missilegauge`)
+
+The two weapon dials the `gauges` subtree carried but nothing wired. `GaugeCluster.ExtractWeaponGauge`
+reads both (extending the same extractor as the altimeter/speedometer/damage dials), and
+`FlightController.UpdateWeaponGauges` pushes a `WeaponGauge` (count / type / selected slot / per-slot
+fractions) each frame from the live loadout. Placed off `OriginalScreenshots/HUD.png` (the Warhawk):
+**ROCKETS** one dial-pitch above the altimeter, **GUNS** above the speedometer.
+
+**How the original drives them** (decoded from planes.zbd + `support\cockpit.gw`, full page in
+`docs/formats/hud.md`): the dial node is mesh-less on **every** plane and the labelled face
+(`gungauge.tif`/`missilegauge.tif`) hangs off a generic child (`g815`/`g819`) — **the per-plane
+parenting quirk the plan warned about is the `damageindicator`'s, NOT these two** (verified across the
+whole roster); the extractor still uses the safe "any unrecognised child = face" rule. `4char_ammo` is a
+`zero.tif`…`nine.tif`,`SPACE.tif` digit cycle (drawn right-aligned); `6char_type` an `A`…`Z`,`zero`…
+`nine`,`SPACE` cycle showing the weapon `NAME` upper-cased; `ggindicator0..3`/`mgindicator0..7` are belt
+lights (one per gun group / pylon, top = 0, CCW) each carrying a 3-frame green/yellow/red cycle; the
+`gg`/`mgarrow` needle rotates to the selected slot.
+
+**Semantics (user-corrected mid-implementation):** the gun count is **per gun group** (the selected
+group's own counter — already independent from B12), the rocket count is **per pylon** (the next-to-fire
+pylon's rounds — a full HE pylon reads `3`), **not** a fleet total. This matches the original's Warhawk
+reading `BOOM 3`. Belt lights step green → yellow (≤ 0.34 fraction) → red (empty); turret gun slots are
+excluded (a 2-gun plane lights 2). The green/yellow/red thresholds are inferred (the data only says the
+indicators *can* be those three colours, not when) → a `IndicatorLowFrac` TUNE, with a `playtest.md`
+item for the user to confirm the yellow state exists in the original and at what fraction.
+
+**Verified** (windowed captures, verification.md rule 71): all 11 flyable planes render both gauges —
+including the Devastator's inherited `player_pfighter` and the five turret airframes (only firable groups
+lit). Counters track B16/B17: each plane's W1 caliber → its capacity on the gun gauge (70→1200 …
+30→2800), `BOOM 3` per full HE pylon on the missile gauge. Belt stepping proven by depleting the
+Bloodhawk's rockets — full = green, `1` remaining = **yellow**, `0` = **red**, the arrow tracking the
+yellow next-to-fire pylon. Purely additive: the gauges render only when the FlightController feeds them,
+so the `--viewer`/lab builds (no loadout) are unchanged.
+
+**Docs.** `docs/formats/hud.md` (new "weapon gauges" section + the `cockpit.gw` drive),
+`docs/architecture.md` (`GaugeCluster` entry — the two gauges, per-group/per-pylon rule, generic-face
+rule), `playtest.md` (E35 gauge item + the yellow-state A/B), PLAN-M3-weapons.md (E35 ☐→☑),
+CLAUDE.md (Current-status Next E35→E36).
+
+## 2026-07-24 — M3 Wave E E36: selected-weapon text readout (`MSG_HUD_GUNGAUGE`)
+
+The game's own textual weapon readout, drawn in the `5pointhud` bitmap font (E34). New
+`src/Flight/WeaponReadout.cs` — a bottom-centre two-line `Control` that renders the currently-selected
+gun group and rocket type with their live ammo, from the message table's own templates
+`MSG_HUD_GUNGAUGE` (id 188, `"GUNS: %1: %2!d!"`) and `MSG_HUD_MISSLES` (id 189,
+`"MISSILES: %1: %2!d!"` — the table's misspelling), resolved through `Messages` and **never
+hardcoded**. `%1` names the gun group / rocket type (that is why the strings exist — the counters are
+per group / per pylon, so the readout has to say which); `%2!d!` is the count.
+
+Added `Messages.Fill`/`Format`: substitutes `%1`…`%9` positional placeholders, consumes a trailing
+bang-spec (the `!d!` in `%2!d!` — the arg is already a formatted string), and turns `%%` into a
+literal `%` (used by `MSG_HUD_HEALTH` etc.). FlightController feeds the readout in the same
+`UpdateWeaponGauges` pass that drives the gauges: `%1` = the gun group's **mount name**
+(`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's **display name**
+(`High-explosive rocket`, its `MSG_WEAP_*` `DESC` resolved through `Messages`, falling back to the
+short handle if unresolved); `%2` = the selected group's per-group rounds / the next-to-fire pylon's
+per-pylon rounds (matching the E35 gauge). This **replaced the interim `AmmoLine`** debug text (which
+summed rockets to a fleet total — the very total the E35 user-correction moved away from).
+
+The HUD font now loads unconditionally in flight (E36 needs it); `--hud-font-test` gates only the
+`HudFontTest` overlay, not the font load.
+
+**Verified** (windowed, verification.md rule 71): the readout renders both lines in the game font at
+bottom centre. Cycling gun groups updates both name and count — Bloodhawk `GUNS: INNER WING GUNS: 2400`
+→ `GUNS: OUTER WING GUNS: 2800` (the 40- and 30-cal groups' distinct capacities), and the Balmoral (the
+plan's named plane, twin independent .50s) `GUNS: INNER WING GUNS: 2000` → `GUNS: OUTER WING GUNS: 2000`
+(same count, name changes). The missile line reads `MISSILES: HIGH-EXPLOSIVE ROCKET: 3` (per pylon). The
+text comes from `messages.json` — a missing table would render the raw `MSG_HUD_GUNGAUGE` key.
+
+**Docs.** `docs/formats/hud.md` (new "text readout" section), `docs/architecture.md`
+(`WeaponReadout.cs` entry + `Messages.cs` `Fill`/`Format`, `HudFont.cs` load note), `playtest.md`
+(weapon-selector item updated: the readout replaced the bracket line), PLAN-M3-weapons.md (E36 ☐→☑),
+CLAUDE.md (module index + Current-status Next E36→E37).
+
+## 2026-07-24 — M3 Wave E E37: impact-point reticle (ballistic projection) — Wave E complete
+
+The gun aiming reticle, with the original's behaviour: it is **not pinned to screen centre** — it
+marks the **projected ballistic impact point of the selected gun group's rounds at a convergence
+distance**, so it trails the nose in a hard manoeuvre and sits on the rounds in steady flight (user
+spec, 2026-07-22). New `src/Flight/ImpactReticle.cs` — a per-pane, viewport-filling `Control` that
+draws the game's own pipper `extracted/rimage/impact_point.png` (a **32×32 RGBA** warm-white disc
+with a cross-notch centre; the alpha is authored, so no colour-keying — pixel-verified against the
+file) at a world point, projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors
+`MarkerHud`, never cached, so it can't lag the chase camera), fixed screen size scaled by
+`HudMetrics`. Loaded once in `PlaneViewer` and built per player pane whenever the plane carries a
+loadout.
+
+`FlightController.UpdateReticle` (in `_Process`) computes the point: it averages the SELECTED
+firable gun group's muzzle poses and marches a round through `BallisticImpactPoint` — the **same**
+`VELOCITY`/`ACCELERATION`/`GRAVITY` path integration `ProjectilePool` fires each round with (plus
+the plane's inherited velocity; only the random `CANNON_SPREAD` is dropped, since the pipper marks
+the cone centre) — to `GunConvergenceDist`. `ProjectilePool.WorldGravity` became `internal` so the
+reticle and the rounds share one gravity constant. Hidden while crashed or when the plane has no
+firable gun.
+
+**The convergence distance is a TUNE (`GunConvergenceDist = 250 m`)** — `weapons.json` carries no
+convergence field (player guns are `RANGE 1000`, `VELOCITY 750–1000`, no `ACCELERATION`/`GRAVITY`,
+so a straight line). Open question 4 in the plan is now *chosen*, pending an original-game A/B.
+
+**Verified** (windowed, verification.md rule 71). Steady level Bloodhawk (`--hold=0,0,0,0.6`): the
+tracer stream passes through the reticle, and a temporary numeric breadcrumb read `nose→reticle =
+0.00°` — the pipper sits exactly on the gun axis, so the rounds land where it sits. Hard pull
+(`--hold=1,0,0,0.6`): as angle-of-attack grew (`nose→vel` 7.8°→15.0°) the reticle deflected off the
+nose (`nose→reticle` 0.46°→0.77°) with a **negative** trail-pitch — i.e. **below** the nose, toward
+the velocity vector — reproducing "trails the nose during a pull." (The angle is small because
+bullets fly ~900 m/s against a ~55 m/s plane; the on-screen trail is set by that ratio, not by the
+convergence distance — a physics fact, now in `hud.md`.) Clean cross-chapter (C4) and 2-player
+splitscreen (each pane draws its own reticle through its own camera, scaled by the pane factor); the
+breadcrumb was removed before landing; build clean (0 warnings).
+
+**E38 (lock-on indicator) is ⊘ deferred to M4** (with B19/B20 — no enemy planes to lock in M3), so
+**Wave E (HUD) is complete**; only Wave F (debug tools) remains.
+
+**Docs.** `docs/formats/hud.md` (new "gun aiming reticle" section — the texture + the
+ballistic-projection behaviour + the convergence TUNE), `docs/architecture.md` (`ImpactReticle.cs`
+entry + FlightController `UpdateReticle` note), `playtest.md` (new E37 item + the convergence TUNE),
+PLAN-M3-weapons.md (E37 ☐→☑, open question 4, Wave-E-complete position), CLAUDE.md (module index +
+Current-status → Wave F).

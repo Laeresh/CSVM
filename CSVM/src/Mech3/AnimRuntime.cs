@@ -50,13 +50,31 @@ public sealed partial class AnimRuntime : Node
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
     private readonly List<AnimInstance> _instances = new();
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
+    private readonly DestructibleRegistry _destructibles = new();
     private Node3D _root = null!;
     private AnimProgram _program = null!;
 
     private int _opsApplied, _opsUnresolved;
 
+    /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
+    /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
+    /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
+    /// samples the delta across a kill to prove the wreck actually tumbles.</summary>
+    public int BallisticMotionsLaunched { get; private set; }
+
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
+
+    /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
+    /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
+    /// post-bootstrap harness (the D32 effects-test) can see WHY an effect built no puffer
+    /// (<c>PufferState(no host node)</c>, <c>PufferState(no texture: …)</c>).</summary>
+    public IReadOnlyDictionary<string, int> UnhandledEventCounts => _unhandled;
+
+    /// <summary>The live per-instance HP of every destructible node group in this world (C21).
+    /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
+    /// C23's weapon damage and C24's death sequence act through it.</summary>
+    public DestructibleRegistry Destructibles => _destructibles;
 
     /// <summary>
     /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
@@ -177,6 +195,11 @@ public sealed partial class AnimRuntime : Node
         // Pass 1: base states. Anchored defs only — a def whose NAME matches nothing in this
         // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare
         // names like 'destroyed'.
+        //
+        // This is also where the destructible registry (C21) is built: a def with HEALTH > 0 is
+        // a destructible, and each node its NAME resolves to is an independent instance with its
+        // own mutable HP. Nothing damages them yet (C23), so this only changes where ANIM_HEALTH
+        // reads its value from, not the value — a fresh world is unchanged.
         int anchored = 0;
         foreach (var def in program.Defs)
         {
@@ -187,6 +210,10 @@ public sealed partial class AnimRuntime : Node
             if (def.ResetState != null)
                 foreach (var anchor in anchors)
                     ApplyInstant(def.ResetState.Events, def, anchor);
+            if (def.Destructible)
+                foreach (var anchor in anchors)
+                    if (anchor != null)
+                        _destructibles.Register(def, anchor, def.Health);
         }
         long resetMs = sw.ElapsedMilliseconds;
 
@@ -216,6 +243,10 @@ public sealed partial class AnimRuntime : Node
                  $"{_instances.Count} live instance(s), {_motions.Count} live motion(s) " +
                  $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
                  $"start {sw.ElapsedMilliseconds - resetMs} ms]");
+        if (_destructibles.Count > 0)
+            GD.Print($"anim: {_destructibles.Count} destructible instance(s) across " +
+                     $"{_destructibles.DistinctAnchors} node group(s) registered " +
+                     $"(mutable HP; inert until weapons land)");
         if (program.MissionLibrarySkipped.Count > 0)
             GD.Print($"anim: {program.MissionLibrarySkipped.Count} mission-scope reader def(s) " +
                      $"not in this mission's compiled manifest, so not instantiated: " +
@@ -544,6 +575,29 @@ public sealed partial class AnimRuntime : Node
     /// resolution is both unambiguous and the only correct choice.</summary>
     public bool NameResolveFallback;
 
+    /// <summary>Hands a named effect off to another runtime (the D32 world-effects runtime) instead
+    /// of starting it locally. Set on the WORLD runtime: when a death sequence's CALL_ANIMATION names
+    /// a destruction/impact effect the effects runtime handles, the world runtime — whose puffer
+    /// factory is gone after the build — routes it there with the call-site world point and returns
+    /// true, so the local Start (which would render nothing) is skipped. Null on every other runtime,
+    /// where CALL_ANIMATION behaves exactly as before.</summary>
+    public Func<string, Vector3, bool>? ExternalEffect;
+
+    /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
+    /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
+    /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
+    /// (D30) or the world runtime (D31), so playing it here too would double it, and with no audio
+    /// session it would only spam "silent for the session" warnings.</summary>
+    public bool SoundHandledElsewhere;
+
+    /// <summary>How long a <see cref="PlayEffectAt"/> effect instance may run before this runtime
+    /// stops it (seconds; 0 = never, the default). The world-effects runtime sets it so a stop-less
+    /// sustained effect — <c>large_30sec_fire</c>'s <c>fire_n_smoke</c>, which has no ACTIVE_STATE 0
+    /// and would otherwise emit for the rest of the session — is bounded. Only effects this runtime
+    /// itself started via PlayEffectAt are tracked; ambient/crash runtimes leave it 0 and are
+    /// untouched.</summary>
+    public float EffectTtl;
+
     /// <summary>A world-space velocity added to every ballistic <see cref="MotionRuntime"/> launch
     /// (translation / translation_range), transformed into the launched node's parent frame. Zero by
     /// default. The crash sets it to a fraction of the plane's impact velocity so the wreck pieces
@@ -576,6 +630,7 @@ public sealed partial class AnimRuntime : Node
         TickPuffers(dt);
         TickLights(dt);
         Sounds?.Tick();
+        SweepEffectTtls(dt);
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -868,9 +923,14 @@ public sealed partial class AnimRuntime : Node
                         if (motion == null)
                             continue;
                         if (instant || ballTime <= 0f)
+                        {
                             motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
+                        }
                         else
+                        {
                             AddMotion(motion, def, anchor);
+                            BallisticMotionsLaunched++;
+                        }
                         _opsApplied++;
                     }
                     // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up
@@ -980,6 +1040,17 @@ public sealed partial class AnimRuntime : Node
                     // them on the CALLER's anchor instead of where the data put it.
                     var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
                     var callAnchor = siteNode ?? anchor;
+                    // The world runtime can't render an effect template (its puffer factory is
+                    // torn down after the build, rule 76). When a death sequence calls one of the
+                    // named destruction/impact effects, hand it to the world-effects runtime (D32),
+                    // which keeps textures open, stages the templates and relocates them onto the
+                    // call site — and skip the local Start that would only build nothing.
+                    if (ExternalEffect != null && callAnchor != null && IsInstanceValid(callAnchor))
+                    {
+                        var siteXform = callAnchor.GlobalTransform;
+                        if (ExternalEffect(callName, siteXform.Origin + siteXform.Basis * siteOffset))
+                            return true;
+                    }
                     foreach (var target in _program.ByAnimName(callName))
                         if (!IsLive(target, callAnchor))
                         {
@@ -1014,6 +1085,10 @@ public sealed partial class AnimRuntime : Node
 
             case "SoundNode":
                 HandleSoundNode(ev, def, anchor);
+                return true;
+
+            case "Sound":
+                HandleSound(ev, def, anchor);
                 return true;
 
             case "ObjectAddChild":
@@ -1064,8 +1139,12 @@ public sealed partial class AnimRuntime : Node
         // ACTIVE_STATE: 1 = start emitting, 0 = stop. The attach point is AT_NODE; note it is
         // NOT the event's "name" (that is the puffer's own name, a different namespace).
         bool on = (ev.Data.Num("active_state") ?? 0f) >= 1f;
+        // AT_NODE INPUT_NODE / MAIN_ROOT_NODE are the sentinels for "the node this def was invoked
+        // on" = the anchor (same rule ConditionNode applies). A destruction fire authored as
+        // `PufferState(fire_n_smoke, at=INPUT_NODE)` thus emits on the effect's own relocated root,
+        // which is what puts it at the call/hit site (D32) rather than nowhere.
         var host = ev.Data.Str("at_node") is { } atNode
-            ? ResolveOne(atNode, def, anchor)
+            ? (IsSelfNodeRef(atNode) ? anchor : ResolveOne(atNode, def, anchor))
             : anchor;
         if (host == null)
         {
@@ -1112,7 +1191,14 @@ public sealed partial class AnimRuntime : Node
         _puffers[key] = (puffer, def, anchor);
         _activePuffers.Add((puffer, host));
         _opsApplied++;
+        PuffersBuilt++;
     }
+
+    /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
+    /// the owning def). The D32 world-effects verify checks this rather than "the def ran" — a
+    /// started effect whose factory is torn down or whose textures are missing builds nothing and
+    /// renders nothing (verification.md rule 76).</summary>
+    public int PuffersBuilt;
 
     // Drives every running emitter from its host node's current world pose. Emitters follow
     // moving nodes (the train's smokestack travels the whole track loop), so this is per frame.
@@ -1152,13 +1238,13 @@ public sealed partial class AnimRuntime : Node
     private bool _soundCensusPrinted;
     private readonly HashSet<string> _soundFailuresReported = new(StringComparer.OrdinalIgnoreCase);
 
-    private void ReportLateSoundFailure(string name, string why)
+    private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
     {
         if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
         {
             return;
         }
-        GD.PushWarning($"anim: SOUND_NODE '{name}' requested after the world build and {why} — "
+        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
                        + "it will be silent for the rest of the session");
     }
 
@@ -1189,6 +1275,8 @@ public sealed partial class AnimRuntime : Node
     /// </summary>
     private void HandleSoundNode(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
+        if (SoundHandledElsewhere)
+            return;
         if (ev.Data.Str("name") is not { } name)
             return;
         if (Sounds == null)
@@ -1233,6 +1321,77 @@ public sealed partial class AnimRuntime : Node
         // 38 correctly-placed emitters all reading "off".
         if (ev.Data.Has("active_state"))
             Sounds.SetActive(handle, ev.Data.Bool("active_state") || ev.Data.Num("active_state") >= 1f);
+    }
+
+    /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
+    /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
+    /// screenshot audio: a nonzero delta across a kill is how "the death's explosion sounded" is
+    /// verified headless.</summary>
+    public int OneShotSoundsPlayed { get; private set; }
+
+    /// <summary>
+    /// A one-shot <c>SOUND</c> event — the fire-and-forget destruction/impact/damage audio a sequence
+    /// emits (<c>air_mixed_exp_sg</c> when a building is struck, <c>snd_gasbagexp1</c> on a zeppelin
+    /// kill). Distinct from <c>SOUND_NODE</c>'s pooled looping emitters: it plays once at a world
+    /// point and disposes itself (<see cref="WorldSounds.PlayOneShot"/>).
+    ///
+    /// The event's NAME is a sounds.json definition or a <c>SOUND_GROUPS</c> name — NOT a gamez node
+    /// (the recorded C3 gotcha: the lone reader-scope one-shot names <c>snd_waterfall</c>, a
+    /// definition, and resolves zero node targets). The node, when present, is the AT_NODE that
+    /// positions it; absent, it plays at the anchor.
+    /// </summary>
+    private void HandleSound(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (SoundHandledElsewhere)
+        {
+            return;
+        }
+        if (ev.Data.Str("name") is not { } name)
+        {
+            return;
+        }
+        if (Sounds == null)
+        {
+            _soundsAfterBuild++;
+            ReportLateSoundFailure(name, "there is no audio session", "SOUND");
+            return;
+        }
+        if (Sounds.PlayOneShot(name, OneShotSoundPosition(ev, def, anchor), _rng) != null)
+        {
+            OneShotSoundsPlayed++;
+            _opsApplied++;
+        }
+        else
+        {
+            _soundsUnknown++;
+            ReportLateSoundFailure(name, "no stream could be resolved for it (unknown to "
+                                         + "sounds.json / SOUND_GROUPS, or never prewarmed)", "SOUND");
+        }
+    }
+
+    /// <summary>Where a one-shot SOUND plays: its AT_NODE's world pose plus the trailing offset, or
+    /// the anchor's when it names no node. The compiled form nests AT_NODE as <c>{name, pos}</c>; the
+    /// reader form (normalized in <see cref="AnimDefs"/>) carries a flat <c>at_node</c> name plus a
+    /// <c>translate</c> offset.</summary>
+    private Vector3 OneShotSoundPosition(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        Node3D? host = null;
+        Vector3 offset = Vector3.Zero;
+        if (ev.Data.Obj("at_node") is { } atObj)
+        {
+            if (atObj.Str("name") is { } hostName)
+            {
+                host = ResolveOne(hostName, def, anchor);
+            }
+            offset = atObj.Vec3("pos");
+        }
+        else if (ev.Data.Str("at_node") is { } atName)
+        {
+            host = ResolveOne(atName, def, anchor);
+            offset = ev.Data.Vec3("translate");
+        }
+        host ??= anchor;
+        return host is { } h && IsInstanceValid(h) ? h.GlobalTransform * offset : Vector3.Zero;
     }
 
     /// <summary>
@@ -1479,10 +1638,14 @@ public sealed partial class AnimRuntime : Node
     /// relocated, so overlapping calls to the same template collapse onto the last site (the
     /// staggered-cluster nuance is a fidelity follow-up). Only the world position is set — the
     /// puffers key off the host origin — and the offset is applied in the site's own frame.</summary>
-    private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset)
+    private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset) =>
+        PlaceTemplateAt(callee, site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset);
+
+    /// <summary>Moves an effect template's own root(s) to an absolute world point — the
+    /// <see cref="PlayEffectAt"/> path, where the site is a hit/death coordinate rather than a
+    /// world node.</summary>
+    private void PlaceTemplateAt(AnimDefinition callee, Vector3 origin)
     {
-        var siteXform = site.GlobalTransform;
-        var origin = siteXform.Origin + siteXform.Basis * offset;
         foreach (var root in Anchors(callee))
         {
             if (root == null || !IsInstanceValid(root))
@@ -1490,6 +1653,65 @@ public sealed partial class AnimRuntime : Node
             var xf = root.GlobalTransform;
             xf.Origin = origin;
             root.GlobalTransform = xf;
+        }
+    }
+
+    // ---- world-effects runtime (D32) ----
+
+    /// <summary>Does this runtime's program hold a definition for an effect animation name? The
+    /// world runtime tests this before routing a death's CALL_ANIMATION here, so only the curated
+    /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
+    public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
+
+    /// <summary>Stages the named effect at an absolute world point: relocates each matching effect
+    /// template's root onto the point (so its puffers, which ride that root, emit there) and starts
+    /// the definition, exactly as a CALL_ANIMATION would but with a synthetic site. Returns true if a
+    /// definition matched — the world-effects runtime that <c>ProjectilePool</c> and the death path
+    /// call. Idempotent per template: the shared root is relocated, not copied, so overlapping calls
+    /// to the same effect collapse onto the latest site (the documented gun follow-up).</summary>
+    public bool PlayEffectAt(string animName, Vector3 worldPoint)
+    {
+        bool matched = false;
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            PlaceTemplateAt(def, worldPoint);
+            // Anchor the instance on the def's own template root when it resolves (its at_node/
+            // motion targets live under that root); fall back to null (global name resolution).
+            var anchor = Anchors(def).FirstOrDefault(a => a != null && IsInstanceValid(a));
+            Start(def, anchor);
+            matched = true;
+            if (EffectTtl > 0f)
+                _effectTtls.Add((def, anchor, _effectClock + EffectTtl));
+        }
+        return matched;
+    }
+
+    /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
+    /// PlayEffectAt started, so the D32 verify measures each effect in a clean window (these effects
+    /// share puffer names/hosts, so a lingering one would contaminate the next). Not used in play.</summary>
+    public void StopAll()
+    {
+        foreach (var name in _instances.Select(i => i.Def.AnimName).Distinct().ToList())
+            Stop(name);
+        _effectTtls.Clear();
+    }
+
+    private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
+    private float _effectClock;
+
+    private void SweepEffectTtls(float dt)
+    {
+        if (_effectTtls.Count == 0)
+            return;
+        _effectClock += dt;
+        for (int i = _effectTtls.Count - 1; i >= 0; i--)
+        {
+            if (_effectClock < _effectTtls[i].Deadline)
+                continue;
+            // Stop (not just drop the instance): tears down the sustained puffers this effect
+            // created, so a stop-less emitter stops emitting and its live particles decay.
+            Stop(_effectTtls[i].Def.AnimName, _effectTtls[i].Anchor);
+            _effectTtls.RemoveAt(i);
         }
     }
 
@@ -1549,14 +1771,14 @@ public sealed partial class AnimRuntime : Node
             "PlayerRange" => anchor != null
                              && WorldPos(anchor).DistanceSquaredTo(PlayerPos()) <= num,
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
-            // Nothing in a world build damages scenery, so every object sits at its
-            // definition's full health and these are uniformly false — which is correct
-            // (an undamaged AA gun does not smoke). Verified: no definition using an
-            // AnimHealth condition ships health 0, so full health is never below a threshold.
-            "AnimHealth" => def.Health <= num,
+            // Read against the LIVE per-instance HP (C21), not the def's authored value, so a
+            // tower damaged to 30 smokes while its undamaged siblings do not. Until C23 wires
+            // weapon damage nothing decrements HP, so every instance sits at full health and
+            // these stay uniformly false — the pre-C21 behaviour, unchanged.
+            "AnimHealth" => HealthOf(def, anchor) <= num,
             "AnimHealthRange" => obj != null
-                                 && def.Health >= (obj.Num("min") ?? 0f)
-                                 && def.Health <= (obj.Num("max") ?? 0f),
+                                 && HealthOf(def, anchor) >= (obj.Num("min") ?? 0f)
+                                 && HealthOf(def, anchor) <= (obj.Num("max") ?? 0f),
             "NodeActive" => ConditionNode(value, def, anchor) is { } n && n.Visible,
             "NodeBelowAlt" => obj != null
                               && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
@@ -1582,6 +1804,254 @@ public sealed partial class AnimRuntime : Node
                      $"[player {PlayerPos().Snapped(Vector3.One)}] → {(result ? "TRUE" : "false")}");
         }
         return result;
+    }
+
+    /// <summary>The live HP an <c>ANIM_HEALTH</c> threshold tests against: the registered
+    /// destructible instance for this <c>(def, anchor)</c> pair, falling back to the def's
+    /// authored value when the pair is not a registered destructible (an unanchored evaluation,
+    /// or a def whose NAME resolved nothing at bootstrap). The fallback reproduces the exact
+    /// pre-C21 read, so anything the registry does not cover behaves as it always did.</summary>
+    private float HealthOf(AnimDefinition def, Node3D? anchor) =>
+        _destructibles.Get(def, anchor)?.Health ?? def.Health;
+
+    /// <summary>The magic sequence name a destructible's progressive-damage script carries in
+    /// both the reader and compiled forms (docs/formats/destructibles.md).</summary>
+    private const string DamageSequenceName = "DAMAGE_SEQUENCE";
+
+    /// <summary>Escalates a destructible's visible damage to the stage its current HP now sits
+    /// in, running its <c>DAMAGE_SEQUENCE</c> so the progressive-damage effect for that stage
+    /// fires — the water tower's black smoke at ≤36, fire smoke at ≤18. Call it after the
+    /// instance's HP changes (C23's weapon hit, or a debug poke).
+    ///
+    /// <para>The stage is how many of the cascade's descending <c>ANIM_HEALTH</c> thresholds the
+    /// live HP has fallen past; the method only ever <b>escalates</b> — it runs the script only
+    /// when a new, deeper threshold is crossed, and the script (an IF/ELSEIF chain C21 evaluates
+    /// against the live value via <see cref="HealthOf"/>) then fires the deepest active branch,
+    /// exactly one effect. The stage gate is what makes "each stage once" hold for <b>every</b>
+    /// effect kind: a sustained smoke would be spared re-firing by <c>CALL_ANIMATION</c>'s own
+    /// live guard, but a one-shot effect that finishes (C5's <c>damage3_mp1zreng11</c>) is not,
+    /// and without the gate would re-fire on every hit inside a band.</para>
+    ///
+    /// <para>Returns whether it escalated. False means no change: the HP has not crossed a new
+    /// threshold, or the destructible carries no <c>DAMAGE_SEQUENCE</c> (many just die outright,
+    /// with no progressive stages). It neither decrements HP (C23) nor runs the death sequence
+    /// (C24).</para></summary>
+    public bool ApplyDamageStages(DestructibleRegistry.Instance inst)
+    {
+        var seq = inst.Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
+        if (seq == null)
+            return false;
+        int stage = DamageStageFor(seq, inst.Health);
+        if (stage <= inst.DamageStage)
+            return false;
+        inst.DamageStage = stage;
+        if (inst.Status == DestructibleRegistry.State.Healthy)
+            inst.Status = DestructibleRegistry.State.Damaged;
+        // A one-shot selector, not a persistent instance: the cascade carries no timed events, so
+        // a single zero-dt advance resolves the whole IF chain and dispatches the chosen
+        // CALL_ANIMATION. The effect it starts becomes its own live instance; this host is
+        // discarded.
+        var host = new AnimInstance(inst.Def, inst.Anchor);
+        host.Runners.Add(new SequenceRunner(seq));
+        host.Advance(this, 0f);
+        return true;
+    }
+
+    /// <summary>How many of a <c>DAMAGE_SEQUENCE</c>'s health thresholds <paramref name="hp"/> has
+    /// fallen at or below — the object's current damage stage. Monotonic in falling HP, so it is a
+    /// safe escalation gate.</summary>
+    private static int DamageStageFor(AnimSequence seq, float hp)
+    {
+        int stage = 0;
+        foreach (var ev in seq.Events)
+        {
+            if (ev.Kind != "If" && ev.Kind != "Elseif")
+                continue;
+            if (DamageThreshold(ev.Data.Obj("condition")) is { } t && hp <= t)
+                stage++;
+        }
+        return stage;
+    }
+
+    private int _damagesLogged;
+
+    /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
+    /// escalates its visible damage. <paramref name="struck"/> is the raycast-hit collider (B15) —
+    /// or any node under a destructible — resolved to the owning instance by walking up to the
+    /// nearest registered anchor (compiled def preferred, <see cref="DestructibleRegistry.Resolve"/>).
+    /// World destructibles carry HEALTH only, so <paramref name="healthDamage"/> (the weapon's
+    /// <c>HEALTH_DAMAGE</c>) is the whole model — there is no armour pool (docs/formats/
+    /// destructibles.md). Subtracts it, runs the damage stages, and marks the instance
+    /// <c>Destroyed</c> at zero; the death <b>sequence</b> (the healthy→destroyed swap, debris,
+    /// fireball) is C24, so today a killed object just holds its final smoking stage. Returns true
+    /// when the hit landed on a destructible (false for terrain/water/clutter); a no-op once
+    /// destroyed.</summary>
+    public bool DamageAt(Node? struck, float healthDamage)
+    {
+        var inst = _destructibles.Resolve(struck);
+        if (inst == null)
+            return false;
+        if (inst.Status == DestructibleRegistry.State.Destroyed)
+            return true;   // already dead — the death sequence (C24) owns it from here
+        float before = inst.Health;
+        inst.Health = Math.Max(0f, inst.Health - Math.Max(0f, healthDamage));
+        ApplyDamageStages(inst);
+        bool destroyed = inst.Health <= 0f;
+        if (destroyed)
+        {
+            inst.Status = DestructibleRegistry.State.Destroyed;
+            RunDeathSequence(inst);
+        }
+        if (_damagesLogged < 12)
+        {
+            _damagesLogged++;
+            GD.Print($"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} " +
+                     $"HP {before:0.##}→{inst.Health:0.##}" +
+                     (destroyed ? " DESTROYED — death sequence run" : $" [stage {inst.DamageStage}]"));
+        }
+        return true;
+    }
+
+    /// <summary>A plane <b>collision</b> with a world node (C27). Only the 44
+    /// <c>WeaponOrCollideHit</c> destructibles — the Hollywood facades, the warehouse windows and
+    /// <c>agyrobus</c> — take collision damage; a <c>WeaponHit</c> object (water tower, gate) is left
+    /// untouched, so ramming it kills the plane and the object stands (decision 6: the 0.01 health
+    /// marks these as fly-through set dressing). Returns true when the struck node is a
+    /// <c>WeaponOrCollideHit</c> destructible — the caller then flies the plane THROUGH it — and false
+    /// for everything else (a <c>WeaponHit</c> object, plain geometry, terrain), which the caller
+    /// treats as a solid crash/graze. The damage itself runs through <see cref="DamageAt"/>, identical
+    /// to a weapon hit, so the object's death (swap, debris, collider removal) is the same.</summary>
+    public bool CollideDamageAt(Node? struck, float healthDamage)
+    {
+        var inst = _destructibles.Resolve(struck);
+        if (inst == null
+            || !inst.Def.Activation.Equals("WeaponOrCollideHit", StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        DamageAt(struck, healthDamage);
+        return true;
+    }
+
+    /// <summary>Returns a destroyed destructible to healthy (C28) — for the debug tools (F40/F41) and
+    /// respawn. The inverse of the death: (1) <see cref="Stop"/> the def's live death, tearing down its
+    /// motions/puffers/fires; (2) restore the authored pose of any node the death physically MOVED —
+    /// the ballistic debris pieces, whose motion Stop removes but leaves wherever they flew, so a
+    /// re-destroy would launch from the wrong place; (3) re-apply the def's <c>RESET_STATE</c>, whose
+    /// <c>OBJECT_ACTIVE_STATE</c> base states make the <c>healthy</c> subtree visible+collidable again
+    /// and hide the <c>destroyed</c> one (<see cref="SetSubtreeActive"/> restores colliders with
+    /// visibility, C25), undoing both the death swap and the <see cref="ApplyDeathSwap"/> fallback; and
+    /// (4) restore the live HP pool. Idempotent — destroy→reset→destroy produces the same result each
+    /// time.</summary>
+    public void ResetDestructible(DestructibleRegistry.Instance inst)
+    {
+        var def = inst.Def;
+        Stop(def.AnimName, inst.Anchor);
+        RestoreRestPoses(def, inst.Anchor);
+        if (def.ResetState != null)
+            ApplyInstant(def.ResetState.Events, def, inst.Anchor);
+        inst.Health = inst.MaxHealth;
+        inst.Status = DestructibleRegistry.State.Healthy;
+        inst.DamageStage = 0;
+    }
+
+    /// <summary>Restores every node a def's events touched to its authored rest pose (<see cref="_rest"/>,
+    /// recorded the first time a motion disturbed it). The membership check confines this to nodes that
+    /// actually MOVED — the ballistic debris and any <c>FROM_TO</c> movers — so healthy/destroyed
+    /// visibility nodes (never transformed) are left to <c>RESET_STATE</c>.</summary>
+    private void RestoreRestPoses(AnimDefinition def, Node3D? anchor)
+    {
+        var seqs = def.ResetState != null ? def.Sequences.Append(def.ResetState) : def.Sequences;
+        foreach (var seq in seqs)
+        {
+            foreach (var ev in seq.Events)
+            {
+                foreach (var node in Targets(ev, def, anchor))
+                {
+                    if (_rest.TryGetValue(node, out var rest))
+                    {
+                        node.Transform = rest;
+                    }
+                }
+            }
+        }
+    }
+
+    /// <summary>Runs a destructible's death sequence (C24) the instant its HP reaches zero: the
+    /// healthy→destroyed <c>OBJECT_ACTIVE_STATE</c> swap, the debris sequences and the puffer
+    /// calls. Those ARE the definition's own Initial sequences — the def's <c>anim_name</c> is the
+    /// destruction (<c>h2twr_destruction1</c>, <c>destroy_mp1zreng11</c>), so its animation is the
+    /// death — which is why this plays them ALL through <see cref="Start"/> rather than trying to
+    /// pick out "the death sequence": that swap lives in a sequence whose name varies wildly
+    /// (<c>destroyit</c>, <c>destroy_h2twr</c>, or unnamed) and is NEVER reliably <c>unknown_seq</c>
+    /// (docs/formats/destructibles.md), but is always <c>Initial</c>, so Start reaches every case.
+    /// The <c>DAMAGE_SEQUENCE</c> among them just re-fires the final smoke stage idempotently (its
+    /// effect is already live), which is also what a one-shot kill wants. Every event kind the death
+    /// emits now runs — the swap, the debris ballistic <c>OBJECT_MOTION</c>, the puffer calls, and
+    /// the one-shot <c>Sound</c> (<see cref="HandleSound"/>); the safety net that hides
+    /// <c>destroyed</c> subtrees only runs at bootstrap, so it does not fight this.
+    ///
+    /// <para>Then <see cref="ApplyDeathSwap"/>: ~10% of destructibles (the C1 AA guns) carry the
+    /// healthy/destroyed node pair but author NO swap in their sequences, so Start alone leaves
+    /// them standing. The swap is derived from the def's own RESET_STATE — the base state that
+    /// declared the pair — flipping the healthy/destroyed/dbase roles it named; idempotent for the
+    /// 90% Start already swapped.</para></summary>
+    private void RunDeathSequence(DestructibleRegistry.Instance inst)
+    {
+        Start(inst.Def, inst.Anchor);
+        ApplyDeathSwap(inst);
+    }
+
+    /// <summary>The generic healthy→destroyed swap, for destructibles that declare the pair but
+    /// author no explicit swap sequence (the AA guns). Read off the def's own RESET_STATE
+    /// <c>OBJECT_ACTIVE_STATE</c> targets — never a world-wide name scan (that is the
+    /// <c>ref_tank_dest</c> bug in <see cref="HideUncoveredDestroyed"/>) — and applied only when
+    /// RESET names a <c>destroyed</c> node, so an object with no destroyed variant (a mission gun
+    /// that dies by effect alone) is left intact rather than blanked. Matches the exact role words,
+    /// not a <c>_dest</c> suffix.</summary>
+    private void ApplyDeathSwap(DestructibleRegistry.Instance inst)
+    {
+        if (inst.Def.ResetState is not { } reset)
+            return;
+        static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
+        bool hasDestroyed = reset.Events.Any(ev => ev.Kind == "ObjectActiveState"
+            && RoleName(ev).Contains("destroyed", StringComparison.OrdinalIgnoreCase));
+        if (!hasDestroyed)
+            return;
+        foreach (var ev in reset.Events)
+        {
+            if (ev.Kind != "ObjectActiveState")
+                continue;
+            var name = RoleName(ev);
+            bool? active =
+                name.Contains("healthy", StringComparison.OrdinalIgnoreCase) ? false
+                : name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                  || name.Contains("dbase", StringComparison.OrdinalIgnoreCase) ? true
+                : null;
+            if (active is not { } state)
+                continue;
+            foreach (var node in Targets(ev, inst.Def, inst.Anchor))
+                SetSubtreeActive(node, state);
+        }
+    }
+
+    /// <summary>The HP a health condition first becomes true at as HP falls: <c>ANIM_HEALTH</c>'s
+    /// operand, or a range's upper bound (its lower bound is left to <see cref="EvaluateCondition"/>
+    /// when the cascade actually runs). Null for a non-health condition, which does not stage.</summary>
+    private static float? DamageThreshold(AnimData? condition)
+    {
+        if (condition?.Union() is not { } union)
+            return null;
+        var (kind, value) = union;
+        return kind switch
+        {
+            "AnimHealth" => AnimData.AsNum(value),
+            "AnimHealthRange" => value is Dictionary<string, object?> fields
+                                 ? new AnimData(fields).Num("max")
+                                 : null,
+            _ => null,
+        };
     }
 
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
@@ -1639,13 +2109,17 @@ public sealed partial class AnimRuntime : Node
     /// cannot tell those two apart — hence the magnitude test rather than an equality check.
     /// It does not matter here: both resolve to the anchor.
     /// </summary>
+    /// <summary>The AT_NODE / condition-node sentinels for "the node this definition was invoked
+    /// on" — both resolve to the anchor (see <see cref="ConditionNode"/> for the u32/-sentinel
+    /// detail).</summary>
+    private static bool IsSelfNodeRef(string name) =>
+        string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase);
+
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
     {
         if (reference is string name)
-            return string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase)
-                ? anchor
-                : ResolveOne(name, def, anchor);
+            return IsSelfNodeRef(name) ? anchor : ResolveOne(name, def, anchor);
         if (AnimData.AsNum(reference) is not { } idx)
             return null;
         if (idx > 1e9f)

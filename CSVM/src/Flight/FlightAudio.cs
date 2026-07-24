@@ -25,6 +25,16 @@ public partial class FlightAudio : Node
     private float _propStartVol = 1f, _propStopVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
 
+    // Gun firing (B16): kept references so the looped firing sound + empty-clip cue can be built
+    // on demand from any caliber's LOOPED_SOUND_NAME. Own-ship, non-positional (like the engine).
+    private SoundArchive? _archive;
+    private IReadOnlyDictionary<string, SoundDef>? _defs;
+    private AudioStreamPlayer? _gunLoop;
+    private string? _gunLoopName;
+    private float _gunLoopVol = 1f;
+    private AudioStreamPlayer? _emptyClip;
+    private float _emptyClipVol = 1f;
+
     private const float SilenceThreshold = 0.002f;
     private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
 
@@ -42,6 +52,10 @@ public partial class FlightAudio : Node
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats)
     {
         _stats = stats;
+        _archive = archive;
+        _defs = defs;
+        // The shared empty-clip cue (weapons.json NO_AMMO_WARNING = snd_emptyclip).
+        _emptyClip = MakeOneShot(archive, defs, "snd_emptyclip", out _emptyClipVol);
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _whine = MakeLoop(archive, defs, stats.WhineSound, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
@@ -107,6 +121,40 @@ public partial class FlightAudio : Node
         AddChild(player);
         return player;
     }
+
+    /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
+    /// Rebuilds the player only when the sound changes (a different caliber group starts firing).</summary>
+    public void StartGunLoop(string? sndName)
+    {
+        if (string.IsNullOrEmpty(sndName) || _archive == null || _defs == null)
+        {
+            return;
+        }
+        if (_gunLoopName != sndName)
+        {
+            _gunLoop?.Stop();
+            _gunLoop = null;
+            // Forward-loop the firing sound while the trigger is held, regardless of the def's own
+            // LOOPED flag (it is a sustained-fire cue).
+            if (_defs.TryGetValue(sndName, out var def) && _archive.Find(def.WavName, looped: true) is { } stream)
+            {
+                _gunLoop = new AudioStreamPlayer { Stream = stream };
+                AddChild(_gunLoop);
+                _gunLoopName = sndName;
+                _gunLoopVol = def.Volume * 0.2f;
+            }
+        }
+        if (_gunLoop is { Playing: false })
+        {
+            _gunLoop.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, _gunLoopVol * MixGain));
+            _gunLoop.Play();
+        }
+    }
+
+    public void StopGunLoop() => _gunLoop?.Stop();
+
+    /// <summary>The empty-clip cue — one shot when a dry gun's trigger is pulled.</summary>
+    public void PlayEmptyClip() => PlayOneShot(_emptyClip, _emptyClipVol * MixGain);
 
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
 
