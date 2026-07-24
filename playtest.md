@@ -261,8 +261,3 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
 
 ---
 
-## 9 · Interactive polish never hand-tested
-
-- **`--freecam` feel** — look sensitivity + speed curve (built entirely via scripted screenshots).
-- **The `--viewer` labs** — damage (H), livery (L), mesh (M) — mouse-driven, no interactive playtest
-  beyond scripted verification. `./RunGame.ps1 --viewer --plane=player_kestrel`.
