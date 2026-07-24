@@ -182,6 +182,11 @@ public sealed class AnimDefinition
 
     public bool OnStartup => Activation.Equals("OnStartup", StringComparison.OrdinalIgnoreCase);
 
+    /// <summary>Any def carrying HEALTH &gt; 0 is a destructible world object — this is the whole
+    /// test (docs/formats/destructibles.md). <see cref="Activation"/> then says what may damage it
+    /// (<c>WeaponHit</c> vs <c>WeaponOrCollideHit</c>).</summary>
+    public bool Destructible => Health > 0f;
+
     public static AnimDefinition Parse(AnimData d, string sourceFile)
     {
         var def = new AnimDefinition

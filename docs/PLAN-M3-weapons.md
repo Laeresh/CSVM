@@ -457,7 +457,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 ### Wave C — destructibles
 
-21. ☐ Per-instance mutable HP + destructible instance registry
+21. ☑ Per-instance mutable HP + destructible instance registry — **landed** (`DestructibleRegistry.cs`; live HP read by `ANIM_HEALTH`, provable no-op until C23)
 22. ☐ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation
 23. ☐ `WeaponHit` activation and damage application
 24. ☐ Death sequence execution + healthy→destroyed swap
@@ -993,7 +993,25 @@ lead computation M4 will need.
 
 ---
 
-### C21 ☐ Per-instance mutable HP + destructible registry
+### C21 ☑ Per-instance mutable HP + destructible registry — **LANDED (2026-07-24)**
+
+**Landed.** `src/Mech3/DestructibleRegistry.cs` holds one `Instance` (current HP, max HP,
+healthy/damaged/destroyed state) per `(def, anchor)` pair — every `AnimDefinition` with
+`HEALTH > 0`, resolved to each world node its wildcard `NAME` binds — built in AnimRuntime's
+bootstrap pass 1 beside RESET_STATE. `EvaluateCondition`'s `AnimHealth`/`AnimHealthRange` read the
+live value via `HealthOf(def, anchor)`, falling back to the static `def.Health` for any unregistered
+pair. **Keyed per `(def, anchor)`, not per def** (the ⚠ below): a wildcard binds many node groups,
+each an independent pool. No damage applied yet (C23), no death sequence (C24) — so a fresh world is
+a **provable no-op** (`HealthOf` == `def.Health` everywhere).
+
+**Verified.** Full 8-chapter `--freecam` regression clean (all exit 0, no exceptions, screenshots
+saved), registry count reported per chapter: C1 267/196, C1B 108/108, C1C 107/107, C2 574/201,
+C2B 104/104, C3 501/202, C4 225/194, C5 568/292 (instances / node groups) — sane against A4's census.
+Instances exceed node groups where the reader's wildcard def and the compiler's per-instance defs
+both bind the same nodes (C2 `fcpan**`/`grasshut#`/`sign*`/`police*` + compiled twins, object-specific
+— not over-matching); node/mesh counts unchanged. **⚠ Handoff to C23:** one struck node can map to
+several instances — C23 must resolve it to ONE authoritative instance (prefer the compiled def);
+recorded on the `DestructibleRegistry` architecture entry.
 
 **Goal.** Replace the static `def.Health` read with live per-instance state. **Blocks C22, C23,
 C24, C27.**

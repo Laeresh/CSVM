@@ -262,6 +262,22 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
 ⚠ The safety net matches ONLY `destroyed` — a `*_dest` suffix names healthy destructible groups.
 ⚠ Crash runtime: `NameResolveFallback` keeps `_byIndex` EMPTY (non-portable ptrs, colliding index
   spaces); `Targets()` never falls back to names; crash puffers must parent at world level.
+⚠ `ANIM_HEALTH`/`ANIM_HEALTH_RANGE` read LIVE HP via `HealthOf` → `DestructibleRegistry`, not
+  `def.Health`; the registry is built in bootstrap pass 1 beside RESET_STATE. Nothing damages HP
+  yet, so every instance is at full health and the read is a no-op today.
+
+## src/Mech3/DestructibleRegistry.cs
+Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
+`HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
+coarse healthy/damaged/destroyed state; built during AnimRuntime's bootstrap and read by
+`ANIM_HEALTH` condition eval. C23's weapon damage and C24's death sequence act through it.
+Schema: docs/formats/destructibles.md.
+⚠ Keyed per `(def, anchor)`, NOT per def — a wildcard NAME binds many node groups, each an
+  independent pool (one tower's damage must not touch its siblings).
+⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
+  the compiler's per-instance defs both bind the same nodes, so one object carries several pools
+  (same HEALTH). C23 must resolve a struck node to ONE authoritative instance — prefer the compiled.
+⚠ Nothing decrements HP until C23 — a fresh world reads bit-identically to before C21.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —

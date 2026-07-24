@@ -5082,3 +5082,31 @@ projectile at ~1260 m/s is not chase-cam-photographable without its (deferred) s
 architecture.md (Projectile.cs entry), PLAN-M3-weapons.md (checklist 14 ☐→☑, `### B14` landed note),
 CLAUDE.md status. **Wave B's remaining in-scope work is the D30/D32 named-effect polish; the next major
 thrust is Wave C (destruction), starting with C21.**
+
+**Per-instance mutable HP + destructible registry — M3 Wave C item C21 (2026-07-24):** the first
+Wave-C landing gives the world's destructibles live, mutable hit points, replacing the static
+`def.Health` read that had made every `ANIM_HEALTH` branch uniformly false (see the new
+`DestructibleRegistry` + updated `AnimRuntime` entries in `docs/architecture.md` and the rewritten
+`destructibles.md` "Engine status"). A new `src/Mech3/DestructibleRegistry.cs` records one
+`Instance` — current HP, max HP, healthy/damaged/destroyed state — per `(def, anchor)` pair: every
+`AnimDefinition` with `HEALTH > 0`, resolved to each world node its (wildcard) `NAME` binds, built
+during AnimRuntime's bootstrap pass 1 beside the RESET_STATE application. `EvaluateCondition`'s
+`AnimHealth`/`AnimHealthRange` now read the live instance value via `HealthOf(def, anchor)`, falling
+back to the static `def.Health` for any unregistered pair (the exact pre-C21 read). **It applies no
+damage (C23) and runs no death sequence (C24)** — nothing decrements HP, so every instance sits at
+full health and the change is a *provable no-op*: `HealthOf` returns exactly `def.Health` everywhere,
+so every `ANIM_HEALTH` verdict is bit-identical to before. **Keyed per `(def, anchor)`, not per def**
+(the plan's ⚠): a wildcard `NAME` binds many node groups and each is an independent pool, so one
+tower's future damage will not break its siblings. Verified: the full 8-chapter `--freecam`
+regression runs clean (all exit 0, no exceptions, screenshots saved) with the registry count reported
+per chapter — C1 267 instances / 196 node groups, C1B 108/108, C1C 107/107, C2 574/201, C2B 104/104,
+C3 501/202, C4 225/194, C5 568/292 — sane against A4's census (2,603 health-defs across 61 archives).
+Instances exceed node groups where the reader's wildcard def and the compiler's per-instance defs
+both bind the same nodes (confirmed in C2: `fcpan**`/`grasshut#`/`sign*`/`police*` reader wildcards +
+their compiled twins — object-specific, not over-matching); each carries its own pool, which **C23
+must collapse to one authoritative instance per struck node (prefer the compiled def)** — recorded as
+a ⚠ on the registry's architecture entry. Node/mesh counts are unchanged (C21 is purely additive,
+post-world-build). Docs: new `DestructibleRegistry` architecture entry + `AnimRuntime` ⚠,
+`destructibles.md` "Engine status" rewrite, PLAN-M3-weapons.md (checklist 21 ☐→☑, `### C21` landed
+note), CLAUDE.md status. **Next: C22 (`DAMAGE_SEQUENCE` reader-front-end parsing + live threshold
+evaluation) and C23 (`WeaponHit` damage application), both hanging off this registry.**

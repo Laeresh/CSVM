@@ -178,6 +178,13 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 70. **To verify one effect, isolate it and remove whatever clears it early.** A fireball's haze
     was read as the (broken) smokeball, and the 1.5 s auto-respawn kept clearing smoke that
     develops at ~2–3 s.
+71. **`--screenshot` needs a real GPU context — never pass `--headless` with it.** `--headless`
+    selects Godot's dummy renderer, whose `texture_2d_get` returns null, so
+    `GetViewport().GetTexture().GetImage()` throws a `NullReferenceException` and writes no file
+    (a loud failure, but the run still exits 0). Screenshots run windowed/offscreen without the
+    flag; `--headless` is only for the windowless dump tools (`--dump-markers`/`--dump-weapons`/
+    `--dump-loadout`) that never read back pixels. ("Headless screenshots" above means the
+    automated `--screenshot` workflow, not the `--headless` flag.)
 
 ## What this project cannot verify itself
 

@@ -50,6 +50,7 @@ public sealed partial class AnimRuntime : Node
     private readonly Dictionary<Node3D, Transform3D> _rest = new(); // authored pose per touched node
     private readonly List<AnimInstance> _instances = new();
     private readonly Dictionary<string, int> _unhandled = new(StringComparer.Ordinal);
+    private readonly DestructibleRegistry _destructibles = new();
     private Node3D _root = null!;
     private AnimProgram _program = null!;
 
@@ -57,6 +58,11 @@ public sealed partial class AnimRuntime : Node
 
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
+
+    /// <summary>The live per-instance HP of every destructible node group in this world (C21).
+    /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
+    /// C23's weapon damage and C24's death sequence act through it.</summary>
+    public DestructibleRegistry Destructibles => _destructibles;
 
     /// <summary>
     /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
@@ -177,6 +183,11 @@ public sealed partial class AnimRuntime : Node
         // Pass 1: base states. Anchored defs only — a def whose NAME matches nothing in this
         // world (player-plane anims, cutscene rigs) must not stomp globally-resolved bare
         // names like 'destroyed'.
+        //
+        // This is also where the destructible registry (C21) is built: a def with HEALTH > 0 is
+        // a destructible, and each node its NAME resolves to is an independent instance with its
+        // own mutable HP. Nothing damages them yet (C23), so this only changes where ANIM_HEALTH
+        // reads its value from, not the value — a fresh world is unchanged.
         int anchored = 0;
         foreach (var def in program.Defs)
         {
@@ -187,6 +198,10 @@ public sealed partial class AnimRuntime : Node
             if (def.ResetState != null)
                 foreach (var anchor in anchors)
                     ApplyInstant(def.ResetState.Events, def, anchor);
+            if (def.Destructible)
+                foreach (var anchor in anchors)
+                    if (anchor != null)
+                        _destructibles.Register(def, anchor, def.Health);
         }
         long resetMs = sw.ElapsedMilliseconds;
 
@@ -216,6 +231,10 @@ public sealed partial class AnimRuntime : Node
                  $"{_instances.Count} live instance(s), {_motions.Count} live motion(s) " +
                  $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
                  $"start {sw.ElapsedMilliseconds - resetMs} ms]");
+        if (_destructibles.Count > 0)
+            GD.Print($"anim: {_destructibles.Count} destructible instance(s) across " +
+                     $"{_destructibles.DistinctAnchors} node group(s) registered " +
+                     $"(mutable HP; inert until weapons land)");
         if (program.MissionLibrarySkipped.Count > 0)
             GD.Print($"anim: {program.MissionLibrarySkipped.Count} mission-scope reader def(s) " +
                      $"not in this mission's compiled manifest, so not instantiated: " +
@@ -1549,14 +1568,14 @@ public sealed partial class AnimRuntime : Node
             "PlayerRange" => anchor != null
                              && WorldPos(anchor).DistanceSquaredTo(PlayerPos()) <= num,
             // ANIM_HEALTH gates damage effects: "if this object has been worn down to N".
-            // Nothing in a world build damages scenery, so every object sits at its
-            // definition's full health and these are uniformly false — which is correct
-            // (an undamaged AA gun does not smoke). Verified: no definition using an
-            // AnimHealth condition ships health 0, so full health is never below a threshold.
-            "AnimHealth" => def.Health <= num,
+            // Read against the LIVE per-instance HP (C21), not the def's authored value, so a
+            // tower damaged to 30 smokes while its undamaged siblings do not. Until C23 wires
+            // weapon damage nothing decrements HP, so every instance sits at full health and
+            // these stay uniformly false — the pre-C21 behaviour, unchanged.
+            "AnimHealth" => HealthOf(def, anchor) <= num,
             "AnimHealthRange" => obj != null
-                                 && def.Health >= (obj.Num("min") ?? 0f)
-                                 && def.Health <= (obj.Num("max") ?? 0f),
+                                 && HealthOf(def, anchor) >= (obj.Num("min") ?? 0f)
+                                 && HealthOf(def, anchor) <= (obj.Num("max") ?? 0f),
             "NodeActive" => ConditionNode(value, def, anchor) is { } n && n.Visible,
             "NodeBelowAlt" => obj != null
                               && ConditionNode(obj.Get("node_index") ?? obj.Get("node"), def, anchor)
@@ -1583,6 +1602,14 @@ public sealed partial class AnimRuntime : Node
         }
         return result;
     }
+
+    /// <summary>The live HP an <c>ANIM_HEALTH</c> threshold tests against: the registered
+    /// destructible instance for this <c>(def, anchor)</c> pair, falling back to the def's
+    /// authored value when the pair is not a registered destructible (an unanchored evaluation,
+    /// or a def whose NAME resolved nothing at bootstrap). The fallback reproduces the exact
+    /// pre-C21 read, so anything the registry does not cover behaves as it always did.</summary>
+    private float HealthOf(AnimDefinition def, Node3D? anchor) =>
+        _destructibles.Get(def, anchor)?.Health ?? def.Health;
 
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
