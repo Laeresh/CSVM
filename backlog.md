@@ -46,6 +46,10 @@ table outlive the landing.
   ⚠ **Do not re-apply the `MotionRuntime.Seek` scale-floor — it is tried and insufficient** (the
   branch keeps it for reference). Find the real source by reproducing the throwing kill and adding a
   temporary det-check log at each inverse in the destruction path to point at the culprit.
+  **⚠ Pass 2 (2026-07-25) sharpened the stakes:** on the `kkgate` door the throw coincides with the door
+  **not moving and keeping its collider** — the leading hypothesis is now that the exception *aborts the
+  death sequence* before its hide/collider-removal/piece-launch events run, making det==0 and the "door
+  won't destroy" symptom one bug. See "Playtest pass 2" finding 13.
 
 ### Larger items — documented, not fixed
 
@@ -94,6 +98,123 @@ table outlive the landing.
   same one flagged in "Rocket firing order": does the original let the player select an individual
   **hardpoint**, or only drain them in pylon order? Meaningful mixed-ordnance cycling arrives with mixed
   loadouts (the M4 gun/hardpoint configurator, Feature backlog). Nothing to fix in M3.
+  **⚠ Reopened by pass 2 (2026-07-25):** the user says per-hardpoint *selection* should work (H selects
+  a pylon; auto-advance only when the selected one empties) — so this is no longer "nothing to fix." See
+  "Playtest pass 2" finding 15 below.
+
+### Playtest pass 2 (2026-07-25) — new findings + verdicts
+
+A second at-the-controls pass (user, answers "by feeling"; the four ambiguous points were grilled and
+settled). Reference shots are in `OriginalScreenshots/` (gitignored — cited by filename). Root causes
+were traced to code before writing. Verdicts on pass-1 items are noted on their rows above; the new
+work is below.
+
+**Gun visuals (finding 1).**
+1. **Muzzle flash too large + never rotates.** `MuzzleSize = 2.2 m` (`Projectile.cs:64`) reads far bigger
+   than the original's compact flash, and the billboard has a fixed orientation (`Projectile.cs:638`) —
+   the original randomises the flash angle every shot. Ref: `MuzzleFlash1..3.png` (small textured
+   starburst, random roll) and shot 2 of `C1B IA1 Bloodhawk tracer and ejection.png` (one compact forward
+   flash on a single wing). *Fix shape:* shrink `MuzzleSize`; add a per-sprite random Z-roll (needs a
+   rotation field on `Sprite`, and the billboard to honour it). ⚠ This flash also masks A10 muzzle-
+   placement verification (finding 11: "hard to see with the large flash") — re-check A10 after it shrinks.
+2. **Tracers read as long glowing streaks, not short yellow dashes.** `TracerLength = 14 m`, additive,
+   warm-yellow (`Projectile.cs:58,83`). Original = small discrete yellow streaks (`…tracer and
+   ejection*.png`). *Fix shape:* shorten/narrow the streak and reconsider the additive bloom — a look
+   TUNE against the two ref shots. (Distinct from the pass-1 `fix/tracer-grow-from-muzzle` position fix.)
+3. **Casing (brass) ejection is missing entirely.** The original ejects shells with a **white smoke puff**
+   below/behind the plane (clusters of white puffs + tiny yellow shells in `…tracer and ejection*.png`
+   and `Water Splash.png`). Nothing in `Projectile.cs` emits casings. *Blocked on data:* check whether a
+   brass/shell-eject effect def or puffer exists in the weapons/effects data, or whether it is engine-side
+   (then it becomes a synthetic effect, a fidelity guess). Medium priority — visible, adds life to gunfire.
+4. **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
+   (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
+   nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
+   a flight bug.
+
+**Rocket visuals (findings 2, 4).**
+5. **The fat orange→grey smoke trail is missing — the biggest rocket gap.** A rocket with a MODEL body
+   gets only a slim `RocketExhaustScale = 0.5` exhaust streak (`Projectile.cs:62`); the original's
+   dominant visual is a **thick smoke trail fading orange→grey** (`Rocket Streak 1..3.png`). This is the
+   deferred `MODEL_ANIMATION` trail — it is why the round "looks completely different" and "too fast to
+   see." *Schedule it.* ⚠ Reframes the pass-1 "rockets feel too fast" TUNE (`weapons.rocketSpeedScale`):
+   the user now attributes the speed impression to the **missing trail**, not the velocity — treat the
+   speed scale as probably-neutral and fix the trail first.
+6. **Rocket explosion looks different + faster than the original.** Goes through the D32 world-effects
+   puffer (`EffectSink`). Tuning gap — cross-ref the "World-effects runtime follow-ups" (M3 D32) item.
+
+**Impacts & surfaces (findings 3, 4).**
+7. **Water impacts produce NOTHING — the sea has no collider.** Hits fire only on a raycast collider
+   strike (`Projectile.cs:416`); the sea isn't collidable, so gun/rocket rounds pass straight through →
+   no hit, no splash, no sound (user, grilled: "nothing at all"). **This supersedes the pass-1 claim that
+   the D30 water splash worked in flight** — that reading was headless/forced, not at-the-controls. *Fix
+   shape:* give the sea surface a `water`-tagged collider (the `SurfaceMeta` classifier already keys off
+   it, `Projectile.cs:544`) so raycasts register; then the splash instances. Target = small white
+   `Splash0N`-style sprites walking across the surface (`Water Splash.png`). ⚠ A sea collider interacts
+   with the crash system — a water crash today falls through to the under-map backstop (see the water-
+   crash-variant feature-backlog item). Scope the collider so it feeds *impacts* without turning every
+   sea-skim into a crash (e.g. a projectile-only collision layer).
+8. **Dirt impact too prominent — should be small tumbling debris.** Dirt falls to the stand-in spark: one
+   big `ImpactSize = 3 m` orange billboard (`Projectile.cs:66,515`). Original = small, **randomly-rotated
+   tumbling debris** sprites (`Dirt Splash.png`: "not billboards — rotating randomly"). *Fix shape:* a
+   small dirt-debris burst (a few sprites, random roll + short arc) in place of the single fat spark.
+9. **Building vs dirt impacts are identical (both a fireball puff).** Original: buildings → `large_fireball`;
+   dirt (HE) → `he_ground_effect` (a light flash, no puff). The per-surface lookup exists
+   (`Projectile.cs:490`) but isn't differentiating. *Investigate:* does the HE rocket's `weapon.Impact`
+   carry distinct `buildings` vs `default` entries, and does terrain tag so dirt classifies `Default`
+   while a building classifies `buildings` (`ClassifySurface`, `Projectile.cs:544`)?
+10. **Oil-tank death fire puff floats too high and lingers far too long.** One puff climbs well above the
+    wreck and stays (the authored `large_30sec_fire` is literally a 30 s fire). The original oil-tank kill
+    is a rich ground-level fireball + smoke column (`Oil Tank Explosion1..3.png`), not a lone high floating
+    puff. *Investigate:* the puffer's anchor (it should sit at the wreck, not climb) and its mode/lifetime.
+    Cross-ref the D32 world-effects follow-ups.
+
+**Destruction & doors (findings 12, 13).**
+11. **Damage stages (smoke→fire) never render in flight.** Guns-only into a tower, HP visibly falling,
+    **no intermediate smoke or fire — only the final blast** (user, grilled: "never showed"). The stages
+    fire headless (`--damage-hd` proves the 60 %/30 % stages), so this is a **render gap**: the
+    `DAMAGE_SEQUENCE` stage effects aren't reaching the flight world-effects runtime (same class as the
+    D32 gun-smoke follow-up — the puffer factory is torn down post-build outside the labs). *Investigate:*
+    does the flight damage path (`AnimRuntime.DamageAt` → stage sequences) route stage effects through the
+    flight `EffectSink`/world-effects runtime, or only the death effect?
+12. **Debris trajectory is wrong, not merely slow.** In-flight kills throw pieces "but not in the correct
+    trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit
+    no launch momentum + `bounce_sequence` ground-rest unsimulated + magnitude decode is TUNE) — this pass
+    adds the *trajectory-shape* symptom, not just the *distance* one.
+13. **⚠ Strong lead — the `det == 0` throw likely ABORTS the door death sequence (same bug as "door never
+    moves / colliders remain").** Re-confirmed 2026-07-25: shooting `kkgate`'s propane tank throws
+    `ERROR: Condition "det == 0" is true` (invert of a singular basis) and the door then does **not** move
+    and **keeps its collider**; in the original the door deactivates, its pieces fly + fade, and it loses
+    collision. Hypothesis to test first: the inversion exception thrown mid-sequence unwinds the death
+    sequence **before** the hide + collider-removal + piece-launch events run — so det==0 and the "door
+    won't destroy" symptom are **one** bug, not two. Cross-ref the "Still open — det==0" item above (its
+    unguarded-inverse suspect list) and the "C2 SeaHangar doors" larger item. *Verify:* wrap the throwing
+    kill, log which inverse throws, and confirm the sequence aborts at that point.
+
+**Gauges, selectors & cues (findings 6, 7, 9).**
+14. **Ammo gauge: remove the yellow tier — the original is green→red only** (finding 9a, settled against
+    the original). Retires the `IndicatorLowFrac` TUNE's *existence*: the belt lights step green→red, no
+    yellow. The red-onset fraction remains a smaller TUNE. `GaugeCluster` — drop the yellow state.
+15. **Hardpoint selection should work — user correction (finding 7).** Each pylon counts for itself; **H
+    should select an individual hardpoint**, with auto-advance only when the selected one empties. H is
+    currently gated `_ordnanceTypes.Length > 1` and dedups to one type → nothing to cycle. *Redesign:* H
+    cycles **pylons**, not ordnance types; the selected pylon drains, then auto-advances. Composes with the
+    `fix/rocket-drain-pylon` order fix. ⚠ Fidelity: confirm the original truly offers per-hardpoint
+    *selection* (vs fixed-order draining) before building any indicator — the user believes it does.
+16. **Rocket empty-clip cue never heard (finding 6b).** The cue plays on a dry pull
+    (`FlightController.cs:789-793`), but the dry branch is only reached when `_rocketCooldown <= 0`
+    (`:782`) — a pull within 1 s of the last shot returns early and stays silent. *Investigate:* is the
+    cue simply inaudible, or is the cooldown swallowing the pull that would sound it?
+17. **Weapon-switch sound not verified (finding 7).** User didn't check whether G/H should play a select
+    click like the original's ammo-selector UI (we likely play none). Added to `playtest.md` as an owed
+    check.
+
+**Test / debug affordances (findings 6, 14).**
+18. **Debug low-ammo knob.** Empty-clip can't be tested without firing 2000+ rounds. Add a start-with-low-
+    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/PLAN-testing.md`'s test-affordance theme.
+19. **Debug: colour world objects by type / class.** The user couldn't locate a C2 water tower or the
+    storefront facades (found filmset panels instead). A "colour by object class" overlay (destructible /
+    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/PLAN-testing.md`
+    **D32 Node Lab** (destructibles view) — extend it with a colour-by-class mode, or a standalone overlay.
 
 ## Blocked / deferred
 
