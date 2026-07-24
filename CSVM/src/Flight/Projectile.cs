@@ -405,7 +405,14 @@ public sealed partial class ProjectilePool : Node3D
             p.DistLeft -= stepLen;
             if (p.DistLeft <= 0f)
             {
-                p.Alive = false;   // spent — expires without an impact
+                // A hardpoint round detonates at max range — same impact path as a surface hit
+                // (null collider ⇒ `default` IMPACT sound + named puffer effect, no damage). Gun
+                // rounds must NOT: that would pop a spark/sound at ~1000 m on every bullet.
+                if (p.Weapon.IsRocket)
+                {
+                    Impact(p.Weapon, p.Pos, null);
+                }
+                p.Alive = false;   // spent
                 KillModel(ref p);
             }
         }
