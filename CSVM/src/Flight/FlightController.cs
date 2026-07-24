@@ -809,9 +809,10 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The next hardpoint with ordnance, scanning from <see cref="_nextPylon"/> and wrapping,
-    /// then advancing the cursor so consecutive pulls spread across the pylons. Null when every pylon
-    /// is empty. With <c>--infinite-ammo</c> the first-scanned pylon always qualifies.</summary>
+    /// <summary>The next hardpoint with ordnance, scanning from <see cref="_nextPylon"/> and wrapping.
+    /// The cursor stays on the fired pylon so it drains fully before firing advances to the next: the
+    /// caller's post-fire decrement empties it, and the next scan skips it once dry. Null when every
+    /// pylon is empty. With <c>--infinite-ammo</c> the first-scanned pylon always qualifies.</summary>
     private Hardpoint? NextArmedHardpoint()
     {
         var hps = Loadout!.Hardpoints;
@@ -828,7 +829,7 @@ public partial class FlightController : Node3D
             }
             if (hps[idx].Ammo > 0 || InfiniteAmmo)
             {
-                _nextPylon = (idx + 1) % hps.Count;
+                _nextPylon = idx;
                 return hps[idx];
             }
         }
