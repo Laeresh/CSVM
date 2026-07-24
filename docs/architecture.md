@@ -535,9 +535,13 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).
 ⚠ The crash is data-driven: CrashRuntime plays player_crash_dirt (InheritedWorldVelocity = impact
   velocity × WreckMomentum); Respawn resets it and re-homes CrashRestPoses; null runtime = hide only.
-⚠ Firing (needs Loadout + Projectiles): UpdateGuns holds Space/pad-B → each group fires at its
-  FIRE_RATE from its own ammo; UpdateRockets F/pad-A → ONE rocket per pull from the next armed pylon
-  (round-robin), FIRE_RATE-gated (1 s). `--fire`/`--fire-rockets` auto-hold; `--infinite-ammo`.
+⚠ Firing (needs Loadout + Projectiles): UpdateGuns holds Space/pad-B → the SELECTED group fires at
+  its FIRE_RATE from its own ammo (ONE group at a time, no ALL — user-confirmed); UpdateRockets F/pad-A
+  → ONE rocket per pull from the next armed pylon (round-robin), FIRE_RATE-gated (1 s). `--fire`/
+  `--fire-rockets` auto-hold; `--infinite-ammo`.
+⚠ Two selectors (CycleWeaponSelectors, edge-detected, --no-pads-safe): guns G/dpad-L cycles the
+  firable groups; hardpoints H/dpad-R cycles ordnance types (stock = one, so a no-op). `--gun-select=N`
+  (0-based) seeds the gun group for headless tests; selections survive respawn.
 ⚠ Rocket pad button A also respawns, but only from the crashed / run-complete screens (early-return
   states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard

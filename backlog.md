@@ -569,7 +569,7 @@ unscheduled.
 
 The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned constant that is
 plausible but unvalidated against the original — they need the user in the cockpit, not another
-scripted screenshot.
+scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
 - **Compass tape** — north = −Z convention (unverified vs the original; one-line flip in
   `FlightController`'s heading line), plus `TileOverscan` / `RimGain` / the nearest-tick look.
@@ -643,6 +643,11 @@ scripted screenshot.
   videos is unassessed.
 
 ## Owed playtests (need hardware or a human at the controls)
+
+> **The actionable, consolidated checklist is [`playtest.md`](playtest.md)** (root) — what to look
+> for, the launch command, and what each blocks. This section keeps the deep evidence/traps; keep
+> the two in step.
+
 
 - **The M2.5 playtest pass.** Items 6 and 7 of `docs/plans/PLAN-M2.5-prototype.md` — the
   launchscreen join flow and the splitscreen stunt race — rest on construction plus scripted

@@ -45,7 +45,7 @@ That is a deliberate boundary: the player's damage model (`PlaneDamage`, `Damage
 | 4 | Gun mechanics | **Finite ammo + empty-clip warning, and cannon spread.** Heat/jam and ammo pickups → `backlog.md`. |
 | 5 | HUD | **All four**: `gungauge` + `missilegauge`, weapon-name readout, ballistic impact-point reticle, lock-on indicator. |
 | 6 | Collide damage | **Follow the data exactly** — 44 collide-destructibles, 2,565 weapon-only. |
-| 7 | Weapon select | **Gun selector cycles mount slots** (plus ALL); hardpoint selector cycles ordnance. Two independent buttons. |
+| 7 | Weapon select | **Gun selector cycles mount slots — ONE group fires at a time** (the "plus ALL" in the original wording was **removed 2026-07-24 per the user: the original never fires all groups at once**); hardpoint selector cycles ordnance. Two independent buttons. |
 | 8 | Sequencing | **Wave A now; waves B–F after M2 polish 3 closes** — *satisfied: that plan closed the same day. See the banner above.* |
 | 9 | Configurator | **Stock loadouts only.** The gun/hardpoint configurator UI is deferred, but the loadout model is fully data-driven so it drops in later without rework. |
 | 10 | Turrets | **Deferred to M4.** Turrets are AI gunners that acquire and engage other aircraft automatically — not player-aimed. With nothing to fight they have no targets. |
@@ -451,7 +451,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 15. ☑ Hit detection + surface classification for `IMPACT` variant selection — **landed** (world raycast + collider surface tag)
 16. ☑ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip — **landed** (Space/pad-B, `--fire`)
 17. ☑ Hardpoint firing — per-pylon allotment and depletion — **landed** (F/pad-A, one rocket per pull, round-robin pylons)
-18. ☐ Weapon selectors — gun-group cycle (+ALL) and hardpoint cycle
+18. ☑ Weapon selectors — gun-group cycle (ONE at a time, no ALL) + hardpoint ordnance cycle — **landed** (G/H, D-pad L/R)
 19. ☐ Guided flight — `TURN_RATE`, `IMPACT_PROXIMITY`, `DETONATION_DISTANCE`
 20. ☐ Ground lock-on — acquisition against destructibles
 
@@ -912,16 +912,33 @@ data's answer and a TUNE candidate rather than a measured fact.
 **Verify.** A stock Bloodhawk fires exactly 9 HE rockets over 9 trigger pulls; each launch originates
 at the correct pylon (screenshot against the A3 overlay).
 
-### B18 ☐ Weapon selectors
+### B18 ☑ Weapon selectors — **LANDED (2026-07-24)**
 
-**Goal.** Two independent selectors, per decision 7.
+**⚠ Design corrected during implementation (user, 2026-07-24):** the original **fires only ONE gun
+group at a time — there is no ALL**. Decision 7's "(plus ALL)" is struck; the gun selector cycles
+through the firable groups and exactly one is active. (This also means the guns-batch behaviour of
+all groups firing at once — never playtested — was wrong; it is fixed here.)
 
-**Approach.** Gun selector cycles the plane's mounted gun slots plus an **ALL** entry; the fire
-button fires only the selected slot(s). Hardpoint selector cycles mounted ordnance. Two buttons,
-bound for both keyboard and pad; route through `MenuInput`/`Pads` conventions and respect
-`--no-pads`. Feed the selection to E36's readout.
+**Landed.** `FlightController.CycleWeaponSelectors` + the `_gunSel` / `_rocketSel` state. Two
+independent selectors, edge-detected, both keyboard + pad and both respecting `--no-pads` (they
+route through `PadPressed` → `Pads.For`):
+- **Gun selector** — **G** / gamepad **D-pad Left** cycles the firable groups (turrets excluded);
+  `UpdateGuns` fires only the selected one. Default = the first group. `--gun-select=N` (0-based)
+  is a headless testing hook for the initial group.
+- **Hardpoint selector** — **H** / gamepad **D-pad Right** cycles the distinct loaded ordnance
+  types; `NextArmedHardpoint` launches only the selected type. Stock loadouts carry one type (all
+  HE), so it is a no-op until mixed loadouts land — the mechanism is data-driven and in place.
 
-**Verify.** On the Balmoral, selecting group 1 depletes only counter 1; ALL depletes both.
+Both selectors survive a respawn (a player's pick is not ammo). The interim HUD ammo line brackets
+the selected gun group. Feeds E36's readout when that lands.
+
+**Verified.** Headless Balmoral soaks (two `wep_50` groups) using the per-group first-shot log:
+**default → only "gun group 1 (Inner Wing Guns)" fires**; **`--gun-select=1` → only "gun group 2
+(Outer Wing Guns)" fires** — exactly one group at a time, and the selector picks the right one. The
+selector-cycle button itself is simple modular arithmetic (playtest-checkable); the fire *filter*
+is what these runs prove.
+
+**Goal.** Two independent selectors, per decision 7 (as corrected above).
 
 ### B19 ☐ Guided flight
 

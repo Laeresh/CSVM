@@ -102,6 +102,11 @@ public partial class FlightController : Node3D
     /// Unlike a human pull (one rocket per press), this auto-repeats at the launch cooldown.</summary>
     public bool AutoFireRockets;
 
+    /// <summary>--gun-select=N: the gun selector's initial firable group (0-based; 0 = the first
+    /// group, the default). Only one gun group fires at a time. A headless testing hook so a scripted
+    /// run can fire one group in isolation; interactively the selector cycles with G / gamepad D-pad Left.</summary>
+    public int InitialGunSelect;
+
     /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
     /// <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that PLAYS the
@@ -218,6 +223,11 @@ public partial class FlightController : Node3D
     private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
     private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
     private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
+    private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
+    private bool _gunSelPrev;                    // edge detection for the gun-selector button
+    private int _rocketSel;                      // hardpoint selector: index into _ordnanceTypes (which ordnance fires)
+    private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector button
+    private string[] _ordnanceTypes = Array.Empty<string>(); // distinct hardpoint weapon ids, in pylon order
 
     /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
     /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
@@ -227,6 +237,7 @@ public partial class FlightController : Node3D
         public float Accum;
         public int NextMuzzle;
         public bool Warned;
+        public bool LoggedFirst;   // verification breadcrumb: the group logs its first live round once
     }
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
@@ -328,6 +339,20 @@ public partial class FlightController : Node3D
             {
                 _gunStates[i] = new GunState();
             }
+            // The distinct ordnance types across the hardpoints, in pylon order — what the
+            // hardpoint selector cycles. Stock loadouts carry one type (all HE), so this is
+            // usually a single entry; it grows straight away once mixed loadouts land.
+            var types = new List<string>();
+            foreach (var h in Loadout.Hardpoints)
+            {
+                if (!types.Contains(h.Weapon.Id))
+                {
+                    types.Add(h.Weapon.Id);
+                }
+            }
+            _ordnanceTypes = types.ToArray();
+            // Apply the --gun-select testing override (0-based group index, clamped into range).
+            _gunSel = n > 0 ? Mathf.Clamp(InitialGunSelect, 0, n - 1) : 0;
         }
     }
 
@@ -341,22 +366,68 @@ public partial class FlightController : Node3D
     /// — states this live-flight firing path never shares — so the two never collide.</summary>
     private bool RocketFirePressed() => AutoFireRockets || KeyDown(Key.F) || PadPressed(JoyButton.A);
 
-    /// <summary>The interim HUD ammo line: <c>GUNS 40:2398 30:2799  ROCKETS 9</c>.</summary>
+    /// <summary>G / gamepad D-pad Left — cycles the gun selector through the firable groups (1 → 2 →
+    /// … → 1). Only ONE group fires at a time; the gun trigger fires the selected one. Caller edge-detects.</summary>
+    private bool GunSelectPressed() => KeyDown(Key.G) || PadPressed(JoyButton.DpadLeft);
+
+    /// <summary>H / gamepad D-pad Right — cycles the hardpoint selector across the loaded ordnance
+    /// types. The rocket trigger then launches only the selected type. Caller edge-detects. (Stock
+    /// loadouts carry a single ordnance type, so this is a no-op until mixed loadouts land.)</summary>
+    private bool RocketSelectPressed() => KeyDown(Key.H) || PadPressed(JoyButton.DpadRight);
+
+    /// <summary>Advances each weapon selector on the rising edge of its button: the gun selector
+    /// through the firable groups (one active at a time), the hardpoint selector through the distinct
+    /// loaded ordnance types. Both are pure UI state — they survive a respawn (a player's pick is
+    /// not ammo).</summary>
+    private void CycleWeaponSelectors()
+    {
+        bool gunSel = GunSelectPressed();
+        if (gunSel && !_gunSelPrev && _gunStates is { Length: > 1 })
+        {
+            _gunSel = (_gunSel + 1) % _gunStates.Length;
+        }
+        _gunSelPrev = gunSel;
+
+        bool rocketSel = RocketSelectPressed();
+        if (rocketSel && !_rocketSelPrev && _ordnanceTypes.Length > 1)
+        {
+            _rocketSel = (_rocketSel + 1) % _ordnanceTypes.Length;
+        }
+        _rocketSelPrev = rocketSel;
+    }
+
+    /// <summary>The interim HUD ammo line, bracketing the SELECTED gun group (only one fires at a
+    /// time): <c>GUNS [40:2398] 30:2799   ROCKETS 9</c>.</summary>
     private string AmmoLine()
     {
         var sb = new System.Text.StringBuilder("GUNS");
+        int gi = 0;
         foreach (var g in Loadout!.FirableGuns)
         {
-            sb.Append($" {g.Weapon.Caliber ?? 0}:{(InfiniteAmmo ? "∞" : g.Ammo.ToString())}");
-        }
-        int rockets = 0;
-        foreach (var h in Loadout.Hardpoints)
-        {
-            rockets += h.Ammo;
+            bool selected = gi == _gunSel;
+            string token = $"{g.Weapon.Caliber ?? 0}:{(InfiniteAmmo ? "∞" : g.Ammo.ToString())}";
+            sb.Append(selected ? $" [{token}]" : $" {token}");
+            gi++;
         }
         if (Loadout.Hardpoints.Count > 0)
         {
+            // Rockets remaining of the SELECTED ordnance type (stock = the sole type).
+            string? type = _ordnanceTypes.Length > 0
+                ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
+                : null;
+            int rockets = 0;
+            foreach (var h in Loadout.Hardpoints)
+            {
+                if (type == null || h.Weapon.Id == type)
+                {
+                    rockets += h.Ammo;
+                }
+            }
             sb.Append($"   ROCKETS {(InfiniteAmmo ? "∞" : rockets.ToString())}");
+            if (_ordnanceTypes.Length > 1)
+            {
+                sb.Append($" ({_rocketSel + 1}/{_ordnanceTypes.Length})");
+            }
         }
         return sb.ToString();
     }
@@ -378,8 +449,11 @@ public partial class FlightController : Node3D
         int gi = 0;
         foreach (var g in Loadout.FirableGuns)
         {
+            int groupIndex = gi;
             var st = _gunStates[gi++];
-            if (!fire || g.Weapon.FireRate <= 0f || g.Muzzles.Count == 0)
+            // Only the selected gun group fires — one at a time (the original's behaviour).
+            bool selected = groupIndex == _gunSel;
+            if (!fire || !selected || g.Weapon.FireRate <= 0f || g.Muzzles.Count == 0)
             {
                 st.Accum = 0f;
                 continue;
@@ -409,6 +483,12 @@ public partial class FlightController : Node3D
                         g.Ammo--;
                     }
                     st.Warned = false; // it fired a real round — re-arm the dry warning
+                    if (!st.LoggedFirst)
+                    {
+                        st.LoggedFirst = true;   // verification breadcrumb: which groups actually fire
+                        GD.Print($"gun group {groupIndex + 1} ({g.Mount}, {g.Weapon.Caliber ?? 0}-cal " +
+                                 $"{g.Weapon.Id}) firing");
+                    }
                 }
                 else
                 {
@@ -490,9 +570,17 @@ public partial class FlightController : Node3D
     private Hardpoint? NextArmedHardpoint()
     {
         var hps = Loadout!.Hardpoints;
+        // The hardpoint selector restricts firing to one ordnance type (stock = the sole type).
+        string? type = _ordnanceTypes.Length > 0
+            ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
+            : null;
         for (int k = 0; k < hps.Count; k++)
         {
             int idx = (_nextPylon + k) % hps.Count;
+            if (type != null && hps[idx].Weapon.Id != type)
+            {
+                continue;
+            }
             if (hps[idx].Ammo > 0 || InfiniteAmmo)
             {
                 _nextPylon = (idx + 1) % hps.Count;
@@ -801,7 +889,9 @@ public partial class FlightController : Node3D
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
 
-        // Guns + rockets: advance the fire clocks and spawn into the shared projectile pool.
+        // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
+        // into the shared projectile pool.
+        CycleWeaponSelectors();
         UpdateGuns(dt);
         UpdateRockets(dt);
 

@@ -5016,3 +5016,17 @@ rocket screenshot is deferred to the owed playtest; per-pylon origin is proven b
 binding is a design choice — both flagged in `backlog.md`. Docs: architecture.md (FlightController +
 Projectile), cli.md (`--fire-rockets`), CLAUDE.md (in-flight keys + status), plan item 17 ticked (14 still ◐).
 **Owed playtest: does firing feel right — guns *and* rockets. Next: B18 (weapon selectors).**
+
+**M3 Wave B — weapon selectors (B18, 2026-07-24).** Two independent selectors, `FlightController.CycleWeaponSelectors`
++ `_gunSel`/`_rocketSel`, both edge-detected and `--no-pads`-safe. **Gun selector** (G / gamepad
+D-pad Left) cycles the firable groups; **hardpoint selector** (H / D-pad Right) cycles the distinct
+loaded ordnance types. `--gun-select=N` (0-based) seeds the gun group for headless tests; selections
+survive a respawn. **⚠ Design corrected mid-implementation (user, 2026-07-24): the original fires
+only ONE gun group at a time — there is no ALL.** Decision 7's "(plus ALL)" is struck, and the
+guns-batch behaviour of all groups firing at once (never playtested) is fixed: `UpdateGuns` now fires
+only the selected group. The hardpoint selector is a no-op with stock loadouts (all pylons carry HE),
+present and data-driven for when mixed loadouts land. Verified with a per-group first-shot breadcrumb:
+headless Balmoral soaks (two `wep_50` groups) fire **only "gun group 1 (Inner Wing Guns)" by default**
+and **only "gun group 2 (Outer Wing Guns)" under `--gun-select=1`** — exactly one group at a time,
+the right one. Docs: architecture.md (FlightController), cli.md (`--gun-select`), CLAUDE.md (keys +
+status), plan decision 7 corrected + item 18 ticked. **Next: B19/B20 (guided flight, ground lock-on).**
