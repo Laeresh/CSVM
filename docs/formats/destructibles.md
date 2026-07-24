@@ -159,29 +159,35 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — live HP exists now; damage does not yet flow
+## Engine status — the damage stages run now; weapon fire does not yet reach them
 
-The destructible model is complete in the data, and the engine now holds live per-instance HP for
-it, but nothing damages that HP yet. A format reader should know why the branches still look dead
-in the live world:
+The destructible model is complete in the data, the engine holds live per-instance HP (C21) and
+now runs the progressive damage stages against it (C22); what is still missing is the weapon fire
+that decrements that HP in normal play. A format reader should know the current wiring:
 
-- **The reader front-end drops `DAMAGE_SEQUENCE` silently.** `AnimDefs.cs`'s `ParseDef` switch
-  handles `NAME`/`ANIMATION_NAME`/`ANIMATION_ROOT_NAME`/`ACTIVATION`/`HEALTH`/`RESET_STATE`/
-  `SEQUENCE_DEFINITION` but has **no `DAMAGE_SEQUENCE` case**, so a reader-sourced damage script
-  is discarded. The compiled front-end delivers it fine (as the ordinary `DAMAGE_SEQUENCE`-named
-  sequence above), so a compiled destructible keeps its script.
-- **`HEALTH` is now a mutable per-instance value — but nothing decrements it yet.** At world build
+- **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
+  ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
+  the reader `DAMAGE_SEQUENCE` block into the same-named sequence (it once dropped it silently —
+  its `ParseDef` switch had no case for it). So a reader-only destructible keeps its damage script,
+  identical in shape to its compiled twin.
+- **`HEALTH` is a mutable per-instance value, and the stages escalate against it.** At world build
   a `DestructibleRegistry` records one live HP pool per destructible node group, keyed by the
   `(def, anchor)` pair and seeded from the def's authored `HEALTH`; `AnimRuntime`'s
   `EvaluateCondition` reads that live value (`AnimHealth => registry HP <= num`) instead of the
-  static `def.Health`. No weapon fire touches it yet, so every instance still sits at full health
-  and every `ANIM_HEALTH` branch is **uniformly false** — an undamaged object never smokes, which
-  is correct for a world nothing has shot at. Because one def's `NAME` is a wildcard, a single def
-  can bind several node groups; each is an independent pool, so one tower's damage will not break
-  its siblings. (It is also moot for `WeaponHit` defs at world build: they never bootstrap — only
-  `ON_STARTUP` defs do.)
+  static `def.Health`, and `AnimRuntime.ApplyDamageStages(instance)` runs the cascade so the one
+  effect for the stage the live HP now sits in fires (the water tower: black smoke at ≤36, fire
+  smoke at ≤18; a three-stage object at ≤0.85/≤0.50/≤0.25 of its `HEALTH`). It escalates only when
+  HP crosses a new, deeper threshold, so each stage's effect fires exactly once — whether that
+  effect is a sustained smoke loop or a one-shot. Because one def's `NAME` is a wildcard, a single
+  def can bind several node groups; each is an independent pool, so one tower's damage will not
+  break its siblings.
+- **Nothing calls `ApplyDamageStages` in normal play yet.** The `--damage-test` debug sweep drives
+  it today; C23's `WeaponHit` path will call it after decrementing HP, and C24 runs the death
+  sequence at zero. Until then a built world sits at full health and every `ANIM_HEALTH` branch is
+  dormant — correct for a world nothing has shot at, and also moot for `WeaponHit` defs at build:
+  they never bootstrap, only `ON_STARTUP` defs do.
 
-Engine internals belong in `docs/architecture.md` (see the `AnimRuntime`, `AnimDefs` and
+Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs` and
 `DestructibleRegistry` entries); this page states the fact, not the wiring.
 
 ### ⚠ Trap: never key the healthy↔destroyed convention on a substring

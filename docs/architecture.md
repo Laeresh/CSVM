@@ -188,6 +188,9 @@ under `raw`). Exists because compiled archives are incomplete: `zepstate`/`start
 ⚠ `AddCallTarget` must NOT touch `data["node"]`/`data["name"]` — for CALL_ANIMATION those hold the CALLED animation's name.
 ⚠ `ReaderCondition` is the ONE place reader↔compiled unit conversions live (PLAYER_RANGE m→m²,
   ANIMATION_LOD HIGH→2); `AddPufferState` bridges the PUFFER_STATE shape differences.
+⚠ `DAMAGE_SEQUENCE` parses into a sequence literally named `DAMAGE_SEQUENCE` (the compiled twin's
+  name) — the magic name `AnimRuntime.ApplyDamageStages` invokes; it is otherwise an ordinary
+  IF/ELSEIF `ANIM_HEALTH` event list (docs/formats/destructibles.md).
 
 ## src/Mech3/AnimProgram.cs
 Merges the compiled + reader front-ends for one mission — load both, prefer compiled on collision,
@@ -264,20 +267,25 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   spaces); `Targets()` never falls back to names; crash puffers must parent at world level.
 ⚠ `ANIM_HEALTH`/`ANIM_HEALTH_RANGE` read LIVE HP via `HealthOf` → `DestructibleRegistry`, not
   `def.Health`; the registry is built in bootstrap pass 1 beside RESET_STATE. Nothing damages HP
-  yet, so every instance is at full health and the read is a no-op today.
+  in normal play yet, so every instance is at full health and the read is a no-op today.
+⚠ `ApplyDamageStages(instance)` runs a destructible's `DAMAGE_SEQUENCE` against its live HP (C22),
+  firing the ONE stage effect for the crossed threshold. It escalates via `DamageStage` (only
+  when a deeper threshold is crossed) — do NOT lean on `CALL_ANIMATION`'s live guard for "once":
+  a one-shot damage effect (`damage3_mp1zreng11`) finishes and would re-fire without the gate.
+  Called by `--damage-test` today; C23's `WeaponHit` invokes it after decrementing HP.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
 `HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
-coarse healthy/damaged/destroyed state; built during AnimRuntime's bootstrap and read by
-`ANIM_HEALTH` condition eval. C23's weapon damage and C24's death sequence act through it.
-Schema: docs/formats/destructibles.md.
+coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`; built during AnimRuntime's
+bootstrap, read by `ANIM_HEALTH` eval and escalated by `ApplyDamageStages`. C23's weapon damage and
+C24's death sequence act through it. Schema: docs/formats/destructibles.md.
 ⚠ Keyed per `(def, anchor)`, NOT per def — a wildcard NAME binds many node groups, each an
   independent pool (one tower's damage must not touch its siblings).
 ⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
   the compiler's per-instance defs both bind the same nodes, so one object carries several pools
   (same HEALTH). C23 must resolve a struck node to ONE authoritative instance — prefer the compiled.
-⚠ Nothing decrements HP until C23 — a fresh world reads bit-identically to before C21.
+⚠ Weapon fire does not decrement HP until C23 — a fresh world reads bit-identically to before C21.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —

@@ -5110,3 +5110,37 @@ post-world-build). Docs: new `DestructibleRegistry` architecture entry + `AnimRu
 `destructibles.md` "Engine status" rewrite, PLAN-M3-weapons.md (checklist 21 ☐→☑, `### C21` landed
 note), CLAUDE.md status. **Next: C22 (`DAMAGE_SEQUENCE` reader-front-end parsing + live threshold
 evaluation) and C23 (`WeaponHit` damage application), both hanging off this registry.**
+
+**DAMAGE_SEQUENCE parsing + live threshold evaluation — M3 Wave C item C22 (2026-07-24):** the
+destructibles' progressive damage stages now run — a hit-worn tower smokes, then catches fire, at
+the authored health thresholds (see the `AnimRuntime`/`AnimDefs`/`DestructibleRegistry` entries in
+`docs/architecture.md` and the rewritten `destructibles.md` "Engine status"). Two pieces landed.
+(1) `AnimDefs.cs`'s reader front-end now parses the `DAMAGE_SEQUENCE` block into a sequence
+literally named `DAMAGE_SEQUENCE` — the same shape the compiled archives already deliver, and the
+magic name the runtime invokes — closing the silent-drop gap (its `ParseDef` switch had no case for
+it). (2) `AnimRuntime.ApplyDamageStages(instance)` runs that cascade against the instance's live HP
+(C21's `HealthOf`): an IF/ELSEIF `ANIM_HEALTH` chain that fires the one effect for the stage the HP
+now sits in. **It escalates via a per-instance `DamageStage` — running the cascade only when a new,
+deeper threshold is crossed** — which is what makes "each stage once" hold for *every* effect kind:
+the sustained smoke loop would be spared re-firing by `CALL_ANIMATION`'s own live guard, but a
+one-shot damage effect that finishes (C5's `damage3_mp1zreng11`) is not, and re-fired on every step
+before the gate was added (the bug that surfaced the need). **Nothing calls `ApplyDamageStages` in
+normal play yet** — C23's `WeaponHit` path will, after decrementing HP; today the new `--damage-test`
+flag drives it. Verified with `--damage-test[=name]` (a new headless C22 verifier standing in until
+F40's interactive HP control): sweeping a destructible's HP full→zero and logging which stage effect
+fires at which health. The water tower (HEALTH 60, both compiled *and* the reader-parsed twin) fires
+black smoke at HP≤36 and fire smoke at HP≤18 (0.60/0.30 × 60); C1's HEALTH-30 AA guns fire at 18/9
+and HEALTH-60 buildings at 36/18 — proving the thresholds are absolute values derived per-def from
+each object's own `HEALTH`, evaluated against live per-instance HP; C5's `reng11` (HEALTH 40, the
+three-stage {0.85,0.50,0.25} progression) fires damage3→damage2→damage1 (each chaining its own
+smoke/fire) once each at HP≤34/20/10, with the re-fire gone. The full 8-chapter `--freecam`
+regression is **byte-identical to the C21 baseline** — same destructible counts (C1 267/196 … C5
+568/292), same node/mesh counts, all exit 0, no exceptions — confirming C22 is a no-op at world
+build: `ApplyDamageStages` runs only under `--damage-test`, and the reader-parsed `DAMAGE_SEQUENCE`
+sequences are inert because `WeaponHit` defs never bootstrap. Also recorded a verification.md rule
+(71): `--screenshot` needs a real GPU context — `--headless` selects the dummy renderer whose null
+texture readback throws, writing no file. Docs: `AnimDefs`/`AnimRuntime` ⚠ + expanded
+`DestructibleRegistry` architecture entries, `destructibles.md` "Engine status" rewrite, `cli.md`
+`--damage-test`, PLAN-M3-weapons.md (checklist 22 ☐→☑, `### C22` landed note), CLAUDE.md status.
+**Next: C23 (`WeaponHit` activation + damage application) — decrement HP on a projectile hit and
+call `ApplyDamageStages`, then C24's death sequence at zero.**

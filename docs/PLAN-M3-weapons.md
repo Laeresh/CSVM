@@ -458,7 +458,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 ### Wave C — destructibles
 
 21. ☑ Per-instance mutable HP + destructible instance registry — **landed** (`DestructibleRegistry.cs`; live HP read by `ANIM_HEALTH`, provable no-op until C23)
-22. ☐ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation
+22. ☑ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation — **landed** (`AnimDefs` parse + `AnimRuntime.ApplyDamageStages`; stages fire once per threshold, `--damage-test` verifies)
 23. ☐ `WeaponHit` activation and damage application
 24. ☐ Death sequence execution + healthy→destroyed swap
 25. ☐ Collider removal on destruction (the doors)
@@ -1032,7 +1032,27 @@ them.
 **Verify.** An 8-chapter freecam regression shows identical rendering to before (no behaviour
 change yet); the registry's instance count per chapter is reported and sane against A4's census.
 
-### C22 ☐ `DAMAGE_SEQUENCE` parsing + threshold evaluation
+### C22 ☑ `DAMAGE_SEQUENCE` parsing + threshold evaluation — **LANDED (2026-07-24)**
+
+**Landed.** Two pieces: `AnimDefs.cs`'s reader front-end now parses the `DAMAGE_SEQUENCE` block into
+a sequence named `DAMAGE_SEQUENCE` (matching the compiled twin, closing the silent-drop gap); and
+`AnimRuntime.ApplyDamageStages(instance)` runs that IF/ELSEIF `ANIM_HEALTH` cascade against the
+instance's live HP (C21's `HealthOf`), firing the one stage effect for the crossed threshold. It
+escalates via a per-instance `DamageStage` — running the cascade only when a **deeper** threshold is
+crossed — so each stage's effect fires exactly once whether the effect is a sustained smoke loop or
+a one-shot (the gate is required: `CALL_ANIMATION`'s live guard alone does NOT stop a finishing
+one-shot like C5's `damage3_mp1zreng11` from re-firing). Nothing calls it in normal play yet — C23's
+`WeaponHit` will; `--damage-test` drives it today.
+
+**Verified.** New headless `--damage-test[=name]` (the C22 verifier until F40) sweeps a
+destructible's HP full→zero and logs which stage effect fires at which health. Water tower (HEALTH
+60, compiled **and** reader-parsed twin): black smoke at HP≤36, fire smoke at HP≤18 (0.60/0.30).
+C1 HEALTH-30 AA guns fire at 18/9, HEALTH-60 buildings at 36/18 — thresholds derived per-def from
+each object's own `HEALTH`, evaluated against live HP. C5 `reng11` (HEALTH 40, three-stage
+{0.85,0.50,0.25}): damage3→damage2→damage1 once each at HP≤34/20/10, re-fire gone. The 8-chapter
+`--freecam` regression is byte-identical to the C21 baseline (same counts, no errors) — C22 is a
+no-op at world build (`ApplyDamageStages` runs only under `--damage-test`; reader `DAMAGE_SEQUENCE`s
+are inert because `WeaponHit` defs never bootstrap).
 
 **Goal.** Progressive damage stages run as authored.
 

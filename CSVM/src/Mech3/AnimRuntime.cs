@@ -1611,6 +1611,84 @@ public sealed partial class AnimRuntime : Node
     private float HealthOf(AnimDefinition def, Node3D? anchor) =>
         _destructibles.Get(def, anchor)?.Health ?? def.Health;
 
+    /// <summary>The magic sequence name a destructible's progressive-damage script carries in
+    /// both the reader and compiled forms (docs/formats/destructibles.md).</summary>
+    private const string DamageSequenceName = "DAMAGE_SEQUENCE";
+
+    /// <summary>Escalates a destructible's visible damage to the stage its current HP now sits
+    /// in, running its <c>DAMAGE_SEQUENCE</c> so the progressive-damage effect for that stage
+    /// fires — the water tower's black smoke at ≤36, fire smoke at ≤18. Call it after the
+    /// instance's HP changes (C23's weapon hit, or a debug poke).
+    ///
+    /// <para>The stage is how many of the cascade's descending <c>ANIM_HEALTH</c> thresholds the
+    /// live HP has fallen past; the method only ever <b>escalates</b> — it runs the script only
+    /// when a new, deeper threshold is crossed, and the script (an IF/ELSEIF chain C21 evaluates
+    /// against the live value via <see cref="HealthOf"/>) then fires the deepest active branch,
+    /// exactly one effect. The stage gate is what makes "each stage once" hold for <b>every</b>
+    /// effect kind: a sustained smoke would be spared re-firing by <c>CALL_ANIMATION</c>'s own
+    /// live guard, but a one-shot effect that finishes (C5's <c>damage3_mp1zreng11</c>) is not,
+    /// and without the gate would re-fire on every hit inside a band.</para>
+    ///
+    /// <para>Returns whether it escalated. False means no change: the HP has not crossed a new
+    /// threshold, or the destructible carries no <c>DAMAGE_SEQUENCE</c> (many just die outright,
+    /// with no progressive stages). It neither decrements HP (C23) nor runs the death sequence
+    /// (C24).</para></summary>
+    public bool ApplyDamageStages(DestructibleRegistry.Instance inst)
+    {
+        var seq = inst.Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase));
+        if (seq == null)
+            return false;
+        int stage = DamageStageFor(seq, inst.Health);
+        if (stage <= inst.DamageStage)
+            return false;
+        inst.DamageStage = stage;
+        if (inst.Status == DestructibleRegistry.State.Healthy)
+            inst.Status = DestructibleRegistry.State.Damaged;
+        // A one-shot selector, not a persistent instance: the cascade carries no timed events, so
+        // a single zero-dt advance resolves the whole IF chain and dispatches the chosen
+        // CALL_ANIMATION. The effect it starts becomes its own live instance; this host is
+        // discarded.
+        var host = new AnimInstance(inst.Def, inst.Anchor);
+        host.Runners.Add(new SequenceRunner(seq));
+        host.Advance(this, 0f);
+        return true;
+    }
+
+    /// <summary>How many of a <c>DAMAGE_SEQUENCE</c>'s health thresholds <paramref name="hp"/> has
+    /// fallen at or below — the object's current damage stage. Monotonic in falling HP, so it is a
+    /// safe escalation gate.</summary>
+    private static int DamageStageFor(AnimSequence seq, float hp)
+    {
+        int stage = 0;
+        foreach (var ev in seq.Events)
+        {
+            if (ev.Kind != "If" && ev.Kind != "Elseif")
+                continue;
+            if (DamageThreshold(ev.Data.Obj("condition")) is { } t && hp <= t)
+                stage++;
+        }
+        return stage;
+    }
+
+    /// <summary>The HP a health condition first becomes true at as HP falls: <c>ANIM_HEALTH</c>'s
+    /// operand, or a range's upper bound (its lower bound is left to <see cref="EvaluateCondition"/>
+    /// when the cascade actually runs). Null for a non-health condition, which does not stage.</summary>
+    private static float? DamageThreshold(AnimData? condition)
+    {
+        if (condition?.Union() is not { } union)
+            return null;
+        var (kind, value) = union;
+        return kind switch
+        {
+            "AnimHealth" => AnimData.AsNum(value),
+            "AnimHealthRange" => value is Dictionary<string, object?> fields
+                                 ? new AnimData(fields).Num("max")
+                                 : null,
+            _ => null,
+        };
+    }
+
     private readonly Dictionary<(string Kind, Node3D? Anchor), bool> _condLast = new();
 
     private bool Flipped(string kind, Node3D? anchor, bool result)

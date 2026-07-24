@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.Diagnostics;
 using System.IO;
+using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
@@ -58,6 +59,9 @@ namespace CSVM;
 ///   --gun-select=N               initial gun group (0-based; 0 = first group, the default). Only one
 ///                                group fires at a time (a testing hook; interactively cycle with G / D-pad Left)
 ///   --infinite-ammo              guns/hardpoints fire without depleting (weapon testing)
+///   --damage-test[=name]         build the --chapter world, then drive one destructible's HP from
+///                                full to zero, logging which DAMAGE_SEQUENCE stage effect fires at
+///                                which health, then quit (C22 verify until F40; optional name filter)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -233,6 +237,8 @@ public partial class PlaneViewer : Node3D
     private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
     private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
+    private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
+    private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
@@ -436,6 +442,10 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
             else if (arg == "--dump-loadout") _dumpLoadout = true;
             else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
+            // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
+            // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
+            else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
@@ -744,6 +754,17 @@ public partial class PlaneViewer : Node3D
                 _worldLights = session.Lights;
                 crashProgram = session.Program;
                 worldScene = session.Builder.Scene;
+
+                // --damage-test: with the world built and its AnimRuntime bound, drive one
+                // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
+                // stand-in until F40's interactive HP control lands. Node resolution runs off the
+                // runtime's own index, so the world subtree need not be in the tree yet.
+                if (_damageTest)
+                {
+                    RunDamageTest(session.Runtime);
+                    GetTree().Quit();
+                    return false;
+                }
 
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
@@ -2485,6 +2506,95 @@ public partial class PlaneViewer : Node3D
         GD.Print(failed == 0
             ? $"loadout dump: {ok} plane(s) bound, every marker resolved → ./.scratch/loadout_dump.txt"
             : $"loadout dump: {ok} ok, {failed} FAILED — see the !! lines above");
+    }
+
+    /// <summary>The C22 verification (until F40's interactive HP control lands): for one live
+    /// destructible instance per distinct DAMAGE_SEQUENCE-carrying def (optionally filtered by
+    /// NAME), sweep its HP from full to zero and record which stage effect the DAMAGE_SEQUENCE
+    /// fires at which health. Subscribing to <see cref="Mech3.AnimRuntime.OnInstanceStarted"/> is
+    /// how each fired CALL_ANIMATION is observed; the runtime's already-live guard means each
+    /// effect starts once, so its first-seen HP is its threshold. Reports to stdout and
+    /// <c>./.scratch/damage_test.txt</c>.</summary>
+    private void RunDamageTest(Mech3.AnimRuntime runtime)
+    {
+        static bool HasDamage(Mech3.AnimDefinition d) => d.Sequences.Any(s =>
+            string.Equals(s.Name, "DAMAGE_SEQUENCE", StringComparison.OrdinalIgnoreCase));
+
+        // One representative instance per distinct def — a wildcard NAME binds many identical
+        // towers, and sweeping every one would just repeat the same result and start hundreds of
+        // effects. Capped so a chapter full of destructibles stays a readable report.
+        var chosen = new List<Mech3.DestructibleRegistry.Instance>();
+        var seenDefs = new HashSet<Mech3.AnimDefinition>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            if (!HasDamage(inst.Def))
+            {
+                continue;
+            }
+            if (_damageTestFilter.Length > 0
+                && !inst.Def.Name.Contains(_damageTestFilter, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (seenDefs.Add(inst.Def))
+            {
+                chosen.Add(inst);
+            }
+            if (chosen.Count >= 16)
+            {
+                break;
+            }
+        }
+
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"damage-test: chapter {_chapter}, filter '{_damageTestFilter}' — "
+            + $"{chosen.Count} DAMAGE_SEQUENCE def(s) of "
+            + $"{runtime.Destructibles.Count} destructible instance(s)");
+        foreach (var inst in chosen)
+        {
+            var fired = new List<(float Hp, string Effect)>();
+            var started = new List<(string? Anim, Node3D? Anchor)>();
+            float atHp = inst.MaxHealth;
+            void OnStarted(Mech3.AnimDefinition def, Node3D? anchor)
+            {
+                fired.Add((atHp, def.AnimName ?? def.Name));
+                started.Add((def.AnimName, anchor));
+            }
+
+            inst.Health = inst.MaxHealth;
+            inst.Status = Mech3.DestructibleRegistry.State.Healthy;
+            inst.DamageStage = 0;
+            runtime.OnInstanceStarted += OnStarted;
+            // Fine enough to land on the round-fraction thresholds exactly (0.60/0.30 of HEALTH …).
+            const int steps = 240;
+            for (int i = 0; i <= steps; i++)
+            {
+                atHp = inst.MaxHealth * (1f - i / (float)steps);
+                inst.Health = atHp;
+                runtime.ApplyDamageStages(inst);
+            }
+            runtime.OnInstanceStarted -= OnStarted;
+            // Stop the effects this sweep started: reader-wildcard and compiled per-instance defs
+            // bind the SAME tower nodes (C21), so a leftover live effect would make the twin's
+            // identical CALL_ANIMATION a no-op and read as "no stage effect fired".
+            foreach (var (anim, anchor) in started)
+            {
+                runtime.Stop(anim, anchor);
+            }
+
+            string src = inst.Def.Archive != null ? "compiled" : "reader";
+            string stages = fired.Count == 0
+                ? "no stage effect fired"
+                : string.Join(", ", fired.Select(f => $"HP≤{f.Hp:0.##} → {f.Effect}"));
+            sb.AppendLine($"  {inst.Def.Name} (HEALTH {inst.MaxHealth:0.##}, {src}): {stages}");
+        }
+
+        var text = sb.ToString();
+        GD.Print(text);
+        var scratch = Path.Combine(_repoRoot, ".scratch");
+        Directory.CreateDirectory(scratch);
+        File.WriteAllText(Path.Combine(scratch, "damage_test.txt"), text);
+        GD.Print($"damage-test: {chosen.Count} def(s) swept → ./.scratch/damage_test.txt");
     }
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";

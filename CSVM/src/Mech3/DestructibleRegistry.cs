@@ -43,6 +43,12 @@ public sealed class DestructibleRegistry
         public float Health { get; set; }
         public State Status { get; set; } = State.Healthy;
 
+        /// <summary>How many of the DAMAGE_SEQUENCE's descending health thresholds this instance
+        /// has fallen past — the deepest progressive-damage stage it has escalated to. Only ever
+        /// increases (C22 escalates, never heals), so a stage effect fires exactly once; a reset
+        /// (C28) puts it back to 0.</summary>
+        public int DamageStage { get; set; }
+
         public Instance(AnimDefinition def, Node3D anchor, float maxHealth)
         {
             Def = def;

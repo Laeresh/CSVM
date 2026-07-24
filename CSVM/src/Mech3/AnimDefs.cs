@@ -92,6 +92,20 @@ public static class AnimDefs
                     if (value != null)
                         def.Sequences.Add(ParseSequence(value));
                     break;
+                // The progressive-damage script of a destructible: a bare IF/ELSEIF ANIM_HEALTH
+                // cascade with no NAME of its own. The compiled archives deliver it as an
+                // ordinary sequence literally named DAMAGE_SEQUENCE, so mirror that — a sequence
+                // by that magic name, which AnimRuntime.ApplyDamageStages invokes on damage
+                // (docs/formats/destructibles.md). Without this case a reader-only destructible's
+                // damage stages were silently dropped.
+                case "DAMAGE_SEQUENCE":
+                    if (value != null)
+                    {
+                        var damage = new AnimSequence { Name = "DAMAGE_SEQUENCE" };
+                        damage.Events.AddRange(ParseEvents(value));
+                        def.Sequences.Add(damage);
+                    }
+                    break;
             }
         }
         // The compiled archives always set anim_name (verified: never null in this install,
