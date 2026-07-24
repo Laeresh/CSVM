@@ -1671,6 +1671,42 @@ public sealed partial class AnimRuntime : Node
         return stage;
     }
 
+    private int _damagesLogged;
+
+    /// <summary>Applies weapon damage to whatever destructible a struck world node belongs to, and
+    /// escalates its visible damage. <paramref name="struck"/> is the raycast-hit collider (B15) —
+    /// or any node under a destructible — resolved to the owning instance by walking up to the
+    /// nearest registered anchor (compiled def preferred, <see cref="DestructibleRegistry.Resolve"/>).
+    /// World destructibles carry HEALTH only, so <paramref name="healthDamage"/> (the weapon's
+    /// <c>HEALTH_DAMAGE</c>) is the whole model — there is no armour pool (docs/formats/
+    /// destructibles.md). Subtracts it, runs the damage stages, and marks the instance
+    /// <c>Destroyed</c> at zero; the death <b>sequence</b> (the healthy→destroyed swap, debris,
+    /// fireball) is C24, so today a killed object just holds its final smoking stage. Returns true
+    /// when the hit landed on a destructible (false for terrain/water/clutter); a no-op once
+    /// destroyed.</summary>
+    public bool DamageAt(Node? struck, float healthDamage)
+    {
+        var inst = _destructibles.Resolve(struck);
+        if (inst == null)
+            return false;
+        if (inst.Status == DestructibleRegistry.State.Destroyed)
+            return true;   // already dead — the death sequence (C24) owns it from here
+        float before = inst.Health;
+        inst.Health = Math.Max(0f, inst.Health - Math.Max(0f, healthDamage));
+        ApplyDamageStages(inst);
+        bool destroyed = inst.Health <= 0f;
+        if (destroyed)
+            inst.Status = DestructibleRegistry.State.Destroyed;
+        if (_damagesLogged < 12)
+        {
+            _damagesLogged++;
+            GD.Print($"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} " +
+                     $"HP {before:0.##}→{inst.Health:0.##}" +
+                     (destroyed ? " DESTROYED (death sequence: C24)" : $" [stage {inst.DamageStage}]"));
+        }
+        return true;
+    }
+
     /// <summary>The HP a health condition first becomes true at as HP falls: <c>ANIM_HEALTH</c>'s
     /// operand, or a range's upper bound (its lower bound is left to <see cref="EvaluateCondition"/>
     /// when the cascade actually runs). Null for a non-health condition, which does not stage.</summary>

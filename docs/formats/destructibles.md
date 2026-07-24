@@ -159,11 +159,12 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — the damage stages run now; weapon fire does not yet reach them
+## Engine status — weapon fire damages destructibles now; the death sequence is next
 
-The destructible model is complete in the data, the engine holds live per-instance HP (C21) and
-now runs the progressive damage stages against it (C22); what is still missing is the weapon fire
-that decrements that HP in normal play. A format reader should know the current wiring:
+The destructible model is complete in the data and the engine now drives most of it: live
+per-instance HP (C21), the progressive damage stages (C22), and weapon fire that spends that HP
+(C23). What remains is the **death sequence** — the healthy→destroyed swap, debris and fireball
+that run when HP reaches zero (C24). A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -177,18 +178,28 @@ that decrements that HP in normal play. A format reader should know the current 
   static `def.Health`, and `AnimRuntime.ApplyDamageStages(instance)` runs the cascade so the one
   effect for the stage the live HP now sits in fires (the water tower: black smoke at ≤36, fire
   smoke at ≤18; a three-stage object at ≤0.85/≤0.50/≤0.25 of its `HEALTH`). It escalates only when
-  HP crosses a new, deeper threshold, so each stage's effect fires exactly once — whether that
-  effect is a sustained smoke loop or a one-shot. Because one def's `NAME` is a wildcard, a single
-  def can bind several node groups; each is an independent pool, so one tower's damage will not
-  break its siblings.
-- **Nothing calls `ApplyDamageStages` in normal play yet.** The `--damage-test` debug sweep drives
-  it today; C23's `WeaponHit` path will call it after decrementing HP, and C24 runs the death
-  sequence at zero. Until then a built world sits at full health and every `ANIM_HEALTH` branch is
-  dormant — correct for a world nothing has shot at, and also moot for `WeaponHit` defs at build:
-  they never bootstrap, only `ON_STARTUP` defs do.
+  HP crosses a new, deeper threshold, so each stage's effect fires exactly once. Because one def's
+  `NAME` is a wildcard, a single def can bind several node groups; each is an independent pool, so
+  one tower's damage will not break its siblings.
+- **Weapon fire reaches it (C23).** A projectile's raycast reports the struck collider; the runtime
+  walks up from it to the owning destructible (`DestructibleRegistry.Resolve`), spends the weapon's
+  `HEALTH_DAMAGE` — world destructibles carry HEALTH only, so there is **no armour pool** and
+  `ARMOR_DAMAGE` does nothing to them — runs the damage stages, and marks the instance destroyed at
+  zero. HE does 60 health damage and AP 40, so a HEALTH-60 tower dies to **one** HE rocket but
+  **two** AP (AP is the worse building-buster, exactly inverting its anti-armour advantage); a
+  40-cal gun at 4.5 each takes 14. The **death sequence** (the visible swap, debris, fireball) is
+  C24, so a killed object today just holds its final smoking stage.
+  - ⚠ **`Resolve` prefers the compiled def.** A wildcard reader `NAME` can grab an inner node the
+    compiled def does not (the tower's `ap_h2otwr*` also matches `ap_h2otwr.flt`, which sits
+    *between* the collider and the compiled `ap_h2otwr1` root), so the walk-up climbs the whole
+    chain and takes the nearest **compiled** anchor — the def whose `DAMAGE_SEQUENCE` and death
+    sequence are the real ones — not simply the first anchor it meets.
+  - The patrol boat and truck are the only world objects also described by an AI-**vehicle** def
+    (armour+health). M3 sees them only as scenery, so they are damaged through their **anim** def
+    (`patrolboat` HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
 
-Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs` and
-`DestructibleRegistry` entries); this page states the fact, not the wiring.
+Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs`,
+`DestructibleRegistry` and `Projectile` entries); this page states the fact, not the wiring.
 
 ### ⚠ Trap: never key the healthy↔destroyed convention on a substring
 

@@ -459,7 +459,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 21. ☑ Per-instance mutable HP + destructible instance registry — **landed** (`DestructibleRegistry.cs`; live HP read by `ANIM_HEALTH`, provable no-op until C23)
 22. ☑ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation — **landed** (`AnimDefs` parse + `AnimRuntime.ApplyDamageStages`; stages fire once per threshold, `--damage-test` verifies)
-23. ☐ `WeaponHit` activation and damage application
+23. ☑ `WeaponHit` activation and damage application — **landed** (`AnimRuntime.DamageAt` + `Registry.Resolve`; HE 1-hit / AP 2-hit a HEALTH-60 tower, `--damage-hd` verifies)
 24. ☐ Death sequence execution + healthy→destroyed swap
 25. ☐ Collider removal on destruction (the doors)
 26. ☐ Ballistic `ObjectMotion` — debris tumble (`AnimRuntime.cs:429`)
@@ -1066,7 +1066,27 @@ silently. The compiled front-end already delivers it as an ordinary `AnimSequenc
 **Verify.** Chipping a water tower's HP through 36 and 18 (via F40) starts each effect at the
 right threshold and only once.
 
-### C23 ☐ `WeaponHit` activation and damage application
+### C23 ☑ `WeaponHit` activation and damage application — **LANDED (2026-07-24)**
+
+**Landed.** `ProjectilePool.Impact` (B15's raycast reports the struck collider) invokes a new
+`DamageSink`, wired in flight to `AnimRuntime.DamageAt(struck, healthDamage)`. `DamageAt` resolves
+the collider to its destructible (`DestructibleRegistry.Resolve` — walks the whole parent chain and
+takes the nearest **compiled** anchor, because a reader wildcard grabs an inner node the compiled def
+does not: the tower's `ap_h2otwr*` matches `ap_h2otwr.flt`, between the collider and the compiled
+`ap_h2otwr1` root), spends `HEALTH_DAMAGE` (world objects carry HEALTH only — no armour pool, so
+`ARMOR_DAMAGE` is inert against them), runs `ApplyDamageStages`, and marks the instance `Destroyed`
+at zero. The death **sequence** (the visible swap + debris) is C24. **Patrol-boat ⚠ resolved:** its
+anim def is HEALTH 20 `WeaponHit` (mission archives only), so M3 damages it as scenery through that
+path; the AI-vehicle armour+health model (HP 40) stays M4.
+
+**Verified.** New `--damage-hd=<n>` mode of `--damage-test` (discrete weapon hits via `DamageAt`,
+counting hits to destruction): a HEALTH-60 tower dies in **1** hit at HD 60 (HE), **2** at 40 (AP —
+worse against buildings), **14** at 4.5 (40-cal), stages at hits 6/10 (HP 33/15); a HEALTH-30 AA gun
+in **10** at 3.0, stages 18/9. A `resolve✓` check (from a deep descendant, the collider's node path)
+passes on all 16 C1 destructibles. 8-chapter freecam regression byte-identical to the C21 baseline
+(no-op at world build — `DamageAt` fires only on real hits). An in-flight `--fly --fire` run confirmed
+`DamageSink` is invoked on every impact and correctly no-ops terrain. **Owed:** the in-flight visual
+of a specific destructible dying, which pairs with C24's death swap (playtest.md).
 
 **Goal.** Projectile hits actually damage destructibles.
 

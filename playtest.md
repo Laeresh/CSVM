@@ -69,6 +69,15 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire` (auto-holds guns).
   *Blocks:* **plan item A10** (verify the binding rule + flash appearance).
 
+- **C23 — shooting a destructible in flight (pairs with C24).** Fly at an airport structure (water
+  tower, AA gun, hangar) and pour gun fire into it, then loose a rocket. The damage MODEL is verified
+  headless (HE 1-hit / AP 2-hit a HEALTH-60 tower; 40-cal 14 hits; stages fire at 60/30 % of HEALTH),
+  but no one has watched it happen at the controls — the airport positions were not decoded into
+  scripted aim points, and the *visible* death is C24's healthy→destroyed swap, so watch for: HP
+  actually falling (smoke then fire appear as you chip it), and — once **C24** lands — the object
+  swapping to its wreck + debris at zero. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+  *Blocks:* end-to-end sign-off on C23 + C24 (weapon damage → destruction).
+
 ---
 
 ## 2 · Milestone 2.5 sign-off (needs two controllers / hardware this machine lacks)
@@ -171,11 +180,12 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
 
 ## 8 · Original-game fidelity questions (need the original open, not just the cockpit)
 
-- **Patrol-boat HP — 20 or 40?** The `patrolboat` vehicle def says HP 40, the `C1/patrol_boat` anim
-  def says HP 20 (both 60 %/30 % stages). M3 sees the boat as scenery, so 20 is the likely answer —
-  **settle by shooting one in the original with a known weapon and counting hits.** Also check
-  `t_truck`/`fueltruck`/`armytruck_destruct` for the same duplication.
-  *Blocks:* **C23** (weapon damage application to world destructibles).
+- **Patrol-boat HP — 20 or 40?** The `patrolboat` vehicle def says HP 40, the anim def says HP 20
+  (both 60 %/30 % stages). **Settled for M3 (C23):** the boat is scenery, damaged through its anim
+  def (HP 20); the AI-vehicle armour+health model (HP 40) is M4. Still a nice fidelity check —
+  **shoot one in the original with a known weapon and count hits** to confirm 20, and check
+  `t_truck`/`fueltruck`/`armytruck_destruct` for the same duplication. *Blocks:* nothing (M3);
+  M4 AI-vehicle combat.
 - **Map-edge continuation.** Ours mirrors the border tiles; the original may plain-repeat, and may
   extend more than one tile. *Look for:* an asymmetric border feature (settles mirror vs repeat) and
   how many tiles out the world continues. *Blocks:* `MapEdgeExtender` fidelity (one-line swap).

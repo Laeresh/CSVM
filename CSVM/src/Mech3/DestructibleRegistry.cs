@@ -78,6 +78,11 @@ public sealed class DestructibleRegistry
 
     private readonly HashSet<ulong> _anchors = new();
 
+    // The ONE authoritative instance per anchor node, for resolving a struck world node back to a
+    // destructible (C23). A node can carry several instances (reader wildcard + compiled
+    // per-instance); the compiled def is the better data, so it wins.
+    private readonly Dictionary<ulong, Instance> _authoritative = new();
+
     /// <summary>Registers one destructible node group at full health. Idempotent: a repeated
     /// <c>(def, anchor)</c> returns the existing instance without resetting its HP, so a second
     /// bootstrap pass or a re-index cannot silently heal a damaged object.</summary>
@@ -89,7 +94,15 @@ public sealed class DestructibleRegistry
         var inst = new Instance(def, anchor, maxHealth);
         _byKey[key] = inst;
         _all.Add(inst);
-        _anchors.Add(anchor.GetInstanceId());
+        ulong aid = anchor.GetInstanceId();
+        _anchors.Add(aid);
+        // Compiled beats reader as the authoritative instance for this anchor (compiled defs load
+        // first, so this normally just fills an empty slot, but the check makes it order-proof).
+        if (!_authoritative.TryGetValue(aid, out var current)
+            || (def.Archive != null && current.Def.Archive == null))
+        {
+            _authoritative[aid] = inst;
+        }
         return inst;
     }
 
@@ -103,11 +116,35 @@ public sealed class DestructibleRegistry
         return _byKey.TryGetValue((def, anchor.GetInstanceId()), out var inst) ? inst : null;
     }
 
+    /// <summary>The destructible instance a struck world node belongs to. The struck node is a
+    /// raycast-hit collider deep under the anchor's subtree, so this climbs the parent chain to
+    /// find a registered anchor. It walks the WHOLE chain rather than stopping at the first hit,
+    /// because a compiled def and a reader wildcard can anchor to DIFFERENT nodes of one object —
+    /// the water tower's compiled def roots on <c>ap_h2otwr1</c> while its reader def's <c>*</c>
+    /// also grabs the inner <c>ap_h2otwr.flt</c>, which is nearer the collider — and the compiled
+    /// def is the authoritative one (its DAMAGE_SEQUENCE and death sequence are the real ones). So
+    /// the nearest COMPILED anchor wins; failing any compiled, the nearest reader. Null when
+    /// nothing up the chain is a destructible (terrain, water, clutter, the sky).</summary>
+    public Instance? Resolve(Node? struck)
+    {
+        Instance? nearestReader = null;
+        for (var n = struck; n != null; n = n.GetParent())
+        {
+            if (!_authoritative.TryGetValue(n.GetInstanceId(), out var inst))
+                continue;
+            if (inst.Def.Archive != null)
+                return inst;               // compiled = authoritative, take the nearest
+            nearestReader ??= inst;        // fallback if no compiled anchor is found up the chain
+        }
+        return nearestReader;
+    }
+
     /// <summary>Drops every instance. Used when a runtime is torn down and rebuilt.</summary>
     public void Clear()
     {
         _byKey.Clear();
         _all.Clear();
         _anchors.Clear();
+        _authoritative.Clear();
     }
 }

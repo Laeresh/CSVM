@@ -272,20 +272,26 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   firing the ONE stage effect for the crossed threshold. It escalates via `DamageStage` (only
   when a deeper threshold is crossed) — do NOT lean on `CALL_ANIMATION`'s live guard for "once":
   a one-shot damage effect (`damage3_mp1zreng11`) finishes and would re-fire without the gate.
-  Called by `--damage-test` today; C23's `WeaponHit` invokes it after decrementing HP.
+⚠ `DamageAt(struck, healthDamage)` is the weapon-hit entry (C23): resolves the struck collider to
+  its destructible (`Registry.Resolve`), spends `HEALTH_DAMAGE` (world objects have HEALTH only —
+  no armour pool), escalates, and marks it `Destroyed` at zero. The death SEQUENCE is C24, so a
+  killed object holds its final smoking stage. Fed by `ProjectilePool.DamageSink` in flight.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
 `HEALTH > 0`. One `Instance` per `(def, anchor)` pair, seeded from the authored `HEALTH`, plus a
 coarse healthy/damaged/destroyed `State` and a monotonic `DamageStage`; built during AnimRuntime's
-bootstrap, read by `ANIM_HEALTH` eval and escalated by `ApplyDamageStages`. C23's weapon damage and
-C24's death sequence act through it. Schema: docs/formats/destructibles.md.
+bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged via `DamageAt`.
+`Resolve(struck)` maps a raycast-hit node back to its instance. Schema: docs/formats/destructibles.md.
 ⚠ Keyed per `(def, anchor)`, NOT per def — a wildcard NAME binds many node groups, each an
   independent pool (one tower's damage must not touch its siblings).
 ⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
   the compiler's per-instance defs both bind the same nodes, so one object carries several pools
-  (same HEALTH). C23 must resolve a struck node to ONE authoritative instance — prefer the compiled.
-⚠ Weapon fire does not decrement HP until C23 — a fresh world reads bit-identically to before C21.
+  (same HEALTH). `_authoritative` keeps ONE per anchor node, compiled-preferred.
+⚠ `Resolve` walks the WHOLE parent chain and takes the nearest COMPILED anchor, not the first hit:
+  a reader wildcard can grab an inner node the compiled def doesn't (tower `ap_h2otwr*` matches
+  `ap_h2otwr.flt`, between the collider and the compiled `ap_h2otwr1` root), and the compiled def
+  owns the real DAMAGE_SEQUENCE + death sequence.
 
 ## src/Mech3/WavFile.cs
 Pure-C# WAV parser with an MS ADPCM→PCM16 decoder (`DecodeMsAdpcm`), no Godot dependencies —
@@ -333,6 +339,9 @@ RANGE), plus tracer streaks, muzzle flashes, per-surface impact sprites and the 
 the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
 ⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
   hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
+⚠ `DamageSink` (wired to `AnimRuntime.DamageAt` in flight, C23) turns a hit into destructible damage:
+  every `Impact` invokes it with the struck collider + `HEALTH_DAMAGE`; a no-op for terrain/water.
+  Null in views with no anim runtime, where impacts stay cosmetic.
 ⚠ Surface class comes from the struck collider's `SceneBuilder.SurfaceMeta` (water/buildings),
   stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a

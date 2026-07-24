@@ -103,6 +103,12 @@ public sealed partial class ProjectilePool : Node3D
     /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
     public Camera3D? Listener { get => _listener; set => _listener = value; }
 
+    /// <summary>Where a hit's damage goes (C23): given the struck collider and the weapon's
+    /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
+    /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
+    /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
+    public System.Func<Node?, float, bool>? DamageSink;
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
@@ -364,6 +370,8 @@ public sealed partial class ProjectilePool : Node3D
             PlaySound(snd);
         else if (weapon.Impact.TryGetValue(SurfaceClass.Default, out var d) && d.Sound is { } snd2)
             PlaySound(snd2);
+        // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
+        DamageSink?.Invoke(collider, weapon.HealthDamage ?? 0f);
     }
 
     private static SurfaceClass ClassifySurface(Node? collider)

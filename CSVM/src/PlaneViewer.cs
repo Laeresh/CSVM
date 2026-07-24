@@ -239,6 +239,7 @@ public partial class PlaneViewer : Node3D
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
+    private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
@@ -446,6 +447,7 @@ public partial class PlaneViewer : Node3D
             // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
             else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
+            else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
@@ -712,6 +714,7 @@ public partial class PlaneViewer : Node3D
             // builds the effect-template roots from the world gamez.
             AnimProgram? crashProgram = null;
             SceneBuilder? worldScene = null;
+            AnimRuntime? worldRuntime = null;   // the world's anim runtime — C23 routes weapon damage through it
             if (_worldMode)
             {
                 // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
@@ -754,6 +757,7 @@ public partial class PlaneViewer : Node3D
                 _worldLights = session.Lights;
                 crashProgram = session.Program;
                 worldScene = session.Builder.Scene;
+                worldRuntime = session.Runtime;
 
                 // --damage-test: with the world built and its AnimRuntime bound, drive one
                 // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
@@ -1093,6 +1097,10 @@ public partial class PlaneViewer : Node3D
                     flyoutGamez: gamez, flyoutScene: worldScene)
                 {
                     Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
+                    // Route weapon hits to the world's destructibles (C23): the pool's raycast
+                    // reports the struck collider, the runtime resolves it to a destructible and
+                    // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
+                    DamageSink = worldRuntime != null ? worldRuntime.DamageAt : null,
                 };
                 _worldRoot!.AddChild(projectiles);
 
@@ -2547,34 +2555,53 @@ public partial class PlaneViewer : Node3D
         }
 
         var sb = new System.Text.StringBuilder();
-        sb.AppendLine($"damage-test: chapter {_chapter}, filter '{_damageTestFilter}' — "
+        string mode = _damageHd > 0f ? $"weapon hits, {_damageHd:0.##} HEALTH_DAMAGE each" : "continuous HP sweep";
+        sb.AppendLine($"damage-test: chapter {_chapter}, filter '{_damageTestFilter}', mode = {mode} — "
             + $"{chosen.Count} DAMAGE_SEQUENCE def(s) of "
             + $"{runtime.Destructibles.Count} destructible instance(s)");
         foreach (var inst in chosen)
         {
-            var fired = new List<(float Hp, string Effect)>();
+            // Discrete-hit mode (C23): spend a fixed HEALTH_DAMAGE per hit through DamageAt and
+            // count hits to destruction. DamageAt resolves a struck node to its AUTHORITATIVE
+            // instance, so drive the resolved one (the compiled def wins a shared node) — driving
+            // the picked reader twin would damage the compiled instance and never see HP fall.
+            var target = _damageHd > 0f ? (runtime.Destructibles.Resolve(inst.Anchor) ?? inst) : inst;
+            var fired = new List<(string At, string Effect)>();
             var started = new List<(string? Anim, Node3D? Anchor)>();
-            float atHp = inst.MaxHealth;
+            int hit = 0;
+            float atHp = target.MaxHealth;
             void OnStarted(Mech3.AnimDefinition def, Node3D? anchor)
             {
-                fired.Add((atHp, def.AnimName ?? def.Name));
+                fired.Add((_damageHd > 0f ? $"hit {hit}" : $"HP≤{atHp:0.##}", def.AnimName ?? def.Name));
                 started.Add((def.AnimName, anchor));
             }
 
-            inst.Health = inst.MaxHealth;
-            inst.Status = Mech3.DestructibleRegistry.State.Healthy;
-            inst.DamageStage = 0;
+            target.Health = target.MaxHealth;
+            target.Status = Mech3.DestructibleRegistry.State.Healthy;
+            target.DamageStage = 0;
             runtime.OnInstanceStarted += OnStarted;
-            // Fine enough to land on the round-fraction thresholds exactly (0.60/0.30 of HEALTH …).
-            const int steps = 240;
-            for (int i = 0; i <= steps; i++)
+            if (_damageHd > 0f)
             {
-                atHp = inst.MaxHealth * (1f - i / (float)steps);
-                inst.Health = atHp;
-                runtime.ApplyDamageStages(inst);
+                int cap = (int)(target.MaxHealth / _damageHd) + 4;   // a few past the expected kill
+                while (target.Status != Mech3.DestructibleRegistry.State.Destroyed && hit < cap)
+                {
+                    hit++;
+                    runtime.DamageAt(target.Anchor, _damageHd);
+                }
+            }
+            else
+            {
+                // Fine enough to land on the round-fraction thresholds exactly (0.60/0.30 of HEALTH …).
+                const int steps = 240;
+                for (int i = 0; i <= steps; i++)
+                {
+                    atHp = target.MaxHealth * (1f - i / (float)steps);
+                    target.Health = atHp;
+                    runtime.ApplyDamageStages(target);
+                }
             }
             runtime.OnInstanceStarted -= OnStarted;
-            // Stop the effects this sweep started: reader-wildcard and compiled per-instance defs
+            // Stop the effects this run started: reader-wildcard and compiled per-instance defs
             // bind the SAME tower nodes (C21), so a leftover live effect would make the twin's
             // identical CALL_ANIMATION a no-op and read as "no stage effect fired".
             foreach (var (anim, anchor) in started)
@@ -2582,11 +2609,27 @@ public partial class PlaneViewer : Node3D
                 runtime.Stop(anim, anchor);
             }
 
-            string src = inst.Def.Archive != null ? "compiled" : "reader";
+            // Walk-up resolution check (C23): resolving from a deep descendant of the anchor —
+            // the kind of node a projectile's raycast actually strikes (a collider sits under the
+            // mesh under the anchor) — must land back on this same destructible.
+            Node3D deep = target.Anchor;
+            while (deep.GetChildCount() > 0 && deep.GetChild(0) is Node3D child)
+            {
+                deep = child;
+            }
+            var back = runtime.Destructibles.Resolve(deep);
+            string resolve = back?.Anchor == target.Anchor ? "resolve✓" : $"resolve✗({back?.Def.Name ?? "null"})";
+
+            string src = target.Def.Archive != null ? "compiled" : "reader";
             string stages = fired.Count == 0
                 ? "no stage effect fired"
-                : string.Join(", ", fired.Select(f => $"HP≤{f.Hp:0.##} → {f.Effect}"));
-            sb.AppendLine($"  {inst.Def.Name} (HEALTH {inst.MaxHealth:0.##}, {src}): {stages}");
+                : string.Join(", ", fired.Select(f => $"{f.At} → {f.Effect}"));
+            string outcome = _damageHd > 0f
+                ? (target.Status == Mech3.DestructibleRegistry.State.Destroyed
+                    ? $"DESTROYED in {hit} hit(s); "
+                    : $"SURVIVED {hit} hit(s); ")
+                : "";
+            sb.AppendLine($"  {target.Def.Name} (HEALTH {target.MaxHealth:0.##}, {src}) {resolve}: {outcome}{stages}");
         }
 
         var text = sb.ToString();

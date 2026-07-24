@@ -5144,3 +5144,38 @@ texture readback throws, writing no file. Docs: `AnimDefs`/`AnimRuntime` ⚠ + e
 `--damage-test`, PLAN-M3-weapons.md (checklist 22 ☐→☑, `### C22` landed note), CLAUDE.md status.
 **Next: C23 (`WeaponHit` activation + damage application) — decrement HP on a projectile hit and
 call `ApplyDamageStages`, then C24's death sequence at zero.**
+
+**WeaponHit activation + damage application — M3 Wave C item C23 (2026-07-24):** the player can now
+shoot the world down — a projectile hit spends the weapon's `HEALTH_DAMAGE` on whatever destructible
+it struck, runs the damage stages, and kills the object at zero HP (the visible death swap is C24).
+Wiring: `ProjectilePool.Impact` (B15's raycast already reports the struck collider) invokes a new
+`DamageSink` delegate, wired in flight to `AnimRuntime.DamageAt(struck, healthDamage)`.
+`DamageAt` resolves the collider to its destructible via `DestructibleRegistry.Resolve`, subtracts
+`HEALTH_DAMAGE` (world destructibles carry HEALTH only — there is no armour pool, so `ARMOR_DAMAGE`
+is inert against them, the damage model the plan settled 2026-07-22), calls `ApplyDamageStages`, and
+sets `State.Destroyed` at zero. **The resolution was the crux.** A struck collider is a `StaticBody3D`
+deep under the anchor's subtree, so `Resolve` walks up the parent chain — but it must walk the WHOLE
+chain and prefer the **compiled** def, because a reader wildcard `NAME` grabs an inner node the
+compiled def does not: the tower's reader `ap_h2otwr*` matches `ap_h2otwr.flt`, which sits between the
+collider and the compiled `ap_h2otwr1` root, so "first anchor up the chain" wrongly picked the reader
+twin (an independent HP pool with no death sequence). Taking the nearest compiled anchor fixes it —
+`_authoritative` keeps one compiled-preferred instance per node. **Patrol-boat ⚠ resolved:** its anim
+def is HEALTH 20 `WeaponHit` (mission archives only, not the freecam IA1 chapters), so M3 damages it
+as scenery through that path; the AI-vehicle armour+health model (vehicle-def HP 40) stays M4.
+Verified with the new `--damage-hd=<n>` mode of `--damage-test` (discrete weapon hits via `DamageAt`,
+counting hits to destruction) — decisive and deterministic: a HEALTH-60 water tower dies in **1** hit
+at HD 60 (HE rocket), **2** at 40 (AP rocket — measurably worse against a building, exactly inverting
+AP's anti-armour advantage), and **14** at 4.5 (40-cal gun), crossing black smoke at hit 6 (HP 33) and
+fire at hit 10 (HP 15); a HEALTH-30 AA gun dies in **10** hits at 3.0 (30-cal), stages at 18/9. A
+`resolve✓` check (resolving from a deep descendant, the same node path a collider sits in) passes on
+**all 16** C1 `DAMAGE_SEQUENCE` destructibles. The full 8-chapter `--freecam` regression is
+byte-identical to the C21 baseline (same counts, no errors) — C23 is a no-op at world build
+(`DamageAt` only fires on real hits). An in-flight `--fly --fire` run over C1 confirmed the wiring
+end to end: `DamageSink` is invoked on every real impact and correctly no-ops terrain/water (no
+spurious damage). **Owed playtest:** watching a specific destructible take fire and die in interactive
+flight — the airport structures are placed by baked node transforms this session did not decode into
+aim points, and the *visible* death is C24's death swap, so this naturally pairs with C24 (added to
+`playtest.md`/`backlog.md`). Docs: `AnimRuntime`/`DestructibleRegistry`/`Projectile` architecture
+entries, `destructibles.md` "Engine status" rewrite, `cli.md` `--damage-hd`, PLAN-M3-weapons.md
+(checklist 23 ☐→☑, `### C23` landed note), CLAUDE.md status. **Next: C24 (death sequence execution +
+healthy→destroyed swap) — run `destroyit`/the death sequence when `DamageAt` reaches zero.**
