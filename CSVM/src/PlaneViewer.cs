@@ -66,6 +66,10 @@ namespace CSVM;
 ///   --effects-test               build the --chapter world, play every impact/destruction effect
 ///                                through the world-effects runtime and report which build a puffer,
 ///                                then quit (D32 verify: a started def that renders nothing vs one that does)
+///   --destroy=name               kill a named destructible (def / anim / node name, substring) at
+///                                session build so a --screenshot captures its destruction with nobody
+///                                at the controls — pairs with --freecam + --campos/--lookat (F42).
+///                                Use --damage-test to list a chapter's destructible names
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -246,6 +250,7 @@ public partial class PlaneViewer : Node3D
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
     private bool _effectsTest;         // --effects-test: play every impact/destruction effect through the world-effects runtime, report which build a puffer, quit (D32)
+    private string? _destroyName;      // --destroy=<def|anim|node>: kill matching destructibles at session build so a --screenshot captures the destruction (F42)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
@@ -468,6 +473,10 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg == "--effects-test") { _effectsTest = true; _freecam = true; hasContentArg = true; }
+            // A pure modifier (like --damage-hd): needs a chapter world to have anything to destroy,
+            // but forces no mode — the caller composes it with --freecam (+ --campos/--lookat) for a
+            // framed, controller-less destruction shot, or with flight for a chase-cam one.
+            else if (arg.StartsWith("--destroy=")) _destroyName = arg["--destroy=".Length..];
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
@@ -1563,6 +1572,41 @@ public partial class PlaneViewer : Node3D
                 {
                     what += $" + '{_planeName}' flying";
                 }
+            }
+
+            // --destroy=<name> (F42): kill a named destructible at session build so a --screenshot
+            // captures its destruction with nobody at the controls. Reuses the weapon-damage path —
+            // DamageAt runs the full death (the healthy→destroyed swap fires synchronously here; the
+            // debris and effects play out as the runtime self-ticks through the screenshot warm-up).
+            // The world subtree is already in the tree (added above), so the death's global-transform
+            // reads and the effect stage are valid. Flight already built + wired the world-effects
+            // runtime (to the projectile pool too); a plane-less --freecam builds one here so the
+            // destruction's fire/smoke still render — gated on --destroy, so a plain --freecam
+            // regression builds nothing extra.
+            if (_destroyName != null && worldRuntime != null)
+            {
+                if (worldRuntime.ExternalEffect == null && worldScene != null)
+                {
+                    var deathEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
+                    worldRuntime.ExternalEffect =
+                        (name, pt) => deathEffects.Handles(name) && deathEffects.PlayEffectAt(name, pt);
+                }
+                int killed = TriggerDestroy(worldRuntime, _destroyName, out var destroyBounds);
+                what += killed > 0 ? $" + destroyed {killed}× '{_destroyName}'"
+                                   : $" + destroy '{_destroyName}' (no match)";
+                // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
+                // camera themselves (--campos/--lookat) — so a bare `--freecam --chapter=CX
+                // --destroy=name --screenshot=x.png` is a complete, self-framing destruction shot.
+                if (killed > 0 && _spectator != null && _camPos == null && _lookAt == null
+                    && destroyBounds.Size.LengthSquared() > 0f)
+                {
+                    _spectator.Frame(destroyBounds);
+                }
+            }
+            else if (_destroyName != null)
+            {
+                GD.Print($"--destroy='{_destroyName}' ignored: no chapter world " +
+                         "(pair it with --freecam/--fly + --chapter=)");
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
@@ -3236,6 +3280,97 @@ public partial class PlaneViewer : Node3D
         // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in WorldSounds.Tick
         // — but this harness pumps no frames, so free them here or they leak at the (imminent) quit.
         runtime.Sounds?.FlushOneShots();
+    }
+
+    /// <summary>--destroy=&lt;name&gt; (F42): kill every destructible whose def name, animation name or
+    /// anchor <c>cs_name</c> contains <paramref name="name"/> (case-insensitive), so a --screenshot
+    /// captures the destruction with nobody at the controls. Reuses the weapon-hit path exactly
+    /// (<see cref="Mech3.AnimRuntime.DamageAt"/> — the healthy→destroyed swap, debris and effects the
+    /// same as a rocket kill); it just spends more than the object's HP. Resolves each match to its
+    /// authoritative instance and dedupes by anchor, so a wildcard def that binds one physical object
+    /// through several pools is killed once. Returns how many distinct objects were destroyed.</summary>
+    private static int TriggerDestroy(Mech3.AnimRuntime runtime, string name, out Aabb bounds)
+    {
+        bounds = default;
+        static string AnchorName(Node3D n) =>
+            n.HasMeta(Mech3.AnimRuntime.NameMeta) ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                                                  : n.Name.ToString();
+
+        // Distinct physical objects to kill, keyed by authoritative anchor so a def bound through
+        // both its reader wildcard and its compiled twin counts once.
+        var targets = new Dictionary<ulong, Mech3.DestructibleRegistry.Instance>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            bool match =
+                inst.Def.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || (inst.Def.AnimName?.Contains(name, StringComparison.OrdinalIgnoreCase) ?? false)
+                || AnchorName(inst.Anchor).Contains(name, StringComparison.OrdinalIgnoreCase);
+            if (!match)
+            {
+                continue;
+            }
+            var target = runtime.Destructibles.Resolve(inst.Anchor) ?? inst;
+            targets[target.Anchor.GetInstanceId()] = target;
+        }
+
+        if (targets.Count == 0)
+        {
+            // No match: list a sample of what IS destructible here so the tester can correct the name
+            // without a separate --damage-test run (that report is still the full list).
+            var sample = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (seen.Add(inst.Def.Name))
+                {
+                    sample.Add(inst.Def.Name);
+                }
+                if (sample.Count >= 20)
+                {
+                    break;
+                }
+            }
+            GD.Print($"--destroy='{name}': no destructible matched. "
+                     + $"{runtime.Destructibles.DistinctAnchors} object(s) present; some def names: "
+                     + string.Join(", ", sample) + " (--damage-test lists them all)");
+            return 0;
+        }
+
+        // A cap so naming a common wildcard (many towers/panels) can't start hundreds of death
+        // sequences in one frame; the framed object is what the screenshot needs. Loud when it bites.
+        const int cap = 64;
+        int killed = 0;
+        bool haveBounds = false;
+        foreach (var target in targets.Values)
+        {
+            if (killed >= cap)
+            {
+                GD.Print($"--destroy='{name}': capped at {cap} of {targets.Count} matches "
+                         + "(name a more specific def/node to kill fewer)");
+                break;
+            }
+            if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                continue;
+            }
+            // The first killed object's world-space bounds, captured before the kill: the caller
+            // auto-frames the freecam on it (the anchor's own origin is often far from its geometry).
+            // MeshInstance-based, so it merges the healthy + destroyed variants either way.
+            if (!haveBounds)
+            {
+                bounds = UI.OrbitCamera.MergedAabb(target.Anchor);
+                haveBounds = true;
+            }
+            // Spend more than the whole health pool so a single call kills it outright (DamageAt runs
+            // the death sequence at zero). Feeding the anchor node is exactly how --damage-hd drives it.
+            runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
+            killed++;
+        }
+        var c = bounds.GetCenter();
+        string at = haveBounds ? $" near ({c.X:0}, {c.Y:0}, {c.Z:0})" : "";
+        GD.Print($"--destroy='{name}': destroyed {killed} object(s){at} "
+                 + $"({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
+        return killed;
     }
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";

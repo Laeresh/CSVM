@@ -962,6 +962,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
   camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
   and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
+⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
+  contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
+  synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
+  auto-frames the killed object (unless `--campos`/`--lookat` set) and builds the world-effects runtime
+  itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

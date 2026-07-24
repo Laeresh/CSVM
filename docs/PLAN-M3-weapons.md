@@ -489,7 +489,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 39. ☑ Weapon lab in `--viewer` — **landed** (2026-07-24): `src/UI/WeaponLab.cs`, the fourth `--viewer` lab (key **W**, `--weapon-lab`). Mounts any of the 48 weapons on any firepoint/pylon and fires it into its own scene-less `ProjectilePool` at a tagged stand-in target wall (surface cycle exercises B15); steppers show live ballistics; auto-fire/fire-once/Space; copy-CLI-args. `--weapon-test` reports **48/48 fired OK, 0 errors** (Bloodhawk/Kestrel/Warhawk/Peacemaker); windowed captures show tracers + impact sparks (`wep_30`) and the rocket path (`wep_06`). Built hidden in every parked `--viewer` session so a plain viewer stays byte-identical.
 40. ⊘ Freecam raycast pick + HP control — **superseded by PLAN-testing D31/D34** (2026-07-24)
 41. ⊘ Destructible list overlay + camera jump — **superseded by PLAN-testing D32** (2026-07-24)
-42. ☐ `--destroy=` CLI trigger
+42. ☑ `--destroy=` CLI trigger — **landed** (2026-07-24): kills a named destructible at session build (reuses `AnimRuntime.DamageAt`) so a `--screenshot` captures its destruction controller-less; `--freecam` auto-frames it + builds the world-effects runtime (gated on `--destroy`). Destruction screenshot verified in all 8 chapters (C2B's only destructibles are the unplaced mission airship — a map fact). **Wave F complete.**
 43. ☑ `--infinite-ammo` / `--loadout=` overrides — **landed** (both flags live + documented in `docs/cli.md`; found delivered on the 2026-07-24 Wave-F review — they shipped with B12/B16)
 
 ---
@@ -1661,11 +1661,29 @@ the census-totals check also stands as PLAN-testing B12's `destructible-census` 
 
 **Verify (moved).** D32 asserts the per-chapter totals against A4's census.
 
-### F42 ☐ `--destroy=` CLI trigger
+### F42 ☑ `--destroy=` CLI trigger — **LANDED (2026-07-24)**
 
-**Approach.** `--destroy=<def-or-node>` triggers a named destructible at startup so a
-`--screenshot` run captures its death with nobody at the controls. This is what makes wave C
-verifiable the way everything else here is verified.
+**Landed.** `--destroy=<name>` kills a named destructible at session build so a `--screenshot`
+captures its death with nobody at the controls. `<name>` matches (case-insensitive substring) any
+live destructible's def / animation / anchor-`cs_name`; every distinct match is killed, resolved to
+its authoritative `DestructibleRegistry` instance and de-duped by anchor (capped 64). It **reuses the
+weapon-hit path** — `AnimRuntime.DamageAt(anchor, MaxHealth+1)`, so the healthy→destroyed swap fires
+synchronously and the debris/effects/audio are identical to a rocket kill — and self-ticks the death
+out during the `--screenshot` warm-up. A pure modifier (forces no mode); in `--freecam` it auto-frames
+the killed object and builds the world-effects runtime so the fire renders, both gated on `--destroy`
+so a plain `--freecam` build stays byte-identical. `PlaneViewer.cs` only (+135). Full flag doc:
+`docs/cli.md`; module notes: `docs/architecture.md` PlaneViewer.
+
+**Verified.** A destruction screenshot in each of the 8 chapters, names from `--damage-test` + the
+compiled-anim data (`m_build01` C1, `bhf_heliumtank1` C4, `g_tower1` C3, `agyrobus` C5, `s_build` C2,
+`--mission=MP1 --destroy=patrolboat` C1B, `--mission=M01 --destroy=leng11` C1C). **C1B/C1C/C2B's IA1
+worlds carry no placed ground destructible — the only destructibles are the mission airship (parked at
+origin, hidden in a controller-less freecam)**; C1B/C1C recover a placed target via an MP/story mission,
+while C2B's every destructible (47/47) is airship-mounted — a map-content fact. Plain 8-chapter
+`--freecam` regression clean (node counts unchanged; one pre-existing C1 late-sound PushWarning).
+
+**Original approach (kept for reference).** `--destroy=<def-or-node>` triggers a named destructible at
+startup so a `--screenshot` run captures its death with nobody at the controls.
 
 **Verify.** A scripted run in each of the 8 chapters produces a destruction screenshot.
 
