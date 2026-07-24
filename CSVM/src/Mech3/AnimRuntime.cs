@@ -3219,6 +3219,18 @@ public sealed partial class AnimRuntime : Node
     // lesson as LightState's per-light host cache, which cost ~7 ms/frame before it existed.
     private readonly Dictionary<Node3D, float> _opacity = new();
 
+    // A subtree faded to ~invisible must also drop its colliders: the opacity path only writes a
+    // shader parameter, so without this a node faded to alpha 0 (C3's startup-faded `spiderweb`)
+    // stays solid and the player hits an invisible wall. Mirror the deactivation path's
+    // "invisible ⇒ non-collidable" rule and restore colliders when it fades back above the
+    // threshold (so a subtree still fading IN stays solid). Edge-triggered on the last collidable
+    // state per subtree root — a fade re-writes opacity every tick, and re-walking the subtree to
+    // (re)assert colliders each frame would thrash. Independent of SetSubtreeActive's own collider
+    // toggle: the two drive separate channels (translucency vs visibility) and, like Visible vs
+    // the opacity parameter themselves, the most recent event wins the collider flag.
+    private const float OpacityCollisionEpsilon = 0.01f;
+    private readonly Dictionary<Node3D, bool> _opacityCollidable = new();
+
     // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
     // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
     // alpha into one would fade every other node that happens to use it. Meshes whose shader
@@ -3230,6 +3242,17 @@ public sealed partial class AnimRuntime : Node
         if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
             return;
         _opacity[node] = alpha;
+
+        // Colliders default to enabled, so an untracked root is treated as currently collidable;
+        // walk the subtree only on a genuine crossing of the invisibility threshold.
+        bool collidable = alpha > OpacityCollisionEpsilon;
+        bool wasCollidable = !_opacityCollidable.TryGetValue(node, out bool tracked) || tracked;
+        if (wasCollidable != collidable)
+        {
+            SetCollidersEnabled(node, collidable);
+        }
+        _opacityCollidable[node] = collidable;
+
         int applied = ApplyOpacity(node, alpha);
         if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
             Count("ObjectOpacityState(no alpha path)");
