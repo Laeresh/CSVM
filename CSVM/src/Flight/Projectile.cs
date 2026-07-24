@@ -569,8 +569,12 @@ public sealed partial class ProjectilePool : Node3D
             float scale = p.Model != null ? RocketExhaustScale
                 : p.Weapon.IsRocket ? RocketStreakScale
                 : 1f;
-            var basis = new Basis(xAxis * (TracerWidth * scale), yAxis * (TracerLength * scale), zAxis);
-            _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (TracerLength * scale * 0.5f)));
+            // Cap the drawn streak to how far the round has actually flown, so it grows out of the
+            // muzzle instead of pre-extending a full length behind it on the spawn frame.
+            float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
+            float len = Mathf.Min(TracerLength * scale, traveled);
+            var basis = new Basis(xAxis * (TracerWidth * scale), yAxis * len, zAxis);
+            _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
             _tracerMm.SetInstanceColor(n, p.Tint);
             n++;
         }
