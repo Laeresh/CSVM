@@ -9,6 +9,75 @@ constants awaiting playtest lives here** (see "TUNE constants pending playtest" 
 out of CLAUDE.md on 2026-07-22, since CLAUDE.md's status section is current-state-and-next-step
 only. When an item gets scheduled into a plan, move it there; when it lands, delete it here.
 
+## Milestone 3 Polishing (playtest findings, 2026-07-24)
+
+A pass of at-the-controls findings from the user (M3 weapons/destruction). Per this session's
+workflow the **localized fixes were each made on their own branch** in an isolated worktree — each
+**built clean, but not yet merged and not yet playtested**; the **larger items** are detailed below
+and left for a plan. Each fix branch is off `origin/main` (`d05bc13`), one commit, **code only** (the
+documentation trail lives here). **When a branch is merged, move its record to `docs/HISTORY.md` and
+delete its row here** — do not let this table outlive the merges.
+
+### Fixed on branches — pending merge + playtest
+
+| Finding | Branch | Change | Confirm in the cockpit |
+|---|---|---|---|
+| Rocket advances to the next pylon after one shot (round-robin) instead of draining the selected pylon | `fix/rocket-drain-pylon` | `FlightController.NextArmedHardpoint`: keep the cursor on the just-fired pylon (`_nextPylon = idx`) instead of `+1`; the scan skips it once dry | wing empties one pylon fully, in order, before the next starts (see "Rocket firing order" under Feature backlog) |
+| A rocket that reaches max range vanishes silently | `fix/rocket-detonate-at-range` | `Projectile._PhysicsProcess`: at range-expiry a **rocket** calls `Impact(weapon, pos, null)` (default-surface effect+sound); guns still expire silently | the `default` IMPACT effect reads acceptably as a mid-air self-destruct (not a ground/water splash floating in the sky) |
+| `ERROR: Condition "det == 0" … invert (basis.cpp:47)` sometimes when destroying things | `fix/motion-scale-zero-guard` | `MotionRuntime.Seek`: floor the ramped scale off zero (sign-preserving, ε=1e-3), matching the guards `PoseScale` / `ScriptPlayback` already have | no `det==0` spam on kills; a "shrink to nothing" piece still looks gone |
+| Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
+| Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
+| `WARNING: … SOUND 'snd_exp_ground_a' … no audio session` on every ground crash | `fix/crash-sound-warning` | `PlaneViewer.BuildFlightCrashRuntime`: crash runtime gets `SoundHandledElsewhere = true` (matches the world-effects runtime) | warning gone; ground boom still plays (via `FlightAudio.OnGroundExplosion`) |
+| Flying into C3's (invisible) spiderweb crashes/damages the plane | `fix/opacity-fade-collider` | `AnimRuntime.SetSubtreeOpacity`: a fade to ~0 now **disables the subtree's colliders** (edge-triggered, reuses `SetCollidersEnabled`); data-driven, no node name hard-coded | fly at C3's faded web — no invisible wall, no damage. ⚠ couldn't confirm from code that `spiderweb` has a `col` body (assets gitignored); the fix generalizes to **all** fade-to-0 subtrees (others are kill-driven, where losing collision is also right) |
+
+### Larger items — documented, not fixed
+
+- **Break-apart debris barely moves — "parts only move a short way."** The piece launch is
+  `MotionRuntime` (`AnimRuntime.cs`), and three things combine — **none of them the FROM_TO
+  dropped-delta bug** (that is a different event kind; the debris `translation.delta` *is* mapped):
+  1. **World destructibles inherit no momentum.** `InheritedWorldVelocity` is set **only** by the
+     plane crash (`FlightController.cs:971`); the shared world `AnimRuntime` never assigns it, so a
+     world piece gets only the small authored launch — a 5–10 m/s straight-up pop, which is exactly
+     "the pieces barely drift."
+  2. **Ground-rest / bounce is deferred.** `do_intersections` + `bounce_sequence` are not simulated,
+     so a piece integrates freely over `run_time` then **holds its final pose** — translate a little,
+     stop.
+  3. **The magnitude decode is unsettled TUNE**, not settled data: `translation.initial` is read as a
+     velocity and `translation_range` xz/y as distance ÷ run_time, with the range's own
+     `initial`/`delta` sub-fields unmapped.
+  **LARGER:** there is no single correct number — livelier world debris means either a world-object
+  launch multiplier (a TUNE mirroring the crash's `WreckMomentum`) or implementing `bounce_sequence`
+  ground-rest (the deferred Layer-1.5 physics-ray work). Both need an original-game A/B. Cross-ref the
+  "Data-driven crash" TUNEs already in this file (`WreckMomentum`, tumble-rate, debris-arc).
+  ⚠ Do **not** "fix" it by reviving the FROM_TO deltas — wrong mechanism.
+
+- **C2 SeaHangar doors don't despawn and stay collidable after shooting the propane tank.** The
+  SeaHangar doors are `sgh_door1`/`sgh_door2`, driven by `sghangar-opensgdoors` — a **HEALTH-0
+  `OnStartup` "open the doors" animation, not a weapon-destructible.** A destructible is any def with
+  `HEALTH > 0` (`AnimRuntime.cs:214-216`), so the doors are **never registered in
+  `DestructibleRegistry`**; `Resolve` never maps their collider, no death sequence runs, so nothing
+  hides them or removes their colliders — they open, then stay as solid set-dressing. The propane tank
+  the user shot is almost certainly **Hollywood's `kkgate`** (its `ANIMATION_ROOT_NAME` is `propane`,
+  HEALTH 10) — a *different* building, whose death chain (`genx12`/`tbridg*_fire`/`free_the_goose`)
+  does not touch `sghangar`. **LARGER — a data/design gap, not a collider bug** (the collider-removal
+  machinery is proven on `gate1`/`gate2` and `kkgate`). To settle: (a) confirm from the C2 gamez/zrdr
+  whether any propane→`sghangar` chain is authored at all (docs show only `kkgate`'s); (b) A/B the
+  original — does shooting a propane tank there destroy the SeaHangar doors?; (c) if it should, decide
+  how — give the doors their own destructible def, or a chain-reaction `CALL_ANIMATION` firing an
+  `OBJECT_ACTIVE_STATE` swap on them (the fuel-depot pattern). ⚠ The C25 plan text named
+  `sghangar_doors` as an intended case, but the shipped C2 data does not make them destructible — an
+  aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
+  passage" is its own playtest.
+
+- **Hardpoint ordnance won't cycle by key or pad (H / D-pad Right) — not a code defect.** The input is
+  wired and does mutate state (`FlightController.RocketSelectPressed` → `CycleWeaponSelectors`), but it
+  is gated `_ordnanceTypes.Length > 1`, and all 11 stock loadouts carry a single hardpoint type
+  (`wep_06`), so after dedup there is exactly one ordnance type and nothing to cycle. (Gun-group select
+  **G** works because several planes have 2+ firable gun groups.) The real question is **design**, the
+  same one flagged in "Rocket firing order": does the original let the player select an individual
+  **hardpoint**, or only drain them in pylon order? Meaningful mixed-ordnance cycling arrives with mixed
+  loadouts (the M4 gun/hardpoint configurator, Feature backlog). Nothing to fix in M3.
+
 ## Blocked / deferred
 
 - **Pad-read-on-focus gate — user may veto (shipped 2026-07-22 alongside polish-4 item 7's focus
@@ -333,7 +402,7 @@ unscheduled.
   `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
   if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
 
-- **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24).**
+- **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24) — the round-robin fix is on branch `fix/rocket-drain-pylon`, pending merge + playtest.**
   The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
   next. Current code (`FlightController.NextArmedHardpoint`, B17) instead spreads pulls **round-robin**
   across the pylons. On a stock Bloodhawk (3 pylons × 3 HE) the depletion order differs:
@@ -341,13 +410,19 @@ unscheduled.
   - **Current:** pylon1 on the **7th**, pylon2 on the **8th**, pylon3 on the **9th** (only the last pull
     agrees). Confirmed by the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
 
-  Fix is a localized change to `NextArmedHardpoint`: keep firing the current pylon (of the selected
-  ordnance type) until it is dry, then advance the cursor — rather than advancing every pull. **D44's
-  pylon-ordnance visual needs no rework** — it already hides each pylon's mounted rocket the instant
-  *that pylon* hits zero, so the wing simply empties one rocket at a time in the correct order once the
-  firing order is fixed. Nuance to settle while there: the H selector currently cycles ordnance *types*;
-  check in the original whether the player also selects an individual hardpoint or the game just drains
-  them in pylon order. Total capacity and the one-rocket-per-pull cadence are unchanged.
+  The fix (on `fix/rocket-drain-pylon`) is the localized change to `NextArmedHardpoint`: keep the
+  cursor on the just-fired pylon (`_nextPylon = idx`) so it keeps firing until dry, then the scan
+  advances — rather than advancing every pull. **D44's pylon-ordnance visual needs no rework** — it
+  already hides each pylon's mounted rocket the instant *that pylon* hits zero, so the wing simply
+  empties one rocket at a time in the correct order once the firing order is fixed. Total capacity and
+  the one-rocket-per-pull cadence are unchanged.
+
+  **Still open — the H-selector design question (the "hardpoints won't cycle" finding).** H / D-pad
+  Right *is* wired (`RocketSelectPressed` → `CycleWeaponSelectors`) but gated `_ordnanceTypes.Length >
+  1`, and every stock loadout carries one hardpoint type (`wep_06`), so there is nothing to cycle —
+  working as designed, not a bug. Settle from the original whether the player selects an individual
+  **hardpoint** or the game just drains them in pylon order; meaningful mixed-ordnance cycling arrives
+  with the M4 configurator (mixed loadouts). See "Milestone 3 Polishing".
 
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
   sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
@@ -618,6 +693,11 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- **Rocket flyout speed** — the user reports rockets feel too fast. A `Config` knob
+  `weapons.rocketSpeedScale` was added (default **1.0 = data speed, byte-identical**); it scales a
+  rocket's flyout velocity **and** acceleration together, so the round still despawns at its `Range`,
+  just slower. Set a smaller value (try `0.7`) in `config.json` and A/B against the original. Hook on
+  branch `fix/rocket-speed-tune-hook` (see "Milestone 3 Polishing").
 - **Compass tape** — north = −Z convention (unverified vs the original; one-line flip in
   `FlightController`'s heading line), plus `TileOverscan` / `RimGain` / the nearest-tick look.
 - **`fogRangeFactor` 2** — the halving predates the sRGB fog-colour fix, so re-A/B it in game.
