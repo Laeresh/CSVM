@@ -524,7 +524,7 @@ and E3 both edit `GaugeCluster.cs`. Give each concurrent agent a stated file-own
 
 ## Items
 
-### A1 ☐ `docs/formats/weapons.md` — the ballistics table
+### A1 ☑ `docs/formats/weapons.md` — the ballistics table — **LANDED (2026-07-24)**
 
 **Goal.** A complete public reference page for `weapons.zrd.json`, and a fix to `zrdr.md`'s
 family index, which omits the file entirely.
@@ -542,7 +542,7 @@ other pages there.
 **Verify.** Every one of the 48 entries is accounted for; every key that appears in the file
 appears on the page; `zrdr.md`'s index lists `weapons.json`.
 
-### A2 ☐ Gun mounts, markers and the airframe gun-group enum
+### A2 ☑ Gun mounts, markers and the airframe gun-group enum — **LANDED (2026-07-24)**
 
 **Goal.** Document the marker rig and the mount-name enum, so the loadout binding has a
 published basis.
@@ -588,7 +588,7 @@ dump; Balmoral/Brigand duplicates render as visibly magenta co-located dots; scr
 carry offsets; the other seven sit at the origin. M4-scope, but the "identity transform" claim was
 overstated.
 
-### A4 ☐ `docs/formats/destructibles.md` — the world-destructible model
+### A4 ☑ `docs/formats/destructibles.md` — the world-destructible model — **LANDED (2026-07-24)**
 
 **Goal.** Document the `HEALTH` / `DAMAGE_SEQUENCE` / `ACTIVATION` mechanism end to end.
 
@@ -608,7 +608,7 @@ tank group. C4's destructible work should not re-introduce a suffix rule.
 
 **Verify.** The census numbers regenerate by script; the worked example matches the file.
 
-### A5 ☐ The weapon effect-reader family
+### A5 ☑ The weapon effect-reader family — **LANDED (2026-07-24)**
 
 **Goal.** Document the ~25 effect readers and the 54 gamez projectile prototype roots that
 `FIRE`/`FLYOUT`/`IMPACT` reference, so waves B and D have a map.
@@ -625,7 +625,7 @@ ammo-type axis.
 to either a documented reader or a documented gamez prototype root. **Report any that do not**
 — an unresolved name is a data gap worth knowing before wave D.
 
-### A6 ☐ `vehicle.md` — retire the deferral
+### A6 ☑ `vehicle.md` — retire the deferral — **LANDED (2026-07-24)**
 
 **Goal.** Decode what `vehicle.md:30` defers as "dogfight-milestone scope, undecoded here".
 
@@ -782,7 +782,7 @@ loadout wants `firepoint8`, which the 7-firepoint Kestrel lacks): `!! marker 'fi
 on the built plane`. **B16/B17/B18 unblocked.** The `--loadout=` flight-side effect lands with the
 firing code (B16).
 
-### B13 ☐ `Projectile.cs` — spawn and integration
+### B13 ☑ `Projectile.cs` — spawn and integration — **LANDED (2026-07-24)**
 
 **Goal.** A pooled projectile with the data's own ballistics.
 
@@ -881,7 +881,7 @@ against — **measure before choosing a broadphase.**
 **Verify.** A shot into water plays the water variant, into terrain the default, into a
 building the buildings variant; a scripted `--screenshot` run captures each.
 
-### B16 ☐ Gun firing — rate, ammo, spread, empty-clip
+### B16 ☑ Gun firing — rate, ammo, spread, empty-clip — **LANDED (2026-07-24)**
 
 **Goal.** Guns that fire like the original's guns.
 
@@ -1304,7 +1304,7 @@ colliders. Feeds F40 and F41.
 
 ---
 
-### D29 ☐ Muzzle flash
+### D29 ☑ Muzzle flash — **LANDED (2026-07-24)**
 
 **Approach.** `FIRE` → `ANIMATION` (`muzzle_burst_slug`/`_ap`/`_dum`/`_mag`) at the firing
 group's markers. The reader is `ON_CALL`, `EXECUTION_PRIORITY 6`, LOD-gated via
@@ -1385,7 +1385,7 @@ a fidelity follow-up for guns (the `PlaceTemplateAt` note already flags the stag
 **Verify.** Each of the top effect names resolves and a `Puffer` is *built* (not just the def
 started — rule 76); a rocket/destruction fireball renders at its site; report any name that does not.
 
-### D33 ☐ Tracers
+### D33 ☑ Tracers — **LANDED (2026-07-24)**
 
 **Approach.** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium` /
 `tracer1`, matched to the ammo type. Cheap billboard/quad per round rather than a mesh.

@@ -11,6 +11,13 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Blocked / deferred
 
+- **Pad-read-on-focus gate — user may veto (shipped 2026-07-22 alongside polish-4 item 7's focus
+  mute).** Pads are read only while the window has focus. It is its own commit, so reverting it
+  alone keeps the mute; the cost while active is that an unfocused window ignores the controller.
+  Waiting on the user's verdict from normal play — delete this entry if it feels right, revert
+  that commit if it does not (see `docs/HISTORY.md` 2026-07-22 "Focus mute, and the
+  pad-read-on-focus question closed").
+
 - **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
   so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on
