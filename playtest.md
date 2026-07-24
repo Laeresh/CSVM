@@ -258,6 +258,16 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   cardinal directions vs the original? *Blocks:* compass sign-off (one-line flip if wrong).
 - **Crossed `pdpN_h` numbering.** Does the *original* amputate the wrong wingtip on wing damage too
   (bloodhawk/firebrand/brigand data quirk)? *Blocks:* damage-visual fidelity confirmation.
+- **C3 spiderweb — is it faded at start, and is it solid?** Our engine fades C3's `spiderweb` mesh to
+  invisible at mission start (the `spiderweb_gone` `ON_STARTUP` opacity fade), and a merged fix
+  (`fix/opacity-fade-collider`) now also drops its collider when it fades — so you no longer crash
+  into an invisible wall. **But the premise is unconfirmed and you doubt it:** in the *original*, at
+  C3 start, is the spiderweb **(a) visible**, **(b) faded/gone**, and **(c) solid** (does the plane
+  hit it or pass through)? If the original shows it **visible and solid**, then *our fade is the bug*
+  (we should not fade it) and the collider change is masking a deeper problem — flag that. *Where:*
+  fly low near the web in C3, ours vs the original. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
+  *Blocks:* confirming `fix/opacity-fade-collider` is the right fix vs. a "why do we fade it at all"
+  question (see backlog "Milestone 3 Polishing").
 
 ---
 

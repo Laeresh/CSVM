@@ -11,24 +11,41 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
 
-A pass of at-the-controls findings from the user (M3 weapons/destruction). Per this session's
-workflow the **localized fixes were each made on their own branch** in an isolated worktree — each
-**built clean, but not yet merged and not yet playtested**; the **larger items** are detailed below
-and left for a plan. Each fix branch is off `origin/main` (`d05bc13`), one commit, **code only** (the
-documentation trail lives here). **When a branch is merged, move its record to `docs/HISTORY.md` and
-delete its row here** — do not let this table outlive the merges.
+A pass of at-the-controls findings from the user (M3 weapons/destruction). **Six localized fixes are
+now merged into `m3-polishing`** (built clean together), each still owing a cockpit playtest; one
+attempt **failed and is documented under "Still open" below**; the **larger items** follow. The
+fixes were code-only, so this section is their documentation trail. **When `m3-polishing` lands on
+`main`, give each merged fix a `docs/HISTORY.md` entry and delete its row here** — do not let this
+table outlive the landing.
 
-### Fixed on branches — pending merge + playtest
+### Merged into `m3-polishing` — pending playtest
 
 | Finding | Branch | Change | Confirm in the cockpit |
 |---|---|---|---|
 | Rocket advances to the next pylon after one shot (round-robin) instead of draining the selected pylon | `fix/rocket-drain-pylon` | `FlightController.NextArmedHardpoint`: keep the cursor on the just-fired pylon (`_nextPylon = idx`) instead of `+1`; the scan skips it once dry | wing empties one pylon fully, in order, before the next starts (see "Rocket firing order" under Feature backlog) |
 | A rocket that reaches max range vanishes silently | `fix/rocket-detonate-at-range` | `Projectile._PhysicsProcess`: at range-expiry a **rocket** calls `Impact(weapon, pos, null)` (default-surface effect+sound); guns still expire silently | the `default` IMPACT effect reads acceptably as a mid-air self-destruct (not a ground/water splash floating in the sky) |
-| `ERROR: Condition "det == 0" … invert (basis.cpp:47)` sometimes when destroying things | `fix/motion-scale-zero-guard` | `MotionRuntime.Seek`: floor the ramped scale off zero (sign-preserving, ε=1e-3), matching the guards `PoseScale` / `ScriptPlayback` already have | no `det==0` spam on kills; a "shrink to nothing" piece still looks gone |
 | Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
 | Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
 | `WARNING: … SOUND 'snd_exp_ground_a' … no audio session` on every ground crash | `fix/crash-sound-warning` | `PlaneViewer.BuildFlightCrashRuntime`: crash runtime gets `SoundHandledElsewhere = true` (matches the world-effects runtime) | warning gone; ground boom still plays (via `FlightAudio.OnGroundExplosion`) |
-| Flying into C3's (invisible) spiderweb crashes/damages the plane | `fix/opacity-fade-collider` | `AnimRuntime.SetSubtreeOpacity`: a fade to ~0 now **disables the subtree's colliders** (edge-triggered, reuses `SetCollidersEnabled`); data-driven, no node name hard-coded | fly at C3's faded web — no invisible wall, no damage. ⚠ couldn't confirm from code that `spiderweb` has a `col` body (assets gitignored); the fix generalizes to **all** fade-to-0 subtrees (others are kill-driven, where losing collision is also right) |
+| Flying into C3's (invisible) spiderweb crashes/damages the plane | `fix/opacity-fade-collider` | `AnimRuntime.SetSubtreeOpacity`: a fade to ~0 now **disables the subtree's colliders** (edge-triggered, reuses `SetCollidersEnabled`); data-driven, no node name hard-coded | fly at C3's faded web — no invisible wall, no damage. ⚠ **Premise unconfirmed:** the user doubts the web is faded at start — verify in the original (`playtest.md` §8): is the C3 spiderweb visible / faded / solid there? If **visible and solid** in the original, our *fade* is the bug, not the collider. ⚠ couldn't confirm from code that `spiderweb` has a `col` body (assets gitignored); the fix generalizes to **all** fade-to-0 subtrees |
+
+### Still open — the attempt did not work
+
+- **`det == 0` invert error when destroying things — the scale-floor did NOT fix it (user-tested
+  2026-07-24).** `ERROR: Condition "det == 0" is true. at: invert (core/math/basis.cpp:47)` still
+  appears on some kills. The attempted fix (branch `fix/motion-scale-zero-guard`, **not merged**)
+  floored `MotionRuntime.Seek`'s ramped scale off zero (sign-preserving, ε=1e-3), the same guard
+  `PoseScale`/`ScriptPlayback` carry, on the theory a scale ramp reaching `(0,0,0)` made
+  `basis.Scaled(scale)` singular. It builds clean but the error persists, so **that is not (or not
+  the only) singular-basis source.** Unguarded suspects to check next:
+  - **`InheritedLocal`'s direct `parentBasis.Inverse()` (`AnimRuntime.cs` ~2655, the crash/launch
+    path)** — inverts a singular basis if any *ancestor* node carries a zero scale; the agent that
+    wrote the scale-floor flagged this as the spot it deliberately left alone.
+  - other `Inverse()` / `AffineInverse()` / `look_at` / zero-scale sites in the destruction,
+    puffer/effect, and `PlaceTemplateAt` / `GlobalTransform`-relative paths.
+  ⚠ **Do not re-apply the `MotionRuntime.Seek` scale-floor — it is tried and insufficient** (the
+  branch keeps it for reference). Find the real source by reproducing the throwing kill and adding a
+  temporary det-check log at each inverse in the destruction path to point at the culprit.
 
 ### Larger items — documented, not fixed
 
