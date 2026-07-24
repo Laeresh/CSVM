@@ -73,6 +73,11 @@ public partial class FlightController : Node3D
     /// canvas so it scales with the pane. Null unless the flag is set.</summary>
     public HudFontTest? FontTest;
 
+    /// <summary>The selected-weapon text readout (E36): the gun group + rocket type and their live
+    /// ammo, drawn in the game's HUD font from the <c>MSG_HUD_GUNGAUGE</c>/<c>MSG_HUD_MISSLES</c>
+    /// templates. Added to the HUD canvas and fed each frame; null (no font / no loadout) hides it.</summary>
+    public WeaponReadout? WeaponReadout;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -328,6 +333,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(Compass);
         if (Gauges != null)
             canvas.AddChild(Gauges);
+        if (WeaponReadout != null)
+            canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
         if (Marker != null)
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         if (Scoreboard != null)
@@ -440,42 +447,6 @@ public partial class FlightController : Node3D
         _rocketSelPrev = rocketSel;
     }
 
-    /// <summary>The interim HUD ammo line, bracketing the SELECTED gun group (only one fires at a
-    /// time): <c>GUNS [40:2398] 30:2799   ROCKETS 9</c>.</summary>
-    private string AmmoLine()
-    {
-        var sb = new System.Text.StringBuilder("GUNS");
-        int gi = 0;
-        foreach (var g in Loadout!.FirableGuns)
-        {
-            bool selected = gi == _gunSel;
-            string token = $"{g.Weapon.Caliber ?? 0}:{(InfiniteAmmo ? "∞" : g.Ammo.ToString())}";
-            sb.Append(selected ? $" [{token}]" : $" {token}");
-            gi++;
-        }
-        if (Loadout.Hardpoints.Count > 0)
-        {
-            // Rockets remaining of the SELECTED ordnance type (stock = the sole type).
-            string? type = _ordnanceTypes.Length > 0
-                ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
-                : null;
-            int rockets = 0;
-            foreach (var h in Loadout.Hardpoints)
-            {
-                if (type == null || h.Weapon.Id == type)
-                {
-                    rockets += h.Ammo;
-                }
-            }
-            sb.Append($"   ROCKETS {(InfiniteAmmo ? "∞" : rockets.ToString())}");
-            if (_ordnanceTypes.Length > 1)
-            {
-                sb.Append($" ({_rocketSel + 1}/{_ordnanceTypes.Length})");
-            }
-        }
-        return sb.ToString();
-    }
-
     /// <summary>Feeds the two cockpit weapon gauges (E35) from the same live ammo the firing code
     /// draws down. The gun gauge shows the SELECTED group (its rounds, its short NAME, and one belt
     /// light per firable group by remaining fraction, the arrow on the selected one); the missile
@@ -488,32 +459,45 @@ public partial class FlightController : Node3D
         {
             return;
         }
+
+        // Guns: the SELECTED firable group. The gauge takes the caliber+ammo short NAME and the belt
+        // fractions; the readout (E36) takes the group's mount name and its per-group rounds.
+        GunGroup? selectedGun = null;
+        int firable = 0;
+        _gunGaugeSlots.Clear();
+        foreach (var g in Loadout.FirableGuns)
+        {
+            _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
+            if (firable == _gunSel)
+            {
+                selectedGun = g;
+            }
+            firable++;
+        }
         if (_gunGaugeState != null)
         {
-            _gunGaugeSlots.Clear();
-            GunGroup? selected = null;
-            int gi = 0;
-            foreach (var g in Loadout.FirableGuns)
-            {
-                _gunGaugeSlots.Add(g.Capacity > 0 ? (float)g.Ammo / g.Capacity : 0f);
-                if (gi == _gunSel)
-                {
-                    selected = g;
-                }
-                gi++;
-            }
-            _gunGaugeState.Selected = gi > 0 ? Mathf.Clamp(_gunSel, 0, gi - 1) : 0;
-            _gunGaugeState.Count = selected?.Ammo ?? 0;
-            _gunGaugeState.Type = selected?.Weapon.Name ?? "";
+            _gunGaugeState.Selected = firable > 0 ? Mathf.Clamp(_gunSel, 0, firable - 1) : 0;
+            _gunGaugeState.Count = selectedGun?.Ammo ?? 0;
+            _gunGaugeState.Type = selectedGun?.Weapon.Name ?? "";
         }
-        if (_missileGaugeState != null)
+        if (WeaponReadout != null)
         {
-            _missileGaugeSlots.Clear();
-            var hps = Loadout.Hardpoints;
+            WeaponReadout.GunGroupName = firable > 0 ? selectedGun?.Mount : null;
+            WeaponReadout.GunAmmo = selectedGun?.Ammo ?? 0;
+        }
+
+        // Rockets: the SELECTED ordnance type / next-to-fire pylon. The count reads that pylon (the
+        // arrow's) — per-pylon rounds (a full HE pylon = 3), NOT the sum across pylons; the original's
+        // gauge is per-pylon (its Warhawk shows BOOM 3, not 24). The readout takes the rocket's display
+        // name (MSG_WEAP_* through Messages, e.g. "High-explosive rocket"), the gauge its short NAME.
+        var hps = Loadout.Hardpoints;
+        if (hps.Count > 0)
+        {
             string? type = _ordnanceTypes.Length > 0
                 ? _ordnanceTypes[Mathf.Clamp(_rocketSel, 0, _ordnanceTypes.Length - 1)]
                 : null;
             WeaponDef? typeWeapon = null;
+            _missileGaugeSlots.Clear();
             for (int i = 0; i < hps.Count; i++)
             {
                 var h = hps[i];
@@ -523,15 +507,33 @@ public partial class FlightController : Node3D
                     typeWeapon = h.Weapon;
                 }
             }
-            // The count reads the pylon the arrow points at (the next to fire) — per-pylon rounds
-            // (a full HE pylon = 3), NOT the sum across pylons; that pylon's own belt light is the one
-            // it sits on. The original's gauge is per-pylon (its Warhawk shows BOOM 3, not 24).
             int next = NextArmedPylon(type);
-            _missileGaugeState.Selected = next;
-            _missileGaugeState.Count = next < hps.Count ? hps[next].Ammo : 0;
-            _missileGaugeState.Type = typeWeapon?.Name ?? "";
+            int perPylon = next < hps.Count ? hps[next].Ammo : 0;
+            if (_missileGaugeState != null)
+            {
+                _missileGaugeState.Selected = next;
+                _missileGaugeState.Count = perPylon;
+                _missileGaugeState.Type = typeWeapon?.Name ?? "";
+            }
+            if (WeaponReadout != null)
+            {
+                WeaponReadout.MissileName = typeWeapon != null ? RocketReadoutName(typeWeapon) : null;
+                WeaponReadout.MissileAmmo = perPylon;
+            }
+        }
+        else if (WeaponReadout != null)
+        {
+            WeaponReadout.MissileName = null;
         }
     }
+
+    /// <summary>The rocket name the E36 readout shows: the resolved <c>MSG_WEAP_*</c> display name
+    /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
+    /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
+    private static string RocketReadoutName(WeaponDef w) =>
+        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
+            ? w.DisplayName
+            : w.Name;
 
     /// <summary>The pylon the next rocket would launch from (the arrow target on the missile gauge):
     /// the first armed pylon of <paramref name="type"/> scanning from <see cref="_nextPylon"/> and
@@ -1383,8 +1385,10 @@ public partial class FlightController : Node3D
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
             Gauges.Stalled = !_crashed && !_paused && _model.isStalled();
-            UpdateWeaponGauges();
         }
+        // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
+        // loadout, so this runs whenever there is one, independent of the dial cluster.
+        UpdateWeaponGauges();
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
@@ -1410,10 +1414,8 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
-        // Interim ammo readout (a proper gungauge/missilegauge HUD is wave E): each firable gun
-        // group's caliber + remaining rounds, then the hardpoint ordnance count.
-        if (Loadout != null)
-            _hud.Text += "\n" + AmmoLine();
+        // The weapon ammo readout is now the E35 gauges + the E36 WeaponReadout (drawn in the game's
+        // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
         // Stunt run status now lives in the marker HUD; keep the compact text line only
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)

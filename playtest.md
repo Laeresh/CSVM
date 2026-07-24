@@ -69,9 +69,10 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   *Blocks:* confirms the B16/B17 dry-warning path under real (long) fire.
 
 - **Weapon selectors — one group at a time.** On a multi-group plane press **G** to switch gun
-  group and watch the HUD ammo line bracket move; only the bracketed group fires. Press **H** to
-  cycle ordnance (stock is one HE type, so this is a no-op today — just confirm it does not break
-  rocket fire). Best on the 4-group planes:
+  group and watch the **GUNS gauge + the bottom-centre readout** (`GUNS: <group name>: <rounds>`,
+  E35/E36) change name and count; only the selected group fires. Press **H** to cycle ordnance
+  (stock is one HE type, so this is a no-op today — just confirm it does not break rocket fire). Best
+  on the 4-group planes:
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo` (Devastator) or
   `--plane=player_peacemaker`. *Look for:* switching feels right; the intended default group is
   sensible. *Blocks:* B18 sign-off; the G/H + D-pad-L/R bindings are a design choice (see below).

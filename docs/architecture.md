@@ -155,8 +155,11 @@ and `ZrdrDict`, the key/[values…] view over a reader's alternating list.
 ## src/Mech3/Messages.cs
 The game's localized string table: plain `System.Text.Json` over the extracted `messages.json`
 (NOT a zrdr reader), a case-insensitive key→value map resolving the `MSG_*` keys missions reference.
+`Fill`/`Format` substitute a template's `%1`…`%9` placeholders (the HUD strings' format, E36).
 ⚠ Degrades, never throws: a missing file yields an empty table, and `Get` returns the raw key for
   an unknown entry (visible, not blank) — display strings are cosmetic.
+⚠ `Fill` grammar: `%N` = arg N (missing ⇒ empty), a trailing bang-spec like `!d!` is consumed (the
+  arg is already a formatted string), `%%` = literal `%`. Resolve the key via `Get` first, then fill.
 
 ## src/Mech3/MarkerRig.cs
 A player airframe's weapon marker rig read from planes.zbd GameZ: `Extract` walks a `player_*`
@@ -486,6 +489,16 @@ atlas is absent; `Draw(CanvasItem,…)`/`Measure` render onto any caller's canva
   count drifts. Black is keyed transparent, green kept — a white modulate reproduces the original.
 ⚠ The drawing control MUST set a Nearest texture filter (it is a pixel font); `HudFontTest.cs` is
   the `--hud-font-test` proof overlay (added per pane, so 1P vs a 4P pane compare).
+⚠ In flight the font now loads unconditionally (E36 uses it), not only under `--hud-font-test`; that
+  flag now gates only the `HudFontTest` overlay, not the font load.
+
+## src/Flight/WeaponReadout.cs
+The selected-weapon text readout (E36): a bottom-centre two-line `Control` drawing the current gun
+group + rocket type and their live ammo in `HudFont`, from the game's own `MSG_HUD_GUNGAUGE` /
+`MSG_HUD_MISSLES` templates (`Messages.Fill`, never hardcoded). FlightController pushes the state
+each frame (`%1` = gun mount name / rocket display name, `%2` = per-group / per-pylon rounds).
+⚠ A null name hides that line (no guns / no hardpoints / no loadout); bottom-anchored like the dials
+  so a damped splitscreen pane keeps it on screen. This replaced the interim `FlightController.AmmoLine`.
 
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text

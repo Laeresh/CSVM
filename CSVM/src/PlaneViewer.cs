@@ -1150,7 +1150,8 @@ public partial class PlaneViewer : Node3D
                 // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
                 // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
                 // (`he_rocket` …) from the chapter's own prototype roots (B14).
-                var weaponDefs = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                var weaponMessages = Messages.Load(messagesPath);
+                var weaponDefs = WeaponDefs.Load(zrdrPath, weaponMessages);
                 var stockLoadouts = StockLoadouts.Load();
                 var projectiles = new ProjectilePool(textures, sounds, soundDefs,
                     flyoutGamez: gamez, flyoutScene: worldScene)
@@ -1195,10 +1196,10 @@ public partial class PlaneViewer : Node3D
                 }
 
                 // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
-                // shared across panes. Only when --hud-font-test is asking for the proof overlay.
-                HudFont? hudFont = _hudFontTest
-                    ? HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"))
-                    : null;
+                // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
+                // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
+                // simply not built.
+                HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
 
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
@@ -1342,11 +1343,21 @@ public partial class PlaneViewer : Node3D
                     // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
                     // and a 4P pane can be compared (--hud-font-test). Set before the controller
                     // enters the tree — its _Ready adds this to the HUD canvas.
-                    if (hudFont != null)
+                    if (hudFont != null && _hudFontTest)
                     {
                         controller.FontTest = new HudFontTest(hudFont, _hudFontTestText);
                         if (verbose)
                             GD.Print($"hud-font-test: '{_hudFontTestText}' via 5pointhud font");
+                    }
+
+                    // The selected-weapon text readout (E36): the gun group + rocket type and their
+                    // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
+                    // templates. Built whenever the font loaded and the plane carries a loadout.
+                    if (hudFont != null && controller.Loadout != null)
+                    {
+                        controller.WeaponReadout = WeaponReadout.Build(hudFont, weaponMessages);
+                        if (verbose)
+                            GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
                     }
 
                     // Visible damage: torn-skin panel flips + the low-HP smoke/fire

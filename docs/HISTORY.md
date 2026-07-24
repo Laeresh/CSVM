@@ -5677,3 +5677,38 @@ so the `--viewer`/lab builds (no loadout) are unchanged.
 `docs/architecture.md` (`GaugeCluster` entry — the two gauges, per-group/per-pylon rule, generic-face
 rule), `playtest.md` (E35 gauge item + the yellow-state A/B), PLAN-M3-weapons.md (E35 ☐→☑),
 CLAUDE.md (Current-status Next E35→E36).
+
+## 2026-07-24 — M3 Wave E E36: selected-weapon text readout (`MSG_HUD_GUNGAUGE`)
+
+The game's own textual weapon readout, drawn in the `5pointhud` bitmap font (E34). New
+`src/Flight/WeaponReadout.cs` — a bottom-centre two-line `Control` that renders the currently-selected
+gun group and rocket type with their live ammo, from the message table's own templates
+`MSG_HUD_GUNGAUGE` (id 188, `"GUNS: %1: %2!d!"`) and `MSG_HUD_MISSLES` (id 189,
+`"MISSILES: %1: %2!d!"` — the table's misspelling), resolved through `Messages` and **never
+hardcoded**. `%1` names the gun group / rocket type (that is why the strings exist — the counters are
+per group / per pylon, so the readout has to say which); `%2!d!` is the count.
+
+Added `Messages.Fill`/`Format`: substitutes `%1`…`%9` positional placeholders, consumes a trailing
+bang-spec (the `!d!` in `%2!d!` — the arg is already a formatted string), and turns `%%` into a
+literal `%` (used by `MSG_HUD_HEALTH` etc.). FlightController feeds the readout in the same
+`UpdateWeaponGauges` pass that drives the gauges: `%1` = the gun group's **mount name**
+(`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's **display name**
+(`High-explosive rocket`, its `MSG_WEAP_*` `DESC` resolved through `Messages`, falling back to the
+short handle if unresolved); `%2` = the selected group's per-group rounds / the next-to-fire pylon's
+per-pylon rounds (matching the E35 gauge). This **replaced the interim `AmmoLine`** debug text (which
+summed rockets to a fleet total — the very total the E35 user-correction moved away from).
+
+The HUD font now loads unconditionally in flight (E36 needs it); `--hud-font-test` gates only the
+`HudFontTest` overlay, not the font load.
+
+**Verified** (windowed, verification.md rule 71): the readout renders both lines in the game font at
+bottom centre. Cycling gun groups updates both name and count — Bloodhawk `GUNS: INNER WING GUNS: 2400`
+→ `GUNS: OUTER WING GUNS: 2800` (the 40- and 30-cal groups' distinct capacities), and the Balmoral (the
+plan's named plane, twin independent .50s) `GUNS: INNER WING GUNS: 2000` → `GUNS: OUTER WING GUNS: 2000`
+(same count, name changes). The missile line reads `MISSILES: HIGH-EXPLOSIVE ROCKET: 3` (per pylon). The
+text comes from `messages.json` — a missing table would render the raw `MSG_HUD_GUNGAUGE` key.
+
+**Docs.** `docs/formats/hud.md` (new "text readout" section), `docs/architecture.md`
+(`WeaponReadout.cs` entry + `Messages.cs` `Fill`/`Format`, `HudFont.cs` load note), `playtest.md`
+(weapon-selector item updated: the readout replaced the bracket line), PLAN-M3-weapons.md (E36 ☐→☑),
+CLAUDE.md (module index + Current-status Next E36→E37).

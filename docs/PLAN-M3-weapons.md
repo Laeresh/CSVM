@@ -480,7 +480,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 34. ☑ Bitmap-font HUD text renderer (`5pointhud`) — **landed** (2026-07-24): `HudFont.cs` — printable-ASCII `0x20`–`0x7e` proportional 5px font, auto-segmented from the atlas, sized via `HudMetrics`; `--hud-font-test` proves 1P == 4P-pane (scaled)
 35. ☑ `gungauge` + `missilegauge` in `GaugeCluster` — **landed** (2026-07-24): both dials render on all 11 planes (uniform subtree; the face hangs off the generic `g815`/`g819` on every plane, no Bloodhawk special case). 4-digit `4char_ammo` + 6-char `6char_type` cycles show the selected weapon's rounds + NAME; `ggindicator`/`mgindicator` belt lights step green/yellow/red per slot fraction; the arrow tracks the selected gun group / next-armed pylon. **Gun count is per-group, rocket count is per-pylon** (user-corrected — the original's Warhawk reads `BOOM 3`, not the 24-round total). Windowed captures verify the roster, per-group/per-pylon counters, and the green→yellow→red step (Bloodhawk rocket depletion). The green/yellow/red thresholds are a TUNE pending an original playtest (see `playtest.md`).
-36. ☐ Selected-weapon readout (`MSG_HUD_GUNGAUGE`)
+36. ☑ Selected-weapon readout (`MSG_HUD_GUNGAUGE`) — **landed** (2026-07-24): `WeaponReadout.cs` draws the selected gun group + rocket type and their live ammo in the `5pointhud` font, from the game's own `MSG_HUD_GUNGAUGE` / `MSG_HUD_MISSLES` templates (`Messages.Fill`, not hardcoded); `%1` = mount name / rocket display name, `%2` = per-group / per-pylon rounds. Replaced the interim `AmmoLine`. Verified: Bloodhawk `INNER WING GUNS: 2400`→`OUTER WING GUNS: 2800` and Balmoral twin-.50 name swap show name+count update from `messages.json`.
 37. ☐ Impact-point reticle — ballistic projection
 38. ☐ Lock-on indicator
 
@@ -1540,10 +1540,24 @@ will confirm against the original that ammo gauges show a yellow state at all, a
 **Verify.** All 11 planes render both gauges; the counters track B16/B17's ammo; belt lights
 step correctly.
 
-### E36 ☐ Selected-weapon readout
+### E36 ☑ Selected-weapon readout — **LANDED (2026-07-24)**
 
 **Approach.** `MSG_HUD_GUNGAUGE` = `"GUNS: %1: %2!d!"` — `%1` names the gun group (which is why
 it exists: per-group counters), `%2` the count. Resolve through `Messages`, render with E34.
+
+**Landed.** `src/Flight/WeaponReadout.cs` — a bottom-centre two-line `Control` in the `5pointhud`
+font. Also renders the parallel `MSG_HUD_MISSLES` (id 189, `"MISSILES: %1: %2!d!"` — the table's
+misspelling) since E35 added both gauges. Added `Messages.Fill` for the `%N` / `!d!` / `%%`
+placeholder grammar. `%1` = the gun group's mount name (`Inner Wing Guns`) or the rocket's display
+name (`High-explosive rocket`); `%2` = the selected group's per-group rounds / the next-to-fire
+pylon's per-pylon rounds (matching the E35 gauge). Replaced the interim `AmmoLine`. Decode in
+`docs/formats/hud.md`.
+
+**Verified.** Cycling gun groups updates both name and count — Bloodhawk `INNER WING GUNS: 2400` →
+`OUTER WING GUNS: 2800` (distinct 40-/30-cal capacities) and the Balmoral twin-.50 name swap
+(`INNER`→`OUTER`, both 2000). Missile line `HIGH-EXPLOSIVE ROCKET: 3` (per pylon). The text resolves
+from `messages.json` (a missing table renders the raw `MSG_HUD_GUNGAUGE` key). Captures windowed
+(verification.md rule 71).
 
 **Verify.** Cycling groups on the Balmoral updates both name and count; the string comes from
 `messages.json`, not a hardcoded literal.

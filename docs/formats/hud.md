@@ -170,6 +170,24 @@ The functional children, and how `cockpit.gw` drives each:
 `greenhilite.tif`, `smallneedle.tif`, `gungauge.tif`, `missilegauge.tif`) live in
 **every chapter's `texture.zbd`**, like the other gauge art — not in `rimage.zbd`.
 
+### The text readout (`MSG_HUD_GUNGAUGE` / `MSG_HUD_MISSLES`)
+
+The message table (`extracted/messages.json`) carries a parallel **text** form of the gauges,
+alongside `MSG_HUD_AIRSPEED` / `MSG_HUD_ALTIMETER` / `MSG_HUD_HEALTH` (the "hudSWGauges" software
+gauges):
+
+- **`MSG_HUD_GUNGAUGE`** (id 188) = `"GUNS: %1: %2!d!"`
+- **`MSG_HUD_MISSLES`** (id 189) = `"MISSILES: %1: %2!d!"` (the table's own misspelling)
+
+`%1` names the **gun group / rocket type** — which is *why* these strings exist: the counters are
+per gun group and per pylon, so the readout has to say *which* one. `%2!d!` is the integer count.
+The remake (E36, `src/Flight/WeaponReadout.cs`) resolves both through `Messages`, fills `%1` with the
+gun group's **mount name** (`Inner Wing Guns`, from `IDS_AIRFRAMEGUNGROUPNAMES`) or the rocket's
+resolved **display name** (`High-explosive rocket`, from its `MSG_WEAP_*` `DESC`), and `%2` with the
+selected group's per-group rounds / the next-to-fire pylon's per-pylon rounds. It draws in the
+`5pointhud` font at the pane's bottom centre. The placeholder grammar (`%N`, a trailing `!spec!`
+consumed, `%%` → literal `%`) is handled by `Messages.Fill`.
+
 ## The HUD bitmap font (`5pointhud`)
 
 Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
