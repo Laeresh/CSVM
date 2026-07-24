@@ -274,8 +274,13 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   a one-shot damage effect (`damage3_mp1zreng11`) finishes and would re-fire without the gate.
 ⚠ `DamageAt(struck, healthDamage)` is the weapon-hit entry (C23): resolves the struck collider to
   its destructible (`Registry.Resolve`), spends `HEALTH_DAMAGE` (world objects have HEALTH only —
-  no armour pool), escalates, and marks it `Destroyed` at zero. The death SEQUENCE is C24, so a
-  killed object holds its final smoking stage. Fed by `ProjectilePool.DamageSink` in flight.
+  no armour pool), escalates, and marks it `Destroyed` at zero. Fed by `ProjectilePool.DamageSink`.
+⚠ At zero, `RunDeathSequence` plays the def's death via `Start(def)` — its Initial sequences ARE the
+  destruction (the swap sequence's name varies: `destroyit`/`destroy_h2twr`/unnamed, always Initial,
+  so don't pick by name). `ApplyDeathSwap` is the fallback for the ~10% (AA guns) that declare the
+  healthy/destroyed pair but author no swap: flip the roles the def's own RESET_STATE named, only
+  when RESET declares a `destroyed` node — the def's explicit targets, NOT a world scan (C24).
+  Debris ballistic ObjectMotion (C26) + one-shot Sound (D31) still stubbed.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with

@@ -460,7 +460,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 21. ☑ Per-instance mutable HP + destructible instance registry — **landed** (`DestructibleRegistry.cs`; live HP read by `ANIM_HEALTH`, provable no-op until C23)
 22. ☑ `DAMAGE_SEQUENCE` — reader front-end parsing + live threshold evaluation — **landed** (`AnimDefs` parse + `AnimRuntime.ApplyDamageStages`; stages fire once per threshold, `--damage-test` verifies)
 23. ☑ `WeaponHit` activation and damage application — **landed** (`AnimRuntime.DamageAt` + `Registry.Resolve`; HE 1-hit / AP 2-hit a HEALTH-60 tower, `--damage-hd` verifies)
-24. ☐ Death sequence execution + healthy→destroyed swap
+24. ☑ Death sequence execution + healthy→destroyed swap — **landed** (`RunDeathSequence` plays the def's death via `Start`; RESET-derived swap fallback for the ~10% that author none; `--damage-hd` swap check verifies)
 25. ☐ Collider removal on destruction (the doors)
 26. ☐ Ballistic `ObjectMotion` — debris tumble (`AnimRuntime.cs:429`)
 27. ☐ The 44 `WeaponOrCollideHit` collision path
@@ -1142,7 +1142,27 @@ one state"). **Never infer a threshold from an animation's name.**
 a known weapon; an AP rocket is measurably *worse* than HE against a building, which is the
 observable signature of the model being right.
 
-### C24 ☐ Death sequence execution + healthy→destroyed swap
+### C24 ☑ Death sequence execution + healthy→destroyed swap — **LANDED (2026-07-24)**
+
+**Landed.** `AnimRuntime.DamageAt`, on the transition to `Destroyed`, calls `RunDeathSequence` which
+plays the def's death via `Start(def)` — the def's own Initial sequences ARE the destruction (swap +
+debris + puffer calls). **The death swap has no fixed name** (census of ~100 destructibles: `destroyit`
+25, `destroy_h2twr` 4, `destroy_twr`, `litehouse_des`, unnamed 56 — never reliably `unknown_seq`, per
+A4), but is always `Initial`, so `Start` reaches every case without keying on a name. **~10 defs (the
+C1 AA guns) declare the healthy/destroyed pair but author NO swap**, so `ApplyDeathSwap` derives it
+from the def's own RESET_STATE (flip the healthy/destroyed/dbase roles it explicitly named), applied
+only when RESET declares a `destroyed` node — so `noseballgun` (no destroyed variant) and the fuel
+trucks (empty RESET) are left intact, not blanked. Uses the def's explicit OBJECT_ACTIVE_STATE targets
+(A4's method), not a world scan; runs per-instance on real death, so it does not fight the bootstrap
+safety net.
+
+**Verified.** `--damage-test --damage-hd=` gained a `swap[healthy…, destroyed…]` check on the killed
+instance: all **16 C1 destructibles** end `healthy 0/1, destroyed 1/1` (healthy hidden, wreck shown) —
+tower via its explicit `destroy_h2twr`, AA gun via the RESET fallback; `reng11` hides healthy and
+stages its separate `mp1reng_destroyed.flt` wreck + `large_fireball`; `noseballgun` dies un-blanked;
+broad C1 sweep kills all 16 with zero errors. 8-chapter freecam regression byte-identical to the C21
+baseline (no-op at world build). **Still stubbed:** debris ballistic `OBJECT_MOTION` (C26) + death
+`Sound` (D31), so the wreck shows and smokes but pieces don't tumble and the explosion is silent.
 
 **Goal.** Objects die correctly.
 

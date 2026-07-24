@@ -5179,3 +5179,38 @@ aim points, and the *visible* death is C24's death swap, so this naturally pairs
 entries, `destructibles.md` "Engine status" rewrite, `cli.md` `--damage-hd`, PLAN-M3-weapons.md
 (checklist 23 ☐→☑, `### C23` landed note), CLAUDE.md status. **Next: C24 (death sequence execution +
 healthy→destroyed swap) — run `destroyit`/the death sequence when `DamageAt` reaches zero.**
+
+**Death sequence execution + healthy→destroyed swap — M3 Wave C item C24 (2026-07-24):** shot
+destructibles now die — at zero HP the object swaps to its wreck, its smoke/fire keeps burning, and
+its puffers fire. `AnimRuntime.DamageAt` (C23), on the transition to `Destroyed`, calls a new
+`RunDeathSequence` that plays the def's death via **`Start(def)`** — the def's own Initial sequences
+ARE the destruction (its `anim_name` is `h2twr_destruction1`/`destroy_mp1zreng11`): the
+healthy→destroyed `OBJECT_ACTIVE_STATE` swap, the debris sequences, and the puffer calls. **The key
+finding was that the death swap has no fixed name** — a census of ~100 C1/C5 destructibles found the
+swap sequence named `destroyit` (25), `destroy_h2twr` (4), `destroy_twr`, `litehouse_des`, or
+*unnamed* (56), and A4's ⚠ already ruled out `unknown_seq` — so rather than pick "the death
+sequence" out, `Start` plays them ALL (they are always `seq_state=Initial`, 90/90), which reaches
+every naming. The `DAMAGE_SEQUENCE` among them just re-fires the final smoke stage idempotently, as a
+one-shot kill wants. **A second finding drove the fallback:** ~10 of the 100 defs (the C1 AA guns
+`aagun32`–`36`) declare the healthy/destroyed node pair but author NO swap sequence, so `Start` alone
+left them standing. `ApplyDeathSwap` derives the swap from the def's **own RESET_STATE** — flipping
+the `healthy`/`destroyed`/`dbase` roles that base state explicitly named — applied only when RESET
+declares a `destroyed` node, so an object with no destroyed variant (`noseballgun`, which RESET shows
+has none; the fuel trucks, whose RESET is empty) is left intact, not blanked. This reads the def's
+explicit OBJECT_ACTIVE_STATE targets (A4's prescribed method), never a world-wide name scan (the
+`ref_tank_dest` trap), matches the exact role words (not a `_dest` suffix), and runs per-instance on
+real death — so it cannot fight the bootstrap safety net, which only runs at load. Verified via
+`--damage-test --damage-hd=` (extended with a `swap[healthy…, destroyed…]` check on the killed
+instance): the water tower (explicit `destroy_h2twr`), the AA gun (RESET fallback), and every one of
+the **16 C1 DAMAGE_SEQUENCE destructibles** end `healthy 0/1 shown, destroyed 1/1 shown` — healthy
+hidden, wreck shown; `reng11` hides its healthy subtree and stages its separately-`CALL_ANIMATION`'d
+`mp1reng_destroyed.flt` wreck + `large_fireball`; `noseballgun` dies without being blanked; the broad
+C1 sweep kills all 16 with zero errors. The 8-chapter `--freecam` regression is byte-identical to the
+C21 baseline (same counts, no errors) — C24 is a no-op at world build (death runs only on real
+hits). **Still stubbed:** the ballistic `OBJECT_MOTION` that flings wreck pieces (C26) and the
+one-shot death `Sound` (D31), so the wreck appears and smokes but the debris does not yet tumble and
+the explosion is silent; the in-flight *visual* of a specific object dying remains the C23 owed
+playtest. Docs: `AnimRuntime` architecture entry, `destructibles.md` "Engine status" rewrite, `cli.md`
+`--damage-hd` swap check, PLAN-M3-weapons.md (checklist 24 ☐→☑, `### C24` landed note), CLAUDE.md
+status. **Next: C25 (collider removal on destruction — the doors) or C26 (ballistic ObjectMotion
+debris); C26 is independent and wakes a path skipped since M2.**

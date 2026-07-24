@@ -2620,13 +2620,42 @@ public partial class PlaneViewer : Node3D
             var back = runtime.Destructibles.Resolve(deep);
             string resolve = back?.Anchor == target.Anchor ? "resolve✓" : $"resolve✗({back?.Def.Name ?? "null"})";
 
+            // Death-swap check (C24): once killed, the healthy subtree should be hidden and the
+            // destroyed subtree shown. Scan the anchor's descendants by cs_name — a test
+            // diagnostic (the mechanism keys off the def's own OBJECT_ACTIVE_STATE, not names).
+            string swap = "";
+            if (_damageHd > 0f && target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
+                void Walk(Node3D n)
+                {
+                    string cs = n.HasMeta(Mech3.AnimRuntime.NameMeta)
+                        ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                        : n.Name.ToString();
+                    if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase)) { hAll++; if (n.Visible) hVis++; }
+                    if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase)) { dAll++; if (n.Visible) dVis++; }
+                    foreach (var c in n.GetChildren())
+                    {
+                        if (c is Node3D c3)
+                        {
+                            Walk(c3);
+                        }
+                    }
+                }
+                Walk(target.Anchor);
+                if (hAll > 0 || dAll > 0)
+                {
+                    swap = $"swap[healthy {hVis}/{hAll} shown, destroyed {dVis}/{dAll} shown]; ";
+                }
+            }
+
             string src = target.Def.Archive != null ? "compiled" : "reader";
             string stages = fired.Count == 0
                 ? "no stage effect fired"
                 : string.Join(", ", fired.Select(f => $"{f.At} → {f.Effect}"));
             string outcome = _damageHd > 0f
                 ? (target.Status == Mech3.DestructibleRegistry.State.Destroyed
-                    ? $"DESTROYED in {hit} hit(s); "
+                    ? $"DESTROYED in {hit} hit(s); {swap}"
                     : $"SURVIVED {hit} hit(s); ")
                 : "";
             sb.AppendLine($"  {target.Def.Name} (HEALTH {target.MaxHealth:0.##}, {src}) {resolve}: {outcome}{stages}");

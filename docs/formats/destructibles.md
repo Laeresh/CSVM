@@ -159,12 +159,13 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — weapon fire damages destructibles now; the death sequence is next
+## Engine status — objects die now; debris tumble and death audio are next
 
 The destructible model is complete in the data and the engine now drives most of it: live
-per-instance HP (C21), the progressive damage stages (C22), and weapon fire that spends that HP
-(C23). What remains is the **death sequence** — the healthy→destroyed swap, debris and fireball
-that run when HP reaches zero (C24). A format reader should know the current wiring:
+per-instance HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23),
+and the death sequence that runs at zero (C24). What remains is the debris **tumble** (the
+ballistic `OBJECT_MOTION` that flings wreck pieces — C26) and the death **audio** (the one-shot
+`Sound` events — D31). A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -187,8 +188,7 @@ that run when HP reaches zero (C24). A format reader should know the current wir
   `ARMOR_DAMAGE` does nothing to them — runs the damage stages, and marks the instance destroyed at
   zero. HE does 60 health damage and AP 40, so a HEALTH-60 tower dies to **one** HE rocket but
   **two** AP (AP is the worse building-buster, exactly inverting its anti-armour advantage); a
-  40-cal gun at 4.5 each takes 14. The **death sequence** (the visible swap, debris, fireball) is
-  C24, so a killed object today just holds its final smoking stage.
+  40-cal gun at 4.5 each takes 14.
   - ⚠ **`Resolve` prefers the compiled def.** A wildcard reader `NAME` can grab an inner node the
     compiled def does not (the tower's `ap_h2otwr*` also matches `ap_h2otwr.flt`, which sits
     *between* the collider and the compiled `ap_h2otwr1` root), so the walk-up climbs the whole
@@ -197,6 +197,23 @@ that run when HP reaches zero (C24). A format reader should know the current wir
   - The patrol boat and truck are the only world objects also described by an AI-**vehicle** def
     (armour+health). M3 sees them only as scenery, so they are damaged through their **anim** def
     (`patrolboat` HEALTH 20), not the vehicle def (HP 40); the armour+health combatant model is M4.
+- **The object dies at zero (C24).** When `DamageAt` empties an instance's HP the engine plays the
+  def's death via `Start(def)` — its Initial sequences: the healthy→destroyed `OBJECT_ACTIVE_STATE`
+  swap, the debris sequences and the puffer calls. Those sequences ARE the destruction (the def's
+  `anim_name` is `h2twr_destruction1`/`destroy_mp1zreng11`), and the swap lives in a sequence whose
+  name varies wildly (`destroyit`, `destroy_h2twr`, or unnamed — and never reliably `unknown_seq`)
+  but is always `Initial`, so playing them all reaches every case without keying on a name.
+  - **~90 % author their own swap; the rest don't.** Of the ~100 C1/C5 destructible defs surveyed,
+    ~90 carry the healthy→destroyed swap in a sequence; ~10 (the C1 AA guns) declare the pair but
+    author no swap. For those a generic fallback derives it from the def's own **RESET_STATE** —
+    flipping the healthy/destroyed/dbase roles that base state named — applied only when RESET
+    declares a `destroyed` node, so an object with no destroyed variant (a mission gun that dies by
+    effect alone, `noseballgun`) is left intact rather than blanked. It reads the def's explicit
+    RESET targets, never a world-wide name scan (the `ref_tank_dest` trap below).
+  - **Debris tumble (C26) and death audio (D31) are still stubbed.** The killed object swaps to its
+    wreck and smokes, but the ballistic `OBJECT_MOTION` pieces do not yet fly and the explosion is
+    silent. `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`),
+    not a child of the anchor — it stages correctly, alongside its `large_fireball`.
 
 Engine internals belong in `docs/architecture.md` (the `AnimRuntime`, `AnimDefs`,
 `DestructibleRegistry` and `Projectile` entries); this page states the fact, not the wiring.

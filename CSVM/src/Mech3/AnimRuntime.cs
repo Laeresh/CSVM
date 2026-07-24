@@ -1696,15 +1696,75 @@ public sealed partial class AnimRuntime : Node
         ApplyDamageStages(inst);
         bool destroyed = inst.Health <= 0f;
         if (destroyed)
+        {
             inst.Status = DestructibleRegistry.State.Destroyed;
+            RunDeathSequence(inst);
+        }
         if (_damagesLogged < 12)
         {
             _damagesLogged++;
             GD.Print($"damage: -{healthDamage:0.##} on {NameOf(inst.Anchor)} " +
                      $"HP {before:0.##}→{inst.Health:0.##}" +
-                     (destroyed ? " DESTROYED (death sequence: C24)" : $" [stage {inst.DamageStage}]"));
+                     (destroyed ? " DESTROYED — death sequence run" : $" [stage {inst.DamageStage}]"));
         }
         return true;
+    }
+
+    /// <summary>Runs a destructible's death sequence (C24) the instant its HP reaches zero: the
+    /// healthy→destroyed <c>OBJECT_ACTIVE_STATE</c> swap, the debris sequences and the puffer
+    /// calls. Those ARE the definition's own Initial sequences — the def's <c>anim_name</c> is the
+    /// destruction (<c>h2twr_destruction1</c>, <c>destroy_mp1zreng11</c>), so its animation is the
+    /// death — which is why this plays them ALL through <see cref="Start"/> rather than trying to
+    /// pick out "the death sequence": that swap lives in a sequence whose name varies wildly
+    /// (<c>destroyit</c>, <c>destroy_h2twr</c>, or unnamed) and is NEVER reliably <c>unknown_seq</c>
+    /// (docs/formats/destructibles.md), but is always <c>Initial</c>, so Start reaches every case.
+    /// The <c>DAMAGE_SEQUENCE</c> among them just re-fires the final smoke stage idempotently (its
+    /// effect is already live), which is also what a one-shot kill wants. The debris ballistic
+    /// motion (C26) and one-shot <c>Sound</c> (D31) events are still stubbed; the safety net that
+    /// hides <c>destroyed</c> subtrees only runs at bootstrap, so it does not fight this.
+    ///
+    /// <para>Then <see cref="ApplyDeathSwap"/>: ~10% of destructibles (the C1 AA guns) carry the
+    /// healthy/destroyed node pair but author NO swap in their sequences, so Start alone leaves
+    /// them standing. The swap is derived from the def's own RESET_STATE — the base state that
+    /// declared the pair — flipping the healthy/destroyed/dbase roles it named; idempotent for the
+    /// 90% Start already swapped.</para></summary>
+    private void RunDeathSequence(DestructibleRegistry.Instance inst)
+    {
+        Start(inst.Def, inst.Anchor);
+        ApplyDeathSwap(inst);
+    }
+
+    /// <summary>The generic healthy→destroyed swap, for destructibles that declare the pair but
+    /// author no explicit swap sequence (the AA guns). Read off the def's own RESET_STATE
+    /// <c>OBJECT_ACTIVE_STATE</c> targets — never a world-wide name scan (that is the
+    /// <c>ref_tank_dest</c> bug in <see cref="HideUncoveredDestroyed"/>) — and applied only when
+    /// RESET names a <c>destroyed</c> node, so an object with no destroyed variant (a mission gun
+    /// that dies by effect alone) is left intact rather than blanked. Matches the exact role words,
+    /// not a <c>_dest</c> suffix.</summary>
+    private void ApplyDeathSwap(DestructibleRegistry.Instance inst)
+    {
+        if (inst.Def.ResetState is not { } reset)
+            return;
+        static string RoleName(AnimEvent ev) => ev.Data.Str("node") ?? ev.Data.Str("name") ?? "";
+        bool hasDestroyed = reset.Events.Any(ev => ev.Kind == "ObjectActiveState"
+            && RoleName(ev).Contains("destroyed", StringComparison.OrdinalIgnoreCase));
+        if (!hasDestroyed)
+            return;
+        foreach (var ev in reset.Events)
+        {
+            if (ev.Kind != "ObjectActiveState")
+                continue;
+            var name = RoleName(ev);
+            bool? active =
+                name.Contains("healthy", StringComparison.OrdinalIgnoreCase) ? false
+                : name.Contains("destroyed", StringComparison.OrdinalIgnoreCase)
+                  || name.Contains("dbase", StringComparison.OrdinalIgnoreCase) ? true
+                : null;
+            if (active is not { } state)
+                continue;
+            foreach (var node in Targets(ev, inst.Def, inst.Anchor))
+                SetSubtreeActive(node, state);
+        }
     }
 
     /// <summary>The HP a health condition first becomes true at as HP falls: <c>ANIM_HEALTH</c>'s

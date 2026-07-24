@@ -69,14 +69,15 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire` (auto-holds guns).
   *Blocks:* **plan item A10** (verify the binding rule + flash appearance).
 
-- **C23 — shooting a destructible in flight (pairs with C24).** Fly at an airport structure (water
-  tower, AA gun, hangar) and pour gun fire into it, then loose a rocket. The damage MODEL is verified
-  headless (HE 1-hit / AP 2-hit a HEALTH-60 tower; 40-cal 14 hits; stages fire at 60/30 % of HEALTH),
-  but no one has watched it happen at the controls — the airport positions were not decoded into
-  scripted aim points, and the *visible* death is C24's healthy→destroyed swap, so watch for: HP
-  actually falling (smoke then fire appear as you chip it), and — once **C24** lands — the object
-  swapping to its wreck + debris at zero. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-  *Blocks:* end-to-end sign-off on C23 + C24 (weapon damage → destruction).
+- **C23/C24 — shooting a destructible to death in flight.** Fly at an airport structure (water
+  tower, AA gun, hangar) and pour gun fire into it, then loose a rocket. The whole chain is verified
+  headless (HE 1-hit / AP 2-hit a HEALTH-60 tower; 40-cal 14 hits; smoke→fire stages at 60/30 % of
+  HEALTH; then the healthy→destroyed **swap** to the wreck — all 16 C1 destructibles), but no one has
+  watched it at the controls: the airport positions were not decoded into scripted aim points. Watch
+  for: HP falling (smoke then fire as you chip it), and the object swapping to its wreck at zero.
+  Debris does NOT tumble yet (C26) and the death explosion is silent (D31), so the wreck just appears
+  and smokes. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+  *Blocks:* end-to-end sign-off on C23 + C24 (weapon damage → destruction visual).
 
 ---
 
