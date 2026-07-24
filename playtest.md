@@ -74,10 +74,12 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   headless (HE 1-hit / AP 2-hit a HEALTH-60 tower; 40-cal 14 hits; smoke→fire stages at 60/30 % of
   HEALTH; then the healthy→destroyed **swap** to the wreck — all 16 C1 destructibles), but no one has
   watched it at the controls: the airport positions were not decoded into scripted aim points. Watch
-  for: HP falling (smoke then fire as you chip it), and the object swapping to its wreck at zero.
-  Debris does NOT tumble yet (C26) and the death explosion is silent (D31), so the wreck just appears
-  and smokes. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-  *Blocks:* end-to-end sign-off on C23 + C24 (weapon damage → destruction visual).
+  for: HP falling (smoke then fire as you chip it), the object swapping to its wreck at zero, and —
+  **new with C26** — wreck pieces flinging off and tumbling (a water tower throws 2, a building 7;
+  they arc up and out, then vanish). The death explosion is still silent (D31), and the debris does
+  not physically ground-rest (it holds its final pose then hides — the `do_intersections` Layer-1.5
+  follow-up). `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+  *Blocks:* end-to-end sign-off on C23 + C24 + C26 (weapon damage → destruction visual + debris tumble).
 - **C25 — flying through a killed door.** In C2 (Hollywood), a destructible door is solid until
   destroyed. Headless proof: killing a door switches its healthy collider **off** (C2 `gate1`/`gate2`
   off 1, on 8) — but the destroyed variant re-adds its own colliders, so whether the blown-open door

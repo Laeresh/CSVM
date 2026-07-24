@@ -204,6 +204,14 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     save PNG at path` on stderr while the process still returns 0. A screenshot loop can "succeed"
     and write nothing. Pass a fully-qualified path (the scratch dir from the environment, or
     `$(pwd)/.scratch/x.png`), and `ls`/`Test-Path` the output before trusting it.
+75. **A synchronous "do X, then check" reads only the IMMEDIATE (t=0) effects — SCHEDULED effects
+    need the clock advanced.** An anim death's debris `OBJECT_MOTION` is scheduled mid-sequence (the
+    water tower's at t=2.2 s), so the C24 kill-and-check saw zero debris and wrongly recorded it
+    "stubbed" — it fired fine in real gameplay, where `_Process` ticks the clock to 2.2 s. To observe
+    a scheduled effect headlessly, call `runtime.Advance(dt)` past the schedule. **But advancing an
+    out-of-tree world spams `!is_inside_tree` (global-transform reads return identity):** add the
+    subtree to the tree first and set `ManualAdvance` so `_Process` doesn't also drive it. Measure
+    immediate state (swap, colliders) BEFORE the tick, scheduled state (debris) after.
 
 ## What this project cannot verify itself
 

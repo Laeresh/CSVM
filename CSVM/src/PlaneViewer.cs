@@ -764,10 +764,14 @@ public partial class PlaneViewer : Node3D
 
                 // --damage-test: with the world built and its AnimRuntime bound, drive one
                 // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
-                // stand-in until F40's interactive HP control lands. Node resolution runs off the
-                // runtime's own index, so the world subtree need not be in the tree yet.
+                // stand-in until F40's interactive HP control lands. The world subtree is added to
+                // the tree (ManualAdvance so _Process doesn't double-drive) because C26 ticks the
+                // death sequences forward, which reads global transforms — invalid on an out-of-tree
+                // node (`!is_inside_tree()` spam). It also makes the C25 collider positions real.
                 if (_damageTest)
                 {
+                    _worldRoot!.AddChild(_plane);
+                    session.Runtime.ManualAdvance = true;
                     RunDamageTest(session.Runtime);
                     GetTree().Quit();
                     return false;
@@ -2623,6 +2627,7 @@ public partial class PlaneViewer : Node3D
             target.Status = Mech3.DestructibleRegistry.State.Healthy;
             target.DamageStage = 0;
             var colBefore = _damageHd > 0f ? EnabledColliders(WorldRoot(target.Anchor)) : new HashSet<CollisionShape3D>();
+            int debrisBefore = runtime.BallisticMotionsLaunched;
             runtime.OnInstanceStarted += OnStarted;
             if (_damageHd > 0f)
             {
@@ -2645,13 +2650,6 @@ public partial class PlaneViewer : Node3D
                 }
             }
             runtime.OnInstanceStarted -= OnStarted;
-            // Stop the effects this run started: reader-wildcard and compiled per-instance defs
-            // bind the SAME tower nodes (C21), so a leftover live effect would make the twin's
-            // identical CALL_ANIMATION a no-op and read as "no stage effect fired".
-            foreach (var (anim, anchor) in started)
-            {
-                runtime.Stop(anim, anchor);
-            }
 
             // Walk-up resolution check (C23): resolving from a deep descendant of the anchor —
             // the kind of node a projectile's raycast actually strikes (a collider sits under the
@@ -2699,6 +2697,26 @@ public partial class PlaneViewer : Node3D
                 int off = colBefore.Count(cs => !colAfter.Contains(cs));
                 int on = colAfter.Count(cs => !colBefore.Contains(cs));
                 swap += $"col[off {off}, on {on}]; ";
+                // Debris tumble (C26): the death's ballistic OBJECT_MOTION bodies — the wreck pieces
+                // that arc out under gravity and tumble (translation_range/forward_rotation). They are
+                // SCHEDULED (the water tower's at t=2.2 s), so advance the death forward past the
+                // schedule to let them launch — done AFTER swap/col so those stay the immediate
+                // post-death state (pre-tick). The world is in the tree (see the --damage-test hook,
+                // ManualAdvance) so the ticked global-transform reads are valid.
+                for (int i = 0; i < 7; i++)
+                {
+                    runtime.Advance(0.5f);   // 3.5 s — past the ~2.2 s schedule, into the tumble
+                }
+                int debris = runtime.BallisticMotionsLaunched - debrisBefore;
+                swap += $"debris[{debris} launched]; ";
+            }
+            // Stop the effects this run started, AFTER the C26 tick so the debris actually launches
+            // first: reader-wildcard and compiled per-instance defs bind the SAME tower nodes (C21),
+            // so a leftover live effect would make the twin's identical CALL_ANIMATION a no-op and
+            // read as "no stage effect fired".
+            foreach (var (anim, anchor) in started)
+            {
+                runtime.Stop(anim, anchor);
             }
 
             string src = target.Def.Archive != null ? "compiled" : "reader";
@@ -2722,8 +2740,7 @@ public partial class PlaneViewer : Node3D
         // C25 diagnostic: the world's collidable-geometry inventory, so we can confirm destructible
         // roles (healthy / destroyed / door*) are among the solid geometry — collision is built here
         // only because --damage-test forces it (--freecam alone builds none). Counts per owning-mesh
-        // cs_name; no positions, because this runs before the world is added to the tree so every
-        // GlobalPosition would read (0,0,0) — a lie, like the C23 anchor-position trap.
+        // cs_name (a per-name census is enough to see what is solid; positions are not needed).
         if (chosen.Count > 0)
         {
             var byName = new SortedDictionary<string, int>();

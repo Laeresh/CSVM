@@ -5247,3 +5247,34 @@ owes). Docs: `destructibles.md` "Engine status", `architecture.md` (`AnimRuntime
 entries), `verification.md` rules 72/73/74, `cli.md` `--damage-hd`, PLAN-M3-weapons.md (checklist 25
 ☐→☑, `### C25` landed note), CLAUDE.md status. **Next: C26 (ballistic ObjectMotion debris tumble —
 independent, wakes a path skipped since M2) or C27 (the WeaponOrCollideHit collision path).**
+
+**Ballistic ObjectMotion — debris tumble — M3 Wave C item C26 (2026-07-24):** the wreck pieces fly.
+Like C25, this needed **no new runtime code** — and the plan's premise ("`AnimRuntime.cs:429`
+implements only the spin half and skips the ballistic half") was already outdated: the M2 crash Layer 1
+work (`ec8a731`) generalized that into `MotionRuntime`, a full ballistic rigid body handling gravity,
+a `translation_range` ballistic arc, a `forward_rotation` tumble, a `scale` ramp and `run_time` — the
+exact list C26's Approach asks for. It is REACHED on a weapon-hit death because the death's
+`OBJECT_MOTION` events sit in `Initial` sequences, so C24's `Start(def)` runs them. **The C24 HISTORY's
+"debris ballistic OBJECT_MOTION (C26) still stubbed" was a measurement artifact, not a real gap:** the
+launch is SCHEDULED mid-sequence (the water tower's `h2twr_middle` at t=2.2 s), and the C24/C25
+kill-and-check never advanced the animation clock — so it saw `debris[0]` and read as stubbed. In real
+gameplay `_Process` ticks the clock to 2.2 s and the pieces launch. Proven by advancing the death in
+the harness: the water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5.3 to y≈19.2 in
+0.8 s, `vis=True`, `run_time` 5 s; `h2twr_upper` likewise), C1 buildings **7** each, passenger planes
+**2**; deaths that author no `OBJECT_MOTION` (`air_gen`, the AA guns) correctly launch **0**. C26's
+deliverable is the durable instrument + the correction: a `BallisticMotionsLaunched` counter on
+`AnimRuntime`, and the `--damage-hd` harness now reports `debris[N launched]`. To measure it the harness
+adds the world subtree to the tree (with `ManualAdvance`, so `_Process` doesn't double-drive) and
+`Advance`s the death ~3.5 s AFTER the swap/col census — ticking an out-of-tree world spammed
+`!is_inside_tree` (global-transform reads), and the swap/col numbers must stay the immediate
+post-death state (C25's `col[off,on]` are unchanged: `m_build01` off 1/on 10, `aagun32` off 2/on 1).
+New `verification.md` rule 75 (a synchronous kill-and-check reads only t=0 effects; scheduled effects
+need the clock advanced, in-tree). **Still deferred:** the debris `do_intersections`/`bounce_sequence`
+ground-rest (a Layer-1.5 physics-ray follow-up — the pieces arc, tumble, and are then hidden by the
+sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it) and the death `Sound` (D31). The
+8-chapter `--freecam` regression is byte-identical to the C21/C24/C25 baseline (the harness changes are
+gated on `_damageTest`; the ballistic counter is zero at bootstrap). Docs: `destructibles.md` "Engine
+status", `architecture.md` (`AnimRuntime` + `PlaneViewer`), `verification.md` rule 75, `cli.md`
+`--damage-hd`, PLAN-M3-weapons.md (checklist 26 ☐→☑, `### C26` landed note), CLAUDE.md status. **Next:
+C27 (the 44 `WeaponOrCollideHit` collision path — facades/windows break on contact) or C28
+(destructible reset/restore, for the debug tools).**

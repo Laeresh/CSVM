@@ -159,13 +159,14 @@ it tumbles clear.)
 loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 [effects.md](effects.md)), invoked from the death sequences via `CALL_SEQUENCE`.
 
-## Engine status — objects die now; debris tumble and death audio are next
+## Engine status — objects die and throw debris now; death audio is next
 
-The destructible model is complete in the data and the engine now drives most of it: live
+The destructible model is complete in the data and the engine now drives nearly all of it: live
 per-instance HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23),
-the death sequence that runs at zero (C24), and the collision that goes with it (C25). What remains
-is the debris **tumble** (the ballistic `OBJECT_MOTION` that flings wreck pieces — C26) and the
-death **audio** (the one-shot `Sound` events — D31). A format reader should know the current wiring:
+the death sequence that runs at zero (C24), the collision that goes with it (C25), and the debris
+**tumble** (C26). What remains is the death **audio** (the one-shot `Sound` events — D31) and the
+debris **ground-rest** (the `do_intersections`/`bounce_sequence` half — a deferred Layer-1.5 follow-up
+needing a physics ray). A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -210,10 +211,25 @@ death **audio** (the one-shot `Sound` events — D31). A format reader should kn
     declares a `destroyed` node, so an object with no destroyed variant (a mission gun that dies by
     effect alone, `noseballgun`) is left intact rather than blanked. It reads the def's explicit
     RESET targets, never a world-wide name scan (the `ref_tank_dest` trap below).
-  - **Debris tumble (C26) and death audio (D31) are still stubbed.** The killed object swaps to its
-    wreck and smokes, but the ballistic `OBJECT_MOTION` pieces do not yet fly and the explosion is
-    silent. `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`),
-    not a child of the anchor — it stages correctly, alongside its `large_fireball`.
+  - `reng11`'s wreck is a separately-`CALL_ANIMATION`'d template (`mp1reng_destroyed.flt`), not a
+    child of the anchor — it stages correctly, alongside its `large_fireball`.
+- **The debris tumbles (C26).** The wreck pieces fly: on death the def's `OBJECT_MOTION` events —
+  gravity, a `translation_range` ballistic arc, a `forward_rotation` tumble and a `scale` ramp over a
+  `run_time` — launch the pieces, driven by the generic `MotionRuntime` the M2 crash work already
+  built (this was **not** new code for M3; the ballistic path was already implemented and only needed
+  to be *reached* by a weapon-hit death, which C24's `Start` does). **It fires from the death, not the
+  hit:** the launch is *scheduled* mid-sequence (the water tower's at t=2.2 s), so it only appears
+  once the death animation plays out — a synchronous kill-and-check that never advances the clock sees
+  no debris (which is why C24 wrongly recorded it "stubbed"). Measured by advancing the death: the
+  water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
+  `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
+  `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
+  - **Ground-rest is deferred (Layer-1.5).** `MotionRuntime` integrates the piece freely over its
+    `run_time` then holds its final pose; the `do_intersections` ground-collision and the
+    `bounce_sequence` re-launch (both need a physics ray) are not simulated. The pieces arc and tumble
+    and are then hidden by the sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it.
+- **Death audio (D31) is still stubbed.** The explosion is silent; the one-shot `Sound` events are
+  not yet played.
 - **Collision follows the swap for free (C25).** The `OBJECT_ACTIVE_STATE` swap toggles
   `SetSubtreeActive`, which disables/enables the subtree's *colliders* alongside its visibility — so
   the death that hides the healthy geometry also stops it blocking flight, and the wreck it shows

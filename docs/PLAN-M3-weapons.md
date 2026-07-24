@@ -462,7 +462,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 23. ☑ `WeaponHit` activation and damage application — **landed** (`AnimRuntime.DamageAt` + `Registry.Resolve`; HE 1-hit / AP 2-hit a HEALTH-60 tower, `--damage-hd` verifies)
 24. ☑ Death sequence execution + healthy→destroyed swap — **landed** (`RunDeathSequence` plays the def's death via `Start`; RESET-derived swap fallback for the ~10% that author none; `--damage-hd` swap check verifies)
 25. ☑ Collider removal on destruction (the doors) — **landed** (no new code: C24's swap runs `SetSubtreeActive`, which toggles colliders with visibility; `--damage-hd` `col[off,on]` census proves it, C2 doors off 1/on 8; propane→door chain confirmed)
-26. ☐ Ballistic `ObjectMotion` — debris tumble (`AnimRuntime.cs:429`)
+26. ☑ Ballistic `ObjectMotion` — debris tumble — **landed** (already implemented by the M2 crash `MotionRuntime`; reached on death via C24's `Start`; the C24 "stubbed" note was a no-clock-tick harness artifact — water tower launches 2 visible pieces, buildings 7, verified by `--damage-hd` `debris[N]`)
 27. ☐ The 44 `WeaponOrCollideHit` collision path
 28. ☐ Destructible reset/restore (for the debug tools)
 
@@ -1213,7 +1213,24 @@ destructible's collision body lives.
 **Verify.** Fly through a destroyed hangar door without a collision; fly into the intact one and
 collide.
 
-### C26 ☐ Ballistic `ObjectMotion` — debris
+### C26 ☑ Ballistic `ObjectMotion` — debris — **LANDED (2026-07-24)**
+
+**Landed — no new runtime code, and the Evidence below was stale.** The M2 crash Layer 1 work
+(`ec8a731`) already generalized `ObjectMotion`'s ballistic half into `MotionRuntime` (gravity,
+`translation_range` arc, `forward_rotation` tumble, `scale` ramp, `run_time` — the exact Approach
+list). It is REACHED on a weapon-hit death because the death's `OBJECT_MOTION` events are `Initial`,
+so C24's `Start` runs them. **The C24 "debris still stubbed" note was a measurement artifact:** the
+launch is SCHEDULED mid-sequence (the water tower's at t=2.2 s), and the kill-and-check harness never
+advanced the animation clock, so it saw `debris[0]`. Advancing the death proves it fires — the water
+tower launches **2** visible pieces (`h2twr_middle` arcs y≈5→19 in 0.8 s, tumbling, run 5 s), C1
+buildings **7** each, passenger planes **2**; no-`OBJECT_MOTION` deaths (`air_gen`, AA guns) launch
+**0**. Instrument: `AnimRuntime.BallisticMotionsLaunched` + the harness `debris[N launched]` (which
+adds the world to the tree with `ManualAdvance` and ticks past the schedule; `verification.md` 75).
+**Ground-rest deferred:** `do_intersections`/`bounce_sequence` (a physics-ray Layer-1.5 follow-up) is
+not simulated — the pieces arc and tumble, then the sequence's own `OBJECT_ACTIVE_STATE` hides them.
+
+**Verified.** `--damage-hd` `debris[N]` across C1; 8-chapter freecam regression byte-identical.
+**Owed playtest:** the on-screen tumble (needs a rendered death — the same aim the C23 playtest owes).
 
 **Goal.** Turn on a code path skipped as unreachable.
 

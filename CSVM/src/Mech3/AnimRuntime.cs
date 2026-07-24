@@ -56,6 +56,12 @@ public sealed partial class AnimRuntime : Node
 
     private int _opsApplied, _opsUnresolved;
 
+    /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
+    /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
+    /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
+    /// samples the delta across a kill to prove the wreck actually tumbles.</summary>
+    public int BallisticMotionsLaunched { get; private set; }
+
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
 
@@ -887,9 +893,14 @@ public sealed partial class AnimRuntime : Node
                         if (motion == null)
                             continue;
                         if (instant || ballTime <= 0f)
+                        {
                             motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
+                        }
                         else
+                        {
                             AddMotion(motion, def, anchor);
+                            BallisticMotionsLaunched++;
+                        }
                         _opsApplied++;
                     }
                     // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up

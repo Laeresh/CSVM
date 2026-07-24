@@ -286,6 +286,12 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   un-solids the door/building and solids the wreck. Measured off/on per kill (C2 gates: off 1, on 8).
   The healthy collider only exists in the FLIGHT build — `Collision` is `_fly` — so a `--freecam`
   census reads zero; the C25 harness forces it with `|| _damageTest`.
+⚠ Debris tumble (C26) is FREE too: the ballistic `ObjectMotion` half (`MotionRuntime` —
+  translation_range/gravity/forward_rotation/scale over a run_time) was built by the M2 crash work and
+  is REACHED on death because the death's `OBJECT_MOTION` events are `Initial`, so `Start` runs them.
+  The launch is SCHEDULED mid-sequence (water tower at t=2.2 s), so it only fires as the death plays
+  out — a kill-and-check must `Advance` the clock to see it (`BallisticMotionsLaunched` counts them).
+  `do_intersections`/`bounce_sequence` ground-rest stays deferred.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -788,8 +794,12 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
 ⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
   HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
-  (C23/C24/C25) — resolve✓ walk-up, healthy/destroyed swap, and `col[off,on]` (colliders switched by
-  the kill). It forces `Collision = _fly || _damageTest` so those colliders EXIST; `--freecam` alone
-  builds none. Discrete mode covers EVERY destructible (doors instant-die, no `DAMAGE_SEQUENCE`),
-  continuous mode only the staged ones. Positions read (0,0,0) — world isn't in the tree — so it
-  reports none (the C23 anchor-position trap).
+  (C23/C24/C25/C26) — resolve✓ walk-up, healthy/destroyed swap, `col[off,on]` (colliders switched by
+  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision = _fly ||
+  _damageTest` so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
+  destructible (doors instant-die, no `DAMAGE_SEQUENCE`), continuous mode only the staged ones.
+⚠ Discrete mode adds the world subtree to the tree (`ManualAdvance` so `_Process` doesn't
+  double-drive) and `Advance`s the death ~3.5 s AFTER the swap/col census: the debris `OBJECT_MOTION`
+  is scheduled (t≈2.2 s), so it needs the clock ticked — and ticking an out-of-tree world spams
+  `!is_inside_tree` (global-transform reads). Swap/col are measured pre-tick (immediate post-death),
+  debris post-tick; being in-tree also makes positions real (no more C23 (0,0,0) trap).
