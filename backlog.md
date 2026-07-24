@@ -333,6 +333,22 @@ unscheduled.
   `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
   if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
 
+- **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24).**
+  The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
+  next. Current code (`FlightController.NextArmedHardpoint`, B17) instead spreads pulls **round-robin**
+  across the pylons. On a stock Bloodhawk (3 pylons × 3 HE) the depletion order differs:
+  - **Original:** pylon1 empties on the **3rd** pull, pylon2 on the **6th**, pylon3 on the **9th**.
+  - **Current:** pylon1 on the **7th**, pylon2 on the **8th**, pylon3 on the **9th** (only the last pull
+    agrees). Confirmed by the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
+
+  Fix is a localized change to `NextArmedHardpoint`: keep firing the current pylon (of the selected
+  ordnance type) until it is dry, then advance the cursor — rather than advancing every pull. **D44's
+  pylon-ordnance visual needs no rework** — it already hides each pylon's mounted rocket the instant
+  *that pylon* hits zero, so the wing simply empties one rocket at a time in the correct order once the
+  firing order is fixed. Nuance to settle while there: the H selector currently cycles ordnance *types*;
+  check in the original whether the player also selects an individual hardpoint or the game just drains
+  them in pylon order. Total capacity and the one-rocket-per-pull cadence are unchanged.
+
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
   sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
   mechanism). It appears on **56,750 `CallAnimation` events** across the install and on **no other

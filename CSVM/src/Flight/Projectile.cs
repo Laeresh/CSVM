@@ -254,11 +254,15 @@ public sealed partial class ProjectilePool : Node3D
         return tilted.Normalized();
     }
 
-    /// <summary>Instances the rocket's <c>FLYOUT</c> <c>MODEL</c> body (its <c>.flt</c> prototype root
-    /// in the chapter gamez) as a live, collision-exempt mesh under <see cref="_flyoutModels"/>. The
-    /// resolved prototype node is cached per model name. Null when no world scene is bound (viewer /
-    /// headless dump) or the chapter lacks the root — the caller falls back to the exhaust streak.</summary>
-    private Node3D? BuildFlyoutModel(WeaponDef weapon)
+    /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> body — its <c>.flt</c> prototype root
+    /// in the chapter gamez (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …) — as a fresh,
+    /// collision-exempt <see cref="Node3D"/>, returned <b>un-parented</b> for the caller to place. The
+    /// resolved prototype node is cached per model name; the geometry is authored nose-along-(-Z).
+    /// Shared by the in-flight rocket body and the mounted pylon ordnance (<see cref="PylonOrdnance"/>,
+    /// D44): the round hanging on the wing and the round that flies off it are the same asset. Null
+    /// when no world scene is bound (viewer / headless dump), the weapon carries no <c>FLYOUT</c>
+    /// <c>MODEL</c>, or the chapter gamez lacks the prototype root.</summary>
+    public Node3D? BuildFlyoutBody(WeaponDef weapon)
     {
         if (_flyoutScene == null || _flyoutGamez == null || weapon.Flyout?.Model is not { } modelName)
             return null;
@@ -271,15 +275,25 @@ public sealed partial class ProjectilePool : Node3D
         }
         if (node == null)
             return null;
-        // Collision-exempt: rockets carry no collider (they raycast for their own hits and must not
-        // obstruct one another or the world hit-test); the world builder would otherwise attach one.
+        // Collision-exempt: a rocket carries no collider (it raycasts for its own hits and must not
+        // obstruct another round or the world hit-test; mounted ordnance must not be shootable either),
+        // and the world builder would otherwise attach one.
         var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
-        if (inst != null)
-            _flyoutModels.AddChild(inst);
         // Verification breadcrumb (once per model name): confirms the named prototype resolved and
         // instanced real geometry, without needing a lucky screenshot; then it goes quiet.
         if (inst != null && _flyoutLogged.Add(modelName))
             GD.Print($"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
+        return inst;
+    }
+
+    /// <summary>The in-flight rocket body: a <see cref="BuildFlyoutBody"/> instance parented under the
+    /// pool's own container (the caller poses it down the round's velocity each frame). Null falls back
+    /// to the exhaust streak.</summary>
+    private Node3D? BuildFlyoutModel(WeaponDef weapon)
+    {
+        var inst = BuildFlyoutBody(weapon);
+        if (inst != null)
+            _flyoutModels.AddChild(inst);
         return inst;
     }
 

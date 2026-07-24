@@ -422,6 +422,10 @@ and flashes the muzzle; it runs itself each physics frame. One pool per session,
   rockets get a mesh (≤1 alive at 1/s); guns stay on the MultiMesh tracer quad (≈10/s, dozens alive).
   A rocket with a body trails a slim exhaust streak; `RocketStreakScale` is now only the fallback
   when a chapter lacks the prototype. The FLYOUT `MODEL_ANIMATION` smoke trail is still pending (D-wave).
+⚠ `BuildFlyoutBody(weapon)` (public) is the shared "FLYOUT MODEL name → fresh un-parented instance"
+  path — resolve+cache the prototype, `BuildSubtree` collision-exempt. The private `BuildFlyoutModel`
+  wraps it for the in-flight round (parents under the pool); `PylonOrdnance` (D44) calls it for the
+  mounted body — the round on the wing and the round that flies off it are the same asset.
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
@@ -621,6 +625,19 @@ Flashes the wingtip flares for FlashDuration 0.08 s (TUNE — the source flash i
 widened so the blink reads) each WingLights.BlinkPeriod; Reset (respawn) restarts the cycle with
 the flares off. Advanced each _Process, frozen while paused or crashed. --fly only.
 
+## src/Flight/PylonOrdnance.cs
+The rockets mounted under a plane's wings (D44): `Build` instances ONE FLYOUT MODEL body per loaded
+pylon via `ProjectilePool.BuildFlyoutBody` (the SAME gamez prototype the round flies), parents it to
+that pylon marker at identity local transform (nose -Z forward, tail at the mount = the launch pose),
+and `Update` shows/hides each per its live `Hardpoint.Ammo`. FlightController drives `Update` after
+UpdateRockets; the mounted body rides the plane and is freed with it. --fly only.
+⚠ ONE model per pylon, not one per CLUSTER_SIZE round — the original shows a single rocket per
+  hardpoint (D44 trap). Show while `Ammo > 0`, hide at zero; a respawn refill re-shows next frame.
+⚠ No double-up with airframe geometry: NO plane model carries static ordnance mesh — every
+  rocket/missile/bomb/torpedo name search is empty and pylon nodes are all `model_index -1` markers.
+⚠ Null when nothing mounts (viewer, or a chapter gamez lacking the prototype root) — the round then
+  flies its streak-only fallback and the wing simply shows no ordnance; never a hard failure.
+
 ## src/Flight/PlaneCollider.cs
 Derives 5–8 plane-frame collision boxes from the built model's mesh triangles alone (no per-plane
 data): region-clipped geometry (tail/wing/fuselage), then greedy volume-guided refinement cutting
@@ -653,6 +670,8 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ Two selectors (CycleWeaponSelectors, edge-detected, --no-pads-safe): guns G/dpad-L cycles the
   firable groups; hardpoints H/dpad-R cycles ordnance types (stock = one, so a no-op). `--gun-select=N`
   (0-based) seeds the gun group for headless tests; selections survive respawn.
+⚠ `Ordnance?.Update()` runs after UpdateRockets each physics frame — hides a pylon's mounted rocket
+  (PylonOrdnance, D44) the instant its ammo hits zero; RefillWeapons/respawn re-arms and re-shows.
 ⚠ Rocket pad button A also respawns, but only from the crashed / run-complete screens (early-return
   states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard

@@ -185,6 +185,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     flag; `--headless` is only for the windowless dump tools (`--dump-markers`/`--dump-weapons`/
     `--dump-loadout`) that never read back pixels. ("Headless screenshots" above means the
     automated `--screenshot` workflow, not the `--headless` flag.)
+    **And its failure is not one clean NRE — it can FLOOD.** A `--headless --screenshot` run has been
+    seen spew `ERROR: Parameter "t" is null` + `NullReferenceException` by the thousand (the dummy
+    renderer failing draw-by-draw), which **poisons any `grep -c ERROR` error census** — the noise
+    swamps and masks real errors. So never trust a headless run's error count when `--screenshot` is
+    present: re-run the exact scenario **without** `--screenshot`, using Godot's `--quit-after <frames>`
+    to auto-terminate, and take THAT run's count as authoritative (a clean feature soak reads 0).
 72. **Colliders exist only in the flight build — a collision census in any non-fly mode reads
     zero and lies.** `WorldSession.Options.Collision` is `_fly`, so `--freecam`, `--viewer` and
     `--anim-lab` build the world with NO `StaticBody3D`/`CollisionShape3D` at all. A C25 collider

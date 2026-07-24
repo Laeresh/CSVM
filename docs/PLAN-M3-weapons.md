@@ -473,7 +473,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 31. ☑ The `Sound` anim-event family — **landed** (2026-07-24): `AnimRuntime.HandleSound` fires the one-shot `SOUND` (death/damage/impact audio) as a fire-and-forget `WorldSounds.PlayOneShot` at its AT_NODE; `SOUND_GROUPS` decoded (`SoundDefs.LoadGroups` + `SoundGroup.Pick`, `DYNAMIC_WEIGHTS` recency); `Sound` dropped off every chapter's unhandled list, death sounds play (switchhouse `air_mixed_exp_sg` verified)
 32. ☑ Destruction **+ impact** effects wiring — the world-effects runtime — **landed** (2026-07-24): `AnimRuntime.PlayEffectAt` over a hidden template stage renders the impact/destruction puffers; rocket impacts route via `ProjectilePool.EffectSink`, deaths via the world runtime's `ExternalEffect`; `--effects-test` verifies 16/28 build a puffer (rule 76). Gun-impact `gunhit` smoke deferred (no stop event → follow-up)
 33. ☑ Tracers — **landed** (velocity-aligned additive streaks; per-ammo tracer texture = refinement)
-44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
+44. ☑ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes — **landed** (2026-07-24): `PylonOrdnance.Build` mounts one FLYOUT-model body per pylon (the round's own asset), hidden as ammo depletes; stock Bloodhawk shows 3 HE rockets → 9 pulls → third vanishes on the 9th; `--rocket=wep_08` swaps to `sonic`. **Wave D complete.**
 
 ### Wave E — HUD
 
@@ -1407,7 +1407,36 @@ Establish the visual-length and frequency rule against reference footage in
 
 **Verify.** `--perf` shows no meaningful GPU cost at sustained fire from all groups.
 
-### D44 ☐ Pylon ordnance visuals
+### D44 ☑ Pylon ordnance visuals — **LANDED (2026-07-24)**
+
+**Landed.** `src/Flight/PylonOrdnance.cs`: `Build(loadout, pool)` instances ONE FLYOUT `MODEL` body
+per loaded pylon via the new public `ProjectilePool.BuildFlyoutBody` — the SAME gamez prototype the
+round flies (`he_rocket`, `sonic`, …) — and parents it to that pylon marker at identity local
+transform, so the mounted body sits nose-forward at the exact pose the round launches in. `Update`
+(driven by `FlightController` after `UpdateRockets`) shows/hides each body per its live
+`Hardpoint.Ammo`; a respawn refill re-shows it. `ProjectilePool.BuildFlyoutModel` was refactored to
+call the shared `BuildFlyoutBody` (the in-flight round parents it under the pool; the wing keeps its
+own copy). `--rocket=<wep_id>` swaps every hardpoint's ordnance for testing (`docs/cli.md`).
+
+**Both traps handled.** *One model per pylon, not per round:* the body shows while `Ammo > 0`, so a
+3-round HE pylon still shows a single rocket. *No double-up with airframe geometry:* a name search of
+the plane `nodes.json` for rocket/missile/bomb/torpedo/ordnance/munition geometry is **empty** — the
+only pylon-named nodes (`pylon1..8`, `lpylon*`/`rpylon*`) are all `model_index -1` mesh-less markers,
+so instancing the FLYOUT body adds ordnance where there was none rather than duplicating it.
+
+**Verified** (headless, `--quit-after`, no `--screenshot` — the framebuffer-capture path floods a
+headless build with `Parameter "t"` errors, `verification.md`; the clean runs report **zero** errors
+and are the authoritative check): a stock Bloodhawk over C1 logs `pylon ordnance: 3 mounted rocket
+model(s)` and `flyout model 'he_rocket' (wep_06) instanced: 1 mesh(es)`; a `--fire-rockets` soak
+fires 9 HE round-robin (pylon1/2/3, 2→1→0 each) and hides `pylon1` on the 7th pull, `pylon2` on the
+8th, **`pylon3` on the 9th**. (That round-robin *order* is B17's, and the user has since flagged it as
+wrong — the original drains the selected hardpoint first, pylon1→3rd/pylon2→6th/pylon3→9th; backlogged
+as an M3-polish `NextArmedHardpoint` fix. D44's visual needs no rework — it hides each pylon the instant
+*that* pylon empties, so the wing will simply empty in whatever order B17 fires.) `--rocket=wep_08`
+builds `sonic` bodies instead (`flyout model 'sonic' (wep_08) instanced`). The 8-pylon Warhawk mounts 8; C5 resolves the prototype too. The pixel-level
+z-fighting check is the owed at-the-controls playtest (shared with B14/B17 — a mounted rocket is not
+headless-screenshottable in this build). **Docs:** `architecture.md` (`PylonOrdnance`, `Projectile`,
+`FlightController`), `CLAUDE.md` index, `cli.md` (`--rocket=`).
 
 **Goal.** Mounted ordnance is visible under the wings, and disappears as it is used.
 

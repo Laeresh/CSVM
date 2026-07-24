@@ -97,6 +97,11 @@ public partial class FlightController : Node3D
     /// disables weapons.</summary>
     public ProjectilePool? Projectiles;
 
+    /// <summary>D44: the FLYOUT-model rockets mounted under the wings, one per loaded pylon, hidden as
+    /// each pylon's ammo depletes. Rides the plane; null when nothing could be mounted (viewer, or a
+    /// chapter gamez lacking the prototype roots).</summary>
+    public PylonOrdnance? Ordnance;
+
     /// <summary>--infinite-ammo: guns/hardpoints fire without depleting (frictionless testing).</summary>
     public bool InfiniteAmmo;
 
@@ -921,6 +926,7 @@ public partial class FlightController : Node3D
         CycleWeaponSelectors();
         UpdateGuns(dt);
         UpdateRockets(dt);
+        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);

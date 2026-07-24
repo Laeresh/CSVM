@@ -5519,3 +5519,53 @@ pre-existing, unrelated harness limitation).
 `Projectile`, `PlaneViewer`), `cli.md` + CLAUDE.md module index (`--effects-test`), PLAN-M3-weapons.md
 (checklist 32 ☐→☑, `### D32` reconciled), `backlog.md` (gunhit guns follow-up + the mesh-effects
 follow-up), `playtest.md` (the owed fireball/impact-effect listen-and-look).
+
+## 2026-07-24 — M3 Wave D D44: pylon ordnance visuals (mounted rockets that deplete)
+
+Rockets now hang under the wings and vanish as they are fired. The new `src/Flight/PylonOrdnance.cs`
+mounts one FLYOUT `MODEL` body per loaded pylon — the **same** chapter-gamez prototype the round
+itself flies (`he_rocket`, `sonic`, …) — so the thing on the wing and the thing that leaves it are one
+asset. `Build(loadout, pool)` calls the newly-public `ProjectilePool.BuildFlyoutBody(weapon)` (the
+resolve-cache-and-`BuildSubtree` path that `BuildFlyoutModel` was refactored to share), parents each
+body to its `pylonN` marker at **identity local transform** — the marker's −Z is the forward firing
+direction, so the body sits nose-forward at the exact pose the round launches in, tail at the mount —
+and `Update` (driven by `FlightController` after `UpdateRockets`) shows/hides each body per its live
+`Hardpoint.Ammo`, a respawn refill re-showing it. Mounted bodies ride the plane and are freed with it;
+they inherit the default visual layer, so every splitscreen camera sees them exactly as it sees the
+plane.
+
+**The two flagged traps, checked against the data, not assumed.** *(1) One model per pylon, not one
+per round:* a pylon carries `CLUSTER_SIZE` (3, stock HE) but the original shows a single rocket, so
+visibility keys on `Ammo > 0`, never a per-round stack. *(2) No double-up with airframe geometry:* a
+name search of the plane `nodes.json` for rocket/missile/bomb/torpedo/ordnance/munition mesh turned up
+**nothing** — the only pylon-named nodes are `pylon1..8` (the mesh-less firing markers) and one plane's
+structural `lpylon*`/`rpylon*`, all `model_index -1`. So the FLYOUT body adds ordnance where the model
+had none; it cannot z-fight a static rocket, because no plane ships one.
+
+**`--rocket=<wep_id>` added** (a testing hook, `PlaneViewer.ApplyRocketOverride`). The plan's verify
+says "swap rocket type via `--loadout=`", but all 11 stock loadouts carry HE (`wep_06`) and `--loadout=`
+only swaps whole plane defs — so no def-swap can change the mounted model. `--rocket=` replaces every
+hardpoint's ordnance (resetting each pylon to that weapon's `CLUSTER_SIZE`) and is the honest way to
+prove the model is data-derived; the general per-slot `--loadout=` override remains F43.
+
+**A `--screenshot` red herring, run to ground.** The first headless soaks flooded with `ERROR:
+Parameter "t" is null` / `NullReferenceException`. It was **not** the new code: those appear only with
+`--screenshot` in a headless build (the framebuffer-capture path, the same limitation D30/D32 hit in
+`GetImage`). A clean `--quit-after` soak with no `--screenshot` reports **zero** errors — that is the
+authoritative regression check here. Recorded as a `verification.md` rule so the next session doesn't
+re-chase it.
+
+**Verified** (headless, `--quit-after`, no `--screenshot`, zero errors): stock Bloodhawk / C1 logs
+`pylon ordnance: 3 mounted rocket model(s)` and `flyout model 'he_rocket' (wep_06) instanced: 1
+mesh(es)`; a `--fire-rockets` soak fires 9 HE round-robin across pylon1/2/3 (each 2→1→0) and hides
+`pylon1` on the 7th pull, `pylon2` on the 8th, **`pylon3` on the 9th** — the exact depletion the verify
+names. `--rocket=wep_08` instances `sonic` bodies instead (`flyout model 'sonic' (wep_08) instanced`),
+proving the model varies by type. The 8-pylon Warhawk mounts 8; Bloodhawk over C5 resolves the
+prototype too (the roots exist in every chapter — B14). The pixel-level z-fighting look is the owed
+at-the-controls playtest, shared with B14/B17 (a 1.5 m mounted round is not headless-screenshottable in
+this build).
+
+**Docs.** `architecture.md` (new `PylonOrdnance` entry + `Projectile`/`FlightController` ⚠ lines),
+CLAUDE.md (module index line, Current-status wave position + Next pointer), `cli.md` (`--rocket=`),
+`verification.md` (the `--screenshot`-floods-headless rule), PLAN-M3-weapons.md (checklist 44 ☐→☑,
+`### D44` landed note; Wave D now complete).

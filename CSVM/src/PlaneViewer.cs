@@ -251,6 +251,7 @@ public partial class PlaneViewer : Node3D
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
     private bool _autoFireRockets;      // --fire-rockets: hold the rocket trigger (scripted screenshots / soak runs)
     private int _gunSelect;             // --gun-select=N: initial gun group (0-based; only one fires at a time)
+    private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -465,6 +466,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--fire") _autoFire = true;
             else if (arg == "--fire-rockets") _autoFireRockets = true;
             else if (arg.StartsWith("--gun-select=")) _gunSelect = int.Parse(arg["--gun-select=".Length..]);
+            else if (arg.StartsWith("--rocket=")) _rocketOverride = arg["--rocket=".Length..];
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1247,6 +1249,17 @@ public partial class PlaneViewer : Node3D
                             controller.AutoFire = _autoFire;
                             controller.AutoFireRockets = _autoFireRockets;
                             controller.InitialGunSelect = _gunSelect;
+                            // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is
+                            // mounted and the ordnance-type list is built (controller._Ready). A
+                            // testing hook — all 11 stock loadouts carry HE (wep_06), so this is the
+                            // only way to prove the mounted model varies by rocket type.
+                            if (_rocketOverride != null)
+                            {
+                                ApplyRocketOverride(controller.Loadout, weaponDefs, _rocketOverride, verbose);
+                            }
+                            // D44: hang the FLYOUT-model ordnance under the pylons — one body per pylon,
+                            // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
+                            controller.Ordnance = PylonOrdnance.Build(controller.Loadout, projectiles);
                             if (verbose)
                             {
                                 int groups = 0;
@@ -1256,6 +1269,11 @@ public partial class PlaneViewer : Node3D
                                          $"select guns=G/dpad-L rockets=H/dpad-R" +
                                          (_gunSelect != 0 ? $" [gun-select={_gunSelect}]" : "") +
                                          (_infiniteAmmo ? " (infinite ammo)" : ""));
+                                if (controller.Ordnance is { } ord)
+                                {
+                                    GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +
+                                             (_rocketOverride != null ? $" (--rocket={_rocketOverride})" : ""));
+                                }
                             }
                         }
                         catch (Exception e)
@@ -2579,6 +2597,32 @@ public partial class PlaneViewer : Node3D
         GD.Print(unhandledTotal == 0
             ? $"weapons dump: {shown} entr(y/ies), NO unhandled keys → ./.scratch/weapons_dump.txt"
             : $"weapons dump: {shown} entr(y/ies), {unhandledTotal} UNHANDLED key(s) — see the !! lines above");
+    }
+
+    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
+    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
+    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
+    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
+    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
+    private static void ApplyRocketOverride(Loadout loadout, WeaponDefs weapons, string wepId, bool verbose)
+    {
+        if (weapons.Get(wepId) is not { } weapon)
+        {
+            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id — hardpoints keep their stock ordnance");
+            return;
+        }
+        int per = weapon.ClusterSize ?? 0;
+        foreach (var hp in loadout.Hardpoints)
+        {
+            hp.Weapon = weapon;
+            hp.Capacity = per;
+            hp.Ammo = per;
+        }
+        if (verbose)
+        {
+            GD.Print($"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), " +
+                     $"flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
+        }
     }
 
     /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
