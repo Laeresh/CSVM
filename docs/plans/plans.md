@@ -26,3 +26,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-anim-debugger.md](PLAN-anim-debugger.md) | The `--anim-lab` animation debugger (Waves 1–5) | 2026-07-23 |
 | [PLAN-data-driven-crash.md](PLAN-data-driven-crash.md) | Data-driven crash: generic anim handlers + the crash plays its def (4 waves) | 2026-07-23 |
 | [PLAN-doc-prune.md](PLAN-doc-prune.md) | Prune architecture.md + verification.md, comment sweep, doc-routing contract (4 waves) | 2026-07-23 |
+| [PLAN-M3-weapons.md](PLAN-M3-weapons.md) | M3 weapons & destruction — guns/rockets, world destructibles, effects, HUD (Waves A–F) | 2026-07-25 |

@@ -1,7 +1,7 @@
 # Documentation prune — architecture.md, verification.md, code comments, and the contract that grew them
 
 **COMPLETE (2026-07-23).** All four waves landed the day the plan was written. It ran BEFORE
-[`PLAN-M3-weapons.md`](../PLAN-M3-weapons.md) — M3 is 44 items that will all write
+[`PLAN-M3-weapons.md`](PLAN-M3-weapons.md) — M3 is 44 items that will all write
 documentation under whatever contract exists when they land, so the contract changed first.
 
 Scope was settled in a grilling session on 2026-07-23. Every decision below is the user's, and
@@ -128,4 +128,4 @@ Waves are independent except D, which lands last (the contract should describe t
 they now are). One commit per wave, straight to `main` when the user asks — each individually
 revertable. When all four land: move this file to `docs/plans/`, add its row to
 `plans.md`, append the HISTORY.md entry (a few lines, per its own new rule), and hand the
-active-plan slot to [`PLAN-M3-weapons.md`](../PLAN-M3-weapons.md) Wave A.
+active-plan slot to [`PLAN-M3-weapons.md`](PLAN-M3-weapons.md) Wave A.

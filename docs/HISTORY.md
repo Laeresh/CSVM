@@ -5868,3 +5868,26 @@ clean (one pre-existing C1 `ReportLateSoundFailure` PushWarning, unrelated — t
 inert without the flag). Screenshots stay in `.scratch/` (git-ignored — no game imagery is committed);
 reproduce with the commands above. With F42 landed, **M3 wave F is complete** and every M3 checklist
 item is done or deferred to M4 (B19/B20/E38 guided flight, F40/F41 → PLAN-testing).
+
+## 2026-07-25 — M3 weapons playtest pass 2 + Milestone 3 plan archived
+
+**Playtest pass 2 (at the controls, user).** A second pass over M3 weapons/destruction; all 14 findings
+were traced to code. Actionable ones are recorded in `backlog.md`'s "Milestone 3 Polishing → Playtest
+pass 2" (items 1–19); `playtest.md` §1 was reconciled into a true owed-list (passes retired, findings
+repointed to their backlog number and re-scoped to "re-test after fix", failures marked). **Passed:**
+destruction sound, pad bindings, gun rate/cadence + in-flight muzzle alternation, rocket
+one-per-pull/cooldown feel, weapon-selector feel, E35 gauges, E37 reticle, C27 (crash-vs-facade).
+**Key findings:** water impacts show *nothing* — the sea has no collider, so rounds raycast through
+(grilled confirmation; supersedes the earlier headless "splash works" reading); the fat orange→grey
+rocket smoke trail is missing (the deferred `MODEL_ANIMATION` trail); the muzzle flash is too large and
+never rotates; damage-stage smoke/fire never render in flight; and the `det==0` throw on the `kkgate`
+door coincides with the door not moving / keeping its collider — likely one bug, the exception aborting
+the death sequence. The gun "sync" complaint is weapon-lab-only (`WeaponLab.FireVolley` fires every
+muzzle at once; flight alternates correctly). Doc-only change; no engine code touched.
+
+**Milestone 3 plan archived.** Every checklist item is landed (Waves A–F) or deferred to M4
+(B19/B20/E38) / superseded by PLAN-testing (F40/F41), so `PLAN-M3-weapons.md` moved to `docs/plans/`
+with a `COMPLETE` banner and a `plans.md` row. `PLAN-testing.md` is now the sole active plan (its
+"queued behind M3" banner cleared); CLAUDE.md's "Current status" + charter and the reference links
+across `backlog.md` and the archived plans were repointed to the new path. M3's remaining sign-off is
+the at-the-controls re-tests owed in `playtest.md` §1 (user-owned).

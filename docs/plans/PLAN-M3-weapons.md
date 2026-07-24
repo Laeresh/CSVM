@@ -1,8 +1,11 @@
 # Milestone 3 — Weapons and Destruction
 
-**ACTIVE PLAN** (written 2026-07-22). It sits in `docs/` rather than `docs/plans/`, which by
-this repo's convention makes it a live plan. Move it to `docs/plans/` with a `COMPLETE` banner
-when every item lands.
+> **✅ COMPLETE — 2026-07-25.** Milestone 3 (weapons and destruction) delivered. Every checklist item
+> is landed (Waves A–F) or deferred to M4 (B19/B20/E38 guided flight + lock-on) / superseded by
+> [`PLAN-testing.md`](../PLAN-testing.md) (F40/F41). Exit criteria 1–6 are met at the code/data level;
+> the **at-the-controls sign-off is owed** — pass 1 flown 2026-07-25, its polish/fix items in
+> `backlog.md`'s "Milestone 3 Polishing" and the re-tests in `playtest.md` §1. Archived for its
+> evidence and dead ends; read as history.
 
 **⚠ This plan is preliminary.** It was written on the assumption that M2 polish 3 was still in
 flight; **that plan closed during the same session** (items 4, 5, 6 landed in `b83252c` /

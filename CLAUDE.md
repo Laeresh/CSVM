@@ -30,7 +30,7 @@ Charter decided 2026-07-14 (full detail in Claude's project memory):
 
 - **Milestone 1** — complete asset extraction: fill the Crimson Skies gaps in mech3ax (`planes.zbd`, `gamez.zbd`).
 - **Milestone 2** — vertical slice: free flight only. One plane, one map (candidate: C1 instant-action arena), arcade controls, original sounds. No AI, objectives, or weapons.
-- **Milestone 3** — weapons and destruction (scoped 2026-07-22): [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md).
+- **Milestone 3** — weapons and destruction (scoped 2026-07-22, delivered 2026-07-25): [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md).
 - Long-term direction (not commitment): full campaign remake.
 
 ## 🚫 Hard rule: no game assets in version control — ever
@@ -222,8 +222,8 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** — Milestone 3, weapons and destruction. **Per-item status (☑/☐, landed notes, decisions, deferrals) is the plan's checklist and item notes — read those, not this section, for what is done and how it was verified.** Position: Waves A–E done (B19/B20/E38 guided flight ⊘ M4); Wave F complete (F39/F42/F43 done; F40/F41 ⊘ superseded by PLAN-testing). **Every M3 checklist item is landed or deferred to M4 — the plan is ready to archive to `docs/plans/`.**
+**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: not started; Wave A (determinism core) is first.
 
-**Next: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — the queued next plan. M3's remaining sign-off is the owed at-the-controls playtests + exit criteria (user-owned).
+**M3 (weapons and destruction) delivered** — plan archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md). Its at-the-controls sign-off is owed: pass 1 flown 2026-07-25, the polish/fix items in `backlog.md`'s "Milestone 3 Polishing" and the re-tests in `playtest.md` §1.
 
 **Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

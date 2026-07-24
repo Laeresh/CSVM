@@ -9,7 +9,7 @@ If an item id was passed as an argument (e.g. `B19`), treat that as the explicit
 
 ## 1. Commit the current changes
 
-First find the **active plan**: CLAUDE.md's "Current status / next step" section names it (currently `docs/PLAN-M3-weapons.md`). Everything below refers to that file.
+First find the **active plan**: CLAUDE.md's "Current status / next step" section names it (currently `docs/PLAN-testing.md`). Everything below refers to that file.
 
 Before committing, confirm the plan reflects the work you just did — per the plan's own ground rules this is part of the change, not a follow-up:
 - The item you just finished is flipped to ☑ in the plan's `## Checklist`.

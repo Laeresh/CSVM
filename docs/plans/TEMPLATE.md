@@ -14,7 +14,7 @@
 > was disproven, decisions were negotiated, or the plan rests on a reverse-engineering pass. When in
 > doubt, keep `[core]`, cut `[situational]`.
 >
-> Two reference plans show the range: [`PLAN-M3-weapons.md`](../PLAN-M3-weapons.md) is a heavy plan
+> Two reference plans show the range: [`PLAN-M3-weapons.md`](PLAN-M3-weapons.md) is a heavy plan
 > with every section; [`PLAN-M2-polish-4.md`](PLAN-M2-polish-4.md) is a routine run that carries the
 > `[core]` sections and thins the `[situational]` ones into per-item notes.
 

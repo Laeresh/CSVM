@@ -8,7 +8,7 @@ to `backlog.md`** under "Open fidelity questions" (blocked on user testing), not
 **Item 8** (the crash choreography) was completed by the data-driven crash — see
 [`PLAN-data-driven-crash.md`](PLAN-data-driven-crash.md). Kept for its evidence and recorded dead ends.
 
-**Scope: Milestone 2 / 2.5 only.** `docs/PLAN-M3-weapons.md` (the now-active plan) was out of scope
+**Scope: Milestone 2 / 2.5 only.** `docs/plans/PLAN-M3-weapons.md` (the then-active plan) was out of scope
 here; every M3-deferred and M4 item in the backlog (gun heat/jam, ammo pickups, the loadout
 configurator, turrets, AI armour) was excluded, as was anything blocked on weapons or a cutscene player.
 

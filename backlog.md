@@ -1,8 +1,8 @@
 # Backlog — unscheduled future work
 
 Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
-`docs/PLAN-M3-weapons.md`** (Milestone 3, weapons); the M2/2.5 polish runs plus the anim-debugger and
-data-driven-crash plans are complete and archived in `docs/plans/`. Per-item history/diagnosis
+`docs/PLAN-testing.md`** (testing & verification infrastructure); M3 (weapons) and the M2/2.5 polish
+runs plus the anim-debugger and data-driven-crash plans are complete and archived in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -585,7 +585,7 @@ unscheduled.
   incidentally fixed the C3 coast z-fight — but it is a boot script, not the full state model.)
 
 - **M3-deferred gun mechanics — firing heat and cannon jam** (scoped out of
-  `docs/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
+  `docs/plans/PLAN-M3-weapons.md` 2026-07-22, decision 4: friction with no combat pressure to justify
   it while nothing shoots back). **The constants are exact, so nobody needs to re-derive them:**
   `weapons.json` `FIRING_HEAT` on 4 entries (30-cal = 5.0); `vehicle.json` `cannon_jam` on
   `player_airplane` = `heat_safe_limit 1000`, `heat_dissipation_rate 50`, `jam_chance 0.1`.
@@ -625,7 +625,7 @@ unscheduled.
   - **AI vehicle armour/health.** `vehicle.json` carries an `armor` + `health` pair on AI defs
     only (aircraft always `armor == health`, 60–100; `patrolboat` and `t_truck` `armor 0 /
     health 40`). `PlaneStats` does not read either. The model is **armour-first, then health**
-    (see `docs/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
+    (see `docs/plans/PLAN-M3-weapons.md` C23 for the dominance argument that settles it).
 
 - **Residuals from polish-3 item 5 (2026-07-22) — all small, all deliberate.** *(Three of the
   original five — the `csky_fog_on` uniform ordering, the missing `csky_opacity`, and
@@ -772,7 +772,7 @@ unscheduled.
 - **Fine-tune fog and environment** — method: record video from a spawn point flying straight for a
   fixed number of seconds, in both engines, and compare.
 
-- **Patrol boat: which HP governs?** (from `docs/PLAN-M3-weapons.md` C23, 2026-07-22.) The boat
+- **Patrol boat: which HP governs?** (from `docs/plans/PLAN-M3-weapons.md` C23, 2026-07-22.) The boat
   is described by two systems that **agree on the damage-stage fractions and disagree on total
   HP by exactly 2×**: the `patrolboat` vehicle def says `health 40` with stages at 0.60/0.30
   firing `ptboat_50damage`/`ptboat_75damage`, while the `C1/patrol_boat` anim def says
