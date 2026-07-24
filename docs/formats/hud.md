@@ -219,6 +219,34 @@ reproduces the original green), and draws each glyph with `DrawTextureRectRegion
 space / unrepresented codes as a **3 px** advance. Sizing routes through `HudMetrics` like every
 other HUD element, so a splitscreen pane damps the text the same way the dials do.
 
+## The gun aiming reticle (`impact_point.png`)
+
+The aiming pipper is a single image in **`extracted/rimage/`** (the UI set, alongside the
+`5pointhud` font — *not* the chapter archives): **`impact_point.png`**, a **32×32 RGBA**
+sprite. It is a filled warm-white disc — core `(255,247,222)`, ring `(247,227,181)` — with a
+**cross-shaped transparent notch** cut through the centre (the PLAN's "four tick marks around an
+open centre"). The alpha channel is authored (transparent background, anti-aliased edges), so it
+draws directly with no colour-keying — unlike the black-backed font atlas.
+
+**Behaviour (remake E37, `src/Flight/ImpactReticle.cs`).** The reticle is **not pinned to screen
+centre.** It marks the **projected ballistic impact point of the selected gun group's rounds at a
+fixed convergence distance**, computed with the *same* `VELOCITY`/`ACCELERATION`/`GRAVITY`
+integration `ProjectilePool` fires each round with (dropping only the random `CANNON_SPREAD` — the
+pipper marks the cone centre), from the averaged muzzle pose. Because the rounds inherit the
+plane's velocity — which lags the nose during a hard roll or pull — the reticle **trails the nose**
+in a hard manoeuvre and sits on the rounds in steady flight (measured: `nose→reticle = 0.00°`
+level, up to `~0.77°` below the nose toward the velocity vector at ~15° angle-of-attack; the small
+angle is physics — bullets travel ~900 m/s against a ~55 m/s plane). It is a fixed-screen-size HUD
+element (drawn via `Camera3D.UnprojectPosition` at `_Draw` time so it never lags the chase camera),
+scaled through `HudMetrics` like every other widget, one per player pane.
+
+⚠ **The convergence distance is a TUNE, not in the data.** `weapons.json` carries no
+harmonisation/convergence field (player guns are `RANGE 1000`, `VELOCITY 750–1000`, no
+`ACCELERATION`/`GRAVITY`). The remake uses **250 m** (`GunConvergenceDist` in `FlightController`),
+pending an original-game playtest. Note the on-screen *trailing angle* is set by the
+velocity/bullet-speed ratio and is essentially independent of this distance; the distance mainly
+sets where a toed-in mount would harmonise and the pipper's parallax off screen-centre.
+
 ## Open question
 
 Which world axis is compass **north**: the remake assumes **−Z** (consistent with the

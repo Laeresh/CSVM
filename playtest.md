@@ -97,6 +97,17 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
     yellow state at all (not just green→red), and at roughly what fraction it turns.** *Blocks:*
     retiring the `IndicatorLowFrac` TUNE in `GaugeCluster`.
 
+- **E37 — gun reticle (the ballistic pipper).** The `impact_point.png` pipper marks where the
+  selected gun group's rounds go — **not** locked to screen centre. *Look for:* in **steady flight**
+  the tracers stream through the reticle (hold **Space**); in a **hard pull or rolling pull** the
+  reticle visibly **trails the nose** (drifts toward the flight-path/velocity vector). Fire a fast
+  plane and a slow one — the trail is a small angle (bullets are fast), so confirm it reads at all.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`. *Blocks:* E37 sign-off.
+  - **⚠ Convergence distance is a TUNE.** The pipper projects to **250 m** (`GunConvergenceDist` in
+    `FlightController`) — the data has no convergence field. **A/B against the original: does the
+    reticle sit at the right harmonisation range, and does the trailing magnitude match?** *Blocks:*
+    retiring the `GunConvergenceDist` TUNE.
+
 - **A10 — muzzle placement per airframe.** Fire each of the 11 planes and confirm the flashes appear
   on the mounts the loadout names. *Look for especially:* Bloodhawk (40-cal **inner** wing, 30-cal
   **outer**) and Brigand (W1+W2 **share the outer** mount) against your own earlier observations;

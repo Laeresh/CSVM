@@ -481,8 +481,8 @@ New files and docs only; touches no module M2 polish 3 is editing.
 34. ☑ Bitmap-font HUD text renderer (`5pointhud`) — **landed** (2026-07-24): `HudFont.cs` — printable-ASCII `0x20`–`0x7e` proportional 5px font, auto-segmented from the atlas, sized via `HudMetrics`; `--hud-font-test` proves 1P == 4P-pane (scaled)
 35. ☑ `gungauge` + `missilegauge` in `GaugeCluster` — **landed** (2026-07-24): both dials render on all 11 planes (uniform subtree; the face hangs off the generic `g815`/`g819` on every plane, no Bloodhawk special case). 4-digit `4char_ammo` + 6-char `6char_type` cycles show the selected weapon's rounds + NAME; `ggindicator`/`mgindicator` belt lights step green/yellow/red per slot fraction; the arrow tracks the selected gun group / next-armed pylon. **Gun count is per-group, rocket count is per-pylon** (user-corrected — the original's Warhawk reads `BOOM 3`, not the 24-round total). Windowed captures verify the roster, per-group/per-pylon counters, and the green→yellow→red step (Bloodhawk rocket depletion). The green/yellow/red thresholds are a TUNE pending an original playtest (see `playtest.md`).
 36. ☑ Selected-weapon readout (`MSG_HUD_GUNGAUGE`) — **landed** (2026-07-24): `WeaponReadout.cs` draws the selected gun group + rocket type and their live ammo in the `5pointhud` font, from the game's own `MSG_HUD_GUNGAUGE` / `MSG_HUD_MISSLES` templates (`Messages.Fill`, not hardcoded); `%1` = mount name / rocket display name, `%2` = per-group / per-pylon rounds. Replaced the interim `AmmoLine`. Verified: Bloodhawk `INNER WING GUNS: 2400`→`OUTER WING GUNS: 2800` and Balmoral twin-.50 name swap show name+count update from `messages.json`.
-37. ☐ Impact-point reticle — ballistic projection
-38. ☐ Lock-on indicator
+37. ☑ Impact-point reticle — ballistic projection — **landed** (2026-07-24): `ImpactReticle.cs` draws `impact_point.png` at the SELECTED gun group's ballistic impact point at a convergence distance (`GunConvergenceDist` TUNE = 250 m; not in the data), integrated exactly as `ProjectilePool` fires (incl. inherited velocity, sans spread), projected via `UnprojectPosition` at draw time so it never lags the chase cam. Measured: `nose→reticle 0.00°` level (rounds land where it sits), up to `0.77°` below the nose toward the velocity vector in a hard pull (visibly trails the nose). **Wave E complete.**
+38. ⊘ Lock-on indicator — **deferred to M4** (with B19/B20, 2026-07-24): the lock it indicates is the enemy-plane target-cycle; M3 has no enemy planes to lock. See E38 detail.
 
 ### Wave F — debug & verification
 
@@ -1562,7 +1562,27 @@ from `messages.json` (a missing table renders the raw `MSG_HUD_GUNGAUGE` key). C
 **Verify.** Cycling groups on the Balmoral updates both name and count; the string comes from
 `messages.json`, not a hardcoded literal.
 
-### E37 ☐ Impact-point reticle
+### E37 ☑ Impact-point reticle — **LANDED (2026-07-24)**
+
+**Landed.** `src/Flight/ImpactReticle.cs` — a per-pane `Control` drawing the game's own pipper
+`extracted/rimage/impact_point.png` (a 32×32 RGBA warm-white disc with a cross-notch centre;
+authored alpha, no colour-keying) at the SELECTED gun group's ballistic impact point.
+`FlightController.UpdateReticle` averages the group's muzzle poses and marches a round through
+`BallisticImpactPoint` — the same `VELOCITY`/`ACCELERATION`/`GRAVITY` integration `ProjectilePool`
+fires with, plus the plane's inherited velocity, dropping only the random `CANNON_SPREAD` — to
+`GunConvergenceDist`; the world point projects through the live camera at `_Draw` time (as
+`MarkerHud`), fixed screen size scaled by `HudMetrics`. `ProjectilePool.WorldGravity` is now
+`internal` so reticle and rounds share one constant. The pipper is NOT pinned to screen centre; it
+is hidden while crashed or with no firable gun.
+
+**Convergence distance = 250 m, a TUNE** (`GunConvergenceDist` in `FlightController`) — `weapons.json`
+carries no convergence field. Open question 4 is now chosen, pending an original-game A/B (playtest.md).
+
+**Verified** (windowed, verification.md rule 71): steady level flight — tracers stream through the
+reticle, `nose→reticle = 0.00°` (rounds land on it); hard pull — as AoA grew (`nose→vel` 7.8°→15.0°)
+the reticle deflected `0.46°→0.77°` **below** the nose toward the velocity vector (trails the nose).
+The trailing angle is set by the velocity/bullet-speed ratio, so it is small (fast bullets) and
+essentially independent of the convergence distance. Clean cross-chapter (C4) + 2-player splitscreen.
 
 **Goal.** The aiming reticle, with the original's behaviour.
 
@@ -1681,7 +1701,9 @@ Carried here rather than guessed at:
    applies. The two-pool model, where it applies, is armour-then-health (see C23). **New open
    question in its place:** the patrol boat and trucks have both a vehicle armour/health def
    and anim destructible defs — which governs? (C23)
-4. **Reticle convergence distance** — not in the data; a TUNE constant pending playtest (E37).
+4. **Reticle convergence distance** — not in the data; **chosen 2026-07-24 as `GunConvergenceDist`
+   = 250 m** (E37), a TUNE pending an original-game A/B (playtest.md). The on-screen trailing angle
+   is set by the velocity/bullet-speed ratio, so it barely depends on this value.
 5. ~~**One trigger pull = one rocket or the whole slot?**~~ — **resolved 2026-07-22**: one
    rocket from one hardpoint. Cooldown (`FIRE_RATE 1.0`) is data-derived, not observed.
 6. **`vehicle.json` `weapons` tuple positions 3–5** — inferred, not confirmed (item A6).

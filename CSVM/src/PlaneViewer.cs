@@ -1201,6 +1201,12 @@ public partial class PlaneViewer : Node3D
                 // simply not built.
                 HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
 
+                // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
+                // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
+                // simply omits the reticle.
+                Texture2D? reticleTex = LoadRimageTexture(
+                    Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
+
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
                     var rig = _rigs[pi];
@@ -1358,6 +1364,16 @@ public partial class PlaneViewer : Node3D
                         controller.WeaponReadout = WeaponReadout.Build(hudFont, weaponMessages);
                         if (verbose)
                             GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
+                    }
+
+                    // The gun aiming reticle (E37): the ballistic impact point of the selected gun
+                    // group at the convergence distance, drawn as the game's pipper — visibly
+                    // trailing the nose in a hard turn, on the rounds in steady flight.
+                    if (reticleTex != null && controller.Loadout != null)
+                    {
+                        controller.Reticle = ImpactReticle.Build(reticleTex, rig.Camera);
+                        if (verbose)
+                            GD.Print("gun reticle: ballistic impact point via impact_point.png");
                     }
 
                     // Visible damage: torn-skin panel flips + the low-HP smoke/fire
@@ -2239,6 +2255,21 @@ public partial class PlaneViewer : Node3D
     /// emitter under <paramref name="parent"/>; null (logged by PufferState.Load) when
     /// the reader or its textures are missing. Shared by the flight assembly and the
     /// static damage lab.</summary>
+    /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
+    /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
+    /// so no colour-keying is needed — unlike the HUD font atlas.</summary>
+    private static Texture2D? LoadRimageTexture(string rimageDir, string file)
+    {
+        var path = Path.Combine(rimageDir, file);
+        if (!File.Exists(path))
+        {
+            GD.Print($"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
+            return null;
+        }
+        var img = Image.LoadFromFile(path);
+        return img != null ? ImageTexture.CreateFromImage(img) : null;
+    }
+
     private static Effects.Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
         string file, string name, float duration = 0.3f)
     {

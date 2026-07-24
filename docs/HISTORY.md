@@ -5712,3 +5712,48 @@ text comes from `messages.json` — a missing table would render the raw `MSG_HU
 (`WeaponReadout.cs` entry + `Messages.cs` `Fill`/`Format`, `HudFont.cs` load note), `playtest.md`
 (weapon-selector item updated: the readout replaced the bracket line), PLAN-M3-weapons.md (E36 ☐→☑),
 CLAUDE.md (module index + Current-status Next E36→E37).
+
+## 2026-07-24 — M3 Wave E E37: impact-point reticle (ballistic projection) — Wave E complete
+
+The gun aiming reticle, with the original's behaviour: it is **not pinned to screen centre** — it
+marks the **projected ballistic impact point of the selected gun group's rounds at a convergence
+distance**, so it trails the nose in a hard manoeuvre and sits on the rounds in steady flight (user
+spec, 2026-07-22). New `src/Flight/ImpactReticle.cs` — a per-pane, viewport-filling `Control` that
+draws the game's own pipper `extracted/rimage/impact_point.png` (a **32×32 RGBA** warm-white disc
+with a cross-notch centre; the alpha is authored, so no colour-keying — pixel-verified against the
+file) at a world point, projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors
+`MarkerHud`, never cached, so it can't lag the chase camera), fixed screen size scaled by
+`HudMetrics`. Loaded once in `PlaneViewer` and built per player pane whenever the plane carries a
+loadout.
+
+`FlightController.UpdateReticle` (in `_Process`) computes the point: it averages the SELECTED
+firable gun group's muzzle poses and marches a round through `BallisticImpactPoint` — the **same**
+`VELOCITY`/`ACCELERATION`/`GRAVITY` path integration `ProjectilePool` fires each round with (plus
+the plane's inherited velocity; only the random `CANNON_SPREAD` is dropped, since the pipper marks
+the cone centre) — to `GunConvergenceDist`. `ProjectilePool.WorldGravity` became `internal` so the
+reticle and the rounds share one gravity constant. Hidden while crashed or when the plane has no
+firable gun.
+
+**The convergence distance is a TUNE (`GunConvergenceDist = 250 m`)** — `weapons.json` carries no
+convergence field (player guns are `RANGE 1000`, `VELOCITY 750–1000`, no `ACCELERATION`/`GRAVITY`,
+so a straight line). Open question 4 in the plan is now *chosen*, pending an original-game A/B.
+
+**Verified** (windowed, verification.md rule 71). Steady level Bloodhawk (`--hold=0,0,0,0.6`): the
+tracer stream passes through the reticle, and a temporary numeric breadcrumb read `nose→reticle =
+0.00°` — the pipper sits exactly on the gun axis, so the rounds land where it sits. Hard pull
+(`--hold=1,0,0,0.6`): as angle-of-attack grew (`nose→vel` 7.8°→15.0°) the reticle deflected off the
+nose (`nose→reticle` 0.46°→0.77°) with a **negative** trail-pitch — i.e. **below** the nose, toward
+the velocity vector — reproducing "trails the nose during a pull." (The angle is small because
+bullets fly ~900 m/s against a ~55 m/s plane; the on-screen trail is set by that ratio, not by the
+convergence distance — a physics fact, now in `hud.md`.) Clean cross-chapter (C4) and 2-player
+splitscreen (each pane draws its own reticle through its own camera, scaled by the pane factor); the
+breadcrumb was removed before landing; build clean (0 warnings).
+
+**E38 (lock-on indicator) is ⊘ deferred to M4** (with B19/B20 — no enemy planes to lock in M3), so
+**Wave E (HUD) is complete**; only Wave F (debug tools) remains.
+
+**Docs.** `docs/formats/hud.md` (new "gun aiming reticle" section — the texture + the
+ballistic-projection behaviour + the convergence TUNE), `docs/architecture.md` (`ImpactReticle.cs`
+entry + FlightController `UpdateReticle` note), `playtest.md` (new E37 item + the convergence TUNE),
+PLAN-M3-weapons.md (E37 ☐→☑, open question 4, Wave-E-complete position), CLAUDE.md (module index +
+Current-status → Wave F).

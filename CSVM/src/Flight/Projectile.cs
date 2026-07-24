@@ -65,7 +65,8 @@ public sealed partial class ProjectilePool : Node3D
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
     private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
-    private const float WorldGravity = 20f;   // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
+    internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
+                                              // (shared: FlightController's reticle integration reads it too)
 
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow

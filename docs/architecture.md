@@ -500,6 +500,17 @@ each frame (`%1` = gun mount name / rocket display name, `%2` = per-group / per-
 ⚠ A null name hides that line (no guns / no hardpoints / no loadout); bottom-anchored like the dials
   so a damped splitscreen pane keeps it on screen. This replaced the interim `FlightController.AmmoLine`.
 
+## src/Flight/ImpactReticle.cs
+The gun aiming reticle (E37): a viewport-filling `Control` drawing `impact_point.png` (the game's
+pipper, from `extracted/rimage/`) at a world impact point fed each frame by FlightController,
+projected via `Camera3D.UnprojectPosition` at `_Draw` time (mirrors MarkerHud, never cached).
+Fixed screen size scaled by `HudMetrics`; one per player pane.
+⚠ NOT pinned to screen centre — the point is FlightController's `BallisticImpactPoint` of the
+  SELECTED gun group at `GunConvergenceDist` (a TUNE, 250 m — no data field), integrated exactly as
+  `ProjectilePool` fires, so it trails the nose in a hard turn and sits on the rounds level.
+⚠ `Active=false` hides it (crashed / no firable gun / behind-camera); `_Draw` early-returns at zero
+  height (can run before the pane is sized).
+
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
 block, the off-screen edge arrow (`EdgePoint`, `ClockHour` bearing), run status and banners
@@ -697,6 +708,10 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
   (0-based) seeds the gun group for headless tests; selections survive respawn.
 ⚠ `Ordnance?.Update()` runs after UpdateRockets each physics frame — hides a pylon's mounted rocket
   (PylonOrdnance, D44) the instant its ammo hits zero; RefillWeapons/respawn re-arms and re-shows.
+⚠ UpdateReticle (E37, in `_Process`): `BallisticImpactPoint` marches a round of the SELECTED group's
+  weapon from the averaged muzzle pose through the pool's own VELOCITY/ACCEL/GRAVITY to
+  `GunConvergenceDist` (TUNE 250 m) and feeds the world point to `ImpactReticle` — hidden when crashed
+  or no firable gun. Shares `ProjectilePool.WorldGravity` (now `internal`) so reticle and rounds agree.
 ⚠ Rocket pad button A also respawns, but only from the crashed / run-complete screens (early-return
   states this live-flight path never reaches), so the two never collide. RefillWeapons re-arms all on respawn.
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard

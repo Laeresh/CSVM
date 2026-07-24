@@ -78,6 +78,12 @@ public partial class FlightController : Node3D
     /// templates. Added to the HUD canvas and fed each frame; null (no font / no loadout) hides it.</summary>
     public WeaponReadout? WeaponReadout;
 
+    /// <summary>The gun aiming reticle (E37): the game's pipper drawn at the SELECTED gun group's
+    /// ballistic impact point at the convergence distance — trailing the nose in a hard turn, on the
+    /// rounds in steady flight. Added to the HUD canvas and fed the world impact point each frame;
+    /// null when the plane carries no firable gun (or the reticle texture was absent).</summary>
+    public ImpactReticle? Reticle;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -273,6 +279,11 @@ public partial class FlightController : Node3D
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
                                                 // plane-dependent (TODO — kept fixed for now per user); the
                                                 // plane accelerates from here toward its cruise
+    private const float GunConvergenceDist = 250f; // m — the range the gun reticle projects the
+                                                   // ballistic solution to (the sight's zero range).
+                                                   // NOT in the data (weapons.json carries no
+                                                   // convergence field; guns have RANGE 1000) — a
+                                                   // TUNE pending an original-game playtest (E37).
     private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
@@ -333,6 +344,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(Compass);
         if (Gauges != null)
             canvas.AddChild(Gauges);
+        if (Reticle != null)
+            canvas.AddChild(Reticle); // gun aiming pipper, over the dials, under the text/marker
         if (WeaponReadout != null)
             canvas.AddChild(WeaponReadout); // selected-weapon text readout, over the dials
         if (Marker != null)
@@ -559,6 +572,109 @@ public partial class FlightController : Node3D
             }
         }
         return _nextPylon % hps.Count;
+    }
+
+    /// <summary>Points the gun reticle (E37) at the SELECTED gun group's ballistic impact point at
+    /// the convergence distance. It integrates the round exactly as <see cref="ProjectilePool"/>
+    /// fires it — muzzle-forward × <c>VELOCITY</c> plus the plane's inherited velocity, stepped
+    /// through any <c>ACCELERATION</c>/<c>GRAVITY</c> — so the pipper and the rounds agree; it drops
+    /// only the random <c>CANNON_SPREAD</c> (the reticle marks the cone centre). Hidden while crashed
+    /// or when the plane has no firable gun / no muzzle to fire from. No-op without a reticle.</summary>
+    private void UpdateReticle()
+    {
+        if (Reticle == null)
+        {
+            return;
+        }
+        // Hidden while crashed (the airframe is gone) — a stale pipper must not hang in the sky —
+        // and when there is nothing to aim.
+        if (_crashed || Loadout == null || _gunStates == null)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        // The selected firable gun group — the one the trigger fires. Its muzzles' averaged world
+        // pose is where THAT group's fire converges.
+        GunGroup? sel = null;
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            if (gi == _gunSel)
+            {
+                sel = g;
+                break;
+            }
+            gi++;
+        }
+        if (sel == null || sel.Muzzles.Count == 0)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        var origin = Vector3.Zero;
+        var forward = Vector3.Zero;
+        foreach (var m in sel.Muzzles)
+        {
+            var xf = m.GlobalTransform;
+            origin += xf.Origin;
+            forward += -xf.Basis.Z.Normalized(); // each muzzle's own aim (as ProjectilePool.Spawn)
+        }
+        origin /= sel.Muzzles.Count;
+        if (forward.LengthSquared() < 1e-6f)
+        {
+            Reticle.Active = false;
+            return;
+        }
+        forward = forward.Normalized();
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        Reticle.ImpactPoint = BallisticImpactPoint(sel.Weapon, origin, forward, inheritVel,
+            GunConvergenceDist);
+        Reticle.Active = true;
+    }
+
+    /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/> along
+    /// <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's velocity) sits
+    /// after travelling <paramref name="distance"/> m of path — the SAME
+    /// <c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c> integration <see cref="ProjectilePool"/>
+    /// steps each round with, so the reticle and the rounds agree. Player guns carry no
+    /// <c>ACCELERATION</c>/<c>GRAVITY</c>, so for them this is a straight line; the loop stays
+    /// faithful for any weapon that does. The march is capped at the weapon's <c>RANGE</c> (a round
+    /// never converges past where it expires) and a hard iteration bound.</summary>
+    private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
+        Vector3 inheritVel, float distance)
+    {
+        var vel = forward * (weapon.Velocity ?? 500f) + inheritVel;
+        float accel = weapon.Acceleration ?? 0f;
+        float grav = (weapon.Gravity ?? 0f) * ProjectilePool.WorldGravity;
+        float cap = Mathf.Min(distance, weapon.Range ?? distance);
+        const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
+        var pos = origin;
+        float travelled = 0f;
+        for (int i = 0; i < 4096 && travelled < cap; i++)
+        {
+            if (accel != 0f)
+            {
+                vel += vel.Normalized() * (accel * dt);
+            }
+            if (grav != 0f)
+            {
+                vel += Vector3.Down * (grav * dt);
+            }
+            var stepv = vel * dt;
+            float step = stepv.Length();
+            if (step < 1e-6f)
+            {
+                break; // a degenerate near-zero speed must never spin the loop
+            }
+            if (travelled + step > cap)
+            {
+                pos += stepv * ((cap - travelled) / step); // don't overshoot the convergence range
+                break;
+            }
+            pos += stepv;
+            travelled += step;
+        }
+        return pos;
     }
 
     /// <summary>Advances every gun group's fire clock: while the trigger is held, each group spawns
@@ -1389,6 +1505,8 @@ public partial class FlightController : Node3D
         // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.
         UpdateWeaponGauges();
+        // Points the E37 gun reticle at the selected group's ballistic impact point (if built).
+        UpdateReticle();
         // Splitscreen: the text block shrinks with the pane, like every other HUD element
         // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
         // (16,10) is untouched there; re-applied only when the factor actually changes.
