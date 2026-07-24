@@ -5569,3 +5569,47 @@ this build).
 CLAUDE.md (module index line, Current-status wave position + Next pointer), `cli.md` (`--rocket=`),
 `verification.md` (the `--screenshot`-floods-headless rule), PLAN-M3-weapons.md (checklist 44 ☐→☑,
 `### D44` landed note; Wave D now complete).
+
+## 2026-07-24 — M3 Wave A A10: the slot→firepoint binding rule confirmed in-engine (Wave A complete)
+
+The last open Wave A item, and — as the plan's preamble anticipates ("landing no code with a correct
+disproof is a success here") — a **verification, not code**. It closes the one thread the plan left
+open on the muzzle-mount binding: the reverse-index rule (slot _n_ → `firepoint(9−2n),(10−2n)`) was
+"strongly supported but pending in-engine confirmation" after two earlier binding hypotheses had been
+disproven. A10 confirms it.
+
+**Method — cross-reference two committed instruments, no new tooling.** `--dump-loadout` reports each
+gun slot's mount name → bound firepoints; `--dump-markers` reports each firepoint's plane-frame
+position (nose −Z, right +X, up +Y). For all 11 aircraft, every **firing** gun group's bound firepoint
+matches the geometry its mount name asserts:
+- **Devastator (decisive — the only two-axis airframe): 3/3 on both axes.** `Low Inner`→fp7,8 (y−0.6,
+  |x|1.2), `Low Outer`→fp5,6 (y−0.83, |x|2.12), `Upper Inner`→fp3,4 (y+0.44, |x|1.0). Low<Upper on y,
+  Inner<Outer on |x|.
+- **Peacemaker (decisive — the only asymmetric one): 2/2, sides correct.** `Center`→fp7,8 (x≈0),
+  `Right Fuselage`→fp5,6 (x+1.96/+1.66).
+- **Bloodhawk** reproduces the user's playtest (40-cal `Inner` |x|3.22 < 30-cal `Outer` |x|3.66);
+  **Brigand** reproduces "W1 and W2 share the outer mount" (both at |x|2.34, fp7≡fp6/fp8≡fp5).
+- **The Firebrand/Kestrel soft spot the plan flagged is resolved, not a discrepancy:** their firing
+  guns are correctly ordered (inner<middle<outer / on-centreline); the reverse-index rule only seats
+  the **inert `Rear Turret`** on the outermost firepoint (Firebrand |x|5.67, Kestrel |x|3.26), which
+  fires no flash in M3 — the turret firepoint binding is M4 scope.
+
+**Windowed corroboration (this machine has a real GPU — RTX 5080/Vulkan, so `--screenshot` WITHOUT
+`--headless` works; the absolute-path rule 74 applies).** A firing Bloodhawk shows a warm muzzle flash
+on the wing with the HUD depleting **only** the selected group (also re-confirming B18's one-group-at-
+a-time). The Peacemaker marker overlay shows `firepoint7` on the centreline and `firepoint5` on the
+right fuselage — the mount names made visible. **Appearance:** the game's own `slug_muzzle1`/`2`
+flipbook is a warm orange→yellow radial burst that matches `OriginalScreenshots/MuzzleFlash1.png`; D29
+draws `slug_muzzle1` and stock is all-slug, so the texture is correct (the 2-frame flip animation +
+per-ammo dum/ap/mag textures remain the documented D29 refinement).
+
+**No code changed** — the binding was already correct (the `markers` arrays in `stock_loadouts.json`
+are the rule's explicit output, checked A7) and D29 already rendered the flash at the resolved
+firepoint. Screenshots are rendered plane frames, so they stay in `./.scratch/` (swept) and are **not
+committed** — the no-assets rule covers rendered asset data; the durable evidence is the two dump
+instruments + `markers.md`, which cite only format-level firepoint positions.
+
+**Docs.** `markers.md` (binding section "pending A10" → "confirmed in-engine", with the method + the
+turret-soft-spot note), PLAN-M3-weapons.md (checklist A10 ☐→☑ + `### A10` landed note; the binding-rule
+subsection header/⚠ flipped to confirmed; Wave A now complete), CLAUDE.md Current-status (A10 done →
+Next is Wave E).

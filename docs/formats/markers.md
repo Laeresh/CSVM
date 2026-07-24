@@ -153,8 +153,16 @@ firepoint pair:
 > **slot _n_ → `firepoint(9 − 2n)`, `firepoint(10 − 2n)`** — W1 → fp7,8; W2 → fp5,6;
 > W3 → fp3,4; W4 → fp1,2.
 
-This is **strongly supported by the measured geometry but pending in-engine confirmation** —
-it is the single binding documented here. The support:
+This is **confirmed in-engine (M3 A10, 2026-07-24)** — the single binding documented here.
+Cross-referencing `--dump-loadout` (each slot's bound firepoints) against `--dump-markers` (their
+plane-frame positions) for all 11 aircraft: every **firing** gun group lands on the mount its name
+says — the Devastator 3/3 on both axes, the Peacemaker 2/2 with sides correct, the Bloodhawk (40 inner
+/ 30 outer) and Brigand (W1/W2 share the outer mount) reproducing the user's playtests. A windowed
+firing capture shows the Bloodhawk's muzzle flash on the wing at the selected group; the Peacemaker
+overlay shows `firepoint7` on the centreline and `firepoint5` on the right fuselage. (The only oddity —
+the reverse-index rule seating W4 `Rear Turret` on the *outermost* firepoint on the Firebrand/Kestrel —
+touches a slot that is **inert in M3**, so no flash rides it; the turret firepoint binding is M4.) The
+support:
 
 **Devastator** — the only airframe whose mounts vary on two axes (height *and* wing spread),
 so it pins the rule on both. Full triples (x, y, z):

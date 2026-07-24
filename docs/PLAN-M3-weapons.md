@@ -248,17 +248,18 @@ verbatim entry from the 3060–3079 enum.**
 | Peacemaker | Center Guns | Right Fuselage Guns | Right Wing Guns | Left Wing Guns |
 | Warhawk | Inner Wing Guns | Inner Wing Guns 2 | Outer Wing Guns | Outer Wing Guns 2 |
 
-#### The binding rule — **reverse index order** (strongly supported, pending A10)
+#### The binding rule — **reverse index order** (confirmed in-engine, A10 2026-07-24)
 
 Cross-referencing the mount names against measured firepoint positions gives:
 
 > **Slot 𝑛 → `firepoint(9−2𝑛)`, `firepoint(10−2𝑛)`** — W1→`fp7,8`, W2→`fp5,6`,
 > W3→`fp3,4`, W4→`fp1,2`.
 
-⚠ **This is the third binding hypothesis in this plan; the first two were disproven.** It is
-recorded as strongly supported rather than proven, and item A10 verifies it. But the supporting
-evidence is of a categorically different kind from the earlier attempts — four independent
-hard-to-fake coincidences:
+⚠ **This was the third binding hypothesis in this plan; the first two were disproven** — so it was
+held as strongly-supported-not-proven until **A10 confirmed it in-engine** (`--dump-loadout` ×
+`--dump-markers` for all 11: every firing gun group on its named mount; the Firebrand/Kestrel soft
+spot confined to the inert turret). The supporting evidence was categorically different from the
+earlier attempts — four independent hard-to-fake coincidences:
 
 - **Devastator (decisive).** The only plane whose mounts vary on two axes. `Low Inner` →
   `fp7,8` (y −0.62, x ±1.17), `Low Outer` → `fp5,6` (y −0.83, ±2.12), `Upper Inner` → `fp3,4`
@@ -440,7 +441,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 7. ☑ Stock-loadout file format + seed from the user's table — **landed** (`CSVM/data/stock_loadouts.json` + `docs/formats/loadouts.md`)
 8. ☑ **[USER]** mount-name column — **delivered 2026-07-22**; the binding rule fell out of it
 9. ☑ **[USER]** `CLUSTER_SIZE` = rounds-per-slot — **confirmed 2026-07-22** (Bloodhawk: 9 HE, 3/hardpoint)
-10. ☐ Verify the binding rule + flash appearance — **in-engine, self-serve** (the `MuzzleFlash*.png` crops are appearance reference only, not placement evidence)
+10. ☑ Verify the binding rule + flash appearance — **landed** (2026-07-24): `--dump-loadout` × `--dump-markers` confirms every firing gun group lands on its named mount (Devastator 3/3 two-axis, Peacemaker 2/2 sides, Bloodhawk/Brigand reproduce the user's playtests); windowed captures show the Bloodhawk flash on the wing + the flash matches `MuzzleFlash1.png`. The Firebrand/Kestrel soft spot is confined to the inert turret (M4). **Wave A complete.**
 
 ### Wave B — weapons core
 
@@ -703,7 +704,26 @@ a carried amount (and does not exist at all on rocket entries).
 **Consequence for B17:** capacity is settled, but *rounds released per trigger pull* is a
 separate question this test does not answer — B17 still must not assume.
 
-### A10 ☐ Verify the binding rule and the flash appearance
+### A10 ☑ Verify the binding rule and the flash appearance — **LANDED (2026-07-24)**
+
+**Landed — no code, a verification (as the plan's preamble anticipates).** The binding rule is
+**confirmed**: cross-referencing `--dump-loadout` (each slot's bound firepoints) against
+`--dump-markers` (their plane-frame positions) for all 11 aircraft shows **every firing gun group
+lands on the mount its name says**. Decisive cases: **Devastator 3/3 on both axes** (Low/Upper × 
+Inner/Outer — the only two-axis airframe), **Peacemaker 2/2 with sides correct** (Center on the
+centreline, Right Fuselage at +x — the only asymmetric one), **Bloodhawk** (40-cal inner |x|=3.22 <
+30-cal outer |x|=3.66) and **Brigand** (W1/W2 both at |x|=2.34, `fp7≡fp6`/`fp8≡fp5`) reproducing the
+user's playtests. **Firebrand/Kestrel soft spot resolved:** their firing guns are correctly ordered
+(inner<middle<outer / on-centreline); the reverse-index rule only seats the **inert `Rear Turret`** on
+the outermost firepoint, which fires no flash in M3 (turret binding is M4). Windowed captures
+corroborate: the Bloodhawk's muzzle flash renders on the wing at the selected group (HUD shows only
+that group depleting — B18), and the Peacemaker overlay shows `firepoint7` on the centreline /
+`firepoint5` on the right fuselage. **Appearance:** the game's own `slug_muzzle1`/`2` flipbook (warm
+orange→yellow radial burst) matches `OriginalScreenshots/MuzzleFlash1.png`; D29 renders `slug_muzzle1`,
+and stock loadouts are all-slug so `slug` is correct (the 2-frame flip + per-ammo dum/ap/mag textures
+stay the documented D29 refinement). No discrepancy found for any firing gun. Docs: `markers.md` +
+this plan's binding section flipped from "pending A10" to "confirmed". Screenshots in `./.scratch/`
+(rendered plane frames — not committed, per the no-assets rule).
 
 **Goal.** Confirm A8's derived binding rule puts flashes on the right mounts, and that the
 flash itself looks right.
