@@ -2196,6 +2196,10 @@ public partial class PlaneViewer : Node3D
             PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
             PlaceCalledTemplates = true,
             NameResolveFallback = true,
+            // The crash def's only SOUND (snd_exp_ground_a) is already played by FlightAudio via
+            // Crash() -> OnGroundExplosion(); this runtime has no audio session, so dispatching it
+            // here would only emit the "silent for the session" warning. Render effects, not sound.
+            SoundHandledElsewhere = true,
         };
         // Bind only the crash def's transitive CALL_ANIMATION closure (Subset), not the whole world
         // program: the full 800+ defs include ~150 generic-named world defs that would mis-anchor

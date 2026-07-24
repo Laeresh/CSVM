@@ -965,7 +965,7 @@ public partial class FlightController : Node3D
             // runtime. The def hides healthy/dontmove/markers, shows the destroyed wreck, launches
             // the pieceN ballistics, and fires every authored effect (sparks, the fireball cluster,
             // the black smokeball, the dirt burst, the burning-debris arcs). Audio stays the same
-            // path (the def's SOUND events are not runtime-driven, so nothing double-plays).
+            // path (the crash runtime treats SOUND as handled-elsewhere, so nothing double-plays).
             // The wreck pieces inherit a fraction of the plane's impact velocity so they scatter
             // along its travel rather than just popping up (the authored launch is a small relative
             // pop); TUNE the fraction against the original.
