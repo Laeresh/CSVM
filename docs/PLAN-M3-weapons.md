@@ -41,7 +41,7 @@ That is a deliberate boundary: the player's damage model (`PlaneDamage`, `Damage
 |---|---|---|
 | 1 | Threat model | **Nothing fights back.** Player fires, world dies. No PvP, no AA return fire, no AI. |
 | 2 | Loadout source | **A hand-authored stock-loadout table** supplied by the user, read from a data file. |
-| 3 | Guided weapons | **Full guided flight**; lock restricted to ground destructibles. Air-to-air lock → M4. |
+| 3 | Guided weapons | **Deferred to M4 (revised 2026-07-24).** ~~Full guided flight; lock restricted to ground destructibles.~~ The original has **no manual ground-target selection** — its auto-aim is game-handled and **enemy-plane-only** (same target-cycle as stunt-race objective selection), and M3 has no enemy planes to lock. So M3 fires **every** rocket, the **Seeker included, as dumbfire**; all homing + lock-on move wholesale to M4. |
 | 4 | Gun mechanics | **Finite ammo + empty-clip warning, and cannon spread.** Heat/jam and ammo pickups → `backlog.md`. |
 | 5 | HUD | **All four**: `gungauge` + `missilegauge`, weapon-name readout, ballistic impact-point reticle, lock-on indicator. |
 | 6 | Collide damage | **Follow the data exactly** — 44 collide-destructibles, 2,565 weapon-only. |
@@ -452,8 +452,8 @@ New files and docs only; touches no module M2 polish 3 is editing.
 16. ☑ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip — **landed** (Space/pad-B, `--fire`)
 17. ☑ Hardpoint firing — per-pylon allotment and depletion — **landed** (F/pad-A, one rocket per pull, round-robin pylons)
 18. ☑ Weapon selectors — gun-group cycle (ONE at a time, no ALL) + hardpoint ordnance cycle — **landed** (G/H, D-pad L/R)
-19. ☐ Guided flight — `TURN_RATE`, `IMPACT_PROXIMITY`, `DETONATION_DISTANCE`
-20. ☐ Ground lock-on — acquisition against destructibles
+19. ⊘ Guided flight — **deferred to M4** (revised 2026-07-24; no enemy planes to lock, original has no manual ground selection). Seeker flies dumbfire in M3
+20. ⊘ Ground lock-on — **deferred to M4** (same revision); acquisition is the enemy-plane target-cycle (stunt Tab-cycle reuse), M4 scope
 
 ### Wave C — destructibles
 
@@ -940,30 +940,31 @@ is what these runs prove.
 
 **Goal.** Two independent selectors, per decision 7 (as corrected above).
 
-### B19 ☐ Guided flight
+### B19 ⊘ Guided flight — deferred to M4
 
-**Goal.** Guided ordnance flies its authored profile.
+**Revised 2026-07-24 (user).** The original has **no manual ground-target selection**; its auto-aim
+is game-handled and can only be pointed at **enemy planes** (the same target-cycle as stunt-race
+objective selection). M3 has no enemy planes, so nothing a guided missile could authentically lock
+exists. Rather than ship an inauthentic ground-lock selector, **M3 fires every rocket — the Seeker
+included — as dumbfire** (the ballistic pool it already flies through; the firing path needed no
+change). All homing moves to M4.
 
-**Approach.** `ACCELERATION` (16 entries), `TURN_RATE` (14), `IMPACT_PROXIMITY` (14),
-`DETONATION_DISTANCE` (13), `DETONATION_DOT_PRODUCT` (3), `DETONATION_TIME`. `RANGE_MINIMUM`
-on the torpedo is an arming distance. `FLYOUT_HEALTH 10` + `TARGETABLE` make the torpedo itself
-shootable — **out of scope in M3** (nothing else shoots), but note it in the code so M4 finds it.
+**What stays true of the data, for M4.** Guidance is `TURN_RATE`, **not a flag** — only the Seeker
+`wep_11` (1.25) homes; the other 13 carry the 0.001 sentinel (`WeaponDef.IsGuided` encodes this).
+`LOCK_ON` is **universal** (even dumbfire HE carries 1.3) because it is the auto-aim / lead-solution
+convergence time for *every* weapon, not a steering promise — so it is not the discriminator. The
+ballistic profile (`ACCELERATION` 16, `GRAVITY` 5) is **already integrated** by `ProjectilePool`.
+When M4 adds enemy planes: steer the Seeker at `TURN_RATE`, fuze at `DETONATION_DISTANCE` (13) /
+`IMPACT_PROXIMITY` (14) / `DETONATION_DOT_PRODUCT` (3) / `DETONATION_TIME`, honour the torpedo's
+`RANGE_MINIMUM` arming distance, and drive acquisition off the plane target-cycle (the `target`
+aim-point marker A2, reusing `MissionTargets`/`MarkerHud`). `FLYOUT_HEALTH 10` + `TARGETABLE` also
+make the torpedo itself shootable — M4.
 
-**Verify.** A seeker's turn radius matches `TURN_RATE`; proximity fuzing triggers at
-`IMPACT_PROXIMITY` metres, verified by a scripted run at a known offset.
+### B20 ⊘ Ground lock-on — deferred to M4
 
-### B20 ☐ Ground lock-on
-
-**Goal.** Acquisition against world destructibles, per decision 3.
-
-**Approach.** Lockable set = the destructible registry (C21). `LOCK_ON` (2.5 s on the Seeker)
-is acquisition time; `LOCK_ON_LEAD` (3 entries) presumably lead computation. Reuse
-`MissionTargets`/`MarkerHud` conventions for target tracking. Feed E38's indicator.
-
-⚠ **Air-to-air lock is M4.** The `target` aim-point marker (A2) is what it will use — do not
-wire it now, just leave it documented.
-
-**Verify.** A seeker fired at a locked water tower hits it; breaking line of sight drops lock.
+Folded into the B19 revision above. Acquisition in the original is the **enemy-plane** target-cycle,
+which is M4 scope; there is no authentic ground lock-on to build. `LOCK_ON_LEAD` (3 entries) is the
+lead computation M4 will need.
 
 ---
 
@@ -1266,12 +1267,13 @@ the data**; a TUNE constant pending playtest.
 **Verify.** In a hard turn the reticle visibly trails the nose; rounds land where the reticle
 sits in steady flight.
 
-### E38 ☐ Lock-on indicator
+### E38 ⊘ Lock-on indicator — deferred to M4
 
-**Approach.** Target box plus acquisition progress for B20, reusing `MarkerHud`'s existing
-reticle and screen-edge arrow.
+**Deferred with B19/B20 (2026-07-24).** The lock-on it indicates is the enemy-plane target-cycle,
+which is M4 scope (M3 has no enemy planes and no guided flight). When M4 builds it: target box plus
+acquisition progress reusing `MarkerHud`'s existing reticle and screen-edge arrow.
 
-**Verify.** Acquisition takes `LOCK_ON` seconds; the indicator clears when lock breaks.
+**Verify (M4).** Acquisition takes `LOCK_ON` seconds; the indicator clears when lock breaks.
 
 ---
 

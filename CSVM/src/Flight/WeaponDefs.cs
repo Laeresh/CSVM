@@ -123,6 +123,15 @@ public sealed class WeaponDef
     /// <summary>Convenience: the caliber+ammo weapon-id rule stock loadouts use lives in
     /// <c>stock_loadouts.json</c>; here, <c>IsGun</c> is just "has a caliber and fires hitscan".</summary>
     public bool IsGun => IsCannon || Caliber.HasValue;
+
+    /// <summary>Whether this rocket physically homes. There is no dedicated <c>GUIDED</c> flag in the
+    /// data — guidance is encoded in <see cref="TurnRate"/>: 13 of the 14 rockets carry the sentinel
+    /// 0.001 (fly straight = dumbfire, e.g. the HE "BOOM" rocket), and only the Seeker's 1.25 steers.
+    /// <see cref="LockOn"/> is present even on dumbfire rockets (it is the universal auto-aim / lead
+    /// convergence time, not a steering promise), so it is NOT the discriminator. The 0.01 threshold
+    /// is well above the 0.001 sentinel and far below the Seeker's 1.25. Homing is not yet modelled —
+    /// every rocket currently flies dumbfire — so this describes the data rather than driving flight.</summary>
+    public bool IsGuided => TurnRate is > 0.01f;
 }
 
 /// <summary>

@@ -93,6 +93,13 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `DETONATION_TIME` | 1 | 2.0 | timed fuse, s (rear-arc flare) |
 | `CRATER` | 6 | 0 | ground-crater flag/scale; marks the ground-attack munitions |
 
+**Guided vs unguided is `TURN_RATE`, not a flag.** There is no `GUIDED` boolean. 13 of the 14
+`TURN_RATE` carriers hold the sentinel **0.001** (fly straight = dumbfire — the HE "BOOM" rocket
+`wep_06`/`wep_24`, AP, FLAK, incendiary, torpedo, …); **only the Seeker `wep_11` at 1.25 homes.**
+`LOCK_ON` is *not* the discriminator — it is present on dumbfire rockets too (the HE rocket carries
+`LOCK_ON 1.3`), because it is the aiming/lead acquisition time, not a steering promise. The Seeker is
+also the sole `BEEPER_SEEKER`. Reader convenience: `WeaponDef.IsGuided` (`TURN_RATE > 0.01`).
+
 ### Class flags & specials
 
 Each selects a special behaviour; most are one bare flag or a tiny struct.

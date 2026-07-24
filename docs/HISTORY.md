@@ -5030,3 +5030,22 @@ headless Balmoral soaks (two `wep_50` groups) fire **only "gun group 1 (Inner Wi
 and **only "gun group 2 (Outer Wing Guns)" under `--gun-select=1`** — exactly one group at a time,
 the right one. Docs: architecture.md (FlightController), cli.md (`--gun-select`), CLAUDE.md (keys +
 status), plan decision 7 corrected + item 18 ticked. **Next: B19/B20 (guided flight, ground lock-on).**
+
+**M3 — guided flight (B19/B20) deferred to M4 (2026-07-24, user decision).** Plan decision 3 is
+revised: guided ordnance is **out of M3 scope**, and **every rocket — the Seeker `wep_11` included —
+fires as dumbfire**. The reasoning is a corrected model of the original's mechanics, supplied by the
+user: the original has **no manual ground-target selection**; its auto-aim is game-handled and can
+only be pointed at **enemy planes** (the same target-cycle as stunt-race objective selection). M3 has
+no enemy planes, so nothing a guided missile could authentically lock exists — a ground-lock selector
+would be an interaction the original never had. No firing-path change was needed: `UpdateRockets`
+already spawns `hp.Weapon` into the ballistic `ProjectilePool` with no homing, so a Seeker on a pylon
+already flew straight. Two data facts, verified from `weapons.zrd.json` and now documented
+(`weapons.md`, `WeaponDef.IsGuided`): (1) **guidance is `TURN_RATE`, not a flag** — 13 of 14 rockets
+carry the 0.001 sentinel (fly-straight), only the Seeker's 1.25 homes; (2) **`LOCK_ON` is universal**
+(even dumbfire HE carries 1.3) because it is the auto-aim / lead-solution convergence time for every
+weapon, not a steering promise — so it is *not* the guided discriminator. Groundwork kept for M4: the
+`WeaponDef.IsGuided` convenience (`TURN_RATE > 0.01`) and the `weapons.md` "guided vs unguided" note.
+Docs updated: PLAN-M3-weapons.md (decision 3, checklist 19/20, B19/B20 detail → deferral notes that
+preserve the M4 design), CLAUDE.md status, weapons.md. Build clean. **Wave B's remaining in-scope work
+is B14 (the `he_rocket` `FLYOUT` MODEL mesh) + D30/D32 polish; the next major thrust is Wave C
+(destruction), starting with C21 (per-instance HP + destructible registry).**
