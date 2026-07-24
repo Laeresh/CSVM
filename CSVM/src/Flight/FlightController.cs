@@ -69,6 +69,10 @@ public partial class FlightController : Node3D
     /// and fed altitude/AGL/speed/stall + part-damage events. Optional.</summary>
     public GaugeCluster? Gauges;
 
+    /// <summary>The <c>--hud-font-test</c> bitmap-font verification overlay: added to the HUD
+    /// canvas so it scales with the pane. Null unless the flag is set.</summary>
+    public HudFontTest? FontTest;
+
     /// <summary>The airframe collision boxes (fuselage/wings/tail), swept along each
     /// physics frame's motion so wingtips and tail collide with obstacles. Null falls
     /// back to the old center-ray-only test.</summary>
@@ -320,6 +324,8 @@ public partial class FlightController : Node3D
             canvas.AddChild(Marker); // stunt objective marker, drawn on top of the dials
         if (Scoreboard != null)
             canvas.AddChild(Scoreboard); // end-of-run results, drawn over everything
+        if (FontTest != null)
+            canvas.AddChild(FontTest); // --hud-font-test: the E34 bitmap-font proof overlay
         // Splitscreen parents the HUD into this player's SubViewport so it draws in that pane
         // only (and scales off the pane's height); single player keeps it on this node.
         (HudParent ?? this).AddChild(canvas);

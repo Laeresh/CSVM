@@ -475,6 +475,18 @@ StuntScoreboard and FlightController's text block all route through it.
 ⚠ Damped sizes only stay on screen if positions anchor to a pane EDGE — see GaugeCluster's
   bottom-anchored dials and FlightController's text block.
 
+## src/Flight/HudFont.cs
+The game's own HUD bitmap font, rebuilt from `extracted/rimage/5pointhud.png` (+ the brighter
+`5pointhudbrite.png` highlight variant): a proportional 5-px font covering printable ASCII
+`0x20`–`0x7e` (layout/colours: docs/formats/hud.md). `Load` returns null (one log line) if the
+atlas is absent; `Draw(CanvasItem,…)`/`Measure` render onto any caller's canvas, sized via
+`HudMetrics`. The E34 foundation E35/E36 draw with.
+⚠ Source rects are auto-segmented at load as maximal inked-column runs assigned from `0x21` up —
+  exact only because no glyph has a blank interior column (94 runs = 94 codes); it warns if the
+  count drifts. Black is keyed transparent, green kept — a white modulate reproduces the original.
+⚠ The drawing control MUST set a Nearest texture filter (it is a pixel font); `HudFontTest.cs` is
+  the `--hud-font-test` proof overlay (added per pane, so 1P vs a 4P pane compare).
+
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
 block, the off-screen edge arrow (`EdgePoint`, `ClockHour` bearing), run status and banners

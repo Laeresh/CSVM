@@ -252,6 +252,8 @@ public partial class PlaneViewer : Node3D
     private bool _autoFireRockets;      // --fire-rockets: hold the rocket trigger (scripted screenshots / soak runs)
     private int _gunSelect;             // --gun-select=N: initial gun group (0-based; only one fires at a time)
     private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
+    private bool _hudFontTest;          // --hud-font-test: overlay the E34 bitmap-font sample on each pane
+    private string _hudFontTestText = "GUNS 30: 2000  ROCKETS 06: 9"; // the sample string
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -467,6 +469,8 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--fire-rockets") _autoFireRockets = true;
             else if (arg.StartsWith("--gun-select=")) _gunSelect = int.Parse(arg["--gun-select=".Length..]);
             else if (arg.StartsWith("--rocket=")) _rocketOverride = arg["--rocket=".Length..];
+            else if (arg == "--hud-font-test") _hudFontTest = true;
+            else if (arg.StartsWith("--hud-font-test=")) { _hudFontTest = true; _hudFontTestText = arg["--hud-font-test=".Length..]; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1190,6 +1194,12 @@ public partial class PlaneViewer : Node3D
                         race = new StuntRace(); // splitscreen: a race, ranked on the shared board
                 }
 
+                // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
+                // shared across panes. Only when --hud-font-test is asking for the proof overlay.
+                HudFont? hudFont = _hudFontTest
+                    ? HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"))
+                    : null;
+
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
                     var rig = _rigs[pi];
@@ -1327,6 +1337,16 @@ public partial class PlaneViewer : Node3D
                                 damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
                         if (verbose)
                             GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
+                    }
+
+                    // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
+                    // and a 4P pane can be compared (--hud-font-test). Set before the controller
+                    // enters the tree — its _Ready adds this to the HUD canvas.
+                    if (hudFont != null)
+                    {
+                        controller.FontTest = new HudFontTest(hudFont, _hudFontTestText);
+                        if (verbose)
+                            GD.Print($"hud-font-test: '{_hudFontTestText}' via 5pointhud font");
                     }
 
                     // Visible damage: torn-skin panel flips + the low-HP smoke/fire

@@ -121,6 +121,37 @@ in dial-local coordinates (x right, y up, **bezel radius = 1**, z ≈ 0); the in
   counters via letter/digit texture cycles, `ggindicatorN`/`mgindicatorN` belt
   lights), `nitrogauge`, the artificial-horizon `horizn` and drum `comp` compass.
 
+## The HUD bitmap font (`5pointhud`)
+
+Decoded 2026-07-24 by pixel-probing the atlas; remake reader `src/Flight/HudFont.cs`.
+
+Two textures in **`extracted/rimage/`** (the menu/UI image set — *not* the chapter texture
+archives that carry the compass/gauge art):
+
+- **`5pointhud.png`** — the normal font.
+- **`5pointhudbrite.png`** — the brighter highlight variant, **pixel-for-pixel the same
+  geometry**, differing only in green level.
+
+Both are **463×6**, a proportional **1-bit** font. Glyphs occupy **rows 0–4** (five pixels tall —
+hence "5point"); row 5 is blank spacing. Colours are exactly two green levels plus a dim outline
+on black: normal core **(0,150,0)**, highlight core **(0,255,0)**, both edged with **(0,32,0)**;
+the background is pure black.
+
+**Character range: printable ASCII `0x20`–`0x7e`.** Space (`0x20`) is a blank leading cell, so the
+atlas holds **94 ink glyphs, one per code `0x21`–`0x7e` laid left-to-right in code order** — i.e.
+`glyph(code)` is the `(code − 0x21)`-th maximal run of inked columns. (The PLAN's shorthand
+"`0123456789:;<=>?@A…z`" understates it: the set begins at `!` and runs through `~`, digits and
+punctuation included.) **Letters are uppercase-only** — the `a`–`z` cells carry the `A`–`Z`
+shapes. No glyph has a fully-blank interior column, so the run-per-code segmentation is exact
+(94 runs = 94 codes, verified); glyph widths vary **1–6 px**, inter-glyph gaps **1–3 px**.
+
+The reader segments the source rects at load (one per inked-column run, assigned from `0x21` up),
+keys the black background to transparent (every non-black texel kept as-is, so a white modulate
+reproduces the original green), and draws each glyph with `DrawTextureRectRegion` under a
+**Nearest** filter (a pixel font). It inserts a **1 px tracking** gap after each glyph and treats
+space / unrepresented codes as a **3 px** advance. Sizing routes through `HudMetrics` like every
+other HUD element, so a splitscreen pane damps the text the same way the dials do.
+
 ## Open question
 
 Which world axis is compass **north**: the remake assumes **−Z** (consistent with the

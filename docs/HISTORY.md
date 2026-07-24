@@ -5613,3 +5613,28 @@ instruments + `markers.md`, which cite only format-level firepoint positions.
 turret-soft-spot note), PLAN-M3-weapons.md (checklist A10 ☐→☑ + `### A10` landed note; the binding-rule
 subsection header/⚠ flipped to confirmed; Wave A now complete), CLAUDE.md Current-status (A10 done →
 Next is Wave E).
+
+**Bitmap-font HUD text renderer — M3 Wave E, item E34 (2026-07-24):** the game's own HUD font is now a
+reusable renderer (`src/Flight/HudFont.cs`), the foundation the rest of Wave E draws with. The two
+atlases in `extracted/rimage/` — `5pointhud.png` (normal) and `5pointhudbrite.png` (highlight) — were
+pixel-probed and are **463×6, a proportional 1-bit font, five px tall (rows 0–4), covering printable
+ASCII `0x20`–`0x7e`**: space is a blank leading cell, so the 94 ink glyphs map one-per-code
+`0x21`–`0x7e` in code order (`glyph(code) = run[code−0x21]`), letters uppercase-only (`a`–`z` reuse
+`A`–`Z`). Colours are two green levels on black (normal core (0,150,0), highlight core (0,255,0), a
+dim (0,32,0) outline). **The PLAN's shorthand "`0123456789:;<=>?@A…z`" understated the range** — the
+probe found it begins at `!`; corrected in `docs/formats/hud.md`, which now carries the full decode.
+The reader auto-segments source rects at load (maximal inked-column runs, exact because no glyph has a
+blank interior column — 94 runs = 94 codes, verified; it warns if the count drifts), keys the black
+background transparent (green kept, so a white modulate reproduces the original), and draws each glyph
+with `DrawTextureRectRegion` under a Nearest filter, 1 px tracking, 3 px space; sizing routes through
+`HudMetrics` like every other HUD element. **Verified** (`--hud-font-test`, a flag-gated per-pane proof
+overlay `src/Flight/HudFontTest.cs`): the sample `GUNS 30: 2000  ROCKETS 06: 9` renders correctly in
+both variants at 1P and in a 4-way splitscreen pane, the glyphs identical and the size differing only by
+the HudMetrics factor (1P Scale 0.50 vs 4P pane 0.354 — the sqrt-damped 0.707 ratio, not a naive 0.50),
+with the `Measure()` underline ending exactly at the last glyph in both. `--screenshot` was run
+**windowed** (verification.md rule 71: `--headless` floods `Parameter "t" is null` and never captures).
+Purely additive and gated — with the flag off, `HudFont` is not loaded and the flight HUD is unchanged.
+
+**Docs.** `docs/formats/hud.md` (new "HUD bitmap font (`5pointhud`)" section), `docs/architecture.md`
+(new `src/Flight/HudFont.cs` entry), `docs/cli.md` (`--hud-font-test`), PLAN-M3-weapons.md (E34 ☐→☑),
+CLAUDE.md (module index + Current-status Next E34→E35).

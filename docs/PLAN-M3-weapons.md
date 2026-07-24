@@ -478,7 +478,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 ### Wave E — HUD
 
-34. ☐ Bitmap-font HUD text renderer (`5pointhud`)
+34. ☑ Bitmap-font HUD text renderer (`5pointhud`) — **landed** (2026-07-24): `HudFont.cs` — printable-ASCII `0x20`–`0x7e` proportional 5px font, auto-segmented from the atlas, sized via `HudMetrics`; `--hud-font-test` proves 1P == 4P-pane (scaled)
 35. ☐ `gungauge` + `missilegauge` in `GaugeCluster`
 36. ☐ Selected-weapon readout (`MSG_HUD_GUNGAUGE`)
 37. ☐ Impact-point reticle — ballistic projection
@@ -1484,17 +1484,27 @@ the model; no z-fighting or duplication against existing airframe geometry.
 
 ---
 
-### E34 ☐ Bitmap-font HUD text renderer
+### E34 ☑ Bitmap-font HUD text renderer — **LANDED (2026-07-24)**
 
-**Goal.** HUD text in the game's own font. Nothing in the codebase uses it yet.
+**Goal.** HUD text in the game's own font. Nothing in the codebase used it yet.
 
-**Approach.** `5pointhud.png` / `5pointhudbrite.png` are a character atlas
-(`0123456789:;<=>?@A…z`). Build a small text renderer: glyph metrics from the atlas, a normal
-and a highlighted variant. Size through `HudMetrics`, which is the single rule for HUD sizing
-and already handles splitscreen pane damping.
+**Landed.** `src/Flight/HudFont.cs` — a reusable renderer over the two `extracted/rimage/` atlases
+(`5pointhud.png` normal + `5pointhudbrite.png` highlight). Pixel-probing corrected the atlas
+description: it is **463×6, a proportional 1-bit font, five px tall (rows 0–4), covering printable
+ASCII `0x20`–`0x7e`** — not just `0123456789:;<=>?@A…z`; space is a blank leading cell so the 94 ink
+glyphs map one-per-code `0x21`–`0x7e` in code order (`glyph(code) = run[code−0x21]`), letters
+uppercase-only. Two green levels on black (normal core (0,150,0), highlight (0,255,0), (0,32,0) edge).
+The reader auto-segments source rects at load (maximal inked-column runs — exact because no glyph has a
+blank interior column, 94 runs = 94 codes; warns if the count drifts), keys black transparent (green
+kept), draws with `DrawTextureRectRegion` under a Nearest filter (1 px tracking, 3 px space), and sizes
+through `HudMetrics`. Full decode in `docs/formats/hud.md`; the E35/E36 items draw with this.
 
-**Verify.** A known string renders identically at 1P and in a 4-way splitscreen pane, scaled per
-`HudMetrics`.
+**Verified.** `--hud-font-test` (a flag-gated per-pane proof overlay, `src/Flight/HudFontTest.cs`):
+`GUNS 30: 2000  ROCKETS 06: 9` renders in both variants at 1P and in a 4-way splitscreen pane, glyphs
+identical, size differing only by the HudMetrics factor (1P Scale 0.50 vs 4P pane 0.354 — the
+sqrt-damped 0.707 ratio, not a naive 0.50), `Measure()`'s underline ending exactly at the last glyph.
+Screenshots run **windowed** (verification.md rule 71). Additive + gated: flag off ⇒ font not loaded,
+flight HUD unchanged.
 
 ### E35 ☐ `gungauge` + `missilegauge`
 
