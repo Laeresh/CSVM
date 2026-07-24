@@ -700,6 +700,9 @@ in the zrdr readers; the `.zan` frame data is the *only* missing piece for the t
   **NODE_ACTIVE 0x2000** (node index); `NODE_NEAR_GROUND` compiles to NODE_UNDERCOVER
   (0x10) **with the value negated**; node references know two sentinels — **INPUT_NODE =
   −200** (also in SOUND AT_NODE and PUFFER_STATE AT_NODE) and **MAIN_ROOT_NODE = −100**
+  (both resolve to the def's anchor — `AnimRuntime.IsSelfNodeRef`; a `PUFFER_STATE` with
+  `AT_NODE INPUT_NODE`, e.g. `large_30sec_fire`'s `fire_n_smoke`, thus emits on the effect's own
+  relocated root, which is what puts a called destruction fire at the D32 call/hit site)
   (`OPERAND_NODE ["MAIN_ROOT_NODE"]`, and plain node refs); e27 INVALIDATE_ANIMATION
   carries index 0 or −100; e24 CALL_ANIMATION has stale small `wait_for` values without
   the flag; e10 OBJECT_MOTION adds flag bit 15 = **`GRAVITY [..., DO_INTERSECTIONS]`** and

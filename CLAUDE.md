@@ -129,7 +129,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
-- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers.
+- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers; `PlayEffectAt`/`ExternalEffect` drive the D32 world-effects runtime.
 - `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; feeds `ANIM_HEALTH` eval + `DAMAGE_SEQUENCE` stages, `Resolve` maps a struck collider back to its instance (weapon damage, C23).
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
@@ -138,7 +138,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s (ballistics/damage/ammo/flags + FIRE/FLYOUT/IMPACT bindings); inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups (independent ammo) + hardpoints, markers→muzzle nodes, turrets inert; inspect with `--dump-loadout`.
-- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics integration, tracers, muzzle flashes, per-surface impact sound + effect model (water splash instanced at the hit, D30) with a spark fallback, hits damage world destructibles (`DamageSink`, C23); guns tracer-quad, rockets fly the FLYOUT MODEL body; `Spawn` into it.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics integration, tracers, muzzle flashes, per-surface impact sound + effect model (water splash instanced at the hit, D30) with a spark fallback, hits damage world destructibles (`DamageSink`, C23); guns tracer-quad, rockets fly the FLYOUT MODEL body; a rocket impact plays its named IMPACT puffer effect via `EffectSink` (D32); `Spawn` into it.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
@@ -217,8 +217,8 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** — Milestone 3, weapons and destruction. **Per-item status (☑/☐, landed notes, decisions, deferrals) is the plan's checklist and item notes — read those, not this section, for what is done and how it was verified.** Position: Wave A complete bar A10; Wave B complete (B19/B20 guided flight deferred to M4); Wave C complete; Wave D underway — D29/D30/D31/D33 landed, D30's impact-puffer half folded into D32 (see the plan items).
+**Active plan: [`docs/PLAN-M3-weapons.md`](docs/PLAN-M3-weapons.md)** — Milestone 3, weapons and destruction. **Per-item status (☑/☐, landed notes, decisions, deferrals) is the plan's checklist and item notes — read those, not this section, for what is done and how it was verified.** Position: Wave A complete bar A10; Wave B complete (B19/B20 guided flight deferred to M4); Wave C complete; Wave D underway — D29/D30/D31/D32/D33 landed.
 
-**Next: D32** (the world-effects runtime), then D44 (pylon ordnance visuals) and A10 (the in-engine flash-placement check).
+**Next: D44** (pylon ordnance visuals), then A10 (the in-engine flash-placement check).
 
 **Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

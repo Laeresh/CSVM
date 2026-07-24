@@ -65,6 +65,12 @@ public sealed partial class AnimRuntime : Node
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
 
+    /// <summary>Per-kind counts of events (and puffer/sound sub-reasons) this runtime processed but
+    /// could not act on — the same tally <c>ReportUnhandled</c> prints at bootstrap, exposed so a
+    /// post-bootstrap harness (the D32 effects-test) can see WHY an effect built no puffer
+    /// (<c>PufferState(no host node)</c>, <c>PufferState(no texture: …)</c>).</summary>
+    public IReadOnlyDictionary<string, int> UnhandledEventCounts => _unhandled;
+
     /// <summary>The live per-instance HP of every destructible node group in this world (C21).
     /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
     /// C23's weapon damage and C24's death sequence act through it.</summary>
@@ -569,6 +575,29 @@ public sealed partial class AnimRuntime : Node
     /// resolution is both unambiguous and the only correct choice.</summary>
     public bool NameResolveFallback;
 
+    /// <summary>Hands a named effect off to another runtime (the D32 world-effects runtime) instead
+    /// of starting it locally. Set on the WORLD runtime: when a death sequence's CALL_ANIMATION names
+    /// a destruction/impact effect the effects runtime handles, the world runtime — whose puffer
+    /// factory is gone after the build — routes it there with the call-site world point and returns
+    /// true, so the local Start (which would render nothing) is skipped. Null on every other runtime,
+    /// where CALL_ANIMATION behaves exactly as before.</summary>
+    public Func<string, Vector3, bool>? ExternalEffect;
+
+    /// <summary>This runtime does not own audio — its SOUND / SOUND_NODE events are no-ops, not
+    /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
+    /// puffers, but the same effect's impact/death SOUND is already played by the projectile pool
+    /// (D30) or the world runtime (D31), so playing it here too would double it, and with no audio
+    /// session it would only spam "silent for the session" warnings.</summary>
+    public bool SoundHandledElsewhere;
+
+    /// <summary>How long a <see cref="PlayEffectAt"/> effect instance may run before this runtime
+    /// stops it (seconds; 0 = never, the default). The world-effects runtime sets it so a stop-less
+    /// sustained effect — <c>large_30sec_fire</c>'s <c>fire_n_smoke</c>, which has no ACTIVE_STATE 0
+    /// and would otherwise emit for the rest of the session — is bounded. Only effects this runtime
+    /// itself started via PlayEffectAt are tracked; ambient/crash runtimes leave it 0 and are
+    /// untouched.</summary>
+    public float EffectTtl;
+
     /// <summary>A world-space velocity added to every ballistic <see cref="MotionRuntime"/> launch
     /// (translation / translation_range), transformed into the launched node's parent frame. Zero by
     /// default. The crash sets it to a fraction of the plane's impact velocity so the wreck pieces
@@ -601,6 +630,7 @@ public sealed partial class AnimRuntime : Node
         TickPuffers(dt);
         TickLights(dt);
         Sounds?.Tick();
+        SweepEffectTtls(dt);
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -1010,6 +1040,17 @@ public sealed partial class AnimRuntime : Node
                     // them on the CALLER's anchor instead of where the data put it.
                     var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
                     var callAnchor = siteNode ?? anchor;
+                    // The world runtime can't render an effect template (its puffer factory is
+                    // torn down after the build, rule 76). When a death sequence calls one of the
+                    // named destruction/impact effects, hand it to the world-effects runtime (D32),
+                    // which keeps textures open, stages the templates and relocates them onto the
+                    // call site — and skip the local Start that would only build nothing.
+                    if (ExternalEffect != null && callAnchor != null && IsInstanceValid(callAnchor))
+                    {
+                        var siteXform = callAnchor.GlobalTransform;
+                        if (ExternalEffect(callName, siteXform.Origin + siteXform.Basis * siteOffset))
+                            return true;
+                    }
                     foreach (var target in _program.ByAnimName(callName))
                         if (!IsLive(target, callAnchor))
                         {
@@ -1098,8 +1139,12 @@ public sealed partial class AnimRuntime : Node
         // ACTIVE_STATE: 1 = start emitting, 0 = stop. The attach point is AT_NODE; note it is
         // NOT the event's "name" (that is the puffer's own name, a different namespace).
         bool on = (ev.Data.Num("active_state") ?? 0f) >= 1f;
+        // AT_NODE INPUT_NODE / MAIN_ROOT_NODE are the sentinels for "the node this def was invoked
+        // on" = the anchor (same rule ConditionNode applies). A destruction fire authored as
+        // `PufferState(fire_n_smoke, at=INPUT_NODE)` thus emits on the effect's own relocated root,
+        // which is what puts it at the call/hit site (D32) rather than nowhere.
         var host = ev.Data.Str("at_node") is { } atNode
-            ? ResolveOne(atNode, def, anchor)
+            ? (IsSelfNodeRef(atNode) ? anchor : ResolveOne(atNode, def, anchor))
             : anchor;
         if (host == null)
         {
@@ -1146,7 +1191,14 @@ public sealed partial class AnimRuntime : Node
         _puffers[key] = (puffer, def, anchor);
         _activePuffers.Add((puffer, host));
         _opsApplied++;
+        PuffersBuilt++;
     }
+
+    /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
+    /// the owning def). The D32 world-effects verify checks this rather than "the def ran" — a
+    /// started effect whose factory is torn down or whose textures are missing builds nothing and
+    /// renders nothing (verification.md rule 76).</summary>
+    public int PuffersBuilt;
 
     // Drives every running emitter from its host node's current world pose. Emitters follow
     // moving nodes (the train's smokestack travels the whole track loop), so this is per frame.
@@ -1223,6 +1275,8 @@ public sealed partial class AnimRuntime : Node
     /// </summary>
     private void HandleSoundNode(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
+        if (SoundHandledElsewhere)
+            return;
         if (ev.Data.Str("name") is not { } name)
             return;
         if (Sounds == null)
@@ -1288,6 +1342,10 @@ public sealed partial class AnimRuntime : Node
     /// </summary>
     private void HandleSound(AnimEvent ev, AnimDefinition def, Node3D? anchor)
     {
+        if (SoundHandledElsewhere)
+        {
+            return;
+        }
         if (ev.Data.Str("name") is not { } name)
         {
             return;
@@ -1580,10 +1638,14 @@ public sealed partial class AnimRuntime : Node
     /// relocated, so overlapping calls to the same template collapse onto the last site (the
     /// staggered-cluster nuance is a fidelity follow-up). Only the world position is set — the
     /// puffers key off the host origin — and the offset is applied in the site's own frame.</summary>
-    private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset)
+    private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset) =>
+        PlaceTemplateAt(callee, site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset);
+
+    /// <summary>Moves an effect template's own root(s) to an absolute world point — the
+    /// <see cref="PlayEffectAt"/> path, where the site is a hit/death coordinate rather than a
+    /// world node.</summary>
+    private void PlaceTemplateAt(AnimDefinition callee, Vector3 origin)
     {
-        var siteXform = site.GlobalTransform;
-        var origin = siteXform.Origin + siteXform.Basis * offset;
         foreach (var root in Anchors(callee))
         {
             if (root == null || !IsInstanceValid(root))
@@ -1591,6 +1653,65 @@ public sealed partial class AnimRuntime : Node
             var xf = root.GlobalTransform;
             xf.Origin = origin;
             root.GlobalTransform = xf;
+        }
+    }
+
+    // ---- world-effects runtime (D32) ----
+
+    /// <summary>Does this runtime's program hold a definition for an effect animation name? The
+    /// world runtime tests this before routing a death's CALL_ANIMATION here, so only the curated
+    /// impact/destruction effects are handed off (doors and other calls fall through).</summary>
+    public bool Handles(string animName) => _program.ByAnimName(animName).Count > 0;
+
+    /// <summary>Stages the named effect at an absolute world point: relocates each matching effect
+    /// template's root onto the point (so its puffers, which ride that root, emit there) and starts
+    /// the definition, exactly as a CALL_ANIMATION would but with a synthetic site. Returns true if a
+    /// definition matched — the world-effects runtime that <c>ProjectilePool</c> and the death path
+    /// call. Idempotent per template: the shared root is relocated, not copied, so overlapping calls
+    /// to the same effect collapse onto the latest site (the documented gun follow-up).</summary>
+    public bool PlayEffectAt(string animName, Vector3 worldPoint)
+    {
+        bool matched = false;
+        foreach (var def in _program.ByAnimName(animName))
+        {
+            PlaceTemplateAt(def, worldPoint);
+            // Anchor the instance on the def's own template root when it resolves (its at_node/
+            // motion targets live under that root); fall back to null (global name resolution).
+            var anchor = Anchors(def).FirstOrDefault(a => a != null && IsInstanceValid(a));
+            Start(def, anchor);
+            matched = true;
+            if (EffectTtl > 0f)
+                _effectTtls.Add((def, anchor, _effectClock + EffectTtl));
+        }
+        return matched;
+    }
+
+    /// <summary>Stops every live instance and clears the effect-TTL list — a full reset of what
+    /// PlayEffectAt started, so the D32 verify measures each effect in a clean window (these effects
+    /// share puffer names/hosts, so a lingering one would contaminate the next). Not used in play.</summary>
+    public void StopAll()
+    {
+        foreach (var name in _instances.Select(i => i.Def.AnimName).Distinct().ToList())
+            Stop(name);
+        _effectTtls.Clear();
+    }
+
+    private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
+    private float _effectClock;
+
+    private void SweepEffectTtls(float dt)
+    {
+        if (_effectTtls.Count == 0)
+            return;
+        _effectClock += dt;
+        for (int i = _effectTtls.Count - 1; i >= 0; i--)
+        {
+            if (_effectClock < _effectTtls[i].Deadline)
+                continue;
+            // Stop (not just drop the instance): tears down the sustained puffers this effect
+            // created, so a stop-less emitter stops emitting and its live particles decay.
+            Stop(_effectTtls[i].Def.AnimName, _effectTtls[i].Anchor);
+            _effectTtls.RemoveAt(i);
         }
     }
 
@@ -1988,13 +2109,17 @@ public sealed partial class AnimRuntime : Node
     /// cannot tell those two apart — hence the magnitude test rather than an equality check.
     /// It does not matter here: both resolve to the anchor.
     /// </summary>
+    /// <summary>The AT_NODE / condition-node sentinels for "the node this definition was invoked
+    /// on" — both resolve to the anchor (see <see cref="ConditionNode"/> for the u32/-sentinel
+    /// detail).</summary>
+    private static bool IsSelfNodeRef(string name) =>
+        string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
+        || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase);
+
     private Node3D? ConditionNode(object? reference, AnimDefinition def, Node3D? anchor)
     {
         if (reference is string name)
-            return string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
-                   || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase)
-                ? anchor
-                : ResolveOne(name, def, anchor);
+            return IsSelfNodeRef(name) ? anchor : ResolveOne(name, def, anchor);
         if (AnimData.AsNum(reference) is not { } idx)
             return null;
         if (idx > 1e9f)

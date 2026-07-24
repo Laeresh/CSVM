@@ -144,7 +144,13 @@ public sealed class AnimProgram
     /// their reset states on the aircraft. The closure is just the crash def plus the effects it
     /// fires, so nothing irrelevant anchors. StartAnims are left empty (the crash runtime never
     /// auto-starts).</summary>
-    public AnimProgram Subset(string rootAnimName)
+    public AnimProgram Subset(string rootAnimName) => Subset(new[] { rootAnimName });
+
+    /// <summary>The closure over several roots at once — the world-effects runtime (D32) binds the
+    /// union of the impact + destruction effect names, so one runtime serves every effect a hit or a
+    /// death calls. Same closure rule as the single-root overload; the reused defs share this
+    /// program's script pool.</summary>
+    public AnimProgram Subset(IEnumerable<string> rootAnimNames)
     {
         var sub = new AnimProgram();
         var visited = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -154,7 +160,8 @@ public sealed class AnimProgram
             if (!string.IsNullOrEmpty(name) && visited.Add(name))
                 queue.Enqueue(name);
         }
-        Enqueue(rootAnimName);
+        foreach (var root in rootAnimNames)
+            Enqueue(root);
         while (queue.Count > 0)
         {
             foreach (var def in ByAnimName(queue.Dequeue()))

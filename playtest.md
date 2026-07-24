@@ -43,8 +43,19 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   splash shape, not the old blue spark); over dirt/buildings, still a spark + the right hit sound.
   Does the water splash read at speed / the right size / vanish cleanly (it shows ~0.4 s)?
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1B` (dives reliably over water) or `--chapter=C2`.
-  *Blocks:* D30 sign-off. (The `gunhit` smoke + fireball **puffs** are still absent — deferred to
-  D32's world-effects runtime, since a runtime puffer can't build in the flight world.)
+  *Blocks:* D30 sign-off. (The `gunhit` smoke + fireball **puffs** now render via D32 — see below.)
+
+- **Impact + destruction effects (D32, never seen).** The headless `--effects-test` proves the
+  puffer **builds** (16/28 names) but not how it **looks** on screen. Two things to *look for:*
+  (1) **Rocket impacts** — fire HE/ordnance rockets at a **building** (buildings → `large_fireball`)
+  and at **dirt** (HE → `he_ground_effect`, a light flash, no puff): a fireball puff should bloom at
+  the building hit, at the right size, and fade cleanly. (2) **Destruction** — kill an object that
+  authors a called fire (`large_30sec_fire`/`great_balls_of_fire`) and watch the wreck **smoke and
+  burn** at its site. *Watch for:* a puff stuck at the world origin (a template that failed to
+  relocate), a fire that never stops, or one collapsing onto a single jumping puff. **Guns are
+  deliberately not smoking** (the `gunhit` follow-up), and the debris-bit/`he_ring`/splash **meshes**
+  are hidden — only the puffs show. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
+  *Blocks:* D32 sign-off — the on-screen half the headless census cannot cover.
 
 - **Destruction sound (D31, never listened to).** Audio can't be screenshot-verified, so the
   headless proof stops at "the stream resolved and fired" (`snd[N played]`). Shoot a destructible

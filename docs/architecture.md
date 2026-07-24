@@ -292,6 +292,18 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   *definition* or a `SOUND_GROUPS` name, never a node. `OneShotSoundsPlayed` counts successful
   plays for the damage-test (audio can't be screenshot-verified). With this landed the death path
   has no stubbed event kind left (its swap, debris tumble, effects and now sound all run).
+⚠ World-effects runtime (D32): a second, world-scoped AnimRuntime (like the crash runtime but not
+  per-player) bound to the impact/destruction effect closure over a hidden template stage. `Handles`
+  tests a name; `PlayEffectAt(name, worldPoint)` relocates the template root onto the point and
+  `Start`s the def — the puffers ride the (relocated) root, parented at world level, so they render;
+  `ProjectilePool.EffectSink` calls it on a rocket impact, and the WORLD runtime's `ExternalEffect`
+  routes a death's CALL_ANIMATION of a curated effect here (its own factory is gone post-build).
+  `EffectTtl` bounds a stop-less sustained emitter (`large_30sec_fire`); `SoundHandledElsewhere`
+  makes its SOUND/SOUND_NODE no-ops (D30/D31 own that audio); `StopAll`/`PuffersBuilt` serve the
+  `--effects-test` verify. `SweepEffectTtls` runs each Advance. Guns don't route (documented follow-up).
+⚠ PUFFER_STATE AT_NODE `INPUT_NODE`/`MAIN_ROOT_NODE` resolve to the anchor (`IsSelfNodeRef`, the same
+  rule ConditionNode applies) — so a `PufferState(fire_n_smoke, at=INPUT_NODE)` death fire emits on
+  the effect's own relocated root instead of nowhere. Before D32 it fell to `ResolveOne`→null→no host.
 ⚠ Collider removal on death is FREE (C25), not separate code: `SetSubtreeActive` toggles
   `SetCollidersEnabled` with `Visible`, so the swap that hides `healthy`/shows `destroyed` also
   un-solids the door/building and solids the wreck. Measured off/on per kill (C2 gates: off 1, on 8).
@@ -397,6 +409,11 @@ and flashes the muzzle; it runs itself each physics frame. One pool per session,
   `he_ground_effect`, `large_fireball`) instances nothing and the spark stands in. The puffer half of
   those named effects can't render in flight (the puffer factory is torn down after the world build —
   `KeepArchivesOpen` is lab-only), so it is D32's world-effects-runtime work, not the pool's.
+⚠ `EffectSink` (D32) plays the puffer half of a named IMPACT effect through the world-effects runtime
+  (`AnimRuntime.PlayEffectAt`) when the effect is NOT a gamez model — the rocket fireballs/smoke
+  (`large_fireball`, `he_ground_effect`, …). Gated to `!weapon.IsGun`: the `gunhit` smoke has no stop
+  event, so a per-round shared emitter would collapse onto one ever-emitting puff (guns follow-up).
+  The runtime no-ops on a name it doesn't carry, so the spark still stands in for the inert names.
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
   screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
 ⚠ Rockets fly the FLYOUT MODEL body (B14): `Spawn` instances the weapon's `.flt` prototype root
@@ -845,6 +862,13 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   is scheduled (t≈2.2 s), so it needs the clock ticked — and ticking an out-of-tree world spams
   `!is_inside_tree` (global-transform reads). Swap/col are measured pre-tick (immediate post-death),
   debris post-tick; being in-tree also makes positions real (no more C23 (0,0,0) trap).
+⚠ `BuildWorldEffectsRuntime` (D32) builds the one world-effects runtime: a hidden `world_effects`
+  stage of the `EffectStageRoots` gamez templates + an `AnimRuntime` bound to `EffectAnimNames`'
+  closure, wired to `ProjectilePool.EffectSink` and the world runtime's `ExternalEffect`. Built only
+  in `--fly` (and `--effects-test`), needs the session textures kept open (they already are, for the
+  crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
+  camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
+  and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

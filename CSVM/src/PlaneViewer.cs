@@ -63,6 +63,9 @@ namespace CSVM;
 ///   --damage-test[=name]         build the --chapter world, then drive one destructible's HP from
 ///                                full to zero, logging which DAMAGE_SEQUENCE stage effect fires at
 ///                                which health, then quit (C22 verify until F40; optional name filter)
+///   --effects-test               build the --chapter world, play every impact/destruction effect
+///                                through the world-effects runtime and report which build a puffer,
+///                                then quit (D32 verify: a started def that renders nothing vs one that does)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -242,6 +245,7 @@ public partial class PlaneViewer : Node3D
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
+    private bool _effectsTest;         // --effects-test: play every impact/destruction effect through the world-effects runtime, report which build a puffer, quit (D32)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
@@ -455,6 +459,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
+            else if (arg == "--effects-test") { _effectsTest = true; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
@@ -804,6 +809,20 @@ public partial class PlaneViewer : Node3D
                     return false;
                 }
 
+                // --effects-test: build the world-effects runtime and play every impact/destruction
+                // effect through it, reporting which resolve and which actually build a puffer (rule
+                // 76: a started def that renders nothing vs one that does), then quit — the D32
+                // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
+                // is real; the world plane subtree is added so the templates' global transforms hold.
+                if (_effectsTest && worldScene != null)
+                {
+                    _worldRoot!.AddChild(_plane);
+                    var effects = BuildWorldEffectsRuntime(gamez, worldScene, textures, session.Program);
+                    RunEffectsTest(effects);
+                    GetTree().Quit();
+                    return false;
+                }
+
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
                 // anything still sitting on the world origin is content this mission never placed
@@ -1137,6 +1156,19 @@ public partial class PlaneViewer : Node3D
                     DamageSink = worldRuntime != null ? worldRuntime.DamageAt : null,
                 };
                 _worldRoot!.AddChild(projectiles);
+
+                // The world-effects runtime (D32): one per session, rendering the impact/destruction
+                // puffer effects the world runtime cannot (its factory is gone after the build). A
+                // rocket impact plays its named effect here; the world runtime routes a death's
+                // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
+                // the templates, so it is built only when the world was.
+                if (worldScene != null)
+                {
+                    var effects = BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
+                    projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
+                    if (worldRuntime != null)
+                        worldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+                }
 
                 // Stunt run: the mission's danger-zone objectives from ia.json
                 // dzones, positions resolved against this chapter world's gamez, display strings
@@ -1927,6 +1959,41 @@ public partial class PlaneViewer : Node3D
     private static readonly string[] EffectTemplateRoots =
         { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
 
+    // The impact/destruction effect ANIMATION names the world-effects runtime (D32) is bound to —
+    // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
+    // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance; the gun
+    // `*_gunhit` family is bound so a later guns pass can reach it, but is not fired per-round);
+    // destruction names are the ones death sequences CALL_ANIMATION. `random_gun_impact` (root
+    // `player`, a player-plane hit) is excluded — unreachable in M3 and its generic root would
+    // mis-anchor. Verified against extracted/*/cam_anim: every name resolves in all 8 chapters.
+    private static readonly string[] EffectAnimNames =
+    {
+        // rocket / ordnance IMPACT (default + buildings), puffer-bearing and otherwise
+        "large_fireball", "small_fireball", "he_ground_effect", "ap_ground_effect", "flak_effect",
+        "flash_effect", "sonic_ground_effect", "scatter_effect", "torpedo_ground_effect",
+        "rear_flash_effect", "torpedo_water_effect",
+        // gun IMPACT family (bound for a later guns pass; see ProjectilePool.EffectSink)
+        "3040slug_gunhit", "3040ap_gunhit", "3040dum_gunhit", "3040mag_gunhit",
+        "5060slug_gunhit", "5060ap_gunhit", "5060dum_gunhit", "5060mag_gunhit",
+        "70slug_gunhit", "70ap_gunhit", "70dum_gunhit", "70mag_gunhit",
+        // destruction effects death sequences call
+        "large_30sec_fire", "great_balls_of_fire", "large_black_smokeball", "biggun_flying_parts",
+        "big_splash",
+    };
+
+    // The gamez template roots those effects' puffers ride — staged (hidden) under the world-effects
+    // stage so a PlayEffectAt relocates one onto the hit/death point. Union of the anim defs'
+    // anchor roots; all present in every chapter's gamez (checked). The stage is hidden, so the
+    // roots' own meshes (gunhit debris bits, the he_ring/splash models) do not render — the puffers,
+    // parented at world level, do; the mesh half is a documented follow-up.
+    private static readonly string[] EffectStageRoots =
+    {
+        "gunhit", "dum_gunhit", "mag_gunhit", "flame_ball_01", "flame_ball_02", "he_ring",
+        "ap_effect", "flak_control", "flash_control", "sonic_effect", "scatter_trails",
+        "torp_effects", "rear_flash_control", "fire_here", "moving_fire_ball_01",
+        "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model",
+    };
+
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
     // anim_root 'player' plus healthy/destroyed/pieces). Built into the lab stage so a played crash
     // def anchors to this 'player' and resolves 'healthy'/'destroyed' HERE — locally, in front of
@@ -1939,10 +2006,14 @@ public partial class PlaneViewer : Node3D
     /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
     /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
     /// CALL_ANIMATION relocates them onto the call site. Returns how many built.</summary>
-    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent)
+    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent) =>
+        BuildEffectStage(gamez, scene, parent, EffectTemplateRoots);
+
+    private static int BuildEffectStage(GameZ gamez, SceneBuilder scene, Node3D parent,
+        IEnumerable<string> roots)
     {
         int n = 0;
-        foreach (var rootName in EffectTemplateRoots)
+        foreach (var rootName in roots)
         {
             if (gamez.FindByName(rootName) is { } node && scene.BuildSubtree(node) is { } built)
             {
@@ -1952,6 +2023,56 @@ public partial class PlaneViewer : Node3D
             }
         }
         return n;
+    }
+
+    // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
+    // world-effects runtime bounds every PlayEffectAt instance to this many seconds (past the 30 s
+    // fire, so it completes), then tears its puffers down.
+    private const float EffectRuntimeTtl = 32f;
+
+    /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
+    /// per-player crash runtime. It stages the impact/destruction effect templates (hidden) under a
+    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
+    /// roots, keeps a live <c>PufferFactory</c> over the session textures, and binds the closure of
+    /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
+    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a rocket impact,
+    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
+    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the hidden stage does
+    /// not suppress them.</summary>
+    private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
+        TextureArchive textures, AnimProgram worldProgram)
+    {
+        var stage = new Node3D { Name = "world_effects", Visible = false };
+        _worldRoot!.AddChild(stage);
+        int staged = BuildEffectStage(gamez, worldScene, stage, EffectStageRoots);
+        var effects = new AnimRuntime
+        {
+            AutoStart = false,
+            DebugMotions = _debugAnim,
+            PufferParent = _worldRoot,
+            PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+            PlaceCalledTemplates = true,
+            NameResolveFallback = true,
+            EffectTtl = EffectRuntimeTtl,
+            // The impact/death SOUND an effect def carries is already played by the projectile pool
+            // (D30) or the world runtime (D31); this runtime only renders the puffers.
+            SoundHandledElsewhere = true,
+            // The verify census must be reproducible; several gun effects gate their puffer behind
+            // RANDOM_WEIGHT, so an unseeded run reports a different set each time. The game leaves it
+            // unseeded (per-hit variety intact).
+            Seed = _effectsTest ? 20260724 : (int?)null,
+            PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                ? cam.GlobalPosition
+                : Vector3.Zero,
+        };
+        // Bind name resolution to the (hidden) template stage — so the effect names resolve to
+        // these templates and not to the world's or the crash roots' same-named nodes — but parent
+        // the runtime node itself under the visible world root, a plain logic node that self-ticks.
+        effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
+        _worldRoot.AddChild(effects);
+        GD.Print($"world-effects runtime: {staged}/{EffectStageRoots.Length} effect template(s) staged, "
+                 + $"{EffectAnimNames.Length} effect name(s) bound");
+        return effects;
     }
 
     /// <summary>Builds the per-player crash runtime.
@@ -2579,6 +2700,64 @@ public partial class PlaneViewer : Node3D
     /// how each fired CALL_ANIMATION is observed; the runtime's already-live guard means each
     /// effect starts once, so its first-seen HP is its threshold. Reports to stdout and
     /// <c>./.scratch/damage_test.txt</c>.</summary>
+    /// <summary>The D32 headless verify: play every impact/destruction effect through the
+    /// world-effects runtime at the camera point and report whether each RESOLVES (its def is bound)
+    /// and whether it BUILDS a puffer (rule 76 — a started def whose factory/textures are missing
+    /// renders nothing). Each effect is stopped before the next so effects sharing a template root
+    /// (the gun family shares <c>gunhit</c>) get an independent count. Reports to stdout and
+    /// <c>./.scratch/effects_test.txt</c>.</summary>
+    private void RunEffectsTest(Mech3.AnimRuntime effects)
+    {
+        // Play each effect at the player point so range-gated ones (gunhit's PLAYER_RANGE) pass.
+        var p = _camera.GlobalPosition;
+        var sb = new System.Text.StringBuilder();
+        sb.AppendLine($"effects-test: chapter {_chapter}, {EffectAnimNames.Length} effect name(s), "
+                      + $"point ({p.X:0},{p.Y:0},{p.Z:0})");
+        int resolved = 0, puffered = 0;
+        foreach (var name in EffectAnimNames)
+        {
+            int before = effects.PuffersBuilt;
+            bool matched = effects.PlayEffectAt(name, p);
+            // Fixed ticks so the t=0 PUFFER_STATE emits and any one-CallSequence-deep puffer
+            // (large_black_smokeball's p1trail) reaches its first batch.
+            for (int f = 0; f < 30; f++)
+                effects.Advance(1f / 60f);
+            int built = effects.PuffersBuilt - before;
+            if (!matched)
+                sb.AppendLine($"  {name,-22} UNRESOLVED — no def bound");
+            else if (built > 0)
+            {
+                puffered++;
+                sb.AppendLine($"  {name,-22} puffer[{built}] rendered");
+            }
+            else
+                sb.AppendLine($"  {name,-22} started, built no puffer (light/model/container effect)");
+            if (matched)
+                resolved++;
+            // Full reset before the next name: these effects share puffer names (trailpuffer2) and
+            // template roots, so a lingering instance would let the next effect read as "no puffer".
+            effects.StopAll();
+        }
+        sb.AppendLine($"effects-test: {resolved}/{EffectAnimNames.Length} resolved, "
+                      + $"{puffered} built a puffer, {resolved - puffered} started but built none");
+        if (effects.UnhandledEventCounts.Count > 0)
+        {
+            sb.AppendLine("  reasons a start built no puffer: "
+                          + string.Join(", ", effects.UnhandledEventCounts
+                              .OrderByDescending(kv => kv.Value).Select(kv => $"{kv.Key}×{kv.Value}")));
+        }
+        GD.Print(sb.ToString());
+        try
+        {
+            Directory.CreateDirectory(".scratch");
+            File.WriteAllText("./.scratch/effects_test.txt", sb.ToString());
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"effects-test: could not write ./.scratch/effects_test.txt — {e.Message}");
+        }
+    }
+
     private void RunDamageTest(Mech3.AnimRuntime runtime)
     {
         static bool HasDamage(Mech3.AnimDefinition d) => d.Sequences.Any(s =>

@@ -471,7 +471,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 29. ☑ Muzzle flash — flash sprite at the firepoint on each shot — **landed** (billboard burst; exact `muzzle_burst_*` anim = refinement)
 30. ☑ Impact effects — **landed** (2026-07-24): per-surface `IMPACT` **sound** + the named effect **model** at the hit point (the water splash `splash1.flt`/`bsplsh.flt` instance; C1B/C2B verified), + spark fallback. The **puffer** half (`gunhit` smoke, `large_fireball`) is blocked at runtime in flight (puffer factory torn down after build) → folded into D32's world-effects runtime; the 5 undefined names confirmed inert
 31. ☑ The `Sound` anim-event family — **landed** (2026-07-24): `AnimRuntime.HandleSound` fires the one-shot `SOUND` (death/damage/impact audio) as a fire-and-forget `WorldSounds.PlayOneShot` at its AT_NODE; `SOUND_GROUPS` decoded (`SoundDefs.LoadGroups` + `SoundGroup.Pick`, `DYNAMIC_WEIGHTS` recency); `Sound` dropped off every chapter's unhandled list, death sounds play (switchhouse `air_mixed_exp_sg` verified)
-32. ☐ Destruction **+ impact** effects wiring — the world-effects runtime (`large_30sec_fire`, `great_balls_of_fire`, fireballs, **and** the impact puffers D30 deferred: `gunhit` smoke, `he_ground_effect`); generalizes `BuildFlightCrashRuntime`
+32. ☑ Destruction **+ impact** effects wiring — the world-effects runtime — **landed** (2026-07-24): `AnimRuntime.PlayEffectAt` over a hidden template stage renders the impact/destruction puffers; rocket impacts route via `ProjectilePool.EffectSink`, deaths via the world runtime's `ExternalEffect`; `--effects-test` verifies 16/28 build a puffer (rule 76). Gun-impact `gunhit` smoke deferred (no stop event → follow-up)
 33. ☑ Tracers — **landed** (velocity-aligned additive streaks; per-ammo tracer texture = refinement)
 44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
 
@@ -1361,29 +1361,42 @@ play (switchhouse `air_mixed_exp_sg` → `snd[2]`, C1 52 / C2B 73 / C3 4 / C5 13
 `air_mixed_exp_sg → snd_exp_hit1/2/3` (recency-diversified) at `dbase`; leak-free (C4 26+ plays → 0
 ObjectDB leak). Docs: `sounds.md` (`SOUND_GROUPS`), `anim-definitions.md`, `architecture.md`.
 
-### D32 ☐ Destruction + impact effects wiring (the world-effects runtime)
+### D32 ☑ Destruction + impact effects wiring (the world-effects runtime) — **LANDED (2026-07-24)**
 
-**Scope now also covers the impact puffers D30 deferred.** D30 established that a runtime
-`PUFFER_STATE` renders nothing in the flight build (puffer factory torn down after world build;
-`verification.md` rule 76). The named destruction effects (`large_30sec_fire` ×1035,
-`great_balls_of_fire` ×432, `large_fireball` ×307, `large_black_smokeball` ×288,
-`biggun_flying_parts` ×84, `big_splash`) and the named **impact** puffers (`gunhit`'s
-`blacksmokepuffer` smoke, the HE `large_fireball`/`he_ground_effect` fireball) are the **same
-machinery** — `ON_CALL` effect defs relocated onto a call/hit site with live puffers — so both wire
-through one **world-effects runtime**.
+**Landed.** `PlaneViewer.BuildWorldEffectsRuntime` builds one world-scoped `AnimRuntime` (the
+generalization of `BuildFlightCrashRuntime`): a **hidden** `world_effects` stage of the effect
+template roots (`EffectStageRoots` — `gunhit`/`flame_ball_01`/`he_ring`/… , all present in every
+chapter's gamez), a live `PufferFactory` over the session textures (kept open for the crash runtime
+already), `PlaceCalledTemplates`/`NameResolveFallback` on, bound to the closure of the 28
+`EffectAnimNames`. `AnimRuntime.PlayEffectAt(name, worldPoint)` relocates the effect's template root
+onto the point and `Start`s the def — the puffers ride the relocated root and parent at world level,
+so they render even though the stage is hidden (the template **meshes** — the `gunhit` debris bits,
+the `he_ring`/splash models — stay hidden: a documented mesh follow-up). Two callers:
+`ProjectilePool.EffectSink` on a **rocket/ordnance** impact, and the world runtime's `ExternalEffect`
+routing a **death** sequence's `CALL_ANIMATION` of a curated effect here. `EffectTtl` (32 s) bounds a
+stop-less sustained emitter (`large_30sec_fire`); `SoundHandledElsewhere` no-ops its SOUND events
+(D30/D31 own that audio).
 
-**Approach.** Generalize `BuildFlightCrashRuntime` (which already proves the pattern in flight: a
-live `PufferFactory` over kept-open textures, `PlaceCalledTemplates`, a `BuildEffectStage` of the
-relocatable template roots, `NameResolveFallback`) into a world-level effects runtime bound to the
-closure of the impact/destruction effect names, exposing a `PlayEffectAt(name, worldPoint)` that
-stages the named effect at a synthetic site. `ProjectilePool` calls it on impact; the death sequences
-already `CallAnimation` these effects. **⚠ Singleton-template limitation:** the shared template roots
-are relocated per call (not copied), and the puffer key is `(name, host)`, so sustained gunfire
-collapses the `gunhit` smoke onto one jumping/first-wins puff — fine for rockets/deaths (≤1/s),
-a fidelity follow-up for guns (the `PlaceTemplateAt` note already flags the staggered-cluster nuance).
+**Two decodes fixed on the way.** (1) A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/
+`MAIN_ROOT_NODE` now resolves to the anchor (`IsSelfNodeRef`, the same sentinel rule `ConditionNode`
+already applied) — before, `ResolveOne`→null→no host, so `large_30sec_fire`'s `fire_n_smoke` emitted
+nowhere. (2) `AnimProgram.Subset` gained a multi-root overload for the effect closure.
 
-**Verify.** Each of the top effect names resolves and a `Puffer` is *built* (not just the def
-started — rule 76); a rocket/destruction fireball renders at its site; report any name that does not.
+**⚠ Guns deferred (stronger than the plan's singleton note).** The plan expected the `gunhit` smoke
+to *collapse onto one puff*; in fact `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE 0` stop**,
+so a per-round shared emitter would emit **forever** at the last hit. So gun impacts are **not**
+routed (`ProjectilePool.EffectSink` is gated `!weapon.IsGun`); the gun `*_gunhit` names are still
+bound + testable. A guns pass needs per-hit copied/expiring emitters. Rockets/ordnance (≤1/s) route.
+
+**Verified.** `--effects-test` (new; seeded + `StopAll` between names → reproducible across chapters
+C1/C2/C4/C5): 28/28 resolve, **16 build a puffer** — `large_fireball`/`small_fireball`/
+`large_30sec_fire`/`great_balls_of_fire`/`large_black_smokeball`/`big_splash` + the gun `*_gunhit`
+smoke + the `ap`/`sonic`/`flak`/`scatter`/`torpedo` ground bursts; the 12 that don't are point-light/
+model effects (`he_ground_effect`/`flash_effect`), the `RANDOM_WEIGHT`-gated gun variants, and
+`biggun_flying_parts` (a zeppelin container whose puffers ride unstaged `fly_trail*` sub-trails).
+Flight: a C1 rocket run routes impacts through `PlayEffectAt` with no crash/noise. Regression: 8-chapter
+`--damage-test` 0 errors (16 defs each, unchanged); `--freecam` ambient puffer census unchanged. The
+**on-screen** fireball look is an owed playtest (`playtest.md`), like D30's splash.
 
 ### D33 ☑ Tracers — **LANDED (2026-07-24)**
 

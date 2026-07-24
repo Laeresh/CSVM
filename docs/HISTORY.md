@@ -5447,3 +5447,75 @@ construction** — with no config.json every getter returns its `const` fallback
 was reordered — which is the accepted verification here since `--fly` screenshots are not
 frame-deterministic (`verification.md` rules 44, and the non-determinism table). Docs: `architecture.md`
 (`src/Utils/Config.cs`), `cli.md` + CLAUDE.md module index (`--dump-config`).
+
+## 2026-07-24 — M3 Wave D D32: the world-effects runtime (destruction + impact puffers)
+
+The named destruction/impact effects now render their smoke and fire. D30 established that a runtime
+`PUFFER_STATE` builds nothing in the flight build — the puffer factory + `TextureArchive` are torn down
+after the world build (`KeepArchivesOpen` is lab-only, `verification.md` rule 76) — and deferred the
+puffer half of both impacts and deaths to a shared **world-effects runtime**. That runtime is the
+world-scoped generalization of the per-player crash runtime (`BuildFlightCrashRuntime`), which already
+proves the pattern: a live `PufferFactory` over kept-open textures, `PlaceCalledTemplates`,
+`NameResolveFallback`, and effect-template roots staged for a `CALL_ANIMATION` to relocate.
+
+**What landed.**
+- **`PlaneViewer.BuildWorldEffectsRuntime`** — one per session (built in the `--fly` path, needing the
+  session textures the crash runtime already keeps open): a **hidden** `world_effects` stage of the
+  `EffectStageRoots` gamez templates (`gunhit`/`dum_gunhit`/`mag_gunhit`/`flame_ball_01`/`flame_ball_02`/
+  `he_ring`/`ap_effect`/`flak_control`/… — 18, all present in every chapter's gamez), plus an
+  `AnimRuntime` (`AutoStart`=false, `PufferFactory` sustained, `PufferParent`=world root,
+  `PlaceCalledTemplates`+`NameResolveFallback` on) bound to the closure of the 28 `EffectAnimNames`.
+- **`AnimRuntime.PlayEffectAt(name, worldPoint)`** — relocates the effect def's template root onto the
+  point (`PlaceTemplateAt` gained an absolute-point overload) and `Start`s it. Its puffers ride that
+  relocated root and parent at world level, so they render even though the stage is hidden — which is
+  the point of hiding it: the template **meshes** (the `gunhit` debris bits, the `he_ring`/`huge_splash`
+  models) never flash at the stage origin (a documented mesh follow-up). `Handles(name)` gates the
+  routing so only curated effects are handed off.
+- **Two callers.** `ProjectilePool.EffectSink` on a **rocket/ordnance** impact (the non-model IMPACT
+  effect — `large_fireball`, `he_ground_effect`, …); the world runtime's new `ExternalEffect` delegate
+  routes a **death** sequence's `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, …) here
+  instead of starting it locally where its factory is gone.
+- **Bounds + hygiene.** `EffectTtl` (32 s) tears down a stop-less sustained emitter so
+  `large_30sec_fire`'s `fire_n_smoke` (a `Loop` with no `ACTIVE_STATE 0` until t=30) does not emit
+  forever; `SoundHandledElsewhere` makes the runtime's SOUND/SOUND_NODE no-ops (the impact/death audio
+  is already played by D30's pool / D31's world runtime — playing it again would double it and, with no
+  audio session, only spam "silent for the session").
+
+**Two decodes fixed on the way.**
+- A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` now resolves to the **anchor**
+  (`IsSelfNodeRef`, the same −200/−100 sentinel rule `ConditionNode` already applied). Before, the host
+  went through `ResolveOne`→null→"no host node", so `large_30sec_fire` (host `INPUT_NODE`) emitted
+  nowhere. With the fix its fire emits on the effect's own relocated root — the whole point of a
+  called destruction fire landing at the call site.
+- `AnimProgram.Subset` gained a multi-root overload for the effect closure.
+
+**Guns deferred — stronger than the plan's singleton note.** The plan expected the `gunhit` smoke to
+*collapse onto one puff* under rapid fire. In fact `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE
+0` stop**, so a per-round shared emitter would emit **forever** at the last hit — worse than a jumping
+puff, a leak. So gun impacts are **not** routed (`ProjectilePool.EffectSink` is gated `!weapon.IsGun`);
+the gun `*_gunhit` names stay bound and testable. A guns pass needs per-hit copied/expiring emitters.
+Rockets/ordnance (≤1/s, self-terminating fireballs) route now.
+
+**Verified.** New `--effects-test` (builds the world-effects runtime, plays each bound name at the
+camera point, reports resolve✓ + puffer-built per rule 76, to `./.scratch/effects_test.txt`, then
+quits). Made deterministic — the runtime RNG is seeded (several gun variants gate their puffer behind
+`RANDOM_WEIGHT`) and every effect is `StopAll`'d before the next (they share the `trailpuffer2` puffer
+name, so a lingering one reads as the next's "no puffer"). Reproducible and identical across C1/C2/C4/C5:
+**28/28 resolve, 16 build a puffer** — `large_fireball`/`small_fireball`/`large_30sec_fire`/
+`great_balls_of_fire`/`large_black_smokeball`/`big_splash`, the gun `*_gunhit` smoke, and the
+`ap`/`sonic`/`flak`/`scatter`/`torpedo` ground bursts. The 12 that build none are honest: point-light/
+model effects (`he_ground_effect`, `flash_effect`, `rear_flash_effect`), the `RANDOM_WEIGHT`-gated gun
+variants, and `biggun_flying_parts` (a zeppelin container whose puffers ride unstaged `fly_trail*`
+sub-trails). A C1 `--fly --fire-rockets` run routes HE impacts through `PlayEffectAt` (`impact: wep_06
+(BOOM) → …`) with no crash and no effects-runtime warning noise. Regression: 8-chapter `--damage-test
+--damage-hd=100` clean (0 hard errors, 16 defs swept each — unchanged); `--freecam` C1 ambient puffer
+census unchanged (`4 puffer emitter(s): splashpuffer1..3, steampuffer`, same 6 unhandled kinds), so the
+`INPUT_NODE`-host fix did not disturb the ambient world. The **on-screen** fireball look is an owed
+playtest (`playtest.md`), like D30's splash — headless `--screenshot` still NREs in `GetImage` (a
+pre-existing, unrelated harness limitation).
+
+**Docs.** `weapon-effects.md` (D32 engine-wiring section + the impact→effect render map),
+`anim-definitions.md` (`INPUT_NODE`/`MAIN_ROOT_NODE` AT_NODE → anchor), `architecture.md` (`AnimRuntime`,
+`Projectile`, `PlaneViewer`), `cli.md` + CLAUDE.md module index (`--effects-test`), PLAN-M3-weapons.md
+(checklist 32 ☐→☑, `### D32` reconciled), `backlog.md` (gunhit guns follow-up + the mesh-effects
+follow-up), `playtest.md` (the owed fireball/impact-effect listen-and-look).

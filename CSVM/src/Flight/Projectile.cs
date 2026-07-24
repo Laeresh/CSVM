@@ -131,6 +131,13 @@ public sealed partial class ProjectilePool : Node3D
     /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
     public System.Func<Node?, float, bool>? DamageSink;
 
+    /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
+    /// runtime (D32): the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
+    /// def rather than a gamez model. Null in views with no anim runtime. Gated to non-gun weapons —
+    /// the <c>gunhit</c> smoke has no stop event, so a shared per-round emitter would collapse onto one
+    /// jumping, ever-emitting puff (a documented guns follow-up); rockets/ordnance fire ≤1/s.</summary>
+    public System.Action<string, Vector3>? EffectSink;
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
@@ -444,9 +451,15 @@ public sealed partial class ProjectilePool : Node3D
         // gamez node (the water splash prototypes), instance it at the hit point and skip the spark
         // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
         // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE is D32).
-        bool showedModel = effect != null
-            && (effect.Animation ?? effect.SurfaceAnimation) is { } fxName
-            && SpawnImpactModel(fxName, point);
+        var fxName = effect != null ? (effect.Animation ?? effect.SurfaceAnimation) : null;
+        bool showedModel = fxName != null && SpawnImpactModel(fxName, point);
+        // The puffer half (D32): when the effect is not a gamez model, hand its name to the
+        // world-effects runtime, which builds the smoke/fireball at the hit. Rockets/ordnance only
+        // (the gun `gunhit` smoke is a documented follow-up — see EffectSink). The runtime no-ops on
+        // a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so the spark below
+        // still stands in for those.
+        if (!showedModel && fxName != null && !weapon.IsGun)
+            EffectSink?.Invoke(fxName, point);
         if (!showedModel && _impact.Count < MaxFlashes)
         {
             var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);

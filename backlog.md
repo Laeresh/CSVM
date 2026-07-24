@@ -309,6 +309,30 @@ unscheduled.
   trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
   inverted flag (`has_interval_value` false, key off `interval_type`).
 
+- **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
+  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; three threads
+  it left open:
+  1. **Gun-impact `gunhit` smoke.** Not wired — `ProjectilePool.EffectSink` is gated `!weapon.IsGun`.
+     The plan assumed the shared per-round emitter would *collapse onto one puff*; the real blocker is
+     that `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE 0` stop**, so one shared emitter
+     (`_puffers` key `(name, host)`, one `gunhit` template root) emits **forever** at the last hit.
+     A guns pass needs a per-hit emitter that copies (not relocates) the template and self-expires —
+     either a pool of `gunhit` roots or a burst-mode puffer with a bounded life.
+  2. **The template MESH half.** The effects stage is hidden, so only the puffers render; the
+     `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their `OBJECT_MOTION`), the `he_ring` ground
+     shockwave, and the `huge_splash_model`/`zep_ng_dstry1.flt` models do **not** show. Rendering them
+     needs the mesh visible-at-the-site without flashing at the stage origin (per-def visibility, or a
+     copied instance per call rather than a hidden shared template).
+  3. **`biggun_flying_parts`** (the zeppelin-destruction container) builds no puffer in `--effects-test`
+     — its `spurtpuffer1..5` ride `fly_trail1..5` sub-trail roots that are gamez nodes but **not in
+     `EffectStageRoots`**. Stage the `fly_trail*`/`*_trails` sub-templates (and check whether it needs
+     the `OPERAND_NODE` call path, not a bare point) if zeppelin kills are ever wanted to smoke.
+  ⚠ **Traps.** The `--effects-test` census is only reproducible **seeded** — several gun `*_gunhit`
+  variants gate their puffer behind `RANDOM_WEIGHT`, so an unseeded run reports a different set each
+  time (a manufactured answer). And these effects **share puffer names** (`trailpuffer2` across
+  `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
+  if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
+
 - **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
   sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
   mechanism). It appears on **56,750 `CallAnimation` events** across the install and on **no other
