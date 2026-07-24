@@ -417,6 +417,9 @@ and flashes the muzzle; it runs itself each physics frame. One pool per session,
   (`large_fireball`, `he_ground_effect`, …). Gated to `!weapon.IsGun`: the `gunhit` smoke has no stop
   event, so a per-round shared emitter would collapse onto one ever-emitting puff (guns follow-up).
   The runtime no-ops on a name it doesn't carry, so the spark still stands in for the inert names.
+⚠ When `EffectSink` is null (a scene-less pool: the weapon lab), a hardpoint (`!IsGun`) impact shows
+  `SpawnExplosion` — a cluster of large additive orange sprites — in place of the single spark, so the
+  blast is visible where the real puffer can't build. Flight keeps its real fireball (EffectSink set).
 ⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
   screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
 ⚠ Rockets fly the FLYOUT MODEL body (B14): `Spawn` instances the weapon's `.flt` prototype root
@@ -856,6 +859,29 @@ boxes, light sliders + headlight, and independent cull × normal-source override
 ⚠ Bounds-check override slots against the INSTANCE (`GetSurfaceOverrideMaterialCount()`), not the
   mesh — `SmoothMesh` refuses 0-surface meshes; `SetOverride` recovers by re-assigning the mesh.
 
+## src/UI/WeaponLab.cs
+The `--viewer` weapon lab (key W): mounts a weapon and fires it, driving its OWN `ProjectilePool` so
+a round runs the identical ballistics flight fires. Two banks match the game — GUNS fire from the
+plane's named gun groups (bound from the stock `Loadout` — "Inner Wing Guns" …), HARDPOINTS fire from
+its pylons; the bank filters both the weapon list and the mount list, so a gun can only fire from a
+gun group and a rocket only from a pylon. Steppers pick bank / weapon (with live ballistics) / mount
+/ target surface; a slider parks a stand-in target wall 15–1100 m ahead; auto-fire + fire-once +
+Space; copy-CLI-args (`--weapon-lab=<id> [--weapon-mount=g<slot>|pylon<n>] [--weapon-fire]`).
+`RunSelfTest` fires all 48 once, each from a mount of its class — the `--weapon-test` pass check.
+Built in every parked `--viewer` session so W always toggles, hidden until engaged so a plain viewer
+screenshot is byte-identical.
+⚠ No chapter world: the pool is built scene-less, so rockets fly streak-only, gun impacts show the
+  spark and hardpoint impacts show the pool's explosion stand-in (no real puffer runtime), and
+  `DamageSink` is null. The target wall is the raycast's only hit; tagged (`SceneBuilder.SurfaceMeta`)
+  so the pool's classifier picks the IMPACT class. Mounts bind from the stock `Loadout`; a plane the
+  table omits (or a bind failure) falls back to the raw firepoint/pylon marker rig.
+⚠ Pool + target + mounts build in the CONSTRUCTOR (not `_Ready`), so `RunSelfTest` works synchronously
+  right after `AddChild` before `_Ready` (Spawn needs no frame). UI + target placement wait for `_Ready` (in tree).
+⚠ `_engaged` (target shown, firing processed) follows `_panel` on W, but `--weapon-fire` starts engaged
+  with the panel HIDDEN (clean firing screenshots) — firing gates on `_engaged`, never panel visibility.
+⚠ Ballistics decimals are formatted `InvariantCulture` (a dot) — a raw `{v:0.#}` interpolation prints
+  a locale comma (`h4,5`) in a de-DE run.
+
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
 owns the orbit state and drives a `Camera3D` it does not own; `Frame` honours `--campos`/`--lookat`,
@@ -936,6 +962,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
   camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
   and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
+⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
+  contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
+  synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
+  auto-frames the killed object (unless `--campos`/`--lookat` set) and builds the world-effects runtime
+  itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

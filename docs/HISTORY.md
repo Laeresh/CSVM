@@ -5780,3 +5780,91 @@ F39 and F42 stay in M3 (F42 is exit-criterion 2's instrument).
 **Verified.** Plan evidence lines cite code greps (TIME sites, unseeded RNG sites, `GD.Print`
 census, `ManualAdvance`/`FixedDt` mechanics); F43's tick verified against `PlaneViewer.cs:466–467`
 and `FlightController.InfiniteAmmo`, not the docs alone. No engine code changed.
+
+**M3 F39 — weapon lab in `--viewer` (2026-07-24).** `src/UI/WeaponLab.cs`, the fourth `--viewer`
+lab (key **W**, `--weapon-lab[=wep_id]`), beside the damage (H) / livery (L) / mesh (M) labs. It
+mounts any of the 48 `weapons.json` entries on any of the parked plane's firepoints/pylons and
+fires it, driving its OWN `ProjectilePool` so a round runs the identical ballistics flight fires.
+The bottom-right panel steppers pick weapon (with live ballistics: caliber, rate, velocity,
+damage, `CLUSTER_SIZE`, range, class flags), mount (`all firepoints` / each `firepointN` / each
+`pylonN`), and target surface (`default`/`water`/`buildings`); a slider parks a stand-in target
+wall 15–400 m ahead; auto-fire + fire-once + **Space**; and copy-CLI-args emits
+`--weapon-lab=<id> [--weapon-mount=<name>] [--weapon-fire]`, as `LiveryLab` does.
+
+*The design question the task flagged — what firing looks like with no world:* the viewer has no
+chapter gamez, so the pool is built scene-less (`ProjectilePool(textures, null, null)`) — rockets
+fly streak-only (no `FLYOUT` prototype to instance), impacts show the stand-in spark (no `splash`
+geometry, no puffer runtime), and `DamageSink` is null. The pool's hits come from a per-step world
+raycast, so with no terrain there is nothing to hit; the lab therefore parks a `StaticBody3D`
+target wall ahead of the nose, **tagged with `SceneBuilder.SurfaceMeta`** so B15's classifier still
+picks the matching `IMPACT` variant. Target + tracers show only while the lab is engaged, so an
+unadorned `--viewer` screenshot stays byte-identical (the lab is built hidden in every parked
+`--viewer` session so W always toggles it). The pool + target + mounts build in the constructor
+(not `_Ready`) so `RunSelfTest` works synchronously right after `AddChild` — `Spawn` needs no frame.
+
+**Verified.** `--weapon-test` mounts and fires every one of the 48 entries once from the
+`all firepoints` mount and reports **48/48 fired OK, 0 errors** on the Bloodhawk, the Kestrel
+(7-firepoint centreline rig), the Warhawk and the Peacemaker (`./.scratch/weapon_test.txt`).
+Windowed captures (`wl_guns.png`) show `wep_30` tracers streaking from the wings into a cluster of
+impact sparks on the target, and (`wl_rocket.png`) the `wep_06` rocket path with the panel reading
+`1/s · 1200 m/s · dmg h60/a40 · ×3 · HE`; the pool's impact log confirms the raycast hits
+`weapon_lab/weapon_target` and classifies the surface (`Default`). A plain `--viewer` renders clean
+(`wl_plain.png` — no target/tracers/panel). Build clean (0 warnings / 0 errors). Wave F now closes
+with F42 (`--destroy=`); docs updated in the same turn (`cli.md`, `architecture.md`, CLAUDE.md
+module index + viewer-keys + Current status, the plan's F39 checklist + detail).
+
+**M3 F39 refinement — gun groups, banks, explosions (2026-07-24, user feedback).** Five changes
+after the first playtest. (1) The lab's mounts are now the game's grouping: weapons split into two
+banks — GUNS fire from the plane's named **gun groups** (bound from the stock `Loadout` via
+`Loadout.Bind` — "Inner Wing Guns" …, each resolving to its firepoint pair), HARDPOINTS fire from
+its **pylons**. (2/3) The bank filters both the weapon list and the mount list, so a gun can only
+fire from a gun group and a rocket only from a pylon (a bank stepper switches; `--weapon-lab=<id>`
+sets the bank from the weapon's class). (4) The target-distance slider now reaches **1100 m** (was
+400) — far enough to watch a rocket fly its full course; guns fall short past their ~1000 m range.
+(5) **Hardpoint impacts now show an explosion:** `ProjectilePool.SpawnExplosion` renders a cluster
+of large additive orange sprites for a `!IsGun` impact when `EffectSink` is null (a scene-less pool
+— the viewer had shown only a small spark because there is no world-effects runtime to build the
+real fireball); flight is unchanged (its `EffectSink` is set, so the real puffer still plays). Also
+fixed a de-DE locale comma in the ballistics readout (`h4,5` → `h4.5`, formatted `InvariantCulture`).
+Mount CLI tokens: `g<slot>` for a gun group, `pylon<n>` for a pylon, `all` for the whole bank.
+
+**Verified.** `--weapon-test` now fires each of the 48 from a mount of its class (guns → gun groups,
+hardpoints → pylons) and reports **48/48 fired OK, 0 errors, 0 skipped** on the Bloodhawk, the
+Kestrel (centreline + turret group), Warhawk and Peacemaker. Windowed captures: `wl_group.png` shows
+`wep_40` fired from the named "Inner Wing Guns" group (panel `bank: GUNS`, mount `Inner Wing Guns`,
+CLI `--weapon-mount=g1`); `wl_boom.png` shows the `wep_06` HE-rocket explosion fireball on the
+target (panel `bank: HARDPOINTS`, `all pylons`). Build clean.
+
+**`--destroy=` CLI trigger — M3 wave F, item F42 (2026-07-24):** the last open Milestone-3 item.
+`--destroy=<name>` kills a named world destructible at session build so a `--screenshot` captures its
+destruction **with nobody at the controls** — the way the rest of wave C (`--damage-hd`) is verified,
+but as a rendered shot instead of a text census. It is exit-criterion 2's instrument. Code is one
+file (`PlaneViewer.cs`, +135): a `--destroy=` flag, a `TriggerDestroy` helper, and a build-time trigger
+block. `<name>` matches, case-insensitively by substring, any live destructible's def name / animation
+name / anchor `cs_name`; every distinct object that matches is killed (resolved to its authoritative
+`DestructibleRegistry` instance and de-duped by anchor, capped 64 with a loud note). It **reuses the
+weapon-hit path exactly** — `AnimRuntime.DamageAt(anchor, MaxHealth+1)` — so the healthy→destroyed swap
+fires synchronously (the death's Initial sequence dispatches its t=0 events inside `Start`) and the
+debris/effects/audio are identical to a rocket kill; the world subtree is already in the tree so the
+death's global-transform reads and effect stage are valid, and the runtime self-ticks the death out
+during the `--screenshot` warm-up. It is a **pure modifier** (forces no mode): pair with `--freecam`
+(the "no controls" case) or flight. In `--freecam` it **auto-frames** the killed object (its merged
+mesh AABB via `SpectatorCamera.Frame`, unless `--campos`/`--lookat` set) and **builds the world-effects
+runtime** itself so the fire/smoke render — both gated on `--destroy`, so a plain `--freecam` build is
+byte-identical (confirmed: the 8-chapter node counts are unchanged from a plain freecam).
+
+**Verified.** A destruction screenshot in each of the 8 chapters (`--freecam --chapter=CX --destroy=…
+--screenshot`, windowed), names taken from `--damage-test` and the compiled-anim data (never guessed):
+`m_build01` C1 (Hollywood-lot building, `great_balls_of_fire`), `bhf_heliumtank1` C4 (helium-tank
+facility fireball), `g_tower1` C3 (guard tower), `agyrobus` C5 (fireball over the night city), `s_build`
+C2 (building swapped to its destroyed shell), `--mission=MP1 --destroy=patrolboat` C1B (fireball on a
+placed harbour dock), `--mission=M01 --destroy=leng11` C1C (fireball on the placed airship's engine).
+**C1B/C1C/C2B's IA1 worlds carry no placed ground destructible — their only destructibles are the
+mission airship, which a controller-less freecam parks at origin (hidden as unplaced), so the trigger
+fires and the effect renders but there is no framed geometry**; C1B/C1C recover a placed target via a
+multiplayer / story mission (patrolboat / the M01 airship), while **C2B's every destructible (47/47) is
+airship-mounted** — a map-content fact, not a defect. The 8-chapter plain `--freecam` regression is
+clean (one pre-existing C1 `ReportLateSoundFailure` PushWarning, unrelated — the `--destroy` path is
+inert without the flag). Screenshots stay in `.scratch/` (git-ignored — no game imagery is committed);
+reproduce with the commands above. With F42 landed, **M3 wave F is complete** and every M3 checklist
+item is done or deferred to M4 (B19/B20/E38 guided flight, F40/F41 → PLAN-testing).

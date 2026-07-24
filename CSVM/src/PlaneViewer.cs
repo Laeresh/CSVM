@@ -66,6 +66,10 @@ namespace CSVM;
 ///   --effects-test               build the --chapter world, play every impact/destruction effect
 ///                                through the world-effects runtime and report which build a puffer,
 ///                                then quit (D32 verify: a started def that renders nothing vs one that does)
+///   --destroy=name               kill a named destructible (def / anim / node name, substring) at
+///                                session build so a --screenshot captures its destruction with nobody
+///                                at the controls — pairs with --freecam + --campos/--lookat (F42).
+///                                Use --damage-test to list a chapter's destructible names
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -246,6 +250,7 @@ public partial class PlaneViewer : Node3D
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
     private bool _effectsTest;         // --effects-test: play every impact/destruction effect through the world-effects runtime, report which build a puffer, quit (D32)
+    private string? _destroyName;      // --destroy=<def|anim|node>: kill matching destructibles at session build so a --screenshot captures the destruction (F42)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
     private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
@@ -254,6 +259,11 @@ public partial class PlaneViewer : Node3D
     private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
     private bool _hudFontTest;          // --hud-font-test: overlay the E34 bitmap-font sample on each pane
     private string _hudFontTestText = "GUNS 30: 2000  ROCKETS 06: 9"; // the sample string
+    private bool _weaponLab;            // --weapon-lab[=id]: open the --viewer weapon lab at launch
+    private string? _weaponSelect;      // --weapon-lab=<wep_id>: the weapon selected at launch
+    private string? _weaponMount;       // --weapon-mount=<name>: the mount (all/firepointN/pylonN) at launch
+    private bool _weaponFire;           // --weapon-fire: start the weapon lab auto-firing (clean firing screenshots)
+    private bool _weaponTest;           // --weapon-test: mount+fire all 48 weapons once, report, quit
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -463,6 +473,10 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--damage-test=")) { _damageTest = true; _damageTestFilter = arg["--damage-test=".Length..]; _freecam = true; hasContentArg = true; }
             else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg == "--effects-test") { _effectsTest = true; _freecam = true; hasContentArg = true; }
+            // A pure modifier (like --damage-hd): needs a chapter world to have anything to destroy,
+            // but forces no mode — the caller composes it with --freecam (+ --campos/--lookat) for a
+            // framed, controller-less destruction shot, or with flight for a chase-cam one.
+            else if (arg.StartsWith("--destroy=")) _destroyName = arg["--destroy=".Length..];
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
             else if (arg == "--infinite-ammo") _infiniteAmmo = true;
             else if (arg == "--fire") _autoFire = true;
@@ -471,6 +485,11 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--rocket=")) _rocketOverride = arg["--rocket=".Length..];
             else if (arg == "--hud-font-test") _hudFontTest = true;
             else if (arg.StartsWith("--hud-font-test=")) { _hudFontTest = true; _hudFontTestText = arg["--hud-font-test=".Length..]; }
+            else if (arg == "--weapon-lab") { _weaponLab = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--weapon-lab=")) { _weaponLab = true; _weaponSelect = arg["--weapon-lab=".Length..]; _viewerMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--weapon-mount=")) { _weaponMount = arg["--weapon-mount=".Length..]; _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--weapon-fire") { _weaponFire = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--weapon-test") { _weaponTest = true; _viewerMode = true; hasContentArg = true; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1079,6 +1098,64 @@ public partial class PlaneViewer : Node3D
                 _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_markersOverlay });
                 what += _markersOverlay ? " + marker overlay" : " + marker overlay (K)";
             }
+            // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
+            // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
+            // stand-in target wall. Parked plane only (a chapter world has no aircraft marker rig)
+            // and after the plane joins the tree — it reads each marker's GlobalTransform. Built in
+            // every parked --viewer session so W always toggles it, hidden unless --weapon-lab opened it,
+            // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
+            if (_viewerMode && !_worldMode && _plane != null)
+            {
+                var labWeapons = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
+                // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
+                // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
+                Loadout? labLoadout = null;
+                foreach (var ldef in StockLoadouts.Load().All.Values)
+                {
+                    if (ldef.Model == _planeName)
+                    {
+                        try
+                        {
+                            labLoadout = Loadout.Bind(ldef, _plane, labWeapons);
+                        }
+                        catch (Exception e)
+                        {
+                            GD.PushWarning($"weapon lab: could not bind loadout {ldef.Def} — {e.Message}");
+                        }
+                        break;
+                    }
+                }
+                var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, textures, _camera, _planeName)
+                {
+                    DebugShow = _weaponLab,
+                    InitialWeapon = _weaponSelect,
+                    InitialMount = _weaponMount,
+                    AutoFireAtStart = _weaponFire,
+                };
+                _worldRoot!.AddChild(weaponLab);
+                // --weapon-test: mount and fire every one of the 48 weapons once and report any that
+                // throw, then quit (windowless under --headless). The report is
+                // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
+                // world tick is required.
+                if (_weaponTest)
+                {
+                    string report = weaponLab.RunSelfTest();
+                    GD.Print(report);
+                    try
+                    {
+                        Directory.CreateDirectory(".scratch");
+                        File.WriteAllText("./.scratch/weapon_test.txt", report);
+                    }
+                    catch (Exception e)
+                    {
+                        GD.PushWarning($"weapon-test: could not write ./.scratch/weapon_test.txt — {e.Message}");
+                    }
+                    GetTree().Quit();
+                    return false;
+                }
+                what += _weaponLab ? " + weapon lab" : " + weapon lab (W)";
+            }
             // The deck is now in the tree at its original position; remember its centre so
             // _Process can re-anchor it under each player every frame, and give every rig past
             // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
@@ -1495,6 +1572,41 @@ public partial class PlaneViewer : Node3D
                 {
                     what += $" + '{_planeName}' flying";
                 }
+            }
+
+            // --destroy=<name> (F42): kill a named destructible at session build so a --screenshot
+            // captures its destruction with nobody at the controls. Reuses the weapon-damage path —
+            // DamageAt runs the full death (the healthy→destroyed swap fires synchronously here; the
+            // debris and effects play out as the runtime self-ticks through the screenshot warm-up).
+            // The world subtree is already in the tree (added above), so the death's global-transform
+            // reads and the effect stage are valid. Flight already built + wired the world-effects
+            // runtime (to the projectile pool too); a plane-less --freecam builds one here so the
+            // destruction's fire/smoke still render — gated on --destroy, so a plain --freecam
+            // regression builds nothing extra.
+            if (_destroyName != null && worldRuntime != null)
+            {
+                if (worldRuntime.ExternalEffect == null && worldScene != null)
+                {
+                    var deathEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
+                    worldRuntime.ExternalEffect =
+                        (name, pt) => deathEffects.Handles(name) && deathEffects.PlayEffectAt(name, pt);
+                }
+                int killed = TriggerDestroy(worldRuntime, _destroyName, out var destroyBounds);
+                what += killed > 0 ? $" + destroyed {killed}× '{_destroyName}'"
+                                   : $" + destroy '{_destroyName}' (no match)";
+                // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
+                // camera themselves (--campos/--lookat) — so a bare `--freecam --chapter=CX
+                // --destroy=name --screenshot=x.png` is a complete, self-framing destruction shot.
+                if (killed > 0 && _spectator != null && _camPos == null && _lookAt == null
+                    && destroyBounds.Size.LengthSquared() > 0f)
+                {
+                    _spectator.Frame(destroyBounds);
+                }
+            }
+            else if (_destroyName != null)
+            {
+                GD.Print($"--destroy='{_destroyName}' ignored: no chapter world " +
+                         "(pair it with --freecam/--fly + --chapter=)");
             }
 
             GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
@@ -3175,6 +3287,97 @@ public partial class PlaneViewer : Node3D
         // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in WorldSounds.Tick
         // — but this harness pumps no frames, so free them here or they leak at the (imminent) quit.
         runtime.Sounds?.FlushOneShots();
+    }
+
+    /// <summary>--destroy=&lt;name&gt; (F42): kill every destructible whose def name, animation name or
+    /// anchor <c>cs_name</c> contains <paramref name="name"/> (case-insensitive), so a --screenshot
+    /// captures the destruction with nobody at the controls. Reuses the weapon-hit path exactly
+    /// (<see cref="Mech3.AnimRuntime.DamageAt"/> — the healthy→destroyed swap, debris and effects the
+    /// same as a rocket kill); it just spends more than the object's HP. Resolves each match to its
+    /// authoritative instance and dedupes by anchor, so a wildcard def that binds one physical object
+    /// through several pools is killed once. Returns how many distinct objects were destroyed.</summary>
+    private static int TriggerDestroy(Mech3.AnimRuntime runtime, string name, out Aabb bounds)
+    {
+        bounds = default;
+        static string AnchorName(Node3D n) =>
+            n.HasMeta(Mech3.AnimRuntime.NameMeta) ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                                                  : n.Name.ToString();
+
+        // Distinct physical objects to kill, keyed by authoritative anchor so a def bound through
+        // both its reader wildcard and its compiled twin counts once.
+        var targets = new Dictionary<ulong, Mech3.DestructibleRegistry.Instance>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            bool match =
+                inst.Def.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || (inst.Def.AnimName?.Contains(name, StringComparison.OrdinalIgnoreCase) ?? false)
+                || AnchorName(inst.Anchor).Contains(name, StringComparison.OrdinalIgnoreCase);
+            if (!match)
+            {
+                continue;
+            }
+            var target = runtime.Destructibles.Resolve(inst.Anchor) ?? inst;
+            targets[target.Anchor.GetInstanceId()] = target;
+        }
+
+        if (targets.Count == 0)
+        {
+            // No match: list a sample of what IS destructible here so the tester can correct the name
+            // without a separate --damage-test run (that report is still the full list).
+            var sample = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (seen.Add(inst.Def.Name))
+                {
+                    sample.Add(inst.Def.Name);
+                }
+                if (sample.Count >= 20)
+                {
+                    break;
+                }
+            }
+            GD.Print($"--destroy='{name}': no destructible matched. "
+                     + $"{runtime.Destructibles.DistinctAnchors} object(s) present; some def names: "
+                     + string.Join(", ", sample) + " (--damage-test lists them all)");
+            return 0;
+        }
+
+        // A cap so naming a common wildcard (many towers/panels) can't start hundreds of death
+        // sequences in one frame; the framed object is what the screenshot needs. Loud when it bites.
+        const int cap = 64;
+        int killed = 0;
+        bool haveBounds = false;
+        foreach (var target in targets.Values)
+        {
+            if (killed >= cap)
+            {
+                GD.Print($"--destroy='{name}': capped at {cap} of {targets.Count} matches "
+                         + "(name a more specific def/node to kill fewer)");
+                break;
+            }
+            if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                continue;
+            }
+            // The first killed object's world-space bounds, captured before the kill: the caller
+            // auto-frames the freecam on it (the anchor's own origin is often far from its geometry).
+            // MeshInstance-based, so it merges the healthy + destroyed variants either way.
+            if (!haveBounds)
+            {
+                bounds = UI.OrbitCamera.MergedAabb(target.Anchor);
+                haveBounds = true;
+            }
+            // Spend more than the whole health pool so a single call kills it outright (DamageAt runs
+            // the death sequence at zero). Feeding the anchor node is exactly how --damage-hd drives it.
+            runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
+            killed++;
+        }
+        var c = bounds.GetCenter();
+        string at = haveBounds ? $" near ({c.X:0}, {c.Y:0}, {c.Z:0})" : "";
+        GD.Print($"--destroy='{name}': destroyed {killed} object(s){at} "
+                 + $"({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
+        return killed;
     }
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";

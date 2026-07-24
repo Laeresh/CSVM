@@ -66,6 +66,12 @@ public sealed partial class ProjectilePool : Node3D
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
     private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
+    // The stand-in explosion burst a hardpoint weapon shows when no world-effects runtime is present
+    // to render its real fireball (a scene-less pool: the weapon lab, a chapter with no world scene).
+    private const int ExplosionSprites = 7;
+    private const float ExplosionSize = 12f;  // m
+    private const float ExplosionLife = 0.5f; // s
+    private const float ExplosionSpread = 6f; // m — the cluster radius
     internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
                                               // (shared: FlightController's reticle integration reads it too)
     internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
@@ -497,7 +503,14 @@ public sealed partial class ProjectilePool : Node3D
         // still stands in for those.
         if (!showedModel && fxName != null && !weapon.IsGun)
             EffectSink?.Invoke(fxName, point);
-        if (!showedModel && _impact.Count < MaxFlashes)
+        if (!showedModel && !weapon.IsGun && EffectSink == null)
+        {
+            // A hardpoint weapon with no world-effects runtime to render its real fireball: a
+            // scene-less pool (the weapon lab). Show an explosion burst stand-in in place of the
+            // single spark, so the blast is visible. Flight keeps its real puffer (EffectSink set).
+            SpawnExplosion(point);
+        }
+        else if (!showedModel && _impact.Count < MaxFlashes)
         {
             var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
             _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint });
@@ -507,6 +520,25 @@ public sealed partial class ProjectilePool : Node3D
             PlaySound(snd);
         // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
         DamageSink?.Invoke(collider, weapon.HealthDamage ?? 0f);
+    }
+
+    /// <summary>A stand-in fireball: a cluster of large, bright, additive sprites at the hit point,
+    /// varied in size/life/tint, so a hardpoint impact reads as an explosion where the real puffer
+    /// effect cannot be built (no world-effects runtime).</summary>
+    private void SpawnExplosion(Vector3 point)
+    {
+        for (int i = 0; i < ExplosionSprites && _impact.Count < MaxFlashes; i++)
+        {
+            var off = new Vector3(GD.Randf() - 0.5f, GD.Randf() - 0.5f, GD.Randf() - 0.5f) * ExplosionSpread;
+            float t = GD.Randf();
+            _impact.Add(new Sprite
+            {
+                Pos = point + off,
+                Life = ExplosionLife * (0.6f + 0.6f * t),
+                Size = ExplosionSize * (0.7f + 0.6f * t),
+                Tint = new Color(1f, 0.45f + 0.4f * t, 0.12f * t), // deep orange → yellow core
+            });
+        }
     }
 
     private static SurfaceClass ClassifySurface(Node? collider)
