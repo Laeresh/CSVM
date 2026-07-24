@@ -703,6 +703,9 @@ public partial class PlaneViewer : Node3D
             using var soundsScope = _animLab ? null : sounds;
             labSounds = _animLab ? sounds : null;
             var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
+            // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
+            // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
+            var soundGroups = haveSounds ? SoundDefs.LoadGroups(zrdrPath) : null;
             if (!mute && !haveSounds)
                 GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
             int meshInstances;
@@ -752,7 +755,7 @@ public partial class PlaneViewer : Node3D
                         AutoStart = !_animLab,
                         RuntimeSeed = _animLab ? _labSeed : null,
                     },
-                    gamez, textures, sounds, soundDefs);
+                    gamez, textures, sounds, soundDefs, soundGroups);
                 _plane = session.Root;
                 var builder = session.Builder;
                 cloudDeck = session.CloudDeck;
@@ -2631,6 +2634,7 @@ public partial class PlaneViewer : Node3D
             target.DamageStage = 0;
             var colBefore = _damageHd > 0f ? EnabledColliders(WorldRoot(target.Anchor)) : new HashSet<CollisionShape3D>();
             int debrisBefore = runtime.BallisticMotionsLaunched;
+            int soundsBefore = runtime.OneShotSoundsPlayed;
             runtime.OnInstanceStarted += OnStarted;
             if (_damageHd > 0f)
             {
@@ -2712,6 +2716,12 @@ public partial class PlaneViewer : Node3D
                 }
                 int debris = runtime.BallisticMotionsLaunched - debrisBefore;
                 swap += $"debris[{debris} launched]; ";
+                // One-shot SOUND (D31): the death/damage sequence's explosion audio (air_mixed_exp_sg
+                // and the like). Audio cannot be screenshot-verified, so a nonzero count across the
+                // kill+advance is the headless proof the destruction sounded. Zero when run --mute
+                // (no audio session) or on a def whose death authors no Sound event.
+                int snd = runtime.OneShotSoundsPlayed - soundsBefore;
+                swap += $"snd[{snd} played]; ";
             }
             // Stop the effects this run started, AFTER the C26 tick so the debris actually launches
             // first: reader-wildcard and compiled per-instance defs bind the SAME tower nodes (C21),
@@ -2827,6 +2837,9 @@ public partial class PlaneViewer : Node3D
             GD.Print($"damage-test: {cols} collidable meshes → ./.scratch/world_colliders.txt");
         }
         GD.Print($"damage-test: {chosen.Count} def(s) swept → ./.scratch/damage_test.txt");
+        // The one-shot death sounds this sweep fired are fire-and-forget nodes swept in WorldSounds.Tick
+        // — but this harness pumps no frames, so free them here or they leak at the (imminent) quit.
+        runtime.Sounds?.FlushOneShots();
     }
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";

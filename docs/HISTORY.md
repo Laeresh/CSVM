@@ -5368,3 +5368,48 @@ Docs: `weapon-effects.md` (Engine wiring D30 + 5-name inert confirmation), `arch
 (`Projectile.cs`), `verification.md` rules 76 (runtime puffers dead in the flight build) + 77
 (`CANNON_SPREAD` non-determinism in impact tests), PLAN-M3-weapons.md (checklist 30 ◐→☑, `### D30`
 reconciled, `### D32` expanded), `playtest.md`, CLAUDE.md status.
+
+## 2026-07-24 — M3 Wave D D31: the one-shot `Sound` anim event + `SOUND_GROUPS` decode
+
+**What landed.** The one-shot `SOUND` animation event — the fire-and-forget destruction/damage/impact
+audio a sequence emits (`air_mixed_exp_sg` when a building is struck, `snd_gasbagexp1` on a zeppelin
+kill) — now plays. Previously `Sound` fell through `AnimRuntime`'s `default` case and was only counted.
+Distinct from `SOUND_NODE` (the pooled looping ambient emitters, landed earlier): a one-shot plays
+once at a world point and disposes itself.
+
+- **`SoundGroup` + `SoundDefs.LoadGroups`** decode the `SOUND_GROUPS` block (docs: `sounds.md`).
+  A group is a weighted member set; `Pick(rng)` is weighted-random with a recency scalar —
+  `DYNAMIC_WEIGHTS factor` (0.5 everywhere) halves the last pick's weight so a variant does not
+  repeat back-to-back (that is what the bare `0.5` after the token decodes to). Explicit-`WEIGHT`
+  groups (`snd_plane_die`/`snd_plane_dmg`, `snd_nothing` at 0.7) get per-member weights and no
+  recency; VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are
+  skipped; music `*_sg` groups parse but no `SOUND` event names them.
+- **`WorldSounds.PlayOneShot(name, worldPos, rng)`** resolves a group→member first, then plays a
+  throwaway `AudioStreamPlayer3D` at the point. Registered in `_oneShots`, swept in `Tick` once it
+  stops (no reliance on the `Finished` signal); `FlushOneShots` frees them for the synchronous
+  damage-test harness, which pumps no frames.
+- **`AnimRuntime.HandleSound`** dispatches the event: NAME is a sound *definition* or a group, never
+  a gamez node (the recorded C3 gotcha — the lone reader-scope one-shot names `snd_waterfall`, a
+  definition, `targets=0`); position is the AT_NODE (`{name,pos}` compiled / flat `at_node`+`translate`
+  reader), or the anchor. `OneShotSoundsPlayed` counts successful plays for headless verification.
+- **Prewarm** now covers one-shot names too (`AnimProgram.OneShotSoundNames`, group names expanded to
+  members in `WorldSounds.Prewarm`), decoded quietly (`SoundArchive.Find(…, warn:false)`) so a
+  per-chapter archive legitimately lacking a referenced WAV (`hanger_door.wav` in C4) does not warn —
+  the authoritative "silent for the session" report stays at the point of use.
+
+**Verified.** Build clean, 0 warnings. `--damage-test --damage-hd=60` across **all 8 chapters**:
+`Sound` dropped off every "not yet acted on" list (was counted, now handled); death sounds play —
+switchhouse (the `air_mixed_exp_sg` worked example) `snd[2 played]`, C1 52, C2B 73, C3 4, C5 136 across
+the sweep. `--debug-anim` shows the emitters: `sound one-shot: air_mixed_exp_sg → snd_exp_hit1/2/3 @
+(-9096,774,-5637)` — the group resolves to *different* members (recency diversifying the picks) at the
+`dbase` node. One-shot cleanup is leak-free (C4, 26+ plays on the helium tanks → 0 ObjectDB leak with
+`FlushOneShots`). Frame-pumped `--freecam` C1 clean (38 ambient emitters unchanged, no per-frame
+errors, `Sound` handled). All residual log noise is pre-existing and non-sound: C2/C3 `det == 0`
+degenerate transforms (present in the `--mute` baseline too), C2B `clutter template not found`,
+`!is_inside_tree()` harness reads, the non-deterministic 0–6 ObjectDB exit leak, and the
+`timeout`-SIGKILL CLR error on a killed freecam.
+
+**Docs.** `sounds.md` (new `SOUND_GROUPS` section), `anim-definitions.md` (one-shot half landed),
+`architecture.md` (`SoundDefs`, `SoundArchive`, `WorldSounds`, `AnimRuntime`), PLAN-M3-weapons.md
+(checklist 31 ☐→☑, `### D31` reconciled), `backlog.md` (the dead-`Sound`-path note closed), CLAUDE.md
+status.

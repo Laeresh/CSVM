@@ -214,13 +214,19 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
 
 ## src/Mech3/WorldSounds.cs
 `SOUND_NODE` ambient looping 3D emitters: one pooled AudioStreamPlayer3D per live emitter,
-following its host's pose per frame; one-shot `SOUND` is a separate mechanism, NOT landed.
-⚠ Pooled, never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
+following its host's pose per frame. `PlayOneShot(name, worldPos, rng)` is the one-shot `SOUND`
+half (D31): fire-and-forget destruction/impact audio, resolving a `SOUND_GROUPS` name to a member
+first; the `Sound` anim event calls it.
+⚠ Pooled emitters are never parented into world subtrees — AnimRuntime's FindAll memoization forbids runtime reparenting.
 ⚠ An emitter is silenced while its host is not visible in tree (the point-light rule) — what makes
   raw emitter counts harmless; a blown-up host pose is silenced + logged (an anim-runtime defect).
-⚠ `Prewarm(AnimProgram.SoundNodeNames())` must run BEFORE the sound archive closes: the Loader
-  dies with the world build and most SOUND_NODE events first fire at runtime; late failures warn
-  via `AnimRuntime.ReportLateSoundFailure` (the bootstrap census is a snapshot and cannot see them).
+⚠ `Prewarm` (SoundNode + one-shot `Sound` names, the latter expanded through `SOUND_GROUPS`) must
+  run BEFORE the sound archive closes: the Loader dies with the world build and most events first
+  fire at runtime; late failures warn via `AnimRuntime.ReportLateSoundFailure`. Prewarm decodes
+  quietly (`Loader(def, warn: false)`) — a chapter archive lacking a referenced WAV is normal.
+⚠ One-shot players are fire-and-forget: registered in `_oneShots`, swept in `Tick` once they stop
+  (no reliance on the `Finished` signal). `FlushOneShots` frees them for the synchronous damage-test
+  harness, which pumps no frames so neither the sweep nor a deferred `QueueFree` ever runs.
 
 ## src/Mech3/WorldLights.cs
 Packs the animated world's `LIGHT_STATE` point lights into the 2×N RGBAF texture the fullbright
@@ -280,7 +286,12 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   so don't pick by name). `ApplyDeathSwap` is the fallback for the ~10% (AA guns) that declare the
   healthy/destroyed pair but author no swap: flip the roles the def's own RESET_STATE named, only
   when RESET declares a `destroyed` node — the def's explicit targets, NOT a world scan (C24).
-  Debris ballistic ObjectMotion (C26) + one-shot Sound (D31) still stubbed.
+⚠ `HandleSound` (D31) fires the one-shot `SOUND` — the death/damage/impact audio a sequence emits
+  (`air_mixed_exp_sg` on a struck building) — as a fire-and-forget `WorldSounds.PlayOneShot` at the
+  event's AT_NODE (`{name,pos}` compiled / flat `at_node`+`translate` reader). NAME is a sound
+  *definition* or a `SOUND_GROUPS` name, never a node. `OneShotSoundsPlayed` counts successful
+  plays for the damage-test (audio can't be screenshot-verified). With this landed the death path
+  has no stubbed event kind left (its swap, debris tumble, effects and now sound all run).
 ⚠ Collider removal on death is FREE (C25), not separate code: `SetSubtreeActive` toggles
   `SetCollidersEnabled` with `Visible`, so the swap that hides `healthy`/shows `destroyed` also
   un-solids the door/building and solids the wreck. Measured off/on per kill (C2 gates: off 1, on 8).
@@ -326,10 +337,20 @@ Godot cannot load the game's WAV format (see `docs/formats/sounds.md`).
 ## src/Mech3/SoundArchive.cs
 WAV lookup over a soundsh/soundsl extraction (zip or dir), decoded through `WavFile` into cached
 `AudioStreamWav`s; `Find(name, looped)` marks the stream as a forward loop when asked.
+⚠ `Find(…, warn: false)` is the speculative bulk-decode path (the sound prewarm): a per-chapter
+  archive legitimately lacks WAVs the program can reference, so a "not found" there is quiet — the
+  authoritative "silent for the session" report is at the point of use, not here.
 
 ## src/Mech3/SoundDefs.cs
 sounds.json SETS parser: `snd_*` name → `SoundDef` (wav name, flags, range, volume); the entry
-grammar and flag/key meanings are in `docs/formats/sounds.md`.
+grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` parses the sibling
+`SOUND_GROUPS` block into `SoundGroup`s — the weighted random destruction/impact sounds a one-shot
+`SOUND` event resolves through (`air_mixed_exp_sg` → `snd_exp_hit*`).
+⚠ `SoundGroup.Pick(rng)` is weighted-random with a recency scalar: `DYNAMIC_WEIGHTS factor` (0.5)
+  halves the last pick's weight so a variant does not repeat back-to-back. Pass the runtime's
+  seedable `_rng` (a lab replay must be deterministic), not `GD.Randf`.
+⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are skipped;
+  music `*_sg` groups parse but no `SOUND` event names them.
 
 ## src/Flight/WeaponDefs.cs
 Typed reader over the shared `weapons.zrd.json` `BALLISTICS` block — 48 `WeaponDef`s (guns /

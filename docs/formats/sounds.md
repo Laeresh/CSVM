@@ -20,6 +20,37 @@ definitions and curve blocks, and the audio container format. Consumed by
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
 
+## `sounds.json` — the SOUND_GROUPS block
+
+A sibling of `SETS`: the weighted random sound groups a one-shot `SOUND` animation event resolves
+through when it names a group instead of a plain `snd_*` definition. The combat/destruction
+one-shots go through these — `air_mixed_exp_sg`, `ground_mixed_exp_sg`, `plane_destroy_sg`,
+`bullet_hit_sg`, `bullet_warning_sg`, `window_hit_sg`. Parsed by `SoundDefs.LoadGroups`.
+
+Entry shapes (all start with the group name):
+
+```
+[name, "DYNAMIC_WEIGHTS", factor, [member], [member], …]          -- uniform members + recency
+[name, "MUSIC", "DYNAMIC_WEIGHTS", factor, [member], …]           -- as above; a music category
+[name, [member, "WEIGHT", w], [member, "WEIGHT", w], …]           -- explicit per-member weight
+[name, [dialogueRoot, [line], [line], …]]                         -- a VO chain, NOT a weighted group
+```
+
+- **`DYNAMIC_WEIGHTS factor`** — the `factor` (0.5 everywhere it appears) is a **recency scalar**:
+  the member returned last has its weight multiplied by it on the next pick, so the same clip is
+  less likely to repeat back-to-back. Members are single-element lists, each weight 1.
+- **Explicit `WEIGHT`** — `snd_plane_die`/`snd_plane_dmg` give each member its own weight and no
+  recency decay; their `snd_nothing` at 0.7 is a 70% chance of silence.
+- **VO dialogue chains** (`snd_assignments`, `snd_HI1*`) nest a list where a weighted member's name
+  would be. They contribute no weighted member and are skipped; a group left with none is not
+  registered. Music `*_sg` groups parse but no `SOUND` event names them (music is triggered
+  elsewhere).
+
+A `SOUND` event's NAME is resolved against `SETS` first, then `SOUND_GROUPS`: `air_mixed_exp_sg`
+picks one of `snd_exp_hit1/2/3/3a/5`, each of which is an ordinary `SETS` entry
+(`snd_exp_hit1` → `explosion_1.wav`). See [anim-definitions.md](anim-definitions.md) for the
+`SOUND` vs `SOUND_NODE` distinction (only the latter is ambient looping world audio).
+
 ## `player.json` — volume/pitch curve blocks
 
 All are clamped two-point ramps `(inStart→inEnd maps outStart→outEnd)`:

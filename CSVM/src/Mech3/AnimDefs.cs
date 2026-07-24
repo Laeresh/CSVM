@@ -267,6 +267,23 @@ public static class AnimDefs
                 // absent field to 0 here would spell "declare it, then immediately switch it off"
                 // — the exact shape of the bug that silently killed the waterfall's puffers.
                 break;
+            case "Sound":
+                // The one-shot SOUND: NAME (set above) is the sound — a sounds.json definition or a
+                // SOUND_GROUPS name, NOT a gamez node. AT_NODE is the world node that positions it,
+                // [nodeName, dx?, dy?, dz?] exactly like a puffer's. The compiled form nests AT_NODE
+                // as {name, pos}; flatten the reader's to an at_node name plus a translate offset,
+                // the shape HandleSound reads.
+                if (fields.TryGetValue("AT_NODE", out var soundAt) && soundAt is { Count: > 0 }
+                    && soundAt[0] is string soundAtName)
+                {
+                    data["at_node"] = soundAtName;
+                    if (soundAt.Count >= 4 && AnimData.AsNum(soundAt[1]) is { } sx
+                        && AnimData.AsNum(soundAt[2]) is { } sy && AnimData.AsNum(soundAt[3]) is { } sz)
+                    {
+                        data["translate"] = Obj3(sx, sy, sz);
+                    }
+                }
+                break;
         }
         // Everything a normalizer didn't claim stays reachable verbatim, so adding a handler
         // later never needs this front-end changed.

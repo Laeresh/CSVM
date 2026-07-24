@@ -76,10 +76,10 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
   |---|---|---|
   | `Callback` | ×8 every chapter | Every dispatch is `def=camera1`, **unanchored**, values 1/2/10/11/14/20/913/914 — engine notifications for the intro **cutscene** camera. This project has no cutscenes, and a callback's whole purpose is to notify mission logic that does not exist here. |
   | `ObjectCycleTexture` | ×1–2 per chapter | Every dispatch is `node=taildamage` with **`targets=0`** — the node never resolves, so there is nothing to cycle. The one real use of this mechanism (the cockpit damage-indicator hilite) is already a build-time material swap in `GaugeCluster.cs`. |
-  | one-shot `Sound` | ×1, C3 only | `def=spew node=snd_waterfall`, **`targets=0`** — it names a sound *definition*, not a node. That waterfall already sounds through `SOUND_NODE`. The family at large is 4,378 `OnCall` + 1,650 `WeaponHit` combat audio (21 names are `DYNAMIC_WEIGHTS` groups needing a further decode), which needs weapons this project does not have. |
+  | one-shot `Sound` | — | **LANDED M3 D31 (2026-07-24).** `AnimRuntime.HandleSound` fires it as a fire-and-forget `WorldSounds.PlayOneShot`; the 4,378 `OnCall` + 1,650 `WeaponHit` combat audio now sound on deaths/hits, and the 21 `DYNAMIC_WEIGHTS` groups are decoded (`SoundDefs.LoadGroups`). No longer in the report. |
 
-  **Pick these up when the thing they depend on exists** — weapons for `SOUND`, a cutscene player
-  for `Callback` — not before. `ObjectCycleTexture` needs neither; it needs a mission that
+  **Pick these up when the thing they depend on exists** — a cutscene player for `Callback` — not
+  before. `ObjectCycleTexture` needs neither; it needs a mission that
   actually builds a `taildamage` node, which none of the ones this project defaults to do.
   The one kind from that list that *was* reachable, `OBJECT_OPACITY_STATE`, landed 2026-07-22
   (`docs/HISTORY.md`) — which is why it is not in this table.

@@ -46,6 +46,13 @@ In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per 
   *Blocks:* D30 sign-off. (The `gunhit` smoke + fireball **puffs** are still absent — deferred to
   D32's world-effects runtime, since a runtime puffer can't build in the flight world.)
 
+- **Destruction sound (D31, never listened to).** Audio can't be screenshot-verified, so the
+  headless proof stops at "the stream resolved and fired" (`snd[N played]`). Shoot a destructible
+  to death and *listen:* an explosion at the wreck (`air_mixed_exp_sg` and kin), one clip per death,
+  positioned at the object — not doubled, not silent, not clipped. A building (`m_build*` in C1) or
+  the C4 helium tanks are loud examples. `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
+  *Blocks:* D31 sign-off — the only part the headless run cannot cover.
+
 - **Empty-clip.** Hold fire until a group runs dry (guns carry 2000–2800 rounds; rockets 9).
   *Look for:* the empty-clip cue sounds once, not repeatedly.
   *Blocks:* confirms the B16/B17 dry-warning path under real (long) fire.

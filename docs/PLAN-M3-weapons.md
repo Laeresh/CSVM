@@ -470,7 +470,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 29. ☑ Muzzle flash — flash sprite at the firepoint on each shot — **landed** (billboard burst; exact `muzzle_burst_*` anim = refinement)
 30. ☑ Impact effects — **landed** (2026-07-24): per-surface `IMPACT` **sound** + the named effect **model** at the hit point (the water splash `splash1.flt`/`bsplsh.flt` instance; C1B/C2B verified), + spark fallback. The **puffer** half (`gunhit` smoke, `large_fireball`) is blocked at runtime in flight (puffer factory torn down after build) → folded into D32's world-effects runtime; the 5 undefined names confirmed inert
-31. ☐ The `Sound` anim-event family — unblocks ~6,000 events
+31. ☑ The `Sound` anim-event family — **landed** (2026-07-24): `AnimRuntime.HandleSound` fires the one-shot `SOUND` (death/damage/impact audio) as a fire-and-forget `WorldSounds.PlayOneShot` at its AT_NODE; `SOUND_GROUPS` decoded (`SoundDefs.LoadGroups` + `SoundGroup.Pick`, `DYNAMIC_WEIGHTS` recency); `Sound` dropped off every chapter's unhandled list, death sounds play (switchhouse `air_mixed_exp_sg` verified)
 32. ☐ Destruction **+ impact** effects wiring — the world-effects runtime (`large_30sec_fire`, `great_balls_of_fire`, fireballs, **and** the impact puffers D30 deferred: `gunhit` smoke, `he_ground_effect`); generalizes `BuildFlightCrashRuntime`
 33. ☑ Tracers — **landed** (velocity-aligned additive streaks; per-ammo tracer texture = refinement)
 44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
@@ -1338,21 +1338,28 @@ effects + sound + spark; the impact puffers fold into D32.
 sound; the reader/undefined-name surfaces play the sound + spark with no crash; on-screen splash look
 is an **owed playtest** (`playtest.md`). The five undefined names render nothing (inert).
 
-### D31 ☐ The `Sound` anim-event family
+### D31 ☑ The `Sound` anim-event family — **LANDED (2026-07-24)**
 
-**Goal.** Unblock ~6,000 events currently deferred for want of weapons.
+**Goal.** Unblock the ~6,000 one-shot `SOUND` events deferred for want of weapons/deaths.
 
-**Evidence.** `backlog.md:102` — 4,378 `OnCall` + 1,650 `WeaponHit` `Sound` events; 21 names are
-`DYNAMIC_WEIGHTS` groups needing a further decode. 307 `Sound` events sit inside death sequences.
+**Landed.** `AnimRuntime.HandleSound` dispatches the one-shot `SOUND` (previously it fell through
+the `default` case and was only counted) as a fire-and-forget `WorldSounds.PlayOneShot` at the
+event's AT_NODE — `{name,pos}` compiled / flat `at_node`+`translate` reader (normalized in
+`AnimDefs`), or the anchor. The NAME is a sound *definition* or a `SOUND_GROUPS` name, never a gamez
+node (the recorded C3 gotcha confirmed: the lone reader-scope one-shot names `snd_waterfall`,
+`targets=0`). **`DYNAMIC_WEIGHTS` decoded** — `SoundDefs.LoadGroups` parses `SOUND_GROUPS` into
+`SoundGroup`s; `Pick(rng)` is weighted-random with a recency scalar (the bare `0.5` after the token
+halves the last pick's weight), through the runtime's seedable `_rng`. Prewarm now covers one-shot
+names (`AnimProgram.OneShotSoundNames`, groups expanded to members) and decodes quietly
+(`SoundArchive.Find(…, warn:false)`) so a chapter archive lacking a WAV (`hanger_door.wav`) is silent
+until the point of use. One-shot players self-sweep in `WorldSounds.Tick`; `FlushOneShots` covers the
+frameless damage-test harness. Ownership: C24 owns the death *sequence*, D31 owns the `Sound` *event*
+inside it — no dispatch-table collision (separate `case`).
 
-**Approach.** Implement the `Sound` event in `AnimRuntime`'s dispatch, resolving through
-`SoundDefs`/`SoundArchive`. Decode `DYNAMIC_WEIGHTS` (a weighted random group) or document why
-not. Note the recorded gotcha: the one-shot `Sound` in C3 names a sound *definition*, not a node.
-
-⚠ Contends with C24 on `AnimRuntime.cs`'s event dispatch — assign file ownership.
-
-**Verify.** Destruction sounds play (`air_mixed_exp_sg` on the worked example); the unhandled-
-event counter drops by the expected amount; `--debug-anim` shows the emitters.
+**Verified.** Build clean. 8-chapter `--damage-test`: `Sound` off every unhandled list; death sounds
+play (switchhouse `air_mixed_exp_sg` → `snd[2]`, C1 52 / C2B 73 / C3 4 / C5 136); `--debug-anim` shows
+`air_mixed_exp_sg → snd_exp_hit1/2/3` (recency-diversified) at `dbase`; leak-free (C4 26+ plays → 0
+ObjectDB leak). Docs: `sounds.md` (`SOUND_GROUPS`), `anim-definitions.md`, `architecture.md`.
 
 ### D32 ☐ Destruction + impact effects wiring (the world-effects runtime)
 

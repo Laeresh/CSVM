@@ -1046,6 +1046,10 @@ public sealed partial class AnimRuntime : Node
                 HandleSoundNode(ev, def, anchor);
                 return true;
 
+            case "Sound":
+                HandleSound(ev, def, anchor);
+                return true;
+
             case "ObjectAddChild":
                 // Only the sound-emitter three-quarters of this event is acted on — see
                 // HandleAddChild. Everything else it does still counts as unhandled.
@@ -1182,13 +1186,13 @@ public sealed partial class AnimRuntime : Node
     private bool _soundCensusPrinted;
     private readonly HashSet<string> _soundFailuresReported = new(StringComparer.OrdinalIgnoreCase);
 
-    private void ReportLateSoundFailure(string name, string why)
+    private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
     {
         if (!_soundCensusPrinted || !_soundFailuresReported.Add(name))
         {
             return;
         }
-        GD.PushWarning($"anim: SOUND_NODE '{name}' requested after the world build and {why} — "
+        GD.PushWarning($"anim: {kind} '{name}' requested after the world build and {why} — "
                        + "it will be silent for the rest of the session");
     }
 
@@ -1263,6 +1267,73 @@ public sealed partial class AnimRuntime : Node
         // 38 correctly-placed emitters all reading "off".
         if (ev.Data.Has("active_state"))
             Sounds.SetActive(handle, ev.Data.Bool("active_state") || ev.Data.Num("active_state") >= 1f);
+    }
+
+    /// <summary>One-shot SOUND events that resolved to a stream and fired this session (the
+    /// destruction/damage/impact audio). Exposed for the damage-test harness, which cannot
+    /// screenshot audio: a nonzero delta across a kill is how "the death's explosion sounded" is
+    /// verified headless.</summary>
+    public int OneShotSoundsPlayed { get; private set; }
+
+    /// <summary>
+    /// A one-shot <c>SOUND</c> event — the fire-and-forget destruction/impact/damage audio a sequence
+    /// emits (<c>air_mixed_exp_sg</c> when a building is struck, <c>snd_gasbagexp1</c> on a zeppelin
+    /// kill). Distinct from <c>SOUND_NODE</c>'s pooled looping emitters: it plays once at a world
+    /// point and disposes itself (<see cref="WorldSounds.PlayOneShot"/>).
+    ///
+    /// The event's NAME is a sounds.json definition or a <c>SOUND_GROUPS</c> name — NOT a gamez node
+    /// (the recorded C3 gotcha: the lone reader-scope one-shot names <c>snd_waterfall</c>, a
+    /// definition, and resolves zero node targets). The node, when present, is the AT_NODE that
+    /// positions it; absent, it plays at the anchor.
+    /// </summary>
+    private void HandleSound(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        if (ev.Data.Str("name") is not { } name)
+        {
+            return;
+        }
+        if (Sounds == null)
+        {
+            _soundsAfterBuild++;
+            ReportLateSoundFailure(name, "there is no audio session", "SOUND");
+            return;
+        }
+        if (Sounds.PlayOneShot(name, OneShotSoundPosition(ev, def, anchor), _rng) != null)
+        {
+            OneShotSoundsPlayed++;
+            _opsApplied++;
+        }
+        else
+        {
+            _soundsUnknown++;
+            ReportLateSoundFailure(name, "no stream could be resolved for it (unknown to "
+                                         + "sounds.json / SOUND_GROUPS, or never prewarmed)", "SOUND");
+        }
+    }
+
+    /// <summary>Where a one-shot SOUND plays: its AT_NODE's world pose plus the trailing offset, or
+    /// the anchor's when it names no node. The compiled form nests AT_NODE as <c>{name, pos}</c>; the
+    /// reader form (normalized in <see cref="AnimDefs"/>) carries a flat <c>at_node</c> name plus a
+    /// <c>translate</c> offset.</summary>
+    private Vector3 OneShotSoundPosition(AnimEvent ev, AnimDefinition def, Node3D? anchor)
+    {
+        Node3D? host = null;
+        Vector3 offset = Vector3.Zero;
+        if (ev.Data.Obj("at_node") is { } atObj)
+        {
+            if (atObj.Str("name") is { } hostName)
+            {
+                host = ResolveOne(hostName, def, anchor);
+            }
+            offset = atObj.Vec3("pos");
+        }
+        else if (ev.Data.Str("at_node") is { } atName)
+        {
+            host = ResolveOne(atName, def, anchor);
+            offset = ev.Data.Vec3("translate");
+        }
+        host ??= anchor;
+        return host is { } h && IsInstanceValid(h) ? h.GlobalTransform * offset : Vector3.Zero;
     }
 
     /// <summary>
@@ -1795,9 +1866,10 @@ public sealed partial class AnimRuntime : Node
     /// (<c>destroyit</c>, <c>destroy_h2twr</c>, or unnamed) and is NEVER reliably <c>unknown_seq</c>
     /// (docs/formats/destructibles.md), but is always <c>Initial</c>, so Start reaches every case.
     /// The <c>DAMAGE_SEQUENCE</c> among them just re-fires the final smoke stage idempotently (its
-    /// effect is already live), which is also what a one-shot kill wants. The debris ballistic
-    /// motion (C26) and one-shot <c>Sound</c> (D31) events are still stubbed; the safety net that
-    /// hides <c>destroyed</c> subtrees only runs at bootstrap, so it does not fight this.
+    /// effect is already live), which is also what a one-shot kill wants. Every event kind the death
+    /// emits now runs — the swap, the debris ballistic <c>OBJECT_MOTION</c>, the puffer calls, and
+    /// the one-shot <c>Sound</c> (<see cref="HandleSound"/>); the safety net that hides
+    /// <c>destroyed</c> subtrees only runs at bootstrap, so it does not fight this.
     ///
     /// <para>Then <see cref="ApplyDeathSwap"/>: ~10% of destructibles (the C1 AA guns) carry the
     /// healthy/destroyed node pair but author NO swap in their sequences, so Start alone leaves

@@ -108,7 +108,8 @@ public sealed class WorldSession
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
     /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.</summary>
     public static WorldSession Build(Options o, GameZ gamez, TextureArchive textures,
-        SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs)
+        SoundArchive? sounds, Dictionary<string, SoundDef>? soundDefs,
+        IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
     {
         var s = new WorldSession();
 
@@ -214,9 +215,9 @@ public sealed class WorldSession
             // The world's ambient SOUND_NODE emitters. Null when muted or soundless, which makes
             // the whole feature inert rather than half-built.
             Sounds = soundDefs != null && sounds != null
-                ? new WorldSounds(soundDefs)
+                ? new WorldSounds(soundDefs, soundGroups)
                 {
-                    Loader = d => sounds.Find(d.WavName, d.Looped),
+                    Loader = (d, warn) => sounds.Find(d.WavName, d.Looped, warn),
                     Debug = o.DebugAnim,
                 }
                 : null,
@@ -245,6 +246,10 @@ public sealed class WorldSession
         if (animRuntime.Sounds is { } builtSounds)
         {
             int prewarmed = builtSounds.Prewarm(animProgram.SoundNodeNames());
+            // The one-shot SOUND streams too (destruction/damage audio) — first reached at runtime
+            // from a death or damage sequence, always after this scope closes. Prewarm expands a
+            // SOUND_GROUPS name to its members.
+            prewarmed += builtSounds.Prewarm(animProgram.OneShotSoundNames());
             if (prewarmed > 0)
             {
                 GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
