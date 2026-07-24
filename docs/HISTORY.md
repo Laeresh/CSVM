@@ -5780,3 +5780,57 @@ F39 and F42 stay in M3 (F42 is exit-criterion 2's instrument).
 **Verified.** Plan evidence lines cite code greps (TIME sites, unseeded RNG sites, `GD.Print`
 census, `ManualAdvance`/`FixedDt` mechanics); F43's tick verified against `PlaneViewer.cs:466–467`
 and `FlightController.InfiniteAmmo`, not the docs alone. No engine code changed.
+
+**M3 F39 — weapon lab in `--viewer` (2026-07-24).** `src/UI/WeaponLab.cs`, the fourth `--viewer`
+lab (key **W**, `--weapon-lab[=wep_id]`), beside the damage (H) / livery (L) / mesh (M) labs. It
+mounts any of the 48 `weapons.json` entries on any of the parked plane's firepoints/pylons and
+fires it, driving its OWN `ProjectilePool` so a round runs the identical ballistics flight fires.
+The bottom-right panel steppers pick weapon (with live ballistics: caliber, rate, velocity,
+damage, `CLUSTER_SIZE`, range, class flags), mount (`all firepoints` / each `firepointN` / each
+`pylonN`), and target surface (`default`/`water`/`buildings`); a slider parks a stand-in target
+wall 15–400 m ahead; auto-fire + fire-once + **Space**; and copy-CLI-args emits
+`--weapon-lab=<id> [--weapon-mount=<name>] [--weapon-fire]`, as `LiveryLab` does.
+
+*The design question the task flagged — what firing looks like with no world:* the viewer has no
+chapter gamez, so the pool is built scene-less (`ProjectilePool(textures, null, null)`) — rockets
+fly streak-only (no `FLYOUT` prototype to instance), impacts show the stand-in spark (no `splash`
+geometry, no puffer runtime), and `DamageSink` is null. The pool's hits come from a per-step world
+raycast, so with no terrain there is nothing to hit; the lab therefore parks a `StaticBody3D`
+target wall ahead of the nose, **tagged with `SceneBuilder.SurfaceMeta`** so B15's classifier still
+picks the matching `IMPACT` variant. Target + tracers show only while the lab is engaged, so an
+unadorned `--viewer` screenshot stays byte-identical (the lab is built hidden in every parked
+`--viewer` session so W always toggles it). The pool + target + mounts build in the constructor
+(not `_Ready`) so `RunSelfTest` works synchronously right after `AddChild` — `Spawn` needs no frame.
+
+**Verified.** `--weapon-test` mounts and fires every one of the 48 entries once from the
+`all firepoints` mount and reports **48/48 fired OK, 0 errors** on the Bloodhawk, the Kestrel
+(7-firepoint centreline rig), the Warhawk and the Peacemaker (`./.scratch/weapon_test.txt`).
+Windowed captures (`wl_guns.png`) show `wep_30` tracers streaking from the wings into a cluster of
+impact sparks on the target, and (`wl_rocket.png`) the `wep_06` rocket path with the panel reading
+`1/s · 1200 m/s · dmg h60/a40 · ×3 · HE`; the pool's impact log confirms the raycast hits
+`weapon_lab/weapon_target` and classifies the surface (`Default`). A plain `--viewer` renders clean
+(`wl_plain.png` — no target/tracers/panel). Build clean (0 warnings / 0 errors). Wave F now closes
+with F42 (`--destroy=`); docs updated in the same turn (`cli.md`, `architecture.md`, CLAUDE.md
+module index + viewer-keys + Current status, the plan's F39 checklist + detail).
+
+**M3 F39 refinement — gun groups, banks, explosions (2026-07-24, user feedback).** Five changes
+after the first playtest. (1) The lab's mounts are now the game's grouping: weapons split into two
+banks — GUNS fire from the plane's named **gun groups** (bound from the stock `Loadout` via
+`Loadout.Bind` — "Inner Wing Guns" …, each resolving to its firepoint pair), HARDPOINTS fire from
+its **pylons**. (2/3) The bank filters both the weapon list and the mount list, so a gun can only
+fire from a gun group and a rocket only from a pylon (a bank stepper switches; `--weapon-lab=<id>`
+sets the bank from the weapon's class). (4) The target-distance slider now reaches **1100 m** (was
+400) — far enough to watch a rocket fly its full course; guns fall short past their ~1000 m range.
+(5) **Hardpoint impacts now show an explosion:** `ProjectilePool.SpawnExplosion` renders a cluster
+of large additive orange sprites for a `!IsGun` impact when `EffectSink` is null (a scene-less pool
+— the viewer had shown only a small spark because there is no world-effects runtime to build the
+real fireball); flight is unchanged (its `EffectSink` is set, so the real puffer still plays). Also
+fixed a de-DE locale comma in the ballistics readout (`h4,5` → `h4.5`, formatted `InvariantCulture`).
+Mount CLI tokens: `g<slot>` for a gun group, `pylon<n>` for a pylon, `all` for the whole bank.
+
+**Verified.** `--weapon-test` now fires each of the 48 from a mount of its class (guns → gun groups,
+hardpoints → pylons) and reports **48/48 fired OK, 0 errors, 0 skipped** on the Bloodhawk, the
+Kestrel (centreline + turret group), Warhawk and Peacemaker. Windowed captures: `wl_group.png` shows
+`wep_40` fired from the named "Inner Wing Guns" group (panel `bank: GUNS`, mount `Inner Wing Guns`,
+CLI `--weapon-mount=g1`); `wl_boom.png` shows the `wep_06` HE-rocket explosion fireball on the
+target (panel `bank: HARDPOINTS`, `all pylons`). Build clean.

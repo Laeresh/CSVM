@@ -254,6 +254,11 @@ public partial class PlaneViewer : Node3D
     private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
     private bool _hudFontTest;          // --hud-font-test: overlay the E34 bitmap-font sample on each pane
     private string _hudFontTestText = "GUNS 30: 2000  ROCKETS 06: 9"; // the sample string
+    private bool _weaponLab;            // --weapon-lab[=id]: open the --viewer weapon lab at launch
+    private string? _weaponSelect;      // --weapon-lab=<wep_id>: the weapon selected at launch
+    private string? _weaponMount;       // --weapon-mount=<name>: the mount (all/firepointN/pylonN) at launch
+    private bool _weaponFire;           // --weapon-fire: start the weapon lab auto-firing (clean firing screenshots)
+    private bool _weaponTest;           // --weapon-test: mount+fire all 48 weapons once, report, quit
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -471,6 +476,11 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--rocket=")) _rocketOverride = arg["--rocket=".Length..];
             else if (arg == "--hud-font-test") _hudFontTest = true;
             else if (arg.StartsWith("--hud-font-test=")) { _hudFontTest = true; _hudFontTestText = arg["--hud-font-test=".Length..]; }
+            else if (arg == "--weapon-lab") { _weaponLab = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--weapon-lab=")) { _weaponLab = true; _weaponSelect = arg["--weapon-lab=".Length..]; _viewerMode = true; hasContentArg = true; }
+            else if (arg.StartsWith("--weapon-mount=")) { _weaponMount = arg["--weapon-mount=".Length..]; _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--weapon-fire") { _weaponFire = true; _viewerMode = true; hasContentArg = true; }
+            else if (arg == "--weapon-test") { _weaponTest = true; _viewerMode = true; hasContentArg = true; }
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1078,6 +1088,64 @@ public partial class PlaneViewer : Node3D
             {
                 _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_markersOverlay });
                 what += _markersOverlay ? " + marker overlay" : " + marker overlay (K)";
+            }
+            // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
+            // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
+            // stand-in target wall. Parked plane only (a chapter world has no aircraft marker rig)
+            // and after the plane joins the tree — it reads each marker's GlobalTransform. Built in
+            // every parked --viewer session so W always toggles it, hidden unless --weapon-lab opened it,
+            // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
+            if (_viewerMode && !_worldMode && _plane != null)
+            {
+                var labWeapons = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
+                // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
+                // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
+                Loadout? labLoadout = null;
+                foreach (var ldef in StockLoadouts.Load().All.Values)
+                {
+                    if (ldef.Model == _planeName)
+                    {
+                        try
+                        {
+                            labLoadout = Loadout.Bind(ldef, _plane, labWeapons);
+                        }
+                        catch (Exception e)
+                        {
+                            GD.PushWarning($"weapon lab: could not bind loadout {ldef.Def} — {e.Message}");
+                        }
+                        break;
+                    }
+                }
+                var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, textures, _camera, _planeName)
+                {
+                    DebugShow = _weaponLab,
+                    InitialWeapon = _weaponSelect,
+                    InitialMount = _weaponMount,
+                    AutoFireAtStart = _weaponFire,
+                };
+                _worldRoot!.AddChild(weaponLab);
+                // --weapon-test: mount and fire every one of the 48 weapons once and report any that
+                // throw, then quit (windowless under --headless). The report is
+                // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
+                // world tick is required.
+                if (_weaponTest)
+                {
+                    string report = weaponLab.RunSelfTest();
+                    GD.Print(report);
+                    try
+                    {
+                        Directory.CreateDirectory(".scratch");
+                        File.WriteAllText("./.scratch/weapon_test.txt", report);
+                    }
+                    catch (Exception e)
+                    {
+                        GD.PushWarning($"weapon-test: could not write ./.scratch/weapon_test.txt — {e.Message}");
+                    }
+                    GetTree().Quit();
+                    return false;
+                }
+                what += _weaponLab ? " + weapon lab" : " + weapon lab (W)";
             }
             // The deck is now in the tree at its original position; remember its centre so
             // _Process can re-anchor it under each player every frame, and give every rig past

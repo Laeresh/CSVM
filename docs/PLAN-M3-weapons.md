@@ -486,7 +486,7 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 ### Wave F — debug & verification
 
-39. ☐ Weapon lab in `--viewer`
+39. ☑ Weapon lab in `--viewer` — **landed** (2026-07-24): `src/UI/WeaponLab.cs`, the fourth `--viewer` lab (key **W**, `--weapon-lab`). Mounts any of the 48 weapons on any firepoint/pylon and fires it into its own scene-less `ProjectilePool` at a tagged stand-in target wall (surface cycle exercises B15); steppers show live ballistics; auto-fire/fire-once/Space; copy-CLI-args. `--weapon-test` reports **48/48 fired OK, 0 errors** (Bloodhawk/Kestrel/Warhawk/Peacemaker); windowed captures show tracers + impact sparks (`wep_30`) and the rocket path (`wep_06`). Built hidden in every parked `--viewer` session so a plain viewer stays byte-identical.
 40. ⊘ Freecam raycast pick + HP control — **superseded by PLAN-testing D31/D34** (2026-07-24)
 41. ⊘ Destructible list overlay + camera jump — **superseded by PLAN-testing D32** (2026-07-24)
 42. ☐ `--destroy=` CLI trigger
@@ -1609,14 +1609,36 @@ acquisition progress reusing `MarkerHud`'s existing reticle and screen-edge arro
 
 ---
 
-### F39 ☐ Weapon lab in `--viewer`
+### F39 ☑ Weapon lab in `--viewer` — **LANDED (2026-07-24)**
 
-**Approach.** A fourth lab alongside `DamageLab` (H), `LiveryLab` (L), `MeshLab` (M) —
-suggest **W**. Mount any of the 48 weapons in any slot, fire, observe muzzle flash, projectile
-and impact. This is where weapon selection gets exercised before the configurator exists.
-Include a copy-CLI-args affordance, as `LiveryLab` does.
+**Landed.** `src/UI/WeaponLab.cs` — the fourth lab beside `DamageLab` (H), `LiveryLab` (L),
+`MeshLab` (M), toggled with **W** (`--weapon-lab[=wep_id]` opens it at launch). It mounts a weapon
+and fires it, driving its OWN `ProjectilePool` so a round runs the identical ballistics flight
+fires. **Refined 2026-07-24 (user feedback):** weapons split into two banks matching the game —
+GUNS fire from the plane's named **gun groups** (bound from the stock `Loadout` — "Inner Wing
+Guns" …), HARDPOINTS fire from its **pylons**; the bank filters both the weapon list and the mount
+list, so a gun can only fire from a gun group and a rocket only from a pylon. The panel
+(bottom-right — the one free corner) steppers pick bank / weapon (with live ballistics) / mount /
+target surface; a slider parks the stand-in target wall **15–1100 m** ahead; auto-fire +
+fire-once + **Space**; and a copy-CLI-args button emits
+`--weapon-lab=<id> [--weapon-mount=g<slot>|pylon<n>] [--weapon-fire]`.
 
-**Verify.** Every one of the 48 entries can be mounted and fired without error.
+**The viewer has no world**, so the pool is built scene-less: rockets fly streak-only (no `FLYOUT`
+prototype), gun impacts show the stand-in spark and **hardpoint impacts show a stand-in explosion
+burst** (`ProjectilePool.SpawnExplosion`, added when `EffectSink` is null — no real puffer runtime),
+and there is no `DamageSink`. To give a round something to hit (the pool's hits come from a per-step
+world raycast), the lab parks a `StaticBody3D` target wall ahead of the nose, tagged
+(`SceneBuilder.SurfaceMeta`) so the pool's classifier picks the matching `IMPACT` variant; shown
+only while the lab is engaged, so an unadorned `--viewer` screenshot is byte-identical. Built in
+every parked `--viewer` session so W always toggles it.
+
+**Verify — done.** `--weapon-test` fires every one of the 48 entries once, each from a mount of its
+class, and reports **48/48 fired OK, 0 errors, 0 skipped** (verified on the Bloodhawk, the Kestrel's
+7-firepoint centreline rig + turret group, Warhawk and Peacemaker; `./.scratch/weapon_test.txt`).
+Windowed captures show a gun fired from a named gun group (`wep_40` from "Inner Wing Guns") with
+tracers + impacts, and the `wep_06` HE-rocket **explosion** on the target; the impact log confirms
+the raycast hits the target and classifies the surface. A plain `--viewer` screenshot renders clean
+(no target/tracers/panel).
 
 ### F40 ⊘ Freecam raycast pick + HP control — superseded by PLAN-testing
 
