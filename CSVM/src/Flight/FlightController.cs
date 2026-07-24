@@ -83,6 +83,21 @@ public partial class FlightController : Node3D
     /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
     public DamageVisuals? Visuals;
 
+    /// <summary>This plane's stock loadout bound to its model — the gun groups (with independent
+    /// ammo counters) + hardpoints the firing code draws from. Null disables weapons.</summary>
+    public Loadout? Loadout;
+
+    /// <summary>The shared world's projectile/effect pool guns and hardpoints fire into. Null
+    /// disables weapons.</summary>
+    public ProjectilePool? Projectiles;
+
+    /// <summary>--infinite-ammo: guns/hardpoints fire without depleting (frictionless testing).</summary>
+    public bool InfiniteAmmo;
+
+    /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as
+    /// <see cref="HoldSegments"/> does for flight input.</summary>
+    public bool AutoFire;
+
     /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
     /// <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that PLAYS the
@@ -191,6 +206,19 @@ public partial class FlightController : Node3D
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
+    private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
+    private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
+    private bool _gunLoopOn;                     // the firing loop sound is currently playing
+
+    /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
+    /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
+    /// the empty-clip warning has already sounded since it last had ammo.</summary>
+    private sealed class GunState
+    {
+        public float Accum;
+        public int NextMuzzle;
+        public bool Warned;
+    }
 
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
@@ -277,6 +305,151 @@ public partial class FlightController : Node3D
             });
         }
         SnapCamera();
+
+        // One firing-state slot per firable gun group (turrets excluded — inert in M3).
+        if (Loadout != null)
+        {
+            int n = 0;
+            foreach (var _ in Loadout.FirableGuns)
+            {
+                n++;
+            }
+            _gunStates = new GunState[n];
+            for (int i = 0; i < n; i++)
+            {
+                _gunStates[i] = new GunState();
+            }
+        }
+    }
+
+    /// <summary>Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
+    /// <c>--fire</c> holds it down for unattended runs.</summary>
+    private bool FirePressed() => AutoFire || KeyDown(Key.Space) || PadPressed(JoyButton.B);
+
+    /// <summary>The interim HUD ammo line: <c>GUNS 40:2398 30:2799  ROCKETS 9</c>.</summary>
+    private string AmmoLine()
+    {
+        var sb = new System.Text.StringBuilder("GUNS");
+        foreach (var g in Loadout!.FirableGuns)
+        {
+            sb.Append($" {g.Weapon.Caliber ?? 0}:{(InfiniteAmmo ? "∞" : g.Ammo.ToString())}");
+        }
+        int rockets = 0;
+        foreach (var h in Loadout.Hardpoints)
+        {
+            rockets += h.Ammo;
+        }
+        if (Loadout.Hardpoints.Count > 0)
+        {
+            sb.Append($"   ROCKETS {(InfiniteAmmo ? "∞" : rockets.ToString())}");
+        }
+        return sb.ToString();
+    }
+
+    /// <summary>Advances every gun group's fire clock: while the trigger is held, each group spawns
+    /// rounds at its <c>FIRE_RATE</c> (alternating muzzles so the group's total rate equals it),
+    /// drawing from its own ammo counter; a dry group sounds the empty-clip cue once. Also drives
+    /// the firing loop sound. No-op without a loadout / pool.</summary>
+    private void UpdateGuns(float dt)
+    {
+        if (Loadout == null || Projectiles == null || _gunStates == null)
+        {
+            return;
+        }
+        bool fire = FirePressed();
+        bool wantLoop = false;
+        var inheritVel = _model.VelocityDir * _model.Speed;
+        string? loopSound = null;
+        int gi = 0;
+        foreach (var g in Loadout.FirableGuns)
+        {
+            var st = _gunStates[gi++];
+            if (!fire || g.Weapon.FireRate <= 0f || g.Muzzles.Count == 0)
+            {
+                st.Accum = 0f;
+                continue;
+            }
+            float interval = 1f / g.Weapon.FireRate;
+            if (!_firePrev)
+            {
+                st.Accum = interval; // the first shot leaves the barrel the instant the trigger goes down
+            }
+            st.Accum += dt;
+            bool hasAmmo = g.Ammo > 0 || InfiniteAmmo;
+            if (hasAmmo)
+            {
+                wantLoop = true;
+                loopSound ??= g.Weapon.LoopedSoundName;
+            }
+            while (st.Accum >= interval)
+            {
+                st.Accum -= interval;
+                if (g.Ammo > 0 || InfiniteAmmo)
+                {
+                    var muzzle = g.Muzzles[st.NextMuzzle % g.Muzzles.Count];
+                    st.NextMuzzle++;
+                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel);
+                    if (!InfiniteAmmo)
+                    {
+                        g.Ammo--;
+                    }
+                    st.Warned = false; // it fired a real round — re-arm the dry warning
+                }
+                else
+                {
+                    if (!st.Warned)
+                    {
+                        st.Warned = true;
+                        Audio?.PlayEmptyClip();
+                    }
+                    st.Accum = 0f;
+                    break;
+                }
+            }
+        }
+        if (wantLoop && !_gunLoopOn)
+        {
+            _gunLoopOn = true;
+            Audio?.StartGunLoop(loopSound);
+        }
+        else if (!wantLoop && _gunLoopOn)
+        {
+            _gunLoopOn = false;
+            Audio?.StopGunLoop();
+        }
+        _firePrev = fire;
+    }
+
+    /// <summary>Refills every gun group to its full load and re-arms the dry warnings (respawn).</summary>
+    private void RefillWeapons()
+    {
+        if (Loadout == null)
+        {
+            return;
+        }
+        foreach (var g in Loadout.Guns)
+        {
+            g.Ammo = g.Capacity;
+        }
+        foreach (var h in Loadout.Hardpoints)
+        {
+            h.Ammo = h.Capacity;
+        }
+        if (_gunStates != null)
+        {
+            foreach (var st in _gunStates)
+            {
+                st.Accum = 0f;
+                st.Warned = false;
+                st.NextMuzzle = 0;
+            }
+        }
+        if (_gunLoopOn)
+        {
+            _gunLoopOn = false;
+            Audio?.StopGunLoop();
+        }
+        Projectiles?.Clear();
     }
 
     /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
@@ -292,6 +465,7 @@ public partial class FlightController : Node3D
         Damage?.Reset();     // every part back to full HP
         Gauges?.Reset();     // damage-dial blink timers cleared
         Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
+        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
         if (CrashRuntime != null)
         {
             // data-driven crash: hard-stop the played def (instances, motions, the fire +
@@ -540,6 +714,9 @@ public partial class FlightController : Node3D
         }
 
         GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+
+        // Guns: advance the fire clock and spawn rounds into the shared projectile pool.
+        UpdateGuns(dt);
 
         // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
         Stunt?.Update(_model.Position);
@@ -909,6 +1086,10 @@ public partial class FlightController : Node3D
         }
         if (Damage?.Summary() is { Length: > 0 } dmgSummary)
             _hud.Text += $"\nDMG {dmgSummary}";
+        // Interim ammo readout (a proper gungauge/missilegauge HUD is wave E): each firable gun
+        // group's caliber + remaining rounds, then the hardpoint ordnance count.
+        if (Loadout != null)
+            _hud.Text += "\n" + AmmoLine();
         // Stunt run status now lives in the marker HUD; keep the compact text line only
         // as a fallback if the marker somehow wasn't built.
         if (Stunt != null && Marker == null)

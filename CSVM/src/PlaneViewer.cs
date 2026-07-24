@@ -49,7 +49,11 @@ namespace CSVM;
 ///                                the resolved gun groups + hardpoints to ./.scratch/loadout_dump.txt,
 ///                                then quit; a missing marker prints a loud error. Filter by plane
 ///   --loadout=<def>              bind this loadout def instead of the plane's own (testing override;
-///                                exercises the missing-marker error with --dump-loadout)
+///                                exercises the missing-marker error with --dump-loadout; in flight
+///                                the flown plane carries that loadout)
+///   --fire                       hold the gun trigger down (scripted firing runs); in interactive
+///                                flight the trigger is Space / gamepad B
+///   --infinite-ammo              guns/hardpoints fire without depleting (weapon testing)
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
 ///                                default gamez + textures to ../extracted/<chapter>/…
@@ -226,6 +230,8 @@ public partial class PlaneViewer : Node3D
     private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
     private string? _loadoutOverride;  // --loadout=<def>: bind this loadout def instead of the plane's own (testing)
+    private bool _infiniteAmmo;         // --infinite-ammo: guns/hardpoints never deplete
+    private bool _autoFire;             // --fire: hold the trigger (scripted screenshots / soak runs)
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
     private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
     private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
@@ -425,6 +431,8 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--dump-loadout") _dumpLoadout = true;
             else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
+            else if (arg == "--infinite-ammo") _infiniteAmmo = true;
+            else if (arg == "--fire") _autoFire = true;
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
@@ -1044,6 +1052,18 @@ public partial class PlaneViewer : Node3D
                 var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
 
+                // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
+                // once, and ONE shared projectile/effect pool every player's guns fire into
+                // (projectiles live in the shared world, so every splitscreen pane sees them). The
+                // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds).
+                var weaponDefs = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                var stockLoadouts = StockLoadouts.Load();
+                var projectiles = new ProjectilePool(textures, sounds, soundDefs)
+                {
+                    Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
+                };
+                _worldRoot!.AddChild(projectiles);
+
                 // Stunt run: the mission's danger-zone objectives from ia.json
                 // dzones, positions resolved against this chapter world's gamez, display strings
                 // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
@@ -1103,6 +1123,36 @@ public partial class PlaneViewer : Node3D
                         AllowPause = _rigs.Count == 1,
                     };
                     controller.AddChild(planeModel);
+
+                    // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
+                    // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
+                    // Set before the controller enters the tree (its _Ready builds the fire state).
+                    var loadoutDefName = _loadoutOverride ?? stats.DefName;
+                    if (stockLoadouts.For(loadoutDefName) is { } ldef)
+                    {
+                        try
+                        {
+                            controller.Loadout = Loadout.Bind(ldef, planeModel, weaponDefs);
+                            controller.Projectiles = projectiles;
+                            controller.InfiniteAmmo = _infiniteAmmo;
+                            controller.AutoFire = _autoFire;
+                            if (verbose)
+                            {
+                                int groups = 0;
+                                foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
+                                GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
+                                         $"hardpoint(s), fire=Space/pad-B" + (_infiniteAmmo ? " (infinite ammo)" : ""));
+                            }
+                        }
+                        catch (Exception e)
+                        {
+                            GD.PushWarning($"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
+                        }
+                    }
+                    else if (verbose)
+                    {
+                        GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
+                    }
                     if (verbose && controller.Props != null)
                         GD.Print($"props: {controller.Props.Count} spinning blur nodes");
                     if (verbose && controller.WingLights != null)

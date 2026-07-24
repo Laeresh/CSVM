@@ -4967,3 +4967,32 @@ overrides which def binds (its flight effect lands with B16). No session/flight/
 cli.md (`--dump-loadout`/`--loadout=`), loadouts.md pointer fixed, plan B12 ticked. **B16/B17/B18
 unblocked. Next: B13 (`Projectile.cs`) — a pooled projectile integrating VELOCITY/ACCELERATION/
 GRAVITY, expiring at RANGE.**
+
+**M3 Wave B/D — guns fire (the B13/B15/B16/D29/D30/D33 batch, 2026-07-24).** Landed the first playable
+weapons: hold Space (gamepad B) and the plane's guns fire. Done as one batch because no piece is
+testable alone. New `src/Flight/Projectile.cs` (`ProjectilePool`): a shared-world pool integrating the
+data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), inheriting launch velocity, with
+a fixed array (no per-round allocation; the raycast query object is reused too). `Spawn` applies the
+`CANNON_SPREAD` cone and flashes the muzzle. It renders three MultiMeshes — velocity-aligned tracer
+streaks (D33, NOT billboarded, or they collapse to a screen-vertical bar), billboarded muzzle-flash
+bursts (D29) and impact sprites — and plays the per-surface `IMPACT` sound (D30, the exact named effect
+animations are the remaining depth). **Hit detection (B15)** is a per-step world raycast; the flying
+plane has no physics body, so a round never hits its launcher and `player`/`enemy` are unreachable in
+M3. Surface class (`default`/`water`/`buildings`) comes from the struck collider's new
+`SceneBuilder.SurfaceMeta`, **stamped at build time in `AttachCollision`** from the mesh's dominant
+material texture (water: `water*`/`wtr*`/`srf*`/`wakefront`; buildings: `hangar*`/`*build*`/`cblock`/…)
+— data-driven, not a runtime name guess. **Gun firing (B16)** wires `Loadout` into `FlightController`:
+each firable group runs its own `FIRE_RATE` clock, alternating muzzles so the group's total rate equals
+FIRE_RATE, drawing from its own `CLUSTER_SIZE` ammo counter; a dry group sounds `snd_emptyclip` once;
+respawn refills; turrets excluded (inert). `FlightAudio` gained the firing loop (LOOPED_SOUND_NAME) +
+empty-clip. New flags: `--fire` (hold trigger, scripted runs), `--infinite-ammo`, and `--loadout=`'s
+flight effect. An interim HUD ammo line stands in until E36. Verified (C1, `./.scratch/`): guns fire;
+ammo depletes per group; the **Fury's 70-cal and 30-cal deplete 102:136 = a 6:8 ratio = their
+FIRE_RATEs** (the per-weapon rate is honoured); `--infinite-ammo` shows `∞`; tracers + muzzle flash
+render (streaks read against sky, wash a little over bright terrain — a visibility TUNE); rounds hit
+**terrain → `Default`** and **sea → `Water`** with correct collider tags and impact sound. Remaining:
+the named `IMPACT`/muzzle animations, per-ammo tracer textures, `buildings` (same code path as water,
+not yet screenshot), the empty-clip drain (2000+ rounds — a playtest check), and tracer/impact visual
+polish. **Owed playtest: firing feel.** Docs: architecture.md (Projectile) + CLAUDE.md module index +
+in-flight keys, cli.md (`--fire`/`--infinite-ammo`), plan items 13/15/16/29/33 ticked (14/30 partial).
+**Next: B17 (rocket/hardpoint firing — where B14's FLYOUT MODEL instancing lands), then B18 selectors.**

@@ -301,6 +301,19 @@ Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
 ⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
   (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
 
+## src/Flight/Projectile.cs
+`ProjectilePool` — the shared-world weapon-fire subsystem (B13/B15/D29/D30/D33): a fixed pool of
+projectiles integrated with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at
+RANGE), plus tracer streaks, muzzle flashes, per-surface impact sprites and the IMPACT sound.
+`Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a CANNON_SPREAD cone) and flashes
+the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
+⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
+  hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
+⚠ Surface class comes from the struck collider's `SceneBuilder.SurfaceMeta` (water/buildings),
+  stamped at build time from the mesh's dominant material texture; absent ⇒ `default`.
+⚠ Tracers are velocity-aligned, NOT billboarded (billboard would collapse the streak to a
+  screen-vertical bar); muzzle/impact bursts ARE round billboards. Per-instance colour via MultiMesh.
+
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals, the `engine_sound` def name with its

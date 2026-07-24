@@ -446,10 +446,10 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 11. ☑ `WeaponDefs.cs` — typed reader over `weapons.json` — **landed** (`--dump-weapons` verifies)
 12. ☑ `Loadout.cs` — stock-loadout reader, slot model, marker resolution — **landed** (`--dump-loadout` verifies)
-13. ☐ `Projectile.cs` — spawn and integration
-14. ☐ `FLYOUT` model instancing — projectile visuals from the gamez prototypes
-15. ☐ Hit detection + surface classification for `IMPACT` variant selection
-16. ☐ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip
+13. ☑ `Projectile.cs` — spawn and integration — **landed** (`ProjectilePool`)
+14. ◐ `FLYOUT` model instancing — guns use the tracer path (D33); rocket `MODEL` instancing pending B17
+15. ☑ Hit detection + surface classification for `IMPACT` variant selection — **landed** (world raycast + collider surface tag)
+16. ☑ Gun firing — rate, per-group ammo, `CANNON_SPREAD`, empty-clip — **landed** (Space/pad-B, `--fire`)
 17. ☐ Hardpoint firing — per-pylon allotment and depletion
 18. ☐ Weapon selectors — gun-group cycle (+ALL) and hardpoint cycle
 19. ☐ Guided flight — `TURN_RATE`, `IMPACT_PROXIMITY`, `DETONATION_DISTANCE`
@@ -468,11 +468,11 @@ New files and docs only; touches no module M2 polish 3 is editing.
 
 ### Wave D — presentation & audio
 
-29. ☐ Muzzle flash — `FIRE` → `muzzle_burst_*` at firepoints
-30. ☐ Impact effects — per-surface `IMPACT` animation + sound
+29. ☑ Muzzle flash — flash sprite at the firepoint on each shot — **landed** (billboard burst; exact `muzzle_burst_*` anim = refinement)
+30. ◐ Impact effects — per-surface `IMPACT` **sound** + a stand-in spark sprite land; the named `IMPACT` effect animations (`gunhit`, `splash1`, `large_fireball`) are the remaining wiring
 31. ☐ The `Sound` anim-event family — unblocks ~6,000 events
 32. ☐ Destruction effects wiring — `large_30sec_fire`, `great_balls_of_fire`, puffers
-33. ☐ Tracers
+33. ☑ Tracers — **landed** (velocity-aligned additive streaks; per-ammo tracer texture = refinement)
 44. ☐ **Pylon ordnance visuals** — mounted rocket models that disappear as ammo depletes
 
 ### Wave E — HUD
@@ -806,7 +806,33 @@ choosing.
 **Verify.** Each of the 15 `ROCKET` entries instances its named model; a screenshot shows a
 rocket in flight with correct orientation.
 
-### B15 ☐ Hit detection + surface classification
+### B15 ☑ Hit detection + surface classification — **LANDED (with the B13/B16/D29/D30/D33 batch, 2026-07-24)**
+
+**The whole "guns fire → tracers fly → hit → impact effect" batch landed together** (B13, B15, B16,
+D29, D30-partial, D33), since no piece is testable alone:
+- `src/Flight/Projectile.cs` (`ProjectilePool`, B13): a shared-world pool integrating the data's
+  ballistics (VELOCITY/ACCELERATION/GRAVITY, expire at RANGE), inheriting launch velocity; fixed
+  array, no per-round alloc. `Spawn` applies the CANNON_SPREAD cone and flashes the muzzle.
+- **Hit detection (B15):** a per-step world raycast. The flying plane has **no physics body**, so a
+  round never hits its own launcher and `player`/`enemy` are unreachable in M3 — only
+  `default`/`water`/`buildings` occur. Surface class comes from the struck collider's
+  `SceneBuilder.SurfaceMeta`, **stamped at build time** from the mesh's dominant material texture
+  (`AttachCollision`), so the classification is data-driven, not a runtime name heuristic.
+- **Gun firing (B16):** Space / pad-B (`--fire` for scripted runs). Each firable group runs its own
+  FIRE_RATE clock, alternating muzzles so the group's total rate = FIRE_RATE, drawing from its own
+  `CLUSTER_SIZE` ammo counter; a dry group sounds `snd_emptyclip` once; refill on respawn;
+  `--infinite-ammo`. Turrets excluded (inert). An interim HUD ammo line stands in for E36.
+- **Muzzle flash (D29) + tracers (D33):** additive billboard bursts at the firepoints; velocity-
+  aligned (non-billboard) tracer streaks. **Impact (D30):** the per-surface `IMPACT` **sound** +
+  a stand-in spark sprite.
+
+**Verified** (C1, screenshots + logs in `./.scratch/`): guns fire; ammo depletes per group; the
+Fury's 70-cal and 30-cal deplete in a **6:8 ratio = their FIRE_RATEs**; `--infinite-ammo` shows `∞`
+and never drops; tracers + muzzle flash render; rounds hit **terrain → `Default`** and **sea →
+`Water`** (correct collider surface tags); impact sprites + sounds fire. **Remaining:** the exact
+named `IMPACT`/muzzle effect animations (D30/D32 depth), per-ammo tracer textures, `buildings`
+confirmed only by the shared code path (same as water), and the empty-clip drain (2000+ rounds —
+a playtest check). B17 (rockets) and B18 (selectors) are next.
 
 **Goal.** Register hits and pick the right `IMPACT` variant.
 
