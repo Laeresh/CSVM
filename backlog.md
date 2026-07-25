@@ -1,8 +1,8 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
-`docs/PLAN-testing.md`** (testing & verification infrastructure); M3 (weapons) and the M2/2.5 polish
-runs plus the anim-debugger and data-driven-crash plans are complete and archived in `docs/plans/`. Per-item history/diagnosis
+Everything known-but-not-scheduled, so it survives between polish runs. **No plan is active** — the testing &
+verification infrastructure, M3 (weapons), the M2/2.5 polish runs and the anim-debugger and
+data-driven-crash plans are all complete and archived in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -227,10 +227,10 @@ work is below.
 
 **Test / debug affordances (findings 6, 14).**
 18. **Debug low-ammo knob.** Empty-clip can't be tested without firing 2000+ rounds. Add a start-with-low-
-    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/PLAN-testing.md`'s test-affordance theme.
+    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/plans/PLAN-testing.md`'s test-affordance theme.
 19. **Debug: colour world objects by type / class.** The user couldn't locate a C2 water tower or the
     storefront facades (found filmset panels instead). A "colour by object class" overlay (destructible /
-    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/PLAN-testing.md`
+    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/plans/PLAN-testing.md`
     **D32 Node Lab** (destructibles view) — extend it with a colour-by-class mode, or a standalone overlay.
 
 ## Blocked / deferred

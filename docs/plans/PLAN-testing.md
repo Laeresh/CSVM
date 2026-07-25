@@ -1,6 +1,16 @@
 # Testing & Verification Infrastructure
 
-**ACTIVE PLAN** (written 2026-07-24; **now the sole active plan — PLAN-M3-weapons completed and archived 2026-07-25**; see "Overlap with M3 Wave F" below for the two M3 debug-tool items this plan supersedes). It sits in `docs/`, which by this repo's convention makes it a live plan; CLAUDE.md's "Current status" names the active plan. Move it to `docs/plans/` with a `COMPLETE` banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+> **✅ COMPLETE — 2026-07-25.** All 18 items landed (Waves A–D). `--det` runs are byte-identical
+> frame-for-frame in every mode including flight, `.\RunTests.ps1` is the single entry point
+> (build → 152 units → 8 in-engine suites → 11 golden hashes → one exit code), and the inspect
+> layer — click-selection with a `cs_name` ancestor ladder, node lab, mesh lab, collider
+> wireframes, world damage sliders — is in freecam and the anim lab. Absorbs M3's F40 and F41.
+> **The at-the-controls sign-off is owed and is the user's**: every interactive half (clicks, the
+> ladder keys, the panels' feel, the numpad camera magnitudes) is unverifiable in this project and
+> sits in `playtest.md` §9, with D31's zeppelin case as the acceptance test the plan named.
+> Archived for its evidence and dead ends; read as history.
+
+**COMPLETED PLAN** (written 2026-07-24, delivered 2026-07-25; see "Overlap with M3 Wave F" below for the two M3 debug-tool items this plan supersedes).
 
 This plan replaces the project's screenshot-first verification culture with deterministic, machine-checkable instruments, then builds the interactive inspection tools the user has asked for. It was scoped in a grilling session on 2026-07-24 (decisions table below). Two audiences, in priority order: **(1) agent-facing infrastructure** — a deterministic test mode, an in-engine test harness, unit tests, a perf framework, a logging layer — so every future change verifies cheaper and less flakily than today's noise-floor rituals (`docs/verification.md` exists because the current instruments lie); **(2) user-facing inspect tools** — a shared click-selection with an ancestor ladder, a node lab, mesh/damage labs in freecam, collider wireframes — fixing real debugging friction (the zeppelin-selects-a-motor complaint).
 

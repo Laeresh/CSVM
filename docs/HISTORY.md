@@ -7082,3 +7082,23 @@ committed before this change, which is the byte-identity claim; the compare is s
 **Residual: the interactive half is unverified.** H, the slider drag and the Kill/Reset buttons run
 through `--debug-damage` and by construction only — live mouse and key input are unscriptable here —
 and the layout was checked at 1280×720 alone. `playtest.md` §9, beside D31's and D32's checks.
+
+## 2026-07-25 — PLAN-testing complete and archived
+
+All 18 items landed (Waves A–D) and the plan moved to `docs/plans/` with a `COMPLETE` banner and a
+`plans.md` row. `--det` runs are byte-identical frame-for-frame in every mode including flight;
+`.\RunTests.ps1` is the single entry point (build → 152 units → 8 in-engine suites → 11 golden
+hashes → one exit code); the inspect layer — click-selection with a `cs_name` ancestor ladder, the
+node lab, the mesh lab scoped to a selection, collider wireframes and world damage sliders — is in
+freecam and the anim lab. M3's F40 and F41 are absorbed.
+
+**What the plan changed about how this project verifies itself.** Twenty-five new
+`docs/verification.md` rules (78–105), most of them written because an instrument was caught
+lying mid-item rather than after the fact. The tripwire earned its keep on its first real merge by
+failing on a golden that moved for a reason nothing else could have surfaced: `--det` was reading a
+git-ignored dev tuning file, so every capture was a function of one machine's uncommitted state.
+
+**What is owed and cannot be done here.** Every interactive half — the clicks, the ladder keys, the
+panels' feel, the numpad camera magnitudes, the flight-model tuning — is unverifiable in this
+project and sits in `playtest.md` §9, with D31's zeppelin case as the acceptance test the plan
+itself named as the user's call.
