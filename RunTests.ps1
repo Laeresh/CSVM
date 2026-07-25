@@ -15,8 +15,13 @@
                --headless: no shaders compile there, so a clean error screen would prove
                nothing) and with --log-file, which is what lets the harness screen native
                engine ERROR lines. --run-tests implies --det by itself.
-      goldens  Not implemented yet -- the seam is here so the pipeline has a place for the
-               golden-image tripwire, and so its absence is visible rather than assumed.
+      goldens  The golden-image tripwire: one Godot per shot in analysis/goldens/manifest.json,
+               each a pinned --det capture, compared as md5 of the RAW pixel buffer (the engine
+               prints it; a PNG's encoded bytes are not the picture). Runs as its own scripted
+               pass rather than as an in-engine suite because the --run-tests harness completes
+               inside one _Ready call and never yields a frame, so it cannot photograph anything.
+               A mismatch names the shot and leaves the actual PNG and that shot's engine log in
+               .scratch/goldens/.
       perf     -Perf only. Not implemented yet, same reason.
 
     Exit code: 1 if any stage FAILED, 0 otherwise. A stage that skipped -- no game data, no
@@ -39,6 +44,14 @@
 .PARAMETER SkipEngine
     Skip the Godot --run-tests stage.
 
+.PARAMETER SkipGoldens
+    Skip the golden-image stage (it is the slow one -- one Godot launch per shot).
+
+.PARAMETER RegenGoldens
+    Re-render every shot and rewrite analysis/goldens/manifest.json with the hashes measured.
+    Deliberately a separate switch and never automatic: the rewritten file is the review artifact,
+    so a moved hash has to be explained in the commit that moves it.
+
 .PARAMETER Perf
     Also report the perf stage (not implemented yet).
 
@@ -60,6 +73,8 @@ param(
     [string]$Filter = "",
     [switch]$SkipUnits,
     [switch]$SkipEngine,
+    [switch]$SkipGoldens,
+    [switch]$RegenGoldens,
     [switch]$Perf
 )
 
@@ -126,16 +141,18 @@ function Get-StatusColor {
     param([string]$Status)
     if ($Status -eq "PASS") { return "Green" }
     if ($Status -eq "FAIL") { return "Red" }
-    if ($Status -eq "TODO") { return "DarkYellow" }
+    if ($Status -eq "TODO")  { return "DarkYellow" }
+    if ($Status -eq "REGEN") { return "DarkYellow" }
     return "Yellow"
 }
 
 # Rule 66: a stray Godot from an earlier run poisons the next one's error census and its
 # window. Two filters, deliberately: a leftover of THIS script -- this tree's project dir
-# AND --run-tests, which always quits by itself, so one still alive is stuck -- gets killed;
-# any other Godot on this tree is only reported. A live playtest or another agent's session
-# is not ours to kill, and "everything launched against this tree" catches both.
+# AND $Marker, an argument only this script's own launches carry, so one still alive is stuck --
+# gets killed; any other Godot on this tree is only reported. A live playtest or another agent's
+# session is not ours to kill, and "everything launched against this tree" catches both.
 function Stop-StrayGodots {
+    param([string]$Marker)
     $killed = 0
     $mine = @()
     $others = @()
@@ -143,7 +160,7 @@ function Stop-StrayGodots {
         $_.CommandLine -and $_.CommandLine.IndexOf($ProjectDir, [System.StringComparison]::OrdinalIgnoreCase) -ge 0
     })
     foreach ($godot in $godots) {
-        if ($godot.CommandLine.IndexOf("--run-tests", [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
+        if ($godot.CommandLine.IndexOf($Marker, [System.StringComparison]::OrdinalIgnoreCase) -ge 0) {
             $mine += $godot
         } else {
             $others += $godot
@@ -249,7 +266,7 @@ if ($SkipEngine) {
     Add-Unchecked "the in-engine suites did not run: no Godot at $GodotExe (in a worktree, set `$env:CSVM_DATA_ROOT to the primary tree)"
 } else {
     Write-Stage-Banner "engine (--run-tests)"
-    Stop-StrayGodots
+    Stop-StrayGodots -Marker "--run-tests"
 
     # Freeze workaround, as in RunGame.ps1/RunDev.ps1: the bundled SDL hangs the main thread
     # when a >255-button DirectInput device disconnects. Real pads still work via XInput.
@@ -326,10 +343,202 @@ if ($SkipEngine) {
 
 # ---- goldens -----------------------------------------------------------------------------
 
-# The seam for the golden-image tripwire. It reports TODO rather than PASS on purpose: a
-# stage that reports green while checking nothing is worse than one that is missing.
-Add-Stage -Name "goldens" -Status "TODO" -Seconds 0 -Detail "not implemented yet -- no golden hashes are captured or compared"
-Add-Unchecked "no golden-image compare exists yet: pixel regressions are not caught by this script"
+$GoldenManifest = Join-Path $RepoRoot "analysis\goldens\manifest.json"
+$GoldenDir      = Join-Path $ScratchDir "goldens"
+
+function ConvertTo-JsonString {
+    param([string]$Text)
+    $sb = New-Object System.Text.StringBuilder
+    $null = $sb.Append('"')
+    foreach ($c in $Text.ToCharArray()) {
+        switch ($c) {
+            '"'  { $null = $sb.Append('\"') }
+            '\'  { $null = $sb.Append('\\') }
+            "`n" { $null = $sb.Append('\n') }
+            "`r" { $null = $sb.Append('\r') }
+            "`t" { $null = $sb.Append('\t') }
+            default {
+                if ([int]$c -lt 0x20) {
+                    $null = $sb.Append(('\u{0:x4}' -f [int]$c))
+                } else {
+                    $null = $sb.Append($c)
+                }
+            }
+        }
+    }
+    return $sb.Append('"').ToString()
+}
+
+# Re-emits the manifest in its one canonical shape. Every field is written from the parsed
+# document, so a regeneration diff shows the hash lines and nothing else -- which is the whole
+# reason regeneration is a deliberate switch: the diff IS the review.
+function Write-GoldenManifest {
+    param($Doc, [string]$Path)
+    $lines = New-Object System.Collections.ArrayList
+    $null = $lines.Add("{")
+    $null = $lines.Add("  ""schema"": $([int]$Doc.schema),")
+    $null = $lines.Add("  ""regenerate"": $(ConvertTo-JsonString $Doc.regenerate),")
+    $null = $lines.Add("  ""readme"": $(ConvertTo-JsonString $Doc.readme),")
+    $null = $lines.Add("  ""size"": $(ConvertTo-JsonString $Doc.size),")
+    $null = $lines.Add("  ""gpu"": $(ConvertTo-JsonString $Doc.gpu),")
+    $null = $lines.Add("  ""notes"": [")
+    $notes = @($Doc.notes)
+    for ($i = 0; $i -lt $notes.Count; $i++) {
+        $comma = if ($i -eq $notes.Count - 1) { "" } else { "," }
+        $null = $lines.Add("    $(ConvertTo-JsonString $notes[$i])$comma")
+    }
+    $null = $lines.Add("  ],")
+    $null = $lines.Add("  ""shots"": [")
+    $shots = @($Doc.shots)
+    for ($i = 0; $i -lt $shots.Count; $i++) {
+        $s = $shots[$i]
+        $argJson = @($s.args | ForEach-Object { ConvertTo-JsonString $_ })
+        $null = $lines.Add("    {")
+        $null = $lines.Add("      ""name"": $(ConvertTo-JsonString $s.name),")
+        $null = $lines.Add("      ""frame"": $([int]$s.frame),")
+        $null = $lines.Add("      ""hash"": $(ConvertTo-JsonString $s.hash),")
+        $null = $lines.Add("      ""exercises"": $(ConvertTo-JsonString $s.exercises),")
+        $null = $lines.Add("      ""args"": [$($argJson -join ', ')]")
+        $null = $lines.Add($(if ($i -eq $shots.Count - 1) { "    }" } else { "    }," }))
+    }
+    $null = $lines.Add("  ]")
+    $null = $lines.Add("}")
+    # UTF-8 without BOM, LF-terminated: this file is reviewed as a diff, so its bytes must not
+    # move for reasons nobody asked for.
+    $text = ($lines -join "`n") + "`n"
+    [System.IO.File]::WriteAllText($Path, $text, (New-Object System.Text.UTF8Encoding($false)))
+}
+
+if ($SkipGoldens) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "-SkipGoldens"
+    Add-Unchecked "the golden-image shots did not run (-SkipGoldens): pixel regressions are not caught by this run"
+} elseif (-not $buildOk) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "build failed"
+    Add-Unchecked "the golden-image shots did not run (the build failed)"
+} elseif (-not (Test-Path $GodotExe)) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
+    Add-Unchecked "the golden-image shots did not run: no Godot at $GodotExe"
+} elseif (-not (Test-Path $GoldenManifest)) {
+    Add-Stage -Name "goldens" -Status "SKIP" -Seconds 0 -Detail "no manifest at $GoldenManifest"
+    Add-Unchecked "the golden-image shots did not run: no manifest at $GoldenManifest"
+} else {
+    Write-Stage-Banner $(if ($RegenGoldens) { "goldens (regenerating)" } else { "goldens" })
+    # Every launch here carries the .scratch\goldens output path, an argument nothing but this
+    # stage passes -- so the kill cannot reach a live playtest or a hand-run capture.
+    Stop-StrayGodots -Marker "\.scratch\goldens\"
+    if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
+        $env:SDL_JOYSTICK_DIRECTINPUT = "0"
+    }
+    if (-not (Test-Path $GoldenDir)) {
+        $null = New-Item -ItemType Directory -Path $GoldenDir
+    }
+
+    # .NET's reader, not Get-Content: PS 5.1 decodes a BOM-less file as the system ANSI codepage,
+    # which turns every em-dash in the manifest's prose into mojibake the moment it is written back.
+    $manifest = [System.IO.File]::ReadAllText($GoldenManifest) | ConvertFrom-Json
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $moved      = @()      # shots whose hash differs from the manifest
+    $broken     = @()      # shots that did not render, or rendered the wrong frame/size
+    $adapters   = @{}
+    foreach ($shot in @($manifest.shots)) {
+        $png = Join-Path $GoldenDir "$($shot.name).png"
+        $shotLog = Join-Path $GoldenDir "$($shot.name).log"
+        foreach ($stale in @($png, $shotLog)) {
+            if (Test-Path $stale) {
+                Remove-Item -Path $stale -Force
+            }
+        }
+        $shotArgs = @($shot.args) + @("--frames=$([int]$shot.frame)", "--screenshot=$png")
+        $ErrorActionPreference = "Continue"
+        & $GodotExe --path $ProjectDir --log-file $shotLog res://scenes/Main.tscn -- @shotArgs
+        $shotCode = $LASTEXITCODE
+        $ErrorActionPreference = "Stop"
+
+        # Rule 74: --screenshot exits 0 even when the save fails, so the file's existence is the
+        # only proof it wrote anything.
+        if (-not (Test-Path $png)) {
+            $broken += "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
+            Write-Host "  FAIL $($shot.name): no PNG at $png" -ForegroundColor Red
+            continue
+        }
+        $hash = ""; $size = ""; $gpu = ""; $simFrame = -1
+        if (Test-Path $shotLog) {
+            foreach ($line in (Get-Content -Path $shotLog)) {
+                if ($line -match 'shot pixmd5=(\w+) size=(\S+) gpu=(.*)$') {
+                    $hash = $Matches[1]; $size = $Matches[2]; $gpu = $Matches[3].Trim()
+                }
+                if ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
+                    $simFrame = [int]$Matches[1]
+                }
+            }
+        }
+        if ($hash.Length -eq 0) {
+            $broken += "$($shot.name): no 'shot pixmd5=' line -- see $shotLog"
+            Write-Host "  FAIL $($shot.name): the run printed no pixel hash" -ForegroundColor Red
+            continue
+        }
+        $adapters[$gpu] = 1
+        # A shot that photographed a different sim frame is a clock regression, not a pixel one,
+        # and reads as neither if it is folded into the hash compare.
+        if ($simFrame -ne [int]$shot.frame) {
+            $broken += "$($shot.name): captured sim_frame=$simFrame, manifest says $([int]$shot.frame)"
+            Write-Host "  FAIL $($shot.name): sim_frame=$simFrame, expected $([int]$shot.frame)" -ForegroundColor Red
+            continue
+        }
+        if ($size -ne $manifest.size) {
+            $broken += "$($shot.name): rendered $size, manifest hashes are $($manifest.size)"
+            Write-Host "  FAIL $($shot.name): rendered $size, expected $($manifest.size)" -ForegroundColor Red
+            continue
+        }
+        if ($hash -eq $shot.hash) {
+            Write-Host "  ok   $($shot.name)  $hash" -ForegroundColor DarkGray
+        } else {
+            $moved += "$($shot.name) $($shot.hash) -> $hash ($png)"
+            $color = if ($RegenGoldens) { "DarkYellow" } else { "Red" }
+            Write-Host "  MOVED $($shot.name): $($shot.hash) -> $hash" -ForegroundColor $color
+            Write-Host "        actual image: $png" -ForegroundColor $color
+        }
+        $shot.hash = $hash
+    }
+    $watch.Stop()
+
+    # The one legitimate reason for every hash to move at once. Printed whether or not anything
+    # failed, because "the adapter also changed" is the difference between regenerate and
+    # stop-the-line.
+    $liveGpu = @($adapters.Keys) -join " + "
+    if ($liveGpu -and $liveGpu -ne $manifest.gpu) {
+        Write-Host "  GPU CHANGED: manifest '$($manifest.gpu)', this run '$liveGpu'" -ForegroundColor Yellow
+        Write-Host "        a driver or card change legitimately moves every hash -- regenerate and say so in the commit" -ForegroundColor Yellow
+        $manifest.gpu = $liveGpu
+    }
+
+    $shotCount = @($manifest.shots).Count
+    if ($RegenGoldens) {
+        Write-GoldenManifest -Doc $manifest -Path $GoldenManifest
+        $detail = "regenerated $shotCount shot(s), $($moved.Count) hash(es) changed -> $GoldenManifest"
+        if ($broken.Count -gt 0) {
+            Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($broken.Count) shot(s) did not render"
+            foreach ($b in $broken) {
+                Write-Host "  !! $b" -ForegroundColor Red
+            }
+        } else {
+            Add-Stage -Name "goldens" -Status "REGEN" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+        }
+        Add-Unchecked "goldens were REGENERATED, not checked -- review the manifest diff and name the moved shots in the commit"
+    } elseif ($moved.Count -eq 0 -and $broken.Count -eq 0) {
+        Add-Stage -Name "goldens" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail "$shotCount shot(s) hash-identical; gpu $liveGpu"
+    } else {
+        $names = @($moved | ForEach-Object { ($_ -split ' ')[0] }) + @($broken | ForEach-Object { ($_ -split ':')[0] })
+        Add-Stage -Name "goldens" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds `
+            -Detail "$($moved.Count) moved, $($broken.Count) broken of $shotCount [$($names -join ', ')]; actual images in $GoldenDir"
+        foreach ($m in $moved) {
+            Write-Host "  !! moved: $m" -ForegroundColor Red
+        }
+        foreach ($b in $broken) {
+            Write-Host "  !! $b" -ForegroundColor Red
+        }
+    }
+}
 
 # ---- perf --------------------------------------------------------------------------------
 

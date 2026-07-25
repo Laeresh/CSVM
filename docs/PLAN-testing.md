@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ C21 — Startup-phase stopwatches (always-on structured timing log) **(done 2026-07-25 — `src/Utils/StartupProfile.cs`, one `[perf] startup` line per session build; `docs/HISTORY.md`)**
 22. ☐ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history
-23. ☐ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels
+23. ☑ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels **(done 2026-07-25 — 11 shots in `analysis/goldens/manifest.json`, run as `RunTests.ps1`'s own scripted stage rather than a B12 suite; `docs/HISTORY.md`)**
 24. ☑ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites) **(done 2026-07-25 — hooked into `TextureArchive.Find`; classification is chromaticity with a measured tolerance; counts are lower bounds; `docs/HISTORY.md`)**
 25. ☑ C25 — Test stages: `--stage=empty` and `--node=<cs_name>` **(done 2026-07-25 — `src/Mech3/EmptyStage.cs` + `WorldBuilder.BuildNode`; the anim-bind audit's findings are in the item's landing note, and C22/Wave D depend on them; `docs/HISTORY.md`)**
 26. ☑ C26 — Flight camera views: held-numpad perspectives around the plane + scripted `--view=` **(done 2026-07-25 — one view table in `FlightController`, `--view=<1-9>`; the geometry sweep and the C24-composed belly capture are verified, the magnitudes are TUNE and the held-key half is by construction; `docs/HISTORY.md`)**
@@ -479,7 +479,7 @@ a floor on the penalty rather than its ceiling.
 
 **⚠ Traps.** Never let vsync-pinned `fps` into a verdict (rule 38); durations in sim frames not wall seconds (A1 makes that exact); a history *trend* is awareness, not evidence — the A/B is the only regression instrument this plan trusts.
 
-## C23 ☐ Golden-image tripwire
+## C23 ☑ Golden-image tripwire
 
 **Goal.** ~10 curated `--det` shots — proposed: the 8 chapters (`--freecam`, pinned `--pos`/`--direction` at each spawn), one `--viewer` parked plane, one `--stage=empty` — hashed as **md5 of the raw pixel buffer** (`Image.GetData()`, never the PNG file — rule 36) and recorded in a committed `analysis/goldens/manifest.json` (command line, frame number, hash — hashes and commands only, no pixels: asset-rule clean). A `goldens` suite in B12 re-renders and compares; any mismatch fails with the offending shot named and the actual image left in `.scratch/` for eyeballing.
 
@@ -490,6 +490,44 @@ a floor on the penalty rather than its ceiling.
 **Verify.** Rule 14: perturb one shader constant → exactly the expected shots fail, others hold; revert → green. Two clean runs → green twice (no flaky hashes — this is the real test of Wave A).
 
 **⚠ Traps.** A GPU driver update can legitimately flip every hash on this machine — document "regenerate after driver updates" in the manifest header; that's the accepted cost of decision 10. Goldens are a *tripwire*, not a diagnosis — a failure is investigated with the headless instruments (census, `--debug-anim`, mesh lab), not by staring at diffs.
+
+**Landed 2026-07-25** — `analysis/goldens/manifest.json` + `README.md`, a `goldens` stage in
+`RunTests.ps1` (`-RegenGoldens` / `-SkipGoldens`), and `src/Testing/GoldenShot.cs` behind one new
+log line at the `--screenshot` save site: `[core] shot pixmd5=… size=… gpu=…`. Evidence in
+`docs/HISTORY.md`; the standing rules are verification 95–97.
+
+**Goldens run as their own scripted pass, NOT as a B12 suite — the constraint C24 flagged is real
+and structural.** The harness runs every suite to completion inside one `_Ready` call and never
+yields a frame, so nothing there can photograph anything; an async harness would have been a rewrite
+of B12 to serve one stage. Driving eleven separate Godot launches from `RunTests.ps1` instead has a
+second payoff the suite shape could not have: each manifest entry **is** the literal command a human
+re-runs, so a failing shot is reproduced by copying one line. Cost: ~53 s for the eleven, hence
+`-SkipGoldens`.
+
+**Eleven shots, not ten, and the extra one is a flight pose** — A3's chase-camera fix made flight
+byte-identical, so `c1-flight` (C1, `--hold`, chase cam + prop/control-surface animators + the whole
+HUD) is in, and it is by far the strongest tripwire in the set: **34.52 % of pixels move between
+sim frame 120 and 121**. The rest: the 8 chapters on pinned `--pos`/`--direction`, one `--viewer`
+parked plane, one `--stage=empty`.
+
+**Rule 80 was applied per shot as a measurement, not an argument.** Every entry carries its measured
+frame-N-vs-N+1 delta, because a pose with no animated surface would pass even with the clock broken.
+Six move on a one-frame perturbation (`c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %,
+`c2b-rain` 3.47 %, `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); `c1b-night-sea` needs 4 s to show its
+cloud-puff drift (0.13 %); `c2-city` (51 px), `c5-city-night` (11 px), `c3-island` (9 px) and
+`viewer-bhawk` (0 px) are geometry-and-shading shots and say so in the manifest.
+
+**Known non-coverage, stated rather than papered over.** No pose in the set moves more than 9 px
+across a full `TextureCycler` cycle — the water flipbooks differ by ~2/255 (rule 32), so goldens
+cannot be their instrument and `--debug-anim` stays it. C1B's four UV-scroll models (the wakes) were
+not located and are unrepresented; C1's and C4's scroll is covered instead. Sound is muted in every
+shot; splitscreen, the launchscreen and the labs are unrepresented.
+
+**Deviation: the hash is computed in-engine, not in PowerShell.** `Image.GetData()` is only reachable
+from C#, and hashing there means no PNG decode round-trip can sit between the frame and its
+fingerprint. The side effect is the useful part: *every* `--screenshot` in this project now prints
+its own pixel hash, so turning any capture into a golden is a copy-paste. The adapter string rides
+the same line so a driver change is visible on the log rather than inferred from a mass failure.
 
 ## C24 ☑ Texture drop-in: `--tex-override` + `--tex-census`
 

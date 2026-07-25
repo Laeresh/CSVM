@@ -6673,3 +6673,92 @@ above-behind with no HUD and no horizon, so neither a distance nor an elevation 
 it, and it does not even establish which view (or the chase camera) it came from. The four videos
 are crash, dive-sound and tile-loading captures. Nothing was inferred from any of them. The
 magnitudes are filed in `backlog.md`'s TUNE list and `playtest.md` §3 pending the A/B.
+
+## 2026-07-25 — PLAN-testing C23: the golden-image tripwire
+
+**Landed.** `analysis/goldens/manifest.json` (11 pinned `--det` shots: command line, sim frame,
+raw-pixel md5, and what each one actually exercises) with its `README.md`; a `goldens` stage in
+`RunTests.ps1` with `-RegenGoldens` / `-SkipGoldens`; and `CSVM/src/Testing/GoldenShot.cs` behind
+one new line at the `--screenshot` save site — `[core] shot pixmd5=… size=… gpu=…`. The hash is md5
+over `Image.GetData()`, never the saved PNG (rule 36). The manifest holds hashes and commands only:
+no pixels, so it is asset-rule clean.
+
+**Goldens run as a scripted pass, not a B12 suite.** C24 flagged the constraint and it holds: the
+`--run-tests` harness completes every suite inside one `_Ready` call and never yields a frame, so
+nothing there can photograph anything. Eleven separate Godot launches from the script instead, each
+`<manifest args> --frames=N --screenshot=<abs> --log-file=<abs>` — which makes every manifest entry
+the literal command a human re-runs to reproduce one shot. Frame number and render size are checked
+**separately** from the hash, so a clock or window-size regression reads as itself instead of as
+"pixels moved". A mismatch names the shot and leaves the actual PNG plus that shot's own engine log
+in `.scratch/goldens/`.
+
+**The set.** The 8 chapters on pinned `--pos`/`--direction` (`c1-waterfall`, `c1b-night-sea`,
+`c1c-rain`, `c2-city`, `c2b-rain`, `c3-island`, `c4-snow`, `c5-city-night`), one `--viewer` parked
+plane (`viewer-bhawk`), one `--stage=empty`, and — new since A3 put the chase camera on the sim
+clock — one **flight** pose, `c1-flight`.
+
+**Rule 80 applied per shot, measured.** Frame N against N+1 on the same build, because a pose with
+no animated surface would pass even with the clock broken: `c1-flight` **34.52 %**, `empty-stage`
+**12.21 %**, `c4-snow` **3.74 %**, `c2b-rain` **3.47 %**, `c1c-rain` **2.50 %**, `c1-waterfall`
+**1.28 %**. The other five are geometry-and-shading shots and the manifest says so: `c1b-night-sea`
+0 px at N+1 but 1,156 px over 4 s (cloud-puff drift), `c2-city` 51 px, `c5-city-night` 11 px,
+`c3-island` 9 px over 4 s, `viewer-bhawk` 0 px at 30 vs 360.
+
+**Verified.** *Rule 14, twice, with the blast radius predicted before the run.* Perturbing the snow
+flutter constant (`sway_freq * 0.9` → `* 1.4`, snow-only by construction) moved **exactly
+`c4-snow`** and held the other ten; widening the precipitation near-fade (`smoothstep(0.0,
+near_fade, md)` → `near_fade * 2.0`, rain *and* snow) moved **exactly `c1c-rain`, `c2b-rain`,
+`c4-snow`** and held the other eight. Both reverted to green. *Stability:* two clean end-to-end
+`.\RunTests.ps1` runs, **11 of 11 hashes identical both times**, exit 0 — `build PASS · units PASS
+152/152 · engine PASS 8/8, engine errors clean · goldens PASS 11 shot(s) hash-identical`, 74.0 s
+total, the golden stage 53.4–54.2 s of it. No shot was unstable. *Regeneration:* `-RegenGoldens` on
+an unperturbed tree rewrites the file **byte-identically** (4,879 → 4,879 bytes, `Compare-Object`
+empty), so a real regeneration's diff is exactly the hash lines — with the snow perturbation active
+the diff is **one line**. It reports `REGEN`, never `PASS`, plus a `not checked:` line.
+*Cross-check:* the eleven committed hashes were measured by a standalone probe script and
+reproduced by the stage's independent code path on the first run.
+
+**The encoding bug the first regeneration found, now rule 97.** `Get-Content -Raw` decodes a
+BOM-less UTF-8 file as the system ANSI codepage in PowerShell 5.1, so the round-trip turned every
+em-dash in the manifest's prose into `â€”` (4,879 → 4,894 bytes). Reading through
+`[System.IO.File]::ReadAllText` fixes it; rule 68's other half.
+
+**Stray-Godot scoping (rule 66) is now per stage.** `Stop-StrayGodots` takes the marker to match:
+`--run-tests` for the engine stage, the `.scratch\goldens\` output path for the goldens. Both are
+arguments only this script's own launches carry, so a live playtest or a hand-run capture to any
+other path is reported and left alone.
+
+**Known non-coverage, stated rather than papered over.** No pose moves more than 9 px across a full
+`TextureCycler` cycle — the water flipbooks differ by ~2/255 (rule 32) — so goldens cannot be their
+instrument and `--debug-anim` stays it. C1B's four UV-scroll models (the wakes) were not located and
+are unrepresented; C1's and C4's scroll covers that surface instead. Sound is muted in every shot,
+and splitscreen, the launchscreen and the labs have no shot at all. Every hash is a property of this
+machine's GPU (`NVIDIA GeForce RTX 5080 / 1.4.341`, recorded in the manifest): a driver change
+legitimately moves all eleven, and the stage prints `GPU CHANGED` when the running adapter differs —
+the one case where regenerating is the right answer. Standing rules: `docs/verification.md` 95–97.
+
+## 2026-07-25 — `--det` stops reading the git-ignored dev tuning file
+
+**What this was.** The golden tripwire fired on its first real merge: `c1-flight` moved while the
+other ten shots held. The cause was not the change under test. `CSVM/config.json` is git-ignored
+(`.gitignore:49`) and carries 15 tuning overrides, **all of them `flightModel`** — so a capture that
+honoured it was a function of one machine's uncommitted state. The shot reproduced as
+`ec35b99d…` in the tree that captured it and `f0493fb0…` in any worktree, and only the flight shot
+could notice, which is exactly the pattern observed.
+
+**Diagnosis.** Reverting the merged change's own source in the worktree still gave `f0493fb0…`,
+which ruled it out; running the identical command in both trees with the same data root and GPU gave
+the two different hashes; `config loaded overrides=15` in one log and no such line in the other named
+the cause.
+
+**Fix.** `Config.ClearOverrides()`, called when the `--det` bundle resolves, so a deterministic run
+takes in-code defaults. The bundle line now carries `config=defaults dropped_overrides=N`. Capture
+with local tuning applied by passing `--no-det`.
+
+**Verified.** The same command now yields `f0493fb0…` in **both** trees — main dropping 15 overrides,
+the worktree dropping 0. The manifest was regenerated with exactly one hash changed (`c1-flight`),
+which is the shot the cause predicts; the other ten regenerated byte-identically. Landed as
+verification rule 98.
+
+**Worth keeping.** The tripwire earned its place on its first outing — it caught a reproducibility
+hole in itself that no other instrument here would have surfaced.

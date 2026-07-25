@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Testing;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -790,9 +791,15 @@ public partial class PlaneViewer : Node3D
         // implies. Every constituent is named with its value, including the ones a flag overrode.
         if (_det)
         {
+            // The dev tuning file is git-ignored, so honouring it would make a deterministic capture
+            // a function of one machine's uncommitted state: the same command gives different pixels
+            // in a checkout and in a worktree, and a golden hash quietly records whatever was being
+            // tuned that day. Pass --no-det to capture with your overrides applied.
+            int dropped = Config.OverrideCount;
+            Config.ClearOverrides();
             ulong liverySeed = _paintSeedExplicit ? _paintSeed : Rng.SeedFor(Rng.Paint);
             float dtMs = GameClock.FixedDt * 1000f;
-            Log.Info("core", $"det clock=fixed dt_ms={dtMs:0.###} seed={_masterSeed} spawn={_spawnIndex} livery_seed={liverySeed} pads=off jitter={_jitterDeg:0.###} via={detVia}");
+            Log.Info("core", $"det clock=fixed dt_ms={dtMs:0.###} seed={_masterSeed} spawn={_spawnIndex} livery_seed={liverySeed} pads=off jitter={_jitterDeg:0.###} config=defaults dropped_overrides={dropped} via={detVia}");
         }
         else if (_noDet && (detExplicit || scriptedBy.Length > 0))
         {
@@ -3730,6 +3737,10 @@ public partial class PlaneViewer : Node3D
         long simFrame = _clock?.Frame ?? 0;
         double simTime = _clock?.Time ?? 0.0;
         Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+        // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
+        // encoded bytes differ between identical images), the size that hash is only valid at, and
+        // the adapter that drew it. Emitted on every capture so any shot can become a golden.
+        Log.Info("core", $"shot pixmd5={GoldenShot.PixelHash(img)} size={img.GetWidth()}x{img.GetHeight()} gpu={GoldenShot.Adapter()}");
         // No-op unless --tex-census: reads the frame just saved back as per-texture pixel counts.
         TextureDropIn.CountShot(img, path);
         if (++_shotIndex >= _screenshotShots)

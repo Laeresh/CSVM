@@ -1309,6 +1309,18 @@ The seven registered suites: `weapons-defs`, `markers-rig`, `loadout-bind`, `wea
 ⚠ `--loadout=<def>` reaches `loadout-bind` — `--run-tests=loadout-bind --loadout=pbloodhawk` is the
   real able-to-fail control (a def wanting `firepoint8` bound to the 7-firepoint Kestrel).
 
+## src/Testing/GoldenShot.cs
+The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
+`Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
+`[core] shot pixmd5=… size=… gpu=…` on every capture; `RunTests.ps1`'s `goldens` stage parses that
+line and compares against `analysis/goldens/manifest.json`.
+⚠ **Hash the raw buffer, never the PNG.** `Image.GetData()` only — encoded bytes differ between
+  pixel-identical images (rule 36), so a file hash reports encoder state.
+⚠ **The hash is a property of this GPU.** A driver change moves every shot at once; the adapter
+  travels on the same line precisely so that case is readable rather than mysterious (rule 95).
+⚠ The comparison lives in PowerShell, not here: the suites in `TestHarness` run inside one `_Ready`
+  call and never yield a frame, so no in-engine suite can photograph anything.
+
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
 the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's value for a present
