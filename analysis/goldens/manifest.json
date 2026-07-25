@@ -1,0 +1,92 @@
+{
+  "schema": 1,
+  "regenerate": "RunTests.ps1 -RegenGoldens",
+  "readme": "analysis/goldens/README.md",
+  "size": "1280x720",
+  "gpu": "NVIDIA GeForce RTX 5080 / 1.4.341",
+  "notes": [
+    "Hashes are md5 over the RAW pixel buffer (Image.GetData()), never over the saved PNG.",
+    "A GPU or driver change legitimately moves every hash at once; the gpu field above is what these were captured on. Regenerate after a driver update, and say so in the commit message.",
+    "A landed visual change updates this file in the SAME commit and names the shots it moved. An unexplained flip is a stop-the-line finding, not a regeneration.",
+    "The runner appends --screenshot=<abs path> and --log-file=<abs path>; everything else is the args below verbatim."
+  ],
+  "shots": [
+    {
+      "name": "c1-waterfall",
+      "frame": 120,
+      "hash": "0bb2532d29261339fb11e3eda79403d0",
+      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121",
+      "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
+    },
+    {
+      "name": "c1b-night-sea",
+      "frame": 120,
+      "hash": "5daeff5c25d336c660399d1873dc1cce",
+      "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift)",
+      "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
+    },
+    {
+      "name": "c1c-rain",
+      "frame": 120,
+      "hash": "03e7e43cfc1232801ace40df89195f51",
+      "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %",
+      "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
+    },
+    {
+      "name": "c2-city",
+      "frame": 120,
+      "hash": "a9a21a039810a78c6bb870ffef2f9857",
+      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121",
+      "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
+    },
+    {
+      "name": "c2b-rain",
+      "frame": 120,
+      "hash": "bf1d59e272d71db33d4069766812d370",
+      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %",
+      "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
+    },
+    {
+      "name": "c3-island",
+      "frame": 120,
+      "hash": "cb550de3080c1b0d22168c154fb6dc52",
+      "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock",
+      "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
+    },
+    {
+      "name": "c4-snow",
+      "frame": 120,
+      "hash": "0b7f937925707df037328d6a7cb62793",
+      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set",
+      "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
+    },
+    {
+      "name": "c5-city-night",
+      "frame": 120,
+      "hash": "08b2bf163667907a3b6a7c2822811800",
+      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360",
+      "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
+    },
+    {
+      "name": "viewer-bhawk",
+      "frame": 30,
+      "hash": "b6404edaa39f4466a504d5e6c4f1c46d",
+      "exercises": "one aircraft built and painted: PlaneBuilder, the pinned livery seed, decals, the orbit camera's framing; static by construction, 0 px at 30 vs 360",
+      "args": ["--viewer", "--plane=player_bhawk", "--det", "--mute"]
+    },
+    {
+      "name": "empty-stage",
+      "frame": 120,
+      "hash": "425b69dfb3b60b3cb846d33058e4b311",
+      "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent",
+      "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
+    },
+    {
+      "name": "c1-flight",
+      "frame": 120,
+      "hash": "ec35b99dde604ed57ccb00279c931a88",
+      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here",
+      "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
+    }
+  ]
+}

@@ -366,6 +366,27 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     the same pose classified 374,491 px confidently with `--no-fog` and 129,210 px with fog on,
     unmatched 19.4 % → 58.8 %.
 
+95. **A landed visual change updates `analysis/goldens/manifest.json` in the SAME commit and names
+    the shots it moved; an unexplained golden flip is stop-the-line, not a regeneration.** The one
+    legitimate mass flip is a GPU or driver change, which the stage detects and says out loud
+    (`GPU CHANGED: manifest '…', this run '…'`) — every other flip is a defect until diagnosed.
+    A hash regenerated in a separate "fix the goldens" commit is indistinguishable from one
+    regenerated to bury a regression, which is why `-RegenGoldens` reports `REGEN`, never `PASS`.
+
+96. **A golden is a tripwire, not a diagnosis — investigate a failure with the headless instruments,
+    never by staring at the diff.** The shot tells you *that* pixels moved and nothing about why;
+    `--tex-override` / `--tex-census` answer "is this surface drawing", `--debug-anim` answers pose
+    and emitter state, the mesh lab answers shading. Measured discrimination: perturbing the snow
+    flutter constant moved **exactly `c4-snow`** and held the other ten; widening the precipitation
+    near-fade moved **exactly `c1c-rain`, `c2b-rain`, `c4-snow`** and held the other eight — the
+    shot names are the diagnosis's starting point, not its answer.
+
+97. **Read a manifest or any other BOM-less UTF-8 file with `[System.IO.File]::ReadAllText`, not
+    `Get-Content -Raw`** — PowerShell 5.1 decodes it as the system ANSI codepage, so a read-modify-
+    write turned every em-dash in the golden manifest into `â€”` on the first regeneration. Rule 68's
+    other half: that one was about a BOM being honoured when you did not want it, this one about
+    UTF-8 not being assumed when you did.
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -406,6 +427,8 @@ Before calling a change verified:
 - [ ] **`.\RunTests.ps1` green, exit 0** — one command for the build, the unit tests and the
       in-engine suites, and its exit code is the verdict. **A `SKIP` row is not a pass**: read its
       "not checked" lines before believing the run, and the `TODO` rows name what nobody checks yet
+- [ ] Every golden hash that moved is explained, and `analysis/goldens/manifest.json` is updated in
+      **this** commit with the moved shots named in its message (rule 95)
 - [ ] Build succeeds, and the **baseline** build succeeded too
 - [ ] Camera and spawn pinned; noise floor (a `--no-det` measurement now — rule 83) measured same-build-vs-same-build
 - [ ] The instrument has been shown capable of reporting failure

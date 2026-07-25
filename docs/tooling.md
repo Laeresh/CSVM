@@ -106,17 +106,31 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — rule 82) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
-| `goldens` | Not implemented — reports `TODO`, so the missing golden-image tripwire is visible rather than assumed |
+| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — rule 36). ~53 s for 11 shots |
 | `perf` | `-Perf` only, and also `TODO` |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
-+ `weapons-fire`; the unit tests are unaffected), **`-SkipUnits`**, **`-SkipEngine`**, **`-Perf`**.
++ `weapons-fire`; the unit tests are unaffected), **`-SkipUnits`**, **`-SkipEngine`**,
+**`-SkipGoldens`**, **`-RegenGoldens`**, **`-Perf`**.
+
+**The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
+`--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a
+frame, so no suite there can photograph anything. Driving it from the script also makes each shot's
+manifest entry the *literal* command a human re-runs by hand. A mismatch fails the stage naming the
+shot, and leaves the actual PNG plus that shot's own engine log in `.scratch/goldens/<shot>.{png,log}`
+for eyeballing — the shot's frame number and render size are checked separately from its hash, so a
+clock or window-size regression reads as itself rather than as "pixels moved". **`-RegenGoldens`**
+re-renders every shot and rewrites `manifest.json` in place; the emitter round-trips the file
+byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
+never automatic — see `docs/verification.md` rule 95 for when it is the right answer and when it is
+covering up a defect, and `analysis/goldens/README.md` for the shot set.
 
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
 data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of
 them prints a `not checked:` line and the summary names what went unmeasured: "the data was not
-there" must never read as "the check held". The `TODO` rows do the same for the two unwritten
-stages.
+there" must never read as "the check held". The `TODO` row does the same for the unwritten perf
+stage, and `-RegenGoldens` reports its stage as `REGEN` — never `PASS` — with a `not checked:` line
+saying the goldens were rewritten rather than verified.
 
 **Worktrees.** Extracted data is found through `CSVM_DATA_ROOT` by the engine and the unit tests
 alike, and Godot is resolved this tree first then `CSVM_DATA_ROOT` (as `RunGame.ps1` does), so
@@ -127,10 +141,11 @@ to the primary tree. Without it a worktree still builds and runs the units; the 
 the engine suites but *not* the data-dependent units — from the primary tree they still find
 `extracted/`.
 
-Stray Godots are killed before the engine stage, **filtered to this tree's project dir AND
-`--run-tests`** (rule 66): a `--run-tests` run always quits by itself, so one still alive is stuck
-and ours, while any other Godot on this tree — a live playtest, another agent — is reported and left
-alone.
+Stray Godots are killed before the engine and golden stages, **filtered to this tree's project dir
+AND an argument only that stage's own launches carry** (rule 66) — `--run-tests` for the engine
+stage, the `.scratch\goldens\` output path for the goldens. Both always quit by themselves, so one
+still alive is stuck and ours, while any other Godot on this tree — a live playtest, another agent,
+a hand-run capture to any other path — is reported and left alone.
 
 **All three scripts set `SDL_JOYSTICK_DIRECTINPUT=0`**, respecting a pre-set value — the
 controller-disconnect freeze workaround (2026-07-19). Godot's bundled SDL hangs the main thread

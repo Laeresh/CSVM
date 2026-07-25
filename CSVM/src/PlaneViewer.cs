@@ -5,6 +5,7 @@ using System.IO;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Testing;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
@@ -3702,6 +3703,10 @@ public partial class PlaneViewer : Node3D
         long simFrame = _clock?.Frame ?? 0;
         double simTime = _clock?.Time ?? 0.0;
         Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+        // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
+        // encoded bytes differ between identical images), the size that hash is only valid at, and
+        // the adapter that drew it. Emitted on every capture so any shot can become a golden.
+        Log.Info("core", $"shot pixmd5={GoldenShot.PixelHash(img)} size={img.GetWidth()}x{img.GetHeight()} gpu={GoldenShot.Adapter()}");
         // No-op unless --tex-census: reads the frame just saved back as per-texture pixel counts.
         TextureDropIn.CountShot(img, path);
         if (++_shotIndex >= _screenshotShots)
