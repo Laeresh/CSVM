@@ -566,6 +566,18 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      passing suites as FAIL. Any exit code, count or hash a verdict rests on gets asserted non-empty
      before it is compared.
 
+121. **A MINIMIZED window does not render; a HIDDEN one does — never minimize a window you are
+     capturing from.** Creating the window minimized (`display/window/size/mode=1`) to keep scripted
+     runs off the desktop put 6 of the 11 goldens on one identical blank hash, and — worse — left
+     the other 5 passing, so the failure looked like a partial regression rather than a broken
+     instrument. `ShowWindow(SW_HIDE)` from `_Ready` costs nothing: all 11 stay hash-identical.
+
+122. **Confirm the intervention actually took effect before crediting the result to it.** Godot
+     clamps `--position` so about a third of the window stays on the desktop (5184 and 10000 both
+     land at 4686 on a 5120-wide desktop, silently), so a full green goldens run "proved" an
+     off-screen window still renders while the window had never left the screen. The verdict was
+     right and the reasoning was worthless; a rect probe was one command away.
+
 ## What this project cannot verify itself
 
 These need the user:

@@ -145,6 +145,16 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
     $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
 }
 
+# The engine hides a scripted run's window (PlaneViewer.HideScriptedWindow), but it can only do that
+# once _Ready runs -- measured 1.0 s after the window appears, which is Godot booting. --position is
+# applied at CREATION, so it puts that unavoidable second at the far edge of the desktop instead of
+# in the middle of whatever the user is reading. Godot clamps it to keep about a third of the window
+# on screen (5184 and 10000 both land at 4686 on a 5120-wide desktop), so this is as far out as the
+# engine allows -- it cannot be parked off-screen outright.
+Add-Type -AssemblyName System.Windows.Forms
+$VirtualScreen = [System.Windows.Forms.SystemInformation]::VirtualScreen
+$WindowOrigin  = "{0},{1}" -f ($VirtualScreen.Right + 64), $VirtualScreen.Top
+
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
 }
@@ -194,7 +204,8 @@ function Invoke-Godot {
     }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName               = $GodotExe
-    $psi.Arguments              = ($quoted -join " ")
+    # --position is an ENGINE argument, so it goes ahead of the scene, never after the `--`.
+    $psi.Arguments              = (@("--position", $WindowOrigin) + $quoted) -join " "
     $psi.WorkingDirectory       = $RepoRoot
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true

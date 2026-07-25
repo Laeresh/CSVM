@@ -226,6 +226,18 @@ The game window is **created without focus** (`display/window/size/no_focus` in 
 a scripted run never takes the desktop from whoever is using the machine — a full `RunTests.ps1`
 launches the engine about twenty times, and before this it grabbed the foreground on most of them.
 
+Not taking focus is not the same as staying out of sight: an unfocused window still *opens in front*
+of what you are reading. So a scripted session also **hides its window** —
+`PlaneViewer.HideScriptedWindow` calls `ShowWindow(SW_HIDE)` once `_Ready` knows the flags. Rendering
+is unaffected (all 11 goldens hash-identical); hiding is deliberately not *minimizing*, which stops
+rendering and blanks the captures (verification rule 121). What remains is a **~1 s flash** — the
+window exists from ~180 ms and `_Ready` cannot run before ~1180 ms, and Godot has no lever to create
+a window hidden or behind (no always-on-bottom flag, and `--position` is clamped to keep about a
+third of the window on the desktop). `RunTests.ps1` passes that clamped `--position` regardless, so
+its launches spend that second at the far edge of the desktop instead of mid-screen. Measured across
+a full run: a Godot window was visible in 82 samples and hidden in 562, every visible one at the
+right edge.
+
 `RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
 unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
 no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed

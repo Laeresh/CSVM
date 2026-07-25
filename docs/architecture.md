@@ -1370,6 +1370,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   branch runs first among the dumps, after every resolution, so it can report a command line that
   carries another dump. Scaffolding: the SessionSpec plan's last item deletes it, and
   `analysis/session-baseline/` keeps the matrix and baseline that outlive it.
+⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
+  drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
+  **never swap that for minimize**, which stops rendering and blanks every capture (rule 121).
+  Both directions are load-bearing: get the predicate wrong and either a test run covers the
+  desktop or somebody's game launches invisible.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
   block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
   `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**

@@ -739,6 +739,10 @@ public partial class PlaneViewer : Node3D
             DisplayServer.WindowMoveToForeground();
             Log.Debug("core", $"window: focus requested (interactive session)");
         }
+        else
+        {
+            HideScriptedWindow();
+        }
 
         // --no-vsync: let the loop run as fast as it can. A measurement flag, not a display one —
         // with the presentation wait gone, `frame`, `fps` and `script` stop being floors pinned at
@@ -3910,6 +3914,34 @@ public partial class PlaneViewer : Node3D
             float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
+
+    private const int SwHide = 0;
+
+    /// <summary>Takes a scripted run's window off the screen entirely. `no_focus` only stops the
+    /// window taking the KEYBOARD — it still opens in front of whatever the user is working in, and
+    /// a full RunTests.ps1 does that about twenty times. Godot has no lever for this: there is no
+    /// always-on-bottom window flag, and --position is clamped so roughly a third of the window
+    /// stays on the desktop whatever you ask for (measured: 5184 and 10000 both land at 4686 on a
+    /// 5120-wide desktop). Hiding is not minimizing — a minimized window stops rendering, which
+    /// turns the captures blank (rule 121).</summary>
+    private static void HideScriptedWindow()
+    {
+        if (!OperatingSystem.IsWindows())
+        {
+            return;
+        }
+        nint hwnd = (nint)DisplayServer.WindowGetNativeHandle(DisplayServer.HandleType.WindowHandle);
+        if (hwnd == 0)
+        {
+            Log.Debug("core", $"window: no native handle, cannot hide (scripted session)");
+            return;
+        }
+        ShowWindow(hwnd, SwHide);
+        Log.Debug("core", $"window: hidden (scripted session)");
     }
 
     /// <summary>The numpad view digit for --view=. 5 has no perspective of its own (the middle of

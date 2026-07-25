@@ -7576,3 +7576,37 @@ which shares the helper, PASS 5/5. The focus fix that started this is intact: a 
 foreground probe sampling every 250 ms across a full `-Perf` run put Godot in the foreground for
 0 of 400 samples. New rules 119 (captured nothing ≠ printed nothing) and 120 (a PowerShell property
 that throws yields `$null`, so a verdict reads the failure as a value).
+
+## 2026-07-25 — a scripted run's window no longer opens in front of you
+
+`no_focus` stopped scripted runs stealing the keyboard, but an unfocused window still *opens on top*
+of whatever you are reading, about twenty times per `RunTests.ps1`. A scripted session now hides its
+window outright — `PlaneViewer.HideScriptedWindow` calls `ShowWindow(SW_HIDE)` on the native handle,
+off the same predicate that decides an interactive session should ask for focus.
+
+Godot has no lever for this, which is why it took interop: there is no always-on-bottom window flag
+(the `WindowFlags` enum was read out of `GodotSharp.dll` to be sure), `WindowMoveToForeground` has no
+opposite, and `--position` is clamped so about a third of the window stays on the desktop — 5184 and
+10000 both land at 4686 on a 5120-wide desktop. The obvious lever, creating the window minimized via
+`display/window/size/mode=1`, is the one thing that must not be done: a minimized window does not
+render, and it put 6 of the 11 goldens on one identical blank hash while leaving the other 5 passing,
+so it read as a partial regression rather than a broken instrument. Hiding costs nothing — all 11
+stay hash-identical.
+
+A wrong turn worth keeping: the first attempt used the clamped `--position` alone, and a full green
+goldens run was taken as proof that an off-screen window still renders. It proved nothing — a rect
+probe showed the window sitting at 4686,-31, still on the desktop the whole time. The verdict was
+right and the reasoning was worthless, which is now rule 122.
+
+What remains is a **~1 s flash**: the window exists from ~180 ms and `_Ready` cannot run before
+~1180 ms. `RunTests.ps1` passes the clamped `--position` anyway so that second happens at the far
+edge of the desktop rather than mid-screen. Closing it entirely needs a separate Windows desktop or
+`--wid` embedding, neither attempted.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens hash-identical, exit 0,
+74.5 s. A window probe attributing by PID across that run saw a Godot window visible in 82 samples
+and hidden in 562, every visible one at 4686,-31. Both directions of the predicate checked
+separately, since getting it wrong either covers the desktop or launches somebody's game invisible:
+`--stage=empty` visible 55 of 59 samples, the same run with `--no-focus` hidden 52 of 58. New rules
+121 (minimized does not render, hidden does) and 122 (confirm the intervention took effect before
+crediting the result to it).
