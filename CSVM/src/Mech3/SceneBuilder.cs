@@ -70,6 +70,8 @@ public sealed class SceneBuilder
         "#include \"res://shaders/csky_atmosphere.gdshaderinc\"";
     internal const string LightsInclude =
         "#include \"res://shaders/csky_lights.gdshaderinc\"";
+    internal const string TimeInclude =
+        "#include \"res://shaders/csky_time.gdshaderinc\"";
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
@@ -994,11 +996,16 @@ void fragment() {
         // material's shader text is byte-for-byte what it always was. `repeat_enable` above is
         // what makes the offset wrap instead of clamping at the UV edge.
         //
-        // TIME wraps at Godot's rendering/limits/time/time_rollover_secs (3600 by default), and
-        // every rate in this install (0.07 / 0.4 / 0.5 / 0.7 / 1.0) times 3600 is a whole number
-        // of texture repeats, so the wrap lands on the identical frame — no visible jump.
+        // The phase comes from csky_time — the sim clock's shader-side twin, not Godot's TIME —
+        // so the scroll freezes with a halted clock and is a function of the frame count under a
+        // fixed step. ⚠ csky_time keeps TIME's 3600 s wrap, and every rate in this install
+        // (0.07 / 0.4 / 0.5 / 0.7 / 1.0) times 3600 is a whole number of texture repeats, so the
+        // wrap lands on the identical frame — no visible jump. See ShaderTime.RolloverSecs.
         if (scroll)
+        {
+            sb.AppendLine(TimeInclude);
             sb.AppendLine("uniform vec2 scroll_rate = vec2(0.0);");
+        }
         if (!textured)
             sb.AppendLine("uniform vec4 albedo_color : source_color = vec4(1.0);");
         // Fullbright world only: the DX7 fixed-function pipeline multiplied texture × baked
@@ -1038,7 +1045,7 @@ void fragment() {{");
         // spill is light falling ON the surface, so it must be modulated by the same albedo
         // rather than added to the final colour (an unlit black texture stays black under a lamp).
         sb.AppendLine(!textured ? "    vec4 base_col = albedo_color;"
-            : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * TIME);"
+            : scroll ? "    vec4 base_col = texture(albedo_tex, UV + scroll_rate * csky_time);"
             : "    vec4 base_col = texture(albedo_tex, UV);");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
