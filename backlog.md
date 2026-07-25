@@ -705,9 +705,17 @@ unscheduled.
 ### Combat-fidelity gaps found by a design cross-check (2026-07-25)
 
 Systems whose data ships complete and whose engine half does not exist, found by reading the
-original **pre-release** design spec against the code. **Where the spec and the extracted data
-disagree the data wins** — every claim below was re-verified against `extracted/` and `CSVM/src`
-first, and each entry says which half it rests on.
+original **pre-release** design spec against the code. Every claim below was re-verified against
+`extracted/`, `CSVM/src` or a retail capture first, and each entry says which half it rests on.
+
+⚠ **How much to trust that document, measured across this pass and earlier ones.** Its
+**structural** claims have held up against our data — per-hardpoint cluster sizes, the 8-firepoint
+rig, the zeppelin launch-altitude gate, the two-volume danger zones, the armour/health damage
+split. Its **per-item art and balance numbers have repeatedly failed** — gun ranges, rocket speeds,
+zone hit points, the crash fireball's timing, and shell ejection's calibre gate and mount position.
+**So: take the mechanism from it, never the magnitudes or the art direction, and prefer extracted
+data or an `OriginalScreenshots/` capture wherever either exists.** Where an entry below rests on
+the document alone, it says so and marks the value TUNE.
 
 - **The armour layer is unimplemented, so 18 of 48 weapon entries are mis-modelled.**
   `WeaponDef.ArmorDamage` (`WeaponDefs.cs:78,239`) has exactly two consumers and both are display
@@ -829,8 +837,23 @@ first, and each entry says which half it rests on.
      `TRANSLATION_RANGE_MIN [10,-75,1.5,0]` / `_MAX [-10,-85,1.8,0]`, `FORWARD_ROTATION TIME 1200`
      (the tumble), `RUN_TIME 2`, then deactivate — and a `gunshell` root node exists in the chapter
      gamez. Referenced by nothing. **This closes the "blocked on data" question in "Playtest pass 2"
-     finding 3** (casings missing): the shell half is data. The white smoke puff in the reference
-     shots is still unlocated and stays a guess.
+     finding 3** (casings missing): the shell half is data.
+     **What retail actually does** (`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`
+     and `…ejection2.png`, chase view, guns firing): each ejection is **one small brass casing
+     sprite plus a cluster of ~5–6 overlapping white smoke puffs**, and the puffs **persist and
+     drift aft** — in shot 2 a cluster has fallen well back and below the aircraft while a fresh
+     casing is still leaving the wing. They originate **at the wing gun mounts, outboard on each
+     wing**, not from the fuselage. Same shots corroborate two open look items: the muzzle flash is
+     a bright yellow core with orange flame at its base, elongated forward and slightly outboard
+     from the wing mount, and fires from **one wing at a time**; tracers are **short yellow dashes**
+     (findings 1 and 2 above).
+     ⚠ **The design spec is wrong here twice and was rejected against those captures** — it gates
+     shell ejection to the 50- and 70-cal guns and places it on the underbelly. The Bloodhawk in the
+     shots is ejecting, and its stock fit is 40-cal inner + 30-cal outer **wing** guns
+     (`CSVM/data/stock_loadouts.json`), so neither the calibre gate nor the underbelly holds. Do not
+     re-derive either from the document. The white puff is still unmatched to any shipped effect def
+     — locating it (or accepting a synthetic one) is the remaining unknown, and it is the larger
+     half of the visual.
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
