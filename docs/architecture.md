@@ -795,6 +795,12 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ The chase camera takes the SIM clock's dt (its exponential smoothing makes its pose a function of
   dt, so wall time made scripted flight captures frame-rate dependent); the halted orbit camera keeps
   wall time on purpose, so a freeze can still be flown around.
+⚠ The fixed numpad views (`Views` + ActiveView/ApplyFixedView; held Kp1–Kp9, or pinned by `--view=`)
+  REPLACE the chase update for that frame — they never smooth, and both the offset and the whole
+  basis are carried by the plane's attitude (`Attitude * LookingAt(-dir, up)`), never a world-up
+  LookAt, which is the same reason the chase camera slerps its basis. Their `up` is the plane's up
+  except for the belly view, whose view axis IS that up. Nothing held and no `--view=` is the chase
+  camera byte for byte (verified md5 against the pre-view binary).
 ⚠ SurviveHit reads the contact normal at a pose 5 cm past the cast hit — at just-touching the rest
   query finds nothing and the head-on fallback turns shallow grazes into crashes; don't shallow it.
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).

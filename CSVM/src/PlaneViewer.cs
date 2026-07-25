@@ -159,6 +159,9 @@ namespace CSVM;
 ///                                spawn list — e.g. start just short of a target, or over water)
 ///   --direction=x,y,z            which way it faces there: the view direction, or the nose
 ///   --lookat=x,y,z               the point form of --direction; also the --viewer orbit pivot
+///   --view=1-9                   hold one of the numpad flight-camera perspectives for the whole
+///                                run (2 belly, 1/3 below-flank, 4/6 flank, 7/9 above-flank, 8
+///                                ahead looking back); flight only, 5 is unbound
 ///   --campos=x,y,z               deprecated spelling of --pos in the camera modes
 ///   --screenshot=path            render a few frames, save a PNG, then quit
 ///   --menu[=mode|chapter|plane]  force the in-game launchscreen even alongside other args (it
@@ -279,6 +282,7 @@ public partial class PlaneViewer : Node3D
     private bool _autoFire;             // --fire: hold the gun trigger (scripted screenshots / soak runs)
     private bool _autoFireRockets;      // --fire-rockets: hold the rocket trigger (scripted screenshots / soak runs)
     private int _gunSelect;             // --gun-select=N: initial gun group (0-based; only one fires at a time)
+    private int _view;                  // --view=N: numpad flight-camera perspective held for the whole run (0 = chase)
     private string? _rocketOverride;    // --rocket=<wep_id>: swap every hardpoint's ordnance (testing — proves the pylon model varies by type; stock is all HE)
     private bool _hudFontTest;          // --hud-font-test: overlay the E34 bitmap-font sample on each pane
     private string _hudFontTestText = "GUNS 30: 2000  ROCKETS 06: 9"; // the sample string
@@ -599,6 +603,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--direction=")) _direction = ParseVec3(arg["--direction=".Length..]);
             else if (arg.StartsWith("--campos=")) { _camPos = ParseVec3(arg["--campos=".Length..]); Deprecated("--campos", "--pos"); }
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
+            else if (arg.StartsWith("--view=")) _view = ParseView(arg["--view=".Length..]);
         }
 
         // Don't steal the user's foreground focus. Screenshot mode always opts in (it renders a
@@ -656,6 +661,13 @@ public partial class PlaneViewer : Node3D
         }
         if (hasContentArg && !_viewerMode && !_freecam && !_animLab)
             _fly = true;
+        // The numpad views orbit a FLYING plane; the other modes have their own cameras (the
+        // viewer's orbit, the spectator freecam) placed with --pos/--direction instead.
+        if (_view != 0 && !_fly)
+        {
+            Log.Warn("core", $"--view={_view} is a flight camera; ignoring it outside --fly/--stunt");
+            _view = 0;
+        }
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
         if (_stage != null)
@@ -1705,6 +1717,7 @@ public partial class PlaneViewer : Node3D
                         // and no debug freeze (it would halt the shared world for everyone)
                         PadDevices = padAssignment?[pi],
                         UseKeyboard = pi == 0,
+                        PinnedView = _view,
                         HudParent = rig.Viewport,
                         AllowPause = _rigs.Count == 1,
                     };
@@ -3349,6 +3362,21 @@ public partial class PlaneViewer : Node3D
             float.Parse(parts[0], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[1], System.Globalization.CultureInfo.InvariantCulture),
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
+    }
+
+    /// <summary>The numpad view digit for --view=. 5 has no perspective of its own (the middle of
+    /// the pad is the chase camera), and anything outside 1–9 is a typo — both fall back to the
+    /// chase camera loudly rather than picking a neighbour.</summary>
+    private static int ParseView(string s)
+    {
+        if (int.TryParse(s, System.Globalization.NumberStyles.Integer,
+                         System.Globalization.CultureInfo.InvariantCulture, out int n)
+            && n >= 1 && n <= 9 && n != 5)
+        {
+            return n;
+        }
+        Log.Warn("core", $"--view={s} is not a numpad view (1-4, 6-9) — using the chase camera");
+        return 0;
     }
 
     /// <summary>Notes a superseded flag so <see cref="ResolvePlacement"/> can name its replacement

@@ -114,6 +114,16 @@ pass through unharmed).
   not glued or lagging. *Blocks:* camera sign-off.
 - **Control surfaces.** Deflection angles + slew rate. *Look for:* ailerons/elevators/rudder track the
   stick believably. *Blocks:* control-surface sign-off.
+- **Numpad camera views — the whole held-key half is unverified here.** Hold numpad 1/2/3/4/6/7/8/9
+  in flight (NumLock on): each snaps the camera around the plane, releasing returns to the chase view.
+  *Look for:* (a) does the key **layout** match the original — 2 belly, 4/6 flanks, 8 head-on, the
+  diagonals in between; (b) is the **distance** right (ours is the chase camera's own 16.62 m) and the
+  **elevation** of 1/3 and 7/9 right (ours is 45°); (c) does the original **snap instantly** or ease,
+  and does releasing ease back (ours snaps both ways); (d) does releasing a key while holding another
+  behave sanely; (e) did the original bind any of this to the **gamepad**, and does **5** do anything?
+  *Command:* `./RunGame.ps1 --plane=player_bhawk --chapter=C1`. *Blocks:* camera sign-off; anything
+  off goes to the `backlog.md` TUNE entry. Only the scripted `--view=` twin is machine-verified —
+  live keypresses are not scriptable here, so the held-key path is correct by construction only.
 
 ---
 

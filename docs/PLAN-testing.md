@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 23. ☐ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels
 24. ☑ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites) **(done 2026-07-25 — hooked into `TextureArchive.Find`; classification is chromaticity with a measured tolerance; counts are lower bounds; `docs/HISTORY.md`)**
 25. ☑ C25 — Test stages: `--stage=empty` and `--node=<cs_name>` **(done 2026-07-25 — `src/Mech3/EmptyStage.cs` + `WorldBuilder.BuildNode`; the anim-bind audit's findings are in the item's landing note, and C22/Wave D depend on them; `docs/HISTORY.md`)**
-26. ☐ C26 — Flight camera views: held-numpad perspectives around the plane + scripted `--view=`
+26. ☑ C26 — Flight camera views: held-numpad perspectives around the plane + scripted `--view=` **(done 2026-07-25 — one view table in `FlightController`, `--view=<1-9>`; the geometry sweep and the C24-composed belly capture are verified, the magnitudes are TUNE and the held-key half is by construction; `docs/HISTORY.md`)**
 
 ### Wave D — Inspect layer
 
@@ -585,7 +585,7 @@ fallback, both because the prototypes and the world-effects runtime live in a ch
 stated in `docs/cli.md` rather than worked around, since C22's scenario list wants the cheap stage,
 not a half-loaded chapter.
 
-## C26 ☐ Flight camera views: held-numpad perspectives + scripted `--view=`
+## C26 ☑ Flight camera views: held-numpad perspectives + scripted `--view=`
 
 **Goal.** In `--fly`/`--stunt`, holding a numpad key snaps the camera to a fixed perspective **around the plane at the chase camera's distance**, looking at the plane; releasing returns to the standard chase view — the original game's in-flight camera control. Layout (the numpad's own geometry, per the user's recall of the original): **2** = straight underside; **1**/**3** = 45° up from underside on the left/right; **4**/**6** = level left/right flank; **7**/**9** = 135° (above-flank) left/right; **8** = camera ahead of the plane, looking back at it. A scripted twin, `--view=<1–9>`, holds that perspective for the whole run — so a `--det --view=2 --screenshot` finally photographs the belly, flanks and nose of a *flying* plane (today's captures are chase-cam-only).
 
@@ -596,6 +596,34 @@ not a half-loaded chapter.
 **Verify.** (a) Scripted geometry: `--det --view=4` — log the camera's plane-frame offset; assert direction and |distance| = chase distance; repeat for all eight views in one scripted loop (the rule-34 sweep, now cheap). (b) Capture: `--det --view=2 --screenshot` over C1 shows the belly (pair with C24's census to assert the underside skin texture visible — the two instruments compose). (c) Inertness: no `--view`, no numpad → chase capture md5-identical to the pre-C26 build. (d) Fidelity: user A/B against the original for distance/angles/snap — anything off goes to `backlog.md`'s TUNE list as magnitude-TUNE, not re-derived here.
 
 **⚠ Traps.** The angles/distance are **user-recalled, not data** — treat the layout as settled (it matches the numpad's spatial geometry) but the magnitudes as TUNE pending the original A/B; don't present the first implementation's numbers as fidelity. Audit numpad key collisions before binding (the flight key list in CLAUDE.md uses none today, but Godot distinguishes `Kp*` keycodes from digits — bind the `Kp` codes so the top-row digits stay free). Rule 15 for the capture check: a belly shot that would pass with the chase camera too is not a test — assert on content only visible from below.
+
+**Landed 2026-07-25** — one `Views` table (direction + image up per view, both in the **plane's**
+frame) plus `ActiveView`/`ApplyFixedView`/`LogView` in `FlightController`, and `--view=<1-9>` in
+`PlaneViewer`. Nothing else in the tree changed. Evidence in `docs/HISTORY.md`.
+
+**Verified.** (a) The rule-34 sweep, all eight views in one loop on the empty stage with the plane
+pitched/rolled/yawed off the world frame: every plane-frame offset is exactly `dir × 16.621` — the
+chase offset's own length `√(16²+4.5²)` — and every `aim` is exactly `−dir`, so the camera looks at
+the plane; 90 logged lines per run, so the pose is held rather than set once, and 0 lines when no
+view is active. (b) The C24 composition over C1: `--tex-override=blo_fusalagebottom` counts **19,509
+magenta px from `--view=2`, 1,287 from `--view=8`, 127 from the chase camera** — rule 15's demand
+that a chase shot could not pass the same assertion. (c) Inertness: three poses md5-identical to the
+pre-C26 binary (0 of 921,600 px each), and the compare seen able to fail — the old binary ignores
+`--view=2`, whose image differs 97.39 %. 8-chapter sound-enabled `--freecam`: 0 engine errors.
+`.\RunTests.ps1` PASS (152 units, 8 suites, exit 0).
+
+**What is NOT verified, and is not this item's to close.** The **held-key half is by construction**
+— pinned and held share one code path, differing only in the `KeyDown(Kp*)` predicate, and live
+keypresses are unscriptable here. The `Kp*` keycodes need **NumLock on** (Windows sends navigation
+keycodes otherwise); documented, not worked around. And the **magnitudes are TUNE**: distance,
+the 45° elevations, and instant-vs-eased snap all wait on the user's A/B — `backlog.md`'s TUNE list
+and `playtest.md` §3. `OriginalScreenshots/` holds no usable reference (its one candidate is an
+uncropped-context 460×374 crop with no HUD or horizon); nothing was inferred from it.
+
+**Deviation from the item text:** a held key beats `--view=` rather than the reverse, so a pinned
+scripted pose can still be explored at the controls; and `--view=` outside `--fly`/`--stunt` warns
+and falls back rather than being silently accepted, as does `--view=5` (the middle of the pad is
+where the chase camera already is, so it stays unbound).
 
 # Wave D — Inspect layer
 

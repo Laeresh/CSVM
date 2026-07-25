@@ -6606,3 +6606,70 @@ pos=(60,300,0)`).
 world and the empty stage's feel at the controls are all unflown. The suppressed root-lift is right
 for an inspection stage by construction; whether some future consumer wants the lifted anchors back
 is a question this leaves open.
+
+## 2026-07-25 — PLAN-testing C26: flight camera views, held numpad + scripted `--view=`
+
+Holding a numpad key in `--fly`/`--stunt` snaps the camera to a fixed perspective around the plane
+and releasing returns to the chase view; `--view=<1-9>` pins the same perspective for a whole run.
+The layout follows the numpad's own geometry: 2 belly, 1/3 45° up from the belly to each side, 4/6
+level flanks, 7/9 45° above those flanks, 8 ahead looking back, 5 unbound. One table in
+`FlightController` holds each view's offset direction and image up **in the plane's frame**; the
+camera sits at the chase camera's own offset length (16.62 m) along that direction and takes its
+whole basis from `Attitude * Basis.LookingAt(-dir, up)` — no world-up LookAt anywhere, so a view of
+a banked plane shows a level aircraft against a tilted horizon exactly as the chase camera's basis
+slerp does. The snap is instant: a scripted capture must not depend on how many frames of catch-up
+it waited for. `--view=` is flight-only and warns otherwise; 5 and out-of-range warn and fall back.
+
+**The capture gap it closes.** Flight captures were chase-cam-only, so nothing under the wings or on
+a flank could be photographed in the air. Composed with C24 over C1 (`--no-fog
+--tex-override=blo_fusalagebottom`, the Bloodhawk's fuselage-bottom skin, on the same flying pose):
+**19,509 magenta px from `--view=2`, 1,287 from `--view=8`, 127 from the chase camera** — a 154×
+ratio that a chase-cam shot could not have passed (rule 15). The texture name itself came out of a
+`--view=2 --tex-census --no-fog` run, which is the census doing its documented job as the map.
+
+**Geometry, all eight views in one sweep** (`--stage=empty --hold=0.5,0.7,0.2,0.7 --frames=90`, so
+the plane is pitched, rolled and yawed away from the world frame). Logged plane-frame camera offset,
+read back off the camera's own transform, and the camera's forward axis in the same frame:
+
+| view | offset | dist | aim |
+|---|---|---|---|
+| 1 | (−11.753, −11.753, 0) | 16.621 | (0.707, 0.707, 0) |
+| 2 | (0, −16.621, 0) | 16.621 | (0, 1.000, 0) |
+| 3 | (11.753, −11.753, 0) | 16.621 | (−0.707, 0.707, 0) |
+| 4 | (−16.621, 0, 0) | 16.621 | (1.000, 0, 0) |
+| 6 | (16.621, 0, 0) | 16.621 | (−1.000, 0, 0) |
+| 7 | (−11.753, 11.753, 0) | 16.621 | (0.707, −0.707, 0) |
+| 8 | (0, 0, −16.621) | 16.621 | (0, 0, 1.000) |
+| 9 | (11.753, 11.753, 0) | 16.621 | (−0.707, −0.707, 0) |
+
+Every distance is exactly `√(16² + 4.5²)`, the chase offset's length, and every `aim` is exactly
+`−dir`, i.e. the camera looks at the plane. 90 lines per run, not one, so the pose is *held*. The
+line only exists while a view is active, so an ordinary chase flight logs nothing (measured: 0 lines
+without `--view=`, 0 with the rejected `--view=5`).
+
+**Inertness.** Flags absent, three poses captured on the pre-C26 binary and on this one at the same
+`--det --frames=`: `--chapter=C1` flight, the same with `--hold=0.5,0.7,0.2,0.7 --frames=120` (which
+exercises the chase smoothing), and `--stage=empty --plane=player_fury` — **md5-identical decoded
+pixels, 0 of 921,600 px** each. The compare is seen able to fail: the old binary ignores `--view=2`
+and returns the chase image, which differs from the new binary's `--view=2` by **97.39 %** of pixels
+at the same args. 8-chapter `--freecam` regression **sound-enabled** (no `--mute`), C26 flags absent:
+**0 engine `ERROR:` lines on every chapter**. `.\RunTests.ps1`: `build PASS · units PASS 152/152 ·
+engine PASS 8/8, engine errors clean · goldens TODO`, exit 0.
+
+**Key-collision audit.** No numpad digit was bound anywhere: the whole tree's key literals are
+WASD/QE/arrows/Shift/Ctrl/Space/F/G/H/R/P/T/Tab/Esc/F11/F12/`.` plus the labs' L/M/N/B/C/V/K/W (all
+`--viewer`/`--anim-lab`, none reachable in flight), and one `Key.KpEnter` in `MenuInput` — numpad
+Enter, a different key. `project.godot` declares no `[input]` map at all, so nothing is bound through
+actions either. The `Kp*` keycodes are used, not the top-row digits, which stay free.
+
+**Not verified, and not verifiable here.** The held-key half is correct **by construction** — the
+pinned and held paths share `ActiveView()`/`ApplyFixedView()` and differ only in the predicate — but
+live keypresses are not scriptable in this project. It also means `Input.IsKeyPressed(Key.Kp*)`
+needs **NumLock on** on Windows, which is documented rather than worked around. And the **fidelity is
+the user's to judge**: the distance, the 45° elevations and the instant snap are recalled from the
+original, not measured out of it. `OriginalScreenshots/` was checked and holds **no usable
+reference**: its one candidate, `Fury from above.png`, is a 460×374 *crop* of a plane seen from
+above-behind with no HUD and no horizon, so neither a distance nor an elevation can be read out of
+it, and it does not even establish which view (or the chase camera) it came from. The four videos
+are crash, dive-sound and tile-loading captures. Nothing was inferred from any of them. The
+magnitudes are filed in `backlog.md`'s TUNE list and `playtest.md` §3 pending the A/B.

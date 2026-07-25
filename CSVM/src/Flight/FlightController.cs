@@ -221,6 +221,12 @@ public partial class FlightController : Node3D
     /// effect without a stunt run.</summary>
     public bool DebugCompleteStunt;
 
+    /// <summary>The numpad camera view (1–9, 5 unbound) held for the whole run — the scripted twin
+    /// of holding the key, so a capture can frame the belly or a flank of a flying plane. 0 (the
+    /// default) is the chase camera, i.e. exactly today's behaviour. A key held at the controls
+    /// wins over this while it is down.</summary>
+    public int PinnedView;
+
     private FlightModel _model = null!;
     private Camera3D _camera = null!;
     private Label _hud = null!;
@@ -238,6 +244,7 @@ public partial class FlightController : Node3D
     private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
     private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
+    private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
     private ImmediateMesh? _probe;               // debug collision-probe line
     private float _damageCooldown;               // s left before the next HP subtraction
     private float _damageFlash;                  // s left on the HUD impact line
@@ -321,6 +328,31 @@ public partial class FlightController : Node3D
     private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
     private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
+    // Fixed views sit the same distance from the plane as the chase camera's rigid offset, so a
+    // snap changes the angle and nothing else. TUNE: the distance, the 45° elevations and the
+    // instant snap are all recalled from the original rather than measured out of it.
+    private static readonly float ViewDist = Mathf.Sqrt(CamBack * CamBack + CamUp * CamUp);
+
+    /// <summary>The numpad's fixed camera perspectives, keyed by its own spatial layout: 2 straight
+    /// under the plane, 1/3 45° up from there to the left/right, 4/6 the level flanks, 7/9 45° above
+    /// those flanks, 8 ahead of the nose looking back. 5 is deliberately unbound — the middle of the
+    /// pad is where the chase camera already is. <c>Dir</c> is the camera's offset direction and
+    /// <c>Up</c> the image up, both unit vectors in the PLANE's frame (+x right, +y up, −z nose), so
+    /// every pose banks and rolls with the aircraft. The belly view takes the nose as its up because
+    /// the plane's own up is the view axis there.</summary>
+    private static readonly (Key Key, int Digit, Vector3 Dir, Vector3 Up)[] Views =
+    {
+        (Key.Kp1, 1, new Vector3(-Diag, -Diag, 0f), Vector3.Up),
+        (Key.Kp2, 2, new Vector3(0f, -1f, 0f), Vector3.Forward),
+        (Key.Kp3, 3, new Vector3(Diag, -Diag, 0f), Vector3.Up),
+        (Key.Kp4, 4, new Vector3(-1f, 0f, 0f), Vector3.Up),
+        (Key.Kp6, 6, new Vector3(1f, 0f, 0f), Vector3.Up),
+        (Key.Kp7, 7, new Vector3(-Diag, Diag, 0f), Vector3.Up),
+        (Key.Kp8, 8, new Vector3(0f, 0f, -1f), Vector3.Up),
+        (Key.Kp9, 9, new Vector3(Diag, Diag, 0f), Vector3.Up),
+    };
+
+    private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -1499,11 +1531,20 @@ public partial class FlightController : Node3D
         }
         else
         {
-            // The chase camera trails the plane by exponential smoothing, so its pose is a
-            // function of the dt it is fed. On wall time that makes a scripted flight capture
-            // frame-rate dependent even when the simulation underneath it is pinned — the pose
-            // has to come off the same clock as the plane it follows.
-            UpdateChaseCamera(simDt);
+            int view = ActiveView();
+            if (view >= 0)
+            {
+                ApplyFixedView(view);
+            }
+            else
+            {
+                // The chase camera trails the plane by exponential smoothing, so its pose is a
+                // function of the dt it is fed. On wall time that makes a scripted flight capture
+                // frame-rate dependent even when the simulation underneath it is pinned — the pose
+                // has to come off the same clock as the plane it follows.
+                UpdateChaseCamera(simDt);
+            }
+            LogView(view);
         }
 
         float mph = _model.Speed * 2.23694f;
@@ -1599,6 +1640,68 @@ public partial class FlightController : Node3D
         }
     }
 
+    /// <summary>Which fixed view the camera should hold this frame, as an index into
+    /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
+    /// <see cref="PinnedView"/> so a pinned run can still be explored at the controls; with several
+    /// keys down the lowest digit wins, which keeps the choice deterministic. There is one keyboard,
+    /// so in splitscreen this is player 1's control (<see cref="UseKeyboard"/>); the D-pad is taken
+    /// by the weapon selectors, so there is no pad binding.</summary>
+    private int ActiveView()
+    {
+        if (UseKeyboard)
+        {
+            for (int i = 0; i < Views.Length; i++)
+            {
+                if (KeyDown(Views[i].Key))
+                {
+                    return i;
+                }
+            }
+        }
+        if (PinnedView != 0)
+        {
+            for (int i = 0; i < Views.Length; i++)
+            {
+                if (Views[i].Digit == PinnedView)
+                {
+                    return i;
+                }
+            }
+        }
+        return -1;
+    }
+
+    /// <summary>Snap the camera to one of the fixed perspectives: out along the view's plane-frame
+    /// direction at the chase camera's distance, aimed back at the plane. Both the offset and the
+    /// whole basis are carried by the plane's attitude rather than re-derived from a world up, so
+    /// the pose rolls with the aircraft and inverted flight renders upside down — the same property
+    /// the chase camera's basis slerp exists to preserve. The snap is instant (no smoothing): the
+    /// point of a fixed view is a repeatable pose, and a scripted capture must not depend on how
+    /// many frames of catch-up it waited for.</summary>
+    private void ApplyFixedView(int view)
+    {
+        var (_, _, dir, up) = Views[view];
+        _camera.Position = _model.Position + _model.Attitude * (dir * ViewDist);
+        _camera.Basis = _model.Attitude * Basis.LookingAt(-dir, up);
+    }
+
+    /// <summary>One line per frame a fixed view is held, plus one on the frame it is released —
+    /// read back off the camera's own transform, so it reports where the camera ENDED UP rather
+    /// than the values that were fed to it. Silent (and free) on an ordinary chase-camera flight.</summary>
+    private void LogView(int view)
+    {
+        if (view < 0 && _viewPrev < 0)
+        {
+            return;
+        }
+        _viewPrev = view;
+        var toPlane = _model.Attitude.Inverse();
+        var offset = toPlane * (_camera.Position - _model.Position);
+        var aim = toPlane * -_camera.Basis.Z;   // the camera's forward axis, in the plane's frame
+        int digit = view < 0 ? 0 : Views[view].Digit;
+        Log.Debug("flight", $"view n={digit} offset=({offset.X:0.000},{offset.Y:0.000},{offset.Z:0.000}) dist={offset.Length():0.000} aim=({aim.X:0.000},{aim.Y:0.000},{aim.Z:0.000})");
+    }
+
     private Vector3 DesiredCamPos(out Vector3 camUp)
     {
         // chase from behind and above the nose in the plane's own frame, so the offset (and
@@ -1677,6 +1780,12 @@ public partial class FlightController : Node3D
 
     private void SnapCamera()
     {
+        int view = ActiveView();
+        if (view >= 0)
+        {
+            ApplyFixedView(view);
+            return;
+        }
         _camera.Position = DesiredCamPos(out var camUp);
         _camera.LookAt(_model.Position - _model.Attitude.Z * CamLookAhead, camUp);
     }

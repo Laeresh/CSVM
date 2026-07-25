@@ -874,6 +874,15 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   `RollTune` 2.12. Those three are measurement-calibrated (2026-07-19) but the *feel* A/B is
   pending — **especially the ~2.7× cut in pitch authority**, the largest single change to how the
   aircraft handles.
+- **Numpad camera views (`FlightController.Views` / `ViewDist`)** — the *layout* is settled (it
+  matches the numpad's spatial geometry, and the user recalls it from the original): 2 belly, 1/3
+  below-flank, 4/6 flanks, 7/9 above-flank, 8 ahead. Three **magnitudes are user-recall, not data**,
+  and need an A/B against the original: (a) the **distance** — currently the chase camera's own
+  16.62 m, which is a choice, not a measurement; (b) the **45° elevation** of 1/3 and 7/9; (c)
+  whether the snap is **instant** (it is today) or eased, and whether releasing eases back.
+  Also open: whether the original bound these to a gamepad at all — the D-pad is taken by the two
+  weapon selectors here, so nothing is bound, and whether 5 does something (it is unbound).
+  All four numbers live in one table in `FlightController`; changing them moves no other behaviour.
 - **Control surfaces** — deflection angles and slew rate.
 - **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original.

@@ -366,6 +366,13 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     the same pose classified 374,491 px confidently with `--no-fog` and 129,210 px with fog on,
     unmatched 19.4 % → 58.8 %.
 
+95. **Rule 34's angle sweep is now cheap in flight — `--view=<1-9>` frames a *flying* plane from the
+    belly, either flank or head-on, so "not visible from astern" is no longer evidence of anything.**
+    Every flight capture before this was chase-cam-only. Measured with `--tex-override` on the
+    Bloodhawk's underside skin over C1: **19,509 magenta px from `--view=2` against 127 from the
+    chase camera** at the same pose — a chase shot cannot support a claim about the underside, and a
+    belly shot that a chase shot would also have passed is not a test (rule 15).
+
 ## What this project cannot verify itself
 
 These need the user:
