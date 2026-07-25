@@ -15,6 +15,16 @@ actionable index; the two are kept in step.
 `player_pfighter` Devastator · `player_fbrand` Firebrand · `player_fury` Fury ·
 `player_kestrel` Kestrel · `player_peacemaker` Peacemaker · `player_warhawk` Warhawk.
 
+**Cross-checked against the original design documentation 2026-07-25.** A *pre-release* spec: it
+settles **system shape**, never numbers or art direction (rebalanced before release — extracted data
+or an `OriginalScreenshots/` capture wins wherever either exists). What it answered is tagged
+**[spec]** and rewritten below — judge ours against the stated target rather than A/B-ing. **It is
+silent on the rest, so do not re-run this cross-check:** all of §2 (the original's multiplayer was
+networked, so there is no splitscreen reference at all); every *tuning* question in §3, §4 and §5 —
+pitch, stall recovery, dive speed, camera, mix levels, weather — which it covers with qualitative
+rules and no numbers; and in §8 the C3 spiderweb, patrol-boat hit points, map-edge continuation,
+which world axis is north, and the crossed `pdpN_h` numbering.
+
 ---
 
 ## 1 · Milestone 3 — weapons (first pass 2026-07-25 — re-tests owed after fixes)
@@ -22,10 +32,9 @@ actionable index; the two are kept in step.
 In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per pull ·
 **G** (D-pad L) select gun group · **H** (D-pad R) select ordnance · R respawn.
 
-First at-the-controls pass done **2026-07-25**. Items that **passed** are retired here (recorded in
-`backlog.md` → "Playtest pass 2" → confirmed working). Items that produced findings point to their
-pass-2 backlog number and are **re-scoped to re-test once the fix lands** — the diagnosis lives in
-`backlog.md`; this stays the owed-list.
+First pass **2026-07-25**: what passed is retired here; what produced a finding points to its
+numbered `backlog.md` "Playtest pass 2" item and is **re-scoped to a re-test once that fix lands**.
+Diagnosis lives in `backlog.md`; this stays the owed-list.
 
 **Passed 2026-07-25 (retired):** destruction sound (D31, incl. secondary oil-tank explosions) · pad
 bindings · gun rate/cadence/sound + in-flight muzzle alternation · rocket one-per-pull + 1 s cooldown
@@ -35,14 +44,22 @@ pass through unharmed).
 
 **Re-test after the fix lands** (the fix is the numbered `backlog.md` "Playtest pass 2" item):
 
-- **Gun visuals** — tracers should read as short yellow streaks (not long glowing lines); the muzzle
-  flash smaller + a random angle each shot; brass should eject with a white puff (missing today).
-  → backlog 1–3. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`
+- **Gun visuals — judge ours against the captures, don't A/B.**
+  `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` + `…ejection2.png` settle it.
+  *Look for:* tracers as **short yellow dashes**, not long glowing lines; a muzzle flash of yellow
+  core + orange flame, elongated forward, **at the wing gun mount**, one wing at a time; each
+  ejection one small brass casing plus a cluster of white smoke puffs that **persist and drift aft**
+  (in shot 2 a cluster has fallen well back and below while a fresh casing is still leaving the wing
+  — a trailing emitter, not a burst parented to the muzzle). No calibre gate: the Bloodhawk ejects on
+  a 40/30-cal **wing** fit (`CSVM/data/stock_loadouts.json`), so the spec's 50/70-cal underbelly
+  claim is rejected. → backlog 1–3. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`
 - **A10 muzzle placement** — looked right but the oversized flash masked it; re-confirm each airframe's
   mounts once the flash shrinks. → backlog 1.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`
-- **Rocket smoke trail** — a launched rocket should trail a fat orange→grey smoke streak (today only a
-  slim exhaust; the round reads "too fast" because of it). → backlog 5.
+- **Rocket smoke trail [spec].** The trail is **per rocket type**, not one generic streak — HE
+  intermittent white puffs, flak continuous black, incendiary continuous red-hued, sonic a sine wave
+  — and our extraction ships those as distinct emitters, so the fix is binding the per-type trail,
+  not thickening today's one slim exhaust. *Look for:* each type trailing its own. → backlog 5.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1`
 - **Impacts over water / dirt (was D30 — FAILED).** Water shows **nothing** (the sea has no collider,
   rounds pass through); dirt shows one big spark instead of small tumbling debris. After the fix: small
@@ -64,11 +81,16 @@ pass through unharmed).
 - **Hardpoint selection** — H should select an individual pylon (each counts for itself), auto-advancing
   only when the selected one empties. → backlog 15. `./RunGame.ps1 --plane=player_bhawk --chapter=C1`
 - **Ammo-gauge yellow tier** — the original is green→red only (no yellow); re-check after it's removed.
-  → backlog 14. `./RunGame.ps1 --plane=player_warhawk --chapter=C1`
+  → backlog 14. **[spec]** yellow's intended axis was gun *heat* / jam risk (white → yellow → red,
+  black = empty), not ammo left — so it returns with a different meaning if jamming is ever
+  implemented. Removal stands. `./RunGame.ps1 --plane=player_warhawk --chapter=C1`
 - **Weapon-switch sound (owed).** Does G / H play a select click like the original's ammo-selector UI?
   A/B to decide whether to add one — a one-line cue in `FlightController` if wanted.
-- **E37 convergence (standing TUNE).** The pipper projects to 250 m (`GunConvergenceDist`); the trail
-  felt right but may differ in a dogfight — A/B against the original. *Blocks:* retiring the TUNE.
+- **E37 pipper (standing TUNE) [spec].** There is **no gun convergence to validate**: the fixed
+  reticle is airframe-locked with every weapon aimed at that centre, and the floating one exists only
+  because inertial forces make shots lag through a turn — velocity inheritance, already modelled.
+  `GunConvergenceDist` 250 m is purely the distance the pipper is *drawn* at. *Look for:* it sits
+  where the rounds go in a hard turn. *Blocks:* retiring the TUNE.
 
 ---
 
@@ -102,6 +124,10 @@ pass through unharmed).
   `ClimbGravityScale`, `LowSpeedDragBlend`. *Look for:* stall recovery, knife-edge sink, and whether
   steep wings-level zoom climbs feel nose-heavy (if so the fix is gating on real bank — a code change,
   not a retune). *Blocks:* flight-feel sign-off.
+- **Stall warning should be graded [spec].** The airspeed dial's stall blink should *rise in
+  intensity* as the stall approaches; ours is binary — it starts only once `Stalled` is true, at a
+  fixed phase. *Look for:* does a graded ramp read as useful warning or as noise. *Blocks:* stall-cue
+  fidelity.
 - **Dive terminal speed.** Ours runs to ~1.7×fd_speed; the original's near-vertical dive pins ~1.27×
   (~385 mph). *Look for:* top-end dive speed vs a reference dive. *Blocks:* overspeed drag/cap tuning
   (interacts with the whine/rattle curves).
@@ -124,6 +150,9 @@ pass through unharmed).
   `./RunGame.ps1 --freecam --chapter=C1` · `--chapter=C4` · `--freecam --chapter=C1 --mission=M04`.
   `--debug-anim` prints each emitter's host/distance/range/playing once a second.
   *Blocks:* WorldSounds mix sign-off.
+- **Low-altitude warning should beep [spec].** It flashes **and beeps** in the original; ours only
+  flashes (`GaugeCluster` `lowalt_on`, below 50 m AGL). *Look for:* once a cue is picked from the
+  extracted sounds, does it warn or just nag during low-level flying. *Blocks:* nothing — a missing cue.
 - **Overspeed whine.** `WhineMixGain` 0.12 — A/B a dive against the original. *Blocks:* audio sign-off.
 - **Engine pitch in dives.** The original's engine drops ~12 % through a dive and overshoots ~1.05 at
   pull-out; ours (throttle-only pitch) cannot. *Look for:* engine note through a full-throttle dive.
@@ -148,11 +177,18 @@ pass through unharmed).
 
 ## 6 · Damage & collision (TUNE — needs states normal play reaches)
 
-- **Collision feel.** `CrashSpeed` 25, graze friction + attitude kick, `GrazeStopSpeed`, tree
-  softness, behaviour against **building corners**. *Look for:* grazes vs outright crashes feel fair.
+- **Collision feel [spec].** `CrashSpeed` 25, graze friction + attitude kick, `GrazeStopSpeed`, tree
+  softness, behaviour against **building corners**. *Written target, so "fair" is judgeable:* a plane
+  bounced off a canyon wall may survive it, and one flown through a billboard should destroy the
+  billboard and come away barely scratched (C27 confirmed the pass-through half; whether the facade
+  is *destroyed* is not). Damage should scale with weight × relative speed × angle of attack and
+  spread over the struck zone **and its neighbours** — a clipped wing damages wing, nose and tail;
+  ours is single-zone with neither term. *Look for:* grazes vs crashes feel fair against that.
 - **Visible damage.** Do the torn-panel flips (`pdpN`) and the low-HP smoke/fire trail look right in
   real flight (the thresholds need HP states normal play actually reaches). *Blocks:* damage-visual
-  sign-off.
+  sign-off. **[spec]** the gauge ramps Blue (100 %) → Green → Yellow → Red above 20 %, and that 20 %
+  matches our shipped `*_damage_red` exactly (0.20 on all 44 zone entries) — so only the blue
+  full-health end and the step order need an eyeball.
 - **Data-driven crash.** `WreckMomentum` 0.4, the piece tumble-rate, the debris-arc scale, overall
   crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. *Blocks:* crash sign-off. A/B against branch `bespoke-crash-animation`.
@@ -161,10 +197,13 @@ pass through unharmed).
 
 ## 7 · Stunt mode (TUNE)
 
-- **Danger-zone radius.** `DzRadius` 15 m is your hand-tuned value, but one global constant does not
-  fit — too tight at some zones, too loose at others (you can fly *around* the danger and still
-  score). The route forward is a **per-zone radius/prism from `dzpathN`** (real gate geometry — see
-  backlog). *Look for:* which zones feel wrong. *Blocks:* a per-zone stunt-radius implementation.
+- **Danger-zone gates — post-fix verification, not an investigation [spec].** The mechanism is
+  settled: each zone has an **entry volume and an exit volume, both of which must be crossed** — two
+  volumes exist precisely so clipping one cannot score, which is the "fly *around* the danger and
+  still score" failure of the single 15 m `DzRadius` sphere, and it explains the two gate polygons
+  each `dzpathN` mesh carries besides its route polyline. *After the ordered crossing lands, look
+  for:* gates triggering where the danger is, no score on a clean miss, no zone that cannot be gated
+  fairly. *Blocks:* signing off the gate implementation (see backlog).
 - **Marker HUD + scoreboard.** Placement, fonts, distance units.
   `./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury`.
 
@@ -173,24 +212,25 @@ pass through unharmed).
 ## 8 · Original-game fidelity questions (need the original open, not just the cockpit)
 
 - **Patrol-boat HP — 20 or 40?** The `patrolboat` vehicle def says HP 40, the anim def says HP 20
-  (both 60 %/30 % stages). **Settled for M3 (C23):** the boat is scenery, damaged through its anim
-  def (HP 20); the AI-vehicle armour+health model (HP 40) is M4. Still a nice fidelity check —
-  **shoot one in the original with a known weapon and count hits** to confirm 20, and check
-  `t_truck`/`fueltruck`/`armytruck_destruct` for the same duplication. *Blocks:* nothing (M3);
-  M4 AI-vehicle combat.
+  (both 60 %/30 % stages); M3 settled on the anim def's 20 and left the HP-40 armour model to M4
+  (backlog). *Look for:* **shoot one in the original with a known weapon and count hits**, and check
+  `t_truck`/`fueltruck`/`armytruck_destruct` for the same duplication. *Blocks:* M4 AI-vehicle combat.
 - **Map-edge continuation.** Ours mirrors the border tiles; the original may plain-repeat, and may
   extend more than one tile. *Look for:* an asymmetric border feature (settles mirror vs repeat) and
   how many tiles out the world continues. *Blocks:* `MapEdgeExtender` fidelity (one-line swap).
 - **Compass north convention.** North = −Z is assumed. *Look for:* does the heading tape read correct
-  cardinal directions vs the original? *Blocks:* compass sign-off (one-line flip if wrong).
+  cardinal directions vs the original? (The spec fixes cardinal *letters* over degrees, which we
+  already do, but names no world axis.) *Blocks:* compass sign-off (one-line flip if wrong).
 - **Crossed `pdpN_h` numbering.** Does the *original* amputate the wrong wingtip on wing damage too
   (bloodhawk/firebrand/brigand data quirk)? *Blocks:* damage-visual fidelity confirmation.
 - **C3 spiderweb — is it faded at start, and is it solid?** Our engine fades C3's `spiderweb` mesh to
   invisible at mission start (the `spiderweb_gone` `ON_STARTUP` opacity fade), and a merged fix
   (`fix/opacity-fade-collider`) now also drops its collider when it fades — so you no longer crash
-  into an invisible wall. **But the premise is unconfirmed and you doubt it:** in the *original*, at
-  C3 start, is the spiderweb **(a) visible**, **(b) faded/gone**, and **(c) solid** (does the plane
-  hit it or pass through)? If the original shows it **visible and solid**, then *our fade is the bug*
+  into an invisible wall. **But the premise is unconfirmed and you doubt it**, and the spec cannot
+  settle it — its Hawaii mission-visuals list names fog over the ruins, the primitive-bridge
+  collapse, waterfalls, tunnel torches and seagulls, and no web at all. In the *original*, at C3
+  start, is the spiderweb **(a) visible**, **(b) faded/gone**, **(c) solid** (does the plane hit it
+  or pass through)? If the original shows it **visible and solid**, then *our fade is the bug*
   (we should not fade it) and the collider change is masking a deeper problem — flag that. *Where:*
   fly low near the web in C3, ours vs the original. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
   *Blocks:* confirming `fix/opacity-fade-collider` is the right fix vs. a "why do we fade it at all"
