@@ -403,6 +403,24 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     chase camera** at the same pose — a chase shot cannot support a claim about the underside, and a
     belly shot that a chase shot would also have passed is not a test (rule 15).
 
+100. **ONE same-build pair is not a noise floor — measure two, because the second is routinely the
+     noisy one.** `RunTests.ps1 -Perf` run twice unchanged put every startup phase inside ±10.5 %;
+     the very next unchanged pair reached ±14.8 %, two to three times wider, and a band calibrated
+     on the first pair marked five same-build rows on the second as regressions.
+
+101. **In a perf A/B, believe the counts before the milliseconds.** `draws`, `prims` and `nodes`
+     came back identical to the digit in all 10 same-build scenario pairings while every ms term
+     jittered, and under a deliberate clutter perturbation `prims` tracked the real instance count
+     to within a few percent (C4 sprites ×2.26 → prims ×2.03, C5 ×2.90 → prims ×2.92) — including
+     the direction, on the chapter where the change accidentally *removed* clutter (×0.89 → ×0.94).
+
+102. **`--perf`'s millisecond terms only speak with `--no-vsync`, and `physics` never speaks under
+     `--det`.** Paced at the refresh rate, `script` collapses onto the frame cap — `--stage=empty`
+     read 17.00 ms against C4's 17.20 ms with 11× the draw calls — and `physics` measured
+     0.01–0.04 ms in every scenario because the fixed clock is parent-driven, so `_PhysicsProcess`
+     consumers no-op and collision cost lands in `script`. Even uncapped this machine still paces at
+     exactly 120 fps, so `fps`/`frame_ms` stay floors (rule 38); read `render_cpu`, `gpu` and the counts.
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -445,6 +463,8 @@ Before calling a change verified:
       "not checked" lines before believing the run, and the `TODO` rows name what nobody checks yet
 - [ ] Every golden hash that moved is explained, and `analysis/goldens/manifest.json` is updated in
       **this** commit with the moved shots named in its message (rule 95)
+- [ ] If the change could cost frame time or startup time: a paired `-Perf` A/B, base and change
+      measured back to back, read against a *freshly* measured same-build band (rules 100–102)
 - [ ] Build succeeds, and the **baseline** build succeeded too
 - [ ] Camera and spawn pinned; noise floor (a `--no-det` measurement now — rule 83) measured same-build-vs-same-build
 - [ ] The instrument has been shown capable of reporting failure

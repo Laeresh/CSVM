@@ -107,11 +107,12 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
 | `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — rule 82) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
 | `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — rule 36). ~53 s for 11 shots |
-| `perf` | `-Perf` only, and also `TODO` |
+| `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
 + `weapons-fire`; the unit tests are unaffected), **`-SkipUnits`**, **`-SkipEngine`**,
-**`-SkipGoldens`**, **`-RegenGoldens`**, **`-Perf`**.
+**`-SkipGoldens`**, **`-RegenGoldens`**, **`-Perf`** (+ `-PerfLabel`, `-PerfCompare`, `-PerfFilter`,
+`-PerfIterations`, `-PerfFrames`).
 
 **The golden stage is a scripted pass, not an in-engine suite, and that is structural**: the
 `--run-tests` harness runs every suite to completion inside one `_Ready` call and never yields a
@@ -124,6 +125,43 @@ re-renders every shot and rewrites `manifest.json` in place; the emitter round-t
 byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
 never automatic — see `docs/verification.md` rule 95 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
+
+### The perf stage (`-Perf`)
+
+**A duration here is a count of SIM frames, never wall seconds.** Each scenario runs
+`--det --perf --no-vsync --mute` plus `--frames=N --screenshot=`, which is what ends the run at
+exactly N sim frames — the fixed clock advances one sim step per rendered frame, and the saved-shot
+line prints `sim_frame=N` so the count is *proved* rather than assumed. `--perf` reports one
+`[perf] window …` line per 60 rendered frames, and C21's `[perf] startup …` line closes
+arithmetically over the build; the script parses both.
+
+**Scenario set** (`analysis/perf/scenarios.json` — each entry's `args` are the literal command a
+human re-runs): `empty-stage` (no gamez at all — the control: a world, clutter or animation change
+must leave it alone), `c1-flight` (the only moving camera: chase cam, animators, HUD, collision
+raycasts), `c2b-water` (rain over open water, the lightest world), `c4-terrain` (the heaviest
+draw-call pose, ~2180 calls), `c5-city` (the largest clutter build and the `LIGHT_STATE` data
+texture). Defaults: 300 sim frames × 3 launches per scenario.
+
+**Protocol.** The first launch of each scenario is discarded — a cold file cache *reshapes* a
+startup profile instead of scaling it (rule 89) — and each kept launch also drops its first perf
+window, which carries the first draw's shader compilation. The record stores **medians**: over
+every kept window for the frame metrics, over the kept launches for the startup phases, plus commit,
+`--dirty` flag, GPU string and the **md5 of the `CSVM.dll` Godot loaded** (rule 11: a dirty tree
+gives A and B the same commit, so the assembly hash is the only proof the new build ran).
+
+**A/B is the only verdict.** `-PerfLabel base` … flip the one line under test (rule 10), rebuild …
+`-PerfLabel change -PerfCompare base` pairs each scenario against the most recent `base` record and
+prints the ratios. Identical dll hashes are called out as "SAME BINARY — a noise floor, not an A/B".
+Nothing in this stage can fail a build, and **a history trend is awareness, not evidence**.
+
+**What is read and what is refused.** Verdict metrics: `render_cpu_ms`, `gpu_ms` and the counts
+`draws` / `prims` / `nodes`, plus the startup phases. Recorded but printed as *awareness only*, each
+with its reason: `fps` and `frame_ms` (paced — floors, rule 38), `script_ms` (`TIME_PROCESS`,
+~2.2× real per rule 37, and it collapses onto the frame cap when the loop is paced), `physics_ms`
+(`--det` makes the clock parent-driven, so `_PhysicsProcess` consumers no-op and the term is empty),
+`mem_mb` (managed-heap high-water, monotonic inside a run). A row is marked `*` only when it clears
+**both** a relative band and an absolute floor, both measured as this machine's same-build noise —
+see `docs/verification.md` rules 100–102 and the manifest's `notes`.
 
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
 data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of
@@ -141,9 +179,9 @@ to the primary tree. Without it a worktree still builds and runs the units; the 
 the engine suites but *not* the data-dependent units — from the primary tree they still find
 `extracted/`.
 
-Stray Godots are killed before the engine and golden stages, **filtered to this tree's project dir
-AND an argument only that stage's own launches carry** (rule 66) — `--run-tests` for the engine
-stage, the `.scratch\goldens\` output path for the goldens. Both always quit by themselves, so one
+Stray Godots are killed before the engine, golden and perf stages, **filtered to this tree's project
+dir AND an argument only that stage's own launches carry** (rule 66) — `--run-tests` for the engine
+stage, the `.scratch\goldens\` / `.scratch\perf\` output paths for the other two. All always quit by themselves, so one
 still alive is stuck and ours, while any other Godot on this tree — a live playtest, another agent,
 a hand-run capture to any other path — is reported and left alone.
 

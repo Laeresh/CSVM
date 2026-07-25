@@ -132,6 +132,10 @@ namespace CSVM;
 ///   --messages=path              message string table (default: ../extracted/messages.json) —
 ///                                resolves targets.json MSG_* keys for the stunt marker text
 ///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
+///   --no-vsync                   uncap the frame loop, so --perf's frame/fps/script report the
+///                                work done instead of sitting pinned at the refresh rate. The
+///                                simulation is unchanged under --det: one sim step per rendered
+///                                frame, however fast the frames come
 ///   --debug-collision            draw the plane's collision probe (the swept ray of the
 ///                                crash test; green, red on impact)
 ///   --players=N                  splitscreen: fly N planes (1–4) in one shared
@@ -388,17 +392,26 @@ public partial class PlaneViewer : Node3D
     // See WorldBuilder.HideUnplacedEntities / RestorePlacedEntities.
     private WorldBuilder? _unplacedWatch;
     private double _unplacedRecheck;
-    private bool _perf;            // --perf: log the CPU/GPU frame-time split once a second
+    private bool _noVsync;         // --no-vsync: uncap the loop so the frame timings stop being floors
+    private bool _perf;            // --perf: log the CPU/GPU frame-time split once per window
     private double _perfClock;
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
+    private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
+
+    /// <summary>Rendered frames per <c>--perf</c> report. A frame count rather than a wall second
+    /// because under the fixed clock one rendered frame is exactly one sim step, so a window is a
+    /// fixed amount of <i>simulation</i> and two runs of the same scenario yield the same number
+    /// of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
+    /// still one report a second, so an interactive run reads as it always did.</summary>
+    private const int PerfWindowFrames = 60;
 
     /// <summary>
     /// --perf: the headless stand-in for the editor's profiler. Godot's visual profiler needs
     /// the editor GUI, but the same numbers are available at runtime — and the one that settles
     /// most questions is the per-viewport measured GPU time, which separates "our shader got
-    /// more expensive" from "our C# got more expensive". Averaged over a second so a single
-    /// hitch doesn't read as a regression; A/B two builds by comparing the same line.
+    /// more expensive" from "our C# got more expensive". Every term is a mean over the window,
+    /// so a single hitch doesn't read as a regression; A/B two builds by comparing the same line.
     ///
     /// <para><c>physics</c> is Godot's <c>TIME_PHYSICS_PROCESS</c> monitor —
     /// the physics tick, which is where broadphase and narrowphase cost lands. It exists because
@@ -406,6 +419,10 @@ public partial class PlaneViewer : Node3D
     /// and cannot show a collision change getting cheaper or dearer; the physics term can move
     /// while the frame time does not. Same caveat as `script`: it is Godot's own monitor, so
     /// trust it as an A/B ratio rather than as an absolute.</para>
+    ///
+    /// <para>The line carries <c>sim_frame=</c> so a parser can pin each window to the run's
+    /// simulation state instead of to a wall moment, and its grammar is flat
+    /// <c>key=value</c> — <c>RunTests.ps1 -Perf</c> reads it.</para>
     /// </summary>
     private void ReportPerf(double delta)
     {
@@ -417,15 +434,38 @@ public partial class PlaneViewer : Node3D
         _perfPhysics += Performance.GetMonitor(Performance.Monitor.TimePhysicsProcess);
         _perfCpuRender += RenderingServer.ViewportGetMeasuredRenderTimeCpu(vp);
         _perfGpu += RenderingServer.ViewportGetMeasuredRenderTimeGpu(vp);
-        if (_perfClock < 1.0)
+        // Counts, and averaged like every other term: a single frame's draw-call count is whatever
+        // was in view at the instant the window closed, which moves under a flying camera. These
+        // four are the sharp end of the report — a count has no timing noise in it, so a scene that
+        // starts drawing (or holding) more says so exactly, while every ms term has to clear a
+        // noise band first.
+        _perfDraws += Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame);
+        _perfPrims += Performance.GetMonitor(Performance.Monitor.RenderTotalPrimitivesInFrame);
+        _perfNodes += Performance.GetMonitor(Performance.Monitor.ObjectNodeCount);
+        _perfMem += Performance.GetMonitor(Performance.Monitor.MemoryStatic);
+        if (_perfFrames < PerfWindowFrames)
+        {
             return;
+        }
+        // Locals, not one very long expression: Log takes a single interpolated string (two
+        // concatenated ones are a plain string, which would already have formatted its floats in
+        // the current culture and so does not compile against it).
         double n = _perfFrames;
-        GD.Print($"perf: {n / _perfClock:0.0} fps | frame {1000 * _perfClock / n:0.00} ms"
-                 + $" = script {1000 * _perfProcess / n:0.00} + render-cpu {_perfCpuRender / n:0.00}"
-                 + $" + gpu {_perfGpu / n:0.00} ms"
-                 + $" | physics {1000 * _perfPhysics / n:0.00} ms"
-                 + $" | draws {Performance.GetMonitor(Performance.Monitor.RenderTotalDrawCallsInFrame):0}");
+        long simFrame = _clock?.Frame ?? 0;
+        double wallMs = 1000 * _perfClock;
+        double fps = n / _perfClock;
+        double frameMs = wallMs / n;
+        double scriptMs = 1000 * _perfProcess / n;
+        double renderCpuMs = _perfCpuRender / n;
+        double gpuMs = _perfGpu / n;
+        double physicsMs = 1000 * _perfPhysics / n;
+        double draws = _perfDraws / n;
+        double prims = _perfPrims / n;
+        double nodes = _perfNodes / n;
+        double memMb = _perfMem / n / (1024 * 1024);
+        Log.Info("perf", $"window sim_frame={simFrame} frames={_perfFrames} wall_ms={wallMs:0.00} fps={fps:0.0} frame_ms={frameMs:0.00} script_ms={scriptMs:0.00} render_cpu_ms={renderCpuMs:0.00} gpu_ms={gpuMs:0.00} physics_ms={physicsMs:0.00} draws={draws:0.0} prims={prims:0.0} nodes={nodes:0.0} mem_mb={memMb:0.00}");
         _perfClock = 0; _perfFrames = 0; _perfProcess = _perfGpu = _perfCpuRender = _perfPhysics = 0;
+        _perfDraws = _perfPrims = _perfNodes = _perfMem = 0;
     }
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
@@ -599,6 +639,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--tex-census") { TextureDropIn.SetScratchDir(_repoRoot); TextureDropIn.EnableCensus(""); }
             else if (arg.StartsWith("--tex-census=")) { TextureDropIn.SetScratchDir(_repoRoot); TextureDropIn.EnableCensus(arg["--tex-census=".Length..]); }
             else if (arg == "--no-focus") _noFocus = true;
+            else if (arg == "--no-vsync") _noVsync = true;
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
             else if (arg.StartsWith("--players=")) { _players = int.Parse(arg["--players=".Length..]); playersExplicit = true; }
@@ -623,6 +664,18 @@ public partial class PlaneViewer : Node3D
         // capture stays valid. Set here (earliest we know the flags), before any world build.
         if (_noFocus || _screenshotPath != null)
             DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+
+        // --no-vsync: let the loop run as fast as it can. A measurement flag, not a display one —
+        // with the presentation wait gone, `frame`, `fps` and `script` stop being floors pinned at
+        // the refresh rate and start reporting the work actually done. Safe to combine with the
+        // fixed clock precisely because that clock advances one sim step per RENDERED frame: the
+        // simulation is identical frame for frame, only the wall time it takes changes.
+        if (_noVsync)
+        {
+            DisplayServer.WindowSetVsyncMode(DisplayServer.VSyncMode.Disabled);
+            Engine.MaxFps = 0;
+            Log.Info("perf", $"vsync off max_fps=0 — frame/fps/script report work done, not a refresh cap");
+        }
 
         // --stunt is free flight over the mission's danger zones: force the flight path and the
         // stunt_flying spawn list (unless the tester pinned another scenario for a specific spawn).

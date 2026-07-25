@@ -80,7 +80,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — Perf + visual instruments
 
 21. ☑ C21 — Startup-phase stopwatches (always-on structured timing log) **(done 2026-07-25 — `src/Utils/StartupProfile.cs`, one `[perf] startup` line per session build; `docs/HISTORY.md`)**
-22. ☐ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history
+22. ☑ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history **(done 2026-07-25 — `RunTests.ps1 -Perf` over `analysis/perf/scenarios.json`, 5 scenarios × 300 sim frames; the same-build band was measured on two pairs, not one; `docs/HISTORY.md`)**
 23. ☑ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels **(done 2026-07-25 — 11 shots in `analysis/goldens/manifest.json`, run as `RunTests.ps1`'s own scripted stage rather than a B12 suite; `docs/HISTORY.md`)**
 24. ☑ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites) **(done 2026-07-25 — hooked into `TextureArchive.Find`; classification is chromaticity with a measured tolerance; counts are lower bounds; `docs/HISTORY.md`)**
 25. ☑ C25 — Test stages: `--stage=empty` and `--node=<cs_name>` **(done 2026-07-25 — `src/Mech3/EmptyStage.cs` + `WorldBuilder.BuildNode`; the anim-bind audit's findings are in the item's landing note, and C22/Wave D depend on them; `docs/HISTORY.md`)**
@@ -467,7 +467,7 @@ live menu launch is not scriptable here), so `boot`'s menu-wait caveat is reason
 A true cold OS cache cannot be forced on this machine — the cold reading is a freshly-written copy,
 a floor on the penalty rather than its ceiling.
 
-## C22 ☐ Perf suite: fixed scenarios, A/B mode, local history
+## C22 ☑ Perf suite: fixed scenarios, A/B mode, local history
 
 **Goal.** `RunPerf.ps1` (or `RunTests.ps1 -Perf`) runs a fixed scenario set under `--det --perf` — proposed: `empty-stage` (C25), `C1` fly spawn 0 scripted hold, `C4` (building-heavy), `C2B` (water+precip), `C5` city freecam pinned pose — each a fixed number of **sim frames**, parses the `--perf` lines plus C21's startup block, and appends one JSON record per scenario to a **git-ignored** `perf-history.jsonl` at the repo root (add to `.gitignore`; `.scratch/` is swept, history must survive sweeps). Regression verdicts come from **A/B runs** (flip the one line under test per rule 10, run the suite twice back-to-back), never from committed thresholds.
 
@@ -478,6 +478,53 @@ a floor on the penalty rather than its ceiling.
 **Verify.** Same-build noise floor first (rule 7): suite twice unchanged → the printed ratios ≈ 1 within a measured band; then a deliberate perturbation (e.g. temporarily double clutter density) → the affected scenario's ratio moves. History file grows one line per scenario per run.
 
 **⚠ Traps.** Never let vsync-pinned `fps` into a verdict (rule 38); durations in sim frames not wall seconds (A1 makes that exact); a history *trend* is awareness, not evidence — the A/B is the only regression instrument this plan trusts.
+
+**Landed 2026-07-25** — `RunTests.ps1`'s `perf` stage over `analysis/perf/scenarios.json`
+(the plan's five scenarios: `empty-stage`, `c1-flight`, `c2b-water`, `c4-terrain`, `c5-city`), each
+300 sim frames × 3 launches, medians appended to the git-ignored `perf-history.jsonl`. `-PerfLabel` /
+`-PerfCompare` are the A/B. Evidence in `docs/HISTORY.md`; the standing rules are verification
+100–102, and the stage's contract is in `docs/tooling.md`.
+
+**One same-build pair is not a noise floor, and finding that out changed the design.** The first
+unchanged pair put every startup phase inside ±10.5 %; the *second* reached ±14.8 % and flagged five
+same-build rows against a band calibrated on the first. The marker therefore needs **both** a
+relative band and an absolute floor (rule 41 made mechanical — 0.045 ms of jitter on a 0.26 ms
+`gpu_ms` is a 17 % ratio and no difference), and the shipped bands are calibrated so that all three
+recorded same-build pairs produce zero marks.
+
+**The counts turned out to be the instrument; the milliseconds are the coarse fallback.**
+`draws`/`prims`/`nodes` came back identical to the digit in all 10 same-build scenario pairings,
+while `render_cpu_ms` spanned ±6 % and `gpu_ms` ±33 %. The perturbation (clutter tiling period
+halved, one line, reverted) confirmed it: C4's sprites went ×2.26 and its `prims` ×2.03, C5's ×2.90
+and ×2.92, `startup.clutter` ×1.70 / ×2.26, `startup.edge` ×2.07 — while **`empty-stage`, the
+control, did not move on a single metric**. Two predictions failed and are recorded because they are
+mechanism, not noise: `nodes` did *not* move on C5 (clutter placements live in MultiMesh buffers,
+never as nodes, on the solid path too), and `c1-flight` moved *downwards* (halving the period
+re-scatters C1's cell offsets rather than multiplying them — 9,303 sprites → 8,253, and `prims`
+tracked that too, ×0.94).
+
+**Deviation: three engine-side changes the item text did not budget for, each forced by a
+measurement.** (1) `--perf`'s window is now 60 rendered frames rather than one wall second, and its
+line is flat `key=value` — a wall-second window makes the sample count a function of the frame rate,
+which is exactly what a paired comparison cannot have. (2) The line gained `prims`, `nodes` and
+`mem_mb` alongside `draws`; the counts are the only noise-free terms in the report. (3) A new
+`--no-vsync` (vsync off + `Engine.MaxFps 0`) exists because at the refresh cap `script_ms` collapses
+onto the frame time — `--stage=empty` read 17.00 ms against C4's 17.20 ms with 11× the draw calls —
+and it steadied `gpu_ms` (C4: 0.47–2.26 ms capped → 0.36–0.37 uncapped) and halved the wall time.
+It is inert unless passed, and provably changes no simulation: the `empty-stage` golden hash holds
+with it on.
+
+**Refused, with the reason printed on every A/B: `fps`, `frame_ms`, `script_ms`, `physics_ms`,
+`mem_mb`.** `physics_ms` is the one worth naming — it is empty *by construction* under `--det`
+(0.01–0.04 ms in every scenario), because the fixed clock is parent-driven and `_PhysicsProcess`
+consumers no-op, so collision cost lands in `script_ms`. Rule 38's advice to "read `physics` for
+collision" therefore does not survive contact with `--det`.
+
+**Residuals.** Even uncapped, this machine paces at exactly 120 fps from outside the engine
+(driver or compositor — not diagnosed), so `fps`/`frame_ms` stay floors. Nothing in the suite can
+see a pure C#-sim regression that stays under that cap, and `c2b-water`'s `clutter` phase (3.6 ms)
+sits below the stage's 15 ms absolute floor, so even a 4× there would go unmarked. The scenarios are
+all single-player and muted: splitscreen, the launchscreen, the labs and audio are unmeasured.
 
 ## C23 ☑ Golden-image tripwire
 
