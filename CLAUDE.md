@@ -246,7 +246,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: Waves A + B ☑ (`.\RunTests.ps1` is the one entry point); Wave C next, C21 first.
+**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: Waves A + B ☑, Wave C ☑ bar C22 (`.\RunTests.ps1` is the one entry point); C22 then Wave D.
 
 **M3 (weapons and destruction) delivered** — plan archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md). Its at-the-controls sign-off is owed: pass 1 flown 2026-07-25, the polish/fix items in `backlog.md`'s "Milestone 3 Polishing" and the re-tests in `playtest.md` §1.
 
