@@ -6401,3 +6401,75 @@ extraction skips the *engine* suites (`PlaneViewer` resolves it strictly) but no
 data-dependent *units*: `TestData` falls back to its own checkout, so from the primary tree they
 still find `extracted/` and all 149 run. Documented in `docs/tooling.md` — it is the test project's
 resolution order, not the script's.
+
+## 2026-07-25 — PLAN-testing C21: startup-phase stopwatches, always on
+
+`src/Utils/StartupProfile.cs` + `Mark`/`Record` calls at the `WorldSession` phase boundaries and
+around `PlaneViewer`'s data loads. Every session build now ends in one `perf`-category line:
+
+```
+[perf] startup mode=freecam chapter=C1 total=3028.0 boot=1091.0 gamez=548.2 textures=1.6
+sounds=0.3 zrdr=15.6 world=461.7 clutter=26.4 anim=270.7 bind=342.6 prewarm=85.0 edge=8.9
+weather=28.3 rest=64.5 first_frame=83.3
+```
+
+**Shape.** `total = boot + Σ(phases) + rest + first_frame`, an identity a parser can check —
+verified 0 mismatches beyond 0.2 ms rounding across 24 collected runs. `boot` is engine start →
+build start; `rest` is the build minus its phases (real uninstrumented work, not an error term);
+`first_frame` is measured at the top of the *second* `_Process` so the first draw is inside it.
+Phases are leaves, never nested, so the sum cannot double-count. Ambient statics rather than an
+`Options` field, because `WorldSession` is also driven by the test harness — where `Current` is
+null and the eight census worlds record nothing.
+
+**Deviations from the item text.** Three phases beyond the plan's list (`plane`, `weather`, `edge`)
+because they are large and mode-specific; `boot` and `rest` added so the line closes arithmetically
+instead of asserting an approximation. The runs that quit inside the build (`--damage-test`,
+`--effects-test`, `--weapon-test`) never render, so their line is emitted from
+`NotificationExitTree` with `first_frame=none`.
+
+**Verified.**
+
+*The residual, named rather than waved at.* `rest` is per-mode and its content was measured, not
+argued: freecam 26–65 ms, flight 240–243 ms, viewer 255 ms. A temporary `probe_puffers` mark
+(added, measured, reverted) attributed **84.9 ms of the viewer's 255 ms to the damage lab's ten
+baked pufftrail emitters**; the balance is the gauge cluster and the livery/mesh/marker/weapon lab
+nodes. Flight's 240 ms is the fly-minus-freecam delta: the per-player rig, the shared projectile
+pool, the world-effects runtime and the loadout bind. Externally, `total` 3028 ms sits inside a
+5355 ms `--quit-after 120` process wall; the remainder is 118 vsync-capped frames (1967 ms) plus
+**~330–360 ms of process spawn and shutdown no in-process clock can see** — cross-checked at
+`--quit-after 3` (wall 3361, total 2992) and `5` (wall 3389, total 3012).
+
+*The numbers move when they should (rule 15).* A zip-only data root (hardlink mirror, so
+`SessionPaths.PreferUnzipped` finds no unpacked siblings) against the normal unzipped tree, C1
+freecam ×3 each: `anim` **265–271 → 431–438 ms**, `sounds` 0.2 → 6.9, build total 1831–1862 →
+1936–1970. Two phases moved the *other* way and reproducibly — `world` 451–456 → 409–417 and
+`zrdr` 15.7–16.5 → 12.3–12.7 — many small loose files costing more than one zip handle.
+
+*Cold vs warm (rule 42, now rule 89).* A freshly-copied C3 data root, first run vs the two after
+it: `total` **9777 → 2570/2561 ms**, and the cost is not spread — `anim` **5974 → 278–284 (21×)**,
+`world` 1451 → 319–321, `prewarm` 340 → 78–80, while `gamez` did not move at all. A cold run
+reshapes the profile rather than scaling it. Comparisons belong in C22's warm-up protocol; this
+item only reports.
+
+*Cost is invisible (rules 7/8/41).* Same-build noise floor taken **first**, on the unchanged
+binary: C1 `--freecam` ×5 → build 1824/1848/1863 ms (min/avg/max). Instrumented: 1853/1857/1868.
+Then the baseline was re-measured by checking the two files back out, rebuilding and re-running ×5
+(rule 8; the absence of the `[perf] startup` line is the rule-11 proof the old binary ran):
+1774/1828/1847 — the two baselines differ from each other by 20 ms while the instrumented average
+sits 9 ms above the first. The arithmetic bound is 12 `Stopwatch.GetTimestamp()` pairs per session,
+~1 µs. C4 agrees: baseline 1882/1895/1911, instrumented 1901/1903/1904.
+
+*Coverage.* 8-chapter `--freecam` sweep, **0 engine `ERROR:` lines** anywhere, a startup line on
+every chapter; `--viewer`, `--anim-lab`, `--fly` (C5) and `--damage-test` each emit correctly; a
+bare launchscreen run emits none (no session built) and is error-free. C5 flight against C5 freecam
+shows the split doing its job — `world` 439–449 → 1243–1252 ms (the collision build), `gamez`
+523–539 → 781–794 (the second `GameZ.Load` accumulating into the same bucket), `bind` 452 → 652–733.
+`.\RunTests.ps1` green: `build PASS · units PASS 149/149 · engine PASS 7/7, engine errors clean ·
+goldens TODO`, `result: PASS -- 19.4s total, exit 0`.
+
+**Not verified.** The launchscreen-driven rebuild path (menu → `StartSession`) is verified by
+construction only — it is the same `StartSession`, but a live menu launch is not scriptable here, so
+the `boot` caveat (it contains the menu wait) is reasoned, not measured. A true cold OS file cache
+cannot be forced on this machine without admin cache-flush tooling: the cold reading above is a
+freshly-written copy, which is rule 42's own scenario but is a *floor* on the cold penalty, not
+necessarily its ceiling.

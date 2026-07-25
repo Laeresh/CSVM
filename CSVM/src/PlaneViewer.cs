@@ -408,6 +408,13 @@ public partial class PlaneViewer : Node3D
     // Base (chapter-independent) paths + parse state, set once in _Ready; StartSession reads them
     // each (re)build and recomputes the chapter-dependent gamez/texture/mission paths from _chapter.
     private string _repoRoot = "";
+    // The session shape (fly / freecam / viewer / …), settled once the args are parsed: it names
+    // the log file and identifies the startup timing line.
+    private string _mode = "";
+    // This session's startup timing — the always-on [perf] startup line. One per StartSession,
+    // published as StartupProfile.Current so the shared build code can record into it, and cleared
+    // when the line is emitted.
+    private StartupProfile? _startup;
     // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
@@ -655,14 +662,15 @@ public partial class PlaneViewer : Node3D
         // Opened once the mode is settled (it names the file) and before anything else can log.
         // The sink always takes every category at every level; --log= only widens what the
         // console additionally shows.
-        Log.Open(_repoRoot, _animLab ? "anim-lab"
+        _mode = _animLab ? "anim-lab"
             : _damageTest || _effectsTest || _weaponTest || _runTests ? "test"
             : _dumpMarkers || _dumpWeapons || _dumpLoadout || _dumpConfig ? "dump"
             : _freecam ? "freecam"
             : _viewerMode ? "viewer"
             : _stunt ? "stunt"
             : _fly ? "fly"
-            : "menu");
+            : "menu";
+        Log.Open(_repoRoot, _mode);
         // The --det bundle, resolved in one place. A scripted run — a capture, a dump report, a
         // test harness — has no operator at the controls and wants to be reproducible, so those
         // flags turn --det on by themselves and noise becomes opt-in through --no-det.
@@ -867,6 +875,14 @@ public partial class PlaneViewer : Node3D
     /// (leaving the partial _worldRoot for the caller to free) when the build threw.</summary>
     private bool StartSession()
     {
+        // The startup timing line, opened before anything is built and closed when the session's
+        // first frame is on screen. Published as the ambient Current so WorldSession — which the
+        // test harness also drives, with no session around it — can record its phases blind.
+        _startup = new StartupProfile(_mode, Time.GetTicksMsec())
+        {
+            Subject = _worldMode ? $"chapter={_chapter}" : $"plane={_planeName}",
+        };
+        StartupProfile.Current = _startup;
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
         // Re-derive every subsystem RNG from the master before anything in the session draws, so a
@@ -912,8 +928,12 @@ public partial class PlaneViewer : Node3D
         try
         {
             var sw = Stopwatch.StartNew();
+            long mark = StartupProfile.Mark();
             var gamez = GameZ.Load(gamezPath);
+            StartupProfile.Record("gamez", mark);
+            mark = StartupProfile.Mark();
             var textures = new TextureArchive(texturesPath);
+            StartupProfile.Record("textures", mark);
             // The texture archive stays open past this build scope: the data-driven crash bakes its
             // effect puffers lazily at crash time (the same reason --anim-lab keeps it open). The lab
             // owns its copy (labTextures, freed with the lab node); every other mode hands it to the
@@ -932,13 +952,17 @@ public partial class PlaneViewer : Node3D
             // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
             // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
             bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
+            mark = StartupProfile.Mark();
             var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
+            StartupProfile.Record("sounds", mark);
             using var soundsScope = _animLab ? null : sounds;
             labSounds = _animLab ? sounds : null;
+            mark = StartupProfile.Mark();
             var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
             // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
             // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
             var soundGroups = haveSounds ? SoundDefs.LoadGroups(zrdrPath) : null;
+            StartupProfile.Record("zrdr", mark);
             if (!mute && !haveSounds)
                 GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
             int meshInstances;
@@ -1051,7 +1075,9 @@ public partial class PlaneViewer : Node3D
                 // for edge-verification shots); off for plain orbit viewing (honest data view).
                 if (_fly || _freecam || _skyZoneExplicit)
                 {
+                    mark = StartupProfile.Mark();
                     _edgeExtender = builder.CreateEdgeExtender(session.Clutter);
+                    StartupProfile.Record("edge", mark);
                     if (_edgeExtender != null)
                     {
                         _plane.AddChild(_edgeExtender);
@@ -1074,6 +1100,7 @@ public partial class PlaneViewer : Node3D
                     // table: it is what resolves --sky-zone's default against the zones this
                     // chapter actually ships (C5 has zone1+zone3, not zone2),
                     // and the dome must be built for the same zone the fog comes from.
+                    mark = StartupProfile.Mark();
                     LoadWeather(missionZrdrPath);
                     foreach (var rig in _rigs)
                     {
@@ -1092,6 +1119,7 @@ public partial class PlaneViewer : Node3D
                     // is given (deterministic fog/whiteout/puff verification with --pos, same as
                     // the sky-verification path).
                     SetupWeather(textures);
+                    StartupProfile.Record("weather", mark);
                 }
                 meshInstances = builder.MeshInstanceCount;
                 colliders = builder.ColliderCount;
@@ -1151,12 +1179,16 @@ public partial class PlaneViewer : Node3D
                     // (--paint still applies one).
                     if (_planeNames.Count > 0)
                     {
+                        mark = StartupProfile.Mark();
                         var planesGamez = GameZ.Load(planesGamezPath);
+                        StartupProfile.Record("gamez", mark);
+                        mark = StartupProfile.Mark();
                         var parkedBuilder = new PlaneBuilder(planesGamez, textures,
                             scheme: SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(),
                                 PatternsForPlane(planesGamez, _planeName)),
                             patterns: Patterns);
                         var parked = parkedBuilder.Build(_planeName);
+                        StartupProfile.Record("plane", mark);
                         meshInstances += parkedBuilder.MeshInstanceCount;
                         _worldRoot!.AddChild(parked);
                         parked.Position = spawnPos;
@@ -1195,6 +1227,7 @@ public partial class PlaneViewer : Node3D
                 // so every existing orbit/damage screenshot renders exactly as before.
                 // Resolved once: the livery lab below opens on exactly the scheme the plane
                 // wears, not a second roll of --paint=random.
+                mark = StartupProfile.Mark();
                 var staticPatterns = PatternsForPlane(gamez, _planeName);
                 var staticScheme = SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(), staticPatterns);
                 // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
@@ -1203,6 +1236,7 @@ public partial class PlaneViewer : Node3D
                 var builder = new PlaneBuilder(gamez, textures, damagePanels: _viewerMode,
                     scheme: _viewerMode ? null : staticScheme, patterns: Patterns);
                 _plane = builder.Build(_planeName);
+                StartupProfile.Record("plane", mark);
                 meshInstances = builder.MeshInstanceCount;
                 what = $"'{_planeName}'";
 
@@ -1212,7 +1246,9 @@ public partial class PlaneViewer : Node3D
                 // --viewer session (H), opened at launch only by --damage.
                 if (_viewerMode)
                 {
+                    mark = StartupProfile.Mark();
                     var stats = PlaneStats.Load(zrdrPath, _planeName);
+                    StartupProfile.Record("zrdr", mark);
                     if (stats.DestroyableParts.Count == 0)
                     {
                         GD.Print($"damage lab: '{_planeName}' ({stats.DefName}) has no destroyable_parts");
@@ -1286,7 +1322,9 @@ public partial class PlaneViewer : Node3D
             // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
             if (_viewerMode && !_worldMode && _plane != null)
             {
+                mark = StartupProfile.Mark();
                 var labWeapons = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                StartupProfile.Record("zrdr", mark);
                 // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
                 // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
                 // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
@@ -1367,7 +1405,9 @@ public partial class PlaneViewer : Node3D
                 // Session-wide flight data, loaded once and shared by every player: the aircraft
                 // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
                 // and the per-plane state below are per player.
+                mark = StartupProfile.Mark();
                 var planesGamez = GameZ.Load(planesGamezPath);
+                StartupProfile.Record("gamez", mark);
                 // Stats are per plane, not per player (splitscreen players can pick
                 // different aircraft) — load each distinct one once, logging it as it appears.
                 var statsCache = new Dictionary<string, PlaneStats>();
@@ -1402,9 +1442,11 @@ public partial class PlaneViewer : Node3D
                 // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
                 // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
                 // (`he_rocket` …) from the chapter's own prototype roots (B14).
+                mark = StartupProfile.Mark();
                 var weaponMessages = Messages.Load(messagesPath);
                 var weaponDefs = WeaponDefs.Load(zrdrPath, weaponMessages);
                 var stockLoadouts = StockLoadouts.Load();
+                StartupProfile.Record("zrdr", mark);
                 var projectiles = new ProjectilePool(textures, sounds, soundDefs,
                     flyoutGamez: gamez, flyoutScene: worldScene)
                 {
@@ -1472,11 +1514,13 @@ public partial class PlaneViewer : Node3D
 
                     // Flight repaints the field on every map load: each player draws their
                     // own random livery (colours + decals) unless --paint pins one.
+                    mark = StartupProfile.Mark();
                     var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
                         scheme: SchemeFor(pi, zrdrPath, randomByDefault: false, paintRng,
                             PatternsForPlane(planesGamez, planeName)),
                         patterns: Patterns);
                     var planeModel = planeBuilder.Build(planeName);
+                    StartupProfile.Record("plane", mark);
                     meshInstances += planeBuilder.MeshInstanceCount;
 
                     var controller = new FlightController
@@ -1840,6 +1884,8 @@ public partial class PlaneViewer : Node3D
             Deprioritise = flownPlanes,
         });
 
+        // The build is done; everything from here to the first drawn frame is `first_frame`.
+        _startup?.EndBuild();
         _inSession = true;
         return true;
     }
@@ -3255,6 +3301,13 @@ public partial class PlaneViewer : Node3D
         {
             SetFocusMuted(false);
         }
+        else if (what == (int)NotificationExitTree)
+        {
+            // A run that quits inside the session build (the headless probes) never renders a
+            // frame, so this is the only place its startup breakdown can still be reported.
+            // Idempotent: a session that did render has already emitted and this does nothing.
+            _startup?.Emit();
+        }
     }
 
     /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
@@ -3377,6 +3430,8 @@ public partial class PlaneViewer : Node3D
                 DriveSimSteps(clock);
             }
         }
+        // The startup line goes out on the frame that proves the first one was drawn.
+        _startup?.Frame();
         // Publish the same instant to the shaders, so the animated surfaces (UV scroll,
         // precipitation) and the CPU sim never disagree within a frame. Written unconditionally:
         // with no session clock — the launchscreen, or the frame after a teardown — it keeps

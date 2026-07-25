@@ -1004,6 +1004,11 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
   the sound loader after bootstrap (prewarming first) unless `Options.KeepArchivesOpen` (the lab).
 ⚠ Returning `Program` keeps crash-effect-param loading in the caller — no Mech3→Flight dep here.
 ⚠ `PlayerPosition` is a single per-call delegate — no camera exists at build time.
+⚠ **The phase boundaries are a reported contract.** Each step records its own span into
+  `StartupProfile` — `zrdr` (mission setup) · `world` (WorldBuilder) · `clutter` · `anim`
+  (AnimProgram load) · `bind` (bind + bootstrap) · `prewarm` — and those are the bulk of the
+  `[perf] startup` accounting. Move a step, move its `Record` with it: a dropped phase does not
+  read as missing, it reads as a growing `rest`. Keep them leaves — never nest one inside another.
 
 ## src/PlaneViewer.cs
 Main.tscn root: parses args, registers shader globals + lighting + the persistent camera once in
@@ -1050,6 +1055,13 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
 ⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
   has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
+⚠ **Owns the session `StartupProfile`** — built at the TOP of `StartSession` (before `_worldRoot`)
+  and published as `StartupProfile.Current`; `EndBuild()` on the success return, `Frame()` from
+  `_Process`, `Emit()` from `NotificationExitTree` for the runs that quit mid-build. Its phases here
+  are `gamez` · `textures` · `sounds` · `zrdr` · `plane` · `weather` (dome + fog + cloud visuals) ·
+  `edge`, all LEAVES; anything between them lands in `rest`, which is why `rest` is per-mode work
+  (viewer ≈ 255 ms of lab construction, flight ≈ 240 ms of rig/pool/effects wiring, freecam ≈ 30 ms).
+  A new load or build step gets its own `Record` or it silently inflates `rest`.
 ⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
   HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
   (C23/C24/C25/C26) — resolve✓ walk-up, healthy/destroyed swap, `col[off,on]` (colliders switched by
@@ -1133,6 +1145,25 @@ shader this project generates reads it instead of Godot's `TIME`.
   left it — the menu must not freeze, and the uniform must never sit pinned at 0.
 ⚠ Declared in `res://shaders/csky_time.gdshaderinc`, one include shared by every shader that reads
   it: a global uniform's TYPE must agree across shaders, so it is declared in exactly one place.
+
+## src/Utils/StartupProfile.cs
+The always-on startup timing report: one `[perf] startup mode=… <subject> total=… boot=… <phases…>
+rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)` are ambient statics over
+`Current`, so the shared build code (`WorldSession`, which the test harness also drives) records blind.
+⚠ **It only reports.** No thresholds, no verdicts, no A/B — a comparison needs a warm-up protocol
+  this class deliberately does not own (C22's).
+⚠ The line asserts `total = boot + Σ(phases) + rest + first_frame` and that identity is checkable —
+  keep every phase a LEAF (never nested inside another) or the sum silently double-counts.
+  `rest` = build minus its phases: real uninstrumented work, not an error term.
+⚠ `first_frame` is measured at the top of the SECOND `_Process` after the build, so the first draw
+  (and its shader compilation) is inside it. A run that quits during the build prints
+  `first_frame=none` — emitted from `PlaneViewer`'s `NotificationExitTree`, the only hook those
+  headless probes still reach — and its build closes at teardown, so its `rest` also holds whatever
+  the probe itself did (`--damage-test`'s sweep). Don't read a probe run's `rest` as build overhead.
+⚠ `boot` is engine start → build start, so on a launchscreen-driven rebuild it also holds however
+  long the menu was up. Read it, don't assume the session was the process's first.
+⚠ `Current` is null outside a session build **on purpose** — `--run-tests` builds eight census
+  worlds through `WorldSession` and must not accumulate them into one line.
 
 ## src/Utils/Rng.cs
 The session's randomness policy: one master seed and ten named subsystem generators derived from it

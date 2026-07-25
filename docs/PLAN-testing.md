@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — Perf + visual instruments
 
-21. ☐ C21 — Startup-phase stopwatches (always-on structured timing log)
+21. ☑ C21 — Startup-phase stopwatches (always-on structured timing log) **(done 2026-07-25 — `src/Utils/StartupProfile.cs`, one `[perf] startup` line per session build; `docs/HISTORY.md`)**
 22. ☐ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history
 23. ☐ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels
 24. ☐ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites)
@@ -416,7 +416,7 @@ still find `extracted/` and run. Documented in `docs/tooling.md` rather than cha
 
 # Wave C — Perf + visual instruments
 
-## C21 ☐ Startup-phase stopwatches
+## C21 ☑ Startup-phase stopwatches
 
 **Goal.** Every session logs a structured, always-on timing breakdown on the `perf` category: data load (gamez/textures/zrdr per phase), world build, clutter, anim bind, sound prewarm, first rendered frame — `[perf] startup total=… gamez=… world=… clutter=… bind=… first_frame=…`.
 
@@ -427,6 +427,45 @@ still find `extracted/` and run. Documented in `docs/tooling.md` rather than cha
 **Verify.** Phase sum ≈ measured wall startup (within the residual — name what the residual contains). Numbers visibly move when they should: an unzipped vs zipped extraction changes the load phase (an A/B the docs already describe via `PreferUnzipped`).
 
 **⚠ Traps.** Rules 41/42: cold-vs-warm cache differences dwarf real changes — C22's protocol (warm-up run discarded) is where comparisons live; this item only *reports*.
+
+**Landed 2026-07-25** — `src/Utils/StartupProfile.cs` plus `Mark`/`Record` calls at the
+`WorldSession` phase boundaries and around `PlaneViewer`'s data loads. Evidence in
+`docs/HISTORY.md`; the standing rules are verification 89 (cold vs warm reshapes the profile) and
+90 (read the line, not the process wall).
+
+**The line closes arithmetically rather than approximately.** The item said "phase sum ≈ measured
+wall startup"; two extra keys make that an identity instead — `boot` (engine start → build start)
+and `rest` (the build minus its phases). `total = boot + Σ(phases) + rest + first_frame`, checked
+across 24 runs with 0 mismatches beyond 0.2 ms rounding. Measured C1 `--freecam`:
+`total=3028.0 boot=1091.0 gamez=548.2 textures=1.6 sounds=0.3 zrdr=15.6 world=461.7 clutter=26.4
+anim=270.7 bind=342.6 prewarm=85.0 edge=8.9 weather=28.3 rest=64.5 first_frame=83.3`.
+
+**What `rest` contains, measured rather than argued.** It is per-mode: freecam 26–65 ms, flight
+240–243, viewer 255. A temporary probe mark (added, measured, reverted) put **84.9 ms of the
+viewer's 255 on the damage lab's ten baked pufftrail emitters**; the rest is the gauge cluster and
+the four lab UIs. Flight's 240 is the fly-minus-freecam delta — per-player rig, projectile pool,
+world-effects runtime, loadout bind. Outside the process, `total` 3028 sits in a 5355 ms
+`--quit-after 120` wall: 118 vsync frames plus ~330–360 ms of spawn/shutdown C# cannot see.
+
+**Three phases beyond the item's list** (`plane`, `weather`, `edge`) because they are large and
+mode-specific, and the runs that quit inside the build (`--damage-test`/`--effects-test`/
+`--weapon-test`) emit from `NotificationExitTree` with `first_frame=none` rather than not at all.
+`StartupProfile.Current` is deliberately null outside a session build, so `--run-tests`' eight
+census worlds — same `WorldSession` code — record nothing.
+
+**The A/B the item asked for, both directions.** Zip-only data root vs unzipped, C1 ×3 each:
+`anim` **265–271 → 431–438 ms**, `sounds` 0.2 → 6.9, build 1831–1862 → 1936–1970 — while `world`
+(451–456 → 409–417) and `zrdr` (15.7–16.5 → 12.3–12.7) reproducibly went the *other* way, many
+loose files costing more than one zip handle. Cold vs warm (a freshly-copied C3 root): `total`
+**9777 → 2570**, concentrated — `anim` 5974 → 278 (**21×**), `world` 4.5×, `prewarm` 4.3×, `gamez`
+unmoved. Cost of the stopwatches themselves: noise floor first (rule 7) at 1824/1848/1863 ms,
+instrumented 1853/1857/1868, re-measured baseline 1774/1828/1847 — the two baselines differ by more
+than the change does (rule 41), against an arithmetic bound of 12 QPC pairs ≈ 1 µs.
+
+**Residual.** The launchscreen-driven rebuild is verified by construction (same `StartSession`; a
+live menu launch is not scriptable here), so `boot`'s menu-wait caveat is reasoned, not measured.
+A true cold OS cache cannot be forced on this machine — the cold reading is a freshly-written copy,
+a floor on the penalty rather than its ceiling.
 
 ## C22 ☐ Perf suite: fixed scenarios, A/B mode, local history
 

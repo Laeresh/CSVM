@@ -323,6 +323,21 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     at the launch line, while the identical unpiped run passed: set `Continue` around every native
     call and judge it by its exit code.
 
+89. **A startup timing number without its cache state is meaningless — the same build, same
+    chapter, measured 8578 ms cold and 1412 ms warm.** Rule 42 with the phase split on it: a
+    freshly-copied C3 data root's first run read `anim=5973.8` against `anim=277–284` warm (21×),
+    `world` 4.5×, `prewarm` 4.3× — while `gamez` (a handful of big files) did not move at all. The
+    penalty lives entirely in the phases that open thousands of small files, so a cold run does not
+    scale a timing, it reshapes it. Discard the first iteration or say out loud that you did not.
+
+90. **Read the `[perf] startup` line rather than timing the process — the wall clock is mostly not
+    startup.** `total = boot + Σ(phases) + rest + first_frame` (checked on 24 runs, 0 mismatches
+    beyond rounding) covers engine start → first drawn frame; a `--quit-after N` process's wall time
+    is that plus `(N−2)` vsync-capped frames plus ~330–360 ms of process spawn and shutdown that no
+    in-process clock can see. Measured on C1 `--freecam`: `total` 3028 ms against 5355 ms of wall at
+    `--quit-after 120` and 3361 ms at `--quit-after 3`. And `boot` is engine start → build start, so
+    on a launchscreen-driven rebuild it silently contains however long the menu was up.
+
 ## What this project cannot verify itself
 
 These need the user:

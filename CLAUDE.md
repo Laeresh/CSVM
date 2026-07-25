@@ -187,6 +187,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global shader uniform: the clock's GPU-side twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a structured verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext` (asserts/paths/world builder), PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/Suites.cs` — the seven registered suites and their golden counts (48 weapon defs, 11 airframes, the per-chapter destructible census).
