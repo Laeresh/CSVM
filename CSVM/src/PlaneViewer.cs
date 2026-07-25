@@ -525,6 +525,14 @@ public partial class PlaneViewer : Node3D
     // anything is *lit*, so a shading question stays answerable while fog is off.
     private bool _noFog;
 
+    /// <summary>Whether this session builds the world's colliders — the one definition every
+    /// consumer reads. Flight needs them to fly into things; the headless damage sweep and the
+    /// world damage lab need them because a kill's collider count would otherwise read zero and
+    /// lie; <c>--collision</c> is the interactive request for them in a mode that builds none.
+    /// The labs and the C overlay must agree with what <see cref="Mech3.WorldSession"/> actually
+    /// built, or they report an absence they created themselves.</summary>
+    private bool BuildsCollision => _fly || _damageTest || _forceCollision || _debugDamage != null;
+
     public override void _Ready()
     {
         // The session clock is advanced at the top of this node's _Process, and every sim consumer
@@ -881,6 +889,8 @@ public partial class PlaneViewer : Node3D
             : _dumpFlight ? "--dump-flight"
             : _dumpConfig ? "--dump-config"
             : _damageTest ? "--damage-test"
+            : _effectsTest ? "--effects-test"
+            : _weaponTest ? "--weapon-test"
             : _runTests ? "--run-tests"
             : "";
         if (scriptedBy.Length > 0 && !_noDet)
@@ -914,10 +924,9 @@ public partial class PlaneViewer : Node3D
             _jitterDeg = _screenshotShots > 1 && !_det ? 0.15f : 0f;
         }
         // The master seed. A deterministic run and the animation debugger (deterministic by nature
-        // — its whole point is an identical replay) pin it; --effects-test pins it too because its
-        // census gates several effects behind RANDOM_WEIGHT and has to be comparable run-to-run.
-        // Everything else draws from the clock, so the shipped game keeps its variety.
-        _seedPinned = _seed != null || _det || _animLab || _effectsTest;
+        // — its whole point is an identical replay) pin it. Everything else draws from the clock, so
+        // the shipped game keeps its variety.
+        _seedPinned = _seed != null || _det || _animLab;
         _masterSeed = _seed ?? (_seedPinned ? Rng.DefaultSeed : Rng.TimeSeed());
         // Applied here as well as per session so the dump tools — which quit before any session is
         // built — still draw from the resolved master rather than a zero one.
@@ -994,34 +1003,33 @@ public partial class PlaneViewer : Node3D
         // --dump-markers: a pure-data report (no world, no camera) — print the marker rig table(s)
         // and quit. Placed here, once planes.zbd's path is known, so it runs whether or not any
         // content arg was given; --headless makes it windowless.
+        //
+        // Each dump quits with its probe's verdict, like --run-tests: a report that could not be
+        // produced must not look to a caller like one that came out clean.
         if (_dumpMarkers)
         {
-            DumpMarkers();
-            GetTree().Quit();
+            GetTree().Quit(DumpMarkers() ? 0 : 1);
             return;
         }
         // --dump-weapons: the same pure-data pattern for the typed weapons.json reader (B11) —
         // dump every def and assert no key went unmapped.
         if (_dumpWeapons)
         {
-            DumpWeapons();
-            GetTree().Quit();
+            GetTree().Quit(DumpWeapons() ? 0 : 1);
             return;
         }
         // --dump-loadout: bind each plane's stock loadout to its built model and report the
         // resolved gun groups + hardpoints (B12) — a missing marker is a loud error here.
         if (_dumpLoadout)
         {
-            DumpLoadout();
-            GetTree().Quit();
+            GetTree().Quit(DumpLoadout() ? 0 : 1);
             return;
         }
         // --dump-flight: pure data again — no world and no model, just the zrdr stats stepped
         // through the manoeuvres the original was measured flying.
         if (_dumpFlight)
         {
-            DumpFlight();
-            GetTree().Quit();
+            GetTree().Quit(DumpFlight() ? 0 : 1);
             return;
         }
 
@@ -1285,7 +1293,7 @@ public partial class PlaneViewer : Node3D
                         // same build: --collision, because the collider overlay needs bodies to
                         // draw, and --debug-damage, because a kill's collider count would otherwise
                         // read zero and lie.
-                        Collision = _fly || _damageTest || _forceCollision || _debugDamage != null,
+                        Collision = BuildsCollision,
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
@@ -1365,9 +1373,8 @@ public partial class PlaneViewer : Node3D
                     };
                     // The node lab reads that selection. Its camera is resolved through a
                     // delegate: the freecam is created further down, after this point.
-                    bool collisionBuilt = _fly || _damageTest || _debugDamage != null;
                     _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
-                        session.Builder.Scene, collisionBuilt)
+                        session.Builder.Scene, BuildsCollision)
                     {
                         CameraSource = () => _spectator,
                         DebugSpec = _debugNodeLab,
@@ -1380,7 +1387,7 @@ public partial class PlaneViewer : Node3D
                     var damageScene = session.Builder.Scene;
                     var damageProgram = session.Program;
                     var damageRuntime = session.Runtime;
-                    _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, collisionBuilt)
+                    _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, BuildsCollision)
                     {
                         SelectByName = name => _nodeLab?.SelectByName(name) ?? false,
                         EffectsSource = () => EnsureWorldEffects(gamez, damageScene, textures,
@@ -2279,13 +2286,12 @@ public partial class PlaneViewer : Node3D
                     planeColliders.Add((model, airframe));
                 }
             }
-            bool collisionBuilt = _fly || _forceCollision || _damageTest;
-            _worldRoot!.AddChild(new UI.ColliderOverlay(_plane, collisionBuilt)
+            _worldRoot!.AddChild(new UI.ColliderOverlay(_plane, BuildsCollision)
             {
                 DebugShow = _showColliders,
                 Planes = planeColliders,
             });
-            Log.Info("world", $"collider overlay ready (C){(collisionBuilt ? "" : " — but this mode built NO collision; relaunch with --collision")}");
+            Log.Info("world", $"collider overlay ready (C){(BuildsCollision ? "" : " — but this mode built NO collision; relaunch with --collision")}");
         }
         else if (_forceCollision && _worldMode)
         {
@@ -3347,7 +3353,8 @@ public partial class PlaneViewer : Node3D
     /// user can see and name every mount when handing back the airframe gun-group table (item A3).
     /// An optional value filters to one plane by model node (<c>player_bhawk</c>) or display name
     /// (<c>Bloodhawk</c>), matched case-insensitively as a substring.</summary>
-    private void DumpMarkers()
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    private bool DumpMarkers()
     {
         // Windowed launches shouldn't steal focus for a report that renders nothing and quits.
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
@@ -3355,12 +3362,13 @@ public partial class PlaneViewer : Node3D
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-markers: {r.Error}");
-            return;
+            return false;
         }
         GD.Print(r.Text);
         // ./.scratch/ inside the workspace, per CLAUDE.md — never the OS temp dir.
         WriteScratch("markers_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/markers_dump.txt");
+        return true;
     }
 
     /// <summary>Writes one report into the workspace scratch folder, by absolute path. Relative
@@ -3421,18 +3429,20 @@ public partial class PlaneViewer : Node3D
     /// then quit. The committed verification instrument the weapons.md table is checked against —
     /// a clean run (no UNHANDLED lines) is the B11 pass. An optional value filters by id
     /// (<c>wep_06</c>) or <c>NAME</c> substring, matched case-insensitively.</summary>
-    private void DumpWeapons()
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    private bool DumpWeapons()
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         var r = Testing.Probes.Weapons(_zrdrPath, _messagesPath, _dumpWeaponsFilter);
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-weapons: {r.Error}");
-            return;
+            return false;
         }
         GD.Print(r.Text);
         WriteScratch("weapons_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/weapons_dump.txt");
+        return true;
     }
 
     /// <summary>--dump-flight[=plane]: step a throwaway <see cref="FlightModel"/> through the
@@ -3441,7 +3451,8 @@ public partial class PlaneViewer : Node3D
     /// <c>./.scratch/flight_dump.txt</c>, then quit. The instrument behind the
     /// <c>flight-envelope</c> suite, and the only way to see what a flight-constant change did to
     /// the whole envelope rather than to the one number that was edited.</summary>
-    private void DumpFlight()
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    private bool DumpFlight()
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         string plane = _dumpFlightPlane.Length > 0 ? _dumpFlightPlane : _planeName;
@@ -3449,11 +3460,12 @@ public partial class PlaneViewer : Node3D
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-flight: {r.Error}");
-            return;
+            return false;
         }
         GD.Print(r.Text);
         WriteScratch("flight_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/flight_dump.txt");
+        return true;
     }
 
     /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
@@ -3489,7 +3501,8 @@ public partial class PlaneViewer : Node3D
     /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
     /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
     /// the missing-marker error fires). An optional value filters by def / model / display.</summary>
-    private void DumpLoadout()
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    private bool DumpLoadout()
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         var r = Testing.Probes.Loadouts(_zrdrPath, _messagesPath, _planesGamezPath, _dataRoot,
@@ -3497,11 +3510,12 @@ public partial class PlaneViewer : Node3D
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-loadout: {r.Error}");
-            return;
+            return false;
         }
         GD.Print(r.Text);
         WriteScratch("loadout_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/loadout_dump.txt");
+        return true;
     }
 
     /// <summary>The D32 headless verify: play every impact/destruction effect through the

@@ -1382,10 +1382,14 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
   `--node=` subtree 7 km out, whose box stretched back to the origin and framed it at 12 km. Hence
   the optional `subject` argument, filled from `WorldBuilder.DetachedWorldAabb` at build time.
-⚠ `WorldSession.Options.Collision` has exactly three sources — `_fly`, `_damageTest`, `--collision`
-  — and `--collision` is the interactive one: the world's colliders are a flight-build product, so
-  the C overlay and any hand check in `--freecam`/`--anim-lab`/`--viewer` need it or they measure an
-  absence. Measured C2 startup cost, warm, 3 runs each: total 2,462 → 3,106 ms, of which `world`
+⚠ **`PlaneViewer.BuildsCollision` is the only spelling of "does this session build colliders".** Four
+  sources — `_fly`, `_damageTest`, `--collision`, `--debug-damage` — and `--collision` is the
+  interactive one: the world's colliders are a flight-build product, so the C overlay and any hand
+  check in `--freecam`/`--anim-lab`/`--viewer` need it or they measure an absence. The node lab, the
+  world damage lab and the C overlay each read it too, and each must get the same answer
+  `WorldSession.Options.Collision` did — three hand-written copies had already dropped a different
+  term apiece, so `--collision --freecam` told the labs nothing was built and `--debug-damage` made
+  the C overlay report "this mode built NO collision" over colliders that existed. Measured C2 startup cost, warm, 3 runs each: total 2,462 → 3,106 ms, of which `world`
   352 → 865 and `clutter` only 47 → 56.
 ⚠ `--stage=empty` and `--node=` are settled in the SAME mode-resolution block as the rest: the node
   stage forces `--viewer` (unless `--anim-lab`) and sets `_chapterGiven`; the empty stage forces

@@ -7458,3 +7458,42 @@ Verified: docs-only, no build. Both indexes machine-checked against their target
 bullet it now agrees with; the documented lookups (`Grep "## src/Flight/FlightModel.cs" -A 12`,
 `Grep "^- .--collision" docs/cli.md`) each return exactly one whole entry. No script, test or `.cs`
 file parses either document. `CLAUDE.md` 35,847 → 25,246 bytes.
+
+## 2026-07-25 — three defects an architecture review surfaced, and the last of the suite-count drift
+
+An architecture review of the hot spots (`PlaneViewer.cs`, 37 of the last 60 source touches) turned
+up three live defects, all of the same shape: a fact restated per consumer instead of derived once.
+
+**A failed `--dump-*` exited 0.** `DumpMarkers`/`DumpWeapons`/`DumpLoadout`/`DumpFlight` printed the
+probe's error and `return`ed, while the caller ran a bare `GetTree().Quit()` — so a missing archive
+read to any script exactly like a clean dump. Each now returns its verdict and the caller quits with
+it, the way `RunTestSuites` already did.
+
+**Three spellings of "does this session build colliders", each missing a different term.** The
+authoritative one fed `WorldSession.Options.Collision`; the copy at the node lab and world damage
+lab had dropped `--collision`, and the copy at the C overlay had dropped `--debug-damage`. So
+`--collision --freecam` told both labs nothing was built, and `--debug-damage` made the C overlay
+print "this mode built NO collision" over colliders that existed. All three now read one
+`PlaneViewer.BuildsCollision`.
+
+**`--effects-test` and `--weapon-test` did not imply `--det`,** though both drive and end a session
+with nobody at the controls — the rule the other seven scripted flags follow. `--effects-test` had
+been half-patched around it with an `|| _effectsTest` term on `_seedPinned`, which is now redundant
+and gone. Both are in the bundle; the membership rule ("a flag that drives and ends the session by
+itself") is now written down in the `cli.md` `--det` bullet, whose list had also been missing
+`--dump-flight` and `--run-tests`.
+
+Docs: `cli.md`'s suite list still said **seven** and omitted `flight-envelope` and `tex-dropin`
+(`architecture.md` already said nine). `HISTORY.md` and `PLAN-testing.md` also say seven and were
+left alone — they record what was true when written.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens hash-identical, exit 0,
+72.9 s. Each defect then checked directly rather than inferred from the green run: a dump with
+`--data-root=` at a nonexistent path exits **1** where a real one exits **0**; `--debug-damage
+--debug-colliders` no longer prints the NO-collision warning while a plain `--freecam
+--debug-colliders` still does (the able-to-fail control); `--collision --debug-nodelab=destructibles`
+reports the committed C1 census, 267 instances / 196 node groups. Pinning did not move either
+probe's documented result — `--effects-test` still 28/28 resolved and **16** building a puffer,
+`--weapon-test` still 48/48 fired, 0 errors, 0 skipped — and both now log `via=--effects-test` /
+`via=--weapon-test`; `--no-det` still opts back out. New rules 115 (an instrument must quit with its
+verdict) and 116 (a derived predicate copied per consumer reports the absence it created).

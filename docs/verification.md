@@ -520,6 +520,20 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      layout lumped in with its TUNE magnitudes). Where one fact must appear twice, name which copy
      is the description of record — an unranked pair has no correct side to fix toward.
 
+115. **An instrument that quits must quit with its verdict, or a caller cannot tell a failed
+     measurement from a clean one.** All four `--dump-*` reports printed their error and then
+     exited 0 — a missing archive read to any script exactly like a passing dump; only
+     `--run-tests` passed its result to `Quit`. Check the exit code of a probe you are about to
+     trust, with a deliberately broken input (`--data-root=` at a path that does not exist).
+
+116. **A derived predicate each consumer spells out for itself drifts one term at a time, and the
+     consumer then reports the absence its own copy created.** Three hand-written spellings of
+     "does this session build colliders" had each dropped a different term: `--collision --freecam`
+     told the node lab and the world damage lab nothing was built, and `--debug-damage` made the C
+     overlay print "this mode built NO collision" over colliders it had just built. A tool that
+     reports on a build product must read the same expression the build read, not a restatement
+     of it.
+
 ## What this project cannot verify itself
 
 These need the user:

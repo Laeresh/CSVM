@@ -149,7 +149,7 @@ The day-to-day 28 of 89. **[`docs/cli.md`](docs/cli.md) opens with an index of a
 | `--perf` | log the frame-cost/draw-count split every 60 frames (the headless profiler stand-in) |
 | `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
-| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests`**, and announced as a `det …` log line |
+| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by every flag that drives and ends a session by itself** — `--screenshot=`, every `--dump-*`, `--damage-test`, `--effects-test`, `--weapon-test`, `--run-tests` — and announced as a `det …` log line |
 | `--no-det` | opt back out — wall-clock sim and live randomness, **beating both the implication and an explicit `--det`** (`--det --no-det` runs on the wall clock) |
 | `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
 | `--tex-override=<name>[=<color>]` | the named texture resolves flat magenta (or your colour) everywhere it is used — "is this thing drawing at all?" |
@@ -190,6 +190,4 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **No plan is active.** Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything. Next work is unscheduled — pick from `backlog.md`, or scaffold a plan with `/new-plan`.
 
-**Two at-the-controls sign-offs are owed, both user-only.** M3 (weapons/destruction), archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md) — pass 1 flown 2026-07-25, items in `backlog.md`'s "Milestone 3 Polishing" and `playtest.md` §1. And the Wave D inspect tools, archived to [`docs/plans/PLAN-testing.md`](docs/plans/PLAN-testing.md) — `playtest.md` §9.
-
-**Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
+Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
