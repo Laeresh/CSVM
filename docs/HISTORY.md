@@ -7610,3 +7610,31 @@ separately, since getting it wrong either covers the desktop or launches somebod
 `--stage=empty` visible 55 of 59 samples, the same run with `--no-focus` hidden 52 of 58. New rules
 121 (minimized does not render, hidden does) and 122 (confirm the intervention took effect before
 crediting the result to it).
+
+## 2026-07-25 — the test run moved to a Windows desktop nobody is looking at
+
+Hiding a scripted run's window from `_Ready` left a ~1 s flash per launch — the window exists from
+~180 ms and `_Ready` cannot run before ~1180 ms — which is about nineteen flashes per `RunTests.ps1`.
+That second is unreachable from inside the engine, so the launcher stopped trying: `HiddenDesktop.ps1`
+creates a second Windows desktop with `CreateDesktop` and starts every Godot process on it via
+`CreateProcess` with `STARTUPINFO.lpDesktop`. A window belongs to the desktop its process was started
+on and only one desktop is ever displayed, so the question is settled before the process runs, which
+is the only kind of placement that works (rule 107). The engine-side `SW_HIDE` stays for ad-hoc runs
+that go through neither script.
+
+Going through `CreateProcess` by hand means building the std handles by hand too — inheritable
+`CreateFile` handles for stdout/stderr and `NUL` for stdin — because without them the GUI binary
+reattaches to the launching console and prints past every redirection (rule 119, two commits back).
+The summary now names the desktop it used: a silent fallback to the visible one is indistinguishable
+from success until windows start appearing, and by then nobody connects the two. A refused desktop
+degrades to a visible run rather than failing the tests, verified by asking for an invalid name.
+
+Verified: full `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens hash-identical,
+exit 0, 79.8 s — while a probe sampling our own desktop every 50 ms saw a Godot window in 0 of 700
+samples with Godot alive in 697 of them, and never saw one hold the foreground. Perf on the hidden
+desktop is unchanged: draw counts identical (198.2 / 900.5 / 907 / 2181 / 1192.1), frame costs within
+noise. The single-shot proof that the GPU still works there — golden `pixmd5` exact, 0 of 52 samples
+on our desktop, 50 of 52 on the new one — is kept as `analysis/hidden-desktop/`, together with the
+two rejected alternatives (create-minimized, which does not render; `--position`, which Godot
+clamps). New rule 123: `EnumWindows` only sees the calling desktop, so "no window found" is what
+success and a dead process look like alike.

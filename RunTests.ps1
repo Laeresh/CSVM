@@ -145,15 +145,14 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
     $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
 }
 
-# The engine hides a scripted run's window (PlaneViewer.HideScriptedWindow), but it can only do that
-# once _Ready runs -- measured 1.0 s after the window appears, which is Godot booting. --position is
-# applied at CREATION, so it puts that unavoidable second at the far edge of the desktop instead of
-# in the middle of whatever the user is reading. Godot clamps it to keep about a third of the window
-# on screen (5184 and 10000 both land at 4686 on a 5120-wide desktop), so this is as far out as the
-# engine allows -- it cannot be parked off-screen outright.
-Add-Type -AssemblyName System.Windows.Forms
-$VirtualScreen = [System.Windows.Forms.SystemInformation]::VirtualScreen
-$WindowOrigin  = "{0},{1}" -f ($VirtualScreen.Right + 64), $VirtualScreen.Top
+# Every launch goes on a separate, never-displayed Windows desktop, so nothing this script starts can
+# appear on screen at all. The engine hides its own window too, but only once _Ready knows the flags
+# -- measured 1.0 s after the window appears, which is Godot booting, times ~19 launches. A window
+# belongs to the desktop its process was started on, and that is fixed before the process runs.
+# Falls back to the visible desktop rather than failing: the tests must still run where it is
+# refused, just visibly.
+. (Join-Path $PSScriptRoot "HiddenDesktop.ps1")
+$HiddenDesktop = Open-HiddenDesktop
 
 if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
@@ -179,8 +178,12 @@ if (-not (Test-Path $ScratchDir)) {
 # back, so $p.ExitCode reads as empty and every stage scores a green run as FAIL. Both pipes are
 # drained asynchronously BEFORE the wait, or a chatty launch fills the ~4 KB buffer and deadlocks.
 #
-# Rule 63: ProcessStartInfo.Arguments is one string that the callee re-splits, and this repo's path
-# contains a space, so any argument carrying one is quoted here or Godot receives it split.
+# When the hidden desktop is open every launch goes there instead, which is the same call with the
+# std handles built by hand; the ProcessStartInfo path below is the fallback for a session that was
+# refused one, and is what keeps this readable as a plain process launch.
+#
+# Rule 63: the argument string is re-split by the callee, and this repo's path contains a space, so
+# any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
     param([Parameter(Mandatory=$true)][string[]]$Arguments)
     $quoted = @()
@@ -202,10 +205,16 @@ function Invoke-Godot {
             $streamBase = $Arguments[$i + 1]
         }
     }
+    if ($HiddenDesktop) {
+        # CreateProcess takes ONE command line and it must carry argv[0] itself.
+        $cmdLine = ('"{0}" {1}' -f $GodotExe, ($quoted -join " "))
+        return Invoke-OnHiddenDesktop -Exe $GodotExe -CommandLine $cmdLine `
+                                      -WorkingDirectory $RepoRoot `
+                                      -StdOut "$streamBase.out" -StdErr "$streamBase.err"
+    }
     $psi = New-Object System.Diagnostics.ProcessStartInfo
     $psi.FileName               = $GodotExe
-    # --position is an ENGINE argument, so it goes ahead of the scene, never after the `--`.
-    $psi.Arguments              = (@("--position", $WindowOrigin) + $quoted) -join " "
+    $psi.Arguments              = ($quoted -join " ")
     $psi.WorkingDirectory       = $RepoRoot
     $psi.UseShellExecute        = $false
     $psi.RedirectStandardOutput = $true
@@ -1101,6 +1110,14 @@ if ($env:CSVM_DATA_ROOT) {
     $dataRootLine += "$RepoRoot (this tree)"
 }
 Write-Host $dataRootLine
+# Say which desktop the launches went to. A silent fallback looks exactly like success until the
+# windows start appearing, and by then nobody connects the two.
+if ($HiddenDesktop) {
+    Write-Host "  windows: hidden desktop '$([CSVMHiddenDesktop]::Name)' -- nothing was drawn on your screen"
+} else {
+    Write-Host "  windows: THIS desktop -- the hidden one was refused, so launches were visible" -ForegroundColor Yellow
+}
+Close-HiddenDesktop
 if ($failedStages.Count -gt 0) {
     Write-Host ("  result: FAIL in {0} -- {1}s total, exit 1" -f ($failedStages -join ", "), (Format-Seconds $totalSeconds)) -ForegroundColor Red
 } else {
