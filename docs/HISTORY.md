@@ -6135,3 +6135,43 @@ scale conflict (0–100 formula vs shipped 1–9) are recorded as decisions to m
 
 **Docs-only change.** No engine code touched; `CLAUDE.md`'s "Current status" deliberately untouched —
 M4 is not scheduled and `PLAN-testing.md` remains the sole active plan.
+
+## 2026-07-25 — `playtest.md` reconciled with the design-documentation cross-check
+
+Folded the design cross-check (the sibling pass that produced `backlog.md`'s combat-fidelity
+entries) into the at-the-controls checklist, so nobody repeats it.
+
+**Retired.** §7's danger-zone item stops being a design investigation: the mechanism is settled —
+each zone has an entry volume and an exit volume and **both** must be crossed, which is exactly the
+"fly around the danger and still score" failure the one 15 m `DzRadius` sphere has, and it accounts
+for the two gate polygons each `dzpathN` mesh carries. It is now a post-fix verification. §1's E37
+item lost its convergence framing: the fixed reticle is airframe-locked with all weapons on that
+centre and the floating one exists only because inertia makes shots lag in a turn (velocity
+inheritance, already modelled), so `GunConvergenceDist` 250 m is a drawing distance, not a value to
+validate.
+
+**Given a written target so they are judgeable rather than A/B-able.** Gun visuals, from the retail
+captures (`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` + `…ejection2.png`):
+short yellow dashes, a yellow-core/orange-flame flash elongated forward at the **wing** mount one
+wing at a time, and ejection as a brass casing plus a white puff cluster that persists and drifts
+aft — a **trailing emitter**, since shot 2 has a cluster well aft while a fresh casing is still
+leaving the wing. The spec's calibre gate and underbelly mount are rejected against
+`CSVM/data/stock_loadouts.json` (the Bloodhawk's fit is 40-cal + 30-cal wing guns). Rocket trails
+are **per type** (HE white puffs, flak black, incendiary red-hued, sonic sine-wave), not one streak.
+Collision feel gets the spec's acceptance criteria — survivable canyon-wall bounce, billboard
+destroyed with the plane barely scratched, damage scaling with weight × speed × angle of attack and
+spreading to adjacent zones (ours is single-zone with neither term). The ammo gauge's dropped yellow
+tier is noted as having been a *heat*/jam axis, so the removal decision stands unchanged.
+
+**Three checks added** that were never on the list: the low-altitude warning should beep as well as
+flash; the stall warning should be graded, rising as the stall approaches, where ours is binary; and
+the damage gauge ramps Blue → Green → Yellow → Red above 20 % — that 20 % **matches our shipped
+`*_damage_red` exactly**, measured 0.20 on all 44 zone entries in `extracted/zrdr/vehicle.zrd.json`.
+
+**What the cross-check could not answer is now recorded in the file's header**, which is the point of
+the edit: §2 entirely (the original's multiplayer was networked — no splitscreen reference exists),
+every tuning question in §3–§5 (qualitative rules, no numbers), and in §8 the C3 spiderweb (its
+Hawaii mission-visuals list names fog, the bridge collapse, waterfalls, torches and seagulls, no
+web), patrol-boat hit points, map-edge continuation, north's world axis, and the crossed `pdpN_h`s.
+The crash "fireball leads the explosion by 0.5 s" claim was **not** added — `player_crash_dirt`
+authors the ground boom before the fireball cascade and contradicts it.
