@@ -7327,3 +7327,26 @@ corrections, the shipped command table, key mapping, seven combat-fidelity backl
 scoping and a reworked `playtest.md`. Its three verification rules renumbered to 108–110 behind
 main's, and three stale rule citations were corrected on the way — two of them pre-existing in main,
 left over from B12's own renumber.
+
+## 2026-07-25 — playtest.md trimmed to the owed list
+
+`playtest.md` had accumulated the record of what already passed, which made it a log rather than a
+checklist. Retired here so the file stays actionable:
+
+**Wave D inspect tools — all five passed at the controls 2026-07-25.** D31's zeppelin case, the
+acceptance test the plan named as the user's call, came back "works really good, exactly what i
+imagined". D32: the tree, search, framing, hide and the destructibles filter all work, and the
+500-row branch cap was judged well beyond what a human needs. D33: the panel, its readouts and the
+restore-on-close all work, and light steering works on world geometry. D35: the wireframes work and
+the no-collision warning path is confirmed. D34: it selects the right pool, the slider and
+kill/reset work, and the readout reads comprehensibly. §9 now carries only the six re-tests the
+follow-ups will need.
+
+**Milestone 3 pass 1 — retired from the checklist.** Passed 2026-07-25: destruction sound including
+secondary oil-tank explosions; pad bindings; gun rate, cadence and sound with in-flight muzzle
+alternation; rocket one-per-pull and its cooldown feel; the weapon selector's feel and default
+group; the gauge readouts; the reticle trailing the nose; and the collision behaviours — crashing
+into a building destroys the plane and leaves the building standing, while a filmset facade is
+flown through unharmed.
+
+The §1 failure bullets kept their re-test but lost their diagnosis, which duplicated `backlog.md`.

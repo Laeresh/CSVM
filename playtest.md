@@ -32,17 +32,9 @@ which world axis is north, and the crossed `pdpN_h` numbering.
 In-flight weapon keys: **Space** (pad B) guns · **F** (pad A) rockets, one per pull ·
 **G** (D-pad L) select gun group · **H** (D-pad R) select ordnance · R respawn.
 
-First pass **2026-07-25**: what passed is retired here; what produced a finding points to its
-numbered `backlog.md` "Playtest pass 2" item and is **re-scoped to a re-test once that fix lands**.
-Diagnosis lives in `backlog.md`; this stays the owed-list.
-
-**Passed 2026-07-25 (retired):** destruction sound (D31, incl. secondary oil-tank explosions) · pad
-bindings · gun rate/cadence/sound + in-flight muzzle alternation · rocket one-per-pull + 1 s cooldown
-feel · weapon-selector feel + default group · E35 gauge readouts · E37 reticle (pipper trails the
-nose) · C27 (crash into a building = plane crashes / building stands; fly through a filmset facade =
-pass through unharmed).
-
-**Re-test after the fix lands** (the fix is the numbered `backlog.md` "Playtest pass 2" item):
+Each item below is a **re-test owed once its fix lands**; the numbered pointer is its
+`backlog.md` "Playtest pass 2" entry, where the diagnosis lives. What already passed is recorded in
+`docs/HISTORY.md`, not here.
 
 - **Gun visuals — judge ours against the captures, don't A/B.**
   `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` + `…ejection2.png` settle it.
@@ -61,22 +53,18 @@ pass through unharmed).
   — and our extraction ships those as distinct emitters, so the fix is binding the per-type trail,
   not thickening today's one slim exhaust. *Look for:* each type trailing its own. → backlog 5.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1`
-- **Impacts over water / dirt (was D30 — FAILED).** Water shows **nothing** (the sea has no collider,
-  rounds pass through); dirt shows one big spark instead of small tumbling debris. After the fix: small
-  white splash sprites on the sea, small randomly-rotated debris on dirt. → backlog 7, 8.
+- **Impacts over water / dirt.** *Look for:* small white splash sprites on the sea, and small
+  randomly-rotated debris on dirt rather than one big spark. → backlog 7, 8.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1B` (over water) or `--chapter=C2`.
-- **Destruction effects (was D32 — FAILED).** Building and dirt rocket impacts look identical (both a
-  fireball puff); an oil-tank kill throws one puff that floats too high and lingers. After the fix:
-  buildings → fireball, dirt → light flash; the oil-tank fire sits at the wreck. → backlog 6, 9, 10.
+- **Destruction effects.** *Look for:* buildings giving a fireball and dirt a light flash — the two
+  telling apart — and an oil-tank fire sitting at the wreck instead of floating. → backlog 6, 9, 10.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`
-- **Damage stages + debris in flight (C23/C24/C26 — FAILED).** Guns-only into a tower showed **no
-  smoke→fire stages** (only the death blast), and wreck pieces fly on the wrong trajectory. After the
-  fix: stages render as HP falls; debris arcs correctly. → backlog 11, 12.
+- **Damage stages + debris in flight.** *Look for:* smoke then fire rendering as HP falls under
+  guns alone, not just the death blast, and wreck pieces arcing correctly. → backlog 11, 12.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`
-- **Killed door (C25 — FAILED ❌).** Shooting `kkgate`'s propane tank leaves the door in place with its
-  collider (original: door deactivates, pieces fly + fade, no collider). The `det==0` error in the same
-  run is a **separate** bug — it prints after the sequence has already completed and reported its swap,
-  so do not expect fixing one to fix the other. → backlog 13.
+- **Killed door.** *Look for:* shooting `kkgate`'s propane tank deactivating the door — pieces fly
+  and fade, collider gone. The `det==0` error in the same run is a separate bug; do not read one as
+  the other. → backlog 13.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`
 - **Empty-clip** — couldn't reach a dry gun group by hand (2000+ rounds); needs the low-ammo debug knob,
   and no rocket dry cue was heard. After: one empty cue per group, once. → backlog 16, 18.
@@ -249,96 +237,44 @@ pass through unharmed).
   question (see backlog "Milestone 3 Polishing").
 
 ---
+## 9 · Inspect-tool follow-ups (re-tests owed once each fix lands)
 
-## 9 · Inspect tools (PLAN-testing Wave D — the tools are yours to judge)
+The Wave D tools themselves passed and are retired; what remains is the re-test each follow-up
+will need. Diagnosis and traps live in [`backlog.md`](backlog.md)'s "Surfaces, colliders and
+inspect tools" section.
 
-> **✅ ALL FIVE PASSED — flown 2026-07-25.** The section is kept for the record of what was checked
-> and for the re-tests the follow-ups below will need. Verdicts, in the user's words: D31 "works
-> really good, exactly what i imagined"; D32 all five sub-checks work; D33 panel, reset and world
-> lighting work; D35 works, with the warning path confirmed; D34 selects, slides, kills and reads
-> comprehensibly. **Five follow-ups came out of it and are in `backlog.md`** — the surface
-> misclassification (which turned out to be a gameplay bug, not an overlay one), the collider
-> wireframe offset, the anim-lab plane selection gap, the node-lab hide affordance, and the damage
-> panel's layout. Stage visuals not showing in the world is recorded there as an
-> animation/visuals issue, deliberately not a D34 defect.
+- **Impact sound and effect on a mis-tagged surface.** The surface classifier tags some buildings
+  `water` and some water `buildings`, and the same tag picks the impact sound and effect — so a
+  building can answer a hit with a splash. **This is the ear's job: the wireframe colour is only
+  the symptom, the sound is the thing to judge.** *Look for:* gunfire into a C2 building giving a
+  ricochet and debris, not a splash; gunfire into water giving the splash; no building that sounds
+  wet. *Where:* `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire`, and press **C** with
+  `--collision` to see which surfaces the engine believes are which.
+  *Blocks:* closing the surface-classification item.
 
+- **Collider wireframes line up with their meshes.** They currently sit offset on one shared axis
+  while the colliders themselves are correct. *Look for:* the wireframe hugging the geometry it
+  belongs to, on world nodes, clutter and the plane's own boxes alike — those are three different
+  code paths and the offset may not be in all of them. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C2 --collision=show`.
 
-- **The zeppelin case — the acceptance test for the shared selection (D31).** The complaint this
-  exists to kill: clicking the zeppelin selects one of its motors with no way up. *Where:*
-  `./RunGame.ps1 --freecam --chapter=C1 --mission=M04 "--pos=-4848,200,-5165" "--direction=-1,0,0"`
-  puts the moored zeppelin broadside in front of the camera. **Click one of the engine nacelles**
-  along the hull, then **PgUp** repeatedly (**Home** jumps straight to the outermost rung, **End**
-  back to the leaf). *Look for:* the yellow breadcrumb line reading the ladder leaf-first with the
-  current rung bracketed; the wireframe box growing from the nacelle to the whole airship as you
-  walk up; the box staying on the object rather than lagging or floating. The scripted run says the
-  ladder is nine rungs — `g15 < l5 < healthy < lk_rightengine01 < lkgasbag01 < zfronthalf <
-  rock_zeppelin < noserotate < hk_zep` — so **the question is whether nine rungs plus Home feels
-  like "a way up", or whether it wants something smarter.** Also try a building, a truck and the
-  moving train, and try clicking terrain (by design nothing is selected — say if that reads as
-  broken rather than as a rule). In `--anim-lab` the camera should frame what you clicked and then
-  re-aim, without re-framing, as you walk the ladder. *Blocks:* D31 sign-off, and the shape of
-  D32–D35, which all act on this selection.
+- **Mesh-lab lighting on the player plane.** The plane cannot currently be selected in
+  `--anim-lab`, so the light-steering controls went unexercised on it. *Look for:* selecting the
+  plane, **M**, and the light sliders moving the shading on the aircraft rather than on the world.
+  *Where:* `./RunGame.ps1 --anim-lab --chapter=C1 --plane=player_bhawk`.
 
-- **The node lab at the controls (D32).** Everything about this panel except its readouts is
-  unverified: live keys and mouse are unscriptable here, so N, the expand arrows, the search field,
-  the buttons and the two-way click sync ran only through `--debug-nodelab` and by construction.
-  *Where:* the same zeppelin launch as above, plus `./RunGame.ps1 --freecam --chapter=C5` for the
-  big-world case (8,897 named nodes, 557 directly under the world root). **Press N.** *Look for:*
-  (a) **does the tree open where you are?** — click the zeppelin, the tree should scroll to that
-  node; click a tree row, the world highlight should follow. (b) **Expanding.** A branch fills only
-  when opened; a branch over 500 rows stops with a "… N more — use the search box" row. Does that
-  read as a limit or as a bug? (c) **Search.** Type a fragment; results are a flat list,
-  double-click frames the camera. Is filtering as you type fast enough in C5? (d) **Frame and
-  Hide.** Frame should put the camera on the thing and orbit it; Hide should grey the row and add
-  `(hidden)`. **Hide something an animation drives (a hangar door, the train) and watch it come
-  back** — that is the data re-showing it and is correct; the panel's `visible=`/`in_tree=` line is
-  how you should be able to tell. (e) **Destructibles.** Flip the switch: C1 should read
-  `defs 132 · instances 267 · node groups 196 · 12 unresolved def(s)`, red ⚠ rows for the twelve,
-  `2/2` root coverage and `9 ok` event coverage on the bound ones; expand one and click an instance
-  to jump to it. (f) **Layout.** Checked at 1280×720 only — in `--anim-lab` the panel is squeezed
-  between the breadcrumb and the timeline, and at other window sizes nothing has been looked at.
-  *Blocks:* D32 sign-off; the panel is also the reach-around for anything the click pick refuses
-  (terrain), so say if that path is discoverable.
+- **The node lab's hide affordance reads from the tree.** Hiding works and the button text flips,
+  but the row itself does not change. *Look for:* a hidden subtree being obvious in the tree
+  without clicking it, and a node an animation re-shows going back to looking visible on its own.
+  *Where:* `./RunGame.ps1 --freecam --chapter=C1`, **N**.
 
-- **M — the mesh lab on what you clicked (D33).** Everything scripted here was proven with
-  `--debug-*` stand-ins; the keypresses are by construction. *Where:*
-  `./RunGame.ps1 --freecam --chapter=C1 "--pos=-6140,185,-4340" "--direction=0.71,-0.17,0.68"`
-  puts a water tower in the middle of the frame. **Click it, press M.** *Look for:* the panel
-  appears bottom-left naming the object and its surface/triangle counts; the normal, wireframe,
-  cull and normal-source buttons act on **that object only**; **M again leaves the world exactly as
-  it was** (nothing dimmed, nothing z-fighting); clicking a *different* object while the panel is up
-  moves the lab onto it and restores the old one. Try the light rows on a world object — they should
-  say "target is fullbright — no light reaches it" and leave the world's own lighting alone (if the
-  sun ever moves, that is the bug this item exists to avoid). Then try the same on the anim lab's
-  parked plane (`--anim-lab --chapter=C1 --plane=player_bhawk`), where the light *should* work.
-  *Blocks:* D33 sign-off.
+- **The world damage panel's size.** Currently larger than its content, with a gap between the
+  no-controls notice and the debris line. *Look for:* it reading as one compact block.
+  *Where:* `./RunGame.ps1 --freecam --chapter=C1`, click a destructible, **H**.
 
-- **C — the collider wireframes (D35).** *Where:*
-  `./RunGame.ps1 --freecam --chapter=C2 --collision "--pos=-5585,49,-3908" "--direction=-0.66,-0.33,-0.66"`
-  (the gate) — press **C**. *Look for:* wireframes coloured world blue / water cyan / buildings
-  orange / clutter green, sitting ON the geometry rather than floating or z-fighting; the count line
-  top-left; C again clears them. Then **run the same command without `--collision`** and press C: it
-  must print "NO COLLISION BUILT IN THIS MODE" and draw nothing — if that ever draws an empty
-  overlay instead, it is lying. Judge whether the whole-chapter hairball is usable at range or wants
-  a radius; and in `--fly` (C works there too) whether the yellow airframe boxes read as the shape
-  the plane collides with. *Blocks:* D35 sign-off.
-
-- **The world damage lab at the controls (D34).** Same story: H, the slider drag and the Kill/Reset
-  buttons ran only through `--debug-damage` and by construction. *Where:*
-  `./RunGame.ps1 --freecam --chapter=C1` — find a water tower (or use N's search for `ap_h2otwr`),
-  **select it and press H**. *Look for:* (a) **Does H find the right thing?** Clicking a leaf deep
-  inside an object should still offer the enclosing pool — the panel's second line names the anchor a
-  hit would damage. Selecting something that is not a destructible should say so, not open empty.
-  (b) **The slider.** Dragging it down should escalate the damage stages as HP falls; dragging it
-  back **up** silently does a reset-then-re-damage (the data has no healing), so watch whether the
-  object visibly resets mid-drag and whether that reads as sane or as a glitch. (c) **Kill/Reset.**
-  Kill should swap the wreck in and throw debris a couple of seconds later; Reset should put the
-  tower back; a second Kill should look identical. (d) **The two-pool row.** `ap_h2otwr1` lists two
-  pools and only the first has controls, with a red line explaining why — is that comprehensible at
-  the controls, or does it read as a broken button? (e) **Effects.** A killed *building*
-  (`m_build01`) should burn; the water tower's smoke/fire **stages** deliberately do not render
-  outside flight (documented, not a bug) — say if the difference is confusing. (f) **Layout.**
-  1280×720 only; the panel is on the right, the node lab on the left, and in `--anim-lab` it is
-  squeezed above the timeline. *Blocks:* D34 sign-off.
-
----
+- **Destruction stages visible in the world, not just the panel.** A destroyed building burns, but
+  the water tower shows no smoke or fire — its stage puffers are outside the world-effects
+  runtime's fixed name set, so they start, log, and draw nothing. *Look for:* smoke at the damaged
+  stage and fire at the destroyed one, on the object, for every destructible you can kill.
+  *Where:* `./RunGame.ps1 --freecam --chapter=C1`, **H**, slide HP down and kill.
+  *Blocks:* nothing here — it is an animation/visuals item, not a damage-lab one.
