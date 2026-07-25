@@ -1,5 +1,6 @@
 using System;
 using CSVM.Flight;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Effects;
@@ -199,7 +200,9 @@ public sealed partial class Precipitation : Node3D
             Mesh = new QuadMesh { Size = Vector2.One },
             InstanceCount = count,
         };
-        var rng = new System.Random();
+        // The per-instance seeds baked into the MultiMesh custom data: the whole field's layout is
+        // this one draw sequence, so pinning it is what makes a rain/snow shot reproducible.
+        var rng = Rng.NewSystemRandom(Rng.Precip);
         for (int i = 0; i < count; i++)
         {
             _mm.SetInstanceTransform(i, Transform3D.Identity); // position comes from the shader

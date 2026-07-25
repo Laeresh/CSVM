@@ -141,16 +141,16 @@ public sealed partial class AnimRuntime : Node
     // and a normal bootstrap's ambient toggle is a no-op rather than a second bootstrap.
     private bool _ambientStarted;
 
-    // RANDOM_WEIGHT dice. A field rather than GD.Randf() so a seed can be pinned — the animation
-    // debugger sets one (see Seed) for a reproducible fixed-dt run; the game leaves it unseeded
-    // and so is unchanged. Any future WeaponHit/crash handler's randomness must route through this
-    // same _rng, or a lab restart stops being identical the day the handler lands.
+    // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
+    // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
+    // pin the whole sequence. Any future WeaponHit/crash handler's randomness must route through
+    // this same _rng, or a replay stops being identical the day the handler lands.
     private Random _rng = new();
     private int? _seed;
 
-    /// <summary>Pins the runtime's RNG for a reproducible run (the debugger's deterministic
-    /// clock). Null — the default — leaves it unseeded, so the game is unchanged. Set at
-    /// construction through the object initializer, before <see cref="Bind"/>.</summary>
+    /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
+    /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
+    /// at construction through the object initializer, before <see cref="Bind"/>.</summary>
     public int? Seed
     {
         init
@@ -161,16 +161,18 @@ public sealed partial class AnimRuntime : Node
         }
     }
 
-    /// <summary>Re-pins the RNG to the constructed <see cref="Seed"/>. The animation debugger
-    /// calls this on every Play/Restart so a seeded replay rolls the same dice as the launch —
-    /// without it the RNG stream would just continue and a "restart" would diverge on the first
-    /// RANDOM_WEIGHT. No-op when unseeded (the game, which never calls it either way).</summary>
+    /// <summary>Re-pins the RNG to the constructed <see cref="Seed"/>, and clears the sound groups'
+    /// last-picked memory with it — that recency state sits outside the RNG, so restoring only the
+    /// dice would still diverge on the first weighted pick. The animation debugger calls this on
+    /// every Play/Restart; without it the stream would continue and a "restart" would branch on the
+    /// first RANDOM_WEIGHT.</summary>
     public void Reseed()
     {
         if (_seed is { } s)
         {
             _rng = new Random(s);
         }
+        Sounds?.ResetGroupRecency();
     }
 
     /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),

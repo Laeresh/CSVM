@@ -87,8 +87,11 @@ namespace CSVM;
 ///                                controls — see UI.AnimLab. Wins over every other mode
 ///   --play-anim=name             (implies --anim-lab) play this def at launch and auto-frame
 ///                                the orbit camera on its anchor; composes with --screenshot
-///   --seed=N                     the lab's pinned RNG seed (default AnimLab.DefaultSeed) —
-///                                same seed, same dice, identical replay
+///   --seed=N                     the master seed every subsystem RNG derives from (gun spread,
+///                                crash sound, spawn, liveries, animation dice, particles) —
+///                                same seed, same run; different seeds genuinely branch. Pinned
+///                                to 1 by --det/--anim-lab/--effects-test, drawn from the clock
+///                                otherwise (the resolved value is logged, so it can be replayed)
 ///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
 ///                                world skips — AI/route data the original never renders); debug only
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
@@ -218,7 +221,6 @@ public partial class PlaneViewer : Node3D
     // The most specific mode of all, so it wins outright when combined with any other.
     private bool _animLab;
     private string? _playAnim;                      // --play-anim=<name>: play at launch (implies --anim-lab)
-    private int _labSeed = UI.AnimLab.DefaultSeed;  // --seed=N: the lab's pinned RNG seed
     // --debug-anim-ui: force the lab's picker + timeline visible in a scripted --screenshot run
     // (the timeline-verification path — the UI is otherwise hidden there so shots stay
     // byte-identical), the same house convention as --debug-livery.
@@ -278,10 +280,14 @@ public partial class PlaneViewer : Node3D
     private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
     private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
 
-    // --det: run the session on a fixed-dt sim clock, so frame N is the same sim state on every
-    // run whatever the render rate. The clock is all it does for now — seeding, spawn and livery
-    // pinning are still their own flags.
+    // --det: run the session on a fixed-dt sim clock with every RNG pinned, so frame N is the same
+    // sim state — and the same pixels — on every run, whatever the render rate.
     private bool _det;
+    // --seed=N: the master seed every subsystem generator derives from (see Utils.Rng). Null until
+    // resolved in _Ready: pinned runs take Rng.DefaultSeed, everything else draws from the clock.
+    private ulong? _seed;
+    private ulong _masterSeed;
+    private bool _seedPinned;
 
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
@@ -451,7 +457,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
             else if (arg == "--anim-lab") { _animLab = true; hasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { _playAnim = arg["--play-anim=".Length..]; _animLab = true; hasContentArg = true; }
-            else if (arg.StartsWith("--seed=")) { _labSeed = int.Parse(arg["--seed=".Length..]); }
+            else if (arg.StartsWith("--seed=")) { _seed = ulong.Parse(arg["--seed=".Length..]); }
             else if (arg == "--debug-anim-ui") { _debugAnimUi = true; _animLab = true; hasContentArg = true; }
             else if (arg == "--debug-anim") _debugAnim = true;
             // A connected pad with stick drift steers the free camera and nudges the flight
@@ -608,6 +614,16 @@ public partial class PlaneViewer : Node3D
         {
             _jitterDeg = _screenshotShots > 1 && !_det ? 0.15f : 0f;
         }
+        // The master seed. A deterministic run and the animation debugger (deterministic by nature
+        // — its whole point is an identical replay) pin it; --effects-test pins it too because its
+        // census gates several effects behind RANDOM_WEIGHT and has to be comparable run-to-run.
+        // Everything else draws from the clock, so the shipped game keeps its variety.
+        _seedPinned = _seed != null || _det || _animLab || _effectsTest;
+        _masterSeed = _seed ?? (_seedPinned ? Rng.DefaultSeed : Rng.TimeSeed());
+        // Applied here as well as per session so the dump tools — which quit before any session is
+        // built — still draw from the resolved master rather than a zero one.
+        Rng.Reset(_masterSeed, _seedPinned);
+        GD.Print($"rng: master seed {_masterSeed}" + (_seedPinned ? " (pinned)" : " (--seed=N to pin)"));
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -730,6 +746,9 @@ public partial class PlaneViewer : Node3D
     {
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
+        // Re-derive every subsystem RNG from the master before anything in the session draws, so a
+        // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
+        Rng.Reset(_masterSeed, _seedPinned);
         // One simulation clock per session. --det pins it to a fixed step in every mode; the
         // animation lab is fixed-dt by nature (an accumulator interactively, one step per rendered
         // frame when scripted); everything else runs at the wall delta, which is arithmetically
@@ -848,10 +867,12 @@ public partial class PlaneViewer : Node3D
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
                         // The lab: quiet stage (ambient playback deferred to its A toggle),
-                        // pinned RNG, archives kept open for interactive effect builds.
+                        // archives kept open for interactive effect builds.
                         KeepArchivesOpen = _animLab,
                         AutoStart = !_animLab,
-                        RuntimeSeed = _animLab ? _labSeed : null,
+                        // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
+                        // scatter — in every mode, not just the lab.
+                        RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                     },
                     gamez, textures, sounds, soundDefs, soundGroups);
                 _plane = session.Root;
@@ -1031,7 +1052,7 @@ public partial class PlaneViewer : Node3D
                     }
 
                     animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
-                        labStage, textures, sounds, _labSeed, _playAnim,
+                        labStage, textures, sounds, _masterSeed, _playAnim,
                         autoFrame: _camPos == null && _lookAt == null)
                     {
                         // Interactive shows the whole lab UI; a scripted --screenshot hides it so
@@ -1040,7 +1061,7 @@ public partial class PlaneViewer : Node3D
                         ShowUi = _screenshotPath == null || _debugAnimUi,
                     };
                     _worldRoot!.AddChild(animLab);
-                    GD.Print($"anim-lab: quiet stage, seed {_labSeed}, fixed dt 1/60"
+                    GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
                              + (_playAnim != null ? $", playing '{_playAnim}'" : "")
                              + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
                              + " P pause · . step · R restart · F picker; click an object to follow");
@@ -2126,18 +2147,13 @@ public partial class PlaneViewer : Node3D
         return scheme;
     }
 
-    /// <summary>The RNG the session's random liveries draw from. Seeded from the clock so
-    /// each map load repaints the field, or from --paint-seed for a reproducible run
-    /// (scripted screenshots need the same aircraft colours every time).</summary>
-    private RandomNumberGenerator NewPaintRng()
+    /// <summary>The RNG the session's random liveries draw from: the master seed's paint stream,
+    /// so an unpinned launch repaints the field and a pinned one repeats it. --paint-seed=N
+    /// overrides the derived seed, pinning liveries alone in an otherwise random run.</summary>
+    private RandomNumberGenerator NewPaintRng() => new()
     {
-        var rng = new RandomNumberGenerator();
-        if (_paintSeedExplicit)
-            rng.Seed = _paintSeed;
-        else
-            rng.Randomize();
-        return rng;
-    }
+        Seed = _paintSeedExplicit ? _paintSeed : Rng.SeedFor(Rng.Paint),
+    };
 
     private string PlaneFor(int index) =>
         _planeNames.Count == 0 ? _planeName : _planeNames[Math.Min(index, _planeNames.Count - 1)];
@@ -2285,10 +2301,9 @@ public partial class PlaneViewer : Node3D
             // The impact/death SOUND an effect def carries is already played by the projectile pool
             // (D30) or the world runtime (D31); this runtime only renders the puffers.
             SoundHandledElsewhere = true,
-            // The verify census must be reproducible; several gun effects gate their puffer behind
-            // RANDOM_WEIGHT, so an unseeded run reports a different set each time. The game leaves it
-            // unseeded (per-hit variety intact).
-            Seed = _effectsTest ? 20260724 : (int?)null,
+            // Several gun effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice
+            // decide which effects render at all — its own stream off the master seed.
+            Seed = Rng.IntSeedFor(Rng.Effects),
             PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                 ? cam.GlobalPosition
                 : Vector3.Zero,
@@ -2363,6 +2378,9 @@ public partial class PlaneViewer : Node3D
             // Crash() -> OnGroundExplosion(); this runtime has no audio session, so dispatching it
             // here would only emit the "silent for the session" warning. Render effects, not sound.
             SoundHandledElsewhere = true,
+            // Wreckage scatter and the crash def's RANDOM_WEIGHT verdicts. One seed per player off
+            // the crash stream, so splitscreen crashes differ from each other but repeat run to run.
+            Seed = Rng.NewIntSeed(Rng.Crash),
         };
         // Bind only the crash def's transitive CALL_ANIMATION closure (Subset), not the whole world
         // program: the full 800+ defs include ~150 generic-named world defs that would mis-anchor
@@ -2577,7 +2595,7 @@ public partial class PlaneViewer : Node3D
             return 0;
         return _spawnIndex >= 0
             ? Mathf.Clamp(_spawnIndex, 0, spawns.Count - 1)
-            : (int)(GD.Randi() % (uint)spawns.Count);
+            : (int)(Rng.Stream(Rng.Spawn).Randi() % (uint)spawns.Count);
     }
 
     /// <summary>Picks one player's flight spawn: a world position + a look-at point one unit

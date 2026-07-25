@@ -67,6 +67,11 @@ public sealed class SoundGroup
         _last = chosen;
         return Members[chosen].Name;
     }
+
+    /// <summary>Forgets which member was picked last. The recency memory lives outside the RNG, so
+    /// re-seeding a runtime alone would not replay a pick sequence — whoever re-seeds calls this
+    /// too (<see cref="AnimRuntime.Reseed"/> via <c>WorldSounds</c>).</summary>
+    public void ResetRecency() => _last = -1;
 }
 
 /// <summary>

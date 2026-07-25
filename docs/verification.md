@@ -229,14 +229,13 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     runtime-played puffer effect by confirming its def started — confirm a `Puffer` was *built*
     (a non-null factory), or you are measuring a no-op. Rendering impact/destruction puffers needs a
     dedicated world-effects runtime on that crash-runtime pattern (D32), not a call into the world runtime.
-77. **`CANNON_SPREAD` makes weapon-impact tests non-deterministic — a round hitting a given surface
-    is chance, not choice.** Each gun round's direction is jittered by `GD.Randf()` inside the spread
-    cone (unseeded), so whether the stream finds a specific patch (a lake, one building) varies
-    run-to-run even with a fixed `--hold` dive and `--no-pads`. Don't rely on "I hit water once";
-    pick a chapter whose **spawn sits over** the surface you want (measured: C1B/C2B dive → all water,
-    C4 → all buildings) so hits are reliable, and assert on the **once-per-name** effect breadcrumb,
-    not on a fixed impact count (the impact log itself caps at 8, so a later water hit still logs its
-    effect while the surface line is capped out).
+77. **A weapon-impact test is reproducible ONLY under `--det`/`--seed` — `CANNON_SPREAD` is a
+    per-round dice roll everywhere else.** Two `--det` C1B dives now log **8 of 8 identical impact
+    positions**; the same pair without a pinned master seed shares none. Unpinned, don't rely on "I
+    hit water once": pick a chapter whose **spawn sits over** the surface you want (measured:
+    C1B/C2B dive → all water, C4 → all buildings), and assert on the **once-per-name** effect
+    breadcrumb rather than a fixed impact count (the impact log caps at 8, so a later water hit
+    still logs its effect while the surface line is capped out).
 
 78. **Godot's physics tick is ALREADY a fixed 1/60 s, so "two runs log identical flight telemetry"
     cannot discriminate a fixed sim clock — vary the RENDER rate instead.** Two `--det` scripted
@@ -257,6 +256,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     build too. Find the surface first (the `texture scroll: N model(s)` log line says whether a
     chapter has any), frame it, and prove the pose is sensitive by perturbing the time value.
 
+81. **Seeding a generator does not make a subsystem reproducible while it carries mutable state
+    OUTSIDE that generator — find the other state before believing a replay.** `SoundGroup._last`
+    biases the next weighted pick away from the sound played last, so a re-seeded `AnimRuntime`
+    still diverges on the first `SOUND_GROUPS` pick unless `ResetRecency()` clears it in the same
+    breath.
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -276,16 +281,16 @@ If your diff lands here, suspect noise first:
 
 | Surface | Behaviour |
 |---|---|
-| `--fly` / `--stunt`, any pose | Useless for screenshot diffs — same-build floor 30–84% of pixels; A/B with `--viewer`/`--freecam` + pinned camera |
-| `--freecam` default camera | Random spawn per launch — pin with `--spawn=N` or `--campos`/`--lookat` |
-| Precipitation (C1C/C2B/C4) | ~5–6% frame difference same-build. `--det` pins the *fall* (clock-driven `csky_time`), NOT the per-instance seeds — a C2B rain shot still moves 4.75% run-to-run until A3 seeds them (0.00% measured with the seed pinned) |
+| `--fly` / `--stunt`, any pose | Useless for screenshot diffs — same-build floor 30–84% of pixels. **Even under `--det` a flight shot is not byte-identical** (2.71%, mean delta 1.08): the chase camera smooths on the raw wall delta by design, though the sim itself matches. A/B with `--viewer`/`--freecam` + pinned camera |
+| `--freecam` default camera | Random spawn per launch — pin with `--spawn=N`, `--campos`/`--lookat`, or `--det`/`--seed` (the pick draws from the `spawn` stream) |
+| Precipitation (C1C/C2B/C4) | ~5–25% frame difference without `--det`. Pinned outright by it — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two `--det` runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
 | C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |
 | UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two identical `--det` runs; `--det` now pins it to 0.00% |
-| Puffer particle spread (waterfall mist, crash smoke) | Unseeded RNG — 0.52% of a C1 waterfall frame between two `--det` runs, all of it inside the mist; A3's master seed, not the clock |
-| Bootstrap `unresolved` op count | `RandomWeight` dice — 100–107 on one unchanged build |
+| Puffer particle spread (waterfall mist, crash smoke) | Pinned by the master seed (`puffer` stream): the C1 waterfall moved 0.47% of the frame between two `--det` runs before A3, **0.00%** after |
+| Bootstrap `unresolved` op count | `RandomWeight` dice — varies run-to-run unpinned (100–107 measured once); pinned by `--det`/`--seed`, which seeds the world `AnimRuntime` in every mode, not just the lab |
 | Damage-lab fire trails | 413–479 px between runs on a single tree |
-| Liveries in flight | Randomised per player per load — pin with `--paint-seed=N` |
-| Any world view | Not frame-deterministic without `--det` — measure the same-build floor first. Under `--det` the clock and shader time are pinned; what is left is the unseeded RNGs above |
+| Liveries in flight | Randomised per player per load — pinned by `--det`/`--seed=N`, or by `--paint-seed=N` alone (measured: a random-livery `--viewer` shot moves 3.39% of pixels unpinned, 0.00% under `--det`) |
+| Any world view | Not frame-deterministic without `--det` — measure the same-build floor first. **Under `--det` a `--freecam`/`--viewer` shot is byte-identical**: clock, shader time and every RNG are pinned (measured md5-equal on C1 falls, C2B rain, C4 snow) |
 
 ## The standing checklist
 

@@ -1,5 +1,6 @@
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -18,7 +19,7 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _engine, _whine, _rattle;
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
-    private readonly List<(AudioStreamWav stream, float volume)> _crashSounds = new();
+    private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
     private AudioStreamPlayer? _groundExp;
     private float _groundExpVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
@@ -69,9 +70,13 @@ public partial class FlightAudio : Node
         // Crash explosions: the game defines snd_exp_plane1..4 as a set; pick one at
         // random per crash, like the original.
         for (int i = 1; i <= 4; i++)
+        {
             if (defs.TryGetValue($"snd_exp_plane{i}", out var def)
                 && archive.Find(def.WavName, looped: false) is { } stream)
-                _crashSounds.Add((stream, def.Volume));
+            {
+                _crashSounds.Add((def.Name, stream, def.Volume));
+            }
+        }
         if (_crashSounds.Count > 0)
         {
             _crash = new AudioStreamPlayer();
@@ -215,10 +220,13 @@ public partial class FlightAudio : Node
         _rattle?.Stop();
         if (_crash == null)
             return;
-        var (stream, volume) = _crashSounds[(int)(GD.Randi() % (uint)_crashSounds.Count)];
+        var (name, stream, volume) = _crashSounds[
+            (int)(Rng.Stream(Rng.FlightAudio).Randi() % (uint)_crashSounds.Count)];
         _crash.Stream = stream;
         _crash.VolumeDb = Mathf.LinearToDb(Mathf.Max(SilenceThreshold, volume));
         _crash.Play();
+        // Which of the four explosions played — the only trace this pick leaves outside the speakers.
+        GD.Print($"crash sound: {name}");
     }
 
     /// <summary>The ground/dirt crash's earth-impact boom (snd_exp_ground_a), layered over the
