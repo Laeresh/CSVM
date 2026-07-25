@@ -6517,3 +6517,92 @@ upper one, so a count under ~1,000 px means "not shown" and an exact figure mean
 And 8 bits a channel leave ~200k reachable colours, so 4 of C1's 882 textures hash to the same one;
 each collision is warned by name and counted in the map, never silently resolved by nudging a
 colour, which would make it depend on load order.
+
+## 2026-07-25 — PLAN-testing C25: test stages `--stage=empty` and `--node=<cs_name>`
+
+Two stages that replace the chapter world when the chapter world is not the thing under test.
+
+**`--stage=empty`** — a third branch in `StartSession` beside the world build and the parked plane:
+`src/Mech3/EmptyStage.cs` builds a flat 20 km ground plane under a **grid drawn pixel-by-pixel in
+code** (256² texture, 100 m squares, tiled 200×; nothing committed, nothing extracted) plus one
+sunk `BoxShape3D` whose top face is y=0, and `_worldMode` goes false so `gamezPath` resolves to
+planes.zbd instead of a chapter. No mission setup, no clutter, no animation program, no weather, no
+skydome, no edge extender. The plane starts over the grid origin at 300 m; `--pos`/`--direction`
+still win; `--freecam --stage=empty` gives the plane-less grid.
+
+*Measured.* Warm, three runs each: `[perf] startup mode=fly stage=empty total=1951.0/1939.4/1992.5
+boot=1019/1075/1122 gamez≈490 world≈20 plane≈150 first_frame≈48` against `--chapter=C1` flight's
+`total=4535.6/4474.2/4547.0` — the build alone (`total − boot − first_frame`) is 877/821/824 ms vs
+3355. A scripted dive with `--fire` logs guns hitting the plane: `impact: wep_40 (40slug) -> Default
+at (7,0,-780) on ground/col` (8 of 8 on `ground/col`), then `CRASH into ground/col (fuselage)
+impact=(1,0,-310) spd=138 m/s`. Rockets work too — `--fire-rockets` logs `wep_06 (BOOM) -> Default
+at (-4,0,-557) on ground/col`, and one that reached RANGE first detonates in mid-air (`on /`) as it
+does anywhere. Two `--det` runs of the same scripted flight are **0 of 921,600 px** apart.
+
+*Two limits, both because there is no chapter gamez:* rockets fly without their FLYOUT body model
+and pylons carry no mounted ordnance (the prototypes live in the chapter world; `ProjectilePool`
+already null-returns them in any world-less mode), and there is no world-effects runtime, so an
+impact draws the spark fallback rather than a named puffer effect. Documented in `docs/cli.md`.
+
+**`--node=<cs_name>`** — `WorldBuilder.BuildNode` slices one named subtree instead of walking the
+world, placed at its **world** transform (`GameZ.WorldTransformOf`, not its own `Local`). Matching
+is on the source name with the `.flt` suffix optional (rule 60); duplicates are normal, so the whole
+match list is logged (`hk_zep#3145`), the first is built, and ambiguity warns. A miss lists the names
+containing the request and quits cleanly — `--node=zeppelin` → `rock_zeppelin, tilt_zeppelin,
+move_zeppelin`, exit 0; `--node=qqzzxx` says nothing contains it either. Three steps are switched
+off: mission setup (it would switch the subject off — C1/IA1 hides `hk_zep`), clutter, and the
+origin-parked registration (`HideUnplacedEntities` would hide exactly the transformless vehicle a
+node run asks for). `--viewer --chapter=C1 --node=hk_zep` shows the zeppelin alone and framed;
+`--anim-lab --node=ap_radiotwr --play-anim=radiotwr_destruction` plays its destruction on the tower.
+
+**The anim-bind audit — the open half the plan flagged as direction-sound — found no throw and two
+silent degradations that look identical from outside.** `AnimRuntime.Bind` never throws on a mostly
+absent world: a def whose NAME resolves nothing gets `Anchors() == []` and is `continue`d, so *no
+handler ever fires*; a def that IS anchored but names a node the build skipped bumps `_opsUnresolved`
+and dispatches into nothing, so *the node is not here*. Both leave a still object, which is rule 47
+exactly. The bind now runs an opt-in per-definition census (`ReportResolution`, set only for a node
+stage) that separates them and names the cause: measured on C1 `--node=hk_zep`, `bind census
+defs=813 anchored_by_name=50 anchored_by_root_lift=0 root_lift_suppressed=0 unanchored=763
+target_missing_ops=134`, with every one of the 134 `why=index-not-built` (the compiled symbol table's
+gamez index was never built) rather than `name-no-match`.
+
+**The finding that changed code:** `MaxRootLift`'s premise is a *whole-world* node count, and a
+partial world inverts it. The 16-match cap exists so a generic `ANIMATION_ROOT_NAME` (`healthy`,
+217× in C1) cannot anchor a def onto every building — but a single subtree drops *under* the cap.
+C1's 20-node `ap_radiotwr` first bound **95 lifted defs and 91 phantom destructible instances**
+(`pass_plane01`, `air_gen`, `destroy_aagun32`, twelve crates …). `SuppressRootLift`, set only for a
+node stage, refuses the lift and prints the refusals: the same stage now binds 1 def and 2
+destructible instances, and the lab's picker lists what actually belongs to the subject. Standing
+rules: `docs/verification.md` 91.
+
+**A second trap, caught by the picture not the log:** the first framed `--node=` capture put the
+zeppelin at 50 px near the horizon. `OrbitCamera.MergedAabb` merges over the LIVE tree, and
+`MeshLab` parks three **empty** overlay meshes at the session origin — invisible for a parked plane
+or a whole world (both already contain the origin), but it stretched the subtree's box from 419 m to
+5.3 km and framed the camera 12 km out. `FrameCamera` now takes the box measured at build time from
+`WorldBuilder.DetachedWorldAabb` (built meshes + node transforms, valid before the subtree joins the
+tree — rule 28's own point). `docs/verification.md` 92. The anim lab's own auto-frame is also turned
+off on a node stage: re-aiming on every Play swung the camera off the only object present (measured
+— the tower left the frame on its own destruction; reproduced on the unchanged full-world path, so
+it is the lab's pre-existing behaviour, not a regression).
+
+**Inertness.** Both flags absent, five modes captured on the pre-C25 binary and on this one at the
+same `--det --frames=60`: `--freecam --chapter=C1`, `--viewer --plane=player_bhawk`, `--viewer
+--chapter=C1`, `--chapter=C1` (flight) and `--anim-lab --chapter=C1` are **md5-identical decoded
+pixels, 0 of 921,600 px** each. The compare is seen able to fail (rule 15): the node stage against
+the same pose differs by 18.30 %. Rule 11's proof that the baseline binary really was the old one:
+it ignored `--node=hk_zep` and produced a shot pixel-identical to plain `--viewer --chapter=C1`.
+8-chapter `--freecam` regression **sound-enabled** (no `--mute`), 150 frames each: **0 engine
+`ERROR:` lines on every chapter**. `.\RunTests.ps1`: `build PASS · units PASS 149/149 · engine PASS
+7/7, engine errors clean (1 allowlisted) · goldens TODO`, `result: PASS -- 21.8s total, exit 0`.
+
+*Flag guards, each exercised:* `--stage=empty --viewer` reports "has no gamez to inspect" and falls
+back to the parked-plane viewer; `--node= --fly` reports "is a single-subtree inspection stage" and
+takes the viewer; `--stage=lagoon` is reported, not guessed. `--stage=empty --players=2` builds the
+splitscreen rig and fans the pair abreast (`spawn [P1 override] pos=(0,300,0)` / `[P2 override]
+pos=(60,300,0)`).
+
+**Not verified.** No interactive pass — the node stage's orbit drag, the lab transport on a one-node
+world and the empty stage's feel at the controls are all unflown. The suppressed root-lift is right
+for an inspection stage by construction; whether some future consumer wants the lifted anchors back
+is a question this leaves open.

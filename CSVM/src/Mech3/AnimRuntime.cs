@@ -57,6 +57,37 @@ public sealed partial class AnimRuntime : Node
 
     private int _opsApplied, _opsUnresolved;
 
+    // ---- bind-time resolution census (--node= stages; see ResolutionLines) ---------------------
+    // Off unless ReportResolution is set, so a normal session collects nothing and logs nothing.
+    private enum AnchorKind { ByName, ByRootLift, LiftSuppressed, None }
+
+    private bool _censusOpen;
+    private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
+    private readonly List<string> _censusUnanchoredNames = new();
+    private readonly List<string> _censusLiftedNames = new();
+    private readonly List<string> _censusSuppressedNames = new();
+    private readonly List<string> _censusMissingTargets = new();
+    private int _censusAnchored, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
+    private const int CensusCap = 12;
+
+    /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
+    /// <see cref="ResolutionLines"/>. Set before <see cref="Bind"/> by a caller that built only
+    /// part of the world (the <c>--node=</c> stage), where "this def did nothing" is the normal
+    /// case and needs to be told apart from a defect. Default false: a full-world session collects
+    /// nothing, so this is inert when nobody asks for it.</summary>
+    public bool ReportResolution;
+
+    /// <summary>
+    /// Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds. Set only by
+    /// a caller that built part of the world, because <see cref="MaxRootLift"/>'s premise is a
+    /// WHOLE-WORLD node population: 'healthy' appears 217× in C1, so the cap rejects it there — and
+    /// a single-subtree stage drops under the cap, at which point 95 unrelated definitions anchor
+    /// onto whatever generic child the subtree happens to own (measured on C1's 20-node
+    /// <c>ap_radiotwr</c>: 95 lifts and 91 phantom destructible instances). Suppressed lifts are
+    /// counted and reported, never silently dropped.
+    /// </summary>
+    public bool SuppressRootLift;
+
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
     /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
@@ -186,6 +217,9 @@ public sealed partial class AnimRuntime : Node
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _root = worldRoot;
         _program = program;
+        // The census covers the bootstrap passes only — after this method a miss is a runtime
+        // event with its own reporting, not a statement about what the bind could reach.
+        _censusOpen = ReportResolution;
         IndexWorld(worldRoot);
         long indexMs = sw.ElapsedMilliseconds;
 
@@ -282,6 +316,117 @@ public sealed partial class AnimRuntime : Node
         ReportConditions();
         ReportRetargets();
         ReportUnhandled();
+        _censusOpen = false;
+    }
+
+    /// <summary>
+    /// The bind-time resolution census, ready to log — empty unless <see cref="ReportResolution"/>
+    /// was set. It exists because <b>two different failures look identical from outside</b> a
+    /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
+    /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
+    /// event names a node <i>this subtree does not contain</i>. Both leave the object still. The
+    /// lines name which happened, per definition.
+    ///
+    /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
+    /// lift is capped at 16 matches precisely so a generic root like <c>healthy</c> (217× in C1)
+    /// cannot anchor a definition onto every building — and a single-subtree stage drops under that
+    /// cap, so defs that never anchor in the full world would anchor here, onto whatever generic
+    /// child the subtree happens to own. <see cref="SuppressRootLift"/> refuses them and this
+    /// reports the refusal, because a silently-different anchor set is the trap.</para>
+    /// </summary>
+    public IReadOnlyList<string> ResolutionLines()
+    {
+        var lines = new List<string>();
+        if (!ReportResolution)
+        {
+            return lines;
+        }
+        int defs = _censusAnchored + _censusLifted + _censusSuppressed + _censusUnanchored;
+        lines.Add($"bind census defs={defs} anchored_by_name={_censusAnchored} "
+                  + $"anchored_by_root_lift={_censusLifted} root_lift_suppressed={_censusSuppressed} "
+                  + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
+        if (_censusUnanchored > 0)
+        {
+            lines.Add($"bind unanchored={_censusUnanchored} — no handler ever fires for these: "
+                      + Sample(_censusUnanchoredNames, _censusUnanchored));
+        }
+        if (_censusLifted > 0)
+        {
+            lines.Add($"bind root_lifted={_censusLifted} — anchored only because this subtree has "
+                      + $"≤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
+                      + Sample(_censusLiftedNames, _censusLifted));
+        }
+        if (_censusSuppressed > 0)
+        {
+            lines.Add($"bind root_lift_suppressed={_censusSuppressed} — these WOULD have anchored on "
+                      + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
+                      + $"node count rules out; refused so the stage shows only defs that name it: "
+                      + Sample(_censusSuppressedNames, _censusSuppressed));
+        }
+        if (_censusMissing > 0)
+        {
+            lines.Add($"bind target_missing={_censusMissing} — the def IS running, the node is not in "
+                      + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
+        }
+        return lines;
+    }
+
+    private static string Sample(List<string> shown, int total) =>
+        string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
+
+    // One census entry per definition identity (anchor name + animation name — AnimProgram's own
+    // dedupe key), because the bootstrap asks for a def's anchors on more than one pass.
+    private void RecordAnchoring(AnimDefinition def, AnchorKind how)
+    {
+        if (!_censusOpen || !_censusSeen.Add((def.Name, def.AnimName ?? "")))
+        {
+            return;
+        }
+        string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+        switch (how)
+        {
+            case AnchorKind.ByName:
+                _censusAnchored++;
+                break;
+            case AnchorKind.ByRootLift:
+                _censusLifted++;
+                if (_censusLiftedNames.Count < CensusCap)
+                {
+                    _censusLiftedNames.Add($"{label}→{def.RootName}");
+                }
+                break;
+            case AnchorKind.LiftSuppressed:
+                _censusSuppressed++;
+                if (_censusSuppressedNames.Count < CensusCap)
+                {
+                    _censusSuppressedNames.Add($"{label}→{def.RootName}");
+                }
+                break;
+            default:
+                _censusUnanchored++;
+                if (_censusUnanchoredNames.Count < CensusCap)
+                {
+                    _censusUnanchoredNames.Add(label);
+                }
+                break;
+        }
+    }
+
+    // An event that named a node the bind could not reach. `why` separates the two causes, which
+    // otherwise read the same: the compiled symbol table bound the name to a gamez node this build
+    // never created, versus name resolution finding no match at all.
+    private void RecordMissingTarget(AnimDefinition def, string refName, string why)
+    {
+        if (!_censusOpen)
+        {
+            return;
+        }
+        _censusMissing++;
+        if (_censusMissingTargets.Count < CensusCap)
+        {
+            string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+            _censusMissingTargets.Add($"{label} ref={refName} why={why}");
+        }
     }
 
     /// <summary>Runs the two ambient-playback bootstrap passes — pass 2 (ACTIVATION ON_STARTUP
@@ -3048,16 +3193,28 @@ public sealed partial class AnimRuntime : Node
         if (string.IsNullOrEmpty(def.Name))
             return new List<Node3D?>();
         var anchors = FindAll(def.Name, null).Cast<Node3D?>().ToList();
+        var how = anchors.Count > 0 ? AnchorKind.ByName : AnchorKind.None;
         if (anchors.Count == 0 && def.RootName != null)
         {
             var roots = FindAll(def.RootName, null);
             if (roots.Count > 0 && roots.Count <= MaxRootLift)
-                anchors = roots
-                    .Select(n => n.GetParent() as Node3D)
-                    .Where(p => p != null)
-                    .Distinct()
-                    .ToList();
+            {
+                if (SuppressRootLift)
+                {
+                    how = AnchorKind.LiftSuppressed;
+                }
+                else
+                {
+                    anchors = roots
+                        .Select(n => n.GetParent() as Node3D)
+                        .Where(p => p != null)
+                        .Distinct()
+                        .ToList();
+                    how = anchors.Count > 0 ? AnchorKind.ByRootLift : AnchorKind.None;
+                }
+            }
         }
+        RecordAnchoring(def, how);
         return anchors;
     }
 
@@ -3083,6 +3240,7 @@ public sealed partial class AnimRuntime : Node
             if (!NameResolveFallback)
             {
                 _opsUnresolved++;
+                RecordMissingTarget(def, refName, "index-not-built");
                 return new List<Node3D>();
             }
         }
@@ -3102,7 +3260,10 @@ public sealed partial class AnimRuntime : Node
             return new List<Node3D>();
         var targets = ResolvePath(path, anchor, def.LocalNodesOnly);
         if (targets.Count == 0)
+        {
             _opsUnresolved++;
+            RecordMissingTarget(def, string.Join("/", path), "name-no-match");
+        }
         return targets;
     }
 

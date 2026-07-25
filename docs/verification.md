@@ -338,14 +338,28 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     `--quit-after 120` and 3361 ms at `--quit-after 3`. And `boot` is engine start → build start, so
     on a launchscreen-driven rebuild it silently contains however long the menu was up.
 
-91. **"Is this drawing at all?" is `--tex-override`, not a census count — the census is the map that
+91. **A heuristic tuned against a WHOLE-WORLD population inverts when you build part of that
+    world — re-derive its premise before reusing it on a slice.** `AnimRuntime`'s
+    `ANIMATION_ROOT_NAME` lift is capped at 16 matches precisely because `healthy` appears 217× in
+    C1; a `--node=ap_radiotwr` stage has two, so the cap passes and **95 unrelated definitions
+    anchored onto the radio tower, registering 91 phantom destructible instances** (1 def and 2
+    instances with the lift refused). The smaller world did not merely show less — it showed more,
+    and wrongly.
+
+92. **Measure a subject's bounding box before other systems parent nodes into its subtree.** A merge
+    over the live tree takes whatever is there: `MeshLab`'s three EMPTY overlay meshes sit at the
+    session origin, which is invisible for a parked plane or a whole world (both already contain the
+    origin) and stretched a `--node=` subtree's box from 419 m to 5.3 km, framing the camera 12 km
+    off the only object in the scene.
+
+93. **"Is this drawing at all?" is `--tex-override`, not a census count — the census is the map that
     tells you which texture to override.** One texture forced to a flat colour is exact and needs no
     separation: C1/M04's moored zeppelin measured **113,947 magenta px against 0 in the same shot
     without the flag**, with every one of the 114,820 changed pixels inside the hull. A `--tex-census`
     count of the same surface at the same pose reads **88,301** — a lower bound, because shading
     moves a flat far enough to contest its crowded neighbours.
 
-92. **Read a census count as a range, never a number, and run census shots with `--no-fog`.** `px` is
+94. **Read a census count as a range, never a number, and run census shots with `--no-fog`.** `px` is
     a lower bound and `px + contested` an upper one; a texture that cannot be on screen still picks
     up stray pixels, so **treat a confident count under ~1,000 px as "not shown"** (measured worst
     case 575 px over 60 textures that exist only in other chapters). Fog is not a thing to tolerate:

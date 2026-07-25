@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☐ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history
 23. ☐ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels
 24. ☑ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites) **(done 2026-07-25 — hooked into `TextureArchive.Find`; classification is chromaticity with a measured tolerance; counts are lower bounds; `docs/HISTORY.md`)**
-25. ☐ C25 — Test stages: `--stage=empty` and `--node=<cs_name>`
+25. ☑ C25 — Test stages: `--stage=empty` and `--node=<cs_name>` **(done 2026-07-25 — `src/Mech3/EmptyStage.cs` + `WorldBuilder.BuildNode`; the anim-bind audit's findings are in the item's landing note, and C22/Wave D depend on them; `docs/HISTORY.md`)**
 26. ☐ C26 — Flight camera views: held-numpad perspectives around the plane + scripted `--view=`
 
 ### Wave D — Inspect layer
@@ -536,7 +536,7 @@ C23's problem, not this item's. What landed instead is the reusable helper (`Tex
 already driving the `--screenshot` count report) plus `tex-dropin`, which asserts the invariant the
 whole instrument rests on: the flatten repaints RGB and moves nothing else.
 
-## C25 ☐ Test stages: `--stage=empty` and `--node=<cs_name>`
+## C25 ☑ Test stages: `--stage=empty` and `--node=<cs_name>`
 
 **Goal.** (a) `--stage=empty`: no gamez at all — a flat `StaticBody3D` ground plane with a generated grid texture, default sky/sun, plane at origin; flight, weapons and colliders fully functional; boots in ~a second. The stage for flight-model and ballistics suites and clean effect shots. (b) `--node=<name>`: `--viewer`/`--anim-lab` builds **only** the matching `cs_name` subtree from the chapter's gamez, camera auto-framed on it — the zeppelin alone, one building, one destructible.
 
@@ -547,6 +547,43 @@ whole instrument rests on: the flatten repaints RGB and moves nothing else.
 **Verify.** Empty: a flight suite takes off, fires, impacts the ground plane (impact log), `--perf` startup < ~2 s. Node: `--viewer --chapter=C1 --node=<the zeppelin's cs_name>` shows the zeppelin alone, framed; `--anim-lab --node=…` plays its def; a bogus name lists candidates and exits cleanly. 8-chapter regression untouched (both flags absent = today's paths, byte-identical shot on one chapter as the inertness check).
 
 **⚠ Traps.** Rule 28 (file bboxes are node-frame — world-frame the auto-framing math); flat-position child indexing (`gotchas.md`) when slicing the subtree; a def whose condition reads a *missing* sibling must degrade to logged-skip, not a throw (rule 47's two-failures-look-identical — log which of "handler doesn't fire" vs "node doesn't exist" happened).
+
+**Landed 2026-07-25** — `src/Mech3/EmptyStage.cs` (a third `StartSession` branch beside the world
+build and the parked plane) and `WorldBuilder.BuildNode`/`MatchNodes`/`SuggestNodes` +
+`WorldSession.Options.NodeSubtree`. Evidence in `docs/HISTORY.md`. Measured: the empty stage boots
+in **1939–1993 ms** warm (build alone 821–877 ms) against C1 flight's 4474–4547 (3355), guns and
+rockets both impact `ground/col`, and two `--det` runs are 0 of 921,600 px apart. Inertness: five
+modes md5-identical to the pre-C25 binary, 8-chapter sound-enabled `--freecam` at 0 engine errors,
+`RunTests.ps1` PASS (149 units, 7 suites, exit 0).
+
+**The anim-bind audit, which C22 and Wave D depend on.** `AnimRuntime.Bind` **never throws** on a
+mostly-absent world — it degrades in two ways that are indistinguishable from outside, which is rule
+47 verbatim: an unanchored def is `continue`d (*no handler ever fires*) and an anchored def whose
+event names an unbuilt node bumps `_opsUnresolved` and dispatches into nothing (*the node is not
+here*). `ReportResolution` (node stages only) now separates them per definition with a cause —
+C1 `--node=hk_zep`: `anchored_by_name=50 unanchored=763 target_missing_ops=134`, all 134
+`why=index-not-built`, none `name-no-match`.
+
+**The finding that changed code, and the one Wave D must not undo:** `MaxRootLift` is calibrated on
+a WHOLE-WORLD node count and inverts on a slice. C1's 20-node `ap_radiotwr` bound **95 lifted defs
+and 91 phantom destructible instances** because it holds 2 `healthy` nodes where the full world holds
+217. `AnimRuntime.SuppressRootLift` (node stages only, refusals counted and printed) takes that to 1
+def / 2 instances. **D32's node lab and D34's HP slider read the same registry**, so anything that
+builds part of a world must set it or show fabricated destructibles.
+
+**Two deviations from the item text, both forced by measurement.** (1) The framing box cannot come
+from a merge over the live tree: `MeshLab` parks three EMPTY overlay meshes at the session origin,
+which stretched the subtree's box from 419 m to 5.3 km and framed the camera 12 km away —
+`FrameCamera` now takes a box measured at build time by `WorldBuilder.DetachedWorldAabb`
+(verification rule 92). (2) The anim lab's `autoFrame` is OFF on a node stage; its per-Play re-aim
+threw the tower out of frame on its own destruction (reproduced on the unchanged full-world path, so
+pre-existing lab behaviour, not a regression).
+
+**Residuals.** No interactive pass — orbit drag on a node stage, lab transport on a one-node world,
+and the empty stage at the controls are unflown. On the empty stage rockets fly without their FLYOUT body and impacts draw the spark
+fallback, both because the prototypes and the world-effects runtime live in a chapter gamez —
+stated in `docs/cli.md` rather than worked around, since C22's scenario list wants the cheap stage,
+not a half-loaded chapter.
 
 ## C26 ☐ Flight camera views: held-numpad perspectives + scripted `--view=`
 
