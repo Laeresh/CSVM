@@ -102,6 +102,9 @@ namespace CSVM;
 ///                                under a flag that would otherwise imply --det
 ///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
 ///                                world skips — AI/route data the original never renders); debug only
+///   --debug-select[=x,y[,up]]    (--freecam/--anim-lab) synthetic click at that screen position on
+///                                the first frame, then `up` rungs of PgUp — logs the whole
+///                                cs_name ancestor ladder with each rung's world-frame box
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
 ///                                ia.json spawn_points); story missions (M0x) fall back to
 ///                                objectives.json PLAYER_INIT. Pair with --chapter= to match the world
@@ -241,6 +244,9 @@ public partial class PlaneViewer : Node3D
     // camera. The testing view for animation work: park in front of a moving object and watch.
     private bool _freecam;
     private SpectatorCamera? _spectator;
+    // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
+    // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
+    private UI.SelectionService? _selection;
     // --anim-lab: the animation debugger — the chapter world as a
     // quiet stage under a deterministic fixed-dt clock with def-playback transport (UI.AnimLab).
     // The most specific mode of all, so it wins outright when combined with any other.
@@ -265,6 +271,7 @@ public partial class PlaneViewer : Node3D
     private int? _debugLivery;
     private string? _debugMesh;  // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
     private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
+    private string? _debugSelect; // --debug-select[=x,y[,up]]: scripted click + ladder walk (freecam/anim-lab)
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
@@ -539,6 +546,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-mesh=")) _debugMesh = arg["--debug-mesh=".Length..];
             else if (arg == "--debug-names") _debugNames ??= "meshes";
             else if (arg.StartsWith("--debug-names=")) _debugNames = arg["--debug-names=".Length..];
+            else if (arg == "--debug-select") _debugSelect ??= "";
+            else if (arg.StartsWith("--debug-select=")) _debugSelect = arg["--debug-select=".Length..];
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -668,6 +677,13 @@ public partial class PlaneViewer : Node3D
         {
             Log.Warn("core", $"--view={_view} is a flight camera; ignoring it outside --fly/--stunt");
             _view = 0;
+        }
+        // The shared selection lives in the two world-observation modes; the static viewer's LMB is
+        // already the orbit drag, and flight has no cursor.
+        if (_debugSelect != null && !_freecam && !_animLab)
+        {
+            Log.Warn("ui", $"--debug-select is a --freecam/--anim-lab tool; ignoring it here");
+            _debugSelect = null;
         }
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
@@ -1204,6 +1220,19 @@ public partial class PlaneViewer : Node3D
                     return false;
                 }
 
+                // The shared world selection: click-pick plus the cs_name ancestor ladder PgUp/PgDn
+                // walks, in the two modes that observe a live world with a cursor. Created here so
+                // the anim lab below can bind its camera-follow to it; it joins the tree with the
+                // rest of the session, and builds no HUD and no highlight until something is
+                // picked, so an unadorned capture is unchanged.
+                if (_freecam || _animLab)
+                {
+                    _selection = new UI.SelectionService(_plane, _camera)
+                    {
+                        DebugPick = _debugSelect != null ? UI.SelectionService.ParseDebugPick(_debugSelect) : null,
+                    };
+                }
+
                 // Every mechanism that places or hides a world entity has now run (the mission's
                 // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
                 // anything still sitting on the world origin is content this mission never placed
@@ -1356,7 +1385,7 @@ public partial class PlaneViewer : Node3D
                         what += $" + parked '{_planeName}'";
                     }
 
-                    animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
+                    animLab = new UI.AnimLab(session.Runtime, session.Program, labCam,
                         labStage, textures, sounds, _masterSeed, _playAnim,
                         // On a --node= stage the subject IS the stage and is already framed; letting
                         // the lab re-aim on every Play swings the camera off the only object there
@@ -1368,6 +1397,8 @@ public partial class PlaneViewer : Node3D
                         // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
                         // to capture the timeline (the same convention as --debug-livery).
                         ShowUi = _screenshotPath == null || _debugAnimUi,
+                        // The lab's camera follows whichever rung of the shared selection is current.
+                        Selection = _selection,
                     };
                     _worldRoot!.AddChild(animLab);
                     GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
@@ -1457,6 +1488,12 @@ public partial class PlaneViewer : Node3D
                     what += " + mesh lab";
             }
             _worldRoot!.AddChild(_plane);
+            // The shared selection joins after the world does: its pick walk and its highlight box
+            // both read GlobalTransform, which on a detached subtree is identity + error spam.
+            if (_selection != null)
+            {
+                _worldRoot!.AddChild(_selection);
+            }
             // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
             // cull-mode and normal-source overrides. Like the other two labs it is built in every
             // --viewer session and starts hidden (M), so an unadorned viewer screenshot is
@@ -1569,7 +1606,8 @@ public partial class PlaneViewer : Node3D
                 _worldRoot!.AddChild(_spectator);
                 what += " + freecam";
                 GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
-                         "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed");
+                         "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
+                         "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump)");
             }
 
             if (_fly)
@@ -2292,6 +2330,7 @@ public partial class PlaneViewer : Node3D
         _precip = null;
         _edgeExtender = null;
         _weather = null;
+        _selection = null;
         // The clock and the consumers it drives explicitly go with the session; a null
         // GameClock.Current puts any node that outlives the teardown back on its raw frame delta.
         _clock = null;

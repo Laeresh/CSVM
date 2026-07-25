@@ -210,3 +210,22 @@ pass through unharmed).
 
 ---
 
+## 9 · Inspect tools (PLAN-testing Wave D — the tools are yours to judge)
+
+- **The zeppelin case — the acceptance test for the shared selection (D31).** The complaint this
+  exists to kill: clicking the zeppelin selects one of its motors with no way up. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1 --mission=M04 "--pos=-4848,200,-5165" "--direction=-1,0,0"`
+  puts the moored zeppelin broadside in front of the camera. **Click one of the engine nacelles**
+  along the hull, then **PgUp** repeatedly (**Home** jumps straight to the outermost rung, **End**
+  back to the leaf). *Look for:* the yellow breadcrumb line reading the ladder leaf-first with the
+  current rung bracketed; the wireframe box growing from the nacelle to the whole airship as you
+  walk up; the box staying on the object rather than lagging or floating. The scripted run says the
+  ladder is nine rungs — `g15 < l5 < healthy < lk_rightengine01 < lkgasbag01 < zfronthalf <
+  rock_zeppelin < noserotate < hk_zep` — so **the question is whether nine rungs plus Home feels
+  like "a way up", or whether it wants something smarter.** Also try a building, a truck and the
+  moving train, and try clicking terrain (by design nothing is selected — say if that reads as
+  broken rather than as a rule). In `--anim-lab` the camera should frame what you clicked and then
+  re-aim, without re-framing, as you walk the ladder. *Blocks:* D31 sign-off, and the shape of
+  D32–D35, which all act on this selection.
+
+---

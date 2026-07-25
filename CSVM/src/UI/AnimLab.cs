@@ -17,9 +17,10 @@ namespace CSVM.UI;
 /// <para>The camera is the <see cref="SpectatorCamera"/> freecam (RMB look, WASD/QE move, Shift
 /// boost, wheel speed) — the same one <c>--freecam</c> uses — so transport is on <b>buttons</b>
 /// (plus a few non-clashing key shortcuts: P pause · <c>.</c> step · R restart · F picker),
-/// because WASD/QE now drive the camera. Clicking any object frames and <b>follows</b> it (the
-/// camera position tracks it as it moves); WASD/QE cancels the follow, mouse-look and the wheel
-/// keep it.</para>
+/// because WASD/QE now drive the camera. Clicking any object hands it to the shared
+/// <see cref="SelectionService"/>, and the camera frames and <b>follows</b> whatever rung of that
+/// selection's ancestor ladder is current (PgUp/PgDn walk it); WASD/QE cancels the follow,
+/// mouse-look and the wheel keep it.</para>
 ///
 /// <para>The clock is the session's <see cref="GameClock"/>, which the lab only drives: pause =
 /// halt it, step = queue one step, and the speed selector (0.1×–4×) is its scale. The mode is the
@@ -58,7 +59,6 @@ public sealed partial class AnimLab : Node
     private readonly AnimRuntime _runtime;
     private readonly AnimProgram _program;
     private readonly SpectatorCamera _cam;
-    private readonly Node3D _world;           // the world content root, walked for pick rays
     // The pre-built, pre-indexed effect/crash stage (its effect templates + player anchor set), which
     // the lab repositions a fixed offset in front of the camera on each fresh play; also the fallback
     // anchor a still-placeless def is staged on. Owned by the session tree, not disposed here.
@@ -102,14 +102,18 @@ public sealed partial class AnimLab : Node
     /// <c>--debug-anim-ui</c> forces it on. When off, the runtime hooks are never attached.</summary>
     public bool ShowUi = true;
 
-    public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam, Node3D world,
+    /// <summary>The session's shared selection. The lab's camera follows its current rung; the
+    /// binding is independent of <see cref="ShowUi"/>, so a scripted <c>--debug-select</c> run
+    /// still tracks what it picked.</summary>
+    public SelectionService? Selection { get; init; }
+
+    public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam,
         Node3D stageAnchor, TextureArchive textures, SoundArchive? sounds,
         ulong seed, string? playAnim, bool autoFrame)
     {
         _runtime = runtime;
         _program = program;
         _cam = cam;
-        _world = world;
         _stageAnchor = stageAnchor;
         _textures = textures;
         _sounds = sounds;
@@ -124,6 +128,10 @@ public sealed partial class AnimLab : Node
 
     public override void _Ready()
     {
+        if (Selection != null)
+        {
+            Selection.Changed += OnSelectionChanged;
+        }
         if (!ShowUi)
         {
             return;
@@ -139,6 +147,10 @@ public sealed partial class AnimLab : Node
 
     public override void _ExitTree()
     {
+        if (Selection != null)
+        {
+            Selection.Changed -= OnSelectionChanged;
+        }
         // The lab owns the session archives (kept open so effects can build mid-session); the
         // session teardown or quit is when they finally close.
         _textures.Dispose();
@@ -187,17 +199,8 @@ public sealed partial class AnimLab : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventMouseButton { ButtonIndex: MouseButton.Left, Pressed: true } mb)
-        {
-            // A click in the 3D area (UI controls consume their own clicks first) releases the
-            // picker's text field — Godot does NOT defocus a LineEdit on a click into empty
-            // space, so without this the camera keys stay dead after typing a filter
-            // (user-reported) — then focuses and orbits the object under the cursor.
-            GetViewport().GuiReleaseFocus();
-            PickObject(mb.Position);
-            GetViewport().SetInputAsHandled();
-            return;
-        }
+        // Clicking (and PgUp/PgDn) belongs to the shared SelectionService, which the lab follows
+        // through OnSelectionChanged.
         // Only a few keys — the camera owns WASD/QE/arrows/Space/C/IJKL/Shift/Ctrl/RMB/wheel.
         if (@event is not InputEventKey { Pressed: true, Echo: false } key)
         {
@@ -388,86 +391,27 @@ public sealed partial class AnimLab : Node
         GD.Print($"anim-lab: stopped '{_defName}'");
     }
 
-    // ---- object pick + follow ----------------------------------------------------------------
+    // ---- selection follow ----------------------------------------------------------------------
 
-    // The largest a followable object's world-space AABB diagonal can be. Terrain tiles span the
-    // whole map, so without this a click almost always hits one and frames the tile (zooming far
-    // out); buildings, vehicles and animated props are all well under this. TUNE.
-    private const float MaxPickDiag = 350f;
-
-    // Casts a ray from the camera through the click and follows the nearest mesh it hits. There
-    // are no physics colliders in the lab (Collision is off), so this is a manual ray-vs-AABB
-    // scan over the built mesh instances — one walk per click, cheap.
-    private void PickObject(Vector2 screenPos)
+    // The lab's camera tracks the shared selection's current rung: a fresh click frames and orbits
+    // what was hit, and a PgUp/PgDn ladder walk re-aims onto the wider object WITHOUT re-framing —
+    // re-framing on every rung would fling the camera out to the whole zeppelin's radius mid-walk.
+    private void OnSelectionChanged(SelectionService selection, bool fresh)
     {
-        var cam = _cam.Camera;
-        var from = cam.ProjectRayOrigin(screenPos);
-        var dir = cam.ProjectRayNormal(screenPos);
-        Node3D? best = null;
-        float bestT = float.MaxValue;
-        void Walk(Node n)
+        if (selection.Current is not { } node)
         {
-            if (n is MeshInstance3D { Mesh: { } mesh } mi && mi.IsVisibleInTree())
-            {
-                var aabb = mesh.GetAabb();
-                var xf = mi.GlobalTransform;
-                // Skip terrain-scale meshes so a click follows the object under it, not the map.
-                if ((xf.Basis * aabb.Size).Length() < MaxPickDiag)
-                {
-                    // The parameter along the local ray equals the world distance (the inverse
-                    // transform is affine and dir is unit), so it compares directly across nodes.
-                    var inv = xf.AffineInverse();
-                    if (RayAabb(inv * from, inv.Basis * dir, aabb, out float t) && t < bestT)
-                    {
-                        bestT = t;
-                        best = mi;
-                    }
-                }
-            }
-            foreach (var child in n.GetChildren())
-            {
-                Walk(child);
-            }
+            return;
         }
-        Walk(_world);
-        if (best != null)
+        if (fresh)
         {
-            FocusNode(best);
-            GD.Print($"anim-lab: following '{_followName}'");
+            FocusNode(node);
         }
-    }
-
-    // Slab test. Returns the near intersection parameter (>= 0) of the ray o + t·d with the box.
-    private static bool RayAabb(Vector3 o, Vector3 d, Aabb box, out float tHit)
-    {
-        tHit = 0f;
-        float tmin = 0f, tmax = float.MaxValue;
-        Vector3 lo = box.Position, hi = box.End;
-        for (int a = 0; a < 3; a++)
+        else
         {
-            float da = d[a], oa = o[a];
-            if (Mathf.Abs(da) < 1e-9f)
-            {
-                if (oa < lo[a] || oa > hi[a])
-                {
-                    return false;
-                }
-                continue;
-            }
-            float t1 = (lo[a] - oa) / da, t2 = (hi[a] - oa) / da;
-            if (t1 > t2)
-            {
-                (t1, t2) = (t2, t1);
-            }
-            tmin = Mathf.Max(tmin, t1);
-            tmax = Mathf.Min(tmax, t2);
-            if (tmin > tmax)
-            {
-                return false;
-            }
+            _cam.FollowNode(node);
+            _followName = NodeName(node);
         }
-        tHit = tmin;
-        return tmax >= 0f;
+        GD.Print($"anim-lab: following '{_followName}'");
     }
 
     // Frame the camera on a node and start following it (position tracks the node as it moves).
@@ -776,7 +720,7 @@ public sealed partial class AnimLab : Node
             $"anim-lab  t {_playhead:0.00} s (step {_steps})  {Clock?.Scale ?? 1f:0.##}×  " +
             $"{(paused ? "PAUSED" : "PLAYING")}   seed {_seed}   ambient {(_ambient ? "on" : "off")}\n" +
             $"def: {def}   {follow}   " +
-            "[P pause · . step · R restart · F picker · click an object to orbit it · RMB look · WASD/QE move]";
+            "[P pause · . step · R restart · F picker · click an object · PgUp/PgDn/Home/End walk its ladder · RMB look · WASD/QE move]";
     }
 
     private Button TBtn(string text, Action pressed)

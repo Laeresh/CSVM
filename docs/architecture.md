@@ -996,6 +996,31 @@ screenshot is byte-identical.
 ⚠ Ballistics decimals are formatted `InvariantCulture` (a dot) — a raw `{v:0.#}` interpolation prints
   a locale comma (`h4,5`) in a de-DE run.
 
+## src/UI/SelectionService.cs
+The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mesh under the cursor,
+PgUp/PgDn (Home/End) walk its `cs_name` ancestor ladder, a breadcrumb HUD line names every rung and
+an `ImmediateMesh` wireframe outlines the current rung's subtree. `Current`/`Ladder`/`Level`/
+`CurrentBox` + the `Changed(service, freshPick)` event are the state the other inspect tools read;
+`Select(node)` is the programmatic entry (a tree panel, a search hit). `--debug-select=x,y[,up]`
+replays a click and a ladder walk for scripted runs.
+⚠ **The pick is NOT a physics raycast** — neither mode builds collision (rule 72), so it is a manual
+  ray-vs-AABB scan over the visible `MeshInstance3D`s under the world root, nearest hit wins, one
+  walk per click. It is AABB-accurate, not triangle-accurate. **This is the mechanism every later
+  inspect tool inherits**; it was lifted out of `AnimLab.PickObject`, which no longer picks.
+⚠ `MaxPickDiag` (350 m) skips map-scale meshes, so **terrain is unpickable by design** — a click
+  that finds nothing logs `select miss … tested= skipped_oversize=` rather than going quiet.
+⚠ Rungs are the `cs_name` meta, never `Node.Name` (rule 60) — C1's second `box_car.flt` is
+  `godot=@Node3D@5`. SceneBuilder's unnamed `mesh`/`lights`/`col` children are skipped, and the walk
+  stops below the world content root, so the outermost rung is the placed object (`hk_zep`).
+⚠ The box is measured from the selected subtree's OWN meshes here, not via `OrbitCamera.MergedAabb`
+  over the live tree (rule 92 — an overlay parked elsewhere would enter the merge); empty meshes are
+  skipped and the highlight is parented to the service, never into the subtree it measures.
+⚠ The highlight's corners are baked into the rung's local frame once, then it rides that node's
+  `GlobalTransform` — exact for rigid motion (train, zeppelin), so it does NOT grow to follow
+  articulation inside the subtree.
+⚠ Builds nothing until the first selection (no CanvasLayer, no mesh): four `--det` poses are
+  raw-pixel md5-identical to a build without this file.
+
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
 owns the orbit state and drives a `Camera3D` it does not own; `Frame` takes the eye + pivot the host
@@ -1011,8 +1036,13 @@ resolved, and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (sh
 
 ## src/UI/AnimLab.cs
 The `--anim-lab` debugger: a quiet `WorldSession` stage (`AutoStart=false`, seed pinned), fixed-dt
-clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam with
-click-to-follow, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
+clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam following the
+shared selection, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
+⚠ The lab no longer picks: `SelectionService` owns the click (and the `GuiReleaseFocus` that frees
+  the picker's filter field). The lab only reacts to `Changed` — **frame + follow on a fresh pick,
+  re-follow WITHOUT re-framing on a ladder walk**, since re-framing every rung would fling the
+  camera out to the whole zeppelin's radius mid-walk. Bound in `_Ready` before the `ShowUi` return,
+  so a scripted `--debug-select` run still tracks what it picked.
 ⚠ The lab does not own its clock: it drives the session `GameClock` (P → `Halted`, `.` →
   `StepOnce`, the speed buttons → `Scale`) and takes `Steps`/`Dt` from it. The mode is
   `PlaneViewer`'s choice — FixedAccum interactively, FixedStep in a scripted `--screenshot` run, so

@@ -6762,3 +6762,46 @@ verification rule 98.
 
 **Worth keeping.** The tripwire earned its place on its first outing — it caught a reproducibility
 hole in itself that no other instrument here would have surfaced.
+
+## 2026-07-25 — Shared click-selection with a `cs_name` ancestor ladder (PLAN-testing D31)
+
+**What landed.** `CSVM/src/UI/SelectionService.cs`: in `--freecam` and `--anim-lab`, left-click
+picks the mesh under the cursor and PgUp/PgDn (Home/End) walk its `cs_name` ancestry from that leaf
+up to the placed world object. A breadcrumb HUD line names every rung with the current one bracketed
+and its world-frame box; an `ImmediateMesh` wireframe outlines the current rung's subtree.
+`Current`/`Ladder`/`Level`/`CurrentBox` + a `Changed` event are the session state D32–D35 bind to.
+`--debug-select=x,y[,up]` is the scripted twin. `AnimLab` no longer picks — its `PickObject`/
+`RayAabb` moved into the service and its camera-follow now tracks the selection's current rung.
+
+**The picking audit, which the rest of Wave D inherits.** The lab's click-to-follow was never a
+physics raycast — it could not be, since `WorldSession.Options.Collision` is flight-only (rule 72)
+and these modes build no bodies at all. It is a manual **ray-vs-AABB scan over the visible
+`MeshInstance3D`s** under the world root: `ProjectRayOrigin`/`ProjectRayNormal` for the ray, each
+mesh's own AABB tested in its local frame (the affine inverse keeps the ray parameter equal to the
+world distance, so it compares across nodes), nearest hit wins, one walk per click. Two properties
+carried forward verbatim: it is **AABB-accurate, not triangle-accurate**, and a 350 m
+world-AABB-diagonal cap skips map-scale meshes — which is what stops every click landing on terrain,
+and equally means **terrain is unselectable**. A click that finds nothing now says so
+(`select miss … tested= skipped_oversize=`) instead of going quiet.
+
+**Verified.** The zeppelin case, `--freecam --chapter=C1 --mission=M04 --pos=-4848,200,-5165
+--direction=-1,0,0 --debug-select=852,360`, clicking an engine nacelle: the ladder is
+`g15 < l5 < healthy < lk_rightengine01 < lkgasbag01 < zfronthalf < rock_zeppelin < noserotate <
+hk_zep` — motor to main node, **nine** rungs, which is why Home/End exist. The outermost rung's box
+reads `centre=(-5248.0,199.8,-5164.6) size=(94.3,72.7,418.6)`, matching C25's independently measured
+`DetachedWorldAabb` for the same node exactly, and it wraps the hull in the capture. Rule 60: the
+second `box_car.flt` of C1's cargotrain logs `cs_name=box_car.flt godot=@Node3D@5` while the first
+logs `godot=box_car_flt`, so the ladder is unreadable from Godot names and correct from `cs_name`.
+Inertness: four `--det` poses (C1/M04 zeppelin, C4 default freecam, the C1 cargotrain anim-lab node
+stage, C1 default freecam) are raw-pixel md5-identical to the pre-change build, 0 of 921,600 px on
+the decoded compare; the same pose **with** `--debug-select` differs 1.32 %, so the compare was seen
+able to fail. 8-chapter sound-enabled `--freecam`: 0 errors beyond the known pre-existing C3
+`!is_inside_tree()`. `.\RunTests.ps1` PASS — 152 units, 8 suites, 11 goldens hash-identical, exit 0;
+no golden moved, which is the expected result for an overlay that draws nothing unasked.
+
+**Not verified here.** The interactive half — the actual click, the PgUp/PgDn feel, whether the
+breadcrumb reads at a glance while flying the freecam — is unscriptable in this project
+(`docs/verification.md`, "what this project cannot verify itself") and is the user's call;
+`playtest.md` carries it. `--debug-select` exercises the same `PickAt`/`StepUp` entry points the
+mouse and the keys call, so only the event binding itself is by construction.
+

@@ -128,13 +128,13 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into the same `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs` — merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
 - `src/Mech3/TextureCycler.cs` — runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`.
-- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot`, the fire-and-forget one-shot `SOUND` (destruction/impact audio, D31).
+- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot`, the fire-and-forget one-shot `SOUND` (destruction/impact audio).
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers; `PlayEffectAt`/`ExternalEffect` drive the D32 world-effects runtime.
-- `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; feeds `ANIM_HEALTH` eval + `DAMAGE_SEQUENCE` stages, `Resolve` maps a struck collider back to its instance (weapon damage, C23).
-- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`; `--node=` slices it to one subtree.
+- `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back to its instance.
+- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
@@ -142,7 +142,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s (ballistics/damage/ammo/flags + FIRE/FLYOUT/IMPACT bindings); inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups (independent ammo) + hardpoints, markers→muzzle nodes, turrets inert; inspect with `--dump-loadout`.
-- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics integration, tracers, muzzle flashes, per-surface impact sound + effect model (water splash instanced at the hit, D30) with a spark fallback, hits damage world destructibles (`DamageSink`, C23); guns tracer-quad, rockets fly the FLYOUT MODEL body; a rocket impact plays its named IMPACT puffer effect via `EffectSink` (D32); `Spawn` into it.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics, tracers, muzzle flashes, per-surface impact sound/effect, hits that damage world destructibles.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
@@ -182,6 +182,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W, `--weapon-lab`): guns fire from named gun groups, hardpoints from pylons, at a stand-in target; copy-CLI-args; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels, shared mounts flagged magenta.
+- `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder PgUp/PgDn walks, breadcrumb + highlight box.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, click-to-follow; stages placeless on-call defs (the crash) in front of the camera.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
@@ -212,8 +213,8 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--fly` | free flight (the default): world + skydome + plane + arcade controls |
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
 | `--viewer` | the static inspection view; hosts the damage (H), livery (L) and mesh (M) labs |
-| `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera |
-| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow |
+| `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera, click-selection |
+| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow the selection |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
 | `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
 | `--direction=x,y,z` | which way it faces there — view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
@@ -232,7 +233,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab.
+In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends); the scripted twin is `--debug-select=` ([`docs/cli.md`](docs/cli.md)).
 
 ### Format gotchas
 

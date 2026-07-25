@@ -149,7 +149,8 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     12-motion print cap dropped looping cars (restarts re-register at the end); raise the cap
     for the measurement.
 60. **Godot node names are not the game files' names** (`.` → `_`, duplicates auto-renamed) —
-    use the `cs_name` meta.
+    use the `cs_name` meta. The auto-rename keeps no trace of the original: C1's two `box_car.flt`
+    siblings build as `box_car_flt` and **`@Node3D@5`**.
 61. **Grep the full stderr, not just the line you expect** — that has hidden a whole class of
     shader error.
 62. **Pass `--no-pads` on scripted runs** — a drifting stick silently steers the free camera.

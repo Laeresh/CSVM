@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — Inspect layer
 
-31. ☐ D31 — Shared selection: click leaf + ancestor-ladder breadcrumb, PgUp/PgDn, highlight box
+31. ☑ D31 — Shared selection: click leaf + ancestor-ladder breadcrumb, PgUp/PgDn, highlight box **(done 2026-07-25 — `src/UI/SelectionService.cs`; the picking audit's answer and what D32–D35 may rely on are in the item's landing note; `docs/HISTORY.md`)**
 32. ☐ D32 — Node Lab (N): tree panel synced to selection — search, frame, hide/show, dependencies
 33. ☐ D33 — Mesh Lab (M) operates on the selected world subtree in freecam
 34. ☐ D34 — Damage sliders (H) on the selected destructible — supersedes M3 F40
@@ -665,7 +665,7 @@ where the chase camera already is, so it stays unbound).
 
 # Wave D — Inspect layer
 
-## D31 ☐ Shared selection: click leaf + ancestor ladder
+## D31 ☑ Shared selection: click leaf + ancestor ladder
 
 **Goal.** In freecam and anim-lab: click any object → the struck mesh is selected and an on-screen breadcrumb shows its full `cs_name` ancestry (leaf → world root); **PgUp/PgDn walks the ladder**; a highlight box tracks the current level's subtree AABB. The selection is session state every other inspect tool reads. Zeppelin: click a motor, PgUp twice, you're on the main node.
 
@@ -676,6 +676,37 @@ where the chase camera already is, so it stays unbound).
 **Verify.** Scripted: `--anim-lab --det` + a synthetic click at a known screen position (the `--debug-*` convention: a `--debug-select=x,y` arg) → log the resulting ladder; assert the zeppelin case lists motor → … → main node in order. Interactive pass by the user (this is their tool — the item is done when the zeppelin frustration is gone, and that's their call).
 
 **⚠ Traps.** Rule 60 (`cs_name` meta, not Godot names — duplicates are auto-renamed). Rule 30's lesson generalized: screen-position picks depend on camera pose — the scripted test pins `--pos`/`--direction` first.
+
+**Landed 2026-07-25** — `src/UI/SelectionService.cs` (own file, a `Node` under the session root),
+`--debug-select=x,y[,up]`, and `AnimLab` reduced to a follower. Evidence in `docs/HISTORY.md`.
+
+**The picking audit, and what D32–D35 may rely on.** The lab's click-to-follow was never a physics
+raycast — it cannot be: `WorldSession.Options.Collision` is flight-only (rule 72), so these modes
+build no bodies. It is a **manual ray-vs-AABB scan over the visible `MeshInstance3D`s** under the
+world content root: camera `ProjectRayOrigin`/`ProjectRayNormal`, each mesh's own AABB tested in its
+local frame (the affine inverse leaves the ray parameter equal to the world distance, so it orders
+hits across nodes), nearest wins, one walk per click. That is now `SelectionService.PickAt`, and it
+is what every later inspect tool inherits, with three properties to design around: it is
+**AABB-accurate, not triangle-accurate**; a 350 m world-AABB-diagonal cap makes **terrain
+unselectable** (the reason a click doesn't grab the map, and a limit D32's tree panel must be able to
+reach around — `Select(Node3D)` is the programmatic entry it should use); and a miss is logged
+(`select miss … tested= skipped_oversize=`), never silent. The state to bind to is
+`Current`/`Ladder`/`Level`/`CurrentBox` plus `Changed(service, freshPick)`; `CurrentBox` is measured
+from the selected subtree's own meshes, never through `OrbitCamera.MergedAabb` (rule 92), and the
+highlight lives on the service, not inside the subtree it measures. **The ladder is deeper than the
+complaint assumed** — C1's zeppelin is nine rungs from a motor's mesh to `hk_zep`, and `healthy` is
+one of them, which is the rung D34's HP slider will resolve through `DestructibleRegistry`.
+
+**Deviation from the item text:** Home/End were added beside PgUp/PgDn once the C1 zeppelin measured
+nine rungs deep; "PgUp twice" was never going to reach the main node. The anim lab re-frames only on
+a fresh pick and merely re-follows on a ladder walk, because re-framing each rung throws the camera
+out to the whole subject's radius mid-walk.
+
+**Residuals.** The interactive half is unverified here and is the user's call (`playtest.md`): live
+mouse and key input are unscriptable in this project, so `--debug-select` drives the same
+`PickAt`/`StepUp` entry points and only the event binding is by construction. The highlight box is
+baked into the rung's local frame at selection time, so it tracks rigid motion exactly but does not
+grow to follow articulation inside the subtree.
 
 ## D32 ☐ Node Lab (N): tree panel synced to selection
 
