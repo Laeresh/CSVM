@@ -7350,3 +7350,61 @@ into a building destroys the plane and leaves the building standing, while a fil
 flown through unharmed.
 
 The §1 failure bullets kept their re-test but lost their diagnosis, which duplicated `backlog.md`.
+
+## 2026-07-25 — thrust calibrated against video of the original; a flight-envelope suite to hold it
+
+The flight model's thrust scale was **4.6× too small**, and this is the fix. `ThrustConst` 40 → 184,
+which is a max thrust acceleration of 60 m/s² on the Bloodhawk. The source is the video-decoded
+measurement in `analysis/video-flight-calibration/` (committed here, with its own `FINDINGS.md`
+carrying the numbers and the traps): the original goes from 150 to 290 mph at full throttle in 3.76
+sim seconds where we took 17.2. One constant fixes that *and* the terminal dive — the same 60 m/s²
+predicts a 70.7° dive terminal of 1.178 × fd_speed against the video's measured 1.182 — so the drag
+*shape* (`0.65x² + 0.35x`) was right all along and only the scale was wrong. Level top speed is
+untouched by construction (drag is normalized so drag(fd_speed) = max thrust) and measures 302.0 vs
+the original's 300.4 mph.
+
+`MaxDiveSpeedFrac` 1.7 → 1.75, and re-labelled: terminal dive is now emergent and correct, so the
+constant's job is a numerical backstop above every airframe's own emergent terminal (worst is the
+Balmoral's 1.708) rather than a stand-in for one. At the old thrust it *was* binding — the drag
+curve's emergent terminal there was 1.72 — which is why its old comment called 1.7 "≈ terminal dive
+from the drag curve" and why our dives all pinned the cap.
+
+**The handoff's own prescription was wrong and the data caught it.** It specified `ThrustConst` 243,
+back-derived from an engine power of 0.47 — the Bloodhawk *Lvl-1* row. Its `engine` is 11, Lvl-2,
+0.62, which is what `PlaneStats` has always read, so 243 would have over-thrust by 32%: 2.83 s on
+the acceleration against the measured 3.76, and a terminal dive of 1.137 against 1.182. The video
+measurement (A ≈ 60 m/s²) survived; only the arithmetic converting it into a constant did not. Now
+`verification.md` rule 113.
+
+**The rate constants were re-checked, not assumed** — raising thrust raises speed, and speed scales
+the yaw `eff`. `PitchTune` 0.75 / `YawTune` 1.32 / `RollTune` 2.12 all still land: roll 360° 1.98 s
+(video 2.05), sustained pitch 33.5 °/s (33), rudder 360° 29.75 s (28.6, ours holding 301 mph where
+the original held 290). Two long-open questions close with them: **pitch authority is not sluggish**
+(`playtest.md` §3's "the big one"), and the original's **pitch rate does not fall off with speed**
+(37.9 / 33.7 / 30.7 / 36.5 °/s binned over 120–280 mph round a loop), so our speed-independent
+pitch is the right shape.
+
+**New instrument: `--dump-flight` + the `flight-envelope` suite** (`Probes.FlightEnvelope`). It
+steps a throwaway `FlightModel` — no world, no scene, zrdr readers only — through the manoeuvres the
+original was recorded flying and prints both numbers side by side; the suite asserts the six that
+have measured targets. This exists because the constants are coupled and a screenshot cannot see any
+of it. Three rows are printed but deliberately **not asserted**, and each is now a backlog entry: the
+1/8-throttle equilibrium (93 mph vs 138) and the 1/8-throttle deceleration (2.47 s vs 7.04), which
+jointly indict the undecoded throttle→thrust curve or the low-speed drag blend without saying which;
+and the zoom climb, which arrives at its apex still doing 266 mph where the original bottomed at 104
+— **we model no induced drag at all**, the sharpest form yet of the old "the original bleeds speed
+in a hard pull" observation.
+
+Verified: `RunTests.ps1` green — 152 units, 9 suites, engine errors clean. The able-to-fail control
+is the prescribed one (flip the line, build, run, flip back): at `ThrustConst` 40 the suite fails on
+`accel-150-290` (+357%) and `terminal-dive` (+43.8%) and on nothing else, so it is pinned to the
+thrust and not to the scenery. Two goldens moved, both flight shots and both expected, regenerated
+here: **`empty-stage`** and **`c1-flight`** — the plane is simply further along its `--hold` path.
+The other nine, all `--freecam`/`--viewer`, are unchanged.
+
+**The git-ignored `CSVM/config.json` was deleted as part of this** (user's call), because it would
+have made the landing invisible in the cockpit: it pinned `thrustConst` to 40 and `pitchTune` to 1.5
+(double the calibrated 0.75), and `--det` drops that file while interactive runs honour it — so the
+suites would have seen the new defaults and the pilot the old ones. Its other twelve keys were
+byte-identical to their in-code defaults, so nothing else changed. Now `verification.md` rule 112,
+because the next such file will do the same thing.

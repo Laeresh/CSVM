@@ -33,10 +33,16 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
+    /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
+    /// silently demoting one to informational cannot read as a green run.</summary>
+    private const int FlightScenarios = 6;
+
     public static void Register(List<TestHarness.Suite> into)
     {
         into.Add(new TestHarness.Suite("weapons-defs",
             "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
+        into.Add(new TestHarness.Suite("flight-envelope",
+            "the flown envelope still matches the original's measured manoeuvres", FlightEnvelope));
         into.Add(new TestHarness.Suite("markers-rig",
             "every player airframe has a firepoint/pylon rig in planes.zbd", MarkersRig));
         into.Add(new TestHarness.Suite("loadout-bind",
@@ -63,6 +69,41 @@ public static class Suites
     };
 
     // ---- pure data -----------------------------------------------------------------------------
+
+    /// <summary>The Bloodhawk's flown envelope against the original's, measured off cockpit-gauge
+    /// video. These are golden numbers in the same sense as the destructible census — the original
+    /// is a fixed artifact, so "150 → 290 mph in 3.76 s" is an invariant of it.
+    ///
+    /// <para>Why a suite and not a playtest: the flight constants are coupled (thrust sets speed,
+    /// speed sets the yaw <c>eff</c>), so editing one silently moves others. The probe's
+    /// informational rows — the 1/8-throttle pair and the zoom climb — are deliberately NOT asserted;
+    /// they record open questions and must not fail a build.</para></summary>
+    private static void FlightEnvelope(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        var r = Probes.FlightEnvelope(ctx.ZrdrPath, "player_bhawk");
+        ctx.Check(r.Error == null, $"plane stats load error={r.Error ?? "-"}");
+        if (r.Error != null)
+        {
+            return;
+        }
+        ctx.WriteArtifact("flight_envelope.txt", r.Text);
+        ctx.Same(FlightScenarios, r.Asserted, $"asserted flight scenarios");
+        foreach (var row in r.Rows)
+        {
+            if (row.Asserted)
+            {
+                string measured = $"original={row.Measured:0.00}{row.Unit} "
+                                  + $"tol=±{row.Tolerance:0.00} err={row.ErrorPct:+0.0;-0.0}%";
+                ctx.Check(row.Ok, $"{row.Name} model={row.Model:0.00}{row.Unit} {measured}");
+            }
+            else
+            {
+                ctx.Note($"{row.Name} model={row.Model:0.00}{row.Unit} not asserted — {row.Detail}");
+            }
+        }
+        ctx.Note($"{r.Summary}");
+    }
 
     private static void WeaponsDefs(TestContext ctx)
     {

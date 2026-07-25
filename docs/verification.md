@@ -489,6 +489,27 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      but only the cloud deck or the water plane in C1B/C1C/C2B, so a "mean terrain height" grid
      silently compared clouds to sea and called two different worlds identical.
 
+111. **Before believing a consistency test that reconciles two measurements, check it is not
+     degenerate — vary the unknown it supposedly pins and watch the residual.** Reconciling the
+     original's level acceleration against its terminal dive speed through our own drag curve
+     agrees to 0.6% and does so for *every* clock factor, residual constant to five decimals,
+     because the thrust scale goes as `1/k` and `sin γ` does too. It validates the drag *shape*
+     and says nothing whatever about the clock, while presenting as a sharp confirmation of
+     whatever value you fed it.
+
+112. **A landed default can be silently reverted in play by the git-ignored `CSVM/config.json`,
+     because `--det` drops it and interactive runs do not — so the suites see the new value and
+     the cockpit sees the old one.** It was found pinning `thrustConst` to the pre-calibration 40
+     and `pitchTune` to 1.5, double the calibrated 0.75, and was deleted when the calibration
+     landed. After changing any `flightModel` default, check whether that file exists and what it
+     overrides, or a playtest measures the constant you just replaced.
+
+113. **A per-item value read through a tier/level table must come from the item's own tier —
+     check the index, never take the first matching row.** The Bloodhawk's `engine` is 11
+     (Bloodhawk Lvl-2, power 0.62), not the Lvl-1 row's 0.47; back-deriving `ThrustConst` from
+     0.47 inflated it 32%, and every downstream check passed because they all only ever see the
+     product.
+
 ## What this project cannot verify itself
 
 These need the user:

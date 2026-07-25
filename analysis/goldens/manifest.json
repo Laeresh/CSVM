@@ -77,14 +77,14 @@
     {
       "name": "empty-stage",
       "frame": 120,
-      "hash": "425b69dfb3b60b3cb846d33058e4b311",
+      "hash": "929367424fc0ca7aff0b3a1d3364b5e1",
       "exercises": "the synthetic stage with no gamez at all — code-drawn grid, default sky and sun, flight model, HUD; frame-sensitive 12.21 %, and the one shot that still renders with extracted/ absent",
       "args": ["--stage=empty", "--plane=player_bhawk", "--hold=0,0,0,0.6", "--det", "--mute"]
     },
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "f0493fb07be2140faa0ae19c136011dc",
+      "hash": "11b9d943e1853ea7f9cca77ad2169395",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     }

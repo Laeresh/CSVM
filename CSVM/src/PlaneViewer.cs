@@ -51,6 +51,10 @@ namespace CSVM;
 ///   --dump-loadout[=plane]       build each plane and bind its stock loadout (Loadout), printing
 ///                                the resolved gun groups + hardpoints to ./.scratch/loadout_dump.txt,
 ///                                then quit; a missing marker prints a loud error. Filter by plane
+///   --dump-flight[=plane]        fly a throwaway FlightModel through the manoeuvres the original
+///                                was measured flying (video-decoded goldens) and print both
+///                                numbers side by side, to stdout and ./.scratch/flight_dump.txt,
+///                                then quit; targets exist for the Bloodhawk only
 ///   --loadout=<def>              bind this loadout def instead of the plane's own (testing override;
 ///                                exercises the missing-marker error with --dump-loadout; in flight
 ///                                the flown plane carries that loadout)
@@ -302,6 +306,8 @@ public partial class PlaneViewer : Node3D
     private string _dumpWeaponsFilter = ""; // the optional --dump-weapons= filter (id or NAME substring)
     private bool _dumpLoadout;         // --dump-loadout[=plane]: bind each plane's stock loadout to its model and quit
     private string _dumpLoadoutFilter = ""; // the optional --dump-loadout= filter (def/model/display substring)
+    private bool _dumpFlight;          // --dump-flight[=plane]: fly the measured manoeuvres against the original's numbers and quit
+    private string _dumpFlightPlane = ""; // the optional --dump-flight= plane (node name); default the flown/default plane
     private bool _dumpConfig;          // --dump-config: write a populated tuning-config template and quit
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
@@ -632,6 +638,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--dump-weapons=")) { _dumpWeapons = true; _dumpWeaponsFilter = arg["--dump-weapons=".Length..]; }
             else if (arg == "--dump-loadout") _dumpLoadout = true;
             else if (arg.StartsWith("--dump-loadout=")) { _dumpLoadout = true; _dumpLoadoutFilter = arg["--dump-loadout=".Length..]; }
+            else if (arg == "--dump-flight") _dumpFlight = true;
+            else if (arg.StartsWith("--dump-flight=")) { _dumpFlight = true; _dumpFlightPlane = arg["--dump-flight=".Length..]; }
             else if (arg == "--dump-config") _dumpConfig = true;
             // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
             // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
@@ -870,6 +878,7 @@ public partial class PlaneViewer : Node3D
             : _dumpMarkers ? "--dump-markers"
             : _dumpWeapons ? "--dump-weapons"
             : _dumpLoadout ? "--dump-loadout"
+            : _dumpFlight ? "--dump-flight"
             : _dumpConfig ? "--dump-config"
             : _damageTest ? "--damage-test"
             : _runTests ? "--run-tests"
@@ -1004,6 +1013,14 @@ public partial class PlaneViewer : Node3D
         if (_dumpLoadout)
         {
             DumpLoadout();
+            GetTree().Quit();
+            return;
+        }
+        // --dump-flight: pure data again — no world and no model, just the zrdr stats stepped
+        // through the manoeuvres the original was measured flying.
+        if (_dumpFlight)
+        {
+            DumpFlight();
             GetTree().Quit();
             return;
         }
@@ -3416,6 +3433,27 @@ public partial class PlaneViewer : Node3D
         GD.Print(r.Text);
         WriteScratch("weapons_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/weapons_dump.txt");
+    }
+
+    /// <summary>--dump-flight[=plane]: step a throwaway <see cref="FlightModel"/> through the
+    /// manoeuvres the original was recorded flying and print its numbers beside the video-decoded
+    /// ones (<c>analysis/video-flight-calibration/</c>), to stdout and
+    /// <c>./.scratch/flight_dump.txt</c>, then quit. The instrument behind the
+    /// <c>flight-envelope</c> suite, and the only way to see what a flight-constant change did to
+    /// the whole envelope rather than to the one number that was edited.</summary>
+    private void DumpFlight()
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        string plane = _dumpFlightPlane.Length > 0 ? _dumpFlightPlane : _planeName;
+        var r = Testing.Probes.FlightEnvelope(_zrdrPath, plane);
+        if (r.Error != null)
+        {
+            GD.PrintErr($"--dump-flight: {r.Error}");
+            return;
+        }
+        GD.Print(r.Text);
+        WriteScratch("flight_dump.txt", r.Text);
+        GD.Print($"{r.Summary} → ./.scratch/flight_dump.txt");
     }
 
     /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's

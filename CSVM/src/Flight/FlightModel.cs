@@ -24,7 +24,9 @@ public struct FlightInput
 /// world-down and cannot be raised over the horizon. Thrust vs drag (quadratic
 /// + linear blend) gives the level-speed equilibrium at fd_speed. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
-/// only the scale constants marked TUNE are ours, adjusted against playtests.
+/// the scale constants marked TUNE are ours, adjusted against playtests — except
+/// ThrustConst and the three *Tune rates, which are pinned to measurements of the
+/// original decoded from cockpit-gauge video and must not be retuned by feel.
 /// </summary>
 public sealed class FlightModel
 {
@@ -39,14 +41,29 @@ public sealed class FlightModel
 
     private readonly float _maxThrustAccel;       // m/s² at full throttle
 
-    private const float ThrustConst = 40f;        // TUNE: m/s² per engine-power unit per tonne
+    // m/s² per engine-power unit per tonne. NOT a free TUNE — the original's own level
+    // acceleration pins it: full throttle 150 → 290 mph in 3.76 sim s (decoded from cockpit-gauge
+    // video) needs A = 60 m/s² on the Bloodhawk, which at 0.62 engine power and 1.9 t is 60·1.9/0.62.
+    // The terminal dive is the independent check on that same number — it puts a 71° dive at
+    // 1.178 × fd_speed against the video's measured 1.182, which is what says the drag SHAPE below
+    // is right and this scale was the only thing wrong.
+    // ⚠ Solve it from the plane's OWN stock engine power, not the level-1 row: the Bloodhawk's
+    // 'engine' is 11 (Lvl-2, 0.62), and using 0.47 back-derives a constant 32% too big.
+    private const float ThrustConst = 184f;
     private const float AlignRate = 4f;           // TUNE: how fast velocity chases the nose at lift speed, 1/s
     private const float MinControlEff = 0.25f;    // TUNE: control authority floor at low speed
     private const float MaxControlEff = 1.15f;    // TUNE: authority ceiling in a dive
     private const float LiftSpeedFrac = 0.40f;    // TUNE: full lift at/above this fraction of fd_speed
                                                   // (0.40·135 = 54 m/s keeps the 120 mph spawn fully lifted)
     private const float StallSpeedFrac = 0.30f;   // TUNE: nose-drop begins below this fraction
-    private const float MaxDiveSpeedFrac = 1.7f;  // hard cap (≈ terminal dive from the drag curve)
+    private const float MaxDiveSpeedFrac = 1.75f; // numerical backstop, NOT a terminal speed. The
+                                                  // terminal dive is emergent from the drag curve
+                                                  // and lands within 0.3% of the original, so a cap
+                                                  // that binds would replace a measured value with a
+                                                  // guess. Set above every airframe's own emergent
+                                                  // terminal — the worst is the Balmoral's 1.708,
+                                                  // a bomber at A = 13 m/s² — so it only ever
+                                                  // catches the loop energy pump or a dt spike.
     private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
     private const float ClimbGravityScale = 0.6f; // TUNE: climb retention — a climb bleeds less speed than
                                                   // plain energy exchange (the original holds speed better)
@@ -78,17 +95,17 @@ public sealed class FlightModel
                                                   // keeps air resistance biting at low speed. The full-throttle
                                                   // equilibrium stays exactly fd_speed for any blend value.
 
-    // Per-axis control-rate calibration, replacing the old global ×2.
-    // Steady rate = torque · recInertia · Tune / ang_momentum_damp (× eff on yaw), and a
-    // full 360° takes ≈ 1/damp spin-up + 2π/rate. Solved against the user's stopwatch
-    // measurements of the original (Bloodhawk, full throttle): 360° roll in 2 s
-    // (3.49 rad/s), sustained full-pitch 360° at 90° bank in 11 s (0.58 rad/s — the
-    // original also bleeds speed in that turn; whether its pitch rate slows with speed
-    // is an open fidelity question, ours is constant), full-rudder 360° in 30 s
-    // (0.21 rad/s at cruise, where eff = 0.4).
-    private const float PitchTune = 0.75f;        // TUNE: calibrated to the stopwatch runs above
-    private const float YawTune = 1.32f;          // TUNE: calibrated (at cruise eff)
-    private const float RollTune = 2.12f;         // TUNE: calibrated
+    // Per-axis control-rate calibration. Steady rate = torque · recInertia · Tune /
+    // ang_momentum_damp (× eff on yaw), and a full 360° takes ≈ 1/damp spin-up + 2π/rate.
+    // Fitted to stopwatch timings of the original, then confirmed against cockpit-gauge video of
+    // it: 360° roll 2.05 s, sustained pitch ~33 °/s, full-rudder 360° 28.6 s — all three within a
+    // few percent of what these values already gave, and none of the verdicts moves anywhere
+    // inside the video's clock uncertainty. The video also settles what was an open question: the
+    // original's pitch rate does NOT fall off with speed (37.9 / 33.7 / 30.7 / 36.5 °/s binned
+    // over 120–280 mph round a loop, flat within the noise), so speed-independent pitch is right.
+    private const float PitchTune = 0.75f;        // TUNE: pinned to the measurements above
+    private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
+    private const float RollTune = 2.12f;         // TUNE: pinned
 
     public FlightModel(PlaneStats stats)
     {

@@ -772,8 +772,8 @@ unscheduled.
     randomizes per player. Decide from playtest whether the menu should offer it.
   - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
     catalog but nothing flies them — there are no AI aircraft yet.
-- **`flight_ceiling`** (data: 2500 m) unenforced — at full throttle a steep climb is a stable
-  equilibrium and sails past it (accepted arcade artifact of the Run-1 item-6 flight model).
+- **An altitude limit** — none is modelled, and the original's is measured at ~2065 m rather than
+  the data's `flight_ceiling` 2500; see "Flight-model gaps the video calibration measured" below.
 - **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 - **Sky UV scroll** (`h_zone*scroll`) — scroll rate unknown, not implemented.
@@ -981,6 +981,100 @@ the document alone, it says so and marks the value TUNE.
   `nom_gravity` and `sounds.md` the curve blocks — so `warning_shot_*`, `sticky_bullet_*`, the
   `crash` armour/health ranges and `respawn_rad`/`respawn_el` are all undocumented shipped tuning.
 
+### Flight-model gaps the video calibration measured (2026-07-25)
+
+Found by decoding the original's cockpit gauges frame by frame
+(`analysis/video-flight-calibration/FINDINGS.md` holds the numbers and the instrument). The thrust
+scale that pass found has landed; these are what it left open. Each is **measured against the
+retail game**, so unlike a TUNE none of them needs a playtest to confirm it is real — the
+`--dump-flight` report prints ours beside the original's for the first three.
+
+⚠ **Read before touching any of these: the flight constants are coupled and `--run-tests` guards
+them.** Thrust sets speed, speed scales the yaw `eff`, so a change in one moves others; the
+`flight-envelope` suite asserts six measured scenarios and will fail if a fix here breaks one.
+`ThrustConst` and `PitchTune`/`YawTune`/`RollTune` are pinned measurements, not knobs — a fix that
+needs one of them to move needs a new measurement first.
+
+- **No induced drag: a hard pull costs us no speed.** Measured, `--dump-flight`'s `zoom-climb` row:
+  from 300 mph level at full throttle our full-pull apex arrives still doing **266 mph** where the
+  original bottomed at **104 mph**. The same signal appears in the loop the clock was measured from
+   — the original's loop spans 120–280 mph, so it bleeds most of its speed round one. Altitude gained
+  is close (1450 ft vs 1635), the energy is not. This is the sharp form of the older "the original
+  visibly bled speed in a sustained full-pitch 360°" observation, which can now be retired as vague.
+  Wanted: a load-factor term in the drag, i.e. drag rising with commanded pitch rate / lift.
+  ⚠ **Traps.** (a) The candidate data ships: `player.json`'s `highGs [9,15]` / `lowGs [-6,-9]` /
+  `maxAOA 46` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` are an angle-of-attack model we have no
+  equivalent of — decode that before inventing a term (see the `player.json` entry below).
+  (b) **It must not slow the sustained pitch RATE**, which is measured flat across 120–280 mph and
+  asserted by the suite: the original bleeds speed in a pull *without* losing pitch authority, so a
+  naive "less speed ⇒ less pitch" coupling would break a passing check. (c) The clip that would
+  measure this directly — a sustained banked max-pull turn — was never recorded; the yaw clip is a
+  verified wings-level *rudder* turn. Any fitted magnitude is inference until it is.
+
+- **The throttle→thrust curve is undecoded, and 1/8 throttle is wrong in both directions.**
+  Measured: the original settles at **137.9 mph** (0.459 × fd_speed) at 1/8 throttle and takes
+  **7.04 sim s** to fall 290 → 150 mph. We settle at **93 mph** (0.309, and below lift speed, so
+  ours is sinking rather than holding level) and decelerate in **2.47 s** — 2.8× too fast. Both are
+  printed by `--dump-flight` as `(not asserted)`.
+  ⚠ **Traps.** (a) **These two numbers cannot separate the two candidates.** We model thrust as
+  linear in throttle; if the original's is not, the equilibrium moves with no drag change at all.
+  Solving it as drag alone needs `x^2.67` at low speed, which contradicts the *other* reading in
+  the same data (the acceleration's fall-off near fd_speed is steeper than a single power law fits,
+  implying ~7.8 below fd against ~3.5 above — probably a soft governor near fd_speed). One more
+  measurement discriminates: a level run at 1/4 and 1/2 throttle held to equilibrium. (b) The full
+  throttle equilibrium is exactly fd_speed **for any drag blend** by construction, so it cannot
+  detect a wrong shape here — the low-throttle end is the only place the shape is observable.
+  (c) `LowSpeedDragBlend` 0.35 exists to answer a user report that a throttled-back plane barely
+  decelerated; whatever lands here must not reintroduce that.
+
+- **No altitude limit at all, and the original's is not `flight_ceiling`.** Measured: the Bloodhawk
+  cannot exceed **~2065 m**, level top speed is flat ~300 mph from 714 m to 1909 m and then
+  collapses (283.5 mph at 2009 m, ~234 mph at 2066 m), so whatever enforces it is concentrated in
+  **1909–2066 m** and invisible below. That is 76–83% of the data's `flight_ceiling` 2500, which
+  `PlaneStats.FlightCeiling` parses and nothing reads (two hits: the field and the assignment).
+  A thrust fade confined to the last few percent under a hard ceiling fits the shape.
+  ⚠ **Traps.** (a) **Neither signature is clean, and which two points you quote decides the
+  answer.** Across five apexes altitude trades smoothly against apex speed — a *performance* limit
+  — but the 2065/2066 pair reaches the same altitude at 183 and 234 mph, which a pure energy limit
+  cannot do. (b) The measurement that settles it is a **level full-throttle run held to equilibrium
+  at 5500 / 6000 / 6500 / 6800 ft**, which no clip covers; it is the one owed capture that would
+  close a whole mechanism. (c) These are true altitudes: the altimeter was proved a straight feet
+  conversion (λ = 1.000 ± 0.004) against four spawn-point readings, so do not re-open the scale.
+
+- **`player.json` ships a physics block we consume almost none of.** Alongside the used
+  `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
+  `highGs [9,15]`, `lowGs [-6,-9]`, `drag_factor 1.5`, `drag_fade_speed 40`, `turn_fade_in 10`,
+  `turn_fade_out 50`, `high_speed_pitch_fade [1000,1001]`, `yaw_low_speed 0.0625`,
+  `yaw_high_speed 0.17`, `yaw_fade_in 10`, `yaw_max 50`, `yaw_fade_out 400`, `groundblow_elev 400`,
+  `groundblow_mag 10`, `ai_groundblow 0.5`, and the `crash` block's `bounce_factor 0.6`. Units are
+  unverified; decoding it deserves its own pass, and it is the upstream of two other entries here.
+  Two things it settles immediately: **ground blow ships** (`groundblow_elev`/`groundblow_mag`),
+  where the M2 plan recorded it as absent with "magnitude would be a TUNE"; and the `yaw_*` fade set
+  is the original's own speed-dependent yaw authority, which our hand-rolled `eff`
+  (`1.4 − clamp(v/fd)`) stands in for and whose comment already admits is "still not same as
+  original".
+  ⚠ **Traps.** (a) `yaw_max 50` and `yaw_fade_out 400` are not in the same units as our `eff`
+  — do not map names onto our terms without deriving the units, because our yaw 360° currently
+  matches the original to 4% and a mis-scaled substitution would break a passing suite check.
+  (b) `drag_factor 1.5` here **collides with** `vehicle.json`'s per-plane `drag_factor` (0.37 on the
+  Bloodhawk), so at least one of the two is not what its name suggests; our drag uses neither.
+
+- **Angle of attack is now fittable and is not modelled.** The ADI shows hysteresis against
+  vertical speed round the loop — expected, since the ball shows attitude while `dh/dt` follows the
+  flight path, and AoA is exactly what separates them. That hysteresis *is* the AoA signal, and it
+  became fittable when the clock factor was pinned. Pairs with the `maxAOA`/`liftAOAs` data above.
+
+- **The roll's spin-up shape is untested.** Mid-roll steady rate reads 240 °/wall-s while the whole
+  360° averages 246, so the original's roll was **still accelerating when it finished**. Our
+  `1/damp` spin-up reproduces the total time (1.98 s vs 2.05) — whether it reproduces the curve is
+  unknown, and only a per-frame bank trace would say.
+
+- **Owed captures, each blocking one of the above.** A sustained banked max-pull turn (induced
+  drag), a low pass along a canyon wall (ground blow — the only possible source), and level top
+  speed at 5500 / 6000 / 6500 / 6800 ft (the altitude limit). The capture spec and the
+  clip-validity gate are in `analysis/video-flight-calibration/FINDINGS.md`; **auto head turn must
+  be off or the clip is unusable**, which cost two takes already.
+
 ## Open fidelity questions (answerable by testing the original)
 
 - **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
@@ -1089,14 +1183,12 @@ the document alone, it says so and marks the value TUNE.
 - **Crossed `pdpN_h` numbering** (bloodhawk/firebrand/brigand data quirk): does the *original*
   amputate the wrong wingtip on wing damage too? Its engine hides healthy skins by an
   engine-side rule we can't see; we pair by mesh position since 2026-07-19.
-- **Dive terminal speed**: the dive-video gauge frames pin the original's near-vertical dive
-  terminal at ≈ 1.27×fd_speed (~385 mph); our drag curve + `MaxDiveSpeedFrac` cap runs to
-  1.7×. Matching it means reshaping the overspeed drag (or the cap) — interacts with the
-  whine/rattle curves that key off speed/fd_speed (HISTORY 2026-07-19).
-- **Pitch rate vs speed**: the user's 11 s sustained full-pitch 360° visibly bled speed in the
-  original — its pitch rate may slow with speed; ours is constant (item-12 calibration matches
-  the 11 s average). Likewise the yaw `eff` speed shape (`1.4 − clamp(v/fd)`) is an unvalidated
-  interim model away from cruise.
+- **The yaw `eff` speed shape** (`1.4 − clamp(v/fd)`) is an unvalidated interim model away from
+  cruise: the 360° rudder turn matches the original to 4%, but that is one speed. The original's
+  own version of this ships as `player.json`'s `yaw_*` fade set — see "Flight-model gaps the video
+  calibration measured" below, which is also where the two closed halves of this entry went (the
+  original's pitch rate is measured **flat** with speed, and it bleeds speed in a hard pull because
+  of induced drag rather than a falling pitch rate).
 - **Engine pitch behavior in dives**: the original's engine drops ~12% through a dive and
   overshoots ~1.05 at pull-out — not reproducible by the throttle-only pitch curve (cap 1.0).
   Throttle cut? Camera Doppler? A speed/RPM term? Needs a controlled full-throttle-dive
@@ -1119,11 +1211,12 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
 - **Compass tape** — north = −Z convention (unverified vs the original; one-line flip in
   `FlightController`'s heading line), plus `TileOverscan` / `RimGain` / the nearest-tick look.
 - **`fogRangeFactor` 2** — the halving predates the sRGB fog-colour fix, so re-A/B it in game.
-- **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`,
-  `LowSpeedDragBlend`, and the Run-2 item-12 per-axis `PitchTune` 0.75 / `YawTune` 1.32 /
-  `RollTune` 2.12. Those three are measurement-calibrated (2026-07-19) but the *feel* A/B is
-  pending — **especially the ~2.7× cut in pitch authority**, the largest single change to how the
-  aircraft handles.
+- **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.
+  **`PitchTune` / `YawTune` / `RollTune` / `ThrustConst` have left this list**: all four are now
+  measured against the original frame by frame and asserted by the `flight-envelope` suite, so they
+  are not TUNE knobs and a feel A/B cannot overrule them. What *is* owed on them is the opposite
+  errand: flying the calibrated values to see what the corrected thrust changed at the speeds the
+  aircraft now reaches routinely (`playtest.md` §3).
 - **Numpad camera views (`FlightController.Views` / `ViewDist`)** — the *layout* is settled (it
   matches the numpad's spatial geometry, and the user recalls it from the original): 2 belly, 1/3
   below-flank, 4/6 flanks, 7/9 above-flank, 8 ahead. Three **magnitudes are user-recall, not data**,

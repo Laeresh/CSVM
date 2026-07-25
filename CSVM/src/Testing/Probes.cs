@@ -5,6 +5,7 @@ using System.Linq;
 using System.Text;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -711,6 +712,267 @@ public static class Probes
         // WorldSounds.Tick — but this harness pumps no frames, so free them here or they leak.
         runtime.Sounds?.FlushOneShots();
         return result;
+    }
+
+    // ---- flight envelope ---------------------------------------------------------------------
+
+    private const float Mph = 0.44704f;         // m/s per mph
+    private const float Ft = 0.3048f;           // m per foot
+    private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
+
+    /// <summary>One flight scenario: what the model does, and what the original did.
+    ///
+    /// <para><see cref="Measured"/> is the original's own value, decoded from cockpit-gauge video
+    /// (see <c>analysis/video-flight-calibration/</c>) — a golden number, not a guess. A row with no
+    /// <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is reported but not
+    /// asserted: either nothing was measured to compare against, or the comparison is a known open
+    /// gap that must not gate a build until it is scoped.</para></summary>
+    public sealed class FlightRow
+    {
+        public string Name = "";
+        public string What = "";
+        public string Unit = "";
+        public double Model;
+        public double? Measured;
+        public double Tolerance;
+        public bool Informational;
+        public string Detail = "";
+
+        public bool Asserted => !Informational && Measured != null;
+        public bool Ok => !Asserted || Math.Abs(Model - Measured!.Value) <= Tolerance;
+
+        /// <summary>Signed miss against the original, as a percentage — the shape that tells a
+        /// scale error (constant %) from drift (sign-random).</summary>
+        public double? ErrorPct =>
+            Measured is { } msd && msd != 0 ? (Model - msd) / msd * 100.0 : null;
+    }
+
+    /// <summary>The flown envelope of one airframe against the original's measured values.</summary>
+    public sealed class FlightEnvelopeResult
+    {
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public readonly List<FlightRow> Rows = new();
+
+        public int Asserted => Rows.Count(r => r.Asserted);
+        public int Failed => Rows.Count(r => !r.Ok);
+        public bool Ok => Error == null && Asserted > 0 && Failed == 0;
+    }
+
+    /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
+    /// measured flying, and reports both numbers side by side.
+    ///
+    /// <para>This is the only instrument that can answer "did a flight-constant change break the
+    /// calibration?" — the constants interact (thrust sets speed, speed sets the yaw <c>eff</c>, so
+    /// a thrust change moves yaw authority), and a screenshot cannot see any of it. No world, no
+    /// scene, no game assets beyond the zrdr readers: it constructs the model directly and
+    /// integrates it at the fixed <c>--det</c> step.</para>
+    ///
+    /// <para>⚠ Every target here is the <b>Bloodhawk's</b>. It is the only airframe the original was
+    /// recorded flying, so another plane's run reports its numbers with nothing to assert against —
+    /// which is honest, not a gap to fill by scaling the Bloodhawk's.</para></summary>
+    public static FlightEnvelopeResult FlightEnvelope(string zrdrPath, string planeNodeName)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new FlightEnvelopeResult();
+        PlaneStats stats;
+        try
+        {
+            stats = PlaneStats.Load(zrdrPath, planeNodeName);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not load plane stats for '{planeNodeName}' ({zrdrPath}): {e.Message}";
+            r.Summary = $"flight envelope: {r.Error}";
+            return r;
+        }
+
+        bool bhawk = planeNodeName.Equals("player_bhawk", StringComparison.OrdinalIgnoreCase);
+        float fd = stats.FdSpeed;
+        float thrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", 184f)
+                            / (stats.VehWeight / 1000f);
+
+        void Row(string name, string what, string unit, double model, double? measured,
+                 double tol, string detail = "", bool info = false)
+        {
+            r.Rows.Add(new FlightRow
+            {
+                Name = name, What = what, Unit = unit, Model = model,
+                Measured = bhawk ? measured : null, Tolerance = tol,
+                Detail = detail, Informational = info,
+            });
+        }
+
+        // --- level full-throttle equilibrium. Drag is normalized so drag(fd_speed) = max thrust,
+        // so this must land on fd_speed for every airframe by construction; it is here because that
+        // construction is exactly what a thrust change could break silently.
+        var m = Fresh(stats, Level(), 0.5f * fd, 1f);
+        Run(m, 1f, 180f, pitch: 0f);
+        Row("level-top-speed", "level full throttle held to equilibrium", "mph",
+            m.Speed / Mph, 300.4, 4.0, $"fd_speed = {fd / Mph:0.0} mph");
+
+        // --- acceleration. THE measurement that sets ThrustConst: one constant fixes both this and
+        // the terminal dive below, and the two agree, which is what makes the drag shape credible.
+        m = Fresh(stats, Level(), 150f * Mph, 1f);
+        double tAccel = RunUntil(m, 1f, 30f, () => m.Speed >= 290f * Mph);
+        Row("accel-150-290", "level full throttle, 150 -> 290 mph", "s", tAccel, 3.76, 0.40);
+
+        // --- terminal dive. Nose (and path) 70.7° down, full throttle, held to terminal — the angle
+        // the original's "vertical" dive clip actually came out at, so this compares like with like.
+        m = Fresh(stats, Pitched(-70.7f), 0.9f * fd, 1f);
+        Run(m, 1f, 120f, pitch: 0f);
+        double pathDeg = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        Row("terminal-dive", "70.7° dive at full throttle, held to terminal", "mph",
+            m.Speed / Mph, 355.2, 6.0,
+            $"settled path {pathDeg:0.0}°, {m.Speed / fd:0.000} x fd_speed");
+
+        // --- roll. Accumulated body roll rate: no other axis is commanded, so this is the 360° the
+        // stopwatch and the video's ADI bank centroid both timed.
+        m = Fresh(stats, Level(), fd, 1f);
+        double tRoll = RunUntil(m, 1f, 30f, RollAccum(m), roll: 1f);
+        Row("roll-360", "full aileron from level cruise, 360°", "s", tRoll, 2.05, 0.25);
+
+        // --- pitch. Steady rate after the 1/damp spin-up, at three speeds: ours is
+        // speed-independent by construction, and the video says the original's is too, so the point
+        // of the three is to catch anything else (stall, lift, eff) leaking into pitch at the ends.
+        var pitchRates = new List<double>();
+        foreach (float mph in new[] { 120f, 200f, 280f })
+        {
+            m = Fresh(stats, Level(), mph * Mph, 1f);
+            Run(m, 1f, 2f, pitch: 1f);
+            pitchRates.Add(Mathf.RadToDeg(m.BodyRates.X));
+        }
+        Row("pitch-rate", "sustained full-elevator body pitch rate", "°/s",
+            pitchRates[1], 33.0, 3.0,
+            $"at 120/200/280 mph = {pitchRates[0]:0.0}/{pitchRates[1]:0.0}/{pitchRates[2]:0.0} °/s");
+
+        // --- yaw. The one axis 'eff' scales, so it is the axis a thrust change moves: faster
+        // acceleration holds the plane nearer fd_speed, where eff is at its floor.
+        m = Fresh(stats, Level(), 290f * Mph, 1f);
+        double sumSpeed = 0, samples = 0;
+        double tYaw = RunUntil(m, 1f, 60f, YawAccum(m), yaw: 1f,
+                               onStep: () => { sumSpeed += m.Speed; samples++; });
+        Row("yaw-360", "full rudder from 290 mph, 360°", "s", tYaw, 28.6, 3.0,
+            samples > 0 ? $"mean speed {sumSpeed / samples / Mph:0.0} mph" : "");
+
+        // --- 1/8 throttle. Both rows are INFORMATIONAL: the original's throttle→thrust curve is
+        // undecoded, so a miss here indicts that curve or the low-speed drag blend and cannot say
+        // which. Asserting it would fail the build over an unscoped question.
+        m = Fresh(stats, Level(), 0.9f * fd, 0.125f);
+        Run(m, 0.125f, 300f, pitch: 0f);
+        double idlePath = Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(m.VelocityDir.Y, -1f, 1f)));
+        Row("eighth-throttle-speed", "1/8 throttle held to equilibrium", "mph",
+            m.Speed / Mph, 137.9, 6.0,
+            $"{m.Speed / fd:0.000} x fd_speed (original 0.459), settled path {idlePath:0.0}° "
+            + "— it ends up below lift speed and sinks, so this is not a level equilibrium",
+            info: true);
+
+        m = Fresh(stats, Level(), 290f * Mph, 0.125f);
+        double tDecel = RunUntil(m, 0.125f, 60f, () => m.Speed <= 150f * Mph);
+        Row("decel-290-150", "throttle cut to 1/8, 290 -> 150 mph", "s", tDecel, 7.04, 1.0,
+            "", info: true);
+
+        // --- zoom climb. INFORMATIONAL, and it is the row that exposes the model's largest known
+        // gap: the original bled to 104 mph reaching its apex where we arrive still fast, because we
+        // model no induced drag at all — a hard pull costs us nothing. The altitude is close; the
+        // energy is not. (Its stick history is also unknown: a held full pull is a loop, and the
+        // same session's loop passed 180° in ~6 s, so 10.5 s to apex was some other input.)
+        m = Fresh(stats, Level(), 300f * Mph, 1f);
+        float apex = 0f, minSpeed = float.MaxValue;
+        double tApex = RunUntil(m, 1f, 30f,
+            () => m.Position.Y < apex - 1f, pitch: 1f,
+            onStep: () =>
+            {
+                apex = Mathf.Max(apex, m.Position.Y);
+                minSpeed = Mathf.Min(minSpeed, m.Speed);
+            });
+        Row("zoom-climb", "full pull from 300 mph level, altitude gained", "ft",
+            apex / Ft, 1635.0, 200.0,
+            $"min speed {minSpeed / Mph:0.0} mph (original 104 — we model no induced drag), "
+            + $"apex at {tApex:0.0} s (original 10.5)",
+            info: true);
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# flight envelope — {planeNodeName} ({stats.DefName})");
+        sb.AppendLine($"# fd_speed {fd:0.#} m/s ({fd / Mph:0.0} mph)  weight {stats.VehWeight:0} kg  "
+                      + $"engine power {stats.EnginePower:0.###}  gravity {stats.Gravity:0.#} m/s²");
+        sb.AppendLine($"# max thrust accel {thrustAccel:0.00} m/s²  stepped at {EnvDt * 1000f:0.0} ms");
+        sb.AppendLine(bhawk
+            ? "# 'original' = decoded from cockpit-gauge video, analysis/video-flight-calibration/"
+            : $"# no measured original for {planeNodeName} — the Bloodhawk is the only airframe on video");
+        sb.AppendLine();
+        sb.AppendLine($"{"scenario",-22} {"unit",-5} {"model",10} {"original",10} {"err",8}  verdict");
+        foreach (var row in r.Rows)
+        {
+            string verdict = row.Asserted ? (row.Ok ? "ok" : "!! FAIL") : "(not asserted)";
+            sb.AppendLine($"{row.Name,-22} {row.Unit,-5} {row.Model,10:0.00} "
+                          + $"{(row.Measured?.ToString("0.00") ?? "-"),10} "
+                          + $"{(row.ErrorPct is { } p ? $"{p:+0.0;-0.0}%" : "-"),8}  {verdict}");
+            sb.AppendLine($"{"",-22} {row.What}{(row.Detail.Length > 0 ? $" — {row.Detail}" : "")}");
+        }
+        r.Text = sb.ToString();
+        r.Summary = r.Failed == 0
+            ? $"flight envelope: {r.Asserted} scenario(s) asserted against the original, all within tolerance"
+            : $"flight envelope: {r.Failed} of {r.Asserted} asserted scenario(s) FAILED — see the !! lines above";
+        return r;
+    }
+
+    private static Basis Level() => Basis.Identity;
+
+    /// <summary>Attitude with the nose <paramref name="deg"/>° above the horizon (negative = dive),
+    /// wings level. Verified by the report's own settled-path readout rather than assumed.</summary>
+    private static Basis Pitched(float deg) => Basis.Identity.Rotated(Vector3.Right, Mathf.DegToRad(deg));
+
+    /// <summary>A model parked at an attitude and speed, with the flight path along the nose —
+    /// <see cref="FlightModel.Reset"/>'s own convention, so a scenario starts trimmed.</summary>
+    private static FlightModel Fresh(PlaneStats stats, Basis attitude, float speed, float throttle)
+    {
+        var m = new FlightModel(stats);
+        m.Reset(Vector3.Zero, attitude, speed, throttle);
+        return m;
+    }
+
+    private static void Run(FlightModel m, float throttle, float seconds,
+                            float pitch = 0f, float roll = 0f, float yaw = 0f)
+    {
+        for (float t = 0f; t < seconds; t += EnvDt)
+        {
+            m.Step(new FlightInput { Pitch = pitch, Roll = roll, Yaw = yaw, Throttle = throttle }, EnvDt);
+        }
+    }
+
+    /// <summary>Steps until <paramref name="done"/> or <paramref name="limit"/>, returning the
+    /// elapsed sim seconds (the limit itself if it never finished — a scenario that ran out of time
+    /// reports as far off rather than as a hang).</summary>
+    private static double RunUntil(FlightModel m, float throttle, float limit, Func<bool> done,
+                                   float pitch = 0f, float roll = 0f, float yaw = 0f,
+                                   Action? onStep = null)
+    {
+        for (float t = 0f; t < limit; t += EnvDt)
+        {
+            m.Step(new FlightInput { Pitch = pitch, Roll = roll, Yaw = yaw, Throttle = throttle }, EnvDt);
+            onStep?.Invoke();
+            if (done())
+            {
+                return t + EnvDt;
+            }
+        }
+        return limit;
+    }
+
+    /// <summary>Predicate that integrates the body roll rate and trips at a full turn — the rate is
+    /// what the stopwatch and the video's bank readout both timed, and nothing else is commanded.</summary>
+    private static Func<bool> RollAccum(FlightModel m)
+    {
+        double turned = 0;
+        return () => (turned += Math.Abs(m.BodyRates.Z) * EnvDt) >= Math.Tau;
+    }
+
+    private static Func<bool> YawAccum(FlightModel m)
+    {
+        double turned = 0;
+        return () => (turned += Math.Abs(m.BodyRates.Y) * EnvDt) >= Math.Tau;
     }
 
     // ---- shared formatting -------------------------------------------------------------------

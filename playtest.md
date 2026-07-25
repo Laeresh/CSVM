@@ -107,9 +107,22 @@ Each item below is a **re-test owed once its fix lands**; the numbered pointer i
 
 ## 3 · Flight feel & camera (TUNE — calibrate against the original)
 
-- **Pitch authority — the big one.** The Run-2 calibration cut pitch authority ~2.7× (`PitchTune`
-  0.75). *Look for:* does the aircraft still turn/loop like the original, or does it now feel sluggish
-  in pitch? Also `YawTune` 1.32 / `RollTune` 2.12. *Blocks:* flight-feel sign-off.
+- **⚠ Before re-adding any `CSVM/config.json`, know that it silently overrules everything in §3.**
+  Interactive runs honour that git-ignored file while `--det` runs drop it, so an override there
+  makes a playtest measure a constant the tests never see. It was deleted when the calibration
+  landed — it had been pinning `thrustConst` to the pre-calibration 40 and `pitchTune` to 1.5,
+  double the calibrated 0.75. `./RunGame.ps1 --dump-config` writes a fresh full template if you
+  want one back. *Blocks:* nothing now — a standing warning.
+- **Thrust is 4.6× stronger than it was — fly it.** Not a TUNE: the original's own acceleration was
+  measured off cockpit-gauge video (150 → 290 mph in 3.76 s) and `ThrustConst` now reproduces it, and
+  the terminal dive agrees to 0.3% on the same constant. *Look for:* does the aircraft accelerate and
+  dive like the original now — and does anything *else* break at the higher speeds it now reaches
+  routinely (collision margins at low level, the overspeed whine and rattle curves, how far a stunt
+  zone overshoots, whether the chase camera keeps up). Top speed is unchanged by construction.
+  *Blocks:* flight-feel sign-off. *Answered, do not re-litigate:* **pitch authority is not sluggish**
+  (sustained rate measured 33 °/s, ours 33.5) and the original's pitch rate does **not** fall off
+  with speed — `PitchTune` 0.75 / `YawTune` 1.32 / `RollTune` 2.12 are all confirmed within a few
+  percent, and `--run-tests=flight-envelope` fails if they move.
 - **Stall & knife-edge.** `StallNoseRate`, `KnifeAlignFloor`, `KnifeNoseSag` (~4°) / `KnifeNoseRate`,
   `ClimbGravityScale`, `LowSpeedDragBlend`. *Look for:* stall recovery, knife-edge sink, and whether
   steep wings-level zoom climbs feel nose-heavy (if so the fix is gating on real bank — a code change,
@@ -118,12 +131,13 @@ Each item below is a **re-test owed once its fix lands**; the numbered pointer i
   intensity* as the stall approaches; ours is binary — it starts only once `Stalled` is true, at a
   fixed phase. *Look for:* does a graded ramp read as useful warning or as noise. *Blocks:* stall-cue
   fidelity.
-- **Dive terminal speed.** Ours runs to ~1.7×fd_speed; the original's near-vertical dive pins ~1.27×
-  (~385 mph). *Look for:* top-end dive speed vs a reference dive. *Blocks:* overspeed drag/cap tuning
-  (interacts with the whine/rattle curves).
-- **Pitch rate vs speed.** The original visibly bled speed during a sustained full-pitch 360°; ours is
-  constant-rate. *Look for:* does a hard sustained pull slow you down like the original? *Blocks:*
-  flight-model fidelity.
+- **A hard pull should cost you speed, and ours does not.** Measured: from 300 mph the original's
+  full pull bottoms at **104 mph**, ours arrives at the apex still doing **266 mph** — we model no
+  induced drag (`backlog.md`, "Flight-model gaps the video calibration measured"). *Look for:* how
+  badly this reads in normal flying, i.e. whether an energy-free turn makes combat and stunt runs
+  feel wrong enough to schedule the fix. *Blocks:* nothing yet — it is a scoping judgement, not a
+  TUNE. Dive terminal speed is **settled and needs no A/B**: it is emergent now and lands within
+  0.3% of the original's measured 355 mph.
 - **Chase camera.** `CamRotSmooth` 7 /s — the roll-follow lag. *Look for:* fast rolls read dynamic,
   not glued or lagging. *Blocks:* camera sign-off.
 - **Control surfaces.** Deflection angles + slew rate. *Look for:* ailerons/elevators/rudder track the

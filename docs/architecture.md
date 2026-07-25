@@ -741,9 +741,15 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
-ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune, TUNE, calibrated to stopwatch
-timings of the original). Thrust/drag/gravity integrate on the velocity vector (speed passes
-through zero); lift cancels gravity's cross-path share; drag is normalized so drag(fd_speed) = max thrust.
+ang_momentum_damp, scaled per axis (PitchTune/YawTune/RollTune). Thrust/drag/gravity integrate on
+the velocity vector (speed passes through zero); lift cancels gravity's cross-path share; drag is
+normalized so drag(fd_speed) = max thrust.
+⚠ ThrustConst and the three *Tune rates are NOT free TUNEs — they are pinned to the original,
+  measured off cockpit-gauge video, and `--run-tests`' flight-envelope suite fails if they move.
+  Retune by feel and you are overwriting a measurement (`analysis/video-flight-calibration/`).
+⚠ MaxDiveSpeedFrac is a numerical backstop, not a terminal speed: terminal dive is EMERGENT from
+  the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
+  number with a guess. Keep it above every airframe's emergent terminal (worst: Balmoral 1.708).
 ⚠ Cruise is Slerp's degenerate case — pathDot > 0.999f branches to a normalized lerp (the
   near-parallel cross-product axis is float noise; Rotated throws). Never revert to a bare Slerp.
 ⚠ While stalled the nose cannot rise over the horizon: world elevation is capped at max(horizon,
@@ -751,7 +757,8 @@ through zero); lift cancels gravity's cross-path share; drag is normalized so dr
 ⚠ The knife-edge nose sag (KnifeNoseSag/KnifeNoseRate) is a bound approached at a rate cap, both
   measured: a free-falling target never settles, an exponential rewrites stall recovery. It also
   acts at zero bank (knife grows with pure pitch) and shifts the settled path ~1:1 by construction.
-⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang, no flight_ceiling.
+⚠ Accepted artifacts, not bugs: loop energy pump, steep-climb equilibrium, stall hang. Known
+  MISSING, both measured: no induced drag (a hard pull costs no speed) and no altitude limit.
 
 ## src/Flight/PropAnimator.cs
 Spins the flying aircraft's prop/rotor blur discs: Build collects every node PropParts classifies
@@ -1396,9 +1403,13 @@ The session's randomness policy: one master seed and ten named subsystem generat
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--damage-test` inspection reports. Each probe does the work once and returns both halves: the
-report text the flag prints and writes, and a structured verdict (counts, per-row booleans,
-failure strings) a `--run-tests` suite asserts on.
+`--dump-flight` / `--damage-test` inspection reports. Each probe does the work once and returns
+both halves: the report text the flag prints and writes, and a structured verdict (counts,
+per-row booleans, failure strings) a `--run-tests` suite asserts on.
+⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
+  recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
+  A row with `Informational` set is measured but deliberately not asserted (an open question) —
+  never promote one to a verdict without the measurement that closes it.
 ⚠ **One source of truth.** The flags in `PlaneViewer` are thin wrappers over these; a check added
   to a probe reaches both the report and the suite. Never re-implement a check in a suite.
 ⚠ **A verdict is a field, never a glyph.** The `✓`/`✗` in a report line is formatting; the boolean
@@ -1435,11 +1446,12 @@ PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
 ⚠ A suite must never write outside `.scratch/`; `WriteArtifact`/`ScratchDir` are the only route.
 
 ## src/Testing/Suites.cs
-The seven registered suites: `weapons-defs`, `markers-rig`, `loadout-bind`, `weapons-fire`,
-`damage-stages`, `damage-hd`, `destructible-census`.
+The nine registered suites: `weapons-defs`, `flight-envelope`, `markers-rig`, `loadout-bind`,
+`weapons-fire`, `damage-stages`, `damage-hd`, `destructible-census`, `tex-dropin`.
 ⚠ The expected numbers are **golden counts against the retail install** (48 weapon defs, 11
   airframes, the per-chapter destructible census) — the data is a fixed input, so they are
-  invariants. Change one only with the measurement that moved it.
+  invariants. Change one only with the measurement that moved it. `flight-envelope`'s targets are
+  golden in the same sense: they measure the original itself, not our model.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`: a skipped weapon is a
   success-looking outcome (no mount on this plane) that nothing else would notice.
 ⚠ `--loadout=<def>` reaches `loadout-bind` — `--run-tests=loadout-bind --loadout=pbloodhawk` is the

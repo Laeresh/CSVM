@@ -196,7 +196,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
-- `src/Testing/Suites.cs` — the seven registered suites and their golden counts (48 weapon defs, 11 airframes, the per-chapter destructible census).
+- `src/Testing/Suites.cs` — the nine registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope).
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
