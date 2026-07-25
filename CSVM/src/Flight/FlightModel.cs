@@ -61,9 +61,11 @@ public sealed class FlightModel
                                                   // and lands within 0.3% of the original, so a cap
                                                   // that binds would replace a measured value with a
                                                   // guess. Set above every airframe's own emergent
-                                                  // terminal — the worst is the Balmoral's 1.708,
-                                                  // a bomber at A = 13 m/s² — so it only ever
-                                                  // catches the loop energy pump or a dt spike.
+                                                  // terminal — the worst is the Balmoral, a bomber
+                                                  // at A = 13 m/s², which reaches 1.678 in a 71°
+                                                  // dive (--dump-flight=player_balmoral) and ~1.71
+                                                  // vertical — so it only ever catches the loop
+                                                  // energy pump or a dt spike.
     private const float StallNoseRate = 1.0f;     // TUNE: rad/s toward world-down at full stall depth (× stall_mag)
     private const float ClimbGravityScale = 0.6f; // TUNE: climb retention — a climb bleeds less speed than
                                                   // plain energy exchange (the original holds speed better)

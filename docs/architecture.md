@@ -749,7 +749,8 @@ normalized so drag(fd_speed) = max thrust.
   Retune by feel and you are overwriting a measurement (`analysis/video-flight-calibration/`).
 ⚠ MaxDiveSpeedFrac is a numerical backstop, not a terminal speed: terminal dive is EMERGENT from
   the drag curve and lands within 0.3% of the original, so a value that binds replaces a measured
-  number with a guess. Keep it above every airframe's emergent terminal (worst: Balmoral 1.708).
+  number with a guess. Keep it above every airframe's emergent terminal — worst is the Balmoral,
+  1.678 in a 71° dive (`--dump-flight=player_balmoral`) and ~1.71 vertical.
 ⚠ Cruise is Slerp's degenerate case — pathDot > 0.999f branches to a normalized lerp (the
   near-parallel cross-product axis is float noise; Rotated throws). Never revert to a bare Slerp.
 ⚠ While stalled the nose cannot rise over the horizon: world elevation is capped at max(horizon,
