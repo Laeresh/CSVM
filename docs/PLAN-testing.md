@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☑ B11 — `Log`: categories/levels, `--log=` console filter, always-on full-detail file sink **(done 2026-07-25 — `src/Utils/Log.cs`, 9 categories, 5 files converted; `docs/HISTORY.md`)**
 12. ☑ B12 — `--run-tests`: in-engine suite registry, pass/fail report, nonzero exit code; existing dump/damage-test assertions become suites **(done 2026-07-25 — `src/Testing/`, 7 suites green in 16 s; `docs/HISTORY.md`)**
 13. ☑ B13 — `CSVM.Tests` xUnit project: pure-logic units, local-data golden invariants, hand-authored fixtures **(done 2026-07-25 — 135 tests, no `CSVM/src/` change needed; `docs/HISTORY.md`)**
-14. ☐ B14 — `RunTests.ps1`: the single entry point (build → units → suites → goldens → summary)
+14. ☑ B14 — `RunTests.ps1`: the single entry point (build → units → suites → goldens → summary) **(done 2026-07-25 — one script, one exit code; the golden and perf stages report TODO until C23/C22; `docs/HISTORY.md`)**
 
 ### Wave C — Perf + visual instruments
 
@@ -375,7 +375,7 @@ per-frame `GlobalPosition` sets on death-created emitters.
 
 Also landed: `CSVM_DATA_ROOT` probes *both* shapes (a checkout holding `extracted/`, and the extraction tree itself), and `[ExtractedDataFact]`/`[ExtractedDataTheory]` set xUnit v2's attribute `Skip` — v2 has no `Assert.Skip`, and a theory must skip at the attribute level or its rows fail individually. B14 should call `dotnet test CSVM/CSVM.sln` (which runs only the test project) and treat exit 0 with a nonzero skip count as "data absent", not "passed".
 
-## B14 ☐ `RunTests.ps1`: the single entry point
+## B14 ☑ `RunTests.ps1`: the single entry point
 
 **Goal.** One script: build (`dotnet build CSVM/CSVM.sln`) → `dotnet test` → `--run-tests` (windowed, `--det` implied) → golden compare (once C23 exists) → one summary block and a single exit code. Switches: `-Filter <suite>`, `-SkipUnits`, `-SkipEngine`, `-Perf` (append C22's history entry).
 
@@ -386,6 +386,33 @@ Also landed: `CSVM_DATA_ROOT` probes *both* shapes (a checkout holding `extracte
 **Verify.** Run it green end-to-end; break one unit test and one suite in turn → script exits nonzero with the failing stage named. Run it from a worktree with `CSVM_DATA_ROOT` set → identical behaviour.
 
 **⚠ Traps.** Rule 66's kill must be scoped (command-line filter on this worktree's path) — never a blanket Godot kill; another agent's run is not yours to kill.
+
+**Landed 2026-07-25** — `RunTests.ps1`: build → units → engine → goldens (+ perf under `-Perf`),
+one summary block, one exit code. Evidence in `docs/HISTORY.md`.
+
+**The two seams are honest TODO rows, not stubs.** `goldens` is C23's and prints "not implemented
+yet — no golden hashes are captured or compared"; `perf` is C22's and prints "not implemented yet —
+no scenario set, no A/B, no history store". Both add a `not checked:` line, so the summary of a
+fully green run still says out loud that no pixel regression and no timing regression is being
+caught. Neither ever contributes a PASS.
+
+**Rule 66's scoping had to be tightened, and the trap is now in the rule.** A command-line filter on
+this tree's project dir alone matches a *live playtest*: the first two runs each killed two
+`--plane=player_bhawk --chapter=C1` processes another session had launched seconds earlier. The kill
+is now filtered to this tree's dir **and** `--run-tests` — a run that always quits by itself, so a
+live one is stuck and ours — and every other Godot on this tree is printed and left alone.
+
+**A second trap, now verification rule 88:** with `$ErrorActionPreference = "Stop"`, piping the
+script's own output (`.\RunTests.ps1 | Select-String …`) makes PowerShell 5.1 wrap the child's
+stderr in `NativeCommandError` records, and Godot's first allowlisted `ERROR:` line then killed the
+script at the launch line while the identical unpiped run passed. Every native call now runs with
+errors non-terminating and is judged by its exit code.
+
+**Known gap, inherited from B13, not fixed here:** `CSVM_DATA_ROOT` pointed at a directory holding
+no extraction makes the *engine* suites skip (it resolves that path strictly) but not the
+data-dependent *unit* tests, which fall back to their own checkout — so from the primary tree they
+still find `extracted/` and run. Documented in `docs/tooling.md` rather than changed, since it is
+`TestData`'s resolution order, not the script's.
 
 # Wave C — Perf + visual instruments
 

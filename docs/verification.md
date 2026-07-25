@@ -167,6 +167,10 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 66. **Confirm zero stray Godots (yours and other agents') before believing a broken capture or
     error burst — kill by command line filtered to your worktree.** `Start-Process -Wait` exit 0
     doesn't mean the run ended; strays manufactured 16,576 errors and a 1/7-size capture.
+    **Scope the kill twice, though: the tree's project dir alone also matches a live session.**
+    A dir-only filter killed two `--plane=player_bhawk --chapter=C1` processes another session had
+    launched seconds earlier — match your own instrument's flag as well (`RunTests.ps1` kills only
+    `--run-tests` Godots on this tree and merely reports the others).
 67. **`dotnet build` cannot fail on comment-encoding corruption; Godot's Mono loader validates
     UTF-8 strictly and refuses the file.** After any bulk text rewrite, run the game — the
     damage surfaces as a `Main.tscn` parse error.
@@ -312,6 +316,13 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     radius from it — a `--direction` there gets a *synthesized* pivot, announced on its own log
     line. And **quote every comma-bearing argument** in PowerShell (rule 63).
 
+88. **Piping a PowerShell script's own output makes a child process's stderr terminating — the run
+    dies mid-stage and reads as a crash in the thing being measured.** Under
+    `$ErrorActionPreference = "Stop"` in 5.1, `.\RunTests.ps1 | Select-String …` turned Godot's
+    first (allowlisted, harmless) `ERROR:` line into a `NativeCommandError` that killed the script
+    at the launch line, while the identical unpiped run passed: set `Continue` around every native
+    call and judge it by its exit code.
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -349,6 +360,9 @@ the reason you would. If your diff lands here, suspect noise first.
 
 Before calling a change verified:
 
+- [ ] **`.\RunTests.ps1` green, exit 0** — one command for the build, the unit tests and the
+      in-engine suites, and its exit code is the verdict. **A `SKIP` row is not a pass**: read its
+      "not checked" lines before believing the run, and the `TODO` rows name what nobody checks yet
 - [ ] Build succeeds, and the **baseline** build succeeded too
 - [ ] Camera and spawn pinned; noise floor (a `--no-det` measurement now — rule 83) measured same-build-vs-same-build
 - [ ] The instrument has been shown capable of reporting failure

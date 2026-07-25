@@ -6349,3 +6349,55 @@ and mesh counts unchanged. `dotnet build` 0/0; `dotnet test` **142/142**.
 **Consequence.** Verification rule 77's chapter-shopping workaround ("pick a chapter whose spawn
 sits over the surface you want") is retired for placement-controllable tests; the new standing rule
 is 84.
+
+## 2026-07-25 — `RunTests.ps1`: one command, one exit code (PLAN-testing B14)
+
+**What landed.** `RunTests.ps1` at the repo root: `build` (`dotnet build CSVM/CSVM.sln`) → `units`
+(`dotnet test`, `--no-build`) → `engine` (Godot `--run-tests`, windowed, `--log-file`) → `goldens`,
+plus `perf` under `-Perf`; one summary block, one exit code, nonzero if any stage FAILED. Switches
+`-Filter <substring>` (engine suite names only), `-SkipUnits`, `-SkipEngine`, `-Perf`. Counts are
+read from machine-readable outputs rather than console prose: a TRX log under
+`.scratch/testresults/` for the units, `.scratch/test-report.json` for the engine — the report is
+deleted before the run so a dead run cannot be scored from the previous one's numbers. Godot is
+resolved this tree first, then `CSVM_DATA_ROOT`, the same fallback `RunGame.ps1` uses.
+
+**Skips are printed, never silent.** No data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP`
+and keep the exit at 0, but each adds a `not checked:` line to the summary. The two unwritten stages
+report `TODO` with a plain "not implemented yet" — the golden-image compare and the perf A/B — so
+even a fully green run says out loud that no pixel and no timing regression is being caught.
+
+**Verified.** *Green end to end:* `build PASS 0.8s · units PASS 2.4s (149 passed, 0 failed, 0
+skipped of 149) · engine PASS 15.7s (7 passed, 0 failed, 0 skipped; engine errors clean) · goldens
+TODO`, `result: PASS -- 18.8s total, exit 0`. *Rule 14, each stage independently (rule 12):* a
+flipped assertion in `ZrdrTests.EveryNumberArrivesAsFloat` gave `FAIL units 148 passed, 1 failed`
+and `result: FAIL in units -- exit 1`; reverted, a `WeaponDefCount + 1` in the `weapons-defs` suite
+gave `FAIL engine 1 passed, 1 failed … [weapons-defs]` and `exit 1` — each with the other stage
+unaffected. *From a worktree* (`git worktree add --detach`, `CSVM_DATA_ROOT` at the primary tree):
+identical — 149/149, 7/7, exit 0, `data root: Z:\Crimson Skies (CSVM_DATA_ROOT)`; no
+`--headless --import` pass was needed first. *Switches:* `-SkipUnits` / `-SkipEngine` each print
+their SKIP row and a `not checked:` line; `-Filter weapons` reached the harness as
+`suites=2/7 filter='weapons'`, `-Filter markers` as `suites=1/7`. *Skip path:* `CSVM_DATA_ROOT`
+pointed at an empty directory → all 7 suites SKIP, each naming the path it wanted, `0 passed, 0
+failed, 7 skipped`, exit 0, with the summary carrying `not checked: 7 in-engine suite(s) SKIPPED`.
+*Seams:* `-Perf` printed `TODO perf … not implemented yet -- no scenario set, no A/B, no history
+store` and contributed no PASS.
+
+**Two traps found while building it, both now standing rules.**
+
+- **Rule 66's kill has to be scoped twice.** Filtering strays only on this tree's project dir also
+  matches a live session: the first two runs each killed two `--plane=player_bhawk --chapter=C1`
+  Godots another session had launched seconds earlier (creation timestamps confirmed they were
+  fresh, not leftovers). The kill now requires this tree's dir **and** `--run-tests` — a run that
+  always quits by itself — and every other Godot on this tree is printed and left alone.
+- **Rule 88, new.** With `$ErrorActionPreference = "Stop"`, piping the script's own output
+  (`.\RunTests.ps1 | Select-String …`) makes PowerShell 5.1 wrap the child's stderr in
+  `NativeCommandError` records: Godot's first allowlisted `ERROR:` line killed the script at the
+  launch line, while the identical unpiped run passed. All three native calls now run with errors
+  non-terminating and are judged by exit code; cmdlets keep `Stop`, because a silently failed
+  `Remove-Item` would score a stage from a stale file.
+
+**Known gap, inherited, not fixed here.** `CSVM_DATA_ROOT` pointed at a directory holding no
+extraction skips the *engine* suites (`PlaneViewer` resolves it strictly) but not the
+data-dependent *units*: `TestData` falls back to its own checkout, so from the primary tree they
+still find `extracted/` and all 149 run. Documented in `docs/tooling.md` — it is the test project's
+resolution order, not the script's.
