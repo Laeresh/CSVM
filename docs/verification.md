@@ -387,6 +387,14 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     other half: that one was about a BOM being honoured when you did not want it, this one about
     UTF-8 not being assumed when you did.
 
+98. **A deterministic run must be a function of the COMMITTED tree — audit what git-ignored state it
+    still reads.** `CSVM/config.json` is a git-ignored dev tuning file, and honouring it under
+    `--det` made the same command produce different pixels in a checkout and in a worktree: the
+    `c1-flight` golden moved the first time it ran anywhere but the tree that captured it, because
+    all 15 of that file's overrides are `flightModel` (which is also why the other ten shots held).
+    `--det` now drops the overrides and says `config=defaults dropped_overrides=N`; capture with
+    your tuning applied via `--no-det`.
+
 ## What this project cannot verify itself
 
 These need the user:

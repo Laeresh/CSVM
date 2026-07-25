@@ -52,6 +52,21 @@ public static class Config
     /// <summary>How many distinct tunable keys have been queried so far (the --dump-config size).</summary>
     public static int RegisteredCount => _registry.Count;
 
+    /// <summary>Drop every loaded override, so all subsequent reads take their in-code default.
+    /// <para>A deterministic run uses this: <c>config.json</c> is a git-ignored dev tuning file, so a
+    /// capture that honoured it would be a function of one machine's uncommitted state rather than of
+    /// the committed tree — the same shot then differs between a checkout and a worktree, and a
+    /// golden hash silently bakes in whatever someone was tuning that day.</para></summary>
+    public static void ClearOverrides()
+    {
+        _values.Clear();
+        _doc?.Dispose();
+        _doc = null;
+        _fileLoaded = false;
+        _warnedMissing.Clear();
+        _warnedType.Clear();
+    }
+
     /// <summary>Parse <paramref name="resPath"/> into the override dictionary. Missing file → no
     /// overrides (all in-code defaults). Malformed JSON, or a non-object root → one error line and
     /// no overrides; never throws, because a dev tool must not crash the game over a stray comma.</summary>

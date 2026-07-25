@@ -84,7 +84,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "ec35b99dde604ed57ccb00279c931a88",
+      "hash": "f0493fb07be2140faa0ae19c136011dc",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     }

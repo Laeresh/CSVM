@@ -779,9 +779,15 @@ public partial class PlaneViewer : Node3D
         // implies. Every constituent is named with its value, including the ones a flag overrode.
         if (_det)
         {
+            // The dev tuning file is git-ignored, so honouring it would make a deterministic capture
+            // a function of one machine's uncommitted state: the same command gives different pixels
+            // in a checkout and in a worktree, and a golden hash quietly records whatever was being
+            // tuned that day. Pass --no-det to capture with your overrides applied.
+            int dropped = Config.OverrideCount;
+            Config.ClearOverrides();
             ulong liverySeed = _paintSeedExplicit ? _paintSeed : Rng.SeedFor(Rng.Paint);
             float dtMs = GameClock.FixedDt * 1000f;
-            Log.Info("core", $"det clock=fixed dt_ms={dtMs:0.###} seed={_masterSeed} spawn={_spawnIndex} livery_seed={liverySeed} pads=off jitter={_jitterDeg:0.###} via={detVia}");
+            Log.Info("core", $"det clock=fixed dt_ms={dtMs:0.###} seed={_masterSeed} spawn={_spawnIndex} livery_seed={liverySeed} pads=off jitter={_jitterDeg:0.###} config=defaults dropped_overrides={dropped} via={detVia}");
         }
         else if (_noDet && (detExplicit || scriptedBy.Length > 0))
         {
