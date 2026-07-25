@@ -252,6 +252,17 @@ pass through unharmed).
 
 ## 9 · Inspect tools (PLAN-testing Wave D — the tools are yours to judge)
 
+> **✅ ALL FIVE PASSED — flown 2026-07-25.** The section is kept for the record of what was checked
+> and for the re-tests the follow-ups below will need. Verdicts, in the user's words: D31 "works
+> really good, exactly what i imagined"; D32 all five sub-checks work; D33 panel, reset and world
+> lighting work; D35 works, with the warning path confirmed; D34 selects, slides, kills and reads
+> comprehensibly. **Five follow-ups came out of it and are in `backlog.md`** — the surface
+> misclassification (which turned out to be a gameplay bug, not an overlay one), the collider
+> wireframe offset, the anim-lab plane selection gap, the node-lab hide affordance, and the damage
+> panel's layout. Stage visuals not showing in the world is recorded there as an
+> animation/visuals issue, deliberately not a D34 defect.
+
+
 - **The zeppelin case — the acceptance test for the shared selection (D31).** The complaint this
   exists to kill: clicking the zeppelin selects one of its motors with no way up. *Where:*
   `./RunGame.ps1 --freecam --chapter=C1 --mission=M04 "--pos=-4848,200,-5165" "--direction=-1,0,0"`

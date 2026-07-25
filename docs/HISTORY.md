@@ -7299,3 +7299,31 @@ Hawaii mission-visuals list names fog, the bridge collapse, waterfalls, torches 
 web), patrol-boat hit points, map-edge continuation, north's world axis, and the crossed `pdpN_h`s.
 The crash "fireball leads the explosion by 0.5 s" claim was **not** added — `player_crash_dirt`
 authors the ground boom before the fireball cascade and contradicts it.
+
+## 2026-07-25 — Wave D playtest passed; the collider overlay found a gameplay bug
+
+**Verdict.** All five inspect-tool playtests passed at the controls. D31's zeppelin case — the
+acceptance test the plan named as the user's call — came back "works really good, exactly what i
+imagined". Recorded in `playtest.md` §9; five follow-ups went to `backlog.md`.
+
+**The finding worth the whole item.** D35's wireframes showed some C2 buildings in the water colour
+and some water in the building colour. That is not an overlay defect: `ColliderOverlay` colours by
+`SceneBuilder.SurfaceMeta` and `Projectile` picks the impact sound and effect from the same
+metadata, so those buildings answer a hit with a water splash. `SurfaceForMesh` votes over a mesh's
+polygons while **skipping the unclassified ones**, so the winner is a majority of whatever matched a
+name pattern rather than of the mesh — measured, **96 of C2's 190 tagged meshes are tagged on a
+minority of their own polygons**, the thinnest `water` on 1 polygon of 76 (C1 42/109, C4 70/106).
+Numbers and the replication script: `analysis/surface-classification/`.
+
+**Two fixes checked and rejected before filing.** Every material carries a `soil` field that looks
+like the original's own classification, but it is almost entirely `Default` — C2 has one `Water`
+material out of 484, and its other values are MechWarrior 3 soil types inherited from mech3ax. And
+the design document describes the system's shape (impact effect and sound follow the surface hit,
+water gets a column and a splash) but not the mechanism; searched and recorded as a dead end so
+nobody repeats it.
+
+**Also landed.** The design-document cross-check branches (`gdd-combined`), per their handoff: doc
+corrections, the shipped command table, key mapping, seven combat-fidelity backlog entries, M4 AI
+scoping and a reworked `playtest.md`. Its three verification rules renumbered to 108–110 behind
+main's, and three stale rule citations were corrected on the way — two of them pre-existing in main,
+left over from B12's own renumber.
