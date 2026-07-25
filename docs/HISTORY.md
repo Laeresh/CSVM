@@ -6076,3 +6076,93 @@ the filter grammar, the line grammar and the invariant rendering — all Godot-f
 (`FormattableString` only reaches `IFormattable` holes), so a record logged whole still emits
 current-culture floats — `Weather` now logs the `ZoneFog` fields individually for exactly this
 reason, and the constraint is recorded as a `⚠` in the module's `docs/architecture.md` entry.
+
+## 2026-07-25 — PLAN-testing A3: one master seed, ten subsystem RNGs
+
+**Landed.** New `src/Utils/Rng.cs` owns every random draw in a session. One master seed; each
+subsystem gets its own generator seeded `splitmix64(master ^ fnv1a(name))` — **independent across
+subsystems**, so adding a draw in the weapons code cannot shift what the liveries roll, and only
+call order *within* a subsystem matters (which A1's fixed clock pins). The hash is hand-written on
+purpose: `string.GetHashCode()` is randomized per process in .NET and would have defeated the whole
+item. `Rng.Reset(master, pinned)` runs at the top of `StartSession`, before anything draws, so an
+in-process rebuild (Esc to the launchscreen and back) *repeats* the run instead of continuing it;
+it also calls `GD.Seed(master)` as the net for any draw not yet routed through a named stream.
+
+**Ten subsystems, where the plan named four.** `weapons` (`ProjectilePool` holds the stream —
+`CANNON_SPREAD` is two draws per round; also the stand-in fireball), `flightaudio` (the
+`snd_exp_plane1..4` crash pick, which now also prints `crash sound: <name>` — the pick's only trace
+outside the speakers), `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`, `precip`.
+The six beyond the plan's list came from an audit of every draw in the tree: the **world**
+`AnimRuntime` had `Seed` machinery but `PlaneViewer` wired `RuntimeSeed` only in `--anim-lab`, so
+`--fly`/`--freecam` ran the world's `RANDOM_WEIGHT` dice, `SOUND_GROUPS` picks and crash-debris
+scatter unseeded; the world-effects runtime was seeded only under `--effects-test`; the per-player
+crash rig is a third `AnimRuntime` nobody had listed; and `Puffer`/`CloudPuffs`/`Precipitation` each
+held a bare `new System.Random()`. `UI/LiveryLab` deliberately keeps its own non-sim generator — it
+is driven by a button press, and the plan is explicit that an input-dependent path must not share a
+sim stream.
+
+**The trap seeding alone does not fix.** `SoundDefs.SoundGroup._last` is recency state living
+*outside* the RNG — `DYNAMIC_WEIGHTS` halves the last pick's weight — so re-seeding a runtime
+replays a different sequence. New `SoundGroup.ResetRecency()` / `WorldSounds.ResetGroupRecency()`,
+called by `AnimRuntime.Reseed()` in the same breath as the re-seed. A fresh session was already safe
+because `LoadGroups` parses new objects per session; the lab's Play/Restart was not.
+
+**CLI.** `--seed=N` was the animation lab's own seed and is now the session master (the lab's
+display and `AnimLab.DefaultSeed` widened to `ulong` and derive from it). Pinned to 1 by `--det`,
+`--anim-lab` and `--effects-test` — the first two because determinism is their point, the third
+because its census gates effects behind `RANDOM_WEIGHT` and has to be comparable run-to-run.
+Everything else draws from the clock and logs `rng: master seed N`, so an interesting unpinned run
+can be replayed by passing the number back. `--paint-seed=N` still overrides the derived paint seed
+alone.
+
+**Verified.** All pixel numbers are raw 32-bpp buffers (rule 36), two runs at the same `--frames`,
+baselines taken on the unchanged pre-A3 binary. *The three residuals A2 handed over:* C1 waterfall
+mist **0.47 % → 0.00 %** (md5 `b456fdf5…` three times, whole frame, `--freecam --chapter=C1 --det
+--campos=-7720,60,-3380 --lookat=-7868,40,-3449 --frames=120`); C2B rain **5.44 % → 0.00 %**
+(`cbaabff3…`); C4 snow **25.84 % → 0.00 %** (`e2f9edad…`). *Rule 77 retired:* two `--det` C1B dives
+with `--fire` log **8 of 8 identical impact positions**, where the pre-A3 build's pair of runs shared
+**none**; the two flights' full logs are identical apart from one wall-clock `focus: lost` line.
+*Crash sound:* seed 1 twice → `snd_exp_plane4` twice; `--seed=2` → `snd_exp_plane2`, `--seed=5` →
+`snd_exp_plane3` (both halves of the check — a seed that changes nothing would be as broken as one
+that pins nothing). *Seeds branch:* `--seed=2` moves **25.09 %** of the C4 snow frame and 0.44 % of
+the waterfall against seed 1. *Inertness (the boundary rule):* three unpinned `--fly --chapter=C1B`
+runs drew three different masters, spawn indices 2/0/3, and three different impact patterns; a
+random-livery `--viewer` shot moves **3.39 %** of pixels unpinned and **0.00 %** under `--det`; a
+plain `--viewer --plane=player_bhawk` shot is md5 `7c2b7274…`, byte-identical to the A1 and A2
+baselines. *Regression:* 8-chapter `--freecam --quit-after 180`, **sound enabled** (rule 61 full-
+stderr grep) — one real `ERROR:` in the set, C3's known pre-existing `!is_inside_tree()` during the
+sound bind; gamez-node / mesh-instance / collider / uv-clamped-surface counts identical to the A2
+baselines on all four chapters with prior logs. Mode battery 0 errors: menu, anim lab, 2P stunt
+race, weapon lab firing, `--weapon-test`, damage lab, `--damage-test`, `--effects-test` (whose
+census is identical across two runs on the derived seed). `dotnet build` 0/0; `dotnet test` 135/135.
+
+**Two pre-existing findings confirmed, not caused here** (rule 13, A/B'd against a pre-A3 binary
+rebuilt from file copies — never `git stash`, and the absent `rng:` line proved which binary ran):
+the `1 ObjectDB instance was leaked at exit` warning under `--quit-after` appears in A2's own logs,
+and every `--dump-*` run logs one `!global_shader_uniforms.variables.has(p_name)` error because the
+dump branches quit before `_Ready` registers `csky_time` — an A2 residual, reproduced on the pre-A3
+build.
+
+**Residual.** A `--det --fly` *screenshot* is still not byte-identical: **2.71 %** of pixels, mean
+delta 1.08. The simulation matches exactly; `FlightController.UpdateChaseCamera` smooths on the raw
+wall delta, which is A1's deliberate "UI and camera code stays off the sim clock". Pin flight
+captures with `--freecam` or a fixed camera; C23's goldens must avoid chase-cam poses until that
+camera moves onto the clock. Filed in `backlog.md`.
+
+## 2026-07-25 — Global shader parameters registered before the dump branches
+
+**What landed.** The `csky_fog_*` / `csky_world_light` / `WorldLights` / `csky_time` registrations
+moved above the `--dump-markers` / `--dump-weapons` / `--dump-loadout` early exits in
+`PlaneViewer._Ready`. Those branches build materials of their own and then quit, so registering
+after them left every dump run emitting one
+`!global_shader_uniforms.variables.has(p_name)` error — noise that would have failed B12's suites
+on their first green run.
+
+**Verified.** A/B on the one moved block, windowed: **1 → 0** occurrences on `--dump-loadout`, with
+all three dump tools at 0 after. The same A/B under `--headless` reads **0 → 0** — the dummy
+renderer compiles no shaders and cannot see the error at all, which is why it survived A2's
+verification and A3's mode battery. Landed as verification rule 82. Build 0 warnings / 0 errors.
+
+**Trap met on the way.** The first A/B "passed" on both sides because the file swap's `dotnet build`
+no-opped (rule 11) — the reverted file kept a stale mtime and Godot ran the old DLL. Forcing the
+rebuild is what made the difference appear.

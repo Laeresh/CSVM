@@ -120,6 +120,9 @@ public sealed partial class ProjectilePool : Node3D
     private Camera3D? _listener;               // billboards align their streak to this camera
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     private int _sfxNext;
+    // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
+    // per draw: two draws fire per round.
+    private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
@@ -258,15 +261,15 @@ public sealed partial class ProjectilePool : Node3D
             _muzzle.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint });
     }
 
-    private static Vector3 ApplySpread(Vector3 forward, float coneDeg)
+    private Vector3 ApplySpread(Vector3 forward, float coneDeg)
     {
         if (coneDeg <= 0f)
             return forward;
         // A random direction inside the cone: a random azimuth around `forward`, and a polar angle
         // in [0, cone] biased for a roughly uniform disc so the pattern fills the cone, not its rim.
         float half = Mathf.DegToRad(coneDeg) * 0.5f;
-        float polar = half * Mathf.Sqrt(GD.Randf());
-        float azimuth = GD.Randf() * Mathf.Tau;
+        float polar = half * Mathf.Sqrt(_rng.Randf());
+        float azimuth = _rng.Randf() * Mathf.Tau;
         // Build a basis with `forward` as -Z, then tilt.
         var basis = Basis.LookingAt(forward, Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up);
         var tilted = basis * new Vector3(
@@ -541,8 +544,8 @@ public sealed partial class ProjectilePool : Node3D
     {
         for (int i = 0; i < ExplosionSprites && _impact.Count < MaxFlashes; i++)
         {
-            var off = new Vector3(GD.Randf() - 0.5f, GD.Randf() - 0.5f, GD.Randf() - 0.5f) * ExplosionSpread;
-            float t = GD.Randf();
+            var off = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f) * ExplosionSpread;
+            float t = _rng.Randf();
             _impact.Add(new Sprite
             {
                 Pos = point + off,

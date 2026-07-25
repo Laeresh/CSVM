@@ -299,6 +299,11 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
 ⚠ The safety net matches ONLY `destroyed` — a `*_dest` suffix names healthy destructible groups.
 ⚠ Crash runtime: `NameResolveFallback` keeps `_byIndex` EMPTY (non-portable ptrs, colliding index
   spaces); `Targets()` never falls back to names; crash puffers must parent at world level.
+⚠ `_rng` is the runtime's ONE die — `RANDOM_WEIGHT` verdicts, `SOUND_GROUPS` one-shot picks,
+  `MotionRuntime`'s crash-debris scatter. **Every session now sets `Seed`, not just the lab**: the
+  world runtime from `Rng.Anim`, each crash rig from `Rng.Crash`, the world-effects one from
+  `Rng.Effects`. Route any new dice through `_rng` or a replay stops being identical. `Reseed()`
+  re-pins it AND clears the sound groups' recency memory, which lives outside the RNG.
 ⚠ `ANIM_HEALTH`/`ANIM_HEALTH_RANGE` read LIVE HP via `HealthOf` → `DestructibleRegistry`, not
   `def.Health`; the registry is built in bootstrap pass 1 beside RESET_STATE. Nothing damages HP
   in normal play yet, so every instance is at full health and the read is a no-op today.
@@ -388,7 +393,11 @@ grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` pars
 `SOUND` event resolves through (`air_mixed_exp_sg` → `snd_exp_hit*`).
 ⚠ `SoundGroup.Pick(rng)` is weighted-random with a recency scalar: `DYNAMIC_WEIGHTS factor` (0.5)
   halves the last pick's weight so a variant does not repeat back-to-back. Pass the runtime's
-  seedable `_rng` (a lab replay must be deterministic), not `GD.Randf`.
+  seedable `_rng` (a replay must be deterministic), not `GD.Randf`.
+⚠ That recency memory (`_last`) is mutable state OUTSIDE the RNG, so re-seeding a generator alone
+  does not replay a pick sequence — `ResetRecency()` exists for exactly that, and whoever re-seeds
+  calls it (`AnimRuntime.Reseed` → `WorldSounds.ResetGroupRecency`). A fresh session is safe without
+  it only because `LoadGroups` parses new objects per session.
 ⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are skipped;
   music `*_sg` groups parse but no `SOUND` event names them.
 
@@ -426,6 +435,9 @@ stand-in spark. `Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a
 and flashes the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
 ⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
   hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
+⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from a held `Rng.Weapons` stream, so a
+  pinned run repeats its whole impact pattern: two `--det` C1B dives log 8/8 identical impact
+  positions where the unseeded build shared none.
 ⚠ `DamageSink` (wired to `AnimRuntime.DamageAt` in flight, C23) turns a hit into destructible damage:
   every `Impact` invokes it with the struck collider + `HEALTH_DAMAGE`; a no-op for terrain/water.
   Null in views with no anim runtime, where impacts stay cosmetic.
@@ -610,6 +622,8 @@ in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `s
 ⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
   driving `Update`, or the restart hook re-fires propstart.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers only the three loops, never the one-shots.
+⚠ The `snd_exp_plane1..4` pick draws from `Rng.FlightAudio` and prints `crash sound: <name>` —
+  the pick's only trace outside the speakers, and the sole way to verify it from a headless run.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -623,6 +637,9 @@ state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim pa
   `colors: null` yet needs MIX, and the depth fade zeroes fresh ground-level smoke. Defaults
   leave every existing caller byte-identical.
 ⚠ A fading additive fireball READS AS SMOKE — isolate the emitter before believing smoke works.
+⚠ Each emitter's `_rng` is a per-instance stream off `Rng.Puffer`, so particle spread is pinned by
+  the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
+  after. Its seed depends on how many puffers were built before it — deterministic under `--det`.
 ⚠ Compiled-payload quirks (`interval_garbage`, Distance-trail meters, `growth_factors`): anim-definitions.md.
 
 ## src/Effects/CloudPuffs.cs
@@ -634,6 +651,9 @@ edge and by vertical distance. Feel constants all TUNE (`BaseAlpha` kept low —
   defines an ambient emitter — don't try to source this from world data.
 ⚠ The shader keeps `fog_disabled` yet carries the custom `csky_fog_*` cylindrical fog term —
   that render mode only disables Godot's BUILT-IN fog; ours is custom.
+⚠ `_rng` is a per-field stream off `Rng.Clouds` (one field per splitscreen rig, each independent).
+  Puff *recycling* is camera-position driven, so the draw count is sim state, not a fixed series —
+  identical only when the camera path is.
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
@@ -644,9 +664,9 @@ are procedural `MakeFlakeTexture`/`MakeStreakTexture` (the original drew untextu
 ⚠ This module has NO per-frame C# hook, so the `csky_time` global is the only handle on the
   animation: halting or fixed-stepping the sim clock is the sole way to stop or pin the fall.
   Never reintroduce `TIME` here — the rain would keep falling through a halt.
-⚠ The per-instance seeds come from an unseeded `new System.Random()`, so two runs of the same
-  `--det` pose still differ (measured 4.75% of pixels, C2B rain; 0.00% with the seed pinned) —
-  that residual is A3's master seed, not the shader clock.
+⚠ The per-instance seeds are one draw sequence off `Rng.Precip` at construction, so the whole
+  field's layout is a function of the master seed. Measured on the same `--det` pose across two
+  runs: C2B rain 5.44% of pixels before, 0.00% after; C4 snow 25.84% before, 0.00% after.
 ⚠ World-sized `CustomAabb` (±40 km) stops frustum culling — the instances sit at the node origin.
 ⚠ Cloud-band gate: precip renders only BELOW the CLOUD_COVER band; a huge sentinel band
   disables the gate when a mission has precip but no cloud band.
@@ -1077,6 +1097,24 @@ shader this project generates reads it instead of Godot's `TIME`.
   left it — the menu must not freeze, and the uniform must never sit pinned at 0.
 ⚠ Declared in `res://shaders/csky_time.gdshaderinc`, one include shared by every shader that reads
   it: a global uniform's TYPE must agree across shaders, so it is declared in exactly one place.
+
+## src/Utils/Rng.cs
+The session's randomness policy: one master seed and ten named subsystem generators derived from it
+(`weapons`, `flightaudio`, `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`,
+`precip`). `Reset(master, pinned)` runs once per session build, before anything draws;
+`Stream(name)` is the shared generator, `SeedFor`/`IntSeedFor` the pure seed, `NewIntSeed`/
+`NewSystemRandom` a per-instance stream off the subsystem's own.
+⚠ A subsystem's seed is `splitmix64(master ^ fnv1a(name))` — **independent across subsystems**, so
+  adding a draw in one cannot shift another's sequence; only order WITHIN a subsystem matters, and
+  the fixed `GameClock` pins that. Never derive a seed from `string.GetHashCode()`: .NET randomizes
+  it per process, which is exactly the non-determinism this class removes.
+⚠ Unpinned (no `--det`, no `--seed`, not `--anim-lab`/`--effects-test`) the master comes from
+  `TimeSeed()`, so the shipped game keeps its variety — a bare `--fly` still gets a random spawn and
+  random liveries. That boundary is the reason nothing here branches on `Pinned`.
+⚠ `Reset` also calls `GD.Seed(master)`: the net for any draw not yet routed through a named stream.
+  A hot-path caller holds its stream reference (`ProjectilePool`) rather than re-resolving per draw.
+⚠ `UI/LiveryLab`'s generator deliberately stays outside this — it is driven by a button press, and a
+  wall-time/input-dependent path must never share a sim subsystem's stream.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

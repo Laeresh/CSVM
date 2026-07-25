@@ -78,6 +78,17 @@ public sealed partial class WorldSounds : Node3D
 
     public int Count => _emitters.Count;
 
+    /// <summary>Clears every <see cref="SoundGroup"/>'s last-picked memory. That memory is mutable
+    /// state outside the RNG, so a re-seeded replay diverges on the first weighted pick without
+    /// this — the caller re-seeding its generator calls it in the same breath.</summary>
+    public void ResetGroupRecency()
+    {
+        foreach (var group in _groups.Values)
+        {
+            group.ResetRecency();
+        }
+    }
+
     public IEnumerable<string> Names
     {
         get

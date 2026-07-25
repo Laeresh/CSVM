@@ -66,7 +66,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ A1 — `GameClock`: one shared sim clock; halt (P) + frame-step (`.`) in every mode; fixed-dt under `--det`
 2. ☑ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
-3. ☐ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
+3. ☑ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
 4. ☐ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out
 5. ☐ A5 — `--pos`/`--direction`: one placement pair in every mode (camera in freecam/viewer, plane in fly)
 
@@ -147,7 +147,7 @@ C4 carry any UV scroll at all, so a scroll-sensitive golden must be framed on on
 
 **⚠ Traps.** Rule 36: compare raw pixel buffers, not PNG bytes. Rule 9 becomes moot *only* under `--det` — wall-clock runs still have unequal frame budgets. This item changes pixel output of TIME-driven surfaces at any given wall moment, so any stale screenshot baselines die here — C23's goldens are captured **after** this lands, never before. `--jitter` must default 0 under `--det` (it exists to defeat bit-identical frames — the very property `--det` wants).
 
-## A3 ☐ One master seed: per-subsystem RNGs derived from `--seed`
+## A3 ☑ One master seed: per-subsystem RNGs derived from `--seed`
 
 **Goal.** `--seed=N` (default 1 under `--det`) pins every random draw in the session: gun spread, crash-sound pick, spawn choice, liveries, `RANDOM_WEIGHT` dice. Same seed → same run; different seeds genuinely branch.
 
@@ -158,6 +158,37 @@ C4 carry any UV scroll at all, so a scroll-sensitive golden must be framed on on
 **Verify.** Two `--det --fire --hold=<dive>` runs over C1B water → identical impact logs (position + count), the check rule 77 says is impossible today (take the failing baseline first on the unseeded build). Crash twice with the same seed → same crash sound named in the log. 8-chapter regression.
 
 **⚠ Traps.** Determinism of a *sequence* still requires deterministic *call order* within a subsystem — under A1's fixed clock that holds; any draw made from a wall-time or focus-dependent path (menu idle, pad rumble) must not share a sim subsystem's RNG. Unseeded (no `--det`, no `--seed`) behaviour must stay time-seeded — the shipped game keeps its variety (the boundary rule).
+
+**Landed 2026-07-25** — `src/Utils/Rng.cs`: one master seed, `Reset(master, pinned)` per session
+build, and a subsystem seed of `splitmix64(master ⊕ fnv1a(name))` — a hand-written hash, because
+`string.GetHashCode()` is per-process randomized in .NET and would have defeated the item outright.
+Evidence in `docs/HISTORY.md`.
+
+**Scope: ten subsystems, not the plan's four.** An audit of every draw in the tree after A1 found
+five more, and implementation turned up a sixth. All are on the sim path and all move pixels:
+`anim` (the **world** `AnimRuntime` — its `Seed` machinery existed but `PlaneViewer` wired
+`RuntimeSeed` only in `--anim-lab`, so `--fly`/`--freecam` ran the world's `RANDOM_WEIGHT` dice,
+`SOUND_GROUPS` picks and crash-debris scatter unseeded), `effects` (the world-effects runtime,
+seeded only under `--effects-test`), `crash` (the per-player crash rig — a third `AnimRuntime`
+family the audit did not list), `puffer`, `clouds`, `precip`. Precipitation and the waterfall mist
+were the whole of A2's measured residual. `UI/LiveryLab` deliberately stays on its own non-sim
+generator: a button press is not sim state.
+
+**The trap seeding alone does not fix:** `SoundDefs.SoundGroup._last` is recency state living
+*outside* the RNG (it halves the last pick's weight), so a re-seeded runtime replays a different
+sequence. `ResetRecency()` / `WorldSounds.ResetGroupRecency()` now clear it and `AnimRuntime.Reseed()`
+calls it in the same breath — `docs/verification.md` rule 81.
+
+**Deviation:** `--seed=N` was the animation lab's own seed; it is now the session master and the lab
+derives from it. `--det`, `--anim-lab` and `--effects-test` pin the master to 1 (which is what the
+lab's old default did, and what kept the effects census comparable); everything else draws from the
+clock, and the resolved value is logged so an unpinned run can be replayed.
+
+**Residual (new finding, not A3's to fix):** a `--det --fly` *screenshot* is still not byte-identical
+— 2.71 % of pixels, mean delta 1.08 — because `FlightController.UpdateChaseCamera` smooths on the
+raw wall delta, which is A1's deliberate "UI and camera code stays off the sim clock". The simulation
+is identical (two runs' full logs match bar the output filename). **C23's goldens must avoid flight
+chase-cam poses unless that camera moves onto the clock first**; filed in `backlog.md`.
 
 ## A4 ☐ The `--det` bundle; scripted runs imply it
 

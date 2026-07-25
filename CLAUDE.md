@@ -186,6 +186,7 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global shader uniform: the clock's GPU-side twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Utils/Rng.cs` — the session's one master seed and the ten named, independently-derived subsystem generators every random draw goes through.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
@@ -210,7 +211,8 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
 | `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
-| `--det` | fixed-dt sim clock: frame N is the same sim state whatever the render rate (A4 grows this into the full determinism bundle) |
+| `--det` | fixed-dt sim clock + master seed 1: frame N is the same sim state, and the same pixels, whatever the render rate (A4 grows this into the full determinism bundle) |
+| `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 

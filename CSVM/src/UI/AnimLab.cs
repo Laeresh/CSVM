@@ -46,9 +46,9 @@ public sealed partial class AnimLab : Node
     /// render rate, so a playback's dispatch times are a function of the step count alone.</summary>
     public const float FixedDt = GameClock.FixedDt;
 
-    /// <summary>The pinned default RNG seed (<c>--seed=N</c> overrides). Any constant works;
-    /// what matters is that every launch shares it, so two runs replay the same dice.</summary>
-    public const int DefaultSeed = 1;
+    /// <summary>The master seed a lab launch pins when no <c>--seed=N</c> is given, so two runs
+    /// replay the same dice.</summary>
+    public const ulong DefaultSeed = Rng.DefaultSeed;
 
     /// <summary>The transport time scales, slowest to fastest (buttons + the current-speed
     /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
@@ -63,7 +63,7 @@ public sealed partial class AnimLab : Node
     // the lab repositions a fixed offset in front of the camera on each fresh play; also the fallback
     // anchor a still-placeless def is staged on. Owned by the session tree, not disposed here.
     private readonly Node3D _stageAnchor;
-    private readonly int _seed;
+    private readonly ulong _seed;
     private readonly string? _playOnLaunch;   // --play-anim=<name>
     private readonly bool _autoFrame;         // no --campos/--lookat: frame the played def
     // The session archives, kept open for the whole lab session (WorldSession.Options
@@ -104,7 +104,7 @@ public sealed partial class AnimLab : Node
 
     public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam, Node3D world,
         Node3D stageAnchor, TextureArchive textures, SoundArchive? sounds,
-        int seed, string? playAnim, bool autoFrame)
+        ulong seed, string? playAnim, bool autoFrame)
     {
         _runtime = runtime;
         _program = program;

@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Effects;
@@ -69,7 +70,9 @@ public sealed partial class CloudPuffs : Node3D
     private float _layerLo, _layerHi;  // the puff layer's world-Y bounds (band ± the margins)
     private Vector3 _wind;
     private bool _seeded;
-    private readonly System.Random _rng = new();
+    // Puff placement, size and frame choice. One stream per field (one per splitscreen rig), drawn
+    // off the master seed's cloud stream.
+    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Clouds);
 
     private const string ShaderCode = """
         shader_type spatial;
