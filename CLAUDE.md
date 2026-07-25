@@ -245,6 +245,22 @@ In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space
 
 Full validated format documentation lives in **`docs/formats/`** — one page per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
 
+## Agent skills
+
+Config the installed engineering skills read. Written by `/setup-matt-pocock-skills`; edit the files directly.
+
+### Issue tracker
+
+This repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+
+### Triage labels
+
+The five canonical roles, unrenamed. See [`docs/agents/triage-labels.md`](docs/agents/triage-labels.md).
+
+### Domain docs
+
+Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT.md`/`docs/adr/`. See [`docs/agents/domain.md`](docs/agents/domain.md).
+
 ## Current status / next step
 
 **Fixed shape — five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense** — "C25 removes colliders on death" is a log line even though it reads like current state; its home is the plan's item note and `docs/HISTORY.md`, and here the item is an ID at most. If this section is longer after your edit than before it, the edit was wrong. (The weaker version of this rule let the section hit 65 KB once, and 6 KB again by 2026-07-24.)
