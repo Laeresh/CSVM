@@ -23,7 +23,7 @@ Then commit ALL current changes as one commit:
 - `git add -A`, then `git commit`.
 - **Message style** matches `git log --oneline -5`: `M3 Wave <X> <item(s)>: <what landed>` (e.g. `M3 Wave B B18: weapon selectors`). Name the item(s) you actually implemented this session — you know them from context; don't reverse-engineer them from the diff.
 - End the message with this trailer on its own line:
-  `Co-Authored-By: Claude Opus 4.8 <noreply@anthropic.com>`
+  `Co-Authored-By: Claude <noreply@anthropic.com>`
 - Commit to the current branch (**main**). Do NOT create a branch. Do NOT push.
 - Print the resulting commit hash and subject line.
 
