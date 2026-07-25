@@ -1,0 +1,19 @@
+[
+  [
+    "PROBE_BLOCK",
+    [
+      "SPEED", [135],
+      "LABEL", ["synthetic probe"],
+      "IS_AUTOGYRO",
+      "COLOR_FLOAT", [0.69, 0.69, 1.0],
+      "COLOR_BYTE", [192, 192, 255],
+      "PAIR", [3, 7],
+      "NESTED", ["INNER_COUNT", [7], "INNER_LABEL", ["deeper"], "INNER_FLAG"],
+      "NULL_FLAG", null,
+      777,
+      "AFTER_STRAY", ["ok"],
+      "SPEED", [999],
+      "TRAILING_FLAG"
+    ]
+  ]
+]

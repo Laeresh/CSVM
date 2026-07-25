@@ -1,0 +1,86 @@
+[
+  [
+    "NO_AMMO_WARNING", ["snd_probe_emptyclip"],
+    "BALLISTICS",
+    [
+      "wep_probe_gun",
+      [
+        "DESC", ["MSG_PROBE_GUN"],
+        "NAME", ["probegun"],
+        "CALIBER", [30],
+        "CLUSTER_SIZE", [200],
+        "AMMO_LIMIT", [400],
+        "FIRE_RATE", [8.5],
+        "VELOCITY", [610],
+        "RANGE", [900],
+        "GRAVITY", [0],
+        "CANNON_SPREAD", [1.5],
+        "FIRING_HEAT", [0.25],
+        "ARMOR_DAMAGE", [3],
+        "HEALTH_DAMAGE", [2],
+        "CANNON", null,
+        "LOOPED_SOUND_NAME", ["snd_probe_gun_loop"],
+        "FIRE", ["ANIMATION", ["probe_muzzle"], "SOUND", ["snd_probe_fire"]],
+        "IMPACT",
+        [
+          "default", ["EFFECT", ["probe_spark"], "SOUND", ["snd_probe_hit"]],
+          "water", ["SURFACE_ANIMATION", ["probe_splash"]],
+          "enemy", null
+        ],
+        "PROBE_FUTURE_KEY", [1]
+      ],
+      "wep_probe_rocket",
+      [
+        "DESC", ["MSG_PROBE_ROCKET"],
+        "NAME", ["proberocket"],
+        "PRIORITY", [5],
+        "CLUSTER_SIZE", [4],
+        "ROCKET", null,
+        "HIGH_EXPLOSIVE", null,
+        "SHAKES_CAMERA", null,
+        "CRATER", null,
+        "FIRE_RATE", [1],
+        "VELOCITY", [180],
+        "ACCELERATION", [90],
+        "RANGE", [2000],
+        "TURN_RATE", [0.001],
+        "LOCK_ON", [1.5],
+        "LOCK_ON_LEAD", [0.2, 0.8],
+        "IMPACT_PROXIMITY", [12],
+        "DETONATION_TIME", [6],
+        "FLYOUT",
+        [
+          "MODEL", ["probe_rocket.flt"],
+          "MODEL_ANIMATION", ["probe_rocket_trail"],
+          "SOUND", ["snd_probe_flyout"]
+        ],
+        "IMPACT", ["default", ["EFFECT", ["probe_boom"], "SOUND", ["snd_probe_boom"]]]
+      ],
+      "wep_probe_seeker",
+      [
+        "DESC", ["MSG_PROBE_SEEKER"],
+        "NAME", ["probeseeker"],
+        "PRIORITY", [9],
+        "CLUSTER_SIZE", [2],
+        "ROCKET", null,
+        "TARGETABLE", null,
+        "TORPEDO", null,
+        "REAR", null,
+        "SONIC", null,
+        "FLASH", null,
+        "BEEPER_SEEKER", null,
+        "DAMAGES_ZEPPELIN", null,
+        "TURN_RATE", [1.25],
+        "RANGE_MINIMUM", [150],
+        "DETONATION_DISTANCE", [30],
+        "DETONATION_DOT_PRODUCT", [0.5],
+        "FLYOUT_HEALTH", [12],
+        "PROJECTILE_BBOX", [3],
+        "DESTROY_ANIMATION", ["probe_seeker_die"],
+        "BEEPER", ["TIME", [4]],
+        "SMOKE_SCREEN", ["TIME", [7]],
+        "TANGLER", ["TIME", [2.5], "RADIUS", [18], "ENGINE_DEAD", [3, 9]]
+      ]
+    ]
+  ]
+]

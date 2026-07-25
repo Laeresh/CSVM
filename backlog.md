@@ -356,6 +356,19 @@ with the diagnosis that verification pass produced. **Do not re-add them here**;
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
 
+### World / animation
+
+- **One `!is_inside_tree()` error during every sound-enabled world bind.** `AnimRuntime.Bind` →
+  `Bootstrap` → `RunAmbientPasses` → `Start` dispatches a `SOUND` event while the world subtree is
+  still out of the tree, and `OneShotSoundPosition` (`AnimRuntime.cs:1405`) reads `GlobalTransform`
+  on it — Godot logs `Condition "!is_inside_tree()" is true. Returning: Transform3D()` and the
+  emitter is placed at the identity origin. Measured 2026-07-25 on C3 `--freecam` (1 error; 0 with
+  `--mute`, which is why every earlier regression baseline read zero — they all ran muted). Same
+  class as rule 75. Fix is either to defer the bootstrap's one-shot sounds until the subtree is in
+  the tree, or to fall back to the node's local transform chain and say so in the log.
+  ⚠ Traps: a muted regression run cannot see this — grep a **sound-enabled** run's full stderr.
+  Do not "fix" it by suppressing the read; the emitter really is being positioned at the origin.
+
 ### HUD & audio
 
 - **Crash damage display blinks fully red.** `GaugeCluster.cs` blinks a zone for `DamageBlinkTime`
