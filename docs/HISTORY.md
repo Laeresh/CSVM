@@ -5891,3 +5891,36 @@ with a `COMPLETE` banner and a `plans.md` row. `PLAN-testing.md` is now the sole
 "queued behind M3" banner cleared); CLAUDE.md's "Current status" + charter and the reference links
 across `backlog.md` and the archived plans were repointed to the new path. M3's remaining sign-off is
 the at-the-controls re-tests owed in `playtest.md` §1 (user-owned).
+
+## 2026-07-25 — PLAN-testing B13: the `CSVM.Tests` xUnit project
+
+**What landed.** A new `CSVM.Tests/` (net8.0, xunit 2.9.0, `ProjectReference` to `CSVM.csproj`, added
+to `CSVM.sln` with the two Export configurations mapped but not built), so `dotnet test CSVM/CSVM.sln`
+runs 135 tests. **No `CSVM/src/` file was touched** — the audit that opens the item found enough
+already-free surface that no seam had to be cut. Godot-free at runtime: `Zrdr`/`ZrdrDict`, `WavFile`,
+`SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths` (no `using Godot` at all), plus
+`GameZ`, `MarkerRig`, `AnimDefs`, `PlaneStats`, `SpawnPoints`, `PaintScheme`, `AnimProgram`, which use
+only managed structs (`Vector3`/`Basis`/`Transform3D`/`Mathf`/`Color`). Partly free: `StockLoadouts.Load`
+given an explicit path, and `TextureArchive`'s constructor / `FindByDecalIndex` / `IsKnownAbsent`.
+Engine-only, left to B12: `Loadout.Bind`, `Weather.Load` (a `GD.Print` per zone on every load),
+`SoundArchive`, `Config`, `HudMetrics`, `DestructibleRegistry`, `TextureArchive.Find`.
+
+**Two input kinds.** Committed `fixtures/` are hand-authored from `docs/formats/` — invented `probe_*`
+node names, `wep_probe_*` ids, `MSG_PROBE_*` keys — and WAV/ADPCM inputs are assembled byte by byte in
+`WavFileTests.cs` with each expected sample derived in a comment. Nothing is copied from an extraction.
+Golden invariants read the player's install through `CSVM_DATA_ROOT` (a checkout holding `extracted/`,
+the engine's convention, *or* the extraction tree itself — both probed) and record numbers only: 220
+shared readers, the per-chapter reader counts, 48 weapon defs with zero unhandled keys, 1023 messages,
+2715 sound defs / 488 sound groups, the 11 airframes' 8-firepoint / 8-pylon / 1-target rigs with two
+`markers.md` coordinates spot-checked, and every stock loadout's `wep_*` ids resolving.
+
+**Verified.** Rule 14 ritual: perturbing one expected ADPCM sample (116 → 117) failed exactly that test
+and returned `$LASTEXITCODE` 1; reverting returned 0. `dotnet test` green both ways — with
+`CSVM_DATA_ROOT` on the real tree **135 passed / 0 skipped / 0 failed, exit 0**, and against an empty
+directory **119 passed / 9 skipped / 0 failed, exit 0** (skips named individually by the runner).
+`dotnet build CSVM/CSVM.sln` still builds the game project with 0 warnings / 0 errors.
+
+**One finding the goldens produced.** A directory listing counts 222 shared readers but the loader
+yields 220: `dlgMessage` and `mp_dialog` extract to a literal JSON `null`, so they carry no reader
+list — likewise C1C's and C2B's `templates` (29→28, 26→25). Not a parser gap; recorded in the test's
+own comment so the discrepancy is stated rather than silently absorbed.

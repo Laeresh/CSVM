@@ -74,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ B11 — `Log`: categories/levels, `--log=` console filter, always-on full-detail file sink
 12. ☐ B12 — `--run-tests`: in-engine suite registry, pass/fail report, nonzero exit code; existing dump/damage-test assertions become suites
-13. ☐ B13 — `CSVM.Tests` xUnit project: pure-logic units, local-data golden invariants, hand-authored fixtures
+13. ☑ B13 — `CSVM.Tests` xUnit project: pure-logic units, local-data golden invariants, hand-authored fixtures **(done 2026-07-25 — 135 tests, no `CSVM/src/` change needed; `docs/HISTORY.md`)**
 14. ☐ B14 — `RunTests.ps1`: the single entry point (build → units → suites → goldens → summary)
 
 ### Wave C — Perf + visual instruments
@@ -188,7 +188,7 @@ A1 blocks A2 (the uniform is driven by the clock) and A4; A3 blocks A4. A5 is in
 
 **⚠ Traps.** Rule 66 (stray Godot processes poison runs — B14's script handles the kill, scoped to this worktree's binaries); rule 74 (absolute output paths only); rule 75 (suites observing scheduled effects must tick the clock via A1's machinery, in-tree, `ManualAdvance`). A suite must never write outside `.scratch/`.
 
-## B13 ☐ `CSVM.Tests`: the xUnit project
+## B13 ☑ `CSVM.Tests`: the xUnit project
 
 **Goal.** `dotnet test` runs a plain xUnit project covering the genuinely pure logic: `WavFile` (ADPCM block decode), `Zrdr`/`ZrdrDict` (alternating-list semantics), parser edge cases (`SoundDefs`, `WeaponDefs`, `AnimDefs` key handling), `Log`'s filter/grammar, format math (the Yxz Euler order, UV mirroring helpers if extractable). Two fixture kinds: **hand-authored synthetic** bytes/JSON committed under `CSVM.Tests/fixtures/` (authored from `docs/formats/`, never copied from extracted data — the asset rule), and **local-data golden invariants** (counts and structural facts against the user's `extracted/`, e.g. "48 weapon defs", "11 loadouts", "zrdr reader count per chapter") that skip-with-notice when the data is absent.
 
@@ -199,6 +199,16 @@ A1 blocks A2 (the uniform is driven by the clock) and A4; A3 blocks A4. A5 is in
 **Verify.** Rule 14: one deliberately failing test seen failing. `dotnet test` green (a) with data present, (b) with `CSVM_DATA_ROOT` pointed at an empty dir — skips reported, zero failures. Confirm `dotnet build CSVM/CSVM.sln` still builds the game project unchanged.
 
 **⚠ Traps.** The Godot SDK csproj may fight the test SDK if tests are added to the *game* project — keep them in their own csproj. **A "small real example" fixture is still a game asset** — synthetic means authored, byte by byte, from the spec; when in doubt it does not get committed. Golden *numbers* (counts) are fine to commit; golden *content* is not.
+
+**Landed 2026-07-25 — 135 tests, `dotnet test CSVM/CSVM.sln`, and NO `CSVM/src/` edit was needed.** The audit the item's Evidence asked for, settled:
+
+- **Godot-free outright** (no `using Godot`): `Zrdr`/`ZrdrDict`, `WavFile`, `SoundDefs`/`SoundGroup`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths`.
+- **Managed-Godot only** (`Vector3`/`Basis`/`Transform3D`/`Mathf`/`Color`, all pure C# structs — they load and run outside the engine): `GameZ` (incl. `Basis.FromEuler(…, Yxz)`), `MarkerRig`, `AnimDefs`, `PlaneStats`, `SpawnPoints`, `PaintScheme`, `AnimProgram`. `AnimDefs`' `AnimRuntime.HighLod` reference is a `const`, so it is inlined and never loads the `Node`-derived type.
+- **Partly free, no seam cut**: `StockLoadouts.Load(path)` is free with an explicit existing path (only `DefaultPath`'s `ProjectSettings.GlobalizePath` and the missing-file `GD.PushWarning` are native); `TextureArchive`'s constructor, `FindByDecalIndex`, `IsKnownAbsent`, `MissingTextures` and `Dispose` are free while `Find`/`FindImage`/alpha classification need `Image`.
+- **Stays with B12**: `Loadout.Bind` (`Node3D`), `Weather.Load` (a `GD.Print` per zone on *every* load), `SoundArchive` (`AudioStreamWav`), `Config` (`GD.Print` + `res://`), `HudMetrics` (takes a live `Control`), `DestructibleRegistry` (`Node3D`), `CompiledAnim` in its failure paths only. **Never call a `GD.*` from a test host** — outside Godot the unmanaged callback table is uninitialised, so it does not throw cleanly.
+- **Free but not yet covered** — cheap headroom for later items: `PlaneStats.Load`, `SpawnPoints.LoadIa`/`LoadPlayerInit`, `PaintScheme.LoadCatalog`, `AnimProgram.Load`.
+
+Also landed: `CSVM_DATA_ROOT` probes *both* shapes (a checkout holding `extracted/`, and the extraction tree itself), and `[ExtractedDataFact]`/`[ExtractedDataTheory]` set xUnit v2's attribute `Skip` — v2 has no `Assert.Skip`, and a theory must skip at the attribute level or its rows fail individually. B14 should call `dotnet test CSVM/CSVM.sln` (which runs only the test project) and treat exit 0 with a nonzero skip count as "data absent", not "passed".
 
 ## B14 ☐ `RunTests.ps1`: the single entry point
 

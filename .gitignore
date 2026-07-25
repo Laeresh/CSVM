@@ -13,6 +13,8 @@
 /CSVM/.godot/
 /CSVM/bin/
 /CSVM/obj/
+/CSVM.Tests/bin/
+/CSVM.Tests/obj/
 *.screenshot.png
 # F12 in-game screenshots (rendered game frames = game-derived, must not be committed)
 /Screenshots/

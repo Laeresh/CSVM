@@ -1,0 +1,68 @@
+[
+  [
+    "ANIMATION_DEFINITIONS",
+    [
+      "ANIMATION_LIST",
+      [
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_tower"],
+          "ANIMATION_ROOT_NAME", ["probe_tower_root"],
+          "ACTIVATION", ["ON_STARTUP"],
+          "LOCAL_NODES_ONLY",
+          "HEALTH", [250],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_spin"],
+            "OBJECT_MOTION",
+            [
+              "NAME", ["probe_rotor"],
+              "XYZ_ROTATION", [0, 0, -40, 0, 0, 90],
+              "RUN_TIME", [3]
+            ],
+            "IF", ["PLAYER_RANGE", [270]],
+            "OBJECT_OPACITY_STATE", ["NAME", ["probe_haze"], "STATE", [0.4, "ON"]],
+            "ELSEIF", ["ANIMATION_LOD", ["HIGH"]],
+            "PUFFER_STATE",
+            [
+              "NAME", ["probe_puff"],
+              "ACTIVE_STATE", ["ACTIVE"],
+              "AT_NODE", ["probe_tower_root", 11, 8, -8],
+              "SIZE_RANGE", [2, 6],
+              "LIFETIME_RANGE", [1.5, 4],
+              "GROWTH_FACTOR", [0.25],
+              "TEXTURES", ["probe_smoke1", "probe_smoke2"]
+            ],
+            "OBJECT_ADD_CHILD", ["PARENT_CHILD", ["probe_tower_root", "probe_emitter"]],
+            "SOUND", ["NAME", ["snd_probe_hum"], "AT_NODE", ["probe_tower_root", 1, 2, 3]]
+          ],
+          "DAMAGE_SEQUENCE",
+          [
+            "IF", ["ANIM_HEALTH", [0.5]],
+            "OBJECT_ACTIVE_STATE", ["NAME", ["probe_tower_damaged"], "STATE", ["ACTIVE"]]
+          ]
+        ],
+        "ANIMATION_DEFINITION",
+        [
+          "NAME", ["probe_sign"],
+          "ANIMATION_NAME", ["probe_sign_flicker"],
+          "ACTIVATION", ["ON_CALL"],
+          "SEQUENCE_DEFINITION",
+          [
+            "NAME", ["probe_flicker"],
+            "ACTIVATION", ["ON_CALL"],
+            "LIGHT_STATE",
+            [
+              "NAME", ["probe_lamp"],
+              "ACTIVE_STATE", ["ACTIVE"],
+              "AT_NODE", ["probe_sign_root", 0, 4, 0],
+              "RANGE", [5, 40],
+              "COLOR", [1.0, 0.8, 0.4]
+            ],
+            "CALL_ANIMATION", ["NAME", ["probe_fire_template"], "WITH_NODE", ["probe_sign_root"]]
+          ]
+        ]
+      ]
+    ]
+  ]
+]

@@ -1,0 +1,9 @@
+{
+  "language_id": 1033,
+  "entries": [
+    { "key": "MSG_PROBE_PLAIN", "id": 1, "value": "Probe target" },
+    { "key": "MSG_PROBE_AMMO", "id": 2, "value": "%1 %2!d! rounds" },
+    { "key": "MSG_PROBE_PERCENT", "id": 3, "value": "100%% throttle" },
+    { "key": "MSG_PROBE_GAP", "id": 4, "value": "[%1][%3]" }
+  ]
+}

@@ -9,6 +9,23 @@ Narratives, diagnoses, and landed-work stories do not live here: they get a shor
 `HISTORY.md`, and git history keeps the rest. Knowledge about the game's data formats belongs in
 `docs/formats/`, not here.
 
+## CSVM.Tests/
+The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj`, listed in
+`CSVM.sln`). Covers the readers that need no running engine: `Zrdr`/`ZrdrDict`, `WavFile`,
+`SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths`, `GameZ`'s transform
+arithmetic, `MarkerRig`, `AnimDefs`, and the Godot-free halves of `StockLoadouts`/`TextureArchive`.
+⚠ Two input kinds, deliberately separate. `fixtures/` is hand-authored from `docs/formats/` with
+  invented `probe_*` names; byte-level inputs (WAV/ADPCM) are assembled in the test code so every
+  byte's provenance is visible. **A trimmed piece of a real extraction is still a game asset and
+  never gets committed** — `fixtures/README.md` restates the rule at the point of temptation.
+⚠ Golden invariants read the player's own install. `CSVM_DATA_ROOT` names a checkout holding
+  `extracted/` (the engine's own convention) or the extraction tree itself; when neither resolves,
+  `[ExtractedDataFact]`/`[ExtractedDataTheory]` set xUnit's `Skip`, so the runner reports **skipped**
+  rather than a silent pass. Golden *numbers* commit; golden *content* never does.
+⚠ Anything reaching `GD.*`, `Image`, `FileAccess`, `ProjectSettings` or a live `Node` belongs to the
+  in-engine suites instead — `Loadout.Bind`, `Weather.Load`, `SoundArchive`, `Config`, `HudMetrics`,
+  `TextureArchive.Find`. Do not refactor a reader to get it in here; that trade was declined by plan.
+
 ## src/Mech3/GameZ.cs
 Loads a mech3ax GameZ extraction (zip or unpacked dir): nodes/models/materials/textures JSON into
 plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes (field mapping:
