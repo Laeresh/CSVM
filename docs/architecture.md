@@ -45,6 +45,17 @@ LastAlphaIsSoft ("soft" = a 0.5 scissor cutout would erase or shred it; drives b
   Godot .NET prints a full managed stack trace per PushWarning call and buries real errors.
 ⚠ IsKnownAbsent (pir_spinner, barngrill — verified absent from the whole extraction) renders
   neutral gray; debug magenta must keep meaning a genuine name-resolution failure, not a data gap.
+⚠ `TextureDropIn` (same file) is the `--tex-override`/`--tex-census` hook, and it hooks HERE because
+  Find is the one resolve point every consumer goes through. The contract is **RGB bytes only**:
+  size, pixel format, alpha channel and mip chain stay the original's, so the alpha class read just
+  above the swap — and the blend/scissor variant, cutout silhouette and mip chain that follow from
+  it — are what a normal run would have produced (measured: an overridden texture's visible extent
+  is the same 114,820 px with the census on and off; a hard-alpha clutter cutout is pixel-identical).
+⚠ Census colours are a pure hash of the name, never an assignment order — the map must mean the
+  same thing in every chapter and every run. Eight bits a channel leave ~200k colours, so ~0.5 % of
+  a chapter's names collide: warn per collision, never resolve it by nudging (that would make a
+  colour depend on what loaded first). Counting is chromaticity-based and its counts are LOWER
+  bounds; the tolerances and their evidence are in docs/cli.md.
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
@@ -64,6 +75,10 @@ as depth bias (priority × surface rank × node index → polygon offset).
 ⚠ Do not raise DepthBiasPerLevel/SurfaceRankBias/NodeOrderBias — the measured coplanar-separation
   floor is ~1e-6 of view distance; a uniform raise scrambles the authored layering (C5 got worse).
 ⚠ Never blanket repeat_disable: UV clamp is per-surface (UvsWithinUnitSquare); 54% of surfaces tile.
+⚠ `BuildSubtree` is the whole of the `--node=` stage's build — it already takes an arbitrary
+  GameZNode, so slicing one subtree needed no new geometry code. It sets the built root's transform
+  from the node's OWN `Local`; a caller slicing a nested node must overwrite that with
+  `GameZ.WorldTransformOf` or the subtree lands at its parent's origin.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -141,6 +156,16 @@ Builds a chapter world (fullbright): World children + partition-referenced subtr
   docs/formats/weather.md); the skydome fogs on purpose (FOG_ALTITUDE fade), never shadows/collides.
 ⚠ `HideUnplacedEntities` needs the BUILT subtree's world AABB (gamez `child_bbox` is LOCAL and
   matches all terrain); one-shot sweeps break motion targets still at origin → `RestorePlacedEntities`.
+⚠ `BuildNode` (the `--node=` stage) slices ONE named subtree out instead of walking the world, and is
+  deliberately unlike `Build` in three ways, each of which would otherwise erase the subject: no
+  `SkipWorldNode` filter (the caller named it, so even `horizon`/`dzpaths` build), no cloud-deck
+  split, and **no origin-parked registration** — the transformless vehicle a `--node=` run most often
+  asks for is exactly what `HideUnplacedEntities` switches off. It also leaves `_builtWorld` null, so
+  `CreateEdgeExtender` correctly returns nothing. `MatchNodes`/`SuggestNodes` do the lookup on the
+  SOURCE name (`.flt` optional, case-insensitive), never the Godot name — rule 60.
+⚠ `DetachedWorldAabb` is the world-frame box of a subtree **not yet in the tree** (from the built
+  meshes + node transforms). Use it, not `OrbitCamera.MergedAabb`, before the subtree is parented —
+  `GlobalTransform` on a detached node is identity and logs an error per call.
 
 ## src/Mech3/MapEdgeExtender.cs
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
@@ -234,6 +259,9 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
   priority, rank, sidedness) cache key yields several ShaderMaterials per cycling source.
 ⚠ C#-side swapping is deliberate (1–7 cycling materials per chapter): no shader variant, atlas, or same-size assumption.
 ⚠ Screenshots cannot verify open water (frames differ ~2/255); use `--debug-anim`'s flipbook log.
+⚠ Frozen outright while `TextureDropIn.Active` (`--tex-override`/`--tex-census`): each frame is its
+  own texture with its own flat colour, so a running cycle would repaint the surface a different
+  colour every few frames and a census count would report whichever the shot caught.
 ⚠ The `EFFECTS` reader (`fire1`/`fire2`) is this mechanism bound to a NODE and is NOT wired up —
   it needs OBJECT_ADD_CHILD (docs/formats/effects.md).
 
@@ -266,6 +294,9 @@ world shader reads as spill (global `csky_light_data`, loop bounded by `csky_lig
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.
 Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pads`), the focus gate.
+⚠ `Disabled` is set by `--no-pads` AND by the `--det` bundle, which every scripted run implies —
+  so a `--screenshot`/`--dump-*`/`--damage-test` run reads no pad at all without saying `--no-pads`.
+  Interactive runs are untouched: that boundary is the bundle's whole constraint.
 ⚠ The focus gate is on `For` (the read), NOT `Connected` (the roster) — `For(bound)` never
   consults `Connected`, and an empty roster would un-join menu players (`LaunchMenu.SyncDevices`)
   and break `PlaneViewer.AssignPads` at session build.
@@ -287,6 +318,10 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + report
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims,
 a safety net), then dispatch-table event playback; unhandled event kinds are counted, never fatal.
 ⚠ `FindAll` is memoized (`_findCache`); adding or reparenting world nodes at runtime must invalidate it.
+⚠ `HandledEventKinds`/`PartialEventKinds` are the inspect tools' view of `Dispatch`'s cases and must
+  move with them — a kind added there and not here reads as unimplemented in the coverage columns.
+  `AnchorsOf`/`FindNodes` are read-only wrappers; both are safe post-bootstrap because the anchoring
+  census is closed by then, so a tool asking cannot perturb the bind report.
 ⚠ `_Process` runs `GameClock.Current.Steps` separate `Advance(Dt)` calls, never one summed step —
   the scheduler resolves per step, so N small steps ≠ one big one. Zero steps (a halted clock)
   means no call at all, not `Advance(0)`, which would still dispatch a frame's worth of t=0 events.
@@ -299,6 +334,11 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
 ⚠ The safety net matches ONLY `destroyed` — a `*_dest` suffix names healthy destructible groups.
 ⚠ Crash runtime: `NameResolveFallback` keeps `_byIndex` EMPTY (non-portable ptrs, colliding index
   spaces); `Targets()` never falls back to names; crash puffers must parent at world level.
+⚠ `_rng` is the runtime's ONE die — `RANDOM_WEIGHT` verdicts, `SOUND_GROUPS` one-shot picks,
+  `MotionRuntime`'s crash-debris scatter. **Every session now sets `Seed`, not just the lab**: the
+  world runtime from `Rng.Anim`, each crash rig from `Rng.Crash`, the world-effects one from
+  `Rng.Effects`. Route any new dice through `_rng` or a replay stops being identical. `Reseed()`
+  re-pins it AND clears the sound groups' recency memory, which lives outside the RNG.
 ⚠ `ANIM_HEALTH`/`ANIM_HEALTH_RANGE` read LIVE HP via `HealthOf` → `DestructibleRegistry`, not
   `def.Health`; the registry is built in bootstrap pass 1 beside RESET_STATE. Nothing damages HP
   in normal play yet, so every instance is at full health and the read is a no-op today.
@@ -353,6 +393,22 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   pose; `Stop` alone leaves it displaced), re-apply `RESET_STATE` (healthy visible+collidable/destroyed
   hidden — undoes the swap AND the `ApplyDeathSwap` fallback), then restore HP/Status/DamageStage.
   Idempotent: destroy→reset→destroy is identical.
+⚠ **The bind never throws on a mostly-absent world — it degrades, silently, in two ways that look
+  the same from outside** (audited for the `--node=` stage). A def whose NAME resolves nothing gets
+  `Anchors() == []` and is `continue`d: *no handler ever fires*. A def that IS anchored but names a
+  node the build skipped bumps `_opsUnresolved` and dispatches into nothing: *the node is not here*.
+  Both leave a still object. `ReportResolution` turns on a bind-time census that separates them by
+  definition — `[anim] bind census …` / `bind unanchored=…` / `bind target_missing=… why=…` with
+  `index-not-built` (the compiled symbol table's gamez index was never built) vs `name-no-match`.
+  Off by default; `WorldSession` sets it for a node stage. Measured on C1 `--node=hk_zep`: 50
+  anchored, 763 unanchored, 134 target-missing, every one of them `index-not-built`.
+⚠ **`MaxRootLift`'s premise is a WHOLE-WORLD node count, so a partial world inverts it** — hence
+  `SuppressRootLift`. The 16-match cap exists so a generic `ANIMATION_ROOT_NAME` (`healthy`, 217× in
+  C1) cannot anchor a def onto every building; a single subtree drops *under* the cap, so defs that
+  never anchor in the full world anchor here, on whatever generic child the subtree owns. Measured
+  on C1's 20-node `ap_radiotwr`: **95 lifted defs and 91 phantom destructible instances**, versus 1
+  def and 2 instances with the lift refused. A caller building part of a world must set it, and the
+  refusals are counted and printed (`root_lift_suppressed=`), never dropped quietly.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -365,6 +421,9 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 ⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
   the compiler's per-instance defs both bind the same nodes, so one object carries several pools
   (same HEALTH). `_authoritative` keeps ONE per anchor node, compiled-preferred.
+⚠ `PoolsOn(node)` is every pool anchored on exactly that node; pair it with `Resolve` (which names
+  the one a hit reaches) rather than filtering `All` again — the node lab and the world damage lab
+  both read it, and the ones `Resolve` does not name cannot be damaged at all.
 ⚠ `Resolve` walks the WHOLE parent chain and takes the nearest COMPILED anchor, not the first hit:
   a reader wildcard can grab an inner node the compiled def doesn't (tower `ap_h2otwr*` matches
   `ap_h2otwr.flt`, between the collider and the compiled `ap_h2otwr1` root), and the compiled def
@@ -388,7 +447,11 @@ grammar and flag/key meanings are in `docs/formats/sounds.md`. `LoadGroups` pars
 `SOUND` event resolves through (`air_mixed_exp_sg` → `snd_exp_hit*`).
 ⚠ `SoundGroup.Pick(rng)` is weighted-random with a recency scalar: `DYNAMIC_WEIGHTS factor` (0.5)
   halves the last pick's weight so a variant does not repeat back-to-back. Pass the runtime's
-  seedable `_rng` (a lab replay must be deterministic), not `GD.Randf`.
+  seedable `_rng` (a replay must be deterministic), not `GD.Randf`.
+⚠ That recency memory (`_last`) is mutable state OUTSIDE the RNG, so re-seeding a generator alone
+  does not replay a pick sequence — `ResetRecency()` exists for exactly that, and whoever re-seeds
+  calls it (`AnimRuntime.Reseed` → `WorldSounds.ResetGroupRecency`). A fresh session is safe without
+  it only because `LoadGroups` parses new objects per session.
 ⚠ VO dialogue chains (`snd_assignments`, `snd_HI1*`) contribute no weighted member and are skipped;
   music `*_sg` groups parse but no `SOUND` event names them.
 
@@ -426,6 +489,9 @@ stand-in spark. `Spawn(weapon, worldMuzzle, inheritVel)` fires one round (with a
 and flashes the muzzle; it runs itself each physics frame. One pool per session, fed by every player's guns.
 ⚠ Hit detection is a per-step world raycast; the flying plane has no physics body, so a round never
   hits its own launcher and `player`/`enemy` IMPACT classes are unreachable in M3.
+⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from a held `Rng.Weapons` stream, so a
+  pinned run repeats its whole impact pattern: two `--det` C1B dives log 8/8 identical impact
+  positions where the unseeded build shared none.
 ⚠ `DamageSink` (wired to `AnimRuntime.DamageAt` in flight, C23) turns a hit into destructible damage:
   every `Impact` invokes it with the struck collider + `HEALTH_DAMAGE`; a no-op for terrain/water.
   Null in views with no anim runtime, where impacts stay cosmetic.
@@ -610,6 +676,8 @@ in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `s
 ⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
   driving `Update`, or the restart hook re-fires propstart.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers only the three loops, never the one-shots.
+⚠ The `snd_exp_plane1..4` pick draws from `Rng.FlightAudio` and prints `crash sound: <name>` —
+  the pick's only trace outside the speakers, and the sole way to verify it from a headless run.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -623,6 +691,9 @@ state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim pa
   `colors: null` yet needs MIX, and the depth fade zeroes fresh ground-level smoke. Defaults
   leave every existing caller byte-identical.
 ⚠ A fading additive fireball READS AS SMOKE — isolate the emitter before believing smoke works.
+⚠ Each emitter's `_rng` is a per-instance stream off `Rng.Puffer`, so particle spread is pinned by
+  the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
+  after. Its seed depends on how many puffers were built before it — deterministic under `--det`.
 ⚠ Compiled-payload quirks (`interval_garbage`, Distance-trail meters, `growth_factors`): anim-definitions.md.
 
 ## src/Effects/CloudPuffs.cs
@@ -634,6 +705,9 @@ edge and by vertical distance. Feel constants all TUNE (`BaseAlpha` kept low —
   defines an ambient emitter — don't try to source this from world data.
 ⚠ The shader keeps `fog_disabled` yet carries the custom `csky_fog_*` cylindrical fog term —
   that render mode only disables Godot's BUILT-IN fog; ours is custom.
+⚠ `_rng` is a per-field stream off `Rng.Clouds` (one field per splitscreen rig, each independent).
+  Puff *recycling* is camera-position driven, so the draw count is sim state, not a fixed series —
+  identical only when the camera path is.
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
@@ -644,9 +718,9 @@ are procedural `MakeFlakeTexture`/`MakeStreakTexture` (the original drew untextu
 ⚠ This module has NO per-frame C# hook, so the `csky_time` global is the only handle on the
   animation: halting or fixed-stepping the sim clock is the sole way to stop or pin the fall.
   Never reintroduce `TIME` here — the rain would keep falling through a halt.
-⚠ The per-instance seeds come from an unseeded `new System.Random()`, so two runs of the same
-  `--det` pose still differ (measured 4.75% of pixels, C2B rain; 0.00% with the seed pinned) —
-  that residual is A3's master seed, not the shader clock.
+⚠ The per-instance seeds are one draw sequence off `Rng.Precip` at construction, so the whole
+  field's layout is a function of the master seed. Measured on the same `--det` pose across two
+  runs: C2B rain 5.44% of pixels before, 0.00% after; C4 snow 25.84% before, 0.00% after.
 ⚠ World-sized `CustomAabb` (±40 km) stops frustum culling — the instances sit at the node origin.
 ⚠ Cloud-band gate: precip renders only BELOW the CLOUD_COVER band; a huge sentinel band
   disables the gate when a mission has precip but no cloud band.
@@ -658,8 +732,12 @@ while held), wheel speed, pads via `Pads.For(null)`; lab additions `Frame(Aabb)`
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ⚠ Deliberate: NO collision; pitch clamped (`PitchLimit` ~89°, `OrbitPitchLimit` ~80°); roll can
   never enter — `ApplyOrientation` is world-up yaw then local-X pitch; vertical move is world up.
-⚠ Default start is the mission spawn — RANDOM per launch; pass `--campos`/`--lookat` for comparisons.
+⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
+⚠ The ctor keeps only the DIRECTION to its look-at (distance discarded), so the host may hand it a
+  `--lookat` point or a `--direction` projected one unit ahead — the two are interchangeable here.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
+⚠ Vertical is Q/E plus the **Z/Space** alternate — Z, not C: C toggles the collider overlay, and
+  because this camera POLLS raw key state, sharing the key descended on every toggle press.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
@@ -723,6 +801,15 @@ The flying-aircraft node: input → FlightModel → transform, roll-following ch
 telemetry, crash and respawn; drives every HUD widget and animator, and sweeps the PlaneCollider
 boxes via CastMotion each physics frame (the old center ray stays as an anti-tunnelling backstop).
 ⚠ The chase camera slerps its BASIS, never a re-derived hard LookAt — inverted flight renders upside down.
+⚠ The chase camera takes the SIM clock's dt (its exponential smoothing makes its pose a function of
+  dt, so wall time made scripted flight captures frame-rate dependent); the halted orbit camera keeps
+  wall time on purpose, so a freeze can still be flown around.
+⚠ The fixed numpad views (`Views` + ActiveView/ApplyFixedView; held Kp1–Kp9, or pinned by `--view=`)
+  REPLACE the chase update for that frame — they never smooth, and both the offset and the whole
+  basis are carried by the plane's attitude (`Attitude * LookingAt(-dir, up)`), never a world-up
+  LookAt, which is the same reason the chase camera slerps its basis. Their `up` is the plane's up
+  except for the belly view, whose view axis IS that up. Nothing held and no `--view=` is the chase
+  camera byte for byte (verified md5 against the pre-view binary).
 ⚠ SurviveHit reads the contact normal at a pose 5 cm past the cast hit — at just-touching the rest
   query finds nothing and the head-on fallback turns shallow grazes into crashes; don't shallow it.
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).
@@ -888,14 +975,28 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
 ⚠ Builds nothing until first shown, so an unadorned `--viewer` screenshot is byte-identical.
 
 ## src/UI/MeshLab.cs
-The `--viewer` geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider
-boxes, light sliders + headlight, and independent cull × normal-source override cyclers
-(`--debug-mesh=cycle=N` scripts them; lighting is only written when `--debug-mesh` asks).
-⚠ Built after the plane joins the tree — `GlobalTransform` on a detached node is identity + error spam.
-⚠ Override materials replicate SceneBuilder's vertex stage verbatim (`skip_vertex_transform`,
-  `depth_bias`/`node_bias`) — otherwise coplanar decals z-fight and every A/B is worthless.
+The geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider boxes, light
+sliders + headlight, and independent cull × normal-source override cyclers (`--debug-mesh=` scripts
+them; `cycle=N` steps the cycler, `force` builds the overrides at the data's own settings, `restore`
+attaches then detaches). Two shapes: the `--viewer` lab owns the parked plane for the session; the
+**scoped** lab (`--freecam`/`--anim-lab`, ctor taking a `SelectionService`) attaches to the current
+selection on M and restores it on M again, on a selection change and on a deselection.
+⚠ Built after the subject joins the tree — `GlobalTransform` on a detached node is identity + error spam.
+⚠ **Override materials are the surface's OWN shader with two edits** — the cull token in
+  `render_mode`, and a `csky_lab_normal_mode` rewrite injected at the top of `fragment()` (the top,
+  because the fullbright path derives its light normal inside the body) — plus every uniform copied
+  by name. Measured: `force` at AsData/AsData is raw-pixel identical to the shipped render on both a
+  world subtree and the parked plane. The hand-written replica shader is the FALLBACK only; on a
+  fullbright world surface it moved 1,682 px of a 2,500 px subject (no fog/scroll/alpha terms).
 ⚠ Bounds-check override slots against the INSTANCE (`GetSurfaceOverrideMaterialCount()`), not the
   mesh — `SmoothMesh` refuses 0-surface meshes; `SetOverride` recovers by re-assigning the mesh.
+⚠ `BoundingRadius` is the geometry's own box half-diagonal, NEVER max |v|: a world subtree's
+  vertices are absolute under an identity node transform, so the C1 water tower read 7,420 m
+  (its distance from the map corner) and drew 163 m normal lines across the chapter.
+⚠ Scoped mode: single-letter cyclers OFF (the free camera flies on W/G/C/V — buttons only), overlays
+  parented to the lab and ridden onto the target rather than added into the measured subtree, and
+  the light sliders drive the lab's OWN `DirectionalLight3D` — never the world's sun or ambient.
+  A fullbright target says "no light reaches it" instead of offering a control that does nothing.
 
 ## src/UI/WeaponLab.cs
 The `--viewer` weapon lab (key W): mounts a weapon and fires it, driving its OWN `ProjectilePool` so
@@ -920,18 +1021,117 @@ screenshot is byte-identical.
 ⚠ Ballistics decimals are formatted `InvariantCulture` (a dot) — a raw `{v:0.#}` interpolation prints
   a locale comma (`h4,5`) in a de-DE run.
 
+## src/UI/SelectionService.cs
+The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mesh under the cursor,
+PgUp/PgDn (Home/End) walk its `cs_name` ancestor ladder, a breadcrumb HUD line names every rung and
+an `ImmediateMesh` wireframe outlines the current rung's subtree. `Current`/`Ladder`/`Level`/
+`CurrentBox` + the `Changed(service, freshPick)` event are the state the other inspect tools read;
+`Select(node)` is the programmatic entry (a tree panel, a search hit). `--debug-select=x,y[,up]`
+replays a click and a ladder walk for scripted runs.
+⚠ **The pick is NOT a physics raycast** — neither mode builds collision (rule 72), so it is a manual
+  ray-vs-AABB scan over the visible `MeshInstance3D`s under the world root, nearest hit wins, one
+  walk per click. It is AABB-accurate, not triangle-accurate. **This is the mechanism every later
+  inspect tool inherits**; it was lifted out of `AnimLab.PickObject`, which no longer picks.
+⚠ `MaxPickDiag` (350 m) skips map-scale meshes, so **terrain is unpickable by design** — a click
+  that finds nothing logs `select miss … tested= skipped_oversize=` rather than going quiet.
+⚠ Rungs are the `cs_name` meta, never `Node.Name` (rule 60) — C1's second `box_car.flt` is
+  `godot=@Node3D@5`. SceneBuilder's unnamed `mesh`/`lights`/`col` children are skipped, and the walk
+  stops below the world content root, so the outermost rung is the placed object (`hk_zep`).
+⚠ The box is measured from the selected subtree's OWN meshes here, not via `OrbitCamera.MergedAabb`
+  over the live tree (rule 92 — an overlay parked elsewhere would enter the merge); empty meshes are
+  skipped and the highlight is parented to the service, never into the subtree it measures.
+⚠ The highlight's corners are baked into the rung's local frame once, then it rides that node's
+  `GlobalTransform` — exact for rigid motion (train, zeppelin), so it does NOT grow to follow
+  articulation inside the subtree.
+⚠ Builds nothing until the first selection (no CanvasLayer, no mesh): four `--det` poses are
+  raw-pixel md5-identical to a build without this file.
+⚠ `OverlayMeta` is the "this is a tool's drawing, not content" marker: a subtree carrying it is
+  skipped by BOTH the pick and the box measurement, which is what lets the collider wireframes be
+  parented onto the very objects they annotate without becoming clickable or growing their boxes.
+
+## src/UI/ColliderOverlay.cs
+The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` script it) in
+`--freecam`/`--anim-lab`/`--fly`: one `ImmediateMesh` per collider host, colour-coded by owner class
+(world / water / buildings / clutter / plane / other), built once on the first toggle and
+`Visible`-flipped after. Measured C2: 1,848 node-backed shapes + 10k–14k clutter placements.
+⚠ **Its first job is the notice.** Pressing C in a mode that built no collision prints the reason on
+  screen and in the log and draws NOTHING — an empty overlay would read as "nothing here is solid",
+  which is exactly rule 72's trap.
+⚠ Clutter shapes hang off the region body's RID with no node, so they are read back through
+  `PhysicsServer3D.BodyGetShape*` only — a `ShapeOwner*` call on one of those bodies would make
+  Godot rebuild it from the nodes it does not have and silently empty it.
+⚠ One ImmediateMesh SURFACE per body, not per shape: the cap is 256 surfaces and a city region
+  carries thousands of placements (over it, every call errors and nothing draws). A surface closed
+  with no vertices is an error too — `HasGeometry` is checked before opening one.
+⚠ Each wireframe's visibility follows its shape's live `Disabled` flag (re-read 4×/s), so a
+  destructible's death swaps the drawing with it; the tallies are logged as **separate on and off
+  counts plus the names that flipped**, never a net (rule 73: the C2 gate nets +7 — `col[off 1, on 8]`).
+⚠ Budgets, both reported: a trimesh over `MaxShapeTris` (2,000) or past the 400k-line budget draws
+  as its bounding box instead. Counts are pose-dependent — the map-edge extender adds clutter bodies.
+⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
+  1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (rule 102).
+
+## src/UI/NodeLab.cs
+The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
+Frame / Hide-Show, a dependency readout for `SelectionService.Current` (anim defs, destructible
+pool + DAMAGE_SEQUENCE, geometry/textures, colliders) and a destructibles view with F41's coverage
+columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin.
+⚠ **Lazy per branch, never per frame.** Each expandable row carries ONE placeholder child that is
+  *reused* as its first real row on expand — no `TreeItem` is ever freed. A branch is capped at
+  `MaxBranchItems` (C5's world root has 557 named children) with the overflow stated in a row. The
+  only per-frame work while open is one status Label at 4 Hz.
+⚠ **Tree children are the nearest `cs_name` descendants** — the exact inverse of the selection
+  ladder's ancestor walk, so a world click and a tree row name the same relation.
+⚠ `Select(node)` reaches what a click cannot: `SelectionService`'s 350 m cap makes terrain
+  unpickable, and `node=<cs_name>` selects it anyway (C5 `z3terrain`, a 512×0×512 box).
+⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (rules 43/72): the
+  collider line prints the not-built-in-this-mode notice, and on a `--node=` slice the anim and
+  destructible readouts carry a PARTIAL WORLD banner with the bind census. `collisionBuilt` is
+  wired to the real `WorldSession` option, which `--debug-damage` forces on (as `--damage-test`
+  does); without it no mode this lab runs in builds collision.
+⚠ Destructible rows come from the PROGRAM's `HEALTH>0` defs joined to the registry, so a def that
+  bound nothing shows as `UNRESOLVED`; the totals equal the `destructible-census` suite's.
+⚠ Builds no UI until N (or `--debug-nodelab`): the 11 goldens hold unchanged with it in the tree.
+
+## src/UI/WorldDamageLab.cs
+The world damage lab (H) in `--freecam`/`--anim-lab`: the destructible pools of whatever
+`SelectionService` holds, each with live HP, and a slider + Kill + Reset on the one a weapon hit
+reaches, driving `AnimRuntime.DamageAt`/`ResetDestructible`. `--debug-damage[=node=,pool=,hp=,kill,
+reset,tick=,open]` is the scripted twin (an ordered script, not a token set).
+⚠ **Only the pool `DestructibleRegistry.Resolve` names is drivable.** A node can carry several
+  `(def, anchor)` pools (C1's water tower: compiled + reader wildcard); the others are listed
+  read-only with the reason. Driving a twin damages a pool nothing can ever hit.
+⚠ **The slider is absolute HP** — down spends through `DamageAt`, up runs `ResetDestructible` then
+  re-damages, because the model has no healing (`DamageStage` only climbs).
+⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, rule 75);
+  colliders print `off=`/`on=` separately (rule 73) or the not-built notice (rule 72).
+⚠ **Freecam builds no world-effects runtime** — the first damage action asks `PlaneViewer` for the
+  one `--destroy` uses. Its bound name closure does NOT include the `sputter_*_obj` stage puffers or
+  a def's own `PUFFER_STATE`, so those fire in the log and draw nothing here (rule 76).
+⚠ Builds no UI until H (or `--debug-damage`): the 11 goldens hold unchanged with it in the tree.
+
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
-owns the orbit state and drives a `Camera3D` it does not own; `Frame` honours `--campos`/`--lookat`,
-and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with the anim lab).
+owns the orbit state and drives a `Camera3D` it does not own; `Frame` takes the eye + pivot the host
+resolved, and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with the anim lab).
+⚠ **`Frame`'s `lookAt` is a PIVOT POINT, not a direction** — with the eye it also sets the orbit
+  RADIUS, which the wheel and the drag then work in. A `--direction` cannot be passed through here;
+  `PlaneViewer.FrameCamera` synthesizes a pivot on the aim ray first. Collapsing that back to a
+  direction (radius 0) leaves the camera spinning about its own eye — measured: a 25° `--jitter`
+  swings the parked plane clean out of frame, where the synthesized pivot keeps it centred.
 ⚠ The FOV read in `Frame` is 50 — the orbit view never runs in `--fly`/`--freecam`, where FOV is 62.
 ⚠ `MergedAabb` on a meshless subtree returns a zero-size box at the origin — callers special-case
   it — and the nodes must be IN the tree (`GlobalTransform` on a detached node = identity + errors).
 
 ## src/UI/AnimLab.cs
 The `--anim-lab` debugger: a quiet `WorldSession` stage (`AutoStart=false`, seed pinned), fixed-dt
-clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam with
-click-to-follow, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
+clock, transport button panel, def picker, `AnimTimeline`, `SpectatorCamera` freecam following the
+shared selection, and a staged effect/crash anchor set so placeless on-call defs play at the camera.
+⚠ The lab no longer picks: `SelectionService` owns the click (and the `GuiReleaseFocus` that frees
+  the picker's filter field). The lab only reacts to `Changed` — **frame + follow on a fresh pick,
+  re-follow WITHOUT re-framing on a ladder walk**, since re-framing every rung would fling the
+  camera out to the whole zeppelin's radius mid-walk. Bound in `_Ready` before the `ShowUi` return,
+  so a scripted `--debug-select` run still tracks what it picked.
 ⚠ The lab does not own its clock: it drives the session `GameClock` (P → `Halted`, `.` →
   `StepOnce`, the speed buttons → `Scale`) and takes `Steps`/`Dt` from it. The mode is
   `PlaneViewer`'s choice — FixedAccum interactively, FixedStep in a scripted `--screenshot` run, so
@@ -973,6 +1173,28 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
   the sound loader after bootstrap (prewarming first) unless `Options.KeepArchivesOpen` (the lab).
 ⚠ Returning `Program` keeps crash-effect-param loading in the caller — no Mech3→Flight dep here.
 ⚠ `PlayerPosition` is a single per-call delegate — no camera exists at build time.
+⚠ **The phase boundaries are a reported contract.** Each step records its own span into
+  `StartupProfile` — `zrdr` (mission setup) · `world` (WorldBuilder) · `clutter` · `anim`
+  (AnimProgram load) · `bind` (bind + bootstrap) · `prewarm` — and those are the bulk of the
+  `[perf] startup` accounting. Move a step, move its `Record` with it: a dropped phase does not
+  read as missing, it reads as a growing `rest`. Keep them leaves — never nest one inside another.
+⚠ `Options.NodeSubtree` (the `--node=` stage) is the same pipeline with three steps switched off:
+  `WorldBuilder.BuildNode` replaces the world build, mission setup and clutter are skipped, and the
+  runtime's `ReportResolution` + `SuppressRootLift` go on. The anim program still loads and still
+  binds — what a partial world does to the bind is the question the stage exists to answer. Mission
+  setup is skipped rather than run because the one verb that reliably WOULD resolve is the one that
+  switches the requested subject off (C1/IA1 hides `hk_zep`); consequence: a node stage shows the
+  subtree in its gamez base state, not this mission's, including its `texture_scroll` defaults.
+
+## src/Mech3/EmptyStage.cs
+The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
+for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in the frame.
+⚠ The grid texture is DRAWN pixel-by-pixel here. Never load one — the repo ships no assets, and a
+  test stage is the easiest place to break that rule by accident.
+⚠ The collider is a sunk `BoxShape3D` whose TOP face is y=0, not a `WorldBoundaryShape3D` and not a
+  trimesh: the weapon and airframe raycasts want a definite thickness under the surface.
+⚠ It carries the `cs_name` meta (`ground`) like a built gamez node, so the impact log and the node
+  labels read a real name off it (`on ground/col`).
 
 ## src/PlaneViewer.cs
 Main.tscn root: parses args, registers shader globals + lighting + the persistent camera once in
@@ -986,6 +1208,49 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   wall time so nothing stalls behind the menu.
 ⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
   null-guards cover the frame before the deferred free lands.
+⚠ **The `--det` bundle is resolved in ONE place** — the block after `Log.Open` in `_Ready`, ahead of
+  the jitter and master-seed resolution it feeds. It sets the fixed clock, master seed 1, `--spawn=0`,
+  the pinned livery seed, `Pads.Disabled` and `--jitter=0`, each still overridable by passing that
+  flag; `--screenshot=`/`--dump-*`/`--damage-test` turn it on themselves and `--no-det` beats both the
+  implication and an explicit `--det`. It announces the resolved set on one `[core] det …` line, whose
+  absence means the run was interactive. **Never let a constituent leak into an interactive default** —
+  a bare `--fly` keeps its random spawn, random liveries and live pads.
+⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
+  block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
+  `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
+  `--lookat` is a POINT (the orbit pivot, and `--freecam`'s aim when no `--pos` was given) while
+  `--direction` is a vector, and only flight converts one to the other. `--campos`/`--spawn-at`/
+  `--spawn-dir` remain as deprecated aliases with their old per-mode reach — `--campos` never places
+  the plane, `--spawn-at` still moves the anim lab's parked prop — and log their replacement once.
+⚠ **`ReportPerf`'s window is 60 RENDERED frames, not a wall second** — under `--det` that is exactly
+  60 sim steps, so two runs of a scenario produce the same number of samples, which is what makes
+  `RunTests.ps1 -Perf`'s paired medians comparable. Keep the line one flat `key=value` string: the
+  script parses it. `--no-vsync` (vsync off + `Engine.MaxFps 0`) exists only so the ms terms stop
+  reading the refresh rate; it changes no simulation, because the fixed clock steps per rendered
+  frame. **`physics_ms` is empty under `--det` by construction** — see `GameClock.ParentDriven`.
+⚠ **`FrameCamera`'s subject box must be measured BEFORE the labs join the subtree.** `MeshLab` parks
+  three EMPTY overlay meshes at the session origin, and `OrbitCamera.MergedAabb` folds them in —
+  harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
+  `--node=` subtree 7 km out, whose box stretched back to the origin and framed it at 12 km. Hence
+  the optional `subject` argument, filled from `WorldBuilder.DetachedWorldAabb` at build time.
+⚠ `WorldSession.Options.Collision` has exactly three sources — `_fly`, `_damageTest`, `--collision`
+  — and `--collision` is the interactive one: the world's colliders are a flight-build product, so
+  the C overlay and any hand check in `--freecam`/`--anim-lab`/`--viewer` need it or they measure an
+  absence. Measured C2 startup cost, warm, 3 runs each: total 2,462 → 3,106 ms, of which `world`
+  352 → 865 and `clutter` only 47 → 56.
+⚠ `--stage=empty` and `--node=` are settled in the SAME mode-resolution block as the rest: the node
+  stage forces `--viewer` (unless `--anim-lab`) and sets `_chapterGiven`; the empty stage forces
+  `_worldMode` false, which is what routes `gamezPath` to planes.zbd and takes the third branch in
+  the build. `--node=` also turns off the anim lab's own auto-frame — on a one-object stage the
+  subject IS the stage, and re-aiming on every Play swings the camera off the only thing there.
+⚠ `FrameCamera` synthesizes the `--viewer` orbit pivot when only a `--direction` was given: the point
+  on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the eye
+  swung to the aim when there is no `--pos`. It logs the value, because a synthesized pivot the user
+  never typed is exactly the thing a later capture cannot explain.
+⚠ F11 (`PrintPlacement`) prints the SUBJECT, per mode: in flight player 1's plane pose (position +
+  nose `-Z`), not the chase camera; in the orbit view `--pos`/`--lookat` (only a point reproduces the
+  radius); elsewhere `--pos`/`--direction`. Directions print to 5 decimals — 3 would quantise a unit
+  vector's aim to ~0.03°.
 ⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
   `GameClock.Current`, nulled on teardown. `ProcessPriority = -1000` so `BeginFrame` runs before
   any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
@@ -997,11 +1262,18 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
 ⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
   has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
+⚠ **Owns the session `StartupProfile`** — built at the TOP of `StartSession` (before `_worldRoot`)
+  and published as `StartupProfile.Current`; `EndBuild()` on the success return, `Frame()` from
+  `_Process`, `Emit()` from `NotificationExitTree` for the runs that quit mid-build. Its phases here
+  are `gamez` · `textures` · `sounds` · `zrdr` · `plane` · `weather` (dome + fog + cloud visuals) ·
+  `edge`, all LEAVES; anything between them lands in `rest`, which is why `rest` is per-mode work
+  (viewer ≈ 255 ms of lab construction, flight ≈ 240 ms of rig/pool/effects wiring, freecam ≈ 30 ms).
+  A new load or build step gets its own `Record` or it silently inflates `rest`.
 ⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
   HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
   (C23/C24/C25/C26) — resolve✓ walk-up, healthy/destroyed swap, `col[off,on]` (colliders switched by
-  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision = _fly ||
-  _damageTest` so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
+  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision` on (as
+  `--debug-damage` does) so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
   destructible (doors instant-die, no `DAMAGE_SEQUENCE`), continuous mode only the staged ones.
 ⚠ Discrete mode adds the world subtree to the tree (`ManualAdvance` so `_Process` doesn't
   double-drive) and `Advance`s the death ~3.5 s AFTER the swap/col census: the debris `OBJECT_MOTION`
@@ -1012,13 +1284,16 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   stage of the `EffectStageRoots` gamez templates + an `AnimRuntime` bound to `EffectAnimNames`'
   closure, wired to `ProjectilePool.EffectSink` and the world runtime's `ExternalEffect`. Built only
   in `--fly` (and `--effects-test`), needs the session textures kept open (they already are, for the
-  crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
+  crash runtime). Outside flight it is built ON DEMAND through `EnsureWorldEffects` — `--destroy` at
+  build time, the world damage lab on its first damage action — which is the one place that wires
+  `ExternalEffect`, so a plain `--freecam` regression still builds nothing extra.
+  `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
   camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
   and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
 ⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
   contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
-  auto-frames the killed object (unless `--campos`/`--lookat` set) and builds the world-effects runtime
+  auto-frames the killed object (unless `--pos`/`--direction` set) and builds the world-effects runtime
   itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
 
 ## src/Utils/GameClock.cs
@@ -1031,7 +1306,8 @@ raw frame delta", so nothing outside a session breaks.
   before this class, which is what makes the shipped modes byte-identical), **FixedAccum** (whole
   1/60 s steps from a wall accumulator clamped at 0.25 s — the interactive anim lab),
   **FixedStep** (exactly one `FixedDt × Scale` step per rendered frame — a scripted lab run and
-  `--det`). `Halted` is orthogonal to all three: 0 steps until `StepOnce`.
+  `--det`, which every scripted flag implies). `Halted` is orthogonal to all three: 0 steps until
+  `StepOnce`. Under FixedStep `--frames=N` is exactly sim frame N (`sim_frame=120 sim_time=2`).
 ⚠ `PhysicsDt` returns 0 in every non-realtime mode and while halted, and **0 means the consumer
   returns without stepping** — `PlaneViewer.DriveSimSteps` calls its `SimStep` instead, `Steps`
   times, in the tree order Godot's physics tick used (projectile pool → flight controllers;
@@ -1043,6 +1319,28 @@ raw frame delta", so nothing outside a session breaks.
 ⚠ The GPU reads the same clock through `ShaderTime` / the `csky_time` global — that is what makes
   a halt a true freeze-frame (measured: frames 120 and 300 of a halted C1 waterfall are md5-equal)
   and a `--det` shot a function of the frame count. Any new animated shader takes `csky_time`.
+
+## src/Utils/Log.cs
+The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
+(`anim world flight weapons sound perf test ui core`) and four levels. Two sinks with different
+jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file is the machine's.
+⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter. `--log=` only
+  moves the *console* threshold. That is the point: a post-hoc grep can never miss a category
+  nobody enabled before the run. Console default is info (what an unconverted `GD.Print` did);
+  warnings and errors are never suppressible; `--debug-anim` implies `--log=anim:debug,sound:debug`.
+⚠ Grammar: every line ends `[cat] message key=value`, the file prefixing a 5-char level token.
+  **No timestamp column, deliberately** — a `--det` run must produce a byte-identical log; a line
+  that needs time carries it as an explicit `key=value`.
+⚠ A message is ONE `FormattableString`, rendered invariant. `$"a{x}" + $"b{y}"` is a `string` and
+  will not compile — deliberately, since the concatenation formats its floats in the current
+  culture first. A composite's own `ToString()` escapes it too: log the fields, not the record.
+⚠ `Warn` prints plain via `GD.Print`, never `GD.PushWarning` (which appends a managed stack trace
+  per call). Line-flushed `StreamWriter`, UTF-8 **with BOM** (PowerShell 5.1 reads BOM-less as ANSI
+  and mojibakes the em dashes). Lines logged before `Open` sit in a 512-line prelude, flushed on open.
+⚠ **Migration is incremental by decision, not by neglect — do NOT bulk-sweep the remaining
+  `GD.Print` sites** (223 across 37 files; a bulk text rewrite has corrupted files here before,
+  verification rule 67). New code uses `Log`; a family converts when an item touches it, keeping
+  each site's original level unless a comment there says the level was compromised.
 
 ## src/Utils/ShaderTime.cs
 The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in
@@ -1057,6 +1355,107 @@ shader this project generates reads it instead of Godot's `TIME`.
   left it — the menu must not freeze, and the uniform must never sit pinned at 0.
 ⚠ Declared in `res://shaders/csky_time.gdshaderinc`, one include shared by every shader that reads
   it: a global uniform's TYPE must agree across shaders, so it is declared in exactly one place.
+
+## src/Utils/StartupProfile.cs
+The always-on startup timing report: one `[perf] startup mode=… <subject> total=… boot=… <phases…>
+rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)` are ambient statics over
+`Current`, so the shared build code (`WorldSession`, which the test harness also drives) records blind.
+⚠ **It only reports.** No thresholds, no verdicts, no A/B — a comparison needs a warm-up protocol
+  this class deliberately does not own (C22's).
+⚠ The line asserts `total = boot + Σ(phases) + rest + first_frame` and that identity is checkable —
+  keep every phase a LEAF (never nested inside another) or the sum silently double-counts.
+  `rest` = build minus its phases: real uninstrumented work, not an error term.
+⚠ `first_frame` is measured at the top of the SECOND `_Process` after the build, so the first draw
+  (and its shader compilation) is inside it. A run that quits during the build prints
+  `first_frame=none` — emitted from `PlaneViewer`'s `NotificationExitTree`, the only hook those
+  headless probes still reach — and its build closes at teardown, so its `rest` also holds whatever
+  the probe itself did (`--damage-test`'s sweep). Don't read a probe run's `rest` as build overhead.
+⚠ `boot` is engine start → build start, so on a launchscreen-driven rebuild it also holds however
+  long the menu was up. Read it, don't assume the session was the process's first.
+⚠ `Current` is null outside a session build **on purpose** — `--run-tests` builds eight census
+  worlds through `WorldSession` and must not accumulate them into one line.
+
+## src/Utils/Rng.cs
+The session's randomness policy: one master seed and ten named subsystem generators derived from it
+(`weapons`, `flightaudio`, `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`,
+`precip`). `Reset(master, pinned)` runs once per session build, before anything draws;
+`Stream(name)` is the shared generator, `SeedFor`/`IntSeedFor` the pure seed, `NewIntSeed`/
+`NewSystemRandom` a per-instance stream off the subsystem's own.
+⚠ A subsystem's seed is `splitmix64(master ^ fnv1a(name))` — **independent across subsystems**, so
+  adding a draw in one cannot shift another's sequence; only order WITHIN a subsystem matters, and
+  the fixed `GameClock` pins that. Never derive a seed from `string.GetHashCode()`: .NET randomizes
+  it per process, which is exactly the non-determinism this class removes.
+⚠ Unpinned (no `--det`, no `--seed`, not `--anim-lab`/`--effects-test`) the master comes from
+  `TimeSeed()`, so the shipped game keeps its variety — a bare `--fly` still gets a random spawn and
+  random liveries. That boundary is the reason nothing here branches on `Pinned`. A scripted flag
+  (`--screenshot=`, `--dump-*`, `--damage-test`) implies `--det`, so those runs are pinned to 1.
+⚠ `Reset` also calls `GD.Seed(master)`: the net for any draw not yet routed through a named stream.
+  A hot-path caller holds its stream reference (`ProjectilePool`) rather than re-resolving per draw.
+⚠ `UI/LiveryLab`'s generator deliberately stays outside this — it is driven by a button press, and a
+  wall-time/input-dependent path must never share a sim subsystem's stream.
+
+## src/Testing/Probes.cs
+The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
+`--damage-test` inspection reports. Each probe does the work once and returns both halves: the
+report text the flag prints and writes, and a structured verdict (counts, per-row booleans,
+failure strings) a `--run-tests` suite asserts on.
+⚠ **One source of truth.** The flags in `PlaneViewer` are thin wrappers over these; a check added
+  to a probe reaches both the report and the suite. Never re-implement a check in a suite.
+⚠ **A verdict is a field, never a glyph.** The `✓`/`✗` in a report line is formatting; the boolean
+  it came from is on `DamageRow`. Parsing a report back to automate it is the thing this replaced.
+⚠ `Probes.SweepCap` (16) caps the swept ROWS, not the registry totals — a census must read
+  `DamageResult.TotalInstances` / `DistinctAnchors` or it silently under-counts (rule 59).
+⚠ `Probes.Damage` needs the world subtree in the tree with `ManualAdvance` set: it ticks past the
+  death schedule for the debris count, and an out-of-tree global-transform read returns identity.
+⚠ `EnabledColliders` / `WorldRootOf` / `CountVariants` are the shared kill-census helpers — the
+  world damage lab reports through the same three, so the panel's numbers and `--damage-hd`'s
+  cannot drift apart (measured equal on C1's `ap_h2otwr1`).
+⚠ Every probe forces `CultureInfo.InvariantCulture` — the damage report used to write `HEALTH 0,01`
+  on this German machine.
+
+## src/Testing/TestHarness.cs
+`--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
+scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`), the
+PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
+⚠ **In-engine is the smaller half.** Only checks that need a live Godot belong here — a built
+  plane read by global transform, a ticked chapter world, a spawning projectile pool. Anything
+  that runs without the engine goes in `CSVM.Tests` (`dotnet test`) instead.
+⚠ **SKIP is never PASS.** A suite whose input is absent throws `SuiteSkippedException` via
+  `RequireData` and is counted separately; the run still exits 0. "No data" must not read as green.
+⚠ **Engine-error policy.** Native `ERROR: …` lines are C++ `ERR_FAIL_COND` prints and cannot be
+  intercepted from C#, so they are screened out of band: the run reads its own engine log
+  (`--log-file`, else the project's default rotating log if this run wrote it) and classifies each
+  error against `ErrorAllowlist`. **Every allowance carries a cap and its measured count is printed
+  even on a pass** — an uncapped or invisible allowance is how a new error hides inside an old
+  one's shape. Unknown error → fail; over cap → fail; no log → SKIP, never PASS.
+⚠ `Screen` is pure (no Godot API, no IO) and unit-tested in `CSVM.Tests` — the classifier is the
+  one part of the harness that could turn the whole thing into a rubber stamp.
+⚠ Run **windowed**: `--headless` compiles no shaders, so a clean error screen says nothing about
+  them (rule 82). The harness logs a warning when it detects the headless display.
+⚠ A suite must never write outside `.scratch/`; `WriteArtifact`/`ScratchDir` are the only route.
+
+## src/Testing/Suites.cs
+The seven registered suites: `weapons-defs`, `markers-rig`, `loadout-bind`, `weapons-fire`,
+`damage-stages`, `damage-hd`, `destructible-census`.
+⚠ The expected numbers are **golden counts against the retail install** (48 weapon defs, 11
+  airframes, the per-chapter destructible census) — the data is a fixed input, so they are
+  invariants. Change one only with the measurement that moved it.
+⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`: a skipped weapon is a
+  success-looking outcome (no mount on this plane) that nothing else would notice.
+⚠ `--loadout=<def>` reaches `loadout-bind` — `--run-tests=loadout-bind --loadout=pbloodhawk` is the
+  real able-to-fail control (a def wanting `firepoint8` bound to the 7-firepoint Kestrel).
+
+## src/Testing/GoldenShot.cs
+The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
+`Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
+`[core] shot pixmd5=… size=… gpu=…` on every capture; `RunTests.ps1`'s `goldens` stage parses that
+line and compares against `analysis/goldens/manifest.json`.
+⚠ **Hash the raw buffer, never the PNG.** `Image.GetData()` only — encoded bytes differ between
+  pixel-identical images (rule 36), so a file hash reports encoder state.
+⚠ **The hash is a property of this GPU.** A driver change moves every shot at once; the adapter
+  travels on the same line precisely so that case is readable rather than mysterious (rule 95).
+⚠ The comparison lives in PowerShell, not here: the suites in `TestHarness` run inside one `_Ready`
+  call and never yield a frame, so no in-engine suite can photograph anything.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

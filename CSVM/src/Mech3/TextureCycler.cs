@@ -43,6 +43,7 @@ public sealed partial class TextureCycler : Node
     /// "I can't see it in a screenshot" is not evidence that it is not running.</summary>
     public bool Debug;
     private float _debugClock;
+    private bool _frozen;
 
     /// <summary>How many flipbooks are running (diagnostics / the build log).</summary>
     public int Count => _cycles.Count;
@@ -67,6 +68,18 @@ public sealed partial class TextureCycler : Node
 
     public override void _Process(double delta)
     {
+        // Each flipbook frame is its own texture with its own drop-in colour, so a running cycle
+        // would repaint the surface a different colour every few frames and the census would read
+        // whichever one the shot caught. Frozen, the surface keeps its material's base texture.
+        if (TextureDropIn.Active)
+        {
+            if (!_frozen)
+            {
+                _frozen = true;
+                Log.Info("anim", $"texture cycles frozen for the texture drop-in cycles={_cycles.Count}");
+            }
+            return;
+        }
         // Flipbook time is sim time: a halted or scaled clock must hold or scale the water.
         float dt = GameClock.Current?.FrameDt ?? (float)delta;
         if (Debug)
@@ -78,7 +91,7 @@ public sealed partial class TextureCycler : Node
                 var parts = new List<string>();
                 for (int i = 0; i < _cycles.Count; i++)
                     parts.Add($"{(i < Summary.Count ? Summary[i] : "?")}=f{_cycles[i].Current}");
-                GD.Print("anim/debug: texture cycles " + string.Join(" ", parts));
+                Log.Debug("anim", $"texture cycles {string.Join(" ", parts)}");
             }
         }
         foreach (var c in _cycles)

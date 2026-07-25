@@ -79,9 +79,11 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
-- `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees**; `-WhatIf`/`-Force`/`-OlderThanDays`/`-Keep`/`-SkipWorktrees`/`-IncludeDirtyWorktrees`/`-PruneBranches`. Spares backups and dirty worktrees; leaves branches alone by default.
+- `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`). Details: `docs/tooling.md`.
+- `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
+- `analysis/goldens/manifest.json` — the golden-image tripwire: 11 pinned `--det` shots as command line + raw-pixel md5. Hashes only, never pixels.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — per-module purpose + still-binding constraints for `CSVM/src`, one `##` entry each. **Read a module's entry before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
@@ -106,85 +108,96 @@ tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scene
 
 Compact module index — **every module's purpose and still-binding constraints live in `docs/architecture.md` as its `##` entry; read that module's entry before changing it.**
 
-- `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects; reads both extraction shapes.
-- `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks and classifies each texture's alpha (soft vs hard).
+- `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
+- `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
 - `src/Mech3/PlaneBuilder.cs` — builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/PaintScheme.cs` — one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs` — decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
-- `src/Mech3/PlanePainter.cs` — applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps the decals.
-- `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props local Z, rotor local Y).
-- `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (local X ailerons/elevators, local Y rudders).
-- `src/Mech3/WingLights.cs` — single source of truth for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
-- `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck by map coverage, camera-anchored skydome, edge extender.
-- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter (buildings solid) continuing the world past the map edge, per camera.
-- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: billboard sprites, plus C2/C5's solid 3D city blocks.
-- `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's alternating list.
-- `src/Mech3/Messages.cs` — the game's localized string table: a plain `messages.json` key→value map resolving the `MSG_*` keys missions reference.
-- `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers` and the overlay.
+- `src/Mech3/PlanePainter.cs` — applies a `PaintScheme` to one aircraft: composites skins from the pattern's region masks, swaps decals.
+- `src/Mech3/PropParts.cs` — classifies prop/rotor nodes by name; spin axis + rate from the original anims (props Z, rotor Y).
+- `src/Mech3/ControlSurfaces.cs` — classifies aileron/elevator/rudder mesh nodes and their hinge axes (X ailerons/elevators, Y rudders).
+- `src/Mech3/WingLights.cs` — the one source for wingtip nav lights: flare node names, glow texture, warm-amber colour, blink period.
+- `src/Mech3/WorldBuilder.cs` — builds a chapter world: placed + partition subtrees, cloud deck, camera-anchored skydome, edge extender.
+- `src/Mech3/MapEdgeExtender.cs` — rolling window of mirrored border tiles + clutter continuing the world past the map edge, per camera.
+- `src/Mech3/Clutter.cs` — stamps interp.json clutter templates onto matching-textured terrain: sprites, plus C2/C5's solid 3D city blocks.
+- `src/Mech3/Zrdr.cs` — zrdr extraction reader (zip or dir) + `ZrdrDict`, the key/[values…] view over a reader's list.
+- `src/Mech3/Messages.cs` — the game's localized string table: the `messages.json` key→value map behind every `MSG_*` key.
+- `src/Mech3/MarkerRig.cs` — a plane's firepoint/pylon/target rig from planes.zbd: plane-frame positions + co-located mounts; feeds `--dump-markers`.
 - `src/Mech3/CompiledAnim.cs` — reader for the compiled `cam_anim`/`mis_anim` archives: anim defs, sequences/events, lazy SI-script pool.
-- `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files normalized into the same `AnimDefinition` model.
+- `src/Mech3/AnimDefs.cs` — the zrdr front-end: ANIMATION_DEFINITIONS reader files, normalized into one `AnimDefinition` model.
 - `src/Mech3/AnimProgram.cs` — merges the compiled + reader defs for one mission, holds `startanims`, resolves SI-script slots.
-- `src/Mech3/TextureCycler.cs` — runs the gamez material `cycle` flipbooks (water, surf, wakes, crowds) by swapping `albedo_tex`.
-- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot`, the fire-and-forget one-shot `SOUND` (destruction/impact audio, D31).
+- `src/Mech3/TextureCycler.cs` — runs the gamez material `cycle` flipbooks (water, surf, wakes) by swapping `albedo_tex`.
+- `src/Mech3/WorldSounds.cs` — `SOUND_NODE` ambient 3D emitters (one pooled player per host node) + `PlayOneShot` for destruction/impact audio.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
-- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers; `PlayEffectAt`/`ExternalEffect` drive the D32 world-effects runtime.
-- `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; feeds `ANIM_HEALTH` eval + `DAMAGE_SEQUENCE` stages, `Resolve` maps a struck collider back to its instance (weapon damage, C23).
-- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`.
+- `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
+- `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
+- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
+- `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
-- `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → `SoundGroup` (the `SOUND_GROUPS` weighted-random destruction sounds, `DYNAMIC_WEIGHTS`).
+- `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → the weighted-random `SOUND_GROUPS`.
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
-- `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s (ballistics/damage/ammo/flags + FIRE/FLYOUT/IMPACT bindings); inspect with `--dump-weapons`.
-- `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups (independent ammo) + hardpoints, markers→muzzle nodes, turrets inert; inspect with `--dump-loadout`.
-- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics integration, tracers, muzzle flashes, per-surface impact sound + effect model (water splash instanced at the hit, D30) with a spark fallback, hits damage world destructibles (`DamageSink`, C23); guns tracer-quad, rockets fly the FLYOUT MODEL body; a rocket impact plays its named IMPACT puffer effect via `EffectSink` (D32); `Spawn` into it.
+- `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
+- `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
-- `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen panes.
-- `src/Flight/HudFont.cs` — the game's own HUD bitmap font (`extracted/rimage/5pointhud*.png`): a 5px printable-ASCII atlas, auto-segmented, drawn onto any canvas sized via `HudMetrics`; `--hud-font-test` overlay (`HudFontTest.cs`) proves it.
-- `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo in the HUD font, from `MSG_HUD_GUNGAUGE`/`MSG_HUD_MISSLES` via `Messages.Fill`.
-- `src/Flight/ImpactReticle.cs` — the gun aiming pipper (`impact_point.png`): the selected group's ballistic impact point at a convergence distance, projected each frame; trails the nose, not screen-locked.
+- `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen.
+- `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font, auto-segmented from `rimage/5pointhud*.png`; `--hud-font-test` proves it.
+- `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo, in the game's own HUD font.
+- `src/Flight/ImpactReticle.cs` — the gun aiming pipper: the selected group's ballistic impact point, projected each frame; trails the nose.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
 - `src/Flight/StuntRaceBoard.cs` — the race's shared ranked results overlay, on its own full-window CanvasLayer above the splitscreen panes.
-- `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, saves only faster runs.
+- `src/Flight/ScoreStore.cs` — stunt best-time persistence: `user://stunt_scores.json` keyed chapter/mission/plane, faster runs only.
 - `src/Flight/Weather.cs` — weather.json reader → `WeatherState`: per-zone fog, sunlight, cloud whiteout, wind, precipitation.
-- `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, with a per-player `MixGain`.
+- `src/Flight/FlightAudio.cs` — own-plane loops (engine, overspeed whine, rattle) + crash/prop one-shots, per-player `MixGain`.
 - `src/Effects/Puffer.cs` — data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
-- `src/Effects/CloudPuffs.cs` — synthetic ambient cloud field: one alpha-blended MultiMesh of billboards anchored to the CLOUD_COVER band.
+- `src/Effects/CloudPuffs.cs` — synthetic ambient cloud field: one alpha-blended MultiMesh of billboards on the CLOUD_COVER band.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
-- `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD, no roll; `Frame`/`FollowNode` let the lab frame + track an object.
-- `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, per-axis calibrated control rates.
+- `src/Flight/SpectatorCamera.cs` — the `--freecam`/`--anim-lab` observation camera: RMB-look + WASD/QE, no roll; `Frame`/`FollowNode` track an object.
+- `src/Flight/FlightModel.cs` — the arcade velocity-vector flight physics: thrust/drag/gravity/lift, stall, calibrated control rates.
 - `src/Flight/PropAnimator.cs` — spins the collected prop/rotor discs about their local axes, throttle-scaled (idle floor 0.4); `--fly` only.
 - `src/Flight/ControlSurfaceAnimator.cs` — deflects ailerons/elevators/rudders to an absolute pose from slewed stick input; `--fly` only.
 - `src/Flight/WingLightBlinker.cs` — blinks the wingtip flares 0.08 s every 1.5 s, reset off on respawn; `--fly` only.
-- `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon (same asset the round flies), hidden as that pylon's ammo depletes; `--fly` only.
-- `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's mesh triangles, with no per-plane data.
+- `src/Flight/PylonOrdnance.cs` — the rockets under the wings: one FLYOUT-model body per loaded pylon, hidden as its ammo depletes; `--fly` only.
+- `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
 - `src/Flight/DamageLab.cs` — the viewer's `--damage` slider UI: one HP slider per part driving flight's own DamageVisuals.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
-- `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile gauges), geometry from the plane's `gauges` subtree.
+- `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn.
 - `src/UI/MenuInput.cs` — one launchscreen player's input source: keyboard flag + a `Pads` array, edge/auto-repeat `Poll(dt)`.
 - `src/UI/SplitScreen.cs` — the splitscreen rig: one SubViewport pane per player (2–4), shared `World3D`, per-player visual-layer band.
 - `src/Flight/PlayerRig.cs` — one rendered view's state: camera, SubViewport, HUD parent, visual layer, controller, own sky/deck/puffs.
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
-- `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
-- `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W, `--weapon-lab`): guns fire from named gun groups, hardpoints from pylons, at a stand-in target; copy-CLI-args; `--weapon-test` fires all 48.
+- `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
+- `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
+- `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W): guns from gun groups, hardpoints from pylons, at a stand-in target; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
-- `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels, shared mounts flagged magenta.
+- `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
+- `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
+- `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
+- `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (H, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
-- `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, click-to-follow; stages placeless on-call defs (the crash) in front of the camera.
+- `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, follows the selection.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
-- `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`; `--dump-config` writes a template.
+- `src/Utils/Config.cs` — dev tuning-override: typed getters over an optional sparse `res://config.json`, else the in-code `const`.
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
-- `src/Utils/ShaderTime.cs` — the `csky_time` global shader uniform: the clock's GPU-side twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
+- `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
+- `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
+- `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
+- `src/Testing/Suites.cs` — the seven registered suites and their golden counts (48 weapon defs, 11 airframes, the per-chapter destructible census).
+- `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
@@ -192,27 +205,39 @@ Compact module index — **every module's purpose and still-binding constraints 
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the damage / livery / mesh labs live. `--fly` is accepted but redundant. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`](docs/cli.md)** — including the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, and manual camera placement.
+The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`](docs/cli.md)** — including the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
 | Flag | Does |
 |---|---|
 | `--chapter[=C1]` | which chapter world (`C1`/`C1B`/`C1C`/`C2`/`C2B`/`C3`/`C4`/`C5`); flown by default |
+| `--stage=empty` | no gamez at all: a collidable grid ground plane + the plane, booting in ~2 s — the flight/ballistics test stage |
+| `--node=<cs_name>` | `--viewer`/`--anim-lab` build only that gamez subtree, auto-framed; multiple matches build the first, a miss lists candidates |
 | `--plane=` | which aircraft; comma-separated gives one per splitscreen player |
 | `--fly` | free flight (the default): world + skydome + plane + arcade controls |
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
 | `--viewer` | the static inspection view; hosts the damage (H), livery (L) and mesh (M) labs |
-| `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera |
-| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow |
+| `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera, click-selection |
+| `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow the selection |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
+| `--pos=x,y,z` | place the mode's **subject**: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt` (bypassing the mission spawn list) |
+| `--direction=x,y,z` | which way it faces there — view direction or nose. `--lookat=x,y,z` is the point form (and the `--viewer` orbit pivot). Quote comma args in PowerShell |
+| `--view=1-9` | hold a numpad flight-camera perspective for the run (2 belly, 4/6 flanks, 8 ahead); layout + magnitude TUNE in [`docs/cli.md`](docs/cli.md) |
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
-| `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
-| `--det` | fixed-dt sim clock: frame N is the same sim state whatever the render rate (A4 grows this into the full determinism bundle) |
+| `--perf` | log the frame-cost/draw-count split every 60 frames (the headless profiler stand-in) |
+| `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
+| `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
+| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests`**, and announced as a `det …` log line |
+| `--no-det` | opt back out — wall-clock sim and live randomness under a flag that would otherwise imply `--det` |
+| `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
+| `--tex-override=<name>[=<color>]` | the named texture resolves flat magenta (or your colour) everywhere it is used — "is this thing drawing at all?" |
+| `--tex-census[=names]` | every texture resolves to its own flat colour; map to `.scratch/tex_census.json`, per-texture pixel counts for a `--screenshot` beside it. **Pair with `--no-fog`**; counts are lower bounds — see [`docs/cli.md`](docs/cli.md) |
+| `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer), so the **C** wireframe overlay has something to draw; `=show` opens it |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, Esc quit. F12 screenshot, F11 print the camera pose as ready-to-paste `--campos=`/`--lookat=`. In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab.
+In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends), **N the node lab**, **M the mesh lab on that selection alone**, **C the built colliders** (see `--collision`), **H the damage lab** on the selected destructible; the scripted twins are `--debug-select=`, `--debug-nodelab=`, `--debug-mesh=`, `--debug-colliders` and `--debug-damage=` ([`docs/cli.md`](docs/cli.md)).
 
 ### Format gotchas
 
@@ -226,8 +251,8 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: not started; Wave A (determinism core) is first.
+**No plan is active.** Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything. Next work is unscheduled — pick from `backlog.md`, or scaffold a plan with `/new-plan`.
 
-**M3 (weapons and destruction) delivered** — plan archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md). Its at-the-controls sign-off is owed: pass 1 flown 2026-07-25, the polish/fix items in `backlog.md`'s "Milestone 3 Polishing" and the re-tests in `playtest.md` §1.
+**Two at-the-controls sign-offs are owed, both user-only.** M3 (weapons/destruction), archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md) — pass 1 flown 2026-07-25, items in `backlog.md`'s "Milestone 3 Polishing" and `playtest.md` §1. And the Wave D inspect tools, archived to [`docs/plans/PLAN-testing.md`](docs/plans/PLAN-testing.md) — `playtest.md` §9.
 
 **Pointers.** The pad-read-on-focus gate is user-vetoable (its own commit; `backlog.md` "Blocked / deferred"). Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

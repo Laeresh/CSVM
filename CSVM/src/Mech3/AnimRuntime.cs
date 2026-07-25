@@ -57,6 +57,37 @@ public sealed partial class AnimRuntime : Node
 
     private int _opsApplied, _opsUnresolved;
 
+    // ---- bind-time resolution census (--node= stages; see ResolutionLines) ---------------------
+    // Off unless ReportResolution is set, so a normal session collects nothing and logs nothing.
+    private enum AnchorKind { ByName, ByRootLift, LiftSuppressed, None }
+
+    private bool _censusOpen;
+    private readonly HashSet<(string Name, string Anim)> _censusSeen = new();
+    private readonly List<string> _censusUnanchoredNames = new();
+    private readonly List<string> _censusLiftedNames = new();
+    private readonly List<string> _censusSuppressedNames = new();
+    private readonly List<string> _censusMissingTargets = new();
+    private int _censusAnchored, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
+    private const int CensusCap = 12;
+
+    /// <summary>Collect a per-definition census of how the bind RESOLVED, and log it through
+    /// <see cref="ResolutionLines"/>. Set before <see cref="Bind"/> by a caller that built only
+    /// part of the world (the <c>--node=</c> stage), where "this def did nothing" is the normal
+    /// case and needs to be told apart from a defect. Default false: a full-world session collects
+    /// nothing, so this is inert when nobody asks for it.</summary>
+    public bool ReportResolution;
+
+    /// <summary>
+    /// Refuse the <c>ANIMATION_ROOT_NAME</c> anchor lift, however few matches it finds. Set only by
+    /// a caller that built part of the world, because <see cref="MaxRootLift"/>'s premise is a
+    /// WHOLE-WORLD node population: 'healthy' appears 217× in C1, so the cap rejects it there — and
+    /// a single-subtree stage drops under the cap, at which point 95 unrelated definitions anchor
+    /// onto whatever generic child the subtree happens to own (measured on C1's 20-node
+    /// <c>ap_radiotwr</c>: 95 lifts and 91 phantom destructible instances). Suppressed lifts are
+    /// counted and reported, never silently dropped.
+    /// </summary>
+    public bool SuppressRootLift;
+
     /// <summary>Running count of ballistic <see cref="MotionRuntime"/> bodies launched — the debris
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
     /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
@@ -76,6 +107,36 @@ public sealed partial class AnimRuntime : Node
     /// Built during the bootstrap; the source of the value <c>ANIM_HEALTH</c> conditions read.
     /// C23's weapon damage and C24's death sequence act through it.</summary>
     public DestructibleRegistry Destructibles => _destructibles;
+
+    /// <summary>The world nodes a definition anchors to, for the inspect tools — the runtime's own
+    /// answer, so a readout shows what the bootstrap actually bound rather than a re-derivation.
+    /// A null entry is a global (anchorless) instance. Read-only: the list is the cached one.</summary>
+    public IReadOnlyList<Node3D?> AnchorsOf(AnimDefinition def) => Anchors(def);
+
+    /// <summary>Every world node matching a NAME pattern, optionally restricted to one subtree —
+    /// the same wildcard matching and the same memoized index the dispatch uses, exposed so an
+    /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
+    public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
+
+    /// <summary>Event kinds <c>Dispatch</c> acts on. Keep in step with its cases: a kind absent
+    /// here is one the runtime counts as unhandled and does nothing for, which is what the node
+    /// lab's coverage column reports.</summary>
+    public static readonly IReadOnlyCollection<string> HandledEventKinds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ObjectActiveState", "ObjectTranslateState", "ObjectRotateState", "ObjectScaleState",
+        "ObjectMotionFromTo", "ObjectOpacityState", "ObjectOpacityFromTo", "ObjectMotion",
+        "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
+        "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "PufferState",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild",
+    };
+
+    /// <summary>Kinds with a handler that covers only part of what the event does — reported
+    /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
+    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled.</summary>
+    public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ObjectAddChild",
+    };
 
     /// <summary>
     /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
@@ -141,16 +202,16 @@ public sealed partial class AnimRuntime : Node
     // and a normal bootstrap's ambient toggle is a no-op rather than a second bootstrap.
     private bool _ambientStarted;
 
-    // RANDOM_WEIGHT dice. A field rather than GD.Randf() so a seed can be pinned — the animation
-    // debugger sets one (see Seed) for a reproducible fixed-dt run; the game leaves it unseeded
-    // and so is unchanged. Any future WeaponHit/crash handler's randomness must route through this
-    // same _rng, or a lab restart stops being identical the day the handler lands.
+    // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
+    // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
+    // pin the whole sequence. Any future WeaponHit/crash handler's randomness must route through
+    // this same _rng, or a replay stops being identical the day the handler lands.
     private Random _rng = new();
     private int? _seed;
 
-    /// <summary>Pins the runtime's RNG for a reproducible run (the debugger's deterministic
-    /// clock). Null — the default — leaves it unseeded, so the game is unchanged. Set at
-    /// construction through the object initializer, before <see cref="Bind"/>.</summary>
+    /// <summary>Pins the runtime's RNG for a reproducible run. Every session sets one, derived from
+    /// the master seed (<see cref="Utils.Rng"/>); null leaves it drawn from .NET's own entropy. Set
+    /// at construction through the object initializer, before <see cref="Bind"/>.</summary>
     public int? Seed
     {
         init
@@ -161,16 +222,18 @@ public sealed partial class AnimRuntime : Node
         }
     }
 
-    /// <summary>Re-pins the RNG to the constructed <see cref="Seed"/>. The animation debugger
-    /// calls this on every Play/Restart so a seeded replay rolls the same dice as the launch —
-    /// without it the RNG stream would just continue and a "restart" would diverge on the first
-    /// RANDOM_WEIGHT. No-op when unseeded (the game, which never calls it either way).</summary>
+    /// <summary>Re-pins the RNG to the constructed <see cref="Seed"/>, and clears the sound groups'
+    /// last-picked memory with it — that recency state sits outside the RNG, so restoring only the
+    /// dice would still diverge on the first weighted pick. The animation debugger calls this on
+    /// every Play/Restart; without it the stream would continue and a "restart" would branch on the
+    /// first RANDOM_WEIGHT.</summary>
     public void Reseed()
     {
         if (_seed is { } s)
         {
             _rng = new Random(s);
         }
+        Sounds?.ResetGroupRecency();
     }
 
     /// <summary>The mission's interp boot script (<c>support\&lt;chapter&gt;\&lt;mission&gt;.gw</c>),
@@ -184,6 +247,9 @@ public sealed partial class AnimRuntime : Node
         var sw = System.Diagnostics.Stopwatch.StartNew();
         _root = worldRoot;
         _program = program;
+        // The census covers the bootstrap passes only — after this method a miss is a runtime
+        // event with its own reporting, not a statement about what the bind could reach.
+        _censusOpen = ReportResolution;
         IndexWorld(worldRoot);
         long indexMs = sw.ElapsedMilliseconds;
 
@@ -280,6 +346,117 @@ public sealed partial class AnimRuntime : Node
         ReportConditions();
         ReportRetargets();
         ReportUnhandled();
+        _censusOpen = false;
+    }
+
+    /// <summary>
+    /// The bind-time resolution census, ready to log — empty unless <see cref="ReportResolution"/>
+    /// was set. It exists because <b>two different failures look identical from outside</b> a
+    /// partial world: a definition that never instantiated (its NAME/ANIMATION_ROOT_NAME matches
+    /// nothing here, so <i>no handler ever fires</i>) and a definition that IS running but whose
+    /// event names a node <i>this subtree does not contain</i>. Both leave the object still. The
+    /// lines name which happened, per definition.
+    ///
+    /// <para>The line nobody expects is <c>root_lift_suppressed</c>: an <c>ANIMATION_ROOT_NAME</c>
+    /// lift is capped at 16 matches precisely so a generic root like <c>healthy</c> (217× in C1)
+    /// cannot anchor a definition onto every building — and a single-subtree stage drops under that
+    /// cap, so defs that never anchor in the full world would anchor here, onto whatever generic
+    /// child the subtree happens to own. <see cref="SuppressRootLift"/> refuses them and this
+    /// reports the refusal, because a silently-different anchor set is the trap.</para>
+    /// </summary>
+    public IReadOnlyList<string> ResolutionLines()
+    {
+        var lines = new List<string>();
+        if (!ReportResolution)
+        {
+            return lines;
+        }
+        int defs = _censusAnchored + _censusLifted + _censusSuppressed + _censusUnanchored;
+        lines.Add($"bind census defs={defs} anchored_by_name={_censusAnchored} "
+                  + $"anchored_by_root_lift={_censusLifted} root_lift_suppressed={_censusSuppressed} "
+                  + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
+        if (_censusUnanchored > 0)
+        {
+            lines.Add($"bind unanchored={_censusUnanchored} — no handler ever fires for these: "
+                      + Sample(_censusUnanchoredNames, _censusUnanchored));
+        }
+        if (_censusLifted > 0)
+        {
+            lines.Add($"bind root_lifted={_censusLifted} — anchored only because this subtree has "
+                      + $"≤{MaxRootLift} of the def's ANIMATION_ROOT_NAME, which the full world does not: "
+                      + Sample(_censusLiftedNames, _censusLifted));
+        }
+        if (_censusSuppressed > 0)
+        {
+            lines.Add($"bind root_lift_suppressed={_censusSuppressed} — these WOULD have anchored on "
+                      + $"this subtree's generic ANIMATION_ROOT_NAME children, which the full world's "
+                      + $"node count rules out; refused so the stage shows only defs that name it: "
+                      + Sample(_censusSuppressedNames, _censusSuppressed));
+        }
+        if (_censusMissing > 0)
+        {
+            lines.Add($"bind target_missing={_censusMissing} — the def IS running, the node is not in "
+                      + $"this subtree: " + Sample(_censusMissingTargets, _censusMissing));
+        }
+        return lines;
+    }
+
+    private static string Sample(List<string> shown, int total) =>
+        string.Join(", ", shown) + (total > shown.Count ? $", … (+{total - shown.Count} more)" : "");
+
+    // One census entry per definition identity (anchor name + animation name — AnimProgram's own
+    // dedupe key), because the bootstrap asks for a def's anchors on more than one pass.
+    private void RecordAnchoring(AnimDefinition def, AnchorKind how)
+    {
+        if (!_censusOpen || !_censusSeen.Add((def.Name, def.AnimName ?? "")))
+        {
+            return;
+        }
+        string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+        switch (how)
+        {
+            case AnchorKind.ByName:
+                _censusAnchored++;
+                break;
+            case AnchorKind.ByRootLift:
+                _censusLifted++;
+                if (_censusLiftedNames.Count < CensusCap)
+                {
+                    _censusLiftedNames.Add($"{label}→{def.RootName}");
+                }
+                break;
+            case AnchorKind.LiftSuppressed:
+                _censusSuppressed++;
+                if (_censusSuppressedNames.Count < CensusCap)
+                {
+                    _censusSuppressedNames.Add($"{label}→{def.RootName}");
+                }
+                break;
+            default:
+                _censusUnanchored++;
+                if (_censusUnanchoredNames.Count < CensusCap)
+                {
+                    _censusUnanchoredNames.Add(label);
+                }
+                break;
+        }
+    }
+
+    // An event that named a node the bind could not reach. `why` separates the two causes, which
+    // otherwise read the same: the compiled symbol table bound the name to a gamez node this build
+    // never created, versus name resolution finding no match at all.
+    private void RecordMissingTarget(AnimDefinition def, string refName, string why)
+    {
+        if (!_censusOpen)
+        {
+            return;
+        }
+        _censusMissing++;
+        if (_censusMissingTargets.Count < CensusCap)
+        {
+            string label = def.AnimName is { Length: > 0 } anim ? $"{anim}@{def.Name}" : def.Name;
+            _censusMissingTargets.Add($"{label} ref={refName} why={why}");
+        }
     }
 
     /// <summary>Runs the two ambient-playback bootstrap passes — pass 2 (ACTIVATION ON_STARTUP
@@ -3046,16 +3223,28 @@ public sealed partial class AnimRuntime : Node
         if (string.IsNullOrEmpty(def.Name))
             return new List<Node3D?>();
         var anchors = FindAll(def.Name, null).Cast<Node3D?>().ToList();
+        var how = anchors.Count > 0 ? AnchorKind.ByName : AnchorKind.None;
         if (anchors.Count == 0 && def.RootName != null)
         {
             var roots = FindAll(def.RootName, null);
             if (roots.Count > 0 && roots.Count <= MaxRootLift)
-                anchors = roots
-                    .Select(n => n.GetParent() as Node3D)
-                    .Where(p => p != null)
-                    .Distinct()
-                    .ToList();
+            {
+                if (SuppressRootLift)
+                {
+                    how = AnchorKind.LiftSuppressed;
+                }
+                else
+                {
+                    anchors = roots
+                        .Select(n => n.GetParent() as Node3D)
+                        .Where(p => p != null)
+                        .Distinct()
+                        .ToList();
+                    how = anchors.Count > 0 ? AnchorKind.ByRootLift : AnchorKind.None;
+                }
+            }
         }
+        RecordAnchoring(def, how);
         return anchors;
     }
 
@@ -3081,6 +3270,7 @@ public sealed partial class AnimRuntime : Node
             if (!NameResolveFallback)
             {
                 _opsUnresolved++;
+                RecordMissingTarget(def, refName, "index-not-built");
                 return new List<Node3D>();
             }
         }
@@ -3100,7 +3290,10 @@ public sealed partial class AnimRuntime : Node
             return new List<Node3D>();
         var targets = ResolvePath(path, anchor, def.LocalNodesOnly);
         if (targets.Count == 0)
+        {
             _opsUnresolved++;
+            RecordMissingTarget(def, string.Join("/", path), "name-no-match");
+        }
         return targets;
     }
 

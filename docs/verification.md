@@ -101,7 +101,9 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     (`TIME_PHYSICS_PROCESS`, ratio-only too) for collision changes; with no monitor on the
     subsystem, call the effect unresolved.
 39. **Split the timer before choosing what to optimise — engine setters hide cost.** The clutter
-    collision build was 271 ms transform vs 3,403 ms `ConcavePolygonShape3D` BVH build.
+    collision build was 271 ms transform vs 3,403 ms `ConcavePolygonShape3D` BVH build. (That term
+    is gone since the shapes became shared: `--collision`'s cost is now the WORLD trimesh build —
+    C2 `world` 352 → 865 ms against `clutter` 47 → 56 ms. Re-split before quoting an old split.)
 40. **Do not assume a cost is on the GPU.** Viewport GPU time was 0.27 ms while the frame was
     ~133 ms of C#; this trap fired twice.
 41. **Differences smaller than the instrument are not differences.** 5537 vs 5606 ms over 3-run
@@ -149,10 +151,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     12-motion print cap dropped looping cars (restarts re-register at the end); raise the cap
     for the measurement.
 60. **Godot node names are not the game files' names** (`.` → `_`, duplicates auto-renamed) —
-    use the `cs_name` meta.
+    use the `cs_name` meta. The auto-rename keeps no trace of the original: C1's two `box_car.flt`
+    siblings build as `box_car_flt` and **`@Node3D@5`**.
 61. **Grep the full stderr, not just the line you expect** — that has hidden a whole class of
     shader error.
 62. **Pass `--no-pads` on scripted runs** — a drifting stick silently steers the free camera.
+    Automatic since the `--det` bundle (rule 83) — but still yours to pass under `--no-det`.
 63. **The repo path contains a space — a mis-quoted launch aborts every run instantly, reading
     as "the build is broken".** Use the call operator (`& "path\to.exe" args`) and quote
     comma-bearing args (they can arrive as `System.Object[]`); instant identical failure is the
@@ -166,6 +170,10 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 66. **Confirm zero stray Godots (yours and other agents') before believing a broken capture or
     error burst — kill by command line filtered to your worktree.** `Start-Process -Wait` exit 0
     doesn't mean the run ended; strays manufactured 16,576 errors and a 1/7-size capture.
+    **Scope the kill twice, though: the tree's project dir alone also matches a live session.**
+    A dir-only filter killed two `--plane=player_bhawk --chapter=C1` processes another session had
+    launched seconds earlier — match your own instrument's flag as well (`RunTests.ps1` kills only
+    `--run-tests` Godots on this tree and merely reports the others).
 67. **`dotnet build` cannot fail on comment-encoding corruption; Godot's Mono loader validates
     UTF-8 strictly and refuses the file.** After any bulk text rewrite, run the game — the
     damage surfaces as a `Main.tscn` parse error.
@@ -229,14 +237,20 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     runtime-played puffer effect by confirming its def started — confirm a `Puffer` was *built*
     (a non-null factory), or you are measuring a no-op. Rendering impact/destruction puffers needs a
     dedicated world-effects runtime on that crash-runtime pattern (D32), not a call into the world runtime.
-77. **`CANNON_SPREAD` makes weapon-impact tests non-deterministic — a round hitting a given surface
-    is chance, not choice.** Each gun round's direction is jittered by `GD.Randf()` inside the spread
-    cone (unseeded), so whether the stream finds a specific patch (a lake, one building) varies
-    run-to-run even with a fixed `--hold` dive and `--no-pads`. Don't rely on "I hit water once";
-    pick a chapter whose **spawn sits over** the surface you want (measured: C1B/C2B dive → all water,
-    C4 → all buildings) so hits are reliable, and assert on the **once-per-name** effect breadcrumb,
-    not on a fixed impact count (the impact log itself caps at 8, so a later water hit still logs its
-    effect while the surface line is capped out).
+    **And that runtime is not a blanket fix — it binds a FIXED closure of effect names.** A killed C1
+    building's `great_balls_of_fire` renders through it in `--freecam`; the same kill's progressive
+    stages (`sputter_black_smoke_obj`) and the def's own `h2twr_puffer` sequence are not in the
+    closure, so they start, log, and draw nothing. Check the name is bound before reading "the def
+    started" as "the effect showed".
+77. **A weapon-impact test is reproducible ONLY under `--det`/`--seed` — `CANNON_SPREAD` is a
+    per-round dice roll everywhere else.** Two `--det` C1B dives now log **8 of 8 identical impact
+    positions**; the same pair without a pinned master seed shares none. Unpinned, don't rely on "I
+    hit water once", and assert on the **once-per-name** effect breadcrumb rather than a fixed
+    impact count (the impact log caps at 8, so a later water hit still logs its effect while the
+    surface line is capped out). **The pin is now automatic in a scripted run** (rule 83).
+    **The chapter-shopping half of this rule is retired** — `--pos`/`--direction` (rule 84) put the
+    plane over the surface you want in any chapter, so "pick a chapter whose spawn sits over water"
+    is no longer the way to get a water impact.
 
 78. **Godot's physics tick is ALREADY a fixed 1/60 s, so "two runs log identical flight telemetry"
     cannot discriminate a fixed sim clock — vary the RENDER rate instead.** Two `--det` scripted
@@ -250,6 +264,8 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     different pixels at any given wall moment now.** UV scroll, precipitation and the skydome moved
     off Godot's `TIME` onto the clock-driven `csky_time` global, so a stored PNG of water, rain,
     snow or a waterfall is a picture of a different time value; re-capture rather than compare.
+    The `--det` bundle (rule 83) moved them a second time: a `--screenshot` run now starts at spawn
+    index 0 on a fixed clock with pinned RNGs, so even a non-animated pose can frame differently.
 
 80. **A pose that renders identically twice is not proof a time-driven change works — most poses
     show no animated surface at all.** Only C1 (2 models), C1B (4) and C4 (6) carry any UV scroll
@@ -257,27 +273,221 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     build too. Find the surface first (the `texture scroll: N model(s)` log line says whether a
     chapter has any), frame it, and prove the pose is sensitive by perturbing the time value.
 
-81. **An absent asset filename is not evidence a feature was cut — features ship under
-    implementation names, and view/camera features may need no art at all.** No `*spyglass*` or
-    `*padlock*` file exists in `rimage`, `rof` or any chapter texture archive, yet both shipped:
-    the spyglass is `MSG_CAM2_TOG` "Toggle Spyglass" — *camera 2*. Ask "did feature X ship?"
-    against `extracted/messages.json`'s `MSG_CMD_*`/`MSG_CAM*` table, which enumerates what the
-    retail build let a player bind (inventory: `docs/formats/strings.md`).
+81. **Seeding a generator does not make a subsystem reproducible while it carries mutable state
+    OUTSIDE that generator — find the other state before believing a replay.** `SoundGroup._last`
+    biases the next weighted pick away from the sound played last, so a re-seeded `AnimRuntime`
+    still diverges on the first `SOUND_GROUPS` pick unless `ResetRecency()` clears it in the same
+    breath.
 
-82. **Trust the original design document for system shape and field meaning, never for specific
-    numbers or per-item art behaviour — those were rebalanced before release, and retail
-    captures or extracted data supersede it wherever both exist.** Its structure has held
-    repeatedly (two-volume danger zones, armour-then-hit-points, the zeppelin launch-altitude
-    gate); its details have not — it gates shell ejection to 50/70-cal from the fuselage
-    underbelly, while the 40/30-cal Bloodhawk visibly ejects brass from its wing mounts in
-    `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`.
+82. **`--headless` compiles no shaders, so it cannot see a shader error — never take a headless run
+    as an error census for anything that builds a material.** Every `--dump-*` run was emitting a
+    missing-global error (the dump branches quit before the `csky_time` registration, since moved
+    above them), and it reproduced 1 → 0 windowed while reading 0 → 0 under `--headless`. Rule 71's
+    sibling: headless lies about pixels *and* about shaders.
 
-83. **Before using a per-chapter file or node flag to tell chapters apart, prove it
-    discriminates — some are copy-paste boilerplate and some mean different things per
-    chapter.** Seven of eight `map.json`s name the same `map_c1m04`, and C2/C2B ship C1's
-    `Airport_terminal` camera presets; the gamez `terrain` flag marks the land tiles in C1/C2
-    but only the cloud deck or the water plane in C1B/C1C/C2B, so a "mean terrain height" grid
-    silently compared clouds to sea and called two different worlds identical.
+83. **A scripted run is deterministic by DEFAULT now — measuring wall-clock behaviour or live
+    randomness takes `--no-det`.** `--screenshot=`, every `--dump-*` and `--damage-test` imply the
+    `--det` bundle (fixed-dt clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` +
+    `--jitter=0`), so a bare `--screenshot` is md5-reproducible with no other flags — measured 0.00 %
+    over the C1 waterfall, 0.47 % for the same pair under `--no-det`. Two consequences to carry: a
+    noise-floor measurement (rule 7) is now a **`--no-det`** measurement, and **the `det clock=…
+    seed=… spawn=… livery_seed=… pads=off jitter=… via=…` log line is what a capture was taken
+    under** — read it instead of assuming, and take its absence as "this run was interactive".
+
+84. **Read WHERE an error sits in the log before attributing it to the code that ran nearby.** All
+    four `det == 0` errors in a C2 `--damage-test --damage-hd=25` run are printed *after* the sweep
+    finished and both reports were written (lines 55–61 of a 62-line log) — so they cannot be
+    aborting the death sequence they were blamed for, which had already completed and reported its
+    swap, colliders and seven stage effects. An error and a symptom in the same run are not the
+    same event.
+
+85. **An error allowlist needs a CAP and a printed count, or it stops being an instrument.** A
+    pattern allowed without a bound hides the next regression inside an old error's shape, and one
+    whose count is invisible on a pass hides a drift from 1 to 7. `TestHarness.ErrorAllowlist`
+    carries `(pattern, max, why)` and the report prints `allowed N/maxx` for every entry whether or
+    not it passed; over cap fails, unknown fails.
+
+86. **Native Godot `ERROR:` lines cannot be seen from C# — capture them with `--log-file` and read
+    the file back.** They are C++ `ERR_FAIL_COND` prints to the process stderr, not managed throws
+    and not `Console.Error`, so no in-process handler sees them. Two traps in doing it:
+    `OS.GetCmdlineArgs()` does **not** contain `--log-file` (Godot hands that method only the
+    arguments its own parser did not recognise) — use `Environment.GetCommandLineArgs()`; and
+    Godot still owns the handle, so open it `FileShare.ReadWrite`.
+
+87. **Place the subject instead of hunting for a scenario that happens to suit — `--pos`/`--direction`
+    reach every mode.** They put the camera where you want it in `--freecam`/`--viewer`/`--anim-lab`
+    and the *plane* where you want it in `--fly`/`--stunt`, so a water-impact test is
+    `--chapter=C1 "--pos=<over the water>" "--direction=<down it>" --hold=… --fire` rather than
+    chapter-shopping (rule 77) — measured 8 of 8 `-> Water` impacts, first run, no land crash.
+    Two traps carried by the pair: **`--direction` is a vector, `--lookat` a point**, and the one
+    place that distinction bites is the `--viewer` orbit, which pivots on the point and derives its
+    radius from it — a `--direction` there gets a *synthesized* pivot, announced on its own log
+    line. And **quote every comma-bearing argument** in PowerShell (rule 63).
+
+88. **Piping a PowerShell script's own output makes a child process's stderr terminating — the run
+    dies mid-stage and reads as a crash in the thing being measured.** Under
+    `$ErrorActionPreference = "Stop"` in 5.1, `.\RunTests.ps1 | Select-String …` turned Godot's
+    first (allowlisted, harmless) `ERROR:` line into a `NativeCommandError` that killed the script
+    at the launch line, while the identical unpiped run passed: set `Continue` around every native
+    call and judge it by its exit code.
+
+89. **A startup timing number without its cache state is meaningless — the same build, same
+    chapter, measured 8578 ms cold and 1412 ms warm.** Rule 42 with the phase split on it: a
+    freshly-copied C3 data root's first run read `anim=5973.8` against `anim=277–284` warm (21×),
+    `world` 4.5×, `prewarm` 4.3× — while `gamez` (a handful of big files) did not move at all. The
+    penalty lives entirely in the phases that open thousands of small files, so a cold run does not
+    scale a timing, it reshapes it. Discard the first iteration or say out loud that you did not.
+
+90. **Read the `[perf] startup` line rather than timing the process — the wall clock is mostly not
+    startup.** `total = boot + Σ(phases) + rest + first_frame` (checked on 24 runs, 0 mismatches
+    beyond rounding) covers engine start → first drawn frame; a `--quit-after N` process's wall time
+    is that plus `(N−2)` vsync-capped frames plus ~330–360 ms of process spawn and shutdown that no
+    in-process clock can see. Measured on C1 `--freecam`: `total` 3028 ms against 5355 ms of wall at
+    `--quit-after 120` and 3361 ms at `--quit-after 3`. And `boot` is engine start → build start, so
+    on a launchscreen-driven rebuild it silently contains however long the menu was up.
+
+91. **A heuristic tuned against a WHOLE-WORLD population inverts when you build part of that
+    world — re-derive its premise before reusing it on a slice.** `AnimRuntime`'s
+    `ANIMATION_ROOT_NAME` lift is capped at 16 matches precisely because `healthy` appears 217× in
+    C1; a `--node=ap_radiotwr` stage has two, so the cap passes and **95 unrelated definitions
+    anchored onto the radio tower, registering 91 phantom destructible instances** (1 def and 2
+    instances with the lift refused). The smaller world did not merely show less — it showed more,
+    and wrongly.
+
+92. **Measure a subject's bounding box before other systems parent nodes into its subtree.** A merge
+    over the live tree takes whatever is there: `MeshLab`'s three EMPTY overlay meshes sit at the
+    session origin, which is invisible for a parked plane or a whole world (both already contain the
+    origin) and stretched a `--node=` subtree's box from 419 m to 5.3 km, framing the camera 12 km
+    off the only object in the scene.
+
+93. **"Is this drawing at all?" is `--tex-override`, not a census count — the census is the map that
+    tells you which texture to override.** One texture forced to a flat colour is exact and needs no
+    separation: C1/M04's moored zeppelin measured **113,947 magenta px against 0 in the same shot
+    without the flag**, with every one of the 114,820 changed pixels inside the hull. A `--tex-census`
+    count of the same surface at the same pose reads **88,301** — a lower bound, because shading
+    moves a flat far enough to contest its crowded neighbours.
+
+94. **Read a census count as a range, never a number, and run census shots with `--no-fog`.** `px` is
+    a lower bound and `px + contested` an upper one; a texture that cannot be on screen still picks
+    up stray pixels, so **treat a confident count under ~1,000 px as "not shown"** (measured worst
+    case 575 px over 60 textures that exist only in other chapters). Fog is not a thing to tolerate:
+    the same pose classified 374,491 px confidently with `--no-fog` and 129,210 px with fog on,
+    unmatched 19.4 % → 58.8 %.
+
+95. **A landed visual change updates `analysis/goldens/manifest.json` in the SAME commit and names
+    the shots it moved; an unexplained golden flip is stop-the-line, not a regeneration.** The one
+    legitimate mass flip is a GPU or driver change, which the stage detects and says out loud
+    (`GPU CHANGED: manifest '…', this run '…'`) — every other flip is a defect until diagnosed.
+    A hash regenerated in a separate "fix the goldens" commit is indistinguishable from one
+    regenerated to bury a regression, which is why `-RegenGoldens` reports `REGEN`, never `PASS`.
+
+96. **A golden is a tripwire, not a diagnosis — investigate a failure with the headless instruments,
+    never by staring at the diff.** The shot tells you *that* pixels moved and nothing about why;
+    `--tex-override` / `--tex-census` answer "is this surface drawing", `--debug-anim` answers pose
+    and emitter state, the mesh lab answers shading. Measured discrimination: perturbing the snow
+    flutter constant moved **exactly `c4-snow`** and held the other ten; widening the precipitation
+    near-fade moved **exactly `c1c-rain`, `c2b-rain`, `c4-snow`** and held the other eight — the
+    shot names are the diagnosis's starting point, not its answer.
+
+97. **Read a manifest or any other BOM-less UTF-8 file with `[System.IO.File]::ReadAllText`, not
+    `Get-Content -Raw`** — PowerShell 5.1 decodes it as the system ANSI codepage, so a read-modify-
+    write turned every em-dash in the golden manifest into `â€”` on the first regeneration. Rule 68's
+    other half: that one was about a BOM being honoured when you did not want it, this one about
+    UTF-8 not being assumed when you did.
+
+98. **A deterministic run must be a function of the COMMITTED tree — audit what git-ignored state it
+    still reads.** `CSVM/config.json` is a git-ignored dev tuning file, and honouring it under
+    `--det` made the same command produce different pixels in a checkout and in a worktree: the
+    `c1-flight` golden moved the first time it ran anywhere but the tree that captured it, because
+    all 15 of that file's overrides are `flightModel` (which is also why the other ten shots held).
+    `--det` now drops the overrides and says `config=defaults dropped_overrides=N`; capture with
+    your tuning applied via `--no-det`.
+
+99. **Rule 34's angle sweep is now cheap in flight — `--view=<1-9>` frames a *flying* plane from the
+    belly, either flank or head-on, so "not visible from astern" is no longer evidence of anything.**
+    Every flight capture before this was chase-cam-only. Measured with `--tex-override` on the
+    Bloodhawk's underside skin over C1: **19,509 magenta px from `--view=2` against 127 from the
+    chase camera** at the same pose — a chase shot cannot support a claim about the underside, and a
+    belly shot that a chase shot would also have passed is not a test (rule 15).
+
+100. **ONE same-build pair is not a noise floor — measure two, because the second is routinely the
+     noisy one.** `RunTests.ps1 -Perf` run twice unchanged put every startup phase inside ±10.5 %;
+     the very next unchanged pair reached ±14.8 %, two to three times wider, and a band calibrated
+     on the first pair marked five same-build rows on the second as regressions.
+
+101. **In a perf A/B, believe the counts before the milliseconds.** `draws`, `prims` and `nodes`
+     came back identical to the digit in all 10 same-build scenario pairings while every ms term
+     jittered, and under a deliberate clutter perturbation `prims` tracked the real instance count
+     to within a few percent (C4 sprites ×2.26 → prims ×2.03, C5 ×2.90 → prims ×2.92) — including
+     the direction, on the chapter where the change accidentally *removed* clutter (×0.89 → ×0.94).
+
+102. **`--perf`'s millisecond terms only speak with `--no-vsync`, and `physics` never speaks under
+     `--det`.** Paced at the refresh rate, `script` collapses onto the frame cap — `--stage=empty`
+     read 17.00 ms against C4's 17.20 ms with 11× the draw calls — and `physics` measured
+     0.01–0.04 ms in every scenario because the fixed clock is parent-driven, so `_PhysicsProcess`
+     consumers no-op and collision cost lands in `script`. Even uncapped this machine still paces at
+     exactly 120 fps, so `fps`/`frame_ms` stay floors (rule 38); read `render_cpu`, `gpu` and the counts.
+
+103. **A world subtree's vertices are ABSOLUTE — its node transform is identity, so distance from
+     that frame's origin is not a size.** C1's water tower measured a 7,420 m "bounding radius"
+     (its distance from the map corner) where the object is 4×14×4 m, and the mesh lab's normal
+     lines, scaled by 2.2 % of it, drew 163 m spikes across the chapter. Measure an object's extent
+     from its own bounding BOX, never as max |v|; the aircraft, which is modelled about its origin,
+     is the case that hides this.
+
+104. **A diagnostic overlay must be provable against the shipped render, so give it a mode that
+     forces it ON at the data's own settings.** The mesh lab's `--debug-mesh=force` renders the
+     override materials with cull and normals set to what the data says, which must be pixel-identical
+     to no override at all: the derived-from-the-original shader measured 0 px, while the hand-written
+     replica it replaced moved 1,682 px of a 2,500 px subject (it carried no fog, scroll or alpha
+     term). Without that mode a broken override only shows up as a wrong conclusion later.
+
+105. **One object can hold several destructible HP pools, and only ONE of them is reachable by
+     damage — drive the wrong one and the object never reacts.** C1's `ap_h2otwr1` carries the
+     compiled `h2twr_destruction1@ap_h2otwr1` and the reader wildcard's `h2twr_destruction*@ap_h2otwr*`,
+     both anchored on the same node with their own 60 HP. `DamageAt` re-resolves through
+     `DestructibleRegistry.Resolve` (compiled preferred), so spending health on the twin drains a pool
+     nothing will ever hit while the real one sits at full — indistinguishable from "damage is
+     broken". Any instrument or UI that damages a pool must name which pool it drove.
+
+106. **A window-focus probe that identifies windows by TITLE cannot tell your window from the user's
+     identically-titled one — attribute by PROCESS TREE.** A title probe "proved" the non-console
+     Godot build never steals focus (0 of 52 samples); it was comparing against a starting window
+     that happened to be another `CSVM (DEBUG)` session, so the thief and the baseline were
+     indistinguishable. Tracking the spawned process and its descendants showed the real figure,
+     13 of 16. The console build also spawns a 3-process tree, so even a PID probe misses it unless
+     it walks children.
+
+107. **A window has to be CREATED without focus — taking it back afterwards is not available to
+     you.** Setting `WindowFlags.NoFocus` from `_Ready` is too late (the window already activated,
+     and clearing the flag hands nothing back), and an engine-side `WindowMoveToForeground` is
+     no-opped by Windows' foreground lock (rule 69) — measured 0 of 120 samples. The lever is
+     `display/window/size/no_focus` in `project.godot`, which took a scripted run from 13 of 16
+     samples to 0 of 158 across a full `RunTests.ps1`. The launching console, being the process the
+     user *is* interacting with, is allowed to hand the foreground over, which is why an
+     interactive launch grabs focus from `RunGame.ps1` rather than from the engine.
+
+108. **An absent asset filename is not evidence a feature was cut — features ship under
+     implementation names, and view/camera features may need no art at all.** No `*spyglass*` or
+     `*padlock*` file exists in `rimage`, `rof` or any chapter texture archive, yet both shipped:
+     the spyglass is `MSG_CAM2_TOG` "Toggle Spyglass" — *camera 2*. Ask "did feature X ship?"
+     against `extracted/messages.json`'s `MSG_CMD_*`/`MSG_CAM*` table, which enumerates what the
+     retail build let a player bind (inventory: `docs/formats/strings.md`).
+
+109. **Trust the original design document for system shape and field meaning, never for specific
+     numbers or per-item art behaviour — those were rebalanced before release, and retail
+     captures or extracted data supersede it wherever both exist.** Its structure has held
+     repeatedly (two-volume danger zones, armour-then-hit-points, the zeppelin launch-altitude
+     gate); its details have not — it gates shell ejection to 50/70-cal from the fuselage
+     underbelly, while the 40/30-cal Bloodhawk visibly ejects brass from its wing mounts in
+     `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`.
+
+110. **Before using a per-chapter file or node flag to tell chapters apart, prove it
+     discriminates — some are copy-paste boilerplate and some mean different things per
+     chapter.** Seven of eight `map.json`s name the same `map_c1m04`, and C2/C2B ship C1's
+     `Airport_terminal` camera presets; the gamez `terrain` flag marks the land tiles in C1/C2
+     but only the cloud deck or the water plane in C1B/C1C/C2B, so a "mean terrain height" grid
+     silently compared clouds to sea and called two different worlds identical.
 
 ## What this project cannot verify itself
 
@@ -294,27 +504,37 @@ These need the user:
 
 ## Known non-deterministic surfaces
 
-If your diff lands here, suspect noise first:
+**Read this table as a description of `--no-det` and interactive runs.** Every row except the first
+is now pinned outright in a scripted one, because `--screenshot`/`--dump-*`/`--damage-test` imply the
+`--det` bundle (rule 83) — so these are the numbers you get back the moment you pass `--no-det`, and
+the reason you would. If your diff lands here, suspect noise first.
 
 | Surface | Behaviour |
 |---|---|
-| `--fly` / `--stunt`, any pose | Useless for screenshot diffs — same-build floor 30–84% of pixels; A/B with `--viewer`/`--freecam` + pinned camera |
-| `--freecam` default camera | Random spawn per launch — pin with `--spawn=N` or `--campos`/`--lookat` |
-| Precipitation (C1C/C2B/C4) | ~5–6% frame difference same-build. `--det` pins the *fall* (clock-driven `csky_time`), NOT the per-instance seeds — a C2B rain shot still moves 4.75% run-to-run until A3 seeds them (0.00% measured with the seed pinned) |
+| `--fly` / `--stunt`, any pose | Same-build floor 30–84% of pixels **unpinned**; under `--det` a bare `--screenshot` C1 flight is byte-identical at frames 15/120/300 (0 of 921,600 px), since the chase camera takes the sim clock's dt while running. Goldens may frame flight poses |
+| `--freecam` default camera | Random spawn per launch — `--det` forces `--spawn=0` (a pinned choice, stable across data changes); `--spawn=N`/`--pos`/`--direction` still override |
+| Precipitation (C1C/C2B/C4) | ~5–25% frame difference under `--no-det`. Pinned outright by `--det` — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
 | C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |
-| UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two identical `--det` runs; `--det` now pins it to 0.00% |
-| Puffer particle spread (waterfall mist, crash smoke) | Unseeded RNG — 0.52% of a C1 waterfall frame between two `--det` runs, all of it inside the mist; A3's master seed, not the clock |
-| Bootstrap `unresolved` op count | `RandomWeight` dice — 100–107 on one unchanged build |
-| Damage-lab fire trails | 413–479 px between runs on a single tree |
-| Liveries in flight | Randomised per player per load — pin with `--paint-seed=N` |
-| Any world view | Not frame-deterministic without `--det` — measure the same-build floor first. Under `--det` the clock and shader time are pinned; what is left is the unseeded RNGs above |
+| UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two runs; `--det` pins it to **0.00%** |
+| Puffer particle spread (waterfall mist, crash smoke) | Pinned by the master seed (`puffer` stream): the C1 waterfall moved 0.47% of the frame before A3, **0.00%** after |
+| Bootstrap `unresolved` op count | `RandomWeight` dice — varies run-to-run under `--no-det` (100–107 measured once); pinned by `--det`/`--seed`, which seeds the world `AnimRuntime` in every mode, not just the lab |
+| Damage-lab fire trails | 413–479 px between runs before A3/A4; **0.00%** now — measured md5-equal on a `--damage=nose:0.05,leftwing:0.05,rightwing:0.05 --frames=200` pair, which differs 3.05% (max delta 227) from a lightly-damaged pose, so the fires are genuinely burning in it |
+| Liveries in flight | Randomised per player per load — pinned by `--det`/`--seed=N`, or by `--paint-seed=N` alone (measured: a random-livery `--viewer` shot moves 3.39% of pixels unpinned, 0.00% under `--det`) |
+| Any world view | Not frame-deterministic under `--no-det` — measure the same-build floor first. **A `--freecam`/`--viewer`/`--anim-lab` capture is byte-identical by default now**: clock, shader time and every RNG are pinned (measured md5-equal on C1 falls, C2B rain, C4 snow, a parked plane and an anim-lab stage) |
 
 ## The standing checklist
 
 Before calling a change verified:
 
+- [ ] **`.\RunTests.ps1` green, exit 0** — one command for the build, the unit tests and the
+      in-engine suites, and its exit code is the verdict. **A `SKIP` row is not a pass**: read its
+      "not checked" lines before believing the run, and the `TODO` rows name what nobody checks yet
+- [ ] Every golden hash that moved is explained, and `analysis/goldens/manifest.json` is updated in
+      **this** commit with the moved shots named in its message (rule 95)
+- [ ] If the change could cost frame time or startup time: a paired `-Perf` A/B, base and change
+      measured back to back, read against a *freshly* measured same-build band (rules 100–102)
 - [ ] Build succeeds, and the **baseline** build succeeded too
-- [ ] Camera and spawn pinned; noise floor measured same-build-vs-same-build
+- [ ] Camera and spawn pinned; noise floor (a `--no-det` measurement now — rule 83) measured same-build-vs-same-build
 - [ ] The instrument has been shown capable of reporting failure
 - [ ] Nothing is occluding, fogging, deactivating or rounding away the effect
 - [ ] "Pre-existing" claims reproduced on the unchanged build

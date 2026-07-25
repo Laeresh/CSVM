@@ -834,7 +834,13 @@ void fragment() {
     private ImageTexture? Resolve(string texName)
     {
         var tex = _textures.Find(texName);
-        return _textureSubstitute != null ? _textureSubstitute(texName, tex) : tex;
+        // A drop-in colour is the answer the run was launched to get; a composited paint scheme
+        // would paint straight over it and the aircraft would be the one thing the census misses.
+        if (_textureSubstitute != null && !TextureDropIn.Covers(texName))
+        {
+            return _textureSubstitute(texName, tex);
+        }
+        return tex;
     }
 
     /// <summary>Where a material's own texture flipbook (the gamez `cycle` block) is delivered.

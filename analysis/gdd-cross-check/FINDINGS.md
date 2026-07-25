@@ -81,7 +81,7 @@ order is **inferred**; a chapter with non-uniform `ace_stats` would settle it an
   identical.** The gamez `terrain` flag is **not applied consistently across chapters** — land
   tiles in C1/C2, only the cloud deck or water plane in C1B/C1C/C2B. It reported C1B and C1C as
   100 % identical (both all-water) and C1C as a uniform y=295 plane (the deck). Replaced by
-  landmark presence + vertex-identity hashing. → `docs/verification.md` rule 81.
+  landmark presence + vertex-identity hashing. → `docs/verification.md` rule 110.
 - **`location.json`/`map.json` cannot discriminate chapters.** Seven of eight name the same
   `map_c1m04`; C1/C1C/C2B ship a byte-identical preset list and C2 those four plus one — Sea
   Haven bookmarks on two Hollywood maps. `location.json` was the proposed instrument for the

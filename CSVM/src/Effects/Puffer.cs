@@ -288,7 +288,9 @@ public sealed partial class Puffer : Node3D
     private MultiMesh _mm = null!;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
-    private readonly System.Random _rng = new();
+    // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
+    // puffer stream, so a run repeats and two emitters still scatter independently.
+    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
 
     private bool _emitting;
     private float _sinceStart;

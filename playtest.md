@@ -73,9 +73,11 @@ pass through unharmed).
   smoke→fire stages** (only the death blast), and wreck pieces fly on the wrong trajectory. After the
   fix: stages render as HP falls; debris arcs correctly. → backlog 11, 12.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`
-- **Killed door (C25 — FAILED ❌).** Shooting `kkgate`'s propane tank throws `det==0`; the door does not
-  move and keeps its collider (original: door deactivates, pieces fly + fade, no collider) — likely one
-  bug with the sequence aborting. → backlog 13. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`
+- **Killed door (C25 — FAILED ❌).** Shooting `kkgate`'s propane tank leaves the door in place with its
+  collider (original: door deactivates, pieces fly + fade, no collider). The `det==0` error in the same
+  run is a **separate** bug — it prints after the sequence has already completed and reported its swap,
+  so do not expect fixing one to fix the other. → backlog 13.
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`
 - **Empty-clip** — couldn't reach a dry gun group by hand (2000+ rounds); needs the low-ammo debug knob,
   and no rocket dry cue was heard. After: one empty cue per group, once. → backlog 16, 18.
 - **Hardpoint selection** — H should select an individual pylon (each counts for itself), auto-advancing
@@ -138,6 +140,16 @@ pass through unharmed).
   not glued or lagging. *Blocks:* camera sign-off.
 - **Control surfaces.** Deflection angles + slew rate. *Look for:* ailerons/elevators/rudder track the
   stick believably. *Blocks:* control-surface sign-off.
+- **Numpad camera views — the whole held-key half is unverified here.** Hold numpad 1/2/3/4/6/7/8/9
+  in flight (NumLock on): each snaps the camera around the plane, releasing returns to the chase view.
+  *Look for:* (a) does the key **layout** match the original — 2 belly, 4/6 flanks, 8 head-on, the
+  diagonals in between; (b) is the **distance** right (ours is the chase camera's own 16.62 m) and the
+  **elevation** of 1/3 and 7/9 right (ours is 45°); (c) does the original **snap instantly** or ease,
+  and does releasing ease back (ours snaps both ways); (d) does releasing a key while holding another
+  behave sanely; (e) did the original bind any of this to the **gamepad**, and does **5** do anything?
+  *Command:* `./RunGame.ps1 --plane=player_bhawk --chapter=C1`. *Blocks:* camera sign-off; anything
+  off goes to the `backlog.md` TUNE entry. Only the scripted `--view=` twin is machine-verified —
+  live keypresses are not scriptable here, so the held-key path is correct by construction only.
 
 ---
 
@@ -238,3 +250,84 @@ pass through unharmed).
 
 ---
 
+## 9 · Inspect tools (PLAN-testing Wave D — the tools are yours to judge)
+
+- **The zeppelin case — the acceptance test for the shared selection (D31).** The complaint this
+  exists to kill: clicking the zeppelin selects one of its motors with no way up. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1 --mission=M04 "--pos=-4848,200,-5165" "--direction=-1,0,0"`
+  puts the moored zeppelin broadside in front of the camera. **Click one of the engine nacelles**
+  along the hull, then **PgUp** repeatedly (**Home** jumps straight to the outermost rung, **End**
+  back to the leaf). *Look for:* the yellow breadcrumb line reading the ladder leaf-first with the
+  current rung bracketed; the wireframe box growing from the nacelle to the whole airship as you
+  walk up; the box staying on the object rather than lagging or floating. The scripted run says the
+  ladder is nine rungs — `g15 < l5 < healthy < lk_rightengine01 < lkgasbag01 < zfronthalf <
+  rock_zeppelin < noserotate < hk_zep` — so **the question is whether nine rungs plus Home feels
+  like "a way up", or whether it wants something smarter.** Also try a building, a truck and the
+  moving train, and try clicking terrain (by design nothing is selected — say if that reads as
+  broken rather than as a rule). In `--anim-lab` the camera should frame what you clicked and then
+  re-aim, without re-framing, as you walk the ladder. *Blocks:* D31 sign-off, and the shape of
+  D32–D35, which all act on this selection.
+
+- **The node lab at the controls (D32).** Everything about this panel except its readouts is
+  unverified: live keys and mouse are unscriptable here, so N, the expand arrows, the search field,
+  the buttons and the two-way click sync ran only through `--debug-nodelab` and by construction.
+  *Where:* the same zeppelin launch as above, plus `./RunGame.ps1 --freecam --chapter=C5` for the
+  big-world case (8,897 named nodes, 557 directly under the world root). **Press N.** *Look for:*
+  (a) **does the tree open where you are?** — click the zeppelin, the tree should scroll to that
+  node; click a tree row, the world highlight should follow. (b) **Expanding.** A branch fills only
+  when opened; a branch over 500 rows stops with a "… N more — use the search box" row. Does that
+  read as a limit or as a bug? (c) **Search.** Type a fragment; results are a flat list,
+  double-click frames the camera. Is filtering as you type fast enough in C5? (d) **Frame and
+  Hide.** Frame should put the camera on the thing and orbit it; Hide should grey the row and add
+  `(hidden)`. **Hide something an animation drives (a hangar door, the train) and watch it come
+  back** — that is the data re-showing it and is correct; the panel's `visible=`/`in_tree=` line is
+  how you should be able to tell. (e) **Destructibles.** Flip the switch: C1 should read
+  `defs 132 · instances 267 · node groups 196 · 12 unresolved def(s)`, red ⚠ rows for the twelve,
+  `2/2` root coverage and `9 ok` event coverage on the bound ones; expand one and click an instance
+  to jump to it. (f) **Layout.** Checked at 1280×720 only — in `--anim-lab` the panel is squeezed
+  between the breadcrumb and the timeline, and at other window sizes nothing has been looked at.
+  *Blocks:* D32 sign-off; the panel is also the reach-around for anything the click pick refuses
+  (terrain), so say if that path is discoverable.
+
+- **M — the mesh lab on what you clicked (D33).** Everything scripted here was proven with
+  `--debug-*` stand-ins; the keypresses are by construction. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1 "--pos=-6140,185,-4340" "--direction=0.71,-0.17,0.68"`
+  puts a water tower in the middle of the frame. **Click it, press M.** *Look for:* the panel
+  appears bottom-left naming the object and its surface/triangle counts; the normal, wireframe,
+  cull and normal-source buttons act on **that object only**; **M again leaves the world exactly as
+  it was** (nothing dimmed, nothing z-fighting); clicking a *different* object while the panel is up
+  moves the lab onto it and restores the old one. Try the light rows on a world object — they should
+  say "target is fullbright — no light reaches it" and leave the world's own lighting alone (if the
+  sun ever moves, that is the bug this item exists to avoid). Then try the same on the anim lab's
+  parked plane (`--anim-lab --chapter=C1 --plane=player_bhawk`), where the light *should* work.
+  *Blocks:* D33 sign-off.
+
+- **C — the collider wireframes (D35).** *Where:*
+  `./RunGame.ps1 --freecam --chapter=C2 --collision "--pos=-5585,49,-3908" "--direction=-0.66,-0.33,-0.66"`
+  (the gate) — press **C**. *Look for:* wireframes coloured world blue / water cyan / buildings
+  orange / clutter green, sitting ON the geometry rather than floating or z-fighting; the count line
+  top-left; C again clears them. Then **run the same command without `--collision`** and press C: it
+  must print "NO COLLISION BUILT IN THIS MODE" and draw nothing — if that ever draws an empty
+  overlay instead, it is lying. Judge whether the whole-chapter hairball is usable at range or wants
+  a radius; and in `--fly` (C works there too) whether the yellow airframe boxes read as the shape
+  the plane collides with. *Blocks:* D35 sign-off.
+
+- **The world damage lab at the controls (D34).** Same story: H, the slider drag and the Kill/Reset
+  buttons ran only through `--debug-damage` and by construction. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1` — find a water tower (or use N's search for `ap_h2otwr`),
+  **select it and press H**. *Look for:* (a) **Does H find the right thing?** Clicking a leaf deep
+  inside an object should still offer the enclosing pool — the panel's second line names the anchor a
+  hit would damage. Selecting something that is not a destructible should say so, not open empty.
+  (b) **The slider.** Dragging it down should escalate the damage stages as HP falls; dragging it
+  back **up** silently does a reset-then-re-damage (the data has no healing), so watch whether the
+  object visibly resets mid-drag and whether that reads as sane or as a glitch. (c) **Kill/Reset.**
+  Kill should swap the wreck in and throw debris a couple of seconds later; Reset should put the
+  tower back; a second Kill should look identical. (d) **The two-pool row.** `ap_h2otwr1` lists two
+  pools and only the first has controls, with a red line explaining why — is that comprehensible at
+  the controls, or does it read as a broken button? (e) **Effects.** A killed *building*
+  (`m_build01`) should burn; the water tower's smoke/fire **stages** deliberately do not render
+  outside flight (documented, not a bug) — say if the difference is confusing. (f) **Layout.**
+  1280×720 only; the panel is on the right, the node lab on the left, and in `--anim-lab` it is
+  squeezed above the timeline. *Blocks:* D34 sign-off.
+
+---

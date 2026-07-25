@@ -1,8 +1,8 @@
 # Backlog — unscheduled future work
 
-Everything known-but-not-scheduled, so it survives between polish runs. **The active plan is
-`docs/PLAN-testing.md`** (testing & verification infrastructure); M3 (weapons) and the M2/2.5 polish
-runs plus the anim-debugger and data-driven-crash plans are complete and archived in `docs/plans/`. Per-item history/diagnosis
+Everything known-but-not-scheduled, so it survives between polish runs. **No plan is active** — the testing &
+verification infrastructure, M3 (weapons), the M2/2.5 polish runs and the anim-debugger and
+data-driven-crash plans are all complete and archived in `docs/plans/`. Per-item history/diagnosis
 detail is in `docs/HISTORY.md` (dated entries) and `docs/architecture.md` (module bullets); how to
 verify a change without fooling yourself is `docs/verification.md`. **The live list of hand-tuned
 constants awaiting playtest lives here** (see "TUNE constants pending playtest" below) — it moved
@@ -31,25 +31,40 @@ table outlive the landing.
 
 ### Still open — the attempt did not work
 
-- **`det == 0` invert error when destroying things — the scale-floor did NOT fix it (user-tested
-  2026-07-24).** `ERROR: Condition "det == 0" is true. at: invert (core/math/basis.cpp:47)` still
-  appears on some kills. The attempted fix (branch `fix/motion-scale-zero-guard`, **not merged**)
-  floored `MotionRuntime.Seek`'s ramped scale off zero (sign-preserving, ε=1e-3), the same guard
-  `PoseScale`/`ScriptPlayback` carry, on the theory a scale ramp reaching `(0,0,0)` made
-  `basis.Scaled(scale)` singular. It builds clean but the error persists, so **that is not (or not
-  the only) singular-basis source.** Unguarded suspects to check next:
-  - **`InheritedLocal`'s direct `parentBasis.Inverse()` (`AnimRuntime.cs` ~2655, the crash/launch
-    path)** — inverts a singular basis if any *ancestor* node carries a zero scale; the agent that
-    wrote the scale-floor flagged this as the spot it deliberately left alone.
-  - other `Inverse()` / `AffineInverse()` / `look_at` / zero-scale sites in the destruction,
-    puffer/effect, and `PlaceTemplateAt` / `GlobalTransform`-relative paths.
-  ⚠ **Do not re-apply the `MotionRuntime.Seek` scale-floor — it is tried and insufficient** (the
-  branch keeps it for reference). Find the real source by reproducing the throwing kill and adding a
-  temporary det-check log at each inverse in the destruction path to point at the culprit.
-  **⚠ Pass 2 (2026-07-25) sharpened the stakes:** on the `kkgate` door the throw coincides with the door
-  **not moving and keeping its collider** — the leading hypothesis is now that the exception *aborts the
-  death sequence* before its hide/collider-removal/piece-launch events run, making det==0 and the "door
-  won't destroy" symptom one bug. See "Playtest pass 2" finding 13.
+- **`det == 0` invert error when destroying things — still open, but every stated mechanism so far
+  is disproven.** `ERROR: Condition "det == 0" is true. at: invert (core/math/basis.cpp:47)`.
+  Reproducer: `--damage-test --damage-hd=25 --chapter=C2` (4 errors) and `--chapter=C3` (3); C1 is
+  clean. **What is now measured (2026-07-25):**
+  - It is Godot's **native** `Basis::invert` guard — a C++ print-and-return macro, not a managed
+    throw. The run completes, exits 0, and every report line after it is written normally.
+  - **Every error is printed AFTER the sweep finished and both reports were written** (lines 55–61
+    of a 62-line log). So it does **not** abort a death sequence: `kkgate`'s death reported
+    `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects *before* the
+    first error line. (verification.md rule 84)
+  - It is **not** the destructible damage/death code at all: `--run-tests=damage-hd --chapter=C2`
+    produces a **byte-identical** report to the tool while emitting **0** errors, because the
+    harness tears its world down before the frame that follows. So the singular basis is reached by
+    per-frame work on state the deaths left behind, not by the sweep.
+  - It is **not** `WorldSounds` — `--mute` (where `AnimRuntime.Sounds` is null and `PlayOneShot`
+    never runs) still gives exactly 4 on C2.
+  - It is **not** the damage-stage path — the continuous HP sweep (`ApplyDamageStages`, no clock
+    ticks) gives 0 on C1 and C2; only the discrete-hit mode, which ticks `runtime.Advance`, gives it.
+  - It needs **several deaths together**: `--damage-test=kkgate`, `=sign` and `=fcpan` each give 0
+    on C2; only the unfiltered 16-def sweep gives 4.
+  **Leading suspect now: the per-frame `GlobalPosition` sets in `Effects/Puffer.cs`** (462/496/536/
+  565) on emitters the deaths created, whose ancestor chain a death swap left with a zero-scale
+  basis — the only per-frame native global setter that survives `--mute`.
+  ⚠ **Traps — do not re-chase these:**
+  - **Do not re-apply the `MotionRuntime.Seek` scale-floor** (branch `fix/motion-scale-zero-guard`,
+    not merged): tried, builds clean, error persists. User-tested 2026-07-24.
+  - **`InheritedLocal`'s `parentBasis.Inverse()` (`AnimRuntime.cs` ~2666) is ruled out.** It is
+    Godot .NET's *managed* `Basis.Inverse()`, which cannot print a `core/math/basis.cpp:47`
+    location.
+  - **The "the throw aborts the death sequence" hypothesis (playtest pass 2, finding 13) is
+    disproven** by the log ordering above. The `kkgate` door-not-moving / collider-remains symptom
+    is a **separate** bug and needs its own diagnosis — do not treat fixing one as fixing the other.
+  - A quiet run is not proof of a fix: `--run-tests` reports 0 of these today because its world is
+    gone by then. Verify against `--damage-test --damage-hd=25 --chapter=C2`.
 
 ### Larger items — documented, not fixed
 
@@ -181,15 +196,17 @@ work is below.
     trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit
     no launch momentum + `bounce_sequence` ground-rest unsimulated + magnitude decode is TUNE) — this pass
     adds the *trajectory-shape* symptom, not just the *distance* one.
-13. **⚠ Strong lead — the `det == 0` throw likely ABORTS the door death sequence (same bug as "door never
-    moves / colliders remain").** Re-confirmed 2026-07-25: shooting `kkgate`'s propane tank throws
-    `ERROR: Condition "det == 0" is true` (invert of a singular basis) and the door then does **not** move
-    and **keeps its collider**; in the original the door deactivates, its pieces fly + fade, and it loses
-    collision. Hypothesis to test first: the inversion exception thrown mid-sequence unwinds the death
-    sequence **before** the hide + collider-removal + piece-launch events run — so det==0 and the "door
-    won't destroy" symptom are **one** bug, not two. Cross-ref the "Still open — det==0" item above (its
-    unguarded-inverse suspect list) and the "C2 SeaHangar doors" larger item. *Verify:* wrap the throwing
-    kill, log which inverse throws, and confirm the sequence aborts at that point.
+13. **`kkgate`'s door does not move and keeps its collider — a bug of its own, NOT the `det == 0` one.**
+    Re-confirmed 2026-07-25: shooting `kkgate`'s propane tank leaves the door in place with its collision;
+    in the original the door deactivates, its pieces fly + fade, and it loses collision.
+    ⚠ **Traps.** The "det == 0 aborts the death sequence" hypothesis this finding was filed under is
+    **disproven** — every `det == 0` line is printed *after* the sweep completed, and `kkgate`'s own
+    headless kill reports `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects
+    *before* the first error (see the "Still open — det==0" item and verification.md rule 84). So the
+    two are separate bugs; fixing det==0 will not move this door. Note also that the headless harness
+    reports the swap and collider flip as *working* here, so the defect is in what the player sees, not
+    in the sequence's bookkeeping — diagnose from the live world, not from `--damage-test`. Cross-ref the
+    "C2 SeaHangar doors" larger item.
 
 **Gauges, selectors & cues (findings 6, 7, 9).**
 14. **Ammo gauge: remove the yellow tier — the original is green→red only** (finding 9a, settled against
@@ -211,10 +228,10 @@ work is below.
 
 **Test / debug affordances (findings 6, 14).**
 18. **Debug low-ammo knob.** Empty-clip can't be tested without firing 2000+ rounds. Add a start-with-low-
-    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/PLAN-testing.md`'s test-affordance theme.
+    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/plans/PLAN-testing.md`'s test-affordance theme.
 19. **Debug: colour world objects by type / class.** The user couldn't locate a C2 water tower or the
     storefront facades (found filmset panels instead). A "colour by object class" overlay (destructible /
-    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/PLAN-testing.md`
+    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/plans/PLAN-testing.md`
     **D32 Node Lab** (destructibles view) — extend it with a colour-by-class mode, or a standalone overlay.
 
 ## Blocked / deferred
@@ -726,7 +743,7 @@ unscheduled.
 - **Race spawn fairness**: each player takes the next entry in the mission's `stunt_flying`
   spawn list, so pilots start at genuinely different distances from the first zone. Fine for
   a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
-  `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
+  `--pos` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 ### Combat-fidelity gaps found by a design cross-check (2026-07-25)
 
@@ -1048,6 +1065,15 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   `RollTune` 2.12. Those three are measurement-calibrated (2026-07-19) but the *feel* A/B is
   pending — **especially the ~2.7× cut in pitch authority**, the largest single change to how the
   aircraft handles.
+- **Numpad camera views (`FlightController.Views` / `ViewDist`)** — the *layout* is settled (it
+  matches the numpad's spatial geometry, and the user recalls it from the original): 2 belly, 1/3
+  below-flank, 4/6 flanks, 7/9 above-flank, 8 ahead. Three **magnitudes are user-recall, not data**,
+  and need an A/B against the original: (a) the **distance** — currently the chase camera's own
+  16.62 m, which is a choice, not a measurement; (b) the **45° elevation** of 1/3 and 7/9; (c)
+  whether the snap is **instant** (it is today) or eased, and whether releasing eases back.
+  Also open: whether the original bound these to a gamepad at all — the D-pad is taken by the two
+  weapon selectors here, so nothing is bound, and whether 5 does something (it is unbound).
+  All four numbers live in one table in `FlightController`; changing them moves no other behaviour.
 - **Control surfaces** — deflection angles and slew rate.
 - **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original.
@@ -1195,7 +1221,7 @@ Its data is fully decoded, so it is an end-to-end exercise for free. The symptom
 of this: the pirate zeppelin builds, renders complete and flies — it is simply **above the
 clouds**, at y 1505→1546 while C1's opaque `cloudlayer` deck sits at y = 960 and the player spawns
 at y ≈ 110. Freecam onto it with `--freecam --chapter=C1 --mission=M04
---campos=-5358,1505,-2200 --lookat=-5358,1505,-1810 --no-fog`.
+"--pos=-5358,1505,-2200" "--lookat=-5358,1505,-1810" --no-fog`.
 
 **Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
 The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked

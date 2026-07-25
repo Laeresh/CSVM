@@ -334,6 +334,82 @@ public sealed class WorldBuilder
     }
 
     /// <summary>
+    /// Every gamez node the <c>--node=</c> request names, in flat-list order. Matching is on the
+    /// <b>source</b> name (what <see cref="AnimRuntime.NameMeta"/> carries), case-insensitively and
+    /// with the data's <c>.flt</c> model suffix optional — Godot node names are sanitized and
+    /// auto-renamed, so they are never the thing to match on. Duplicate names are normal in this
+    /// data (C1 has seven <c>rock_zeppelin</c>s), which is why this returns the whole list.
+    /// </summary>
+    public static List<GameZNode> MatchNodes(GameZ gamez, string request)
+    {
+        var hits = new List<GameZNode>();
+        foreach (var n in gamez.Nodes)
+        {
+            if (n.Name.Length == 0)
+            {
+                continue;
+            }
+            if (string.Equals(n.Name, request, StringComparison.OrdinalIgnoreCase)
+                || (n.Name.EndsWith(".flt", StringComparison.OrdinalIgnoreCase)
+                    && string.Equals(n.Name[..^4], request, StringComparison.OrdinalIgnoreCase)))
+            {
+                hits.Add(n);
+            }
+        }
+        return hits;
+    }
+
+    /// <summary>Distinct source names CONTAINING the request — what a miss offers instead of
+    /// nothing, so a mistyped <c>--node=</c> is one line away from the right spelling.</summary>
+    public static List<string> SuggestNodes(GameZ gamez, string request, int cap)
+    {
+        var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        var names = new List<string>();
+        foreach (var n in gamez.Nodes)
+        {
+            if (n.Name.Length == 0 || !n.Name.Contains(request, StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (seen.Add(n.Name) && names.Count < cap)
+            {
+                names.Add(n.Name);
+            }
+        }
+        return names;
+    }
+
+    /// <summary>
+    /// Builds ONE named subtree as a standalone stage instead of the whole world (<c>--node=</c>).
+    /// The subtree is placed at its <b>world</b> transform — accumulated up the parent chain via
+    /// <see cref="GameZ.WorldTransformOf"/> — so a node nested under a placed parent sits where the
+    /// full world would have put it, not at the origin.
+    ///
+    /// <para>Deliberately unlike <see cref="Build"/> in three ways, each of which would otherwise
+    /// erase the subject: no <see cref="SkipWorldNode"/> filter (the caller named this subtree, so
+    /// even <c>horizon</c>/<c>dzpaths</c> build), no cloud-deck split, and <b>no
+    /// origin-parked registration</b> — <see cref="HideUnplacedEntities"/> would switch off exactly
+    /// the transformless vehicle a <c>--node=</c> run most often asks for.</para>
+    /// </summary>
+    public Node3D BuildNode(GameZ gamez, GameZNode node)
+    {
+        var root = new Node3D { Name = "world1" };
+        var built = _scene.BuildSubtree(node, skip: null, collisionSkip: NoCollisionNode);
+        if (built != null)
+        {
+            built.Transform = gamez.WorldTransformOf(node);
+            root.AddChild(built);
+        }
+        return root;
+    }
+
+    /// <summary>World-frame union of a built subtree's mesh AABBs, computed from the meshes and the
+    /// node transforms rather than from <c>GlobalTransform</c> — so it is valid <b>before</b> the
+    /// subtree joins the scene tree, where <c>GlobalTransform</c> returns identity and logs an error
+    /// per call. Null when the subtree draws nothing.</summary>
+    public static Aabb? DetachedWorldAabb(Node3D root) => SubtreeAabb(root, root.Transform);
+
+    /// <summary>
     /// Map-edge continuation: a rolling window of mirrored terrain tiles
     /// following the plane past the map boundary, so the world continues indefinitely under
     /// the fog like the original's tile-reload grid (see MapEdgeExtender for the model and

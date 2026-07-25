@@ -116,6 +116,27 @@ public sealed class DestructibleRegistry
         return _byKey.TryGetValue((def, anchor.GetInstanceId()), out var inst) ? inst : null;
     }
 
+    /// <summary>Every pool anchored on exactly this node — normally one, but a node carrying both
+    /// the compiler's per-instance def and a reader wildcard's carries two independent pools with
+    /// their own HP. Use it with <see cref="Resolve"/>, which names the one a weapon hit reaches;
+    /// the others cannot be damaged through the hit path at all. Empty for an ordinary node.</summary>
+    public List<Instance> PoolsOn(Node? node)
+    {
+        var found = new List<Instance>();
+        if (node == null)
+        {
+            return found;
+        }
+        foreach (var inst in _all)
+        {
+            if (ReferenceEquals(inst.Anchor, node))
+            {
+                found.Add(inst);
+            }
+        }
+        return found;
+    }
+
     /// <summary>The destructible instance a struck world node belongs to. The struck node is a
     /// raycast-hit collider deep under the anchor's subtree, so this climbs the parent chain to
     /// find a registered anchor. It walks the WHOLE chain rather than stopping at the first hit,

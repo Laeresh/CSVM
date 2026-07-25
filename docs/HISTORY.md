@@ -6013,6 +6013,1130 @@ session start; the interactive **P / `.` keys remain verified by construction on
 (`AnimRuntime.OneShotSoundPosition`, world subtree not yet in the tree) whenever sound is enabled —
 reproduced on the unchanged pre-A2 binary; A1's baselines missed it because they ran `--mute`.
 
+## 2026-07-25 — PLAN-testing B11: `Log`, categories/levels + the always-on file sink
+
+**Landed.** `src/Utils/Log.cs` — `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine
+categories (`anim world flight weapons sound perf test ui core`) and four levels, with two sinks:
+the console (filtered by `--log=cat[:level],…`) and a **file sink that always writes everything**
+to `.scratch/logs/<mode>-<stamp>.log`, PID-suffixed on a same-second collision. Line grammar
+`[cat] message key=value`, the file prefixing a 5-char level token and **no timestamp column**, so
+a `--det` run's log is byte-identical run to run. Messages are `FormattableString`s rendered with
+`InvariantCulture`; the sink is a line-flushed `StreamWriter` (UTF-8 with BOM).
+
+**Census correction.** The plan budgeted "184 `GD.Print` sites across 29 files" (grepped 2026-07-24);
+the real figure on the day is **223 across 37 files** — M3's landing added ~40, and `PlaneViewer.cs`
+alone holds 98 of them. The plan's 8 categories had no home for the ~24 UI/lab sites, so a **ninth
+category `ui`** was added rather than widening `core`: `core` is the session/CLI/config spine a
+scripted run always wants, while the lab and launchscreen dumps are read on purpose and must be
+silenceable on their own.
+
+**Two deviations from the item text, both to protect inertness.** (1) The console default is
+`info`, not "errors and warnings only" — that is exactly what an unconverted `GD.Print` showed, so
+converting a site changes nothing you see; `--log=*:warn` spells the quieter shape when wanted.
+(2) `--debug-anim` implies `--log=anim:debug,sound:debug`, because it already opens those families'
+call-site gates and would otherwise half-work while their 35 sites are unconverted.
+
+**Migration converted 5 files / 14 sites and no more, by decision** (plan decision 9, verification
+rule 67 — bulk text rewrites have corrupted files here): `Utils/Config.cs` (`core`),
+`Mech3/Clutter.cs`, `Mech3/TextureArchive.cs`, `Flight/Weather.cs` (`world`),
+`Mech3/TextureCycler.cs` (`anim`, debug level). Each site keeps its original level except
+`TextureArchive`'s two, whose own comment recorded that the level had been compromised to dodge
+`GD.PushWarning`'s stack trace. `WorldSounds.cs` was converted and then reverted when it landed on
+another agent's active file list. `PlaneViewer.cs` took three lines only: the `--log=` arg, the
+deferred-spec application, and `Log.Open`.
+
+**Verified.** *The headline property, both directions.* `--debug-anim --log=anim,world:warn`:
+`DEBUG [anim] texture cycles` = **34 in the file, 34 on the console**; `INFO [world] weather zone`
+= **2 in the file, 0 on the console**. `--debug-anim --log=anim:info` (call-site gate open, console
+filter closed): the same anim lines are **5 in the file, 0 on the console** — the instrument is seen
+able to fail either way. *Caught error in both sinks:* a deliberately malformed `res://config.json`
+put `ERROR [core] config is not valid JSON …` on stderr and the same line **plus the full
+`JsonReaderException` stack trace** in the file — and it appears *before* the `log file=` line,
+proving the pre-open prelude flushes in order. *Crash safety (rule 65):* a live `--debug-anim`
+freecam run `Stop-Process -Force`d (TerminateProcess — no unwind, no `Dispose`) left a **1562-byte,
+18-line** log holding all 13 per-second `[anim]` ticks up to ~1 s before the kill. *Cost:* `--perf`
+medians over 30 samples, C1 `--det` freecam — same-build noise floor first (rule 7) is **1.14 ms of
+`script`** (baseline 19.11 vs 17.97); baseline→converted is **17.97 → 17.54 ms**, i.e. −0.4 ms,
+*inside* the floor and in the impossible direction, so no measurable cost (rules 37/41; `frame` sat
+pinned at 16.67 ms, the vsync floor, rule 38). Even the run with the per-frame debug site firing
+reads 18.33 ms, still inside the floor. *Locale:* the same process renders unconverted
+`ZoneFog … WorldLight = 0,80200005` and converted `[world] … world_light=0.802` — and `LogTests`
+asserts `Log.Format($"dt={1000f/60f:0.000} ms")` == `dt=16.667 ms` under a forced `de-DE`, with the
+able-to-fail control that plain interpolation there yields `16,667`. *Inertness:* baseline vs
+converted `--freecam --chapter=C1 --det --spawn=0 --no-focus` with no `--log=` differ by exactly the
+four rewritten lines (same count, same positions, same levels bar the documented `WARN` promotion)
+plus **one new line**, the `[core] log file=…` announcement; world counts identical
+(7064/3458/0/1483). *Regression:* 8-chapter `--freecam` — **0 Godot-format engine errors** in every
+chapter, warning counts identical to baseline on C1.
+
+**Tests.** `dotnet test CSVM/CSVM.sln` **142 passed / 0 failed** (135 + 7 new `LogTests` covering
+the filter grammar, the line grammar and the invariant rendering — all Godot-free, per B13's audit).
+
+**Residual.** A composite object's own `ToString()` escapes the invariant rendering
+(`FormattableString` only reaches `IFormattable` holes), so a record logged whole still emits
+current-culture floats — `Weather` now logs the `ZoneFog` fields individually for exactly this
+reason, and the constraint is recorded as a `⚠` in the module's `docs/architecture.md` entry.
+
+## 2026-07-25 — PLAN-testing A3: one master seed, ten subsystem RNGs
+
+**Landed.** New `src/Utils/Rng.cs` owns every random draw in a session. One master seed; each
+subsystem gets its own generator seeded `splitmix64(master ^ fnv1a(name))` — **independent across
+subsystems**, so adding a draw in the weapons code cannot shift what the liveries roll, and only
+call order *within* a subsystem matters (which A1's fixed clock pins). The hash is hand-written on
+purpose: `string.GetHashCode()` is randomized per process in .NET and would have defeated the whole
+item. `Rng.Reset(master, pinned)` runs at the top of `StartSession`, before anything draws, so an
+in-process rebuild (Esc to the launchscreen and back) *repeats* the run instead of continuing it;
+it also calls `GD.Seed(master)` as the net for any draw not yet routed through a named stream.
+
+**Ten subsystems, where the plan named four.** `weapons` (`ProjectilePool` holds the stream —
+`CANNON_SPREAD` is two draws per round; also the stand-in fireball), `flightaudio` (the
+`snd_exp_plane1..4` crash pick, which now also prints `crash sound: <name>` — the pick's only trace
+outside the speakers), `spawn`, `paint`, `anim`, `crash`, `effects`, `puffer`, `clouds`, `precip`.
+The six beyond the plan's list came from an audit of every draw in the tree: the **world**
+`AnimRuntime` had `Seed` machinery but `PlaneViewer` wired `RuntimeSeed` only in `--anim-lab`, so
+`--fly`/`--freecam` ran the world's `RANDOM_WEIGHT` dice, `SOUND_GROUPS` picks and crash-debris
+scatter unseeded; the world-effects runtime was seeded only under `--effects-test`; the per-player
+crash rig is a third `AnimRuntime` nobody had listed; and `Puffer`/`CloudPuffs`/`Precipitation` each
+held a bare `new System.Random()`. `UI/LiveryLab` deliberately keeps its own non-sim generator — it
+is driven by a button press, and the plan is explicit that an input-dependent path must not share a
+sim stream.
+
+**The trap seeding alone does not fix.** `SoundDefs.SoundGroup._last` is recency state living
+*outside* the RNG — `DYNAMIC_WEIGHTS` halves the last pick's weight — so re-seeding a runtime
+replays a different sequence. New `SoundGroup.ResetRecency()` / `WorldSounds.ResetGroupRecency()`,
+called by `AnimRuntime.Reseed()` in the same breath as the re-seed. A fresh session was already safe
+because `LoadGroups` parses new objects per session; the lab's Play/Restart was not.
+
+**CLI.** `--seed=N` was the animation lab's own seed and is now the session master (the lab's
+display and `AnimLab.DefaultSeed` widened to `ulong` and derive from it). Pinned to 1 by `--det`,
+`--anim-lab` and `--effects-test` — the first two because determinism is their point, the third
+because its census gates effects behind `RANDOM_WEIGHT` and has to be comparable run-to-run.
+Everything else draws from the clock and logs `rng: master seed N`, so an interesting unpinned run
+can be replayed by passing the number back. `--paint-seed=N` still overrides the derived paint seed
+alone.
+
+**Verified.** All pixel numbers are raw 32-bpp buffers (rule 36), two runs at the same `--frames`,
+baselines taken on the unchanged pre-A3 binary. *The three residuals A2 handed over:* C1 waterfall
+mist **0.47 % → 0.00 %** (md5 `b456fdf5…` three times, whole frame, `--freecam --chapter=C1 --det
+--campos=-7720,60,-3380 --lookat=-7868,40,-3449 --frames=120`); C2B rain **5.44 % → 0.00 %**
+(`cbaabff3…`); C4 snow **25.84 % → 0.00 %** (`e2f9edad…`). *Rule 77 retired:* two `--det` C1B dives
+with `--fire` log **8 of 8 identical impact positions**, where the pre-A3 build's pair of runs shared
+**none**; the two flights' full logs are identical apart from one wall-clock `focus: lost` line.
+*Crash sound:* seed 1 twice → `snd_exp_plane4` twice; `--seed=2` → `snd_exp_plane2`, `--seed=5` →
+`snd_exp_plane3` (both halves of the check — a seed that changes nothing would be as broken as one
+that pins nothing). *Seeds branch:* `--seed=2` moves **25.09 %** of the C4 snow frame and 0.44 % of
+the waterfall against seed 1. *Inertness (the boundary rule):* three unpinned `--fly --chapter=C1B`
+runs drew three different masters, spawn indices 2/0/3, and three different impact patterns; a
+random-livery `--viewer` shot moves **3.39 %** of pixels unpinned and **0.00 %** under `--det`; a
+plain `--viewer --plane=player_bhawk` shot is md5 `7c2b7274…`, byte-identical to the A1 and A2
+baselines. *Regression:* 8-chapter `--freecam --quit-after 180`, **sound enabled** (rule 61 full-
+stderr grep) — one real `ERROR:` in the set, C3's known pre-existing `!is_inside_tree()` during the
+sound bind; gamez-node / mesh-instance / collider / uv-clamped-surface counts identical to the A2
+baselines on all four chapters with prior logs. Mode battery 0 errors: menu, anim lab, 2P stunt
+race, weapon lab firing, `--weapon-test`, damage lab, `--damage-test`, `--effects-test` (whose
+census is identical across two runs on the derived seed). `dotnet build` 0/0; `dotnet test` 135/135.
+
+**Two pre-existing findings confirmed, not caused here** (rule 13, A/B'd against a pre-A3 binary
+rebuilt from file copies — never `git stash`, and the absent `rng:` line proved which binary ran):
+the `1 ObjectDB instance was leaked at exit` warning under `--quit-after` appears in A2's own logs,
+and every `--dump-*` run logs one `!global_shader_uniforms.variables.has(p_name)` error because the
+dump branches quit before `_Ready` registers `csky_time` — an A2 residual, reproduced on the pre-A3
+build.
+
+**Residual.** A `--det --fly` *screenshot* is still not byte-identical: **2.71 %** of pixels, mean
+delta 1.08. The simulation matches exactly; `FlightController.UpdateChaseCamera` smooths on the raw
+wall delta, which is A1's deliberate "UI and camera code stays off the sim clock". Pin flight
+captures with `--freecam` or a fixed camera; C23's goldens must avoid chase-cam poses until that
+camera moves onto the clock. Filed in `backlog.md`.
+
+## 2026-07-25 — Global shader parameters registered before the dump branches
+
+**What landed.** The `csky_fog_*` / `csky_world_light` / `WorldLights` / `csky_time` registrations
+moved above the `--dump-markers` / `--dump-weapons` / `--dump-loadout` early exits in
+`PlaneViewer._Ready`. Those branches build materials of their own and then quit, so registering
+after them left every dump run emitting one
+`!global_shader_uniforms.variables.has(p_name)` error — noise that would have failed B12's suites
+on their first green run.
+
+**Verified.** A/B on the one moved block, windowed: **1 → 0** occurrences on `--dump-loadout`, with
+all three dump tools at 0 after. The same A/B under `--headless` reads **0 → 0** — the dummy
+renderer compiles no shaders and cannot see the error at all, which is why it survived A2's
+verification and A3's mode battery. Landed as verification rule 82. Build 0 warnings / 0 errors.
+
+**Trap met on the way.** The first A/B "passed" on both sides because the file swap's `dotnet build`
+no-opped (rule 11) — the reverted file kept a stale mtime and Godot ran the old DLL. Forcing the
+rebuild is what made the difference appear.
+
+## 2026-07-25 — PLAN-testing A4: the `--det` bundle; scripted runs imply it
+
+**What landed.** `--det` became one named bundle resolved in a single block of
+`PlaneViewer._Ready` (after `Log.Open`, ahead of the jitter and master-seed resolution it feeds):
+fixed-dt clock + master seed 1 + `--spawn=0` + pinned livery seed + `--no-pads` + `--jitter=0`,
+each constituent still overridable by passing its own flag. **`--screenshot=`, `--dump-markers`,
+`--dump-weapons`, `--dump-loadout`, `--dump-config` and `--damage-test` turn it on themselves**, so
+a reproducible capture needs no other flag; **`--no-det`** beats both the implication and an
+explicit `--det`. The whole resolved set is announced on one line —
+`[core] det clock=fixed dt_ms=16.667 seed=1 spawn=0 livery_seed=… pads=off jitter=0 via=--screenshot`
+— and the saved-shot line now carries `sim_frame=` / `sim_time=`, so a capture documents the moment
+it shows. The per-session `det: fixed-dt sim clock` print was folded into the bundle line.
+
+**Verified.** *Headline:* a bare `--screenshot` over the C1 waterfall pose, twice, no other flags →
+md5 `bbb18fec…` **=** `bbb18fec…`, **0 of 921600 px differ**; at `--frames=120` md5 `b456fdf5…`
+twice, 0 px. The compare can fail: frame 15 vs frame 120 differs **2.24 %** (max delta 170), so the
+pose is genuinely time-sensitive (rule 80), and the same pair under **`--no-det` differs 0.47 %**
+(max delta 77). *Each implication individually* (rule 12): all five non-screenshot flags log the
+`det` line with the right `via=`, and `--no-det` cancels each one — `--det --no-det` and
+`--no-det --det` both run on the wall clock, `--no-det` alone logs nothing. *Overrides:*
+`--dump-config --seed=7 --spawn=2 --paint-seed=99 --jitter=0.5` announces
+`seed=7 spawn=2 livery_seed=99 jitter=0.5`. *Inertness:* an interactive `--fly --players=2` logs no
+`det` line, an unpinned master (`18165887919824763418`), spawn `#1 of 4`, and
+`player 1 input: keyboard + pad 0` — the same run with `--screenshot` logs `pads=off` and
+`player 1 input: keyboard`, so the pad check is able to fail. *`--frames=N` tightened:*
+`sim_frame=15 sim_time=0.25` and `sim_frame=120 sim_time=2` under the bundle versus
+`sim_frame=15 sim_time=0.435` under `--no-det` — N is now a sim coordinate. *Modes:* `--viewer`
+(`7c2b7274…`), `--anim-lab` (`2b20bb13…`) and the damage lab with fires burning (`3e3d0faf…`) are
+each md5-identical across two runs, 0 errors; `--stunt` and `--menu` shot cleanly. *Regression:*
+8-chapter `--freecam --quit-after 240`, **sound enabled**, windowed (rule 82) — **0 errors in seven
+chapters, 1 in C3**, the known pre-existing `!is_inside_tree()` sound bind, reproduced on a
+HEAD-restored binary in the same session (rule 13; the `1 ObjectDB instance was leaked at exit`
+shutdown warning appears identically on both builds in C1B/C1C/C2/C3/C5). `dotnet build` 0/0;
+`dotnet test` **142/142**.
+
+**Residual — the headline's literal form fails, and honestly so.** A bare `--screenshot` with *no*
+other flags is a **flight** run (flight is the default for any content arg), and A3's chase-camera
+residual stands: measured **29.38 % at frame 15, 3.21 % at frame 120, 32.70 % at frame 300**, mean
+delta 1.1–2.4, while the sim itself matches (two runs' logs identical bar the filename).
+`FlightController.UpdateChaseCamera` smooths on the raw wall delta by design. Byte-identity is
+therefore a `--freecam` / `--viewer` / `--anim-lab` property; C23's goldens must still avoid flight
+poses. Filed in `backlog.md`. Landed as verification rule 83.
+
+## 2026-07-25 — The chase camera moves onto the sim clock
+
+**What landed.** `FlightController._Process` feeds `UpdateChaseCamera` the `GameClock`'s `FrameDt`
+instead of the raw frame delta. The halted orbit camera keeps wall time, deliberately — the point of
+a freeze is to fly the camera around a stopped world.
+
+**Why the earlier rule was too wide.** A1 put "UI and camera code" on the raw delta so a halt still
+lets you look around and the HUD still draws. That is right, but it only has to hold *through a
+halt*: the chase camera smooths with `1 - exp(-k·dt)`, so its pose is a function of the dt it is fed,
+and on wall time a scripted flight capture stayed frame-rate dependent even with the simulation
+underneath it pinned. Being simultaneously a view and a function of sim state, only its second half
+wanted the sim clock — and that half is the whole of what a capture sees.
+
+**Verified.** A bare `--screenshot` C1 flight, two runs at each of frames 15 / 120 / 300:
+**0 of 921,600 px** differ at all three, against the **29.38 % / 3.21 % / 32.70 %** A4 recorded the
+same command producing. Controls both ways: frames 15 vs 120 differ by 50.26 % (the pose is
+genuinely time-sensitive, rule 80), and `--no-det` still moves 54.67 %, so the opt-out survives.
+Inertness: the parked `--viewer` shot is md5 `7c2b7274…`, identical to the A1, A2 and A3 baselines —
+in Realtime mode `FrameDt` *is* the wall delta, so nothing outside a fixed clock changed. Build 0
+warnings / 0 errors, 142 tests green.
+
+**Consequence.** A4's headline verify — a bare `--screenshot` twice is md5-identical — now holds
+literally, and C23's goldens are no longer restricted to `--freecam`/`--viewer` poses. The
+`backlog.md` entry is deleted rather than marked fixed, per the standing rule.
+
+## 2026-07-25 — PLAN-testing B12: `--run-tests`, the in-engine test harness
+
+**What landed.** `CSVM/src/Testing/` — `Probes.cs` (the assertion cores that used to live inside the
+`--dump-*` / `--damage-test` handlers, now returning report text *and* a structured verdict),
+`TestHarness.cs` (`--run-tests[=filter]`: suite registry, `TestContext` with the assert verbs, the
+resolved data paths and a `WorldSession`-backed chapter-world builder, a PASS/FAIL/SKIP table,
+`.scratch/test-report.json`, and the exit code) and `Suites.cs` (seven suites). The dump flags keep
+working and are now thin wrappers over the probes — one source of truth instead of a copy;
+`PlaneViewer.cs` shrank by ~430 lines. `WeaponLab.RunSelfTest` gained a counted twin `SelfTest()`.
+
+**Suites, measured green on the retail install (C1, 16.0 s wall, exit 0):** `weapons-defs` 48 defs /
+0 unhandled keys · `markers-rig` 11/11 airframes · `loadout-bind` 11 bound / 0 failed ·
+`weapons-fire` 48/48 fired, 0 errors, 0 skipped · `damage-stages` 16 defs, every one resolving from
+a deep descendant and firing a stage effect · `damage-hd` 16 defs, all destroyed, all
+reset-and-rekill idempotent · `destructible-census` all 8 chapters against the committed table
+(C1 267/196 … C5 568/292), read from the registry rather than the 16-def-capped sweep rows.
+
+**Verified.** Rule 14 both ways. *Planted:* C1's census expectation flipped to 268 →
+`FAIL destructible-census … !! C1 destructible instances expected=268 actual=267`, `$LASTEXITCODE`
+**1**; reverted → PASS, exit **0**. *Real bad input:* `--run-tests=loadout-bind
+--loadout=pbloodhawk` → FAIL naming the genuine binding error (`marker 'firepoint8' not found on
+the built plane`), exit **1**. `--run-tests=weapons` selects 2 of 7 suites. `--data-root=<empty>` →
+**0 passed / 0 failed / 7 skipped**, each naming its missing path, exit **0** — a skip is reported
+distinctly and never as a pass. A filesystem sweep after a full run found **nothing** written
+outside `.scratch/`. The refactor is output-preserving: `weapons_dump.txt`, `markers_dump.txt`,
+`world_colliders.txt` and a filtered `loadout_dump.txt` are **md5-identical** to the pre-refactor
+files; `damage_test.txt` differs only in `HEALTH 0,01` → `HEALTH 0.01` (the probes now force
+`InvariantCulture`, which `--damage-test` never did). Smoke: `--weapon-test` 48/48,
+`--effects-test` 28/28 resolved / 16 puffers, `--freecam --chapter=C1 --det --screenshot` 0 errors.
+`dotnet build` 0 warnings / 0 errors; `dotnet test` **149 passed / 0 failed** (142 + 7 new).
+
+**The error-screen decision, taken before writing the suites.** Native `ERROR:` lines are C++
+`ERR_FAIL_COND` prints and cannot be intercepted from C# at all, so a strict full-stderr criterion
+was never available in-process. The harness instead reads the run's own engine log back
+(Godot's `--log-file`, else the project's default rotating log when this run is the one writing it;
+with neither it reports SKIP, never PASS) and classifies every error line against a **capped**
+allowlist: `det == 0` (max 8) and `!is_inside_tree()` (max 4), each naming its open backlog item.
+Unknown error fails, over-cap fails, and **every allowance's actual count is printed even on a
+pass** — the measured full run reads `allowed 0/8x` and `allowed 1/4x`. The classifier is pure and
+carries 7 xUnit tests including "one over the cap fails". Rules 84 and 85.
+
+**Two live rule-74 bugs fixed on the way.** `--weapon-test` and `--effects-test` wrote their reports
+through relative `./.scratch/` paths, which resolve against the *process* working directory; the
+evidence was a stray `CSVM/.scratch/` holding 24 MB of misplaced probe artifacts. Both now use the
+absolute `WriteScratch` helper, and the file sweep above confirms it.
+
+**Finding — the `det == 0` errors are not what `backlog.md` said.** Measured: they are printed
+**after** the sweep has finished and both reports are written (lines 55–61 of a 62-line C2 log), so
+they cannot be aborting a death sequence that already reported its swap, colliders and seven stage
+effects; they survive `--mute`, where `AnimRuntime.Sounds` is null (4 → 4 on C2), ruling out
+`WorldSounds`; the continuous-sweep mode never produces them (0 on C1 and C2) while the
+clock-ticking discrete mode does; no single def group reproduces them (`kkgate`, `sign*`, `fcpan*`
+each 0, the unfiltered 16-def sweep 4); and `--run-tests=damage-hd --chapter=C2` produces a
+**byte-identical report with 0 errors**, because the harness frees its world before the frame that
+emits them. The named suspect `AnimRuntime.cs:~2666` is ruled out on the earlier grounds that a
+managed `Basis.Inverse()` cannot print a `core/math/basis.cpp` location. Leading suspect is now
+`Effects/Puffer.cs`'s per-frame `GlobalPosition` sets on emitters the deaths created.
+`backlog.md`'s entry and playtest finding 13 are corrected; the transferable half is rules 84–86.
+
+## 2026-07-25 — `--pos`/`--direction`: one placement pair in every mode (PLAN-testing A5)
+
+**What landed.** `--pos=x,y,z` and `--direction=x,y,z` place the *subject of whatever mode is
+running* — the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt`. One
+`ResolvePlacement` block in `PlaneViewer._Ready` routes them onto the plumbing that already carried
+placement (`_spawnAt`/`_spawnDir` in flight, `_camPos` plus a new `_camDir` elsewhere), so no
+consumer downstream decides anything. `--campos`/`--spawn-at`/`--spawn-dir` survive as deprecated
+aliases that log `WARN [core] deprecated flag=… use=…` once per run. F11 became `PrintPlacement` and
+now prints the subject per mode. `ChooseSpawn`/`LogSpawn` moved onto `Log` in passing — the German
+locale had been rendering the spawn direction as `dir=(0,97,-0,24,0,00)`, which is unreadable in
+exactly the log line this item's parity check compares.
+
+**Two decisions the plan's approach did not cover, both forced by the audit:**
+
+- **`--lookat` stays a POINT; only flight converts it.** `SpectatorCamera` keeps just the direction
+  to its look-at, so either form is lossless there — but `OrbitCamera.Frame` treats it as a true
+  pivot *and derives the orbit radius from it*, so converting at parse time would have broken the
+  `--viewer` wheel and drag. A `--viewer --direction` therefore gets a **synthesized** pivot: the
+  point on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the
+  eye swung to the aim when no `--pos` was given. It is announced on its own log line, because a
+  pivot nobody typed is what a later capture cannot explain.
+- **In `--freecam`/`--anim-lab`, `--pos` beats `--spawn-at`.** The two already overlapped there
+  (`--spawn-at` reaches the camera through `ChooseSpawn`, `--campos` layered on top). The deprecated
+  flags keep their *old per-mode meaning* rather than becoming pure renames: `--campos` still never
+  places the plane, and `--spawn-at` still moves the anim lab's parked stage prop as well as the
+  camera — which `--pos`, placing only the camera there, deliberately does not copy.
+
+**Verified.** *Alias equivalence:* a C1 `--freecam` shot from `"--pos=-6200,500,-3300"
+"--direction=0,0,-1"` is md5-identical (`7facfce6…`, decoded pixels — rule 36) to the same pose as
+`--campos`/`--lookat`; moving one coordinate 10 m moves **28.23 %** of pixels, so the compare can
+fail (rule 15). Same for `--pos` vs `--campos` alone in `--viewer` (`00695e91…`).
+*The motivating case:* `--chapter=C1 "--pos=-6500,300,-1500" "--direction=1,-0.25,0"
+"--hold=0,0,0,1" --fire --frames=300` logs **8 of 8 `-> Water` impacts on the first run, no land
+crash** — the C1 open water was located from `models.json` by classifying each mesh's dominant
+material texture the way `SceneBuilder.SurfaceForMesh` does, not by flying around. *Flight parity:*
+the same values via `--spawn-at`/`--spawn-dir` give the identical logged spawn pose
+(`pos=(-6500,300,-1500) dir=(0.970,-0.243,0.000)`), the identical 8 impacts and an md5-identical
+frame (`e980ff10…`). *The orbit still orbits:* `--viewer --pos=18,6,26 --direction=-0.5,-0.2,-0.75`
+reports `pivot --lookat=0.339,-1.064,-0.491 radius=32.613`, and a `--shots=2 --jitter=25` burst
+keeps the plane centred — where the degenerate pivot-at-the-eye the synthesis avoids
+(`--lookat=<the eye>`) swings it clean out of frame into empty sky. *Deprecation:* `--campos` passed
+twice over a 200-frame run logs the notice exactly once, in console and file sink alike.
+*F11:* verified through a temporary probe call at the screenshot-save site (live keypresses are
+unscriptable here), then reverted — flight printed the **plane's** pose 0.9 m along its track from
+the spawn with `--direction=0.97015,-0.24251,-0`, freecam and anim-lab their eye + unit direction,
+the viewer `--pos`/`--lookat=<the pivot>`. Also exercised: `--stunt`, `--players=2` (60 m abreast
+fan-out intact), `--direction` with no `--pos` in flight (logged no-op), `--lookat` alone in freecam
+(unchanged: aims from the mission spawn), `--direction` alone in the viewer.
+*Regression:* 8-chapter `--freecam --quit-after 240`, **sound enabled**, windowed (rule 82), flags
+absent — **0 errors in seven chapters, 1 in C3**, the known pre-existing `!is_inside_tree()`; node
+and mesh counts unchanged. `dotnet build` 0/0; `dotnet test` **142/142**.
+
+**Consequence.** Verification rule 77's chapter-shopping workaround ("pick a chapter whose spawn
+sits over the surface you want") is retired for placement-controllable tests; the new standing rule
+is 84.
+
+## 2026-07-25 — `RunTests.ps1`: one command, one exit code (PLAN-testing B14)
+
+**What landed.** `RunTests.ps1` at the repo root: `build` (`dotnet build CSVM/CSVM.sln`) → `units`
+(`dotnet test`, `--no-build`) → `engine` (Godot `--run-tests`, windowed, `--log-file`) → `goldens`,
+plus `perf` under `-Perf`; one summary block, one exit code, nonzero if any stage FAILED. Switches
+`-Filter <substring>` (engine suite names only), `-SkipUnits`, `-SkipEngine`, `-Perf`. Counts are
+read from machine-readable outputs rather than console prose: a TRX log under
+`.scratch/testresults/` for the units, `.scratch/test-report.json` for the engine — the report is
+deleted before the run so a dead run cannot be scored from the previous one's numbers. Godot is
+resolved this tree first, then `CSVM_DATA_ROOT`, the same fallback `RunGame.ps1` uses.
+
+**Skips are printed, never silent.** No data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP`
+and keep the exit at 0, but each adds a `not checked:` line to the summary. The two unwritten stages
+report `TODO` with a plain "not implemented yet" — the golden-image compare and the perf A/B — so
+even a fully green run says out loud that no pixel and no timing regression is being caught.
+
+**Verified.** *Green end to end:* `build PASS 0.8s · units PASS 2.4s (149 passed, 0 failed, 0
+skipped of 149) · engine PASS 15.7s (7 passed, 0 failed, 0 skipped; engine errors clean) · goldens
+TODO`, `result: PASS -- 18.8s total, exit 0`. *Rule 14, each stage independently (rule 12):* a
+flipped assertion in `ZrdrTests.EveryNumberArrivesAsFloat` gave `FAIL units 148 passed, 1 failed`
+and `result: FAIL in units -- exit 1`; reverted, a `WeaponDefCount + 1` in the `weapons-defs` suite
+gave `FAIL engine 1 passed, 1 failed … [weapons-defs]` and `exit 1` — each with the other stage
+unaffected. *From a worktree* (`git worktree add --detach`, `CSVM_DATA_ROOT` at the primary tree):
+identical — 149/149, 7/7, exit 0, `data root: Z:\Crimson Skies (CSVM_DATA_ROOT)`; no
+`--headless --import` pass was needed first. *Switches:* `-SkipUnits` / `-SkipEngine` each print
+their SKIP row and a `not checked:` line; `-Filter weapons` reached the harness as
+`suites=2/7 filter='weapons'`, `-Filter markers` as `suites=1/7`. *Skip path:* `CSVM_DATA_ROOT`
+pointed at an empty directory → all 7 suites SKIP, each naming the path it wanted, `0 passed, 0
+failed, 7 skipped`, exit 0, with the summary carrying `not checked: 7 in-engine suite(s) SKIPPED`.
+*Seams:* `-Perf` printed `TODO perf … not implemented yet -- no scenario set, no A/B, no history
+store` and contributed no PASS.
+
+**Two traps found while building it, both now standing rules.**
+
+- **Rule 66's kill has to be scoped twice.** Filtering strays only on this tree's project dir also
+  matches a live session: the first two runs each killed two `--plane=player_bhawk --chapter=C1`
+  Godots another session had launched seconds earlier (creation timestamps confirmed they were
+  fresh, not leftovers). The kill now requires this tree's dir **and** `--run-tests` — a run that
+  always quits by itself — and every other Godot on this tree is printed and left alone.
+- **Rule 88, new.** With `$ErrorActionPreference = "Stop"`, piping the script's own output
+  (`.\RunTests.ps1 | Select-String …`) makes PowerShell 5.1 wrap the child's stderr in
+  `NativeCommandError` records: Godot's first allowlisted `ERROR:` line killed the script at the
+  launch line, while the identical unpiped run passed. All three native calls now run with errors
+  non-terminating and are judged by exit code; cmdlets keep `Stop`, because a silently failed
+  `Remove-Item` would score a stage from a stale file.
+
+**Known gap, inherited, not fixed here.** `CSVM_DATA_ROOT` pointed at a directory holding no
+extraction skips the *engine* suites (`PlaneViewer` resolves it strictly) but not the
+data-dependent *units*: `TestData` falls back to its own checkout, so from the primary tree they
+still find `extracted/` and all 149 run. Documented in `docs/tooling.md` — it is the test project's
+resolution order, not the script's.
+
+## 2026-07-25 — PLAN-testing C21: startup-phase stopwatches, always on
+
+`src/Utils/StartupProfile.cs` + `Mark`/`Record` calls at the `WorldSession` phase boundaries and
+around `PlaneViewer`'s data loads. Every session build now ends in one `perf`-category line:
+
+```
+[perf] startup mode=freecam chapter=C1 total=3028.0 boot=1091.0 gamez=548.2 textures=1.6
+sounds=0.3 zrdr=15.6 world=461.7 clutter=26.4 anim=270.7 bind=342.6 prewarm=85.0 edge=8.9
+weather=28.3 rest=64.5 first_frame=83.3
+```
+
+**Shape.** `total = boot + Σ(phases) + rest + first_frame`, an identity a parser can check —
+verified 0 mismatches beyond 0.2 ms rounding across 24 collected runs. `boot` is engine start →
+build start; `rest` is the build minus its phases (real uninstrumented work, not an error term);
+`first_frame` is measured at the top of the *second* `_Process` so the first draw is inside it.
+Phases are leaves, never nested, so the sum cannot double-count. Ambient statics rather than an
+`Options` field, because `WorldSession` is also driven by the test harness — where `Current` is
+null and the eight census worlds record nothing.
+
+**Deviations from the item text.** Three phases beyond the plan's list (`plane`, `weather`, `edge`)
+because they are large and mode-specific; `boot` and `rest` added so the line closes arithmetically
+instead of asserting an approximation. The runs that quit inside the build (`--damage-test`,
+`--effects-test`, `--weapon-test`) never render, so their line is emitted from
+`NotificationExitTree` with `first_frame=none`.
+
+**Verified.**
+
+*The residual, named rather than waved at.* `rest` is per-mode and its content was measured, not
+argued: freecam 26–65 ms, flight 240–243 ms, viewer 255 ms. A temporary `probe_puffers` mark
+(added, measured, reverted) attributed **84.9 ms of the viewer's 255 ms to the damage lab's ten
+baked pufftrail emitters**; the balance is the gauge cluster and the livery/mesh/marker/weapon lab
+nodes. Flight's 240 ms is the fly-minus-freecam delta: the per-player rig, the shared projectile
+pool, the world-effects runtime and the loadout bind. Externally, `total` 3028 ms sits inside a
+5355 ms `--quit-after 120` process wall; the remainder is 118 vsync-capped frames (1967 ms) plus
+**~330–360 ms of process spawn and shutdown no in-process clock can see** — cross-checked at
+`--quit-after 3` (wall 3361, total 2992) and `5` (wall 3389, total 3012).
+
+*The numbers move when they should (rule 15).* A zip-only data root (hardlink mirror, so
+`SessionPaths.PreferUnzipped` finds no unpacked siblings) against the normal unzipped tree, C1
+freecam ×3 each: `anim` **265–271 → 431–438 ms**, `sounds` 0.2 → 6.9, build total 1831–1862 →
+1936–1970. Two phases moved the *other* way and reproducibly — `world` 451–456 → 409–417 and
+`zrdr` 15.7–16.5 → 12.3–12.7 — many small loose files costing more than one zip handle.
+
+*Cold vs warm (rule 42, now rule 89).* A freshly-copied C3 data root, first run vs the two after
+it: `total` **9777 → 2570/2561 ms**, and the cost is not spread — `anim` **5974 → 278–284 (21×)**,
+`world` 1451 → 319–321, `prewarm` 340 → 78–80, while `gamez` did not move at all. A cold run
+reshapes the profile rather than scaling it. Comparisons belong in C22's warm-up protocol; this
+item only reports.
+
+*Cost is invisible (rules 7/8/41).* Same-build noise floor taken **first**, on the unchanged
+binary: C1 `--freecam` ×5 → build 1824/1848/1863 ms (min/avg/max). Instrumented: 1853/1857/1868.
+Then the baseline was re-measured by checking the two files back out, rebuilding and re-running ×5
+(rule 8; the absence of the `[perf] startup` line is the rule-11 proof the old binary ran):
+1774/1828/1847 — the two baselines differ from each other by 20 ms while the instrumented average
+sits 9 ms above the first. The arithmetic bound is 12 `Stopwatch.GetTimestamp()` pairs per session,
+~1 µs. C4 agrees: baseline 1882/1895/1911, instrumented 1901/1903/1904.
+
+*Coverage.* 8-chapter `--freecam` sweep, **0 engine `ERROR:` lines** anywhere, a startup line on
+every chapter; `--viewer`, `--anim-lab`, `--fly` (C5) and `--damage-test` each emit correctly; a
+bare launchscreen run emits none (no session built) and is error-free. C5 flight against C5 freecam
+shows the split doing its job — `world` 439–449 → 1243–1252 ms (the collision build), `gamez`
+523–539 → 781–794 (the second `GameZ.Load` accumulating into the same bucket), `bind` 452 → 652–733.
+`.\RunTests.ps1` green: `build PASS · units PASS 149/149 · engine PASS 7/7, engine errors clean ·
+goldens TODO`, `result: PASS -- 19.4s total, exit 0`.
+
+**Not verified.** The launchscreen-driven rebuild path (menu → `StartSession`) is verified by
+construction only — it is the same `StartSession`, but a live menu launch is not scriptable here, so
+the `boot` caveat (it contains the menu wait) is reasoned, not measured. A true cold OS file cache
+cannot be forced on this machine without admin cache-flush tooling: the cold reading above is a
+freshly-written copy, which is rule 42's own scenario but is a *floor* on the cold penalty, not
+necessarily its ceiling.
+
+## 2026-07-25 — Texture drop-in: `--tex-override` + `--tex-census` (PLAN-testing C24)
+
+Two instruments hooked into `TextureArchive.Find`, the one point every consumer resolves a name
+through, so world, clutter, aircraft, puffers, clouds and gauges inherit them without knowing.
+`--tex-override=<name>[=<color>]` paints one texture flat (default magenta); `--tex-census` gives
+every texture its own hashed colour, writes the name→colour map to `.scratch/tex_census.json`, and
+counts a `--screenshot` frame into `.scratch/tex_census_<shot>.json`. `TextureCycler` freezes under
+either flag, and on an aircraft the drop-in beats the paint substitution. New: `TextureDropIn` in
+`TextureArchive.cs`, a `tex-dropin` engine suite, three xUnit tests on the colour hash.
+
+**Verified.** Override on C1/M04's moored zeppelin skin: **113,947 magenta px vs 0** in the same
+shot without the flag, all 114,820 changed pixels inside the hull. Census at the same pose:
+`lkzepskin` 88,301 px, `cloudlayer` 230,365, `zep_cab02` 478, while four textures that exist only in
+C4/C5 read 0/1/2/30 px. Rule 56: an overridden texture's visible extent is 114,820 px with the
+census off and 114,819 with it on (the one pixel is a sub-quantum blend fringe the diff method
+cannot see, not a geometry move), and a hard-alpha clutter cutout is **pixel-identical**, 803 px in
+both. Map stable: two runs md5-equal, and 167/167 names shared between a C1 and a C4 map carry the
+same colour. Inert with the flags absent: `--freecam` C1 and C4 shots md5-equal to the pre-change
+build, 0 of 921,600 px. 8-chapter `--freecam` regression, sound on, flags absent: 8/8 exit 0, one
+`ERROR:` line total, the known C3 `!is_inside_tree()`. `RunTests.ps1` green — 152 units, 8 suites.
+Both new checks seen able to fail: the unit tests failed twice on real defects while being written,
+and skipping one texel in `Flatten` failed `tex-dropin` on all 7 samples.
+
+**The tolerance decision, and why it needed measuring.** The world shader multiplies the flat by a
+**per-channel** vertex colour, so nothing lands on its exact colour (`exact` = 0 on every world shot)
+and half of the zeppelin's hull reads `184,0,196` where a pure scalar dim would give `204,0,204` —
+a chromaticity shift of 0.124, larger than any palette this size can separate. Classification is
+therefore chromaticity (linear colour over its brightest channel, invariant to a scalar dim) with
+tolerance **0.045** and an **absolute** separation of **0.03**, both taken from a sweep against the
+override's 113,947 px ground truth plus 60 textures that cannot be on screen: 75 % recall at a
+worst-case 575 px false credit. An absolute gap beat a ratio margin outright — a pixel sitting
+exactly on a flat has a winning distance of ~0, which passes any ratio test however close the rival.
+The first palette drew its two free channels uniformly in **sRGB bytes**, which bunches them in the
+corners once gamma is undone; redrawing them uniformly in **linear** ratio took the same texture
+from 55,950 to 88,301 px. Fog was measured rather than tolerated: 374,491 px classified confidently
+with `--no-fog` against 129,210 with fog on, so census shots take `--no-fog`. Standing rules 91–92.
+
+**Two things the item cannot do, stated rather than implied.** A per-texture census cannot be read
+back reliably from one shot at this texture count — counts are lower bounds and `px + contested` the
+upper one, so a count under ~1,000 px means "not shown" and an exact figure means `--tex-override`.
+And 8 bits a channel leave ~200k reachable colours, so 4 of C1's 882 textures hash to the same one;
+each collision is warned by name and counted in the map, never silently resolved by nudging a
+colour, which would make it depend on load order.
+
+## 2026-07-25 — PLAN-testing C25: test stages `--stage=empty` and `--node=<cs_name>`
+
+Two stages that replace the chapter world when the chapter world is not the thing under test.
+
+**`--stage=empty`** — a third branch in `StartSession` beside the world build and the parked plane:
+`src/Mech3/EmptyStage.cs` builds a flat 20 km ground plane under a **grid drawn pixel-by-pixel in
+code** (256² texture, 100 m squares, tiled 200×; nothing committed, nothing extracted) plus one
+sunk `BoxShape3D` whose top face is y=0, and `_worldMode` goes false so `gamezPath` resolves to
+planes.zbd instead of a chapter. No mission setup, no clutter, no animation program, no weather, no
+skydome, no edge extender. The plane starts over the grid origin at 300 m; `--pos`/`--direction`
+still win; `--freecam --stage=empty` gives the plane-less grid.
+
+*Measured.* Warm, three runs each: `[perf] startup mode=fly stage=empty total=1951.0/1939.4/1992.5
+boot=1019/1075/1122 gamez≈490 world≈20 plane≈150 first_frame≈48` against `--chapter=C1` flight's
+`total=4535.6/4474.2/4547.0` — the build alone (`total − boot − first_frame`) is 877/821/824 ms vs
+3355. A scripted dive with `--fire` logs guns hitting the plane: `impact: wep_40 (40slug) -> Default
+at (7,0,-780) on ground/col` (8 of 8 on `ground/col`), then `CRASH into ground/col (fuselage)
+impact=(1,0,-310) spd=138 m/s`. Rockets work too — `--fire-rockets` logs `wep_06 (BOOM) -> Default
+at (-4,0,-557) on ground/col`, and one that reached RANGE first detonates in mid-air (`on /`) as it
+does anywhere. Two `--det` runs of the same scripted flight are **0 of 921,600 px** apart.
+
+*Two limits, both because there is no chapter gamez:* rockets fly without their FLYOUT body model
+and pylons carry no mounted ordnance (the prototypes live in the chapter world; `ProjectilePool`
+already null-returns them in any world-less mode), and there is no world-effects runtime, so an
+impact draws the spark fallback rather than a named puffer effect. Documented in `docs/cli.md`.
+
+**`--node=<cs_name>`** — `WorldBuilder.BuildNode` slices one named subtree instead of walking the
+world, placed at its **world** transform (`GameZ.WorldTransformOf`, not its own `Local`). Matching
+is on the source name with the `.flt` suffix optional (rule 60); duplicates are normal, so the whole
+match list is logged (`hk_zep#3145`), the first is built, and ambiguity warns. A miss lists the names
+containing the request and quits cleanly — `--node=zeppelin` → `rock_zeppelin, tilt_zeppelin,
+move_zeppelin`, exit 0; `--node=qqzzxx` says nothing contains it either. Three steps are switched
+off: mission setup (it would switch the subject off — C1/IA1 hides `hk_zep`), clutter, and the
+origin-parked registration (`HideUnplacedEntities` would hide exactly the transformless vehicle a
+node run asks for). `--viewer --chapter=C1 --node=hk_zep` shows the zeppelin alone and framed;
+`--anim-lab --node=ap_radiotwr --play-anim=radiotwr_destruction` plays its destruction on the tower.
+
+**The anim-bind audit — the open half the plan flagged as direction-sound — found no throw and two
+silent degradations that look identical from outside.** `AnimRuntime.Bind` never throws on a mostly
+absent world: a def whose NAME resolves nothing gets `Anchors() == []` and is `continue`d, so *no
+handler ever fires*; a def that IS anchored but names a node the build skipped bumps `_opsUnresolved`
+and dispatches into nothing, so *the node is not here*. Both leave a still object, which is rule 47
+exactly. The bind now runs an opt-in per-definition census (`ReportResolution`, set only for a node
+stage) that separates them and names the cause: measured on C1 `--node=hk_zep`, `bind census
+defs=813 anchored_by_name=50 anchored_by_root_lift=0 root_lift_suppressed=0 unanchored=763
+target_missing_ops=134`, with every one of the 134 `why=index-not-built` (the compiled symbol table's
+gamez index was never built) rather than `name-no-match`.
+
+**The finding that changed code:** `MaxRootLift`'s premise is a *whole-world* node count, and a
+partial world inverts it. The 16-match cap exists so a generic `ANIMATION_ROOT_NAME` (`healthy`,
+217× in C1) cannot anchor a def onto every building — but a single subtree drops *under* the cap.
+C1's 20-node `ap_radiotwr` first bound **95 lifted defs and 91 phantom destructible instances**
+(`pass_plane01`, `air_gen`, `destroy_aagun32`, twelve crates …). `SuppressRootLift`, set only for a
+node stage, refuses the lift and prints the refusals: the same stage now binds 1 def and 2
+destructible instances, and the lab's picker lists what actually belongs to the subject. Standing
+rules: `docs/verification.md` 91.
+
+**A second trap, caught by the picture not the log:** the first framed `--node=` capture put the
+zeppelin at 50 px near the horizon. `OrbitCamera.MergedAabb` merges over the LIVE tree, and
+`MeshLab` parks three **empty** overlay meshes at the session origin — invisible for a parked plane
+or a whole world (both already contain the origin), but it stretched the subtree's box from 419 m to
+5.3 km and framed the camera 12 km out. `FrameCamera` now takes the box measured at build time from
+`WorldBuilder.DetachedWorldAabb` (built meshes + node transforms, valid before the subtree joins the
+tree — rule 28's own point). `docs/verification.md` 92. The anim lab's own auto-frame is also turned
+off on a node stage: re-aiming on every Play swung the camera off the only object present (measured
+— the tower left the frame on its own destruction; reproduced on the unchanged full-world path, so
+it is the lab's pre-existing behaviour, not a regression).
+
+**Inertness.** Both flags absent, five modes captured on the pre-C25 binary and on this one at the
+same `--det --frames=60`: `--freecam --chapter=C1`, `--viewer --plane=player_bhawk`, `--viewer
+--chapter=C1`, `--chapter=C1` (flight) and `--anim-lab --chapter=C1` are **md5-identical decoded
+pixels, 0 of 921,600 px** each. The compare is seen able to fail (rule 15): the node stage against
+the same pose differs by 18.30 %. Rule 11's proof that the baseline binary really was the old one:
+it ignored `--node=hk_zep` and produced a shot pixel-identical to plain `--viewer --chapter=C1`.
+8-chapter `--freecam` regression **sound-enabled** (no `--mute`), 150 frames each: **0 engine
+`ERROR:` lines on every chapter**. `.\RunTests.ps1`: `build PASS · units PASS 149/149 · engine PASS
+7/7, engine errors clean (1 allowlisted) · goldens TODO`, `result: PASS -- 21.8s total, exit 0`.
+
+*Flag guards, each exercised:* `--stage=empty --viewer` reports "has no gamez to inspect" and falls
+back to the parked-plane viewer; `--node= --fly` reports "is a single-subtree inspection stage" and
+takes the viewer; `--stage=lagoon` is reported, not guessed. `--stage=empty --players=2` builds the
+splitscreen rig and fans the pair abreast (`spawn [P1 override] pos=(0,300,0)` / `[P2 override]
+pos=(60,300,0)`).
+
+**Not verified.** No interactive pass — the node stage's orbit drag, the lab transport on a one-node
+world and the empty stage's feel at the controls are all unflown. The suppressed root-lift is right
+for an inspection stage by construction; whether some future consumer wants the lifted anchors back
+is a question this leaves open.
+
+## 2026-07-25 — PLAN-testing C26: flight camera views, held numpad + scripted `--view=`
+
+Holding a numpad key in `--fly`/`--stunt` snaps the camera to a fixed perspective around the plane
+and releasing returns to the chase view; `--view=<1-9>` pins the same perspective for a whole run.
+The layout follows the numpad's own geometry: 2 belly, 1/3 45° up from the belly to each side, 4/6
+level flanks, 7/9 45° above those flanks, 8 ahead looking back, 5 unbound. One table in
+`FlightController` holds each view's offset direction and image up **in the plane's frame**; the
+camera sits at the chase camera's own offset length (16.62 m) along that direction and takes its
+whole basis from `Attitude * Basis.LookingAt(-dir, up)` — no world-up LookAt anywhere, so a view of
+a banked plane shows a level aircraft against a tilted horizon exactly as the chase camera's basis
+slerp does. The snap is instant: a scripted capture must not depend on how many frames of catch-up
+it waited for. `--view=` is flight-only and warns otherwise; 5 and out-of-range warn and fall back.
+
+**The capture gap it closes.** Flight captures were chase-cam-only, so nothing under the wings or on
+a flank could be photographed in the air. Composed with C24 over C1 (`--no-fog
+--tex-override=blo_fusalagebottom`, the Bloodhawk's fuselage-bottom skin, on the same flying pose):
+**19,509 magenta px from `--view=2`, 1,287 from `--view=8`, 127 from the chase camera** — a 154×
+ratio that a chase-cam shot could not have passed (rule 15). The texture name itself came out of a
+`--view=2 --tex-census --no-fog` run, which is the census doing its documented job as the map.
+
+**Geometry, all eight views in one sweep** (`--stage=empty --hold=0.5,0.7,0.2,0.7 --frames=90`, so
+the plane is pitched, rolled and yawed away from the world frame). Logged plane-frame camera offset,
+read back off the camera's own transform, and the camera's forward axis in the same frame:
+
+| view | offset | dist | aim |
+|---|---|---|---|
+| 1 | (−11.753, −11.753, 0) | 16.621 | (0.707, 0.707, 0) |
+| 2 | (0, −16.621, 0) | 16.621 | (0, 1.000, 0) |
+| 3 | (11.753, −11.753, 0) | 16.621 | (−0.707, 0.707, 0) |
+| 4 | (−16.621, 0, 0) | 16.621 | (1.000, 0, 0) |
+| 6 | (16.621, 0, 0) | 16.621 | (−1.000, 0, 0) |
+| 7 | (−11.753, 11.753, 0) | 16.621 | (0.707, −0.707, 0) |
+| 8 | (0, 0, −16.621) | 16.621 | (0, 0, 1.000) |
+| 9 | (11.753, 11.753, 0) | 16.621 | (−0.707, −0.707, 0) |
+
+Every distance is exactly `√(16² + 4.5²)`, the chase offset's length, and every `aim` is exactly
+`−dir`, i.e. the camera looks at the plane. 90 lines per run, not one, so the pose is *held*. The
+line only exists while a view is active, so an ordinary chase flight logs nothing (measured: 0 lines
+without `--view=`, 0 with the rejected `--view=5`).
+
+**Inertness.** Flags absent, three poses captured on the pre-C26 binary and on this one at the same
+`--det --frames=`: `--chapter=C1` flight, the same with `--hold=0.5,0.7,0.2,0.7 --frames=120` (which
+exercises the chase smoothing), and `--stage=empty --plane=player_fury` — **md5-identical decoded
+pixels, 0 of 921,600 px** each. The compare is seen able to fail: the old binary ignores `--view=2`
+and returns the chase image, which differs from the new binary's `--view=2` by **97.39 %** of pixels
+at the same args. 8-chapter `--freecam` regression **sound-enabled** (no `--mute`), C26 flags absent:
+**0 engine `ERROR:` lines on every chapter**. `.\RunTests.ps1`: `build PASS · units PASS 152/152 ·
+engine PASS 8/8, engine errors clean · goldens TODO`, exit 0.
+
+**Key-collision audit.** No numpad digit was bound anywhere: the whole tree's key literals are
+WASD/QE/arrows/Shift/Ctrl/Space/F/G/H/R/P/T/Tab/Esc/F11/F12/`.` plus the labs' L/M/N/B/C/V/K/W (all
+`--viewer`/`--anim-lab`, none reachable in flight), and one `Key.KpEnter` in `MenuInput` — numpad
+Enter, a different key. `project.godot` declares no `[input]` map at all, so nothing is bound through
+actions either. The `Kp*` keycodes are used, not the top-row digits, which stay free.
+
+**Not verified, and not verifiable here.** The held-key half is correct **by construction** — the
+pinned and held paths share `ActiveView()`/`ApplyFixedView()` and differ only in the predicate — but
+live keypresses are not scriptable in this project. It also means `Input.IsKeyPressed(Key.Kp*)`
+needs **NumLock on** on Windows, which is documented rather than worked around. And the **fidelity is
+the user's to judge**: the distance, the 45° elevations and the instant snap are recalled from the
+original, not measured out of it. `OriginalScreenshots/` was checked and holds **no usable
+reference**: its one candidate, `Fury from above.png`, is a 460×374 *crop* of a plane seen from
+above-behind with no HUD and no horizon, so neither a distance nor an elevation can be read out of
+it, and it does not even establish which view (or the chase camera) it came from. The four videos
+are crash, dive-sound and tile-loading captures. Nothing was inferred from any of them. The
+magnitudes are filed in `backlog.md`'s TUNE list and `playtest.md` §3 pending the A/B.
+
+## 2026-07-25 — PLAN-testing C23: the golden-image tripwire
+
+**Landed.** `analysis/goldens/manifest.json` (11 pinned `--det` shots: command line, sim frame,
+raw-pixel md5, and what each one actually exercises) with its `README.md`; a `goldens` stage in
+`RunTests.ps1` with `-RegenGoldens` / `-SkipGoldens`; and `CSVM/src/Testing/GoldenShot.cs` behind
+one new line at the `--screenshot` save site — `[core] shot pixmd5=… size=… gpu=…`. The hash is md5
+over `Image.GetData()`, never the saved PNG (rule 36). The manifest holds hashes and commands only:
+no pixels, so it is asset-rule clean.
+
+**Goldens run as a scripted pass, not a B12 suite.** C24 flagged the constraint and it holds: the
+`--run-tests` harness completes every suite inside one `_Ready` call and never yields a frame, so
+nothing there can photograph anything. Eleven separate Godot launches from the script instead, each
+`<manifest args> --frames=N --screenshot=<abs> --log-file=<abs>` — which makes every manifest entry
+the literal command a human re-runs to reproduce one shot. Frame number and render size are checked
+**separately** from the hash, so a clock or window-size regression reads as itself instead of as
+"pixels moved". A mismatch names the shot and leaves the actual PNG plus that shot's own engine log
+in `.scratch/goldens/`.
+
+**The set.** The 8 chapters on pinned `--pos`/`--direction` (`c1-waterfall`, `c1b-night-sea`,
+`c1c-rain`, `c2-city`, `c2b-rain`, `c3-island`, `c4-snow`, `c5-city-night`), one `--viewer` parked
+plane (`viewer-bhawk`), one `--stage=empty`, and — new since A3 put the chase camera on the sim
+clock — one **flight** pose, `c1-flight`.
+
+**Rule 80 applied per shot, measured.** Frame N against N+1 on the same build, because a pose with
+no animated surface would pass even with the clock broken: `c1-flight` **34.52 %**, `empty-stage`
+**12.21 %**, `c4-snow` **3.74 %**, `c2b-rain` **3.47 %**, `c1c-rain` **2.50 %**, `c1-waterfall`
+**1.28 %**. The other five are geometry-and-shading shots and the manifest says so: `c1b-night-sea`
+0 px at N+1 but 1,156 px over 4 s (cloud-puff drift), `c2-city` 51 px, `c5-city-night` 11 px,
+`c3-island` 9 px over 4 s, `viewer-bhawk` 0 px at 30 vs 360.
+
+**Verified.** *Rule 14, twice, with the blast radius predicted before the run.* Perturbing the snow
+flutter constant (`sway_freq * 0.9` → `* 1.4`, snow-only by construction) moved **exactly
+`c4-snow`** and held the other ten; widening the precipitation near-fade (`smoothstep(0.0,
+near_fade, md)` → `near_fade * 2.0`, rain *and* snow) moved **exactly `c1c-rain`, `c2b-rain`,
+`c4-snow`** and held the other eight. Both reverted to green. *Stability:* two clean end-to-end
+`.\RunTests.ps1` runs, **11 of 11 hashes identical both times**, exit 0 — `build PASS · units PASS
+152/152 · engine PASS 8/8, engine errors clean · goldens PASS 11 shot(s) hash-identical`, 74.0 s
+total, the golden stage 53.4–54.2 s of it. No shot was unstable. *Regeneration:* `-RegenGoldens` on
+an unperturbed tree rewrites the file **byte-identically** (4,879 → 4,879 bytes, `Compare-Object`
+empty), so a real regeneration's diff is exactly the hash lines — with the snow perturbation active
+the diff is **one line**. It reports `REGEN`, never `PASS`, plus a `not checked:` line.
+*Cross-check:* the eleven committed hashes were measured by a standalone probe script and
+reproduced by the stage's independent code path on the first run.
+
+**The encoding bug the first regeneration found, now rule 97.** `Get-Content -Raw` decodes a
+BOM-less UTF-8 file as the system ANSI codepage in PowerShell 5.1, so the round-trip turned every
+em-dash in the manifest's prose into `â€”` (4,879 → 4,894 bytes). Reading through
+`[System.IO.File]::ReadAllText` fixes it; rule 68's other half.
+
+**Stray-Godot scoping (rule 66) is now per stage.** `Stop-StrayGodots` takes the marker to match:
+`--run-tests` for the engine stage, the `.scratch\goldens\` output path for the goldens. Both are
+arguments only this script's own launches carry, so a live playtest or a hand-run capture to any
+other path is reported and left alone.
+
+**Known non-coverage, stated rather than papered over.** No pose moves more than 9 px across a full
+`TextureCycler` cycle — the water flipbooks differ by ~2/255 (rule 32) — so goldens cannot be their
+instrument and `--debug-anim` stays it. C1B's four UV-scroll models (the wakes) were not located and
+are unrepresented; C1's and C4's scroll covers that surface instead. Sound is muted in every shot,
+and splitscreen, the launchscreen and the labs have no shot at all. Every hash is a property of this
+machine's GPU (`NVIDIA GeForce RTX 5080 / 1.4.341`, recorded in the manifest): a driver change
+legitimately moves all eleven, and the stage prints `GPU CHANGED` when the running adapter differs —
+the one case where regenerating is the right answer. Standing rules: `docs/verification.md` 95–97.
+
+## 2026-07-25 — `--det` stops reading the git-ignored dev tuning file
+
+**What this was.** The golden tripwire fired on its first real merge: `c1-flight` moved while the
+other ten shots held. The cause was not the change under test. `CSVM/config.json` is git-ignored
+(`.gitignore:49`) and carries 15 tuning overrides, **all of them `flightModel`** — so a capture that
+honoured it was a function of one machine's uncommitted state. The shot reproduced as
+`ec35b99d…` in the tree that captured it and `f0493fb0…` in any worktree, and only the flight shot
+could notice, which is exactly the pattern observed.
+
+**Diagnosis.** Reverting the merged change's own source in the worktree still gave `f0493fb0…`,
+which ruled it out; running the identical command in both trees with the same data root and GPU gave
+the two different hashes; `config loaded overrides=15` in one log and no such line in the other named
+the cause.
+
+**Fix.** `Config.ClearOverrides()`, called when the `--det` bundle resolves, so a deterministic run
+takes in-code defaults. The bundle line now carries `config=defaults dropped_overrides=N`. Capture
+with local tuning applied by passing `--no-det`.
+
+**Verified.** The same command now yields `f0493fb0…` in **both** trees — main dropping 15 overrides,
+the worktree dropping 0. The manifest was regenerated with exactly one hash changed (`c1-flight`),
+which is the shot the cause predicts; the other ten regenerated byte-identically. Landed as
+verification rule 98.
+
+**Worth keeping.** The tripwire earned its place on its first outing — it caught a reproducibility
+hole in itself that no other instrument here would have surfaced.
+
+## 2026-07-25 — Shared click-selection with a `cs_name` ancestor ladder (PLAN-testing D31)
+
+**What landed.** `CSVM/src/UI/SelectionService.cs`: in `--freecam` and `--anim-lab`, left-click
+picks the mesh under the cursor and PgUp/PgDn (Home/End) walk its `cs_name` ancestry from that leaf
+up to the placed world object. A breadcrumb HUD line names every rung with the current one bracketed
+and its world-frame box; an `ImmediateMesh` wireframe outlines the current rung's subtree.
+`Current`/`Ladder`/`Level`/`CurrentBox` + a `Changed` event are the session state D32–D35 bind to.
+`--debug-select=x,y[,up]` is the scripted twin. `AnimLab` no longer picks — its `PickObject`/
+`RayAabb` moved into the service and its camera-follow now tracks the selection's current rung.
+
+**The picking audit, which the rest of Wave D inherits.** The lab's click-to-follow was never a
+physics raycast — it could not be, since `WorldSession.Options.Collision` is flight-only (rule 72)
+and these modes build no bodies at all. It is a manual **ray-vs-AABB scan over the visible
+`MeshInstance3D`s** under the world root: `ProjectRayOrigin`/`ProjectRayNormal` for the ray, each
+mesh's own AABB tested in its local frame (the affine inverse keeps the ray parameter equal to the
+world distance, so it compares across nodes), nearest hit wins, one walk per click. Two properties
+carried forward verbatim: it is **AABB-accurate, not triangle-accurate**, and a 350 m
+world-AABB-diagonal cap skips map-scale meshes — which is what stops every click landing on terrain,
+and equally means **terrain is unselectable**. A click that finds nothing now says so
+(`select miss … tested= skipped_oversize=`) instead of going quiet.
+
+**Verified.** The zeppelin case, `--freecam --chapter=C1 --mission=M04 --pos=-4848,200,-5165
+--direction=-1,0,0 --debug-select=852,360`, clicking an engine nacelle: the ladder is
+`g15 < l5 < healthy < lk_rightengine01 < lkgasbag01 < zfronthalf < rock_zeppelin < noserotate <
+hk_zep` — motor to main node, **nine** rungs, which is why Home/End exist. The outermost rung's box
+reads `centre=(-5248.0,199.8,-5164.6) size=(94.3,72.7,418.6)`, matching C25's independently measured
+`DetachedWorldAabb` for the same node exactly, and it wraps the hull in the capture. Rule 60: the
+second `box_car.flt` of C1's cargotrain logs `cs_name=box_car.flt godot=@Node3D@5` while the first
+logs `godot=box_car_flt`, so the ladder is unreadable from Godot names and correct from `cs_name`.
+Inertness: four `--det` poses (C1/M04 zeppelin, C4 default freecam, the C1 cargotrain anim-lab node
+stage, C1 default freecam) are raw-pixel md5-identical to the pre-change build, 0 of 921,600 px on
+the decoded compare; the same pose **with** `--debug-select` differs 1.32 %, so the compare was seen
+able to fail. 8-chapter sound-enabled `--freecam`: 0 errors beyond the known pre-existing C3
+`!is_inside_tree()`. `.\RunTests.ps1` PASS — 152 units, 8 suites, 11 goldens hash-identical, exit 0;
+no golden moved, which is the expected result for an overlay that draws nothing unasked.
+
+**Not verified here.** The interactive half — the actual click, the PgUp/PgDn feel, whether the
+breadcrumb reads at a glance while flying the freecam — is unscriptable in this project
+(`docs/verification.md`, "what this project cannot verify itself") and is the user's call;
+`playtest.md` carries it. `--debug-select` exercises the same `PickAt`/`StepUp` entry points the
+mouse and the keys call, so only the event binding itself is by construction.
+
+
+## 2026-07-25 — C22: the perf suite, its A/B, and a measured noise floor
+
+**What landed.** `RunTests.ps1 -Perf`: five scenarios from the committed
+`analysis/perf/scenarios.json` — `empty-stage`, `c1-flight`, `c2b-water`, `c4-terrain`, `c5-city` —
+each run `--det --perf --no-vsync --mute` for **300 sim frames** × 3 launches, medians appended as
+one JSON line per scenario to the git-ignored `perf-history.jsonl` at the repo root. `-PerfLabel` /
+`-PerfCompare` are the A/B: label a baseline, flip the one line under test, rebuild, run again
+paired. The run length is a *frame count*, ended by `--frames=N --screenshot=`, whose saved-shot line
+prints `sim_frame=N` — the count is proved, not assumed. The first launch of each scenario and the
+first window of each kept launch are discarded (cold cache, first-draw shader compilation).
+
+**Engine side.** `--perf`'s window became 60 rendered frames instead of one wall second (a
+wall-second window makes the sample count a function of the frame rate, which a paired comparison
+cannot have), its line became flat `key=value` on the `perf` category, and it gained `prims`,
+`nodes` and `mem_mb` next to `draws`. New `--no-vsync` (vsync off + `Engine.MaxFps 0`), inert unless
+passed: at the refresh cap `script_ms` collapses onto the frame time — `--stage=empty` read 17.00 ms
+against C4's 17.20 ms with **11× the draw calls** — and uncapping steadied `gpu_ms` (C4 0.47–2.26 ms
+→ 0.36–0.37) and halved the wall time. It changes no simulation: the `empty-stage` golden hash holds
+with it on, because the fixed clock steps once per *rendered* frame.
+
+**The noise floor, measured before anything was believed (rule 7) and then re-measured (rule 8).**
+Suite run twice unchanged: counts identical to the digit, `render_cpu` within 3.3 %, `gpu` within
+1.4 % on a fixed camera and 17.3 % on the moving one, startup phases within 10.5 %. The **next**
+unchanged pair was two to three times noisier (startup to ±14.8 %) and flagged five same-build rows
+against a band calibrated on the first pair. Hence the shipped marker needs **both** a relative band
+and an absolute floor — rule 41 made mechanical, since 0.045 ms of jitter on a 0.26 ms `gpu_ms` is a
+17 % ratio and no difference. All three recorded same-build pairs now produce zero marks.
+
+**Perturbation (rule 14/15: the instrument seen able to fire).** One line in `Clutter.cs` — the
+tiling period halved — built, run, reverted. Predicted before running: `empty-stage` must not move;
+`startup.clutter` must rise on the world scenarios. Held: `startup.clutter` ×1.70 (C4) and ×2.26
+(C5), `startup.edge` ×2.07 (C5), `prims` ×2.03 and ×2.92, `gpu_ms` ×2.95 on C5 — and **`empty-stage`
+did not move on a single metric**. `prims` tracked the real instance count to a few percent (C4
+sprites ×2.26, C5 ×2.90). Two predictions failed, both mechanism: `nodes` did not move on C5
+(clutter placements live in MultiMesh buffers, never as nodes, on the solid path too), and
+`c1-flight` moved *downwards* — halving the period re-scatters C1's cell offsets rather than
+multiplying them, 9,303 sprites → 8,253, which `prims` also tracked (×0.94). After the revert, a
+fourth pair against the pre-perturbation baseline was clean.
+
+**Refused, with the reason printed on every A/B.** `fps`/`frame_ms` (paced — floors, rule 38),
+`script_ms` (`TIME_PROCESS`, ~2.2× real per rule 37, and pinned when the loop is paced),
+`physics_ms`, `mem_mb`. `physics_ms` is the one worth naming: it is empty **by construction** under
+`--det` — 0.01–0.04 ms in every scenario — because the fixed clock is parent-driven, so
+`_PhysicsProcess` consumers no-op and collision cost lands in `script_ms`. Rule 38's "read `physics`
+for collision" does not survive contact with `--det`.
+
+**Verified.** `.\RunTests.ps1 -Perf` green end to end: build, **152 units**, **8 engine suites**
+(errors clean), **11 goldens hash-identical** — the goldens are also the proof the engine changes
+are inert when their flags are absent — and perf 5/5, exit 0, 161 s. `perf-history.jsonl` grew five
+lines per run and is git-ignored (`git check-ignore` confirms).
+
+**Residuals.** Even uncapped this machine paces at exactly 120 fps from outside the engine (driver
+or compositor — not diagnosed), so `fps`/`frame_ms` remain floors; nothing in the suite sees a pure
+C#-sim regression that stays under that cap. `c2b-water`'s `clutter` phase (3.6 ms) is below the
+stage's 15 ms absolute floor, so even a 4× there would go unmarked. Splitscreen, the launchscreen,
+the labs and audio are unmeasured. Standing rules: `docs/verification.md` 100–102.
+
+## 2026-07-25 — The node lab: tree, search, dependencies, destructibles (PLAN-testing D32)
+
+**N opens a dockable panel in `--freecam`/`--anim-lab`** — `src/UI/NodeLab.cs`, plus four read-only
+accessors on `AnimRuntime` (`AnchorsOf`, `FindNodes`, `HandledEventKinds`, `PartialEventKinds`),
+`SelectionService.SubtreeWorldAabb` made public, and the wiring + `--debug-nodelab[=spec]` in
+`PlaneViewer`. It absorbs **M3's F41** (destructible list + camera jump + coverage columns), which
+the plan's Wave-F overlap table already marked superseded. Nothing else in the tree changed.
+
+**What it holds.** The world's node tree by `cs_name`, populated **one branch at a time** on expand;
+a search box over a once-built flat name index; two-way sync with D31's selection (world click →
+tree row, tree row → selection, double-click frames); Frame (`SpectatorCamera.Frame`/`FollowNode`)
+and Hide/Show (`Visible` flip only); a dependency readout for the current rung; and a destructibles
+view with F41's two coverage columns.
+
+**Verified — the water tower, quoted from the run**
+(`--freecam --chapter=C1 --det --mute --debug-nodelab=node=ap_h2otwr1,deps`):
+
+```
+nodelab select name='ap_h2otwr1' → 'ap_h2otwr1' matches=1 exact=True candidates=[ap_h2otwr1]
+nodelab deps anim defs anchored_here=2 naming_this_node=0
+nodelab deps anim def=h2twr_destruction1@ap_h2otwr1 rel=anchor activation=WeaponHit health=60
+   source=compiled seqs=[DAMAGE_SEQUENCE destroy_h2twr (unnamed) ×4 h2twr_puffer]
+nodelab deps destructible pool def=h2twr_destruction1@ap_h2otwr1 hp=60/60 state=Healthy stage=0
+   authoritative=True source=compiled
+nodelab deps destructible DAMAGE_SEQUENCE def=h2twr_destruction1@ap_h2otwr1 events=6 thresholds=2
+nodelab deps geometry meshes=5 surfaces=12 materials=6 textures=h2otwr02.tif, h2otwr01.tif, …
+nodelab deps colliders NOT BUILT IN THIS MODE — --freecam/--anim-lab build the world with no
+   collision at all, so an empty list here would be the missing instrument, not missing colliders
+```
+
+Both pools show — the compiled `ap_h2otwr1` def (authoritative) and the reader's `ap_h2otwr*`
+wildcard — which is the registry's per-`(def,anchor)` keying made visible.
+
+**Verified — totals equal the `destructible-census` suite.** Full C1 reports
+`defs=132 instances=267 node_groups=196 unresolved_defs=12`, C5 `instances=568 node_groups=292` —
+the suite's committed numbers, reached through a different code path (the panel joins the program's
+`HEALTH>0` defs to the registry; the suite reads `Count`/`DistinctAnchors`).
+
+**Verified — the C25 phantom case does not appear as real.** On `--anim-lab --node=ap_radiotwr`
+the view reports **`instances=2 node_groups=2`**, not the 91 phantom instances the root-lift
+heuristic would have produced, and prints a red `PARTIAL WORLD` banner carrying the bind census
+(`root_lift_suppressed=95`) above the list. 131 of C1's 132 destructible defs then read `UNRESOLVED`
+— correct for a 20-node slice, and stated rather than hidden.
+
+**Verified — the collider notice is a notice, not an empty list, and the branch behind it works.**
+With `collisionBuilt` and `WorldSession.Options.Collision` temporarily forced on in freecam (flipped,
+built, measured, reverted — rule 10), the same node reads `colliders bodies=4 shapes_enabled=1
+shapes_disabled=3`, the rule-73 direction split. `collisionBuilt` is wired to the real option and is
+false in every mode this lab runs in today; D35's `--collision` is what flips it.
+
+**Verified — inertness, and the compare seen able to fail.** `.\RunTests.ps1` PASS: 152 units,
+8 engine suites, **11 goldens hash-identical**, exit 0, 72.7 s. The same C1 waterfall pose with the
+panel open hashes `84af3759…` against the golden's `0bb2532d…`, so a golden could have caught it.
+8-chapter sound-enabled `--freecam` (`--quit-after 240`, flags absent, full-log grep): **0 errors in
+seven chapters**, the known pre-existing C3 `!is_inside_tree()` ×1 in the eighth.
+
+**Verified — perf, panel open in the C5 city** (`RunTests.ps1 -Perf -PerfFilter c5-city`, paired
+A/B against the same build with the flag absent, read against C22's committed bands):
+`render_cpu_ms` 1.035 → 1.045 (×1.010), `gpu_ms` ×0.988, `prims` ×1.000, `nodes` +31, `draws`
+1192.1 → 1214.1 (×1.018 — **the panel's own 22 UI draw calls**, the only marked verdict metric),
+`startup.rest` +33 ms for the panel build. `frame_ms`/`fps` are pinned at this machine's 120 fps
+pace and are floors (rule 38), so a sub-5 ms CPU cost hiding under the cap is not ruled out.
+A first A/B with the *dump* also running read `script_ms` ×2.877; isolating the panel with the new
+`--debug-nodelab=open` token took it to ×1.162, which is what identified the spike as the one-off
+dump rather than a per-frame cost.
+
+**Deviations from the item text.** (1) The camera is `SpectatorCamera.Frame`/`FollowNode`, not
+`OrbitCamera`'s — the orbit camera is `--viewer`-only and this lab is freecam/anim-lab-only; the
+API is the same shape. (2) A branch is capped at 500 rows: C5's world root has **557** named direct
+children, and an uncapped root branch would defeat the laziness the tree exists for. The overflow is
+a row that names the count and points at the search box. (3) `--debug-nodelab` grew a
+`node=<cs_name>` token, because a scripted run has to reach a *known* node and a screen-position
+pick cannot name one; it goes through the tree's own `Select`, which is also how anything over the
+350 m pick cap is reached (demonstrated on C5's `z3terrain`, a 512×0×512 box).
+
+**Residuals.** The interactive half is unverified here — live mouse and key input are unscriptable
+in this project, so N, the expand arrows, the search field, the buttons and the two-way click sync
+are exercised only through `--debug-nodelab` and by construction; the panel's feel and the tree's
+usability are the user's call (`playtest.md`, beside D31's zeppelin case). The panel's layout was
+checked at 1280×720 only, where the anim lab's variant is cramped between the breadcrumb and the
+timeline. The name index is a snapshot taken on first search; freed nodes are skipped at query time
+rather than triggering a rebuild.
+## 2026-07-25 â€” Mesh lab on the selection (M) + collider wireframes (C), `--collision` (PLAN-testing D33 + D35)
+
+**What landed.** `MeshLab` is no longer viewer-only: given a `SelectionService` it becomes the
+*scoped* lab, and **M** in `--freecam`/`--anim-lab` attaches every overlay and override to the
+selected rung's subtree, restoring it exactly on M again, on a selection change, or on a
+deselection. New `src/UI/ColliderOverlay.cs` draws every built collider as a colour-coded
+wireframe on **C** (world / water / buildings / clutter / plane / other), and `--collision[=show]`
+forces the collision build in the modes that build none. `SelectionService.OverlayMeta` is the new
+"this is a drawing, not content" marker both tools use, skipped by the pick and by the box
+measurement. `SpectatorCamera`'s undocumented C-descends alternate moved to Z (the camera polls raw
+key state, so sharing C descended on every overlay toggle).
+
+**The rule-56 answer: the override materials are now the surface's own shader, edited.** The old
+hand-written replica could only stand in for the *aircraft's* shaded variant; a world surface's
+shader carries `unshaded`, the sRGB vertex modulate, LIGHT_STATE spill, cylindrical fog, UV scroll
+and its alpha term, and rendering it through the replica would have re-lit the very thing under
+inspection. `DerivedShader` rewrites two things in the original text â€” the cull token in
+`render_mode`, and a `csky_lab_normal_mode` block injected at the top of `fragment()` â€” and copies
+every uniform by name. Measured with the new `--debug-mesh=force` (build the overrides at the
+data's own settings, the able-to-fail control): **0 px** change against the shipped render on both
+the C1 water tower and the parked Bloodhawk (the viewer's 960-px delta is the panel's own status
+line), where the replica path moved **1,682 px** of the tower's ~2,500 px. `verification.md` 104.
+
+**Verified.** C1 freecam, `--pos=-6140,185,-4340 --direction=0.71,-0.17,0.68`, pick at (640,360)
+walked 4 rungs to `ap_h2otwr1` (12 surfaces, 264 tris, 12 fullbright): overlays on moved **1,278 of
+921,600 px, every one inside the tower's own 31Ã—81 px rect** â€” the identical second tower 250 px
+away untouched; `--debug-mesh=â€¦,restore` (attach then detach) returned the exact pre-toggle md5
+`33e2beâ€¦`; `cull=inverted` moved **626 px, max delta 89**, all inside the same rect (able to fail),
+and 3.88 % of the frame on the parked plane. C2 with `--collision=show`: 1,848 node-backed shapes
+(the same count rule 72 measured) + 10kâ€“14k clutter placements, `switched on 521 Â· switched off
+1349`; with `--destroy=gate1`, `on 528 Â· off 1342` â€” the two directions reported separately, never
+the +7 net, and `--damage-test=gate1 --damage-hd=25` independently reads `col[off 1, on 8]`. The
+gate's lintel wireframe is one healthy box before and three wreck-piece boxes after. A live
+in-run flip logged itself on the propane chain: `switched OFF 4: tbridg2a, tbridg2b, tbridg1a,
+tbridg1b`. Without `--collision`, `--debug-colliders` prints the notice once and the only pixels
+that move are its 306Ã—51 px text. `--collision` startup, warm, 3 runs each (C2 freecam): total
+2,462 â†’ 3,106 ms, `world` 352 â†’ 865, `clutter` 47 â†’ 56 â€” the clutter BVH is no longer the dominant
+term rule 39 measured (C5: 3,188 â†’ 4,304, `world` 448 â†’ 1,240). 8-chapter `--freecam` regression
+with sound on: zero errors bar C3's known `!is_inside_tree()`. Overlay cost, C4 at the golden pose
+(`--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu` 1.05 → 1.42 ms. `.\RunTests.ps1` green â€” 152 units,
+8 suites, **11 goldens hash-identical**, which is the inertness proof for both flags absent.
+
+**The bug the first cut had, and its rule.** Scoped normal lines drew 163 m spikes across the whole
+chapter: `BoundingRadius` was `max |v|`, and a world subtree's vertices are absolute under an
+identity node transform, so the tower "measured" 7,420 m â€” its distance from the map corner. Now
+the geometry's own box half-diagonal (`verification.md` 103). Also: one `ImmediateMesh` surface per
+*body*, not per shape â€” a C2 clutter region carries thousands of placements and the cap is 256.
+
+**Residuals.** Every keypress half is by construction (live input is unscriptable here): M, C, the
+light steering, and re-targeting the lab by clicking something else while it is attached â€” all in
+`playtest.md`. The overlay's counts are pose-dependent (the map-edge extender adds clutter bodies),
+big trimeshes draw as bounding boxes over 2,000 tris, and `--viewer` binds no C overlay because C
+is the mesh lab's cull cycler there (it says so when `--collision` is passed).
+
+
+## 2026-07-25 — The world damage lab: HP slider, kill and reset on any destructible (PLAN-testing D34)
+
+**H opens a panel in `--freecam`/`--anim-lab` that damages whatever the shared selection is on** —
+`src/UI/WorldDamageLab.cs`, plus `DestructibleRegistry.PoolsOn`, three census helpers lifted out of
+`Probes.Damage` into `Probes` (`EnabledColliders`, `WorldRootOf`, `CountVariants`), a shared
+`PlaneViewer.EnsureWorldEffects` that `--destroy` now goes through too, and
+`--debug-damage[=script]`. In `--viewer` H still means the parked aircraft's `DamageLab`; the two
+never exist in the same session. **This supersedes M3's F40**, which the Wave-F overlap table already
+marked; `backlog.md` holds no F-reference to delete.
+
+**What it holds.** Every destructible pool on the selected node (or the enclosing one a hit would
+reach), each with live HP, state and damage stage; on the reachable one a slider, Kill and Reset
+driving `AnimRuntime.DamageAt` / `ResetDestructible`. The slider is **absolute HP** — down spends the
+difference through the weapon-hit path, up runs `ResetDestructible` and re-damages, because the model
+has no healing. A kill reports the swap and the collider census **pre-tick** (synchronous) and the
+debris **post-tick** (scheduled).
+
+**Only one pool per object is drivable, and that decided the UI.** C1's `ap_h2otwr1` carries two
+pools with independent 60 HP — the compiled `h2twr_destruction1@ap_h2otwr1` and the reader wildcard's
+`h2twr_destruction*@ap_h2otwr*` — and `DamageAt` re-resolves through `DestructibleRegistry.Resolve`,
+so health spent on the twin drains a pool nothing can ever hit. Every pool is listed; only the
+reachable one carries controls, the rest carry the reason, and a scripted `pool=2,kill` is refused
+out loud. New verification rule 103.
+
+**Verified — the scripted sequence, quoted from the run**
+(`--freecam --chapter=C1 --det --debug-damage=node=ap_h2otwr1,hp=30,kill,tick=3.5,reset,kill`):
+
+```
+damagelab pool=1/2 def=h2twr_destruction1@ap_h2otwr1 source=compiled anchor=ap_h2otwr1
+   hp=60/60 state=Healthy stage=0 drivable=True
+damagelab pool=2/2 def=h2twr_destruction*@ap_h2otwr* source=reader anchor=ap_h2otwr1
+   hp=60/60 state=Healthy stage=0 drivable=False
+damagelab hp   … spent=30 hp=60→30 stage=0→1 state=Damaged started=[sputter_black_smoke_obj]
+damagelab kill … hp=30→0 state=Destroyed started=[sputter_fire_smoke_obj h2twr_destruction1]
+damagelab kill swap healthy=0/1 shown destroyed=1/1 shown (immediate, pre-tick)
+damagelab kill colliders off=1 on=3 (counted separately — the net hides a real removal)
+damagelab kill debris=0 sounds=0 (immediate, pre-tick — the death's debris motion is SCHEDULED)
+damagelab tick advance=3.5s debris=+2 sounds=+0 (scheduled state, post-tick)
+damagelab reset … hp=60/60 state=Healthy stage=0 swap healthy=1/1 shown destroyed=0/1 shown
+damagelab kill … hp=60→0 state=Destroyed started=[sputter_fire_smoke_obj h2twr_destruction1]
+damagelab kill swap healthy=0/1 shown destroyed=1/1 shown (immediate, pre-tick)
+damagelab kill colliders off=1 on=3 (counted separately — the net hides a real removal)
+```
+
+The second kill is line-for-line the first — the C28 idempotency check, now interactive. Colliders
+are reported as `off=` and `on=` and **never as the +2 net** (rule 73); the debris is read before and
+after the tick (rule 75), and reads 0 then +2 because the `OBJECT_MOTION` is scheduled at t≈2.2 s
+while the whole script runs inside one frame.
+
+**Verified — the panel agrees with the headless twin, number for number.**
+`--damage-test=ap_h2otwr1 --damage-hd=60` reports `swap[healthy 0/1 shown, destroyed 1/1 shown]`,
+`col[off 1, on 3]`, `debris[2 launched]`, `snd[0 played]`, `reset[healthy=✓ (h1/1,d0/1), rekill 1h ✓]`
+and `hit 1 → sputter_fire_smoke_obj, hit 1 → h2twr_destruction1`. Two code paths, one set of numbers —
+which is what the shared `Probes` census helpers are for. (`snd 0` is the tower's own data: its death
+authors no `Sound` event. C1's `m_build01` reads `sounds=2`, `debris=7`, `col[off 1, on 10]`.)
+
+**Verified — rule 72's notice is a notice, not an empty list.** `--debug-damage` forces the collision
+build on, the `--damage-test` precedent, one `||` in the same expression. With that force temporarily
+removed (flipped, built, measured, reverted — rule 10) the same kill prints
+`colliders NOT BUILT IN THIS MODE — this world was built with no collision at all, so a census here
+would read zero and lie about what the death removed`.
+
+**Confirmed, not assumed: the freecam build does NOT wire M3's world-effects runtime.**
+`BuildWorldEffectsRuntime` runs in `--fly`, `--effects-test` and under `--destroy`; a plain
+`--freecam` builds none, and the world runtime's puffer factory is torn down after the bootstrap
+(rule 76). The lab now asks for it on its **first damage action** (nothing built until then), and a
+`m_build01` kill renders its `great_balls_of_fire` in freecam — captured. **It is not a blanket
+fix:** that runtime binds a fixed 28-name closure, and the tower's progressive stages
+(`sputter_black_smoke_obj`, confirmed in `extracted/C1/cam_anim` as a `PUFFER_STATE` def) and its own
+`h2twr_puffer` sequence are not in it, so they fire, log, and draw nothing outside flight. Rule 76
+now carries that.
+
+**Verified — inertness.** `.\RunTests.ps1` PASS: 152 units, 8 engine suites, **11 goldens
+hash-identical**, exit 0, 78.8 s. Eight of those eleven are `--det --freecam` poses whose hashes were
+committed before this change, which is the byte-identity claim; the compare is seen able to fail —
+`c1-waterfall` with `--debug-damage=open` hashes `e790256d…` against the golden's `0bb2532d…`.
+8-chapter sound-enabled `--freecam` (`--quit-after 240`, flags absent, full engine-log grep):
+**0 errors in seven chapters**, the known pre-existing C3 `!is_inside_tree()` ×1 in the eighth.
+
+**Residual: the interactive half is unverified.** H, the slider drag and the Kill/Reset buttons run
+through `--debug-damage` and by construction only — live mouse and key input are unscriptable here —
+and the layout was checked at 1280×720 alone. `playtest.md` §9, beside D31's and D32's checks.
+
+## 2026-07-25 — PLAN-testing complete and archived
+
+All 18 items landed (Waves A–D) and the plan moved to `docs/plans/` with a `COMPLETE` banner and a
+`plans.md` row. `--det` runs are byte-identical frame-for-frame in every mode including flight;
+`.\RunTests.ps1` is the single entry point (build → 152 units → 8 in-engine suites → 11 golden
+hashes → one exit code); the inspect layer — click-selection with a `cs_name` ancestor ladder, the
+node lab, the mesh lab scoped to a selection, collider wireframes and world damage sliders — is in
+freecam and the anim lab. M3's F40 and F41 are absorbed.
+
+**What the plan changed about how this project verifies itself.** Twenty-five new
+`docs/verification.md` rules (78–105), most of them written because an instrument was caught
+lying mid-item rather than after the fact. The tripwire earned its keep on its first real merge by
+failing on a golden that moved for a reason nothing else could have surfaced: `--det` was reading a
+git-ignored dev tuning file, so every capture was a function of one machine's uncommitted state.
+
+**What is owed and cannot be done here.** Every interactive half — the clicks, the ladder keys, the
+panels' feel, the numpad camera magnitudes, the flight-model tuning — is unverifiable in this
+project and sits in `playtest.md` §9, with D31's zeppelin case as the acceptance test the plan
+itself named as the user's call.
+
+## 2026-07-25 — Scripted runs stop stealing the desktop
+
+**The complaint.** A test run repeatedly took the foreground while the user was working. A full
+`RunTests.ps1` launches the engine ~19 times, so the milestone's own tooling had made this much
+worse than it used to be.
+
+**What it was not.** Godot exposes no CLI flag for this, and project-setting overrides on the
+command line are silently ignored — measured by overriding `viewport_width` and getting the same
+1280x720 capture and the same pixel hash. The existing `--no-focus` set `WindowFlags.NoFocus` from
+`_Ready`, which is after the window exists and has already activated; clearing or setting the flag
+then hands nothing back.
+
+**Diagnosis, and a wrong turn worth recording.** A first probe attributed windows by title and
+reported that the non-console Godot build never steals focus (0 of 52 samples). That was an
+instrument failure: the baseline window it compared against was another `CSVM (DEBUG)` session, so
+the thief was indistinguishable from the starting state. Re-attributing by **process tree** — the
+console build spawns three processes — gave the real figures: console 5 of 7, non-console 13 of 16.
+Landed as rule 106.
+
+**Fix.** `display/window/size/no_focus=true` in `project.godot` creates the window unfocused, and an
+interactive session asks for focus explicitly. The engine cannot take it back itself (Windows'
+foreground lock no-ops that, measured 0 of 120), so `RunGame.ps1` and `RunDev.ps1` hand the
+foreground over from the launching console, which is permitted. Rule 107. `RunTests.ps1` additionally
+moved to the non-console binary, which required an `Invoke-Godot` helper that waits: PowerShell does
+not block on a GUI-subsystem process, and gives it no stdout.
+
+**A second bug the change exposed.** With every launch returning instantly, the engine stage reported
+**PASS** while producing no report at all — a run that never started read as green. A missing report
+is now a FAIL, on the same principle as the SKIP rows: absence of a result is not a result.
+
+**Verified.** Full `RunTests.ps1` under a process-tree focus probe: **0 of 158 samples**, with the
+suite green throughout (152 units, 8 engine suites, 11 goldens hash-identical, exit 0). `RunGame.ps1`
+still takes focus where the unpatched engine-side grab did not.
+
 ## 2026-07-25 — Design-document cross-check: five doc corrections + five readers decoded
 
 **Landed.** Read the original pre-release design document against the shipped extraction and

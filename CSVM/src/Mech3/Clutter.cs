@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -257,13 +258,13 @@ public sealed class ClutterBuilder
         var root = FindTemplateRoot(name);
         if (root == null)
         {
-            GD.Print($"clutter: template '{name}' not found in gamez");
+            Log.Info("world", $"clutter template not in gamez template={name}");
             return null;
         }
         var ground = FirstWithMesh(root);
         if (ground == null || GroundInfo(ground) is not { } info)
         {
-            GD.Print($"clutter: template '{name}' has no textured ground quad");
+            Log.Info("world", $"clutter template has no textured ground quad template={name}");
             return null;
         }
         var template = new Template { GroundTexture = info.Texture, Period = info.Period };
@@ -333,7 +334,7 @@ public sealed class ClutterBuilder
             var shown = distinct.Count > 5
                 ? string.Join(", ", distinct.GetRange(0, 5)) + ", …"
                 : string.Join(", ", distinct);
-            GD.Print($"clutter: template '{name}' skipped {skipped.Count} unusable decoration(s) ({shown})");
+            Log.Info("world", $"clutter template skipped decorations template={name} skipped={skipped.Count} examples='{shown}'");
         }
         return template.Kinds.Count > 0 ? template : null;
     }
