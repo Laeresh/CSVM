@@ -211,7 +211,8 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
 | `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
-| `--det` | fixed-dt sim clock + master seed 1: frame N is the same sim state, and the same pixels, whatever the render rate (A4 grows this into the full determinism bundle) |
+| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*` and `--damage-test`**, and announced as a `det …` log line |
+| `--no-det` | opt back out — wall-clock sim and live randomness under a flag that would otherwise imply `--det` |
 | `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |

@@ -223,8 +223,12 @@ work is below.
   smooths position and basis with `1 - exp(-k·dt)` on the **raw frame delta**, not `GameClock`.
   Measured: two `--det --fly --chapter=C1 --spawn=0 --hold=0,0,0,0.6` runs at `--frames=180` differ
   by **2.71 % of pixels, mean delta 1.08** while the simulation is identical (the two runs' full
-  logs match apart from the output filename). **This blocks any C23 golden framed on a flight
-  chase-cam pose** — until it is fixed, goldens use `--freecam`/`--viewer` or a fixed camera.
+  logs match apart from the output filename). The magnitude tracks where the camera sits in its lag,
+  not any drift: a bare `--screenshot` C1 flight (A4, so `--det` implied) measures **29.38 % at
+  frame 15, 3.21 % at 120, 32.70 % at 300**, mean delta 1.1–2.4. **This blocks any C23 golden framed
+  on a flight chase-cam pose** — until it is fixed, goldens use `--freecam`/`--viewer` or a fixed
+  camera. It is also why A4's own "bare `--screenshot` twice is md5-identical" verify does not hold
+  literally: a bare `--screenshot` is a flight run.
   ⚠ Traps: A1 put UI and camera code on the raw delta **deliberately** (a halt must still let you
   look around, and the HUD must still draw), so this is not a straight "convert it like the rest" —
   the chase camera is simultaneously a *view* and a *function of sim state*, and only the second

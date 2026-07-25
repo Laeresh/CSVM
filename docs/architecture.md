@@ -266,6 +266,9 @@ world shader reads as spill (global `csky_light_data`, loop bounded by `csky_lig
 ## src/Pads.cs
 Single source of truth for gamepads — every reader goes through it, never `Input.GetConnectedJoypads()`.
 Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pads`), the focus gate.
+⚠ `Disabled` is set by `--no-pads` AND by the `--det` bundle, which every scripted run implies —
+  so a `--screenshot`/`--dump-*`/`--damage-test` run reads no pad at all without saying `--no-pads`.
+  Interactive runs are untouched: that boundary is the bundle's whole constraint.
 ⚠ The focus gate is on `For` (the read), NOT `Connected` (the roster) — `For(bound)` never
   consults `Connected`, and an empty roster would un-join menu players (`LaunchMenu.SyncDevices`)
   and break `PlaneViewer.AssignPads` at session build.
@@ -1004,6 +1007,13 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   wall time so nothing stalls behind the menu.
 ⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
   null-guards cover the frame before the deferred free lands.
+⚠ **The `--det` bundle is resolved in ONE place** — the block after `Log.Open` in `_Ready`, ahead of
+  the jitter and master-seed resolution it feeds. It sets the fixed clock, master seed 1, `--spawn=0`,
+  the pinned livery seed, `Pads.Disabled` and `--jitter=0`, each still overridable by passing that
+  flag; `--screenshot=`/`--dump-*`/`--damage-test` turn it on themselves and `--no-det` beats both the
+  implication and an explicit `--det`. It announces the resolved set on one `[core] det …` line, whose
+  absence means the run was interactive. **Never let a constituent leak into an interactive default** —
+  a bare `--fly` keeps its random spawn, random liveries and live pads.
 ⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
   `GameClock.Current`, nulled on teardown. `ProcessPriority = -1000` so `BeginFrame` runs before
   any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
@@ -1049,7 +1059,8 @@ raw frame delta", so nothing outside a session breaks.
   before this class, which is what makes the shipped modes byte-identical), **FixedAccum** (whole
   1/60 s steps from a wall accumulator clamped at 0.25 s — the interactive anim lab),
   **FixedStep** (exactly one `FixedDt × Scale` step per rendered frame — a scripted lab run and
-  `--det`). `Halted` is orthogonal to all three: 0 steps until `StepOnce`.
+  `--det`, which every scripted flag implies). `Halted` is orthogonal to all three: 0 steps until
+  `StepOnce`. Under FixedStep `--frames=N` is exactly sim frame N (`sim_frame=120 sim_time=2`).
 ⚠ `PhysicsDt` returns 0 in every non-realtime mode and while halted, and **0 means the consumer
   returns without stepping** — `PlaneViewer.DriveSimSteps` calls its `SimStep` instead, `Steps`
   times, in the tree order Godot's physics tick used (projectile pool → flight controllers;
@@ -1110,7 +1121,8 @@ The session's randomness policy: one master seed and ten named subsystem generat
   it per process, which is exactly the non-determinism this class removes.
 ⚠ Unpinned (no `--det`, no `--seed`, not `--anim-lab`/`--effects-test`) the master comes from
   `TimeSeed()`, so the shipped game keeps its variety — a bare `--fly` still gets a random spawn and
-  random liveries. That boundary is the reason nothing here branches on `Pinned`.
+  random liveries. That boundary is the reason nothing here branches on `Pinned`. A scripted flag
+  (`--screenshot=`, `--dump-*`, `--damage-test`) implies `--det`, so those runs are pinned to 1.
 ⚠ `Reset` also calls `GD.Seed(master)`: the net for any draw not yet routed through a named stream.
   A hot-path caller holds its stream reference (`ProjectilePool`) rather than re-resolving per draw.
 ⚠ `UI/LiveryLab`'s generator deliberately stays outside this — it is driven by a button press, and a

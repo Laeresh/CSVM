@@ -153,6 +153,7 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 61. **Grep the full stderr, not just the line you expect** — that has hidden a whole class of
     shader error.
 62. **Pass `--no-pads` on scripted runs** — a drifting stick silently steers the free camera.
+    Automatic since the `--det` bundle (rule 83) — but still yours to pass under `--no-det`.
 63. **The repo path contains a space — a mis-quoted launch aborts every run instantly, reading
     as "the build is broken".** Use the call operator (`& "path\to.exe" args`) and quote
     comma-bearing args (they can arrive as `System.Object[]`); instant identical failure is the
@@ -235,7 +236,8 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     hit water once": pick a chapter whose **spawn sits over** the surface you want (measured:
     C1B/C2B dive → all water, C4 → all buildings), and assert on the **once-per-name** effect
     breadcrumb rather than a fixed impact count (the impact log caps at 8, so a later water hit
-    still logs its effect while the surface line is capped out).
+    still logs its effect while the surface line is capped out). **The pin is now automatic in a
+    scripted run** (rule 83); the chapter-shopping workaround is for `--no-det` and interactive runs.
 
 78. **Godot's physics tick is ALREADY a fixed 1/60 s, so "two runs log identical flight telemetry"
     cannot discriminate a fixed sim clock — vary the RENDER rate instead.** Two `--det` scripted
@@ -249,6 +251,8 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     different pixels at any given wall moment now.** UV scroll, precipitation and the skydome moved
     off Godot's `TIME` onto the clock-driven `csky_time` global, so a stored PNG of water, rain,
     snow or a waterfall is a picture of a different time value; re-capture rather than compare.
+    The `--det` bundle (rule 83) moved them a second time: a `--screenshot` run now starts at spawn
+    index 0 on a fixed clock with pinned RNGs, so even a non-animated pose can frame differently.
 
 80. **A pose that renders identically twice is not proof a time-driven change works — most poses
     show no animated surface at all.** Only C1 (2 models), C1B (4) and C4 (6) carry any UV scroll
@@ -268,6 +272,15 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     above them), and it reproduced 1 → 0 windowed while reading 0 → 0 under `--headless`. Rule 71's
     sibling: headless lies about pixels *and* about shaders.
 
+83. **A scripted run is deterministic by DEFAULT now — measuring wall-clock behaviour or live
+    randomness takes `--no-det`.** `--screenshot=`, every `--dump-*` and `--damage-test` imply the
+    `--det` bundle (fixed-dt clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` +
+    `--jitter=0`), so a bare `--screenshot` is md5-reproducible with no other flags — measured 0.00 %
+    over the C1 waterfall, 0.47 % for the same pair under `--no-det`. Two consequences to carry: a
+    noise-floor measurement (rule 7) is now a **`--no-det`** measurement, and **the `det clock=…
+    seed=… spawn=… livery_seed=… pads=off jitter=… via=…` log line is what a capture was taken
+    under** — read it instead of assuming, and take its absence as "this run was interactive".
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -283,27 +296,30 @@ These need the user:
 
 ## Known non-deterministic surfaces
 
-If your diff lands here, suspect noise first:
+**Read this table as a description of `--no-det` and interactive runs.** Every row except the first
+is now pinned outright in a scripted one, because `--screenshot`/`--dump-*`/`--damage-test` imply the
+`--det` bundle (rule 83) — so these are the numbers you get back the moment you pass `--no-det`, and
+the reason you would. If your diff lands here, suspect noise first.
 
 | Surface | Behaviour |
 |---|---|
-| `--fly` / `--stunt`, any pose | Useless for screenshot diffs — same-build floor 30–84% of pixels. **Even under `--det` a flight shot is not byte-identical** (2.71%, mean delta 1.08): the chase camera smooths on the raw wall delta by design, though the sim itself matches. A/B with `--viewer`/`--freecam` + pinned camera |
-| `--freecam` default camera | Random spawn per launch — pin with `--spawn=N`, `--campos`/`--lookat`, or `--det`/`--seed` (the pick draws from the `spawn` stream) |
-| Precipitation (C1C/C2B/C4) | ~5–25% frame difference without `--det`. Pinned outright by it — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two `--det` runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
+| `--fly` / `--stunt`, any pose | **The one row `--det` does NOT fix.** Same-build floor 30–84% of pixels unpinned; under `--det` the sim matches exactly (two runs' full logs identical) but the shot still moves — the chase camera smooths on the raw wall delta by design. Measured on a bare `--screenshot` C1 flight: 29.38% at frame 15, 3.21% at frame 120, 32.70% at frame 300, mean delta 1.1–2.4. A/B with `--viewer`/`--freecam` + pinned camera; goldens must avoid flight poses |
+| `--freecam` default camera | Random spawn per launch — `--det` forces `--spawn=0` (a pinned choice, stable across data changes); `--spawn=N`/`--campos`/`--lookat` still override |
+| Precipitation (C1C/C2B/C4) | ~5–25% frame difference under `--no-det`. Pinned outright by `--det` — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
 | C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |
-| UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two identical `--det` runs; `--det` now pins it to 0.00% |
-| Puffer particle spread (waterfall mist, crash smoke) | Pinned by the master seed (`puffer` stream): the C1 waterfall moved 0.47% of the frame between two `--det` runs before A3, **0.00%** after |
-| Bootstrap `unresolved` op count | `RandomWeight` dice — varies run-to-run unpinned (100–107 measured once); pinned by `--det`/`--seed`, which seeds the world `AnimRuntime` in every mode, not just the lab |
-| Damage-lab fire trails | 413–479 px between runs on a single tree |
+| UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two runs; `--det` pins it to **0.00%** |
+| Puffer particle spread (waterfall mist, crash smoke) | Pinned by the master seed (`puffer` stream): the C1 waterfall moved 0.47% of the frame before A3, **0.00%** after |
+| Bootstrap `unresolved` op count | `RandomWeight` dice — varies run-to-run under `--no-det` (100–107 measured once); pinned by `--det`/`--seed`, which seeds the world `AnimRuntime` in every mode, not just the lab |
+| Damage-lab fire trails | 413–479 px between runs before A3/A4; **0.00%** now — measured md5-equal on a `--damage=nose:0.05,leftwing:0.05,rightwing:0.05 --frames=200` pair, which differs 3.05% (max delta 227) from a lightly-damaged pose, so the fires are genuinely burning in it |
 | Liveries in flight | Randomised per player per load — pinned by `--det`/`--seed=N`, or by `--paint-seed=N` alone (measured: a random-livery `--viewer` shot moves 3.39% of pixels unpinned, 0.00% under `--det`) |
-| Any world view | Not frame-deterministic without `--det` — measure the same-build floor first. **Under `--det` a `--freecam`/`--viewer` shot is byte-identical**: clock, shader time and every RNG are pinned (measured md5-equal on C1 falls, C2B rain, C4 snow) |
+| Any world view | Not frame-deterministic under `--no-det` — measure the same-build floor first. **A `--freecam`/`--viewer`/`--anim-lab` capture is byte-identical by default now**: clock, shader time and every RNG are pinned (measured md5-equal on C1 falls, C2B rain, C4 snow, a parked plane and an anim-lab stage) |
 
 ## The standing checklist
 
 Before calling a change verified:
 
 - [ ] Build succeeds, and the **baseline** build succeeded too
-- [ ] Camera and spawn pinned; noise floor measured same-build-vs-same-build
+- [ ] Camera and spawn pinned; noise floor (a `--no-det` measurement now — rule 83) measured same-build-vs-same-build
 - [ ] The instrument has been shown capable of reporting failure
 - [ ] Nothing is occluding, fogging, deactivating or rounding away the effect
 - [ ] "Pre-existing" claims reproduced on the unchanged build

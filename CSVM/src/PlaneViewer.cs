@@ -92,6 +92,13 @@ namespace CSVM;
 ///                                same seed, same run; different seeds genuinely branch. Pinned
 ///                                to 1 by --det/--anim-lab/--effects-test, drawn from the clock
 ///                                otherwise (the resolved value is logged, so it can be replayed)
+///   --det                        the deterministic bundle: fixed-dt sim clock + master seed 1 +
+///                                --spawn=0 + pinned liveries + --no-pads + --jitter=0, each
+///                                overridable by passing it explicitly. Implied by --screenshot=,
+///                                every --dump-*, and --damage-test; the resolved set is announced
+///                                on one `det …` log line so a capture documents itself
+///   --no-det                     opt back out — wall-clock sim clock and live randomness, even
+///                                under a flag that would otherwise imply --det
 ///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
 ///                                world skips — AI/route data the original never renders); debug only
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
@@ -280,9 +287,12 @@ public partial class PlaneViewer : Node3D
     private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
     private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
 
-    // --det: run the session on a fixed-dt sim clock with every RNG pinned, so frame N is the same
-    // sim state — and the same pixels — on every run, whatever the render rate.
+    // --det: the deterministic bundle — fixed-dt sim clock, pinned master seed, spawn index 0,
+    // pinned liveries, no gamepads, no camera dither — so frame N is the same sim state, and the
+    // same pixels, on every run whatever the render rate. Scripted runs turn it on themselves.
     private bool _det;
+    // --no-det: opt back out, so a scripted run measures wall-clock behaviour and live randomness.
+    private bool _noDet;
     // --seed=N: the master seed every subsystem generator derives from (see Utils.Rng). Null until
     // resolved in _Ready: pinned runs take Rng.DefaultSeed, everything else draws from the clock.
     private ulong? _seed;
@@ -466,6 +476,7 @@ public partial class PlaneViewer : Node3D
             // hints don't help (Godot 4.7 enumerates the pad regardless), so the switch is ours.
             else if (arg == "--no-pads") Pads.Disabled = true;
             else if (arg == "--det") _det = true;
+            else if (arg == "--no-det") _noDet = true;
             else if (arg == "--perf") _perf = true;
             else if (arg.StartsWith("--log=")) logSpecs.Add(arg["--log=".Length..]);
             else if (arg.StartsWith("--anim-lod=")) _animLod = int.Parse(arg["--anim-lod=".Length..]);
@@ -630,6 +641,43 @@ public partial class PlaneViewer : Node3D
             : _stunt ? "stunt"
             : _fly ? "fly"
             : "menu");
+        // The --det bundle, resolved in one place. A scripted run — a capture, a dump report, a
+        // test harness — has no operator at the controls and wants to be reproducible, so those
+        // flags turn --det on by themselves and noise becomes opt-in through --no-det.
+        //
+        // The boundary the bundle must never cross is the interactive one: a bare --fly keeps its
+        // random spawn, random liveries and live gamepads, because playtest variety is a feature.
+        bool detExplicit = _det;
+        string scriptedBy =
+            _screenshotPath != null ? "--screenshot"
+            : _dumpMarkers ? "--dump-markers"
+            : _dumpWeapons ? "--dump-weapons"
+            : _dumpLoadout ? "--dump-loadout"
+            : _dumpConfig ? "--dump-config"
+            : _damageTest ? "--damage-test"
+            : "";
+        if (scriptedBy.Length > 0 && !_noDet)
+        {
+            _det = true;
+        }
+        // The explicit opt-out wins over the implication and over an explicit --det alike: there is
+        // one way to ask for wall-clock behaviour, whatever else is on the command line.
+        if (_noDet)
+        {
+            _det = false;
+        }
+        string detVia = detExplicit ? "--det" : scriptedBy;
+        if (_det)
+        {
+            // A pinned CHOICE beats a pinned dice roll: a seeded pick still moves if the mission's
+            // spawn list grows, index 0 does not. An explicit --spawn=N still wins.
+            if (_spawnIndex < 0)
+            {
+                _spawnIndex = 0;
+            }
+            // A connected pad with stick drift steers the free camera and nudges the flight model.
+            Pads.Disabled = true;
+        }
         // Burst captures dither the camera by default so z-fighting flickers across frames;
         // a single shot never jitters. --det defaults it off instead: the dither exists to defeat
         // bit-identical frames, which is the one property a deterministic run is for.
@@ -648,6 +696,20 @@ public partial class PlaneViewer : Node3D
         // built — still draw from the resolved master rather than a zero one.
         Rng.Reset(_masterSeed, _seedPinned);
         GD.Print($"rng: master seed {_masterSeed}" + (_seedPinned ? " (pinned)" : " (--seed=N to pin)"));
+        // Announce the whole resolved bundle on one line, so any capture or log carries the exact
+        // conditions it was taken under instead of relying on the reader remembering what --det
+        // implies. Every constituent is named with its value, including the ones a flag overrode.
+        if (_det)
+        {
+            ulong liverySeed = _paintSeedExplicit ? _paintSeed : Rng.SeedFor(Rng.Paint);
+            float dtMs = GameClock.FixedDt * 1000f;
+            Log.Info("core", $"det clock=fixed dt_ms={dtMs:0.###} seed={_masterSeed} spawn={_spawnIndex} livery_seed={liverySeed} pads=off jitter={_jitterDeg:0.###} via={detVia}");
+        }
+        else if (_noDet && (detExplicit || scriptedBy.Length > 0))
+        {
+            string wouldBe = detExplicit ? "--det" : scriptedBy;
+            Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
+        }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -728,7 +790,7 @@ public partial class PlaneViewer : Node3D
         // mid-game works the moment the engine reports it. Log the roster at launch and every
         // connect/disconnect so a silent pad is diagnosable from the console.
         if (Pads.Disabled)
-            GD.Print("gamepad: --no-pads, ignoring every device (keyboard/scripted input only)");
+            GD.Print("gamepad: off (--no-pads, or the --det bundle), ignoring every device (keyboard/scripted input only)");
         else
             Input.Singleton.JoyConnectionChanged += (device, connected) =>
                 GD.Print(connected
@@ -788,13 +850,6 @@ public partial class PlaneViewer : Node3D
                 : GameClock.RunMode.Realtime,
         };
         GameClock.Current = _clock;
-        if (_det)
-        {
-            // InvariantCulture: a German locale renders this with a comma decimal, which turns a
-            // machine-read line into two fields.
-            GD.Print(string.Format(System.Globalization.CultureInfo.InvariantCulture,
-                "det: fixed-dt sim clock, {0:0.###} ms per frame", GameClock.FixedDt * 1000f));
-        }
         _camera.Fov = _fly || _freecam || _animLab ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
@@ -3783,7 +3838,11 @@ public partial class PlaneViewer : Node3D
         var img = GetViewport().GetTexture().GetImage();
         var path = _screenshotShots > 1 ? IndexedShotPath(_screenshotPath, _shotIndex) : _screenshotPath;
         img.SavePng(path);
-        GD.Print($"screenshot saved: {path}");
+        // The sim frame is part of what the capture IS: under the fixed clock one rendered frame is
+        // exactly one sim step, so this number pins the moment the shot shows.
+        long simFrame = _clock?.Frame ?? 0;
+        double simTime = _clock?.Time ?? 0.0;
+        Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
         if (++_shotIndex >= _screenshotShots)
         {
             _screenshotPath = null;

@@ -67,7 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ A1 — `GameClock`: one shared sim clock; halt (P) + frame-step (`.`) in every mode; fixed-dt under `--det`
 2. ☑ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
 3. ☑ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
-4. ☐ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out
+4. ☑ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out **(done 2026-07-25 — one resolution block in `PlaneViewer._Ready`, a `det …` announcement line, verification rule 83; `docs/HISTORY.md`)**
 5. ☐ A5 — `--pos`/`--direction`: one placement pair in every mode (camera in freecam/viewer, plane in fly)
 
 ### Wave B — Harness + logging
@@ -190,7 +190,7 @@ raw wall delta, which is A1's deliberate "UI and camera code stays off the sim c
 is identical (two runs' full logs match bar the output filename). **C23's goldens must avoid flight
 chase-cam poses unless that camera moves onto the clock first**; filed in `backlog.md`.
 
-## A4 ☐ The `--det` bundle; scripted runs imply it
+## A4 ☑ The `--det` bundle; scripted runs imply it
 
 **Goal.** `--det` = fixed-dt clock + master seed 1 + `--spawn=0` (unless explicit) + pinned livery + `--no-pads` + `--jitter=0`. `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests` **imply `--det`**; `--no-det` opts out. A `det [...]` log line announces the full resolved bundle, so every capture is self-documenting (the `--no-fog` convention).
 
@@ -199,6 +199,24 @@ chase-cam poses unless that camera moves onto the clock first**; filed in `backl
 **Verify.** (a) `--screenshot` twice, no other flags → md5-identical raw pixels (the headline capability). (b) `--no-det --screenshot` twice over C3 water → pixels differ (opt-out works, and the identity check is seen able to fail). (c) `--det` absent + no scripted flag → grep the log for `det` line absent, and confirm pad input still reaches the flight (inertness). Update `docs/cli.md`, CLAUDE.md's flag table, and `docs/verification.md` (new rule: scripted runs are deterministic by default; wall-clock behaviour needs `--no-det`; retire/annotate the noise-floor table entries that `--det` obsoletes — they still apply to `--no-det` runs).
 
 **⚠ Traps.** Existing scripted workflows change pixel output once, permanently — land A4 *before* C23 captures goldens. `--frames=N` semantics tighten to "exactly sim frame N"; state it in cli.md. Do not let `--det` leak into interactive defaults: a bare `--fly` must keep random spawn/livery (playtest variety is a feature).
+
+**Landed 2026-07-25** — one resolution block in `PlaneViewer._Ready` (after `Log.Open`, ahead of the
+jitter and master-seed resolution it feeds), a `[core] det clock=… seed=… spawn=… livery_seed=…
+pads=off jitter=… via=…` announcement, and `sim_frame=`/`sim_time=` on the saved-shot line.
+Implying flags: `--screenshot=`, `--dump-markers`, `--dump-weapons`, `--dump-loadout`,
+`--dump-config`, `--damage-test` — each verified individually, each cancelled by `--no-det`, which
+also beats an explicit `--det`. Evidence in `docs/HISTORY.md`; the standing rule is verification 83.
+
+**The item's own verify (a) does not hold as written, and the reason is A3's residual, not a defect
+here.** "`--screenshot` twice, no other flags" is a **flight** run — flight is the default for any
+content arg — so it hits `UpdateChaseCamera`'s wall-delta smoothing: measured 29.38 % of pixels at
+frame 15, 3.21 % at 120, 32.70 % at 300, while the simulation matches exactly. Byte-identity is a
+`--freecam` / `--viewer` / `--anim-lab` property (all three measured md5-identical, 0 px). **C23's
+goldens must avoid flight poses until that camera moves onto the clock**; filed in `backlog.md`.
+
+**Deviation:** the implication list includes `--dump-config` (the plan said "every `--dump-*`", and
+it is one) but deliberately NOT `--effects-test` / `--weapon-test`, which already pin what they need
+and were left alone rather than widened by guess. `--run-tests` joins the list when B12 lands.
 
 ## A5 ☐ `--pos`/`--direction`: one placement pair in every mode
 

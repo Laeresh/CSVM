@@ -6166,3 +6166,46 @@ verification and A3's mode battery. Landed as verification rule 82. Build 0 warn
 **Trap met on the way.** The first A/B "passed" on both sides because the file swap's `dotnet build`
 no-opped (rule 11) — the reverted file kept a stale mtime and Godot ran the old DLL. Forcing the
 rebuild is what made the difference appear.
+
+## 2026-07-25 — PLAN-testing A4: the `--det` bundle; scripted runs imply it
+
+**What landed.** `--det` became one named bundle resolved in a single block of
+`PlaneViewer._Ready` (after `Log.Open`, ahead of the jitter and master-seed resolution it feeds):
+fixed-dt clock + master seed 1 + `--spawn=0` + pinned livery seed + `--no-pads` + `--jitter=0`,
+each constituent still overridable by passing its own flag. **`--screenshot=`, `--dump-markers`,
+`--dump-weapons`, `--dump-loadout`, `--dump-config` and `--damage-test` turn it on themselves**, so
+a reproducible capture needs no other flag; **`--no-det`** beats both the implication and an
+explicit `--det`. The whole resolved set is announced on one line —
+`[core] det clock=fixed dt_ms=16.667 seed=1 spawn=0 livery_seed=… pads=off jitter=0 via=--screenshot`
+— and the saved-shot line now carries `sim_frame=` / `sim_time=`, so a capture documents the moment
+it shows. The per-session `det: fixed-dt sim clock` print was folded into the bundle line.
+
+**Verified.** *Headline:* a bare `--screenshot` over the C1 waterfall pose, twice, no other flags →
+md5 `bbb18fec…` **=** `bbb18fec…`, **0 of 921600 px differ**; at `--frames=120` md5 `b456fdf5…`
+twice, 0 px. The compare can fail: frame 15 vs frame 120 differs **2.24 %** (max delta 170), so the
+pose is genuinely time-sensitive (rule 80), and the same pair under **`--no-det` differs 0.47 %**
+(max delta 77). *Each implication individually* (rule 12): all five non-screenshot flags log the
+`det` line with the right `via=`, and `--no-det` cancels each one — `--det --no-det` and
+`--no-det --det` both run on the wall clock, `--no-det` alone logs nothing. *Overrides:*
+`--dump-config --seed=7 --spawn=2 --paint-seed=99 --jitter=0.5` announces
+`seed=7 spawn=2 livery_seed=99 jitter=0.5`. *Inertness:* an interactive `--fly --players=2` logs no
+`det` line, an unpinned master (`18165887919824763418`), spawn `#1 of 4`, and
+`player 1 input: keyboard + pad 0` — the same run with `--screenshot` logs `pads=off` and
+`player 1 input: keyboard`, so the pad check is able to fail. *`--frames=N` tightened:*
+`sim_frame=15 sim_time=0.25` and `sim_frame=120 sim_time=2` under the bundle versus
+`sim_frame=15 sim_time=0.435` under `--no-det` — N is now a sim coordinate. *Modes:* `--viewer`
+(`7c2b7274…`), `--anim-lab` (`2b20bb13…`) and the damage lab with fires burning (`3e3d0faf…`) are
+each md5-identical across two runs, 0 errors; `--stunt` and `--menu` shot cleanly. *Regression:*
+8-chapter `--freecam --quit-after 240`, **sound enabled**, windowed (rule 82) — **0 errors in seven
+chapters, 1 in C3**, the known pre-existing `!is_inside_tree()` sound bind, reproduced on a
+HEAD-restored binary in the same session (rule 13; the `1 ObjectDB instance was leaked at exit`
+shutdown warning appears identically on both builds in C1B/C1C/C2/C3/C5). `dotnet build` 0/0;
+`dotnet test` **142/142**.
+
+**Residual — the headline's literal form fails, and honestly so.** A bare `--screenshot` with *no*
+other flags is a **flight** run (flight is the default for any content arg), and A3's chase-camera
+residual stands: measured **29.38 % at frame 15, 3.21 % at frame 120, 32.70 % at frame 300**, mean
+delta 1.1–2.4, while the sim itself matches (two runs' logs identical bar the filename).
+`FlightController.UpdateChaseCamera` smooths on the raw wall delta by design. Byte-identity is
+therefore a `--freecam` / `--viewer` / `--anim-lab` property; C23's goldens must still avoid flight
+poses. Filed in `backlog.md`. Landed as verification rule 83.
