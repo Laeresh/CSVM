@@ -1,0 +1,25 @@
+[
+  [
+    "SETS",
+    [
+      "probe_set_a",
+      [
+        ["snd_probe_loop", "probe_loop.wav", "LOOPED", "3D", "RANGE", [50, 400], "VOLUME", [0.75]],
+        ["snd_probe_oneshot", "probe_one.wav"],
+        ["snd_probe_pitched", "probe_pitch.wav", "FREQUENCY", "SFX", "PURGEABLE"]
+      ],
+      "probe_set_b",
+      [
+        ["snd_probe_second", "probe_second.wav", "3D"]
+      ]
+    ],
+    "SOUND_GROUPS",
+    [
+      ["probe_plain_sg", ["snd_probe_oneshot"], ["snd_probe_second"]],
+      ["probe_weighted_sg", ["snd_probe_oneshot", "WEIGHT", 0.0], ["snd_probe_second", "WEIGHT", 1.0]],
+      ["probe_dynamic_sg", "DYNAMIC_WEIGHTS", 0.5, ["snd_probe_oneshot"], ["snd_probe_second"]],
+      ["probe_music_sg", "MUSIC", ["snd_probe_oneshot"]],
+      ["probe_dialogue_sg", [["snd_probe_oneshot"], ["snd_probe_second"]]]
+    ]
+  ]
+]
