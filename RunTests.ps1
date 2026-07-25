@@ -22,7 +22,15 @@
                inside one _Ready call and never yields a frame, so it cannot photograph anything.
                A mismatch names the shot and leaves the actual PNG and that shot's engine log in
                .scratch/goldens/.
-      perf     -Perf only. Not implemented yet, same reason.
+      perf     -Perf only. Every scenario in analysis/perf/scenarios.json, run under
+               --det --perf --no-vsync for a fixed number of SIM frames (never wall seconds --
+               the fixed clock advances one sim step per rendered frame, so a frame count is an
+               exact amount of simulation). Each scenario is launched several times and the first
+               launches are thrown away: a cold file cache reshapes a startup profile rather than
+               scaling it. Medians of the kept windows land as one JSON line per scenario in the
+               git-ignored perf-history.jsonl at the repo root. The stage records; it does not
+               judge. A verdict needs -PerfCompare, which pairs this run against an earlier
+               labelled one and prints the ratios.
 
     Exit code: 1 if any stage FAILED, 0 otherwise. A stage that skipped -- no game data, no
     Godot, -SkipUnits / -SkipEngine -- is NOT a failure, but it is printed as a skip and the
@@ -53,7 +61,31 @@
     so a moved hash has to be explained in the commit that moves it.
 
 .PARAMETER Perf
-    Also report the perf stage (not implemented yet).
+    Also run the perf stage: every scenario in analysis/perf/scenarios.json under
+    --det --perf --no-vsync for a fixed number of SIM frames, one JSON record per scenario
+    appended to the git-ignored perf-history.jsonl at the repo root. It measures and records;
+    it never judges. A regression verdict comes from a paired A/B (-PerfCompare), never from a
+    threshold: machine drift makes a committed number lie (verification rules 8, 41).
+
+.PARAMETER PerfLabel
+    Tags this run's history records (default "run"). The A/B protocol is: label the baseline,
+    flip the one line under test, rebuild, run again with -PerfCompare pointed at that label.
+
+.PARAMETER PerfCompare
+    After measuring, pair each scenario against the most recent record carrying this label and
+    print the ratios, with the reason each awareness metric is not a verdict. The two builds'
+    CSVM.dll hashes are compared too: identical hashes mean the run measured the same binary
+    twice, which is a noise floor, not an A/B (rule 11).
+
+.PARAMETER PerfFilter
+    Substring filter on the perf scenario names.
+
+.PARAMETER PerfIterations
+    Launches per scenario, overriding the manifest. The first (manifest "warmups") are discarded:
+    a cold OS file cache reshapes a startup profile instead of scaling it (rule 89).
+
+.PARAMETER PerfFrames
+    Sim frames per launch, overriding the manifest.
 
 .EXAMPLE
     .\RunTests.ps1
@@ -62,6 +94,11 @@
 .EXAMPLE
     .\RunTests.ps1 -Filter weapons -SkipUnits
     Build, then only the in-engine suites whose name contains "weapons".
+
+.EXAMPLE
+    .\RunTests.ps1 -Perf -PerfLabel base -SkipUnits -SkipEngine -SkipGoldens
+    Measure the perf scenario set and file it under the label "base". Flip the one line under
+    test, then repeat with -PerfLabel change -PerfCompare base for the paired verdict.
 
 .EXAMPLE
     $env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'; .\RunTests.ps1
@@ -75,7 +112,12 @@ param(
     [switch]$SkipEngine,
     [switch]$SkipGoldens,
     [switch]$RegenGoldens,
-    [switch]$Perf
+    [switch]$Perf,
+    [string]$PerfLabel = "run",
+    [string]$PerfCompare = "",
+    [string]$PerfFilter = "",
+    [int]$PerfIterations = 0,
+    [int]$PerfFrames = 0
 )
 
 $ErrorActionPreference = "Stop"
@@ -542,9 +584,400 @@ if ($SkipGoldens) {
 
 # ---- perf --------------------------------------------------------------------------------
 
-if ($Perf) {
-    Add-Stage -Name "perf" -Status "TODO" -Seconds 0 -Detail "not implemented yet -- no scenario set, no A/B, no history store"
-    Add-Unchecked "-Perf measured nothing: the perf harness does not exist yet"
+$PerfManifest = Join-Path $RepoRoot "analysis\perf\scenarios.json"
+$PerfDir      = Join-Path $ScratchDir "perf"
+$PerfHistory  = Join-Path $RepoRoot "perf-history.jsonl"
+# The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
+# run" (rule 11): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
+# nothing else distinguishes two builds of one revision.
+$PerfDll      = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
+
+function Get-Median {
+    param([double[]]$Values)
+    if ($Values.Count -eq 0) {
+        return [double]::NaN
+    }
+    $sorted = @($Values | Sort-Object)
+    $mid = [int][math]::Floor($sorted.Count / 2)
+    if (($sorted.Count % 2) -eq 1) {
+        return [double]$sorted[$mid]
+    }
+    return ([double]$sorted[$mid - 1] + [double]$sorted[$mid]) / 2.0
+}
+
+# Every key=value on a [perf] line whose value parses as a number, in the order the line wrote
+# them. Non-numeric fields (mode=fly, chapter=C1) are identity, not measurement, and are dropped.
+function Read-PerfLine {
+    param([string]$Line)
+    $out = New-Object System.Collections.Specialized.OrderedDictionary
+    foreach ($m in [regex]::Matches($Line, '([A-Za-z_][A-Za-z0-9_]*)=([^\s]+)')) {
+        $d = 0.0
+        if ([double]::TryParse($m.Groups[2].Value, [System.Globalization.NumberStyles]::Float, $Inv, [ref]$d)) {
+            $out[$m.Groups[1].Value] = $d
+        }
+    }
+    return $out
+}
+
+function Format-PerfNumber {
+    param([double]$Value)
+    return $Value.ToString("0.####", $Inv)
+}
+
+function Get-FileMd5 {
+    param([string]$Path)
+    if (-not (Test-Path $Path)) {
+        return ""
+    }
+    return (Get-FileHash -Path $Path -Algorithm MD5).Hash.ToLowerInvariant()
+}
+
+if (-not $Perf) {
+    # Nothing to say: the stage is opt-in, and an absent stage is not an unchecked one.
+} elseif (-not $buildOk) {
+    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "build failed"
+    Add-Unchecked "the perf scenarios did not run (the build failed)"
+} elseif (-not (Test-Path $GodotExe)) {
+    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "Godot not found at $GodotExe"
+    Add-Unchecked "the perf scenarios did not run: no Godot at $GodotExe"
+} elseif (-not (Test-Path $PerfManifest)) {
+    Add-Stage -Name "perf" -Status "SKIP" -Seconds 0 -Detail "no manifest at $PerfManifest"
+    Add-Unchecked "the perf scenarios did not run: no manifest at $PerfManifest"
+} else {
+    Write-Stage-Banner "perf"
+    # Every launch here carries the .scratch\perf output path, an argument nothing else passes --
+    # so the kill cannot reach a live playtest or a hand-run capture (rule 66).
+    Stop-StrayGodots -Marker "\.scratch\perf\"
+    if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
+        $env:SDL_JOYSTICK_DIRECTINPUT = "0"
+    }
+    if (-not (Test-Path $PerfDir)) {
+        $null = New-Item -ItemType Directory -Path $PerfDir
+    }
+
+    # Rule 97: PS 5.1 decodes a BOM-less UTF-8 file as the ANSI codepage.
+    $perfDoc = [System.IO.File]::ReadAllText($PerfManifest) | ConvertFrom-Json
+    $perfFrameCount = [int]$perfDoc.frames
+    if ($PerfFrames -gt 0) {
+        $perfFrameCount = $PerfFrames
+    }
+    $perfIters = [int]$perfDoc.iterations
+    if ($PerfIterations -gt 0) {
+        $perfIters = $PerfIterations
+    }
+    $perfWarmups = [int]$perfDoc.warmups
+    if ($perfWarmups -ge $perfIters) {
+        $perfWarmups = $perfIters - 1
+    }
+    $dropFirstWindow = [bool]$perfDoc.dropFirstWindow
+    $verdictMetrics = @($perfDoc.verdictMetrics)
+    $awareness = @($perfDoc.awarenessMetrics)
+
+    # Build identity, recorded on every line so a history entry can be traced to a tree state.
+    $ErrorActionPreference = "Continue"
+    $gitCommit = (& git -C $RepoRoot rev-parse --short HEAD 2>$null | Select-Object -First 1)
+    $gitDescribe = (& git -C $RepoRoot describe --tags --always --dirty 2>$null | Select-Object -First 1)
+    $gitStatus = @(& git -C $RepoRoot status --porcelain 2>$null)
+    $ErrorActionPreference = "Stop"
+    if (-not $gitCommit) { $gitCommit = "" }
+    if (-not $gitDescribe) { $gitDescribe = "" }
+    $gitDirty = ($gitStatus.Count -gt 0)
+    $dllMd5 = Get-FileMd5 $PerfDll
+    $runId = (Get-Date).ToString("yyyyMMdd-HHmmss", $Inv) + "-" + $PID
+    $stamp = (Get-Date).ToUniversalTime().ToString("yyyy-MM-ddTHH:mm:ssZ", $Inv)
+
+    Write-Host ("  build: commit $gitCommit dirty=$gitDirty dll_md5=$dllMd5") -ForegroundColor DarkGray
+    Write-Host ("  protocol: $perfFrameCount sim frames x $perfIters launch(es) per scenario, first $perfWarmups discarded") -ForegroundColor DarkGray
+
+    $perfScenarios = @($perfDoc.scenarios)
+    if ($PerfFilter) {
+        $perfScenarios = @($perfScenarios | Where-Object { $_.name -like "*$PerfFilter*" })
+    }
+    $watch = [System.Diagnostics.Stopwatch]::StartNew()
+    $perfBroken = @()
+    $perfRecords = @()
+    foreach ($scenario in $perfScenarios) {
+        $windowSamples = @{}   # metric -> list of per-window values
+        $startupSamples = @{}  # metric -> list of per-launch values
+        $startupOrder = @()
+        $windowOrder = @()
+        $gpuName = ""
+        $launchOk = 0
+        for ($iter = 1; $iter -le $perfIters; $iter++) {
+            $tag = "$($scenario.name)-$iter"
+            $log = Join-Path $PerfDir "$tag.log"
+            $png = Join-Path $PerfDir "$tag.png"
+            foreach ($stale in @($log, $png)) {
+                if (Test-Path $stale) {
+                    Remove-Item -Path $stale -Force
+                }
+            }
+            # --frames=N --screenshot= is what ends the run at exactly N sim frames, and the
+            # saved-shot line prints sim_frame= so the count is proved rather than assumed.
+            $runArgs = @($scenario.args) + @("--det", "--mute", "--perf", "--no-vsync",
+                                             "--frames=$perfFrameCount", "--screenshot=$png")
+            $ErrorActionPreference = "Continue"
+            & $GodotExe --path $ProjectDir --log-file $log res://scenes/Main.tscn -- @runArgs
+            $runCode = $LASTEXITCODE
+            $ErrorActionPreference = "Stop"
+
+            if (-not (Test-Path $log)) {
+                $perfBroken += "$tag : no engine log at $log (Godot exited $runCode)"
+                continue
+            }
+            $windows = @()
+            $startup = $null
+            $simFrame = -1
+            foreach ($line in (Get-Content -Path $log)) {
+                if ($line -match '\[perf\] window ') {
+                    $windows += ,(Read-PerfLine $line)
+                } elseif ($line -match '\[perf\] startup ') {
+                    $startup = Read-PerfLine $line
+                } elseif ($line -match 'screenshot saved: .* sim_frame=(\d+)') {
+                    $simFrame = [int]$Matches[1]
+                } elseif ($line -match 'shot pixmd5=\w+ size=\S+ gpu=(.*)$') {
+                    $gpuName = $Matches[1].Trim()
+                }
+            }
+            if ($simFrame -ne $perfFrameCount) {
+                $perfBroken += "$tag : ran to sim_frame=$simFrame, asked for $perfFrameCount -- see $log"
+                continue
+            }
+            if ($startup -eq $null) {
+                $perfBroken += "$tag : no '[perf] startup' line -- see $log"
+                continue
+            }
+            if ($dropFirstWindow -and $windows.Count -gt 1) {
+                $windows = @($windows[1..($windows.Count - 1)])
+            }
+            if ($windows.Count -eq 0) {
+                $perfBroken += "$tag : no usable '[perf] window' line -- see $log"
+                continue
+            }
+            $launchOk++
+            if ($iter -le $perfWarmups) {
+                continue   # cache warm-up: it ran, and that is all it was for
+            }
+            foreach ($w in $windows) {
+                foreach ($key in $w.Keys) {
+                    if ($key -eq "sim_frame" -or $key -eq "frames" -or $key -eq "wall_ms") {
+                        continue   # run identity, not a measurement
+                    }
+                    if (-not $windowSamples.ContainsKey($key)) {
+                        $windowSamples[$key] = New-Object System.Collections.ArrayList
+                        $windowOrder += $key
+                    }
+                    $null = $windowSamples[$key].Add([double]$w[$key])
+                }
+            }
+            foreach ($key in $startup.Keys) {
+                if (-not $startupSamples.ContainsKey($key)) {
+                    $startupSamples[$key] = New-Object System.Collections.ArrayList
+                    $startupOrder += $key
+                }
+                $null = $startupSamples[$key].Add([double]$startup[$key])
+            }
+        }
+
+        if ($windowSamples.Count -eq 0) {
+            Write-Host "  FAIL $($scenario.name): no measured launch" -ForegroundColor Red
+            continue
+        }
+        $metrics = New-Object System.Collections.Specialized.OrderedDictionary
+        foreach ($key in $windowOrder) {
+            $metrics[$key] = Get-Median @($windowSamples[$key].ToArray())
+        }
+        $startMetrics = New-Object System.Collections.Specialized.OrderedDictionary
+        foreach ($key in $startupOrder) {
+            $startMetrics[$key] = Get-Median @($startupSamples[$key].ToArray())
+        }
+        $windowCount = 0
+        if ($windowOrder.Count -gt 0) {
+            $windowCount = $windowSamples[$windowOrder[0]].Count
+        }
+        $perfRecords += [pscustomobject]@{
+            scenario = $scenario.name
+            windows  = $windowCount
+            launches = $launchOk
+            metrics  = $metrics
+            startup  = $startMetrics
+            gpu      = $gpuName
+        }
+        Write-Host ("  ok   {0,-12} windows {1}  render_cpu {2} ms  gpu {3} ms  draws {4}  startup total {5} ms" -f `
+            $scenario.name, $windowCount,
+            (Format-PerfNumber $metrics["render_cpu_ms"]), (Format-PerfNumber $metrics["gpu_ms"]),
+            (Format-PerfNumber $metrics["draws"]), (Format-PerfNumber $startMetrics["total"])) -ForegroundColor DarkGray
+    }
+    $watch.Stop()
+
+    # ---- history: one line per scenario per run, appended, never rewritten -------------------
+    $historyLines = @()
+    foreach ($rec in $perfRecords) {
+        $sb = New-Object System.Text.StringBuilder
+        $null = $sb.Append('{')
+        $null = $sb.Append('"run":').Append((ConvertTo-JsonString $runId)).Append(',')
+        $null = $sb.Append('"ts":').Append((ConvertTo-JsonString $stamp)).Append(',')
+        $null = $sb.Append('"label":').Append((ConvertTo-JsonString $PerfLabel)).Append(',')
+        $null = $sb.Append('"scenario":').Append((ConvertTo-JsonString $rec.scenario)).Append(',')
+        $null = $sb.Append('"commit":').Append((ConvertTo-JsonString $gitCommit)).Append(',')
+        $null = $sb.Append('"describe":').Append((ConvertTo-JsonString $gitDescribe)).Append(',')
+        $null = $sb.Append('"dirty":').Append($(if ($gitDirty) { "true" } else { "false" })).Append(',')
+        $null = $sb.Append('"dll_md5":').Append((ConvertTo-JsonString $dllMd5)).Append(',')
+        $null = $sb.Append('"gpu":').Append((ConvertTo-JsonString $rec.gpu)).Append(',')
+        $null = $sb.Append('"frames":').Append($perfFrameCount).Append(',')
+        $null = $sb.Append('"launches":').Append($rec.launches).Append(',')
+        $null = $sb.Append('"warmups":').Append($perfWarmups).Append(',')
+        $null = $sb.Append('"windows":').Append($rec.windows).Append(',')
+        $null = $sb.Append('"metrics":{')
+        $first = $true
+        foreach ($key in $rec.metrics.Keys) {
+            if (-not $first) { $null = $sb.Append(',') }
+            $first = $false
+            $null = $sb.Append((ConvertTo-JsonString $key)).Append(':').Append((Format-PerfNumber $rec.metrics[$key]))
+        }
+        $null = $sb.Append('},"startup":{')
+        $first = $true
+        foreach ($key in $rec.startup.Keys) {
+            if (-not $first) { $null = $sb.Append(',') }
+            $first = $false
+            $null = $sb.Append((ConvertTo-JsonString $key)).Append(':').Append((Format-PerfNumber $rec.startup[$key]))
+        }
+        $null = $sb.Append('}}')
+        $historyLines += $sb.ToString()
+    }
+    if ($historyLines.Count -gt 0) {
+        # Appended as UTF-8 without BOM through .NET: Add-Content would write the ANSI codepage
+        # and a second run would put a BOM in the middle of the file.
+        [System.IO.File]::AppendAllText($PerfHistory, (($historyLines -join "`n") + "`n"),
+                                        (New-Object System.Text.UTF8Encoding($false)))
+    }
+
+    # ---- A/B: pair against an earlier label and print ratios ---------------------------------
+    if ($PerfCompare -and (Test-Path $PerfHistory)) {
+        $baseByScenario = @{}
+        foreach ($line in (Get-Content -Path $PerfHistory)) {
+            if (-not $line.Trim()) {
+                continue
+            }
+            $rec = $null
+            try {
+                $rec = $line | ConvertFrom-Json
+            } catch {
+                continue
+            }
+            if ($rec.label -eq $PerfCompare -and $rec.run -ne $runId) {
+                $baseByScenario[$rec.scenario] = $rec   # later lines win: the most recent baseline
+            }
+        }
+        Write-Host ""
+        Write-Host "--- perf A/B: '$PerfLabel' vs '$PerfCompare' ----------------------------------" -ForegroundColor Cyan
+        # A row is marked only when it clears BOTH the relative band and an absolute floor. The
+        # floor is verification rule 41 made mechanical: 0.045 ms of jitter on a 0.26 ms gpu figure
+        # is a 17 % ratio and no difference at all.
+        $verdictSet = @{}
+        foreach ($m in $verdictMetrics) {
+            $verdictSet[$m.metric] = $m
+        }
+        $startupBand = $perfDoc.startupBand
+        $sameBinary = $false
+        $flagged = @()
+        foreach ($rec in $perfRecords) {
+            $base = $baseByScenario[$rec.scenario]
+            if ($base -eq $null) {
+                Write-Host ("  {0}: no '{1}' record to pair against" -f $rec.scenario, $PerfCompare) -ForegroundColor Yellow
+                continue
+            }
+            if ($base.dll_md5 -eq $dllMd5 -and $dllMd5 -ne "") {
+                $sameBinary = $true
+            }
+            Write-Host ("  {0}   base commit {1} dll {2}" -f $rec.scenario, $base.commit, $base.dll_md5.Substring(0, [math]::Min(8, $base.dll_md5.Length))) -ForegroundColor DarkGray
+            foreach ($section in @("metrics", "startup")) {
+                $mine = $rec.$section
+                $theirs = $base.$section
+                foreach ($key in $mine.Keys) {
+                    $prop = $theirs.PSObject.Properties[$key]
+                    if ($prop -eq $null) {
+                        continue
+                    }
+                    $b = [double]$prop.Value
+                    $c = [double]$mine[$key]
+                    $label = $key
+                    $isVerdict = $true
+                    $band = $startupBand
+                    if ($section -eq "metrics") {
+                        $isVerdict = $verdictSet.ContainsKey($key)
+                        if ($isVerdict) {
+                            $band = $verdictSet[$key]
+                        }
+                    } else {
+                        $label = "startup." + $key
+                    }
+                    if ($b -eq 0) {
+                        $ratioText = "  n/a"
+                        $flag = " "
+                    } else {
+                        $ratio = $c / $b
+                        $ratioText = $ratio.ToString("0.000", $Inv)
+                        $flag = " "
+                        $outsideBand = ([math]::Abs($ratio - 1.0) -gt [double]$band.band)
+                        $aboveFloor = ([math]::Abs($c - $b) -ge [double]$band.minAbs)
+                        if ($isVerdict -and $outsideBand -and $aboveFloor) {
+                            $flag = "*"
+                            $flagged += ("{0} {1} {2} -> {3} (x{4})" -f $rec.scenario, $label,
+                                         (Format-PerfNumber $b), (Format-PerfNumber $c), $ratioText)
+                        }
+                    }
+                    $color = "DarkGray"
+                    if (-not $isVerdict) {
+                        $color = "DarkYellow"
+                    } elseif ($flag -eq "*") {
+                        $color = "Yellow"
+                    }
+                    $note = ""
+                    if (-not $isVerdict) {
+                        $note = "  (awareness only)"
+                    }
+                    Write-Host ("     {0}{1,-20} {2,12} -> {3,12}   x{4}{5}" -f `
+                        $flag, $label, (Format-PerfNumber $b), (Format-PerfNumber $c), $ratioText, $note) -ForegroundColor $color
+                }
+            }
+        }
+        Write-Host ""
+        if ($flagged.Count -eq 0) {
+            Write-Host "  nothing outside the recorded same-build bands." -ForegroundColor Green
+        } else {
+            Write-Host "  outside the recorded same-build bands:" -ForegroundColor Yellow
+            foreach ($f in $flagged) {
+                Write-Host "    * $f" -ForegroundColor Yellow
+            }
+        }
+        Write-Host "  read the ratios like this:" -ForegroundColor Yellow
+        Write-Host "    * marks a verdict metric past BOTH its relative band and its absolute floor -- a candidate, never a verdict. Nothing here fails." -ForegroundColor Yellow
+        Write-Host "    the bands are machine- and day-specific: re-measure by running the suite twice unchanged (rules 7, 8, 41)." -ForegroundColor Yellow
+        foreach ($a in $awareness) {
+            Write-Host ("    $($a.metric): $($a.why)") -ForegroundColor DarkYellow
+        }
+        if ($sameBinary) {
+            Write-Host "  SAME BINARY: base and change share a CSVM.dll hash -- this is a same-build noise floor, not an A/B (rule 11)." -ForegroundColor Yellow
+        } else {
+            Write-Host "  binaries differ (CSVM.dll hash), so the new build did run (rule 11)." -ForegroundColor DarkGray
+        }
+    }
+
+    $scenarioCount = @($perfScenarios).Count
+    $detail = "$($perfRecords.Count)/$scenarioCount scenario(s), $perfFrameCount sim frames x $perfIters launch(es), history -> $PerfHistory"
+    if ($PerfCompare) {
+        $detail = "$detail; paired against '$PerfCompare'"
+    }
+    if ($perfBroken.Count -gt 0 -or $perfRecords.Count -ne $scenarioCount) {
+        Add-Stage -Name "perf" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail "$detail; $($perfBroken.Count) launch(es) unusable"
+        foreach ($b in $perfBroken) {
+            Write-Host "  !! $b" -ForegroundColor Red
+        }
+    } else {
+        Add-Stage -Name "perf" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+    }
+    Add-Unchecked "the perf stage measured and recorded, it did not judge: no threshold here can fail a build, and a history trend is awareness. A regression verdict needs a paired A/B (-PerfCompare) read against a freshly measured same-build noise band"
 }
 
 # ---- summary -----------------------------------------------------------------------------

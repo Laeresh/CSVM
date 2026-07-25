@@ -47,6 +47,11 @@ CopyToOneDrive.ps1
 # version control so scripted --screenshot runs see no file → pure defaults → byte-identical.
 # Values worth keeping get baked back into the const (with its rationale) and cleared from here.
 /CSVM/config.json
+# Local perf history (RunTests.ps1 -Perf): one JSON line per scenario per run, appended.
+# Machine- and day-specific timings -- a committed one would be a threshold, and this project's
+# only trusted regression instrument is a paired A/B measured back to back on one machine. It
+# lives at the repo root rather than in .scratch/ so CleanScratch.ps1 does not sweep it away.
+/perf-history.jsonl
 
 # Personal backlog, ideas and other things
 NOTES.md
@@ -55,3 +60,6 @@ __pycache__/
 *.pyc
 
 .env
+
+#tmp
+HANDOFF-gdd-merge.md

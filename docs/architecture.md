@@ -1103,6 +1103,12 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   `--direction` is a vector, and only flight converts one to the other. `--campos`/`--spawn-at`/
   `--spawn-dir` remain as deprecated aliases with their old per-mode reach — `--campos` never places
   the plane, `--spawn-at` still moves the anim lab's parked prop — and log their replacement once.
+⚠ **`ReportPerf`'s window is 60 RENDERED frames, not a wall second** — under `--det` that is exactly
+  60 sim steps, so two runs of a scenario produce the same number of samples, which is what makes
+  `RunTests.ps1 -Perf`'s paired medians comparable. Keep the line one flat `key=value` string: the
+  script parses it. `--no-vsync` (vsync off + `Engine.MaxFps 0`) exists only so the ms terms stop
+  reading the refresh rate; it changes no simulation, because the fixed clock steps per rendered
+  frame. **`physics_ms` is empty under `--det` by construction** — see `GameClock.ParentDriven`.
 ⚠ **`FrameCamera`'s subject box must be measured BEFORE the labs join the subtree.** `MeshLab` parks
   three EMPTY overlay meshes at the session origin, and `OrbitCamera.MergedAabb` folds them in —
   harmless for a parked plane or a whole world (both already contain the origin), ruinous for a

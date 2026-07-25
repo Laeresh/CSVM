@@ -6762,3 +6762,60 @@ verification rule 98.
 
 **Worth keeping.** The tripwire earned its place on its first outing — it caught a reproducibility
 hole in itself that no other instrument here would have surfaced.
+
+## 2026-07-25 — C22: the perf suite, its A/B, and a measured noise floor
+
+**What landed.** `RunTests.ps1 -Perf`: five scenarios from the committed
+`analysis/perf/scenarios.json` — `empty-stage`, `c1-flight`, `c2b-water`, `c4-terrain`, `c5-city` —
+each run `--det --perf --no-vsync --mute` for **300 sim frames** × 3 launches, medians appended as
+one JSON line per scenario to the git-ignored `perf-history.jsonl` at the repo root. `-PerfLabel` /
+`-PerfCompare` are the A/B: label a baseline, flip the one line under test, rebuild, run again
+paired. The run length is a *frame count*, ended by `--frames=N --screenshot=`, whose saved-shot line
+prints `sim_frame=N` — the count is proved, not assumed. The first launch of each scenario and the
+first window of each kept launch are discarded (cold cache, first-draw shader compilation).
+
+**Engine side.** `--perf`'s window became 60 rendered frames instead of one wall second (a
+wall-second window makes the sample count a function of the frame rate, which a paired comparison
+cannot have), its line became flat `key=value` on the `perf` category, and it gained `prims`,
+`nodes` and `mem_mb` next to `draws`. New `--no-vsync` (vsync off + `Engine.MaxFps 0`), inert unless
+passed: at the refresh cap `script_ms` collapses onto the frame time — `--stage=empty` read 17.00 ms
+against C4's 17.20 ms with **11× the draw calls** — and uncapping steadied `gpu_ms` (C4 0.47–2.26 ms
+→ 0.36–0.37) and halved the wall time. It changes no simulation: the `empty-stage` golden hash holds
+with it on, because the fixed clock steps once per *rendered* frame.
+
+**The noise floor, measured before anything was believed (rule 7) and then re-measured (rule 8).**
+Suite run twice unchanged: counts identical to the digit, `render_cpu` within 3.3 %, `gpu` within
+1.4 % on a fixed camera and 17.3 % on the moving one, startup phases within 10.5 %. The **next**
+unchanged pair was two to three times noisier (startup to ±14.8 %) and flagged five same-build rows
+against a band calibrated on the first pair. Hence the shipped marker needs **both** a relative band
+and an absolute floor — rule 41 made mechanical, since 0.045 ms of jitter on a 0.26 ms `gpu_ms` is a
+17 % ratio and no difference. All three recorded same-build pairs now produce zero marks.
+
+**Perturbation (rule 14/15: the instrument seen able to fire).** One line in `Clutter.cs` — the
+tiling period halved — built, run, reverted. Predicted before running: `empty-stage` must not move;
+`startup.clutter` must rise on the world scenarios. Held: `startup.clutter` ×1.70 (C4) and ×2.26
+(C5), `startup.edge` ×2.07 (C5), `prims` ×2.03 and ×2.92, `gpu_ms` ×2.95 on C5 — and **`empty-stage`
+did not move on a single metric**. `prims` tracked the real instance count to a few percent (C4
+sprites ×2.26, C5 ×2.90). Two predictions failed, both mechanism: `nodes` did not move on C5
+(clutter placements live in MultiMesh buffers, never as nodes, on the solid path too), and
+`c1-flight` moved *downwards* — halving the period re-scatters C1's cell offsets rather than
+multiplying them, 9,303 sprites → 8,253, which `prims` also tracked (×0.94). After the revert, a
+fourth pair against the pre-perturbation baseline was clean.
+
+**Refused, with the reason printed on every A/B.** `fps`/`frame_ms` (paced — floors, rule 38),
+`script_ms` (`TIME_PROCESS`, ~2.2× real per rule 37, and pinned when the loop is paced),
+`physics_ms`, `mem_mb`. `physics_ms` is the one worth naming: it is empty **by construction** under
+`--det` — 0.01–0.04 ms in every scenario — because the fixed clock is parent-driven, so
+`_PhysicsProcess` consumers no-op and collision cost lands in `script_ms`. Rule 38's "read `physics`
+for collision" does not survive contact with `--det`.
+
+**Verified.** `.\RunTests.ps1 -Perf` green end to end: build, **152 units**, **8 engine suites**
+(errors clean), **11 goldens hash-identical** — the goldens are also the proof the engine changes
+are inert when their flags are absent — and perf 5/5, exit 0, 161 s. `perf-history.jsonl` grew five
+lines per run and is git-ignored (`git check-ignore` confirms).
+
+**Residuals.** Even uncapped this machine paces at exactly 120 fps from outside the engine (driver
+or compositor — not diagnosed), so `fps`/`frame_ms` remain floors; nothing in the suite sees a pure
+C#-sim regression that stays under that cap. `c2b-water`'s `clutter` phase (3.6 ms) is below the
+stage's 15 ms absolute floor, so even a 4× there would go unmarked. Splitscreen, the launchscreen,
+the labs and audio are unmeasured. Standing rules: `docs/verification.md` 100–102.

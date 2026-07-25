@@ -79,7 +79,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractAssets.ps1` — bulk ZBD extractor (`unzbd cs <mode>` per type, fork build, idempotent). Details: `docs/tooling.md`.
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
-- `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens (`-RegenGoldens` rewrites the hashes). Details: `docs/tooling.md`.
+- `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`). Details: `docs/tooling.md`.
 - `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees**; `-WhatIf`/`-Force`/`-OlderThanDays`/`-Keep`/`-SkipWorktrees`/`-IncludeDirtyWorktrees`/`-PruneBranches`. Spares backups and dirty worktrees; leaves branches alone by default.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
@@ -221,7 +221,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--screenshot=<path>` | render a few frames, save PNG, quit — the automated-verification workhorse |
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
-| `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
+| `--perf` | log the frame-cost/draw-count split every 60 frames (the headless profiler stand-in) |
 | `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
 | `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests`**, and announced as a `det …` log line |
@@ -246,7 +246,7 @@ Full validated format documentation lives in **`docs/formats/`** — one page pe
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: Waves A + B ☑, Wave C ☑ bar C22 (`.\RunTests.ps1` is the one entry point); C22 then Wave D.
+**Active plan: [`docs/PLAN-testing.md`](docs/PLAN-testing.md)** (authored 2026-07-24) — deterministic test infrastructure, then interactive inspect tools. **Per-item status (☑/☐, decisions, deferrals) is the plan's checklist — read that, not this section.** Position: Waves A–C ☑ (`.\RunTests.ps1` is the one entry point); Wave D next.
 
 **M3 (weapons and destruction) delivered** — plan archived to [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md). Its at-the-controls sign-off is owed: pass 1 flown 2026-07-25, the polish/fix items in `backlog.md`'s "Milestone 3 Polishing" and the re-tests in `playtest.md` §1.
 
