@@ -92,8 +92,10 @@ public sealed partial class SpectatorCamera : Node
         _camera = camera;
         _camera.Position = position;
         var to = lookAt - position;
-        // Derive the starting yaw/pitch from the requested look direction so --campos/--lookat
-        // (and the mission spawn default) frame exactly what they asked for.
+        // Derive the starting yaw/pitch from the requested look direction so --pos/--direction
+        // (and the mission spawn default) frame exactly what they asked for. Only the DIRECTION
+        // survives — the distance to the point is discarded, which is why the host may hand this
+        // camera either a --lookat point or a --direction projected one unit ahead.
         if (to.LengthSquared() > 1e-6f)
         {
             _yaw = Mathf.Atan2(-to.X, -to.Z);

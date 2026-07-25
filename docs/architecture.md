@@ -681,7 +681,9 @@ while held), wheel speed, pads via `Pads.For(null)`; lab additions `Frame(Aabb)`
 a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ⚠ Deliberate: NO collision; pitch clamped (`PitchLimit` ~89°, `OrbitPitchLimit` ~80°); roll can
   never enter — `ApplyOrientation` is world-up yaw then local-X pitch; vertical move is world up.
-⚠ Default start is the mission spawn — RANDOM per launch; pass `--campos`/`--lookat` for comparisons.
+⚠ Default start is the mission spawn — RANDOM per launch; pass `--pos`/`--direction` for comparisons.
+⚠ The ctor keeps only the DIRECTION to its look-at (distance discarded), so the host may hand it a
+  `--lookat` point or a `--direction` projected one unit ahead — the two are interchangeable here.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
 
 ## src/Flight/FlightModel.cs
@@ -946,8 +948,13 @@ screenshot is byte-identical.
 
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
-owns the orbit state and drives a `Camera3D` it does not own; `Frame` honours `--campos`/`--lookat`,
-and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with the anim lab).
+owns the orbit state and drives a `Camera3D` it does not own; `Frame` takes the eye + pivot the host
+resolved, and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with the anim lab).
+⚠ **`Frame`'s `lookAt` is a PIVOT POINT, not a direction** — with the eye it also sets the orbit
+  RADIUS, which the wheel and the drag then work in. A `--direction` cannot be passed through here;
+  `PlaneViewer.FrameCamera` synthesizes a pivot on the aim ray first. Collapsing that back to a
+  direction (radius 0) leaves the camera spinning about its own eye — measured: a 25° `--jitter`
+  swings the parked plane clean out of frame, where the synthesized pivot keeps it centred.
 ⚠ The FOV read in `Frame` is 50 — the orbit view never runs in `--fly`/`--freecam`, where FOV is 62.
 ⚠ `MergedAabb` on a meshless subtree returns a zero-size box at the origin — callers special-case
   it — and the nodes must be IN the tree (`GlobalTransform` on a detached node = identity + errors).
@@ -1017,6 +1024,21 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   implication and an explicit `--det`. It announces the resolved set on one `[core] det …` line, whose
   absence means the run was interactive. **Never let a constituent leak into an interactive default** —
   a bare `--fly` keeps its random spawn, random liveries and live pads.
+⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
+  block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
+  `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
+  `--lookat` is a POINT (the orbit pivot, and `--freecam`'s aim when no `--pos` was given) while
+  `--direction` is a vector, and only flight converts one to the other. `--campos`/`--spawn-at`/
+  `--spawn-dir` remain as deprecated aliases with their old per-mode reach — `--campos` never places
+  the plane, `--spawn-at` still moves the anim lab's parked prop — and log their replacement once.
+⚠ `FrameCamera` synthesizes the `--viewer` orbit pivot when only a `--direction` was given: the point
+  on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the eye
+  swung to the aim when there is no `--pos`. It logs the value, because a synthesized pivot the user
+  never typed is exactly the thing a later capture cannot explain.
+⚠ F11 (`PrintPlacement`) prints the SUBJECT, per mode: in flight player 1's plane pose (position +
+  nose `-Z`), not the chase camera; in the orbit view `--pos`/`--lookat` (only a point reproduces the
+  radius); elsewhere `--pos`/`--direction`. Directions print to 5 decimals — 3 would quantise a unit
+  vector's aim to ~0.03°.
 ⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
   `GameClock.Current`, nulled on teardown. `ProcessPriority = -1000` so `BeginFrame` runs before
   any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
@@ -1049,7 +1071,7 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
 ⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
   contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
-  auto-frames the killed object (unless `--campos`/`--lookat` set) and builds the world-effects runtime
+  auto-frames the killed object (unless `--pos`/`--direction` set) and builds the world-effects runtime
   itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
 
 ## src/Utils/GameClock.cs

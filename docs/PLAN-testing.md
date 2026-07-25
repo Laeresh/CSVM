@@ -68,7 +68,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
 3. ☑ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
 4. ☑ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out **(done 2026-07-25 — one resolution block in `PlaneViewer._Ready`, a `det …` announcement line, verification rule 83; `docs/HISTORY.md`)**
-5. ☐ A5 — `--pos`/`--direction`: one placement pair in every mode (camera in freecam/viewer, plane in fly)
+5. ☑ A5 — `--pos`/`--direction`: one placement pair in every mode (camera in freecam/viewer, plane in fly) **(done 2026-07-25 — one `ResolvePlacement` block in `PlaneViewer._Ready`; `--lookat` stays a point, the `--viewer` orbit pivot is synthesized from `--direction`; `docs/HISTORY.md`)**
 
 ### Wave B — Harness + logging
 
@@ -219,7 +219,7 @@ goldens must avoid flight poses until that camera moves onto the clock**; filed 
 it is one) but deliberately NOT `--effects-test` / `--weapon-test`, which already pin what they need
 and were left alone rather than widened by guess. `--run-tests` joins the list when B12 lands.
 
-## A5 ☐ `--pos`/`--direction`: one placement pair in every mode
+## A5 ☑ `--pos`/`--direction`: one placement pair in every mode
 
 **Goal.** `--pos=x,y,z` + `--direction=x,y,z` place the **subject** of whatever mode is running: the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane (spawn position + nose direction, bypassing the mission spawn list) in `--fly`/`--stunt`. One pair to remember, one syntax in every scripted run. The motivating case: a water-dive test today spawns wherever the mission says and can crash into land before reaching water — with A5 the plane starts exactly over the lake, pointed down it.
 
@@ -230,6 +230,34 @@ and were left alone rather than widened by guess. `--run-tests` joins the list w
 **Verify.** (a) Alias equivalence: a freecam `--pos`/`--direction` shot md5-equal to the same pose via `--campos`/`--lookat` (then move one coordinate → pixels change; the compare can fail). (b) The motivating case: `--fly --chapter=C1 --pos=<over the lake> --direction=<down the lake> --hold=<dive> --fire` → impact log reports water impacts on the first run, no land crash — the scenario rule 77 says needs chapter-shopping today. (c) Flight spawn parity: `--pos`/`--direction` in flight behaves identically to the same values via `--spawn-at`/`--spawn-dir` (same logged spawn pose). 8-chapter regression untouched with the flags absent.
 
 **⚠ Traps.** `--lookat` is a *point*, `--direction` a *vector* — converting one to the other blindly at the plane-spawn site is the mixup to guard; keep the conversion in one parse-time place. PowerShell splits unquoted comma args into arrays (rule 63 and the `--data-root` note in cli.md) — every example in docs shows the quoted form. Mid-air placement must go through the existing `--spawn-at` code path so `FlightModel`'s initial speed/trim handling applies — do not invent a second spawn initializer.
+
+**Landed 2026-07-25** — one `ResolvePlacement` block in `PlaneViewer._Ready` (after the `--det`
+block; it needs `_fly`, which settles far earlier) routing the pair onto the existing per-mode
+plumbing, `PrintCameraPose` → `PrintPlacement`, and `ChooseSpawn`/`LogSpawn` converted to `Log` (the
+German locale had been printing `dir=(0,97,-0,24,0,00)` in the very line the parity check compares).
+Evidence in `docs/HISTORY.md`; the standing rule is verification 84, which retires rule 77's
+chapter-shopping workaround.
+
+**The two decisions the item text left open, both raised by the audit:**
+
+- **`--lookat` is NOT converted to a direction at parse time — only flight converts it.** The item
+  said "converted at parse time", and that is right for a nose direction and wrong everywhere else:
+  `OrbitCamera.Frame`'s `lookAt` is a true **pivot** and sets the orbit **radius** with the eye, so a
+  parse-time collapse would leave the `--viewer` wheel and drag spinning about the eye. `--lookat`
+  therefore stays a point, `--direction` a vector, and a `--viewer --direction` gets a **synthesized**
+  pivot — nearest approach of the aim ray to the plane's AABB centre (min radius 1 m), or the AABB
+  centre with the eye swung to the aim when there is no `--pos` — announced on its own log line. Also
+  why `--lookat` alone (no `--pos`) still works in `--freecam`: there is no position to convert
+  against, and the point is what that mode wanted anyway.
+- **In `--freecam`/`--anim-lab`, `--pos` beats `--spawn-at`** (which already reached those modes
+  through `ChooseSpawn`, with `--campos` layered on top). The deprecated flags keep their *old
+  per-mode meaning* rather than becoming renames: `--campos` still never places the plane, and
+  `--spawn-at` still moves the anim lab's parked stage prop as well as the camera — `--pos` places
+  only the camera there and deliberately does not copy that.
+
+**Residual.** F11 was proved through a temporary probe call at the screenshot-save site (then
+reverted), not a live keypress — the standing limit in `docs/verification.md`. The printed direction
+carries a `-0` component when an axis is zero; it round-trips through `ParseVec3` unharmed.
 
 # Wave B — Harness + logging
 
@@ -346,7 +374,7 @@ Also landed: `CSVM_DATA_ROOT` probes *both* shapes (a checkout holding `extracte
 
 ## C23 ☐ Golden-image tripwire
 
-**Goal.** ~10 curated `--det` shots — proposed: the 8 chapters (`--freecam`, pinned `--campos`/`--lookat` at each spawn), one `--viewer` parked plane, one `--stage=empty` — hashed as **md5 of the raw pixel buffer** (`Image.GetData()`, never the PNG file — rule 36) and recorded in a committed `analysis/goldens/manifest.json` (command line, frame number, hash — hashes and commands only, no pixels: asset-rule clean). A `goldens` suite in B12 re-renders and compares; any mismatch fails with the offending shot named and the actual image left in `.scratch/` for eyeballing.
+**Goal.** ~10 curated `--det` shots — proposed: the 8 chapters (`--freecam`, pinned `--pos`/`--direction` at each spawn), one `--viewer` parked plane, one `--stage=empty` — hashed as **md5 of the raw pixel buffer** (`Image.GetData()`, never the PNG file — rule 36) and recorded in a committed `analysis/goldens/manifest.json` (command line, frame number, hash — hashes and commands only, no pixels: asset-rule clean). A `goldens` suite in B12 re-renders and compares; any mismatch fails with the offending shot named and the actual image left in `.scratch/` for eyeballing.
 
 **Evidence (confidence: traced, contingent on Wave A).** Byte-identical `--det` shots are A2/A4's verified deliverable; the manual "8-chapter regression" checklist line in `docs/verification.md` is exactly this, unautomated.
 
@@ -404,7 +432,7 @@ Also landed: `CSVM_DATA_ROOT` probes *both* shapes (a checkout holding `extracte
 
 **Verify.** Scripted: `--anim-lab --det` + a synthetic click at a known screen position (the `--debug-*` convention: a `--debug-select=x,y` arg) → log the resulting ladder; assert the zeppelin case lists motor → … → main node in order. Interactive pass by the user (this is their tool — the item is done when the zeppelin frustration is gone, and that's their call).
 
-**⚠ Traps.** Rule 60 (`cs_name` meta, not Godot names — duplicates are auto-renamed). Rule 30's lesson generalized: screen-position picks depend on camera pose — the scripted test pins `--campos`/`--lookat` first.
+**⚠ Traps.** Rule 60 (`cs_name` meta, not Godot names — duplicates are auto-renamed). Rule 30's lesson generalized: screen-position picks depend on camera pose — the scripted test pins `--pos`/`--direction` first.
 
 ## D32 ☐ Node Lab (N): tree panel synced to selection
 

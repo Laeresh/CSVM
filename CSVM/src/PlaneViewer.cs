@@ -22,8 +22,8 @@ namespace CSVM;
 /// flight returns to the launchscreen (ReturnToMenu). Any explicit content arg bypasses the menu.
 ///
 /// F12 (any mode) saves the current frame to a timestamped PNG under the repo's
-/// git-ignored Screenshots/ folder. F11 (any mode) prints the current camera pose as
-/// ready-to-paste --campos=/--lookat= args for reproducing a view.
+/// git-ignored Screenshots/ folder. F11 (any mode) prints the mode's subject placement as
+/// ready-to-paste --pos=/--direction= args for reproducing a view.
 ///
 /// User args (after "--" on the command line):
 ///   --plane=player_bhawk         which aircraft root node to build. A comma-separated list gives
@@ -68,7 +68,7 @@ namespace CSVM;
 ///                                then quit (D32 verify: a started def that renders nothing vs one that does)
 ///   --destroy=name               kill a named destructible (def / anim / node name, substring) at
 ///                                session build so a --screenshot captures its destruction with nobody
-///                                at the controls — pairs with --freecam + --campos/--lookat (F42).
+///                                at the controls — pairs with --freecam + --pos/--direction (F42).
 ///                                Use --damage-test to list a chapter's destructible names
 ///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
 ///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
@@ -108,16 +108,15 @@ namespace CSVM;
 ///                                (zeppelin_run, dogfight_ace, dogfight_squadron, stunt_flying, …)
 ///   --spawn=N                    force spawn index N in that list (default: random pick, like the
 ///                                original — relaunch to sample the others; the pick is logged)
-///   --spawn-at=x,y,z             debug: override the spawn position (bypasses the mission spawn
-///                                list) — e.g. start just short of a target for a deterministic run
-///   --spawn-dir=x,y,z            debug: nose direction at --spawn-at (world space; default -Z)
+///   --spawn-at=x,y,z             deprecated spelling of --pos in flight
+///   --spawn-dir=x,y,z            deprecated spelling of --direction in flight
 ///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
 ///                                (moon/stars, what the original shows at the C1 airfield),
 ///                                zone1 = day haze (likely test-only, unfinished gray cap).
 ///                                Also selects which zone's distance fog (weather.json) applies.
 ///                                If given in static --chapter mode, the skydome + fog + cloud-
 ///                                band whiteout render there too (put the camera inside the map
-///                                via --campos — deterministic fog/whiteout verification shots)
+///                                via --pos — deterministic fog/whiteout verification shots)
 ///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes.zip;
 ///                                in --chapter/--fly modes: the chapter's gamez, default C1/gamez.zip)
 ///   --textures=path              texture zip (default: ../extracted/<chapter>/texture.zip, chapter=C1)
@@ -155,8 +154,12 @@ namespace CSVM;
 ///                                when N>1, else 0). Micro-orbits the eye around the framed
 ///                                point so a still camera doesn't render bit-identical frames;
 ///                                0 disables. Only applies in static (non-fly) mode.
-///   --campos=x,y,z               place the camera here instead of auto-framing
-///   --lookat=x,y,z               orbit/look target (default: model AABB center)
+///   --pos=x,y,z                  place the mode's subject here: the camera in --freecam/--viewer/
+///                                --anim-lab, the plane in --fly/--stunt (bypassing the mission
+///                                spawn list — e.g. start just short of a target, or over water)
+///   --direction=x,y,z            which way it faces there: the view direction, or the nose
+///   --lookat=x,y,z               the point form of --direction; also the --viewer orbit pivot
+///   --campos=x,y,z               deprecated spelling of --pos in the camera modes
 ///   --screenshot=path            render a few frames, save a PNG, then quit
 ///   --menu[=mode|chapter|plane]  force the in-game launchscreen even alongside other args (it
 ///                                otherwise shows only on a bare no-content-arg launch); the
@@ -166,7 +169,7 @@ public partial class PlaneViewer : Node3D
 {
     private const float HorizonScale = 2.5f;
 
-    // Splitscreen with a --spawn-at override: lateral offset between players so they don't spawn
+    // Splitscreen with a --pos override: lateral offset between players so they don't spawn
     // inside each other (the mission spawn lists already place players apart). TUNE.
     private const float SpawnAbreast = 60f;
 
@@ -274,11 +277,24 @@ public partial class PlaneViewer : Node3D
     private bool _weaponFire;           // --weapon-fire: start the weapon lab auto-firing (clean firing screenshots)
     private bool _weaponTest;           // --weapon-test: mount+fire all 48 weapons once, report, quit
     private int _spawnIndex = -1;      // --spawn=N forces a spawn; <0 = random pick (like the original)
-    private Vector3? _spawnAt;         // --spawn-at=x,y,z: override the mission spawn position (debug/testing)
-    private Vector3? _spawnDir;        // --spawn-dir=x,y,z: nose direction there (world space; default -Z)
+    private Vector3? _spawnAt;         // the flight spawn override --pos resolves into (deprecated --spawn-at)
+    private Vector3? _spawnDir;        // the nose direction there, world space, default -Z (deprecated --spawn-dir)
     private int _players = 1;          // --players=N: splitscreen panes/planes; 1 = single player
     private (FlightInput, float)[][]? _holdSets; // --hold: one scripted sequence per player ('|'-separated)
+    // The camera eye --pos resolves into (deprecated --campos), and --lookat: a POINT, which is the
+    // orbit view's pivot and the freecam's aim when no direction was given.
     private Vector3? _camPos, _lookAt;
+    // --pos=x,y,z / --direction=x,y,z: the one placement pair, whatever the mode. They place the
+    // SUBJECT — the camera in --freecam/--viewer/--anim-lab, the plane (spawn position + nose
+    // direction) in --fly/--stunt — and ResolvePlacement routes them onto the per-mode plumbing
+    // below, so nothing downstream has to ask which mode it is in.
+    private Vector3? _pos;
+    private Vector3? _direction;
+    // --direction in a camera mode: the aim, held apart from _lookAt because a direction names no
+    // pivot and the orbit view needs one (see FrameCamera).
+    private Vector3? _camDir;
+    // Deprecated spellings seen on the command line, reported once each with their replacement.
+    private readonly List<(string Old, string New)> _deprecated = new();
     private string? _screenshotPath;
     private int _screenshotFrames = 15;
     private int _screenshotShots = 1;  // --shots=N: consecutive frames to capture (z-fight debug)
@@ -511,7 +527,7 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--damage-hd=")) _damageHd = float.Parse(arg["--damage-hd=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg == "--effects-test") { _effectsTest = true; _freecam = true; hasContentArg = true; }
             // A pure modifier (like --damage-hd): needs a chapter world to have anything to destroy,
-            // but forces no mode — the caller composes it with --freecam (+ --campos/--lookat) for a
+            // but forces no mode — the caller composes it with --freecam (+ --pos/--direction) for a
             // framed, controller-less destruction shot, or with flight for a chase-cam one.
             else if (arg.StartsWith("--destroy=")) _destroyName = arg["--destroy=".Length..];
             else if (arg.StartsWith("--loadout=")) _loadoutOverride = arg["--loadout=".Length..];
@@ -530,8 +546,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--mission=")) _mission = arg["--mission=".Length..];
             else if (arg.StartsWith("--scenario=")) { _scenario = arg["--scenario=".Length..]; _scenarioExplicit = true; }
             else if (arg.StartsWith("--spawn=")) _spawnIndex = int.Parse(arg["--spawn=".Length..]);
-            else if (arg.StartsWith("--spawn-at=")) _spawnAt = ParseVec3(arg["--spawn-at=".Length..]);
-            else if (arg.StartsWith("--spawn-dir=")) _spawnDir = ParseVec3(arg["--spawn-dir=".Length..]);
+            else if (arg.StartsWith("--spawn-at=")) { _spawnAt = ParseVec3(arg["--spawn-at=".Length..]); Deprecated("--spawn-at", "--pos"); }
+            else if (arg.StartsWith("--spawn-dir=")) { _spawnDir = ParseVec3(arg["--spawn-dir=".Length..]); Deprecated("--spawn-dir", "--direction"); }
             else if (arg.StartsWith("--sky-zone=")) { _skyZone = arg["--sky-zone=".Length..]; _skyZoneExplicit = true; }
             else if (arg.StartsWith("--data-root=")) { /* resolved before this loop — every base path derives from it */ }
             else if (arg.StartsWith("--gamez=")) { _gamezPath = arg["--gamez=".Length..]; _gamezOverridden = true; }
@@ -552,7 +568,9 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--screenshot=")) { _screenshotPath = arg["--screenshot=".Length..]; hasContentArg = true; }
             else if (arg.StartsWith("--yaw=")) _argYaw = float.Parse(arg["--yaw=".Length..], System.Globalization.CultureInfo.InvariantCulture);
             else if (arg.StartsWith("--pitch=")) _argPitch = float.Parse(arg["--pitch=".Length..], System.Globalization.CultureInfo.InvariantCulture);
-            else if (arg.StartsWith("--campos=")) _camPos = ParseVec3(arg["--campos=".Length..]);
+            else if (arg.StartsWith("--pos=")) _pos = ParseVec3(arg["--pos=".Length..]);
+            else if (arg.StartsWith("--direction=")) _direction = ParseVec3(arg["--direction=".Length..]);
+            else if (arg.StartsWith("--campos=")) { _camPos = ParseVec3(arg["--campos=".Length..]); Deprecated("--campos", "--pos"); }
             else if (arg.StartsWith("--lookat=")) _lookAt = ParseVec3(arg["--lookat=".Length..]);
         }
 
@@ -710,6 +728,7 @@ public partial class PlaneViewer : Node3D
             string wouldBe = detExplicit ? "--det" : scriptedBy;
             Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
         }
+        ResolvePlacement();
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -1033,7 +1052,7 @@ public partial class PlaneViewer : Node3D
                     // radius) it is beyond the farthest terrain (~17.4 km corner-to-corner)
                     // while well inside the camera's 40 km far plane. In static --chapter mode
                     // only an explicit --sky-zone adds it (an outside orbit view is better
-                    // without the enclosing dome; with --campos inside the map it works).
+                    // without the enclosing dome; with --pos inside the map it works).
                     // One dome per rig: it follows *a* camera, so each splitscreen pane needs
                     // its own on that player's visual layer.
                     //
@@ -1056,7 +1075,7 @@ public partial class PlaneViewer : Node3D
                     // Weather (the flown mission's weather.json): distance fog for the rendered
                     // zone + the cloud-band whiteout + the ambient cloud puffs. Applied whenever
                     // the world+dome are shown — in --fly, and in static --chapter when --sky-zone
-                    // is given (deterministic fog/whiteout/puff verification with --campos, same as
+                    // is given (deterministic fog/whiteout/puff verification with --pos, same as
                     // the sky-verification path).
                     SetupWeather(textures);
                 }
@@ -1106,9 +1125,9 @@ public partial class PlaneViewer : Node3D
 
                     // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
                     // in place of the orbit view — the lab drives it (Frame/FollowNode) on
-                    // play/pick. Starts at the mission spawn; --campos/--lookat override.
+                    // play/pick. Starts at the mission spawn; --pos/--direction override.
                     var camPos = _camPos ?? spawnPos;
-                    var camLook = _lookAt ?? spawnLook;
+                    var camLook = _camDir is { } labDir ? camPos + labDir : _lookAt ?? spawnLook;
                     var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
                     _worldRoot!.AddChild(labCam);
                     _spectator = labCam;
@@ -1136,7 +1155,7 @@ public partial class PlaneViewer : Node3D
 
                     animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
                         labStage, textures, sounds, _masterSeed, _playAnim,
-                        autoFrame: _camPos == null && _lookAt == null)
+                        autoFrame: _camPos == null && _lookAt == null && _camDir == null)
                     {
                         // Interactive shows the whole lab UI; a scripted --screenshot hides it so
                         // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
@@ -1315,7 +1334,7 @@ public partial class PlaneViewer : Node3D
 
             // Spectator mode (--freecam): the live world with no aircraft at all, observed from
             // a free-flying camera. It starts where the mission would have spawned the player
-            // (or wherever --campos/--spawn-at put it), so the interesting part of the map is
+            // (or wherever --pos put it), so the interesting part of the map is
             // already in view rather than a corner of empty sea.
             if (_freecam)
             {
@@ -1323,7 +1342,9 @@ public partial class PlaneViewer : Node3D
                 var (camPos, camLookAt) = ChooseSpawn(freecamSpawns, missionZrdrPath,
                     ChooseSpawnBase(freecamSpawns), 0, "");
                 if (_camPos is { } cp) camPos = cp;
-                if (_lookAt is { } la) camLookAt = la;
+                // The aim: a direction from wherever the eye ended up, or the named point.
+                if (_camDir is { } cd) camLookAt = camPos + cd;
+                else if (_lookAt is { } la) camLookAt = la;
                 _spectator = new SpectatorCamera(_camera, camPos, camLookAt)
                 {
                     // A scripted --screenshot run wants the frame clean of the overlay.
@@ -1744,10 +1765,10 @@ public partial class PlaneViewer : Node3D
                 what += killed > 0 ? $" + destroyed {killed}× '{_destroyName}'"
                                    : $" + destroy '{_destroyName}' (no match)";
                 // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
-                // camera themselves (--campos/--lookat) — so a bare `--freecam --chapter=CX
+                // camera themselves (--pos/--direction) — so a bare `--freecam --chapter=CX
                 // --destroy=name --screenshot=x.png` is a complete, self-framing destruction shot.
                 if (killed > 0 && _spectator != null && _camPos == null && _lookAt == null
-                    && destroyBounds.Size.LengthSquared() > 0f)
+                    && _camDir == null && destroyBounds.Size.LengthSquared() > 0f)
                 {
                     _spectator.Frame(destroyBounds);
                 }
@@ -2700,8 +2721,7 @@ public partial class PlaneViewer : Node3D
             dir = dir.Normalized();
             // Splitscreen: fan the players out abreast so they don't spawn inside each other.
             at += dir.Cross(Vector3.Up).Normalized() * (playerIndex * SpawnAbreast);
-            GD.Print($"spawn [{tag}override]: pos=({at.X:0},{at.Y:0},{at.Z:0}) " +
-                     $"dir=({dir.X:0.00},{dir.Y:0.00},{dir.Z:0.00})");
+            Log.Info("flight", $"spawn [{tag}override] pos=({at.X:0},{at.Y:0},{at.Z:0}) dir=({dir.X:0.000},{dir.Y:0.000},{dir.Z:0.000})");
             return (at, at + dir);
         }
 
@@ -2724,8 +2744,7 @@ public partial class PlaneViewer : Node3D
     private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
     {
         var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;
-        GD.Print($"spawn [{_chapter}/{_mission} {label}]: " +
-                 $"pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
+        Log.Info("flight", $"spawn [{_chapter}/{_mission} {label}] pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
         return (s.Position, s.Position + forward);
     }
 
@@ -2749,7 +2768,38 @@ public partial class PlaneViewer : Node3D
         AddChild(new WorldEnvironment { Environment = _env });
     }
 
-    private void FrameCamera() => _orbit.Frame(OrbitCamera.MergedAabb(_plane!), _camPos, _lookAt);
+    /// <summary>Smallest orbit radius a synthesized pivot may sit at, so an aim ray that passes
+    /// behind the subject still leaves something to orbit rather than spinning about the eye.</summary>
+    private const float MinOrbitRadius = 1f;
+
+    /// <summary>Frames the parked plane in the orbit view. <c>--lookat</c> is a true pivot and is
+    /// used verbatim; <c>--direction</c> names only an aim, so a pivot is synthesized on the aim
+    /// ray — at the subject's nearest approach when an eye was given, otherwise the subject's own
+    /// centre with the eye swung round to that direction. Either way the orbit still ORBITS the
+    /// subject: dragging turns around it and the wheel dollies toward it.</summary>
+    private void FrameCamera()
+    {
+        var aabb = OrbitCamera.MergedAabb(_plane!);
+        var pivot = _lookAt;
+        if (pivot == null && _camDir is { } dir)
+        {
+            if (_camPos is { } eye)
+            {
+                float ahead = Mathf.Max((aabb.GetCenter() - eye).Dot(dir), MinOrbitRadius);
+                pivot = eye + dir * ahead;
+                Log.Info("core", $"orbit pivot from --direction: --lookat={Vec3Arg(pivot.Value)} radius={ahead:0.###}");
+            }
+            else
+            {
+                // No eye: keep the AABB pivot and the framing distance Frame derives, and place the
+                // eye along the aim — the inverse of OrbitCamera.Update's yaw/pitch to offset.
+                _orbit.Pitch = Mathf.Asin(Mathf.Clamp(-dir.Y, -1f, 1f));
+                _orbit.Yaw = Mathf.Atan2(-dir.X, -dir.Z);
+                Log.Info("core", $"orbit pivot from --direction: subject centre, eye swung to the aim");
+            }
+        }
+        _orbit.Frame(aabb, _camPos, pivot);
+    }
 
     /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
     /// no game data, so Config's registry knows the full key set. That lets <see cref="Config.ReportOrphans"/>
@@ -3571,6 +3621,76 @@ public partial class PlaneViewer : Node3D
             float.Parse(parts[2], System.Globalization.CultureInfo.InvariantCulture));
     }
 
+    /// <summary>Notes a superseded flag so <see cref="ResolvePlacement"/> can name its replacement
+    /// once per run. Repeating the flag does not repeat the notice.</summary>
+    private void Deprecated(string old, string replacement)
+    {
+        if (!_deprecated.Exists(d => d.Old == old))
+        {
+            _deprecated.Add((old, replacement));
+        }
+    }
+
+    /// <summary>Resolves <c>--pos</c>/<c>--direction</c> — the one placement pair — onto the
+    /// per-mode plumbing that already carries placement: the plane's spawn override in
+    /// <c>--fly</c>/<c>--stunt</c>, the camera's placement in <c>--freecam</c>/<c>--viewer</c>/
+    /// <c>--anim-lab</c>. Routing happens HERE, in one place, so no consumer downstream has to ask
+    /// what mode it is in or whether it holds a point or a vector.
+    ///
+    /// <para><c>--pos</c> wins over the flag it replaces in its own mode; the superseded spellings
+    /// keep their old per-mode meaning, so <c>--campos</c> still places only a camera (never the
+    /// plane) and <c>--spawn-at</c> still moves the anim lab's parked stage prop as well as the
+    /// camera.</para>
+    ///
+    /// <para><c>--lookat</c> names a POINT and <c>--direction</c> a VECTOR. The conversion is
+    /// one-way and lives here: flight steers by direction, so a point is converted against the
+    /// subject's position. The camera modes keep the point — <c>--freecam</c> only ever uses its
+    /// direction (either form is lossless there) and the <c>--viewer</c> orbit PIVOTS on it, which
+    /// no direction can express.</para></summary>
+    private void ResolvePlacement()
+    {
+        foreach (var (old, replacement) in _deprecated)
+        {
+            Log.Warn("core", $"deprecated flag={old} use={replacement}");
+        }
+        if (_fly && _direction == null && _lookAt is { } aimPoint && (_pos ?? _spawnAt) is { } eye)
+        {
+            _direction = aimPoint - eye;
+        }
+        if (_direction is { } aim)
+        {
+            _direction = aim.LengthSquared() > 1e-6f ? aim.Normalized() : null;
+        }
+        if (_pos is { } place)
+        {
+            if (_fly)
+            {
+                _spawnAt = place;
+            }
+            else
+            {
+                _camPos = place;
+            }
+        }
+        if (_direction is { } dir)
+        {
+            if (_fly)
+            {
+                _spawnDir = dir;
+            }
+            else
+            {
+                _camDir = dir;
+            }
+        }
+        // A nose direction with nothing to place it on is a silently ignored argument: the spawn
+        // override only engages when a position was given.
+        if (_fly && _spawnDir != null && _spawnAt == null)
+        {
+            Log.Warn("core", $"--direction ignored: flight steers the nose from the spawn override, which needs --pos");
+        }
+    }
+
     // ---- Focus mute --------------------------------------------------------------------------
     //
     // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
@@ -3712,12 +3832,12 @@ public partial class PlaneViewer : Node3D
             SaveScreenshot();
             return;
         }
-        // F11 anywhere: print the current camera pose as ready-to-paste --campos=/--lookat=
-        // args, so a hand-framed orbit (or in-flight) view can be reproduced for a
+        // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
+        // args, so a hand-framed orbit (or a spot found while flying) can be reproduced for a
         // deterministic --screenshot run.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
-            PrintCameraPose();
+            PrintPlacement();
             return;
         }
         if (_fly || _freecam || _animLab)
@@ -3888,38 +4008,40 @@ public partial class PlaneViewer : Node3D
         return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
     }
 
-    /// <summary>Print the camera's current world pose as ready-to-paste --campos=/--lookat=
-    /// arguments (F11, any mode). Reproducing a hand-framed orbit or in-flight vantage for a
-    /// deterministic --screenshot run is otherwise fiddly; this prints exactly what
-    /// FrameCamera consumes. In orbit mode the look-at is the framed point (_orbit.OrbitCenter); in
-    /// --fly it is a point one unit ahead along the view ray — either reproduces the same
-    /// framing (FrameCamera reconstructs pitch/yaw from the pos→look-at direction).</summary>
-    /// <summary>How far ahead of a free-look camera F11 places the printed --lookat point
-    /// (metres). Only the direction matters to every consumer; the distance is about surviving
-    /// the 3-decimal rounding of the printed args.</summary>
-    private const float PoseLookAtDistance = 100f;
-
-    private void PrintCameraPose()
+    /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode) —
+    /// the same pair that placed it, so a pose found by hand reproduces in a deterministic
+    /// --screenshot run. In flight that subject is the PLANE (player 1's position and nose), not
+    /// the chase camera, because that is what --pos/--direction place there. The orbit view prints
+    /// --lookat rather than --direction: its framed point is a pivot, and only the point
+    /// reproduces the orbit radius as well as the angle.</summary>
+    private void PrintPlacement()
     {
+        if (_fly && _rigs.Count > 0 && _rigs[0].Controller is { } controller)
+        {
+            var xform = controller.GlobalTransform;
+            Log.Info("core", $"placement: --pos={Vec3Arg(xform.Origin)} --direction={DirArg(-xform.Basis.Z)}");
+            return;
+        }
         var pos = _camera.GlobalPosition;
-        // Free-look modes have no framed point, so the look-at is projected along the view
-        // direction. Both flight and the spectator camera (--freecam) are free-look; only the
-        // static orbit view has a real pivot. Previously --freecam fell into the orbit
-        // branch and printed _orbitCenter, which it never sets — every pose aimed at the world
-        // origin. Projected a long way out because the args round to 3 decimals: at world
-        // coordinates in the thousands, a 1 m offset quantises the reconstructed direction to
-        // ~0.06°, which is visible when the pose is pasted back.
-        var lookAt = _fly || _freecam || _animLab
-            ? pos - _camera.GlobalTransform.Basis.Z * PoseLookAtDistance
-            : _orbit.OrbitCenter;
-        GD.Print($"camera pose: --campos={Vec3Arg(pos)} --lookat={Vec3Arg(lookAt)}");
+        if (_freecam || _animLab || _fly)
+        {
+            Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --direction={DirArg(-_camera.GlobalTransform.Basis.Z)}");
+            return;
+        }
+        Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --lookat={Vec3Arg(_orbit.OrbitCenter)}");
     }
 
-    /// <summary>Format a vector as the "x,y,z" argument value --campos=/--lookat= parse
-    /// (invariant culture, matching ParseVec3; trimmed to 3 decimals).</summary>
+    /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
+    /// culture, trimmed to 3 decimals).</summary>
     private static string Vec3Arg(Vector3 v) =>
         string.Format(System.Globalization.CultureInfo.InvariantCulture,
             "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
+
+    /// <summary>Same, for a direction — normalized, and finer, since a unit vector's components
+    /// are small enough that 3 decimals would quantise the aim to ~0.03°.</summary>
+    private static string DirArg(Vector3 v) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
 
     /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
     /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
