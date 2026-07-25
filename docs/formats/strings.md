@@ -8,7 +8,9 @@ holds the *layout* that references those IDs, not the text itself (see [rof.md](
 This is a different mechanism from the in-mission string table: `messages.json` resolves
 symbolic `MSG_*` keys for briefings and objective text and is documented in
 [missions.md](missions.md). The two do not overlap — shell UI is numeric here, mission text is
-keyed there.
+keyed there. **One `messages.json` block is documented on this page rather than there** — the
+[bindable-command table](#the-bindable-command-table-messagesjson), because it is UI text and
+because it is the definitive inventory of the retail game's player-facing commands.
 
 Decoded 2026-07-20, alongside `.rof`. It is where the plane customisation screens get their
 aircraft description panels, which exist nowhere in the ZBD data.
@@ -106,6 +108,102 @@ aircraft `i` — eleven entries, matching the eleven `player_*` aircraft in `pla
 (see [gamez.md](gamez.md)). Order is Hoplite, Hellhound, Balmoral, Bloodhawk, Brigand,
 Devastator, Firebrand, Fury, Kestrel, Peacemaker, Warhawk — the Hoplite and Hellhound first,
 then the remaining nine alphabetically.
+
+## The bindable-command table (`messages.json`)
+
+**This section is about the *other* string table** — `messages.json`, the `MSG_*` key table
+documented in [missions.md](missions.md) — because that is where the game keeps the labels for
+its **controls-configuration screen**, and that list is the authoritative inventory of what the
+retail game let a player do. **74 bindable commands under seven headings** (measured), plus the
+device-name vocabulary the binding UI prints. **Recorded here as the feature-parity target for
+the remake: this is the whole player-facing command set, straight from the shipped build.**
+
+Two near neighbours are *not* commands and are excluded from the 74: `MSG_WINGMAN_SHOT_DOWN`
+("Wingman was shot down") is a notification and `MSG_DLG_CONTROLS` ("controls") a dialog title —
+both read like bindings by name.
+
+**Trust this list over any other source.** It is what the shipped binary offered to bind. It has
+already overturned one wrong conclusion: an asset-name sweep found no `spyglass` or `padlock`
+file anywhere in `rimage`, `rof` or the chapter textures and concluded both features were cut
+before release — they shipped, and the string table says so plainly. See
+[verification.md](../verification.md) on why an absent filename proves nothing.
+
+### The seven headings (ids 3005–3011)
+
+`MSG_MOVEMENT_CONTROLS` "Movement" · `MSG_WEAPON_CONTROLS` "Weapons" · `MSG_THROTTLE_CONTROLS`
+"Throttle" · `MSG_TARGETING_CONTROLS` "Targeting" · `MSG_VIEW1_CONTROLS` "Views 1" ·
+`MSG_VIEW2_CONTROLS` "Views 2" · `MSG_OTHER_CONTROLS` "Other".
+
+### Flight, throttle and weapons
+
+| Key | Label |
+|---|---|
+| `MSG_NOSE_UP` / `MSG_NOSE_DOWN` | Point Nose Up / Down |
+| `MSG_ROLL_LEFT` / `MSG_ROLL_RIGHT` | Roll Left / Right |
+| `MSG_RUDDER_LEFT` / `MSG_RUDDER_RIGHT` | Turn Left / Right |
+| `MSG_LEVEL_TOG` | Level Off |
+| `MSG_INC_THROTTLE` / `MSG_DEC_THROTTLE` | Throttle Up / Down |
+| `MSG_THROTTLE_0`…`MSG_THROTTLE_8` | Throttle *n*/8 — **nine direct-set bindings**, an eight-notch quadrant |
+| `MSG_CMD_TRIGGER` | Fire Guns |
+| `MSG_FIRE_MISSILE` | Fire Rockets |
+| `MSG_CMD_CYCLE_MODE` | Cycle Weapons |
+| `MSG_CMD_CANNON_NEXT` / `_PREV` | Cycle guns counterclockwise / clockwise |
+| `MSG_CMD_MISSILE_NEXT` / `_PREV` | Cycle rockets counterclockwise / clockwise |
+| `MSG_MISSILE_NEXT` | Next Rocket |
+| `MSG_CMD_NITROUS` | Use Nitro-Booster |
+| `MSG_JETTISON_FUEL` | Jettison fuel |
+
+**Gun and rocket selection is rotational, not linear** — the labels are "clockwise" and
+"counterclockwise", i.e. the selector walks the mounts around the airframe, not up and down a
+list. The remake's single-direction `G`/`H` steppers are a simplification of this.
+
+### Targeting — three groups, four verbs
+
+The full suite shipped: `MSG_CMD_TARGET_{NEAREST,NEXT,PREVIOUS}_{ENEMY,ALLY,GROUND}` (nine
+commands), plus `MSG_CMD_TARGET_UNDER_RETICULE` "Select Target Nearest Crosshairs" and
+`MSG_CMD_TARGET_NOTHING` "Target Nothing". The three groups are labelled "Next Enemy/Objective",
+"Next Ally" and "Next Non-Aircraft" — ground vehicles, structures and, per the design, Danger
+Zones.
+
+### Views — the spyglass and padlock both shipped
+
+| Key | Label |
+|---|---|
+| `MSG_CAM2_TOG` | **Toggle Spyglass** — a *camera* command (camera 2), not a targeting one |
+| `MSG_CMD_PADLOCK_SNAP` | Access Snap Look Mode |
+| `MSG_CMD_PADLOCK_STICK` | Access Smooth Look Mode |
+| `MSG_CMD_PADLOCK_WATCH` | Track Target |
+| `MSG_PADLOCK_M`/`_U`/`_D`/`_L`/`_R`/`_UL`/`_UR`/`_DL`/`_DR` | the nine hat-position look directions (Look Forward / Up / Back / Left / Right / Up-Left / Up-Right / Up-Left-Rear / Up-Right-Rear) |
+| `MSG_LOOK_FORWARD` | Cycle Cockpit Views |
+| `MSG_LOOK_FLYBY` | Access Chase View |
+| `MSG_LOOK_DOWN` / `_BACK` / `_LEFT` / `_RIGHT` | External Camera Down / Back / Left / Right |
+| `MSG_CAM_ZOOM_IN` / `_OUT` | External Camera Zoom In / Out |
+
+All three design-document padlock modes are present, and the nine `MSG_PADLOCK_*` directions are
+the hat-switch grid the design describes. `player.json`'s `autohead_turn_time` / `_max` /
+`_min_pitch` are this camera's rate limits (see [vehicle.md](vehicle.md#playerjson--the-player-global-blocks)).
+
+### Other
+
+| Key | Label |
+|---|---|
+| `MSG_CMD_PAUSE_GAME` | **Pause/Quit/Objectives** — the objectives display shipped, folded onto the pause key |
+| `MSG_CMD_BAIL_OUT` | Bail Out |
+| `MSG_CMD_LAUNCH_AUTO_LAND` | Auto-Dock (also `MSG_PRESS_AUTOLAND` / `MSG_CLICK_AUTOLAND` prompts) |
+| `MSG_CMD_INTERP` | Comm Interp |
+| `MSG_CMD_KEYMAP_DISP` | View Help |
+| `MSG_CMD_DISPLAY_SCORES` | Display Scores (Multiplayer Only) |
+| `MSG_CHAT_ALL` / `MSG_CHAT_TEAM` | Chat to Everyone / Team |
+| `MSG_CMD_ZONE_TOGGLE` / `MSG_CMD_COLLISION_TOGGLE` | Zone toggle / Collisions — developer switches left in the shipped table |
+| `MSG_WINGMAN_ENGAGE` / `_FIRE` / `_BKT_LEFT` / `_BKT_RIGHT` | Engage/Disengage, Wingman Fire, Bracket left / right |
+
+### Binding vocabulary
+
+`MSG_KEYA` "Key A" and `MSG_KEYB` "Key B" confirm **two keyboard bindings per command**;
+`MSG_JOYBTN` "Joy Btn" and `MSG_MOUSEBTN` "Mouse Btn" are the other two columns.
+`MSG_JBTN_1`…`_10` name ten joystick buttons, `MSG_MBTN_LEFT`/`_RIGHT`/`_MIDDLE` three mouse
+buttons, and a `MSG_KEY_*` block (ids 15004–15128) names every keyboard key, Japanese IME keys
+included.
 
 ## Open
 

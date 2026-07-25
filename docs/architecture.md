@@ -736,7 +736,9 @@ struck collider box + plane-local impact to the data part: wing/canard by impact
 feeds the HUD DMG line.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it
   no outboard boxes — do not fix tail sidedness here; widening the signature was rejected.
-⚠ The tail's `engine` flag (power loss) is deliberately unwired — handling penalties out of scope.
+⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage
+  never degrades performance; but the shipped data still sets the flag, so retail may have walked
+  that back (docs/formats/vehicle.md).
 
 ## src/Flight/DamageVisuals.cs
 Visible damage driven purely by data thresholds: as a part's HP fraction crosses an injure_anims

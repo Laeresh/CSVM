@@ -21,8 +21,9 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [zrdr.md](zrdr.md) | The zrdr reader archives: what they are, the three scopes (shared / chapter / mission), which reader file is documented where |
 | [vehicle.md](vehicle.md) | `vehicle.json` aircraft defs: `kind_of` inheritance, dynamics, engines, `destroyable_parts` damage model, collision points, and the weapon/turret/AI keys |
 | [markers.md](markers.md) | Aircraft weapon rig (`planes.zbd` `markers`): firepoints + pylons + `target`, the `IDS_AIRFRAMEGUNGROUPNAMES` gun-group enum, the per-airframe W1–W4 gun-mount table, and the slot→firepoint binding rule |
-| [spawns.md](spawns.md) | Player spawns: `ia.json` `spawn_points`, `objectives.json` `PLAYER_INIT`, the campaign mission ↔ folder map |
-| [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones, `targets.json` node→string keys, the `messages.json` string table |
+| [spawns.md](spawns.md) | Player spawns + the Instant Action config: `ia.json` (`spawn_points`, mission/enemy/ace setup), `objectives.json` `PLAYER_INIT`, the campaign mission ↔ folder map |
+| [missions.md](missions.md) | Mission objectives: the stunt `dzones` Danger Zones + their entry/exit gate geometry, per-mission `dzones.json` overrides, `targets.json` node→string keys, the `messages.json` string table |
+| [mission-entities.md](mission-entities.md) | `zeppelins.json` (motion, gasbags, broadside cannons, critical-zone threshold) and `egen.json` (enemy generators, the zeppelin fighter-launch altitude gate) |
 | [sounds.md](sounds.md) | `sounds.json` SETS, the `player.json` volume/pitch curves, the game's MS-ADPCM WAV format |
 | [weather.md](weather.md) | `weather.json`: per-zone fog, `SUNLIGHT_*` world lighting, cloud cover, wind, precipitation, the dual colour encoding |
 | [anim-definitions.md](anim-definitions.md) | `ANIMATION_DEFINITION` readers (zepstate/startanims/building anims) + the compiled `cam_anim.zbd`/`mis_anim.zbd` survey |
@@ -36,7 +37,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
 | [paint.md](paint.md) | Aircraft paint: `paint_pattern`/`paint_color`/`paint_decal` schemes, the numbered 00–49 decal set, why shipped skins are unpainted key textures |
 | [rof.md](rof.md) | `.rof` UI resource archives: the container, the GUI scripts + `LAYOUT.CSV`, and the `.BM` texture format carrying the **paint region masks** |
-| [strings.md](strings.md) | UI text: the `langui.dll` Win32 string table, `RESOURCE.H` symbols, the `[FONTID]` convention, the aircraft name/description blocks |
+| [strings.md](strings.md) | UI text: the `langui.dll` Win32 string table, `RESOURCE.H` symbols, the `[FONTID]` convention, the aircraft name/description blocks — plus the **bindable-command inventory** (`MSG_CMD_*`/`MSG_CAM*`), the authoritative list of what the retail game let a player do |
 
 ## Shared conventions (zrdr readers)
 

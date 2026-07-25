@@ -613,8 +613,11 @@ unscheduled.
     but `TURRET` defs. Five player planes carry one — `pavenger`, `pbalmoral` (two: front +
     rear), `pbrigand`, `pfirebrand`, `pkestrel` — and **W4 in the stock loadout table is filled
     on exactly those five and no others**. `vehicle.json` `turrets` gives `firstp`/`thirdp` node
-    pairs (which mesh renders in which view, *not* a player camera mode); `gun_pitch`/`gun_yaw`
-    (±11°) are the gunner's cone.
+    pairs (which mesh renders in which view, *not* a player camera mode) and **nothing else — turret
+    rotation limits are not in any reader and stay undecoded**. `gun_pitch`/`gun_yaw` (±11°) are
+    **not** the turret arc: they sit on AI aircraft defs including seven turret-less ones, on no
+    player def including all five turret airframes, so they are the AI's forward-gun aiming cone
+    (census in `docs/formats/vehicle.md`).
   - **`target`** — a mesh-less marker, one per plane root (11 player + 11 AI). The aim point
     for AI gunnery and air-to-air lock-on.
   - **Air-to-air lock-on.** M3 implements the full guided-missile flight model but restricts

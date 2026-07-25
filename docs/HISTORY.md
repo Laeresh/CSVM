@@ -5934,3 +5934,54 @@ Shader-driven motion (UV scroll, precipitation, skydome) still runs on wall `TIM
 `--det` world screenshot is not yet byte-identical — measured 1.60 % floor. In `--anim-lab` only,
 CPU-driven texture cycles and puffer particles now follow the lab clock instead of wall time (they
 freeze on pause and scale with the speed selector) — the item's intent, not inertness drift.
+
+## 2026-07-25 — Design-document cross-check: five doc corrections + five readers decoded
+
+**Landed.** Read the original pre-release design document against the shipped extraction and
+corrected what `docs/` and the code stated wrongly, then documented the mission readers nobody had
+decoded. Every claim was re-measured against `extracted/**` first; one did not survive and was
+dropped. Instruments are committed as `analysis/gdd-cross-check/` (six probes + a shared zrdr
+reader; verdicts in that directory's README).
+
+*Corrections.* `missions.md` said a Danger Zone has no gate geometry — it does: **all 80 `dzpathN`
+meshes carry exactly three polygons**, a route ribbon plus a matched outline pair (the design's
+entry and exit volumes, both of which must be crossed). `spawns.md` and `LaunchMenu.cs` called
+C1/C1B/C1C day/night variants of one Sea Haven map — they are **separate terrain databases** in one
+campaign region. `vehicle.md` implied `gun_pitch`/`gun_yaw` were a turret arc — they are the **AI's
+forward-gun cone**, and turret rotation limits are in no reader at all. `architecture.md` recorded
+the `engine` flag as deferred — it is unwired **by design** (damage never degrades performance),
+caveat kept that the shipped data still sets the flag. `loadouts.md`'s uniform-HE stock is now
+attributed as a retail-UI observation, with the `{count, stock}` narrowness recorded as a schema
+limit (the runtime is already mixed-capable).
+
+*Decoded.* `ia.json`'s full Instant Action configuration (mission type, enemy waves, the named ace
+with a `PaintScheme`-compatible livery) → `spawns.md`; per-mission `dzones.json`
+(`objective_numbers`/`disable`/`nosnapshot`) → `missions.md`; **new page**
+`docs/formats/mission-entities.md` for `zeppelins.json` and `egen.json`; `player.json`'s aim-assist,
+warning-shot and smokescreen blocks → `vehicle.md`; and the **74-command bindable inventory** →
+`strings.md`, which corrects an earlier conclusion that the spyglass and padlock views were cut —
+both shipped, along with the full targeting suite and the objectives display.
+
+**Verified.** Six probes, each printing its own verdict and re-run clean from the worktree.
+`gun_cone.py`: 12 cone-owning defs, all `[-11, 11]`, **7 with no turret**, **0 of 12 player defs**
+(including all five turret airframes), 60 of 63 AI defs resolving it. `dzpath_gates.py`: polygon-count
+histogram `{3: 80}`, 29/80 area-bit-equal pairs, 64/80 within 10 %, median pair separation 11.7 m.
+`chapter_distinct.py`: the six Sea Haven airfield nodes present in C1 and absent from C1B and C1C;
+C2 vs C2B **zero** identical terrain meshes; disjoint danger-zone names. `damage_pools.py`: 46 weapons
+carry both damage fields, 18 differ. `commands.py`: 74 commands under 7 headings.
+`reader_census.py`: 58 zeppelin instances over 50 files, 23 generators over 53.
+
+**Failed verification, and dropped.** The brief asserted AI defs ship an unequal `destroyable_parts`
+pair (25/20) — false. **All 88 entries across all 22 defs have hp1 == hp2**, no exceptions; the `r*`
+AI defs mirror their player counterparts exactly. (A sibling branch measured this independently and
+agrees.) The (armor, hit points) reading of that pair is therefore recorded as a **hypothesis with a
+falsification test** — rounds-to-kill with `wep_31` (dum-dum) vs `wep_32` (AP) on one zone — not as
+decoded fact: every shipped pair being equal means no measurement over this data can discriminate.
+`ace_stats`'s 9-value order is likewise inferred, not decoded (all 8 chapters store `[9]x9`).
+
+**Traps recorded** (`docs/verification.md` rules 79–81). An absent asset filename is not evidence a
+feature was cut — the spyglass ships with no asset bearing its name. Trust the design document for
+system shape, never for numbers. And **prove a per-chapter file or node flag discriminates before
+using it**: `map.json` is the same string in 7 of 8 chapters, `location.json` gives two Hollywood maps
+Sea Haven camera presets, and the gamez `terrain` flag means different things per chapter — a
+terrain-height grid built on it compared clouds to sea and called two different worlds identical.

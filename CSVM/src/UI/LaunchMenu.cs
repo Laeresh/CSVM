@@ -79,9 +79,12 @@ public sealed partial class LaunchMenu : CanvasLayer
         new("Stunt Flying", "Race through every Danger Zone against the clock."),
     };
 
-    // The eight chapter worlds (mirrors RunDev.ps1's roster: display name + extracted folder code;
-    // C1/C1B/C1C are day/night/weather variants of Sea Haven). Not every chapter has Danger Zones —
-    // C1C/C2B have none, so Stunt Flying there falls back to free flight (logged by StuntMission).
+    // The eight chapter worlds (mirrors RunDev.ps1's roster: display name + extracted folder code).
+    // The lettered codes are separate terrain databases, not lighting variants of one map: C1/C1B/C1C
+    // all sit in the campaign's Sea Haven region but host different story missions over different
+    // ground, with disjoint landmarks and Danger Zones (same for C2/C2B). Not every chapter has
+    // Danger Zones — C1C/C2B have none, so Stunt Flying there falls back to free flight (logged by
+    // StuntMission).
     private static readonly (string Name, string Code)[] Chapters =
     {
         ("Sea Haven (night)", "C1"),

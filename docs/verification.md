@@ -246,6 +246,28 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     900 rendered frames give 15 sim seconds and the same final pose under `--det`, 30 sim seconds
     and a different pose without it.
 
+79. **An absent asset filename is not evidence a feature was cut — features ship under
+    implementation names, and view/camera features may need no art at all.** No `*spyglass*` or
+    `*padlock*` file exists in `rimage`, `rof` or any chapter texture archive, yet both shipped:
+    the spyglass is `MSG_CAM2_TOG` "Toggle Spyglass" — *camera 2*. Ask "did feature X ship?"
+    against `extracted/messages.json`'s `MSG_CMD_*`/`MSG_CAM*` table, which enumerates what the
+    retail build let a player bind (inventory: `docs/formats/strings.md`).
+
+80. **Trust the original design document for system shape and field meaning, never for specific
+    numbers or per-item art behaviour — those were rebalanced before release, and retail
+    captures or extracted data supersede it wherever both exist.** Its structure has held
+    repeatedly (two-volume danger zones, armour-then-hit-points, the zeppelin launch-altitude
+    gate); its details have not — it gates shell ejection to 50/70-cal from the fuselage
+    underbelly, while the 40/30-cal Bloodhawk visibly ejects brass from its wing mounts in
+    `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`.
+
+81. **Before using a per-chapter file or node flag to tell chapters apart, prove it
+    discriminates — some are copy-paste boilerplate and some mean different things per
+    chapter.** Seven of eight `map.json`s name the same `map_c1m04`, and C2/C2B ship C1's
+    `Airport_terminal` camera presets; the gamez `terrain` flag marks the land tiles in C1/C2
+    but only the cloud deck or the water plane in C1B/C1C/C2B, so a "mean terrain height" grid
+    silently compared clouds to sea and called two different worlds identical.
+
 ## What this project cannot verify itself
 
 These need the user:

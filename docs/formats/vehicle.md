@@ -46,6 +46,31 @@ equilibrium (drag balances thrust there).
 property picks its stock engine by id (Bloodhawk: 11 = Lvl-2, power 0.62). Engine power
 scales thrust/acceleration; `fd_speed` stays the level-speed cap.
 
+## `player.json` — the player-global blocks
+
+One shared reader, flat alternating `KEY, [values…]`, ~45 top-level keys. Flight globals
+(`nom_gravity`, `maxAOA`, `liftAOAs`, `highGs`/`lowGs`, the `yaw_*`/`turn_*` fade curves,
+`stall_mag`, `drag_factor`) feed `PlaneStats`; the sound curve blocks (`engine_sound`,
+`prop_sound`, `rattle`) are in [sounds.md](sounds.md). Three whole subsystems in it are
+**undocumented elsewhere and unimplemented** — key names and values are data-confirmed, the
+meanings are read off the names and are **inferred**. None appears in the original design
+document, so they are shipped-only features.
+
+| Keys | Values | Reading |
+|---|---|---|
+| `sticky_bullet_catchup_rate` `_inaccuracy` `_forget_interval` `_dist_factor` | 5.0 / 1.0 / 1.5 / 0.0 | **Bullet magnetism / aim assist.** Rounds already in flight are steered toward a tracked target at `catchup_rate`, within `inaccuracy`, dropped `forget_interval` seconds after the lock is lost; `dist_factor` 0 disables any range scaling. |
+| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback.** A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, sampled every `interval`, playing a sound group when it trips. Pairs with `bullet_hit_sound`. |
+| `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
+
+Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
+`bounce_factor` — see the [hp-pair hypothesis](#the-hp-pair-armor--hit-points-hypothesis));
+`autohead_turn_time`/`_max`/`_min_pitch` (the padlock/look camera's head-turn rate limits — see
+the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
+`[fameThreshold, soundName]` steps warning a player who is shooting allies);
+`respawn_rad`/`respawn_el` (multiplayer respawn ring); `score_kill`/`_zep`/`_suicide`/
+`_return_flag`/`_enemy_flag` (multiplayer scoring); `min_ai_active_dist` 2000 m;
+`ai_skill_parameters` (the chance/factor curves the nine pilot skills index into).
+
 ## destroyable_parts (Run-2 item 10)
 
 A list of part entries:
@@ -57,12 +82,20 @@ A list of part entries:
 ```
 
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
-- The two `hp` values are identical for player defs (20 for pbloodhawk, 25 for
-  pdevastator); AI variants differ (25/20) — semantics of the second value undecoded, the
-  remake takes the first as max HP.
+- **The two `hp` values are equal in every entry** — all 88 parts across the 22 defs that carry
+  `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. The
+  remake takes the first as max HP. *(An earlier version of this page said AI variants differ
+  25/20 — that is wrong; nothing in this install has an unequal pair.)*
+- **Hypothesis: the pair is (armor, hit points).** See [below](#the-hp-pair-armor--hit-points-hypothesis).
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
-  parts carry it); `engine` (tail only) — engine damage/power loss on that part
-  (flight-handling penalties deliberately unmodeled this run).
+  parts carry it); `engine` — engine damage/power loss on that part. Not tail-only: it sits on
+  the tail for `pbloodhawk`/`pdevastator` but on the nose for `pautogyro`/`pbrigand`/`pfury`/
+  `ppeacemaker`/`pbalmoral`/`pwarhawk` and on **both wings** for
+  `pfirebrand`/`pavenger`/`pkestrel` — it
+  marks the part the engine(s) physically live in. Handling penalties are unmodelled **by
+  design**, not deferred: the original design states damage does not degrade an aircraft's
+  performance, a plane on its last legs keeping full performance and lethality. The shipped
+  flag may still drive something (sound, effects) the design text does not cover.
 - `injure_anims`: **descending HP fractions**; when the part's HP fraction crosses one,
   the named anim runs. Two families interleave:
   - `<part>_damage_effects` (0.99) / `_green` (0.72) / `_yellow` (0.46) / `_red` (0.20) —
@@ -84,6 +117,40 @@ fire trail streaming from every damaged panel (clearly visible in
 engine must hide the healthy skins at damage time by an engine-side rule. Beware: the
 `pdpN`↔`pdpN_h` numbering is crossed on three plane models — pair torn↔healthy by mesh
 position, not by name (measurements in `gamez.md`, "Player-plane damage states").
+
+### The hp pair: armor + hit points (hypothesis)
+
+**Claim.** The two numbers on a `destroyable_parts` entry are that zone's **armor pool** and its
+**hit-point pool**, armor spent first.
+
+Supporting evidence, in descending strength:
+
+1. **The HUD showed two pools.** `messages.json` `MSG_HUD_HEALTH` = `Armor: %1%% Health: %2%%` —
+   the shipped in-flight readout has an armor bar *and* a health bar. Data-confirmed.
+2. **Weapons carry both damage figures, and they differ.** Every one of the 46
+   `weapons.json` `BALLISTICS` entries with damage carries `ARMOR_DAMAGE` **and**
+   `HEALTH_DAMAGE`, and 18 of them differ — the ammo matrix is built out of the split:
+   `wep_N1` (dum-dum) is armor-light/health-heavy (`wep_31` 1.5 / 4.5), `wep_N2` (AP) is the
+   mirror (`wep_32` 4.5 / 1.5), `wep_N3` (magnesium) is between. A two-pool target is the only
+   thing that makes those numbers mean different things. Data-confirmed.
+3. **Crash damage is two-pool too.** `player.json`'s `crash` block is
+   `armor_damage_range [50,300]` + `health_damage_range [50,300]` + `bounce_factor`.
+   Data-confirmed.
+4. **The design says so, per zone.** The original design gives an aircraft four damage zones —
+   Nose, Tail, Left Wing, Right Wing, exactly the `destroyable_parts` names — each with its own
+   Armor and Hit Points, damage applied to armor until it is gone; and its airframe table lists
+   a per-zone "Standard Armor (N/T/W)" stat. Design-informed.
+
+**Why it stays a hypothesis.** All 88 entries in this install have the two values *equal*, so no
+measurement over the shipped data can separate (armor, hp) from (hp, hp) or (max, current). The
+AI defs' separate `armor`/`health` pair is equal too on every aircraft, which is consistent but
+equally non-discriminating.
+
+**Falsification test (needs the original, at the controls).** Against one aircraft zone, count
+rounds-to-destroy for a dum-dum gun versus an AP gun of the *same* caliber (`wep_31` vs
+`wep_32`, or `wep_51` vs `wep_52`). Two pools depleting at different published rates must give
+different counts; if the two guns kill the zone in the same number of hits, there is one pool
+and the hypothesis is dead.
 
 ## Def-level injure_anims
 
@@ -148,8 +215,25 @@ planes' per-part `destroyable_parts` — **player defs have no `armor`/`health` 
 **`turrets`** — on exactly the five turret airframes (`pavenger`, `pbalmoral`, `pbrigand`,
 `pfirebrand`, `pkestrel`). A viewpoint-keyed list (`firstp`/`thirdp`) of
 `[title <MSG_TUR_*>, node <turretNode>]` entries; the Balmoral is the only two-turret plane
-(`balmoral_turret0`–`3`). Turrets are AI gunners that track other aircraft — **M4 scope**.
-`gun_pitch` / `gun_yaw` (AI defs, e.g. `[-11, 11]`) are the aiming cone.
+(`balmoral_turret0`–`3`). Turrets are AI gunners that track other aircraft — **M4 scope**. A
+turret entry carries a title and a node and **nothing else: no rotation limits anywhere in the
+data.** Turret arcs remain undecoded.
+
+**`gun_pitch` / `gun_yaw` are the AI's forward-gun aiming cone, not a turret arc.** Both keys
+appear exactly 12 times, always together, always `[-11, 11]` (degrees), and always on an AI
+airframe def — a census settles which:
+
+- **7 of the 12 carriers have no turret at all** (`bswingman`, `bloodhawk`, `fury`, `autogyro`,
+  `devastator`, `peacemaker`, `warhawk`), so presence cannot be tracking turrets.
+- **60 of the 63 non-player defs resolve the cone** through `kind_of`; the 3 that do not are
+  `basic_airplane` (the abstract root) and the two surface vehicles `patrolboat` / `t_truck`.
+  So: every AI *aircraft*, turret or not.
+- **0 of the 12 player defs carry or inherit it — including all five turret airframes**
+  (`pavenger`, `pbalmoral`, `pbrigand`, `pfirebrand`, `pkestrel`). A turret arc would have to be
+  on the plane that mounts the turret; this is on the plane that has an AI pilot.
+
+±11° is the AI's fixed-gun firing tolerance. The design's gunnery model backs the reading — an
+NPC's Dead Eye statistic sets the radius of a lead sphere it will shoot into.
 
 **`bullethole_anims`** — per player plane, the ON_CALL cockpit-glass hit-decal anims
 `bullet1`…`bullet5` (see [anim-definitions.md](anim-definitions.md)).

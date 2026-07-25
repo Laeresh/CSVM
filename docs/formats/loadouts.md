@@ -49,7 +49,7 @@ Keyed by **vehicle def name** (`vehicle.json`), matching `PlaneStats`. Per plane
 | `guns[].markers` | the firepoint node(s) this group fires from (see binding rule) |
 | `guns[].turret` | present + `true` on turret slots — parsed but **inert in M3** (see below) |
 | `hardpoints.count` | number of underwing pylons (`pylon1`…`pylonN`) |
-| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) |
+| `hardpoints.stock` | the `wep_*` id every pylon carries in stock fit (`wep_06`, HE) — one id for all pylons, see the [schema limitation](#the-uniform-he-stock-load-is-an-observation-and-a-schema-limit) |
 
 ## Two resolution rules baked into the file
 
@@ -97,3 +97,28 @@ exists on that plane's model, every gun matches the binding rule, and every deri
 | Warhawk | Inner Wing 70 | Inner Wing 2 50 | — | — | 8 |
 
 ᵀ = turret slot, inert in M3. Every pylon carries `wep_06` (HE) in stock fit.
+
+## The uniform-HE stock load is an observation, and a schema limit
+
+**`hardpoints.stock` being a single HE id per plane is what the retail Ammo Selection UI shows**
+(user-read 2026-07-22, corroborated by `OriginalScreenshots/Ammo Selector Hoplite.png` /
+`… Balmoral.png`) — it is an observation of the shipped default, not a statement that a plane
+*can only* carry one ordnance type. It cannot be checked against the extraction, because there
+is no player loadout in the data at all (above).
+
+The original design describes the opposite as normal: its Ordinance Loadout screen is a pop-up
+menu **per hardpoint**, each listing that hardpoint's available types, so a plane's pylons could
+carry a mixed load. The design's per-airframe table also gives more hardpoints than the retail
+fit does on several planes — one of many places its numbers were rebalanced before release, so
+the retail observation wins on *what the stock fit is* and the design wins only on *whether
+mixing is possible*.
+
+**Our runtime is already mixed-capable; only this file's schema is not.** `Loadout.Hardpoint`
+carries a per-pylon `Weapon`, and `FlightController` builds `_ordnanceTypes` by collecting the
+**distinct** weapon ids across the bound hardpoints in pylon order — so a plane with three
+different rocket types on its pylons gets a three-entry ordnance selector with no code change.
+What cannot express it is `hardpoints: {count, stock}`, which has room for exactly one id.
+Expressing a mixed fit means widening that to a per-pylon list (e.g. `"pylons": ["wep_06",
+"wep_06", "wep_08"]`), with `{count, stock}` kept as the shorthand. **Record this as a schema
+limitation of our own config file, not a bug** — nothing is wrong with the stock table as it
+stands, and the widening is only worth doing when the configurator lands.
