@@ -285,6 +285,9 @@ public partial class PlaneViewer : Node3D
     private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
     private string? _debugSelect; // --debug-select[=x,y[,up]]: scripted click + ladder walk (freecam/anim-lab)
     private string? _debugNodeLab; // --debug-nodelab[=spec]: open the node lab and dump its readouts
+    // --collision[=show]: build the world's colliders in a mode that otherwise builds none
+    // (freecam/anim-lab/viewer), so the C wireframe overlay has something to draw; =show opens it.
+    private bool _forceCollision, _showColliders;
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
@@ -599,6 +602,20 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-select=")) _debugSelect = arg["--debug-select=".Length..];
             else if (arg == "--debug-nodelab") _debugNodeLab ??= "";
             else if (arg.StartsWith("--debug-nodelab=")) _debugNodeLab = UI.NodeLab.ParseDebugSpec(arg["--debug-nodelab=".Length..]);
+            else if (arg == "--collision") _forceCollision = true;
+            else if (arg.StartsWith("--collision="))
+            {
+                _forceCollision = true;
+                string want = arg["--collision=".Length..];
+                _showColliders = want == "show";
+                if (!_showColliders && want.Length > 0)
+                {
+                    Log.Warn("world", $"--collision='{want}' is not a value it takes (only '=show', which opens the C overlay) — building collision anyway");
+                }
+            }
+            // The scripted C press on its own, deliberately WITHOUT forcing the build: it is what
+            // proves the overlay reports "this mode built no collision" instead of drawing nothing.
+            else if (arg == "--debug-colliders") _showColliders = true;
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -1188,7 +1205,7 @@ public partial class PlaneViewer : Node3D
                 // No gamez, no mission, no animation program: a flat collidable ground plane under
                 // a grid drawn in code. Flight, weapons and colliders work; nothing else is built.
                 mark = StartupProfile.Mark();
-                var stage = EmptyStage.Build(collision: _fly);
+                var stage = EmptyStage.Build(collision: _fly || _forceCollision);
                 StartupProfile.Record("world", mark);
                 _plane = stage.Root;
                 meshInstances = stage.MeshInstanceCount;
@@ -1221,8 +1238,9 @@ public partial class PlaneViewer : Node3D
                             : Vector3.Zero,
                         // The damage-test needs the collidable world (its C25 census measures which
                         // destructible geometry is solid and whether death removes it) even though it
-                        // runs in the freecam (non-fly) harness.
-                        Collision = _fly || _damageTest,
+                        // runs in the freecam (non-fly) harness. --collision is the interactive lever
+                        // on the same switch: the collider overlay needs bodies to draw.
+                        Collision = _fly || _damageTest || _forceCollision,
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
@@ -2171,6 +2189,47 @@ public partial class PlaneViewer : Node3D
         // to the world's AABB orbit).
         if (!_fly && !_freecam && !_animLab)
             FrameCamera(nodeAabb);
+
+        // Mesh lab on the selection (M) — the freecam/anim-lab twin of the viewer's lab above. It
+        // owns no subtree until M attaches it to whatever the shared selection has, and restores
+        // that subtree exactly when M lets go, so it builds and changes nothing until then.
+        if (_selection != null)
+        {
+            _worldRoot!.AddChild(new UI.MeshLab(_selection, _sun, _env, _camera)
+            {
+                DebugSpec = _debugMesh,
+                // A scripted capture is about the geometry, not the panel over it.
+                ShowPanel = _screenshotPath == null,
+            });
+        }
+
+        // Collider wireframes (C). Built in the modes that observe a live world: it draws what the
+        // collision build produced, and says so loudly when the mode built none rather than
+        // rendering an empty overlay that reads as "nothing here is solid".
+        if ((_freecam || _animLab || _fly) && _plane != null)
+        {
+            var planeColliders = new List<(Node3D, PlaneCollider)>();
+            foreach (var rig in _rigs)
+            {
+                if (rig.Controller is { Collider: { } airframe, PlaneModel: { } model })
+                {
+                    planeColliders.Add((model, airframe));
+                }
+            }
+            bool collisionBuilt = _fly || _forceCollision || _damageTest;
+            _worldRoot!.AddChild(new UI.ColliderOverlay(_plane, collisionBuilt)
+            {
+                DebugShow = _showColliders,
+                Planes = planeColliders,
+            });
+            Log.Info("world", $"collider overlay ready (C){(collisionBuilt ? "" : " — but this mode built NO collision; relaunch with --collision")}");
+        }
+        else if (_forceCollision && _worldMode)
+        {
+            // The static viewer builds the bodies but binds no overlay: C there cycles the mesh
+            // lab's cull override, and silently rebinding a lab key would be worse than saying so.
+            Log.Info("world", $"--collision built the world's colliders, but the C overlay is not bound in this mode (C is the mesh lab's cull cycler) — use --freecam to see them");
+        }
 
         // Node-name labels (T) — in BOTH the viewer and flight: reading a misplaced object's
         // name off it as you fly past is the fast way to identify it. Covers the whole session

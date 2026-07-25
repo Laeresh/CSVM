@@ -6945,3 +6945,56 @@ usability are the user's call (`playtest.md`, beside D31's zeppelin case). The p
 checked at 1280×720 only, where the anim lab's variant is cramped between the breadcrumb and the
 timeline. The name index is a snapshot taken on first search; freed nodes are skipped at query time
 rather than triggering a rebuild.
+## 2026-07-25 â€” Mesh lab on the selection (M) + collider wireframes (C), `--collision` (PLAN-testing D33 + D35)
+
+**What landed.** `MeshLab` is no longer viewer-only: given a `SelectionService` it becomes the
+*scoped* lab, and **M** in `--freecam`/`--anim-lab` attaches every overlay and override to the
+selected rung's subtree, restoring it exactly on M again, on a selection change, or on a
+deselection. New `src/UI/ColliderOverlay.cs` draws every built collider as a colour-coded
+wireframe on **C** (world / water / buildings / clutter / plane / other), and `--collision[=show]`
+forces the collision build in the modes that build none. `SelectionService.OverlayMeta` is the new
+"this is a drawing, not content" marker both tools use, skipped by the pick and by the box
+measurement. `SpectatorCamera`'s undocumented C-descends alternate moved to Z (the camera polls raw
+key state, so sharing C descended on every overlay toggle).
+
+**The rule-56 answer: the override materials are now the surface's own shader, edited.** The old
+hand-written replica could only stand in for the *aircraft's* shaded variant; a world surface's
+shader carries `unshaded`, the sRGB vertex modulate, LIGHT_STATE spill, cylindrical fog, UV scroll
+and its alpha term, and rendering it through the replica would have re-lit the very thing under
+inspection. `DerivedShader` rewrites two things in the original text â€” the cull token in
+`render_mode`, and a `csky_lab_normal_mode` block injected at the top of `fragment()` â€” and copies
+every uniform by name. Measured with the new `--debug-mesh=force` (build the overrides at the
+data's own settings, the able-to-fail control): **0 px** change against the shipped render on both
+the C1 water tower and the parked Bloodhawk (the viewer's 960-px delta is the panel's own status
+line), where the replica path moved **1,682 px** of the tower's ~2,500 px. `verification.md` 104.
+
+**Verified.** C1 freecam, `--pos=-6140,185,-4340 --direction=0.71,-0.17,0.68`, pick at (640,360)
+walked 4 rungs to `ap_h2otwr1` (12 surfaces, 264 tris, 12 fullbright): overlays on moved **1,278 of
+921,600 px, every one inside the tower's own 31Ã—81 px rect** â€” the identical second tower 250 px
+away untouched; `--debug-mesh=â€¦,restore` (attach then detach) returned the exact pre-toggle md5
+`33e2beâ€¦`; `cull=inverted` moved **626 px, max delta 89**, all inside the same rect (able to fail),
+and 3.88 % of the frame on the parked plane. C2 with `--collision=show`: 1,848 node-backed shapes
+(the same count rule 72 measured) + 10kâ€“14k clutter placements, `switched on 521 Â· switched off
+1349`; with `--destroy=gate1`, `on 528 Â· off 1342` â€” the two directions reported separately, never
+the +7 net, and `--damage-test=gate1 --damage-hd=25` independently reads `col[off 1, on 8]`. The
+gate's lintel wireframe is one healthy box before and three wreck-piece boxes after. A live
+in-run flip logged itself on the propane chain: `switched OFF 4: tbridg2a, tbridg2b, tbridg1a,
+tbridg1b`. Without `--collision`, `--debug-colliders` prints the notice once and the only pixels
+that move are its 306Ã—51 px text. `--collision` startup, warm, 3 runs each (C2 freecam): total
+2,462 â†’ 3,106 ms, `world` 352 â†’ 865, `clutter` 47 â†’ 56 â€” the clutter BVH is no longer the dominant
+term rule 39 measured (C5: 3,188 â†’ 4,304, `world` 448 â†’ 1,240). 8-chapter `--freecam` regression
+with sound on: zero errors bar C3's known `!is_inside_tree()`. Overlay cost, C4 at the golden pose
+(`--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu` 1.05 → 1.42 ms. `.\RunTests.ps1` green â€” 152 units,
+8 suites, **11 goldens hash-identical**, which is the inertness proof for both flags absent.
+
+**The bug the first cut had, and its rule.** Scoped normal lines drew 163 m spikes across the whole
+chapter: `BoundingRadius` was `max |v|`, and a world subtree's vertices are absolute under an
+identity node transform, so the tower "measured" 7,420 m â€” its distance from the map corner. Now
+the geometry's own box half-diagonal (`verification.md` 103). Also: one `ImmediateMesh` surface per
+*body*, not per shape â€” a C2 clutter region carries thousands of placements and the cap is 256.
+
+**Residuals.** Every keypress half is by construction (live input is unscriptable here): M, C, the
+light steering, and re-targeting the lab by clicking something else while it is attached â€” all in
+`playtest.md`. The overlay's counts are pose-dependent (the map-edge extender adds clutter bodies),
+big trimeshes draw as bounding boxes over 2,000 tris, and `--viewer` binds no C overlay because C
+is the mesh lab's cull cycler there (it says so when `--collision` is passed).

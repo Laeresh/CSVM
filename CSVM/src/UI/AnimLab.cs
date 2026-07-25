@@ -201,7 +201,8 @@ public sealed partial class AnimLab : Node
     {
         // Clicking (and PgUp/PgDn) belongs to the shared SelectionService, which the lab follows
         // through OnSelectionChanged.
-        // Only a few keys — the camera owns WASD/QE/arrows/Space/C/IJKL/Shift/Ctrl/RMB/wheel.
+        // Only a few keys — the camera owns WASD/QE/arrows/Space/Z/IJKL/Shift/Ctrl/RMB/wheel, and
+        // M/C belong to the mesh lab and the collider overlay.
         if (@event is not InputEventKey { Pressed: true, Echo: false } key)
         {
             return;

@@ -733,6 +733,8 @@ a public `Camera` accessor — all inert in plain `--freecam`. Rates TUNE.
 ⚠ The ctor keeps only the DIRECTION to its look-at (distance discarded), so the host may hand it a
   `--lookat` point or a `--direction` projected one unit ahead — the two are interchangeable here.
 ⚠ `KeyboardCaptured` zeroes keyboard axes while a text field owns focus — raw key polls bypass GUI focus.
+⚠ Vertical is Q/E plus the **Z/Space** alternate — Z, not C: C toggles the collider overlay, and
+  because this camera POLLS raw key state, sharing the key descended on every toggle press.
 
 ## src/Flight/FlightModel.cs
 Velocity-vector arcade flight model: body rates = control torque × reciprocal inertia vs
@@ -968,14 +970,28 @@ magenta, pylons cyan, target green); `--markers` opens it at launch. Reuses `Mar
 ⚠ Builds nothing until first shown, so an unadorned `--viewer` screenshot is byte-identical.
 
 ## src/UI/MeshLab.cs
-The `--viewer` geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider
-boxes, light sliders + headlight, and independent cull × normal-source override cyclers
-(`--debug-mesh=cycle=N` scripts them; lighting is only written when `--debug-mesh` asks).
-⚠ Built after the plane joins the tree — `GlobalTransform` on a detached node is identity + error spam.
-⚠ Override materials replicate SceneBuilder's vertex stage verbatim (`skip_vertex_transform`,
-  `depth_bias`/`node_bias`) — otherwise coplanar decals z-fight and every A/B is worthless.
+The geometry/shading lab (key M): normal lines, smoothing-seam wireframe, collider boxes, light
+sliders + headlight, and independent cull × normal-source override cyclers (`--debug-mesh=` scripts
+them; `cycle=N` steps the cycler, `force` builds the overrides at the data's own settings, `restore`
+attaches then detaches). Two shapes: the `--viewer` lab owns the parked plane for the session; the
+**scoped** lab (`--freecam`/`--anim-lab`, ctor taking a `SelectionService`) attaches to the current
+selection on M and restores it on M again, on a selection change and on a deselection.
+⚠ Built after the subject joins the tree — `GlobalTransform` on a detached node is identity + error spam.
+⚠ **Override materials are the surface's OWN shader with two edits** — the cull token in
+  `render_mode`, and a `csky_lab_normal_mode` rewrite injected at the top of `fragment()` (the top,
+  because the fullbright path derives its light normal inside the body) — plus every uniform copied
+  by name. Measured: `force` at AsData/AsData is raw-pixel identical to the shipped render on both a
+  world subtree and the parked plane. The hand-written replica shader is the FALLBACK only; on a
+  fullbright world surface it moved 1,682 px of a 2,500 px subject (no fog/scroll/alpha terms).
 ⚠ Bounds-check override slots against the INSTANCE (`GetSurfaceOverrideMaterialCount()`), not the
   mesh — `SmoothMesh` refuses 0-surface meshes; `SetOverride` recovers by re-assigning the mesh.
+⚠ `BoundingRadius` is the geometry's own box half-diagonal, NEVER max |v|: a world subtree's
+  vertices are absolute under an identity node transform, so the C1 water tower read 7,420 m
+  (its distance from the map corner) and drew 163 m normal lines across the chapter.
+⚠ Scoped mode: single-letter cyclers OFF (the free camera flies on W/G/C/V — buttons only), overlays
+  parented to the lab and ridden onto the target rather than added into the measured subtree, and
+  the light sliders drive the lab's OWN `DirectionalLight3D` — never the world's sun or ambient.
+  A fullbright target says "no light reaches it" instead of offering a control that does nothing.
 
 ## src/UI/WeaponLab.cs
 The `--viewer` weapon lab (key W): mounts a weapon and fires it, driving its OWN `ProjectilePool` so
@@ -1024,6 +1040,31 @@ replays a click and a ladder walk for scripted runs.
   articulation inside the subtree.
 ⚠ Builds nothing until the first selection (no CanvasLayer, no mesh): four `--det` poses are
   raw-pixel md5-identical to a build without this file.
+⚠ `OverlayMeta` is the "this is a tool's drawing, not content" marker: a subtree carrying it is
+  skipped by BOTH the pick and the box measurement, which is what lets the collider wireframes be
+  parented onto the very objects they annotate without becoming clickable or growing their boxes.
+
+## src/UI/ColliderOverlay.cs
+The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` script it) in
+`--freecam`/`--anim-lab`/`--fly`: one `ImmediateMesh` per collider host, colour-coded by owner class
+(world / water / buildings / clutter / plane / other), built once on the first toggle and
+`Visible`-flipped after. Measured C2: 1,848 node-backed shapes + 10k–14k clutter placements.
+⚠ **Its first job is the notice.** Pressing C in a mode that built no collision prints the reason on
+  screen and in the log and draws NOTHING — an empty overlay would read as "nothing here is solid",
+  which is exactly rule 72's trap.
+⚠ Clutter shapes hang off the region body's RID with no node, so they are read back through
+  `PhysicsServer3D.BodyGetShape*` only — a `ShapeOwner*` call on one of those bodies would make
+  Godot rebuild it from the nodes it does not have and silently empty it.
+⚠ One ImmediateMesh SURFACE per body, not per shape: the cap is 256 surfaces and a city region
+  carries thousands of placements (over it, every call errors and nothing draws). A surface closed
+  with no vertices is an error too — `HasGeometry` is checked before opening one.
+⚠ Each wireframe's visibility follows its shape's live `Disabled` flag (re-read 4×/s), so a
+  destructible's death swaps the drawing with it; the tallies are logged as **separate on and off
+  counts plus the names that flipped**, never a net (rule 73: the C2 gate nets +7 — `col[off 1, on 8]`).
+⚠ Budgets, both reported: a trimesh over `MaxShapeTris` (2,000) or past the 400k-line budget draws
+  as its bounding box instead. Counts are pose-dependent — the map-edge extender adds clutter bodies.
+⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
+  1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (rule 102).
 
 ## src/UI/NodeLab.cs
 The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
@@ -1170,6 +1211,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
   `--node=` subtree 7 km out, whose box stretched back to the origin and framed it at 12 km. Hence
   the optional `subject` argument, filled from `WorldBuilder.DetachedWorldAabb` at build time.
+⚠ `WorldSession.Options.Collision` has exactly three sources — `_fly`, `_damageTest`, `--collision`
+  — and `--collision` is the interactive one: the world's colliders are a flight-build product, so
+  the C overlay and any hand check in `--freecam`/`--anim-lab`/`--viewer` need it or they measure an
+  absence. Measured C2 startup cost, warm, 3 runs each: total 2,462 → 3,106 ms, of which `world`
+  352 → 865 and `clutter` only 47 → 56.
 ⚠ `--stage=empty` and `--node=` are settled in the SAME mode-resolution block as the rest: the node
   stage forces `--viewer` (unless `--anim-lab`) and sets `_chapterGiven`; the empty stage forces
   `_worldMode` false, which is what routes `gamezPath` to planes.zbd and takes the third branch in

@@ -249,4 +249,27 @@ pass through unharmed).
   *Blocks:* D32 sign-off; the panel is also the reach-around for anything the click pick refuses
   (terrain), so say if that path is discoverable.
 
+- **M — the mesh lab on what you clicked (D33).** Everything scripted here was proven with
+  `--debug-*` stand-ins; the keypresses are by construction. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1 "--pos=-6140,185,-4340" "--direction=0.71,-0.17,0.68"`
+  puts a water tower in the middle of the frame. **Click it, press M.** *Look for:* the panel
+  appears bottom-left naming the object and its surface/triangle counts; the normal, wireframe,
+  cull and normal-source buttons act on **that object only**; **M again leaves the world exactly as
+  it was** (nothing dimmed, nothing z-fighting); clicking a *different* object while the panel is up
+  moves the lab onto it and restores the old one. Try the light rows on a world object — they should
+  say "target is fullbright — no light reaches it" and leave the world's own lighting alone (if the
+  sun ever moves, that is the bug this item exists to avoid). Then try the same on the anim lab's
+  parked plane (`--anim-lab --chapter=C1 --plane=player_bhawk`), where the light *should* work.
+  *Blocks:* D33 sign-off.
+
+- **C — the collider wireframes (D35).** *Where:*
+  `./RunGame.ps1 --freecam --chapter=C2 --collision "--pos=-5585,49,-3908" "--direction=-0.66,-0.33,-0.66"`
+  (the gate) — press **C**. *Look for:* wireframes coloured world blue / water cyan / buildings
+  orange / clutter green, sitting ON the geometry rather than floating or z-fighting; the count line
+  top-left; C again clears them. Then **run the same command without `--collision`** and press C: it
+  must print "NO COLLISION BUILT IN THIS MODE" and draw nothing — if that ever draws an empty
+  overlay instead, it is lying. Judge whether the whole-chapter hairball is usable at range or wants
+  a radius; and in `--fly` (C works there too) whether the yellow airframe boxes read as the shape
+  the plane collides with. *Blocks:* D35 sign-off.
+
 ---

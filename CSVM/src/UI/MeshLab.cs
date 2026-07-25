@@ -2,15 +2,15 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Flight;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.UI;
 
 /// <summary>
-/// The static viewer's mesh lab (<c>--viewer</c>, key M): geometry and shading
-/// diagnostics for one aircraft — normal vectors, wireframe with smoothing seams, the
-/// collision zone boxes, steerable lighting, and live overrides of the two render decisions
-/// that shading artifacts usually trace back to.
+/// The mesh lab (key M): geometry and shading diagnostics for one subtree — normal vectors,
+/// wireframe with smoothing seams, the collision zone boxes, steerable lighting, and live
+/// overrides of the two render decisions that shading artifacts usually trace back to.
 ///
 /// It exists because "this patch looks wrong" is not diagnosable from a screenshot: the
 /// candidate causes (a normal pointing the wrong way, a polygon single-sided that should be
@@ -18,12 +18,20 @@ namespace CSVM.UI;
 /// for it, or simply a texture that was never painted) all look alike on a dark model. The
 /// lab separates them by letting you change exactly one of those at a time and watch.
 ///
+/// <para><b>Two targets, one lab.</b> In <c>--viewer</c> it owns the parked aircraft for the
+/// whole session. In <c>--freecam</c>/<c>--anim-lab</c> it is <i>scoped</i>: M attaches it to
+/// whatever <see cref="SelectionService"/> currently has selected, and M again (or a selection
+/// change, or deselection) restores that subtree exactly — every surface's original material and
+/// mesh are held per surface for precisely that.</para>
+///
 /// <para><b>Override fidelity.</b> The <see cref="CullOverride"/> / <see cref="NormalSource"/>
-/// modes swap in the lab's own shader, which deliberately replicates SceneBuilder's vertex
-/// stage verbatim — <c>skip_vertex_transform</c> plus the same <c>depth_bias</c>/<c>node_bias</c>
-/// scale-toward-eye — so an override differs from the shipped render in the culling or the
-/// normal and in nothing else. Without that the coplanar decals would start z-fighting the
-/// moment you toggled anything and every comparison would be worthless.</para>
+/// modes rebuild the surface's OWN shader with two edits — the cull token in its
+/// <c>render_mode</c> and a normal rewrite at the top of <c>fragment()</c> — so an override
+/// differs from the shipped render in the culling or the normal and in nothing else. That
+/// matters most on world geometry, whose shaders are the fullbright variants (unshaded, sRGB
+/// vertex modulate, LIGHT_STATE spill, distance fog, UV scroll): a hand-written stand-in shader
+/// would silently re-light and unfog the very surface under test. Materials the lab cannot read
+/// a shader off fall back to a replica of SceneBuilder's shaded vertex stage.</para>
 ///
 /// <para><b>Provenance is inferred, not plumbed.</b> SceneBuilder does not record which
 /// normals came from the file and which came from its flat fallback, and threading that
@@ -65,11 +73,14 @@ public sealed partial class MeshLab : Node
 
     // ---- state ------------------------------------------------------------------------
 
-    private readonly Node3D _planeRoot;
+    private Node3D? _target;
     private readonly PlaneCollider? _collider;
     private readonly DirectionalLight3D _sun;
     private readonly Godot.Environment? _env;
     private readonly Camera3D _camera;
+    // Set only in the scoped (--freecam/--anim-lab) mode: the shared selection the lab follows.
+    private readonly SelectionService? _selection;
+    private bool _scopedActive;
 
     private NormalColorMode _colorMode = NormalColorMode.Provenance;
     private NormalDensity _density = NormalDensity.Off;
@@ -99,19 +110,27 @@ public sealed partial class MeshLab : Node
         public required Vector3[] Normals;
         public required int[] Tris;
         public required bool DoubleSided;
+        public required bool Fullbright;
         public required Material? Original;
         public Mesh? OriginalMesh;
     }
 
     /// <summary>--debug-mesh[=spec]: open the panel at launch and preset modes, so one
     /// scripted screenshot exercises the overlays rather than an empty panel. Same role as
-    /// --debug-livery / --debug-scoreboard. Null = flag absent.</summary>
+    /// --debug-livery / --debug-scoreboard. In a scoped run it also stands in for the M press,
+    /// attaching the lab to whatever the run selected. Null = flag absent.</summary>
     public string? DebugSpec { get; init; }
 
+    /// <summary>Whether the panel is shown when the scoped lab attaches. A scripted
+    /// <c>--screenshot</c> run turns it off, the same convention the anim lab follows, so the
+    /// capture answers a question about the geometry rather than about the UI over it.</summary>
+    public bool ShowPanel { get; init; } = true;
+
+    /// <summary>The <c>--viewer</c> lab: one fixed subtree (the parked aircraft) for the session.</summary>
     public MeshLab(Node3D planeRoot, PlaneCollider? collider, DirectionalLight3D sun,
         Godot.Environment? env, Camera3D camera)
     {
-        _planeRoot = planeRoot;
+        _target = planeRoot;
         _collider = collider;
         _sun = sun;
         _env = env;
@@ -119,8 +138,37 @@ public sealed partial class MeshLab : Node
         Name = "mesh_lab";
     }
 
+    /// <summary>The scoped lab (<c>--freecam</c>/<c>--anim-lab</c>): no target until M attaches it
+    /// to the shared selection's current rung.</summary>
+    public MeshLab(SelectionService selection, DirectionalLight3D sun, Godot.Environment? env,
+        Camera3D camera)
+    {
+        _selection = selection;
+        _sun = sun;
+        _env = env;
+        _camera = camera;
+        Name = "mesh_lab";
+    }
+
+    private bool Scoped => _selection != null;
+
     public override void _Ready()
     {
+        if (Scoped)
+        {
+            // Nothing is collected, drawn or overridden until M attaches the lab to a selection,
+            // so an unadorned freecam capture is unchanged by this node existing.
+            BuildUi();
+            _selection!.Changed += OnSelectionChanged;
+            if (DebugSpec != null)
+            {
+                ApplyDebugSpec(DebugSpec);
+                // The scripted twin of pressing M: attach to whatever the run selected. Deferred
+                // to the first frame, because --debug-select picks there.
+                _scopedPending = true;
+            }
+            return;
+        }
         CollectGeometry();
         BuildDrawNodes();
         SeedLighting();
@@ -148,7 +196,17 @@ public sealed partial class MeshLab : Node
         }
     }
 
+    public override void _ExitTree()
+    {
+        if (_selection != null)
+        {
+            _selection.Changed -= OnSelectionChanged;
+        }
+    }
+
     private int _debugCycles;
+    private bool _scopedPending;
+    private bool _debugRestore;
 
     /// <summary>Adopts the viewer's existing lighting as the lab's starting state instead of
     /// inventing one, so the sliders open on what you are actually looking at and an untouched
@@ -168,6 +226,18 @@ public sealed partial class MeshLab : Node
     {
         if (@event is not InputEventKey { Pressed: true, Echo: false } k)
             return;
+        // Scoped mode binds M and nothing else: the single-letter cyclers below are the same keys
+        // the free camera flies on (W/G/C/V), so there they belong to the camera and the modes are
+        // panel buttons only.
+        if (Scoped)
+        {
+            if (k.Keycode == Key.M)
+            {
+                ToggleScoped();
+                GetViewport().SetInputAsHandled();
+            }
+            return;
+        }
         switch (k.Keycode)
         {
             case Key.M: _ui.Visible = !_ui.Visible; return;
@@ -185,13 +255,111 @@ public sealed partial class MeshLab : Node
 
     public override void _Process(double delta)
     {
+        if (_scopedPending)
+        {
+            // --debug-mesh in a scoped run: attach on the first frame, after --debug-select picked.
+            _scopedPending = false;
+            ToggleScoped();
+            if (_debugRestore)
+            {
+                // The scripted restore probe: everything applied, then taken straight back off, so
+                // the capture must be identical to one with no lab at all.
+                ToggleScoped();
+            }
+        }
+        if (_overlayRoot != null && _target != null && IsInstanceValid(_target))
+        {
+            // The overlays are emitted in the target's own frame and live OUTSIDE its subtree
+            // (a drawing parked inside the thing it measures would enter the next box measured
+            // over it), so they ride its transform from here instead of inheriting it.
+            _overlayRoot.GlobalTransform = _target.GlobalTransform;
+        }
         if (!_headlight)
             return;
-        // Headlight: the sun rides the camera, so every surface facing you is lit by
+        // Headlight: the light rides the camera, so every surface facing you is lit by
         // definition and one that stays dark while pointed at you has a bad normal. This is
         // the sharpest normals test the lab has, and it needs no reasoning about geometry.
         var fwd = -_camera.GlobalTransform.Basis.Z;
         AimSun(fwd);
+    }
+
+    // ---- scoped attach / detach -----------------------------------------------------------
+
+    /// <summary>M in <c>--freecam</c>/<c>--anim-lab</c>: attach every overlay and override to the
+    /// selection's current rung, or take them all back off.</summary>
+    private void ToggleScoped()
+    {
+        if (_scopedActive)
+        {
+            int restored = _surfaces.Count;
+            DetachScoped();
+            _ui.Visible = false;
+            Log.Info("ui", $"mesh lab off — restored {restored} surface(s)");
+            return;
+        }
+        var pick = _selection?.Current;
+        if (pick == null)
+        {
+            // Absence of a subject is not "the subtree is clean" — say which it is.
+            Log.Info("ui", $"mesh lab: nothing is selected — click an object first (PgUp/PgDn pick the rung)");
+            _ui.Visible = ShowPanel;
+            _scopedNote = "NOTHING SELECTED — click an object, then M";
+            UpdateStatus();
+            return;
+        }
+        AttachScoped(pick);
+    }
+
+    private void AttachScoped(Node3D target)
+    {
+        _target = target;
+        _scopedActive = true;
+        _scopedNote = "";
+        CollectGeometry();
+        BuildDrawNodes();
+        RefreshAll(applyLighting: false);
+        _ui.Visible = ShowPanel;
+        var scale = target.GlobalTransform.Basis.Scale;
+        Log.Info("ui", $"mesh lab on '{SelectionService.NameOf(target)}': {_surfaces.Count} surface(s), {_triCount} tri(s), {_fullbrightSurfaces} fullbright, {_surfaces.Count - _fullbrightSurfaces} shaded, local radius {BoundingRadius():0.##} m, target scale ({scale.X:0.###},{scale.Y:0.###},{scale.Z:0.###})");
+    }
+
+    /// <summary>Puts the current target back exactly as it was built: original materials, original
+    /// meshes, no overlay geometry. The mode selections survive, so re-attaching (or moving to
+    /// another object) re-applies the same comparison.</summary>
+    private void DetachScoped()
+    {
+        RestoreSurfaces();
+        _overlayRoot?.QueueFree();
+        _overlayRoot = null;
+        _normalDraw = _wireDraw = _boxDraw = null!;
+        _surfaces.Clear();
+        _smoothed.Clear();
+        _triCount = _flatCount = _twoSidedTris = _fullbrightSurfaces = 0;
+        _capped = false;
+        _target = null;
+        _scopedActive = false;
+        if (_labLight != null)
+        {
+            _labLight.LightEnergy = 0f;
+        }
+    }
+
+    /// <summary>The selection moved while the lab was attached: restore the old subtree first, then
+    /// take the new one. A deselection (Current == null) just restores.</summary>
+    private void OnSelectionChanged(SelectionService selection, bool freshPick)
+    {
+        if (!_scopedActive)
+        {
+            return;
+        }
+        DetachScoped();
+        if (selection.Current is { } next)
+        {
+            AttachScoped(next);
+            return;
+        }
+        _scopedNote = "selection cleared";
+        UpdateStatus();
     }
 
     private static T Cycle<T>(T value) where T : struct, Enum
@@ -203,16 +371,42 @@ public sealed partial class MeshLab : Node
 
     // ---- geometry read-back -------------------------------------------------------------
 
-    /// <summary>Reads every built surface back out of its ArrayMesh into plane-local space.
-    /// Done once: the parked aircraft never moves, and re-reading per toggle would make the
-    /// cyclers feel sticky on the bigger models.</summary>
+    /// <summary>The most surfaces the lab reads back off one subtree. A rung high up the ladder can
+    /// carry a whole partition; collecting it would stall the frame and drown the overlays. Over the
+    /// cap the lab still works on what it took and SAYS it was capped, rather than quietly
+    /// diagnosing part of the object.</summary>
+    private const int MaxSurfaces = 3000;
+
+    /// <summary>And the most triangles the line overlays emit. Independent of the collection cap:
+    /// the counts stay honest for the whole subtree, only the drawing stops.</summary>
+    private const int MaxOverlayTris = 60000;
+
+    private bool _capped;
+    private int _fullbrightSurfaces;
+
+    /// <summary>Reads every built surface back out of its ArrayMesh into the target's local space.
+    /// Done once per target: the parked aircraft never moves, and re-reading per toggle would make
+    /// the cyclers feel sticky on the bigger models.</summary>
     private void CollectGeometry()
     {
-        var toPlane = _planeRoot.GlobalTransform.AffineInverse();
-        foreach (var inst in Descendants(_planeRoot).OfType<MeshInstance3D>())
+        if (_target == null)
+        {
+            return;
+        }
+        var toPlane = _target.GlobalTransform.AffineInverse();
+        foreach (var inst in Descendants(_target).OfType<MeshInstance3D>())
         {
             if (inst.Mesh is not ArrayMesh am)
                 continue;
+            if (inst.HasMeta(SelectionService.OverlayMeta))
+            {
+                continue; // another tool's drawing, not content
+            }
+            if (_surfaces.Count >= MaxSurfaces)
+            {
+                _capped = true;
+                break;
+            }
             var xf = toPlane * inst.GlobalTransform;
             var nrm = xf.Basis.Inverse().Transposed(); // correct under any non-uniform scale
             for (int s = 0; s < am.GetSurfaceCount(); s++)
@@ -242,6 +436,10 @@ public sealed partial class MeshLab : Node
                     // but honest, and it avoids widening SceneBuilder's API for a debug view.
                     DoubleSided = mat is ShaderMaterial sm && sm.Shader != null
                                   && sm.Shader.Code.Contains("cull_disabled"),
+                    // The world's variants render unshaded, so no light of ours reaches them —
+                    // the lighting section says so instead of pretending to steer them.
+                    Fullbright = mat is ShaderMaterial fb && fb.Shader != null
+                                 && fb.Shader.Code.Contains("unshaded"),
                     Original = mat,
                     OriginalMesh = am,
                 });
@@ -252,7 +450,14 @@ public sealed partial class MeshLab : Node
 
     private void TallyTriangles()
     {
-        _triCount = _flatCount = _twoSidedTris = 0;
+        _triCount = _flatCount = _twoSidedTris = _fullbrightSurfaces = 0;
+        foreach (var s in _surfaces)
+        {
+            if (s.Fullbright)
+            {
+                _fullbrightSurfaces++;
+            }
+        }
         foreach (var s in _surfaces)
             for (int t = 0; t + 2 < s.Tris.Length; t += 3)
             {
@@ -303,14 +508,28 @@ public sealed partial class MeshLab : Node
 
     // ---- overlays -----------------------------------------------------------------------
 
+    // Parent of the three overlay meshes in the scoped mode: one node the lab owns, whose transform
+    // follows the target each frame. In --viewer the overlays stay children of the parked plane,
+    // which is where they have always been.
+    private Node3D? _overlayRoot;
+
     private void BuildDrawNodes()
     {
-        _normalDraw = MakeDrawNode("mesh_lab_normals");
-        _wireDraw = MakeDrawNode("mesh_lab_wire");
-        _boxDraw = MakeDrawNode("mesh_lab_boxes");
+        Node parent = _target!;
+        if (Scoped)
+        {
+            _overlayRoot = new Node3D { Name = "mesh_lab_overlays" };
+            _overlayRoot.SetMeta(SelectionService.OverlayMeta, true);
+            AddChild(_overlayRoot);
+            _overlayRoot.GlobalTransform = _target!.GlobalTransform;
+            parent = _overlayRoot;
+        }
+        _normalDraw = MakeDrawNode("mesh_lab_normals", parent);
+        _wireDraw = MakeDrawNode("mesh_lab_wire", parent);
+        _boxDraw = MakeDrawNode("mesh_lab_boxes", parent);
     }
 
-    private MeshInstance3D MakeDrawNode(string name)
+    private static MeshInstance3D MakeDrawNode(string name, Node parent)
     {
         var mi = new MeshInstance3D
         {
@@ -325,7 +544,8 @@ public sealed partial class MeshLab : Node
                 CullMode = BaseMaterial3D.CullModeEnum.Disabled,
             },
         };
-        _planeRoot.AddChild(mi);
+        mi.SetMeta(SelectionService.OverlayMeta, true);
+        parent.AddChild(mi);
         return mi;
     }
 
@@ -347,16 +567,25 @@ public sealed partial class MeshLab : Node
 
     private void RebuildNormals()
     {
-        var im = (ImmediateMesh)_normalDraw.Mesh;
+        if (_normalDraw is not { Mesh: ImmediateMesh im })
+        {
+            return;
+        }
         im.ClearSurfaces();
         if (_density == NormalDensity.Off || _surfaces.Count == 0)
             return;
 
         float len = Mathf.Max(BoundingRadius() * NormalLenFrac, 0.01f);
+        int drawn = 0;
         im.SurfaceBegin(Mesh.PrimitiveType.Lines);
         foreach (var s in _surfaces)
             for (int t = 0; t + 2 < s.Tris.Length; t += 3)
             {
+                if (++drawn > MaxOverlayTris)
+                {
+                    _capped = true;
+                    break;
+                }
                 bool flat = IsFlatFallback(s, t);
                 var face = FaceNormal(s, t);
                 if (_density == NormalDensity.PerFace)
@@ -399,20 +628,36 @@ public sealed partial class MeshLab : Node
         im.SurfaceAddVertex(at + n * len);
     }
 
+    /// <summary>Half the diagonal of the collected geometry's own bounding box — the subject's SIZE,
+    /// measured about its own centre rather than about the frame's origin. World subtrees are built
+    /// with their vertices in absolute coordinates under an identity node transform, so a
+    /// distance-from-origin radius reads as the object's distance from the map corner: the C1 water
+    /// tower measured 7,420 m and drew 163 m normal lines across the whole chapter.</summary>
     private float BoundingRadius()
     {
-        float r = 0f;
+        if (_surfaces.Count == 0)
+        {
+            return 0f;
+        }
+        var lo = new Vector3(float.MaxValue, float.MaxValue, float.MaxValue);
+        var hi = new Vector3(float.MinValue, float.MinValue, float.MinValue);
         foreach (var s in _surfaces)
             foreach (var v in s.Verts)
-                r = Mathf.Max(r, v.Length());
-        return r;
+            {
+                lo = new Vector3(Mathf.Min(lo.X, v.X), Mathf.Min(lo.Y, v.Y), Mathf.Min(lo.Z, v.Z));
+                hi = new Vector3(Mathf.Max(hi.X, v.X), Mathf.Max(hi.Y, v.Y), Mathf.Max(hi.Z, v.Z));
+            }
+        return hi.X < lo.X ? 0f : (hi - lo).Length() * 0.5f;
     }
 
     // ---- wireframe ----------------------------------------------------------------------
 
     private void RebuildWireframe()
     {
-        var im = (ImmediateMesh)_wireDraw.Mesh;
+        if (_wireDraw is not { Mesh: ImmediateMesh im })
+        {
+            return;
+        }
         im.ClearSurfaces();
         if (_wire == WireMode.Off)
             return;
@@ -421,9 +666,16 @@ public sealed partial class MeshLab : Node
         var boundary = new Color(1f, 1f, 1f, 0.85f);
         var seam = new Color(1f, 0.15f, 0.15f, 0.95f);
 
+        int drawn = 0;
         im.SurfaceBegin(Mesh.PrimitiveType.Lines);
         foreach (var s in _surfaces)
         {
+            if (drawn > MaxOverlayTris)
+            {
+                _capped = true;
+                break;
+            }
+            drawn += s.Tris.Length / 3;
             // Edge → the (position-keyed) triangles touching it. Keyed by quantised position
             // rather than vertex index because SurfaceTool splits a vertex wherever the
             // normal differs — which is precisely the seam we are trying to find, so index
@@ -515,7 +767,10 @@ public sealed partial class MeshLab : Node
 
     private void RebuildBoxes()
     {
-        var im = (ImmediateMesh)_boxDraw.Mesh;
+        if (_boxDraw is not { Mesh: ImmediateMesh im })
+        {
+            return;
+        }
         im.ClearSurfaces();
         if (!_boxes || _collider == null)
             return;
@@ -580,9 +835,14 @@ public sealed partial class MeshLab : Node
 
     private readonly Dictionary<int, Shader> _overrideShaders = new();
 
+    // --debug-mesh=force: build the override materials even when both cyclers sit on AsData. The
+    // lab's able-to-fail control — an override that only ever differs in the thing under test must
+    // render the shipped picture when asked for the shipped settings, and this is what measures it.
+    private bool _forceOverride;
+
     private void ApplyOverrides()
     {
-        bool off = _cull == CullOverride.AsData && _normals == NormalSource.AsData;
+        bool off = !_forceOverride && _cull == CullOverride.AsData && _normals == NormalSource.AsData;
         foreach (var s in _surfaces)
         {
             if (off)
@@ -603,28 +863,166 @@ public sealed partial class MeshLab : Node
             ? Viewport.DebugDrawEnum.Wireframe : Viewport.DebugDrawEnum.Disabled;
     }
 
+    /// <summary>The uniform the derived shader carries, named so it cannot collide with anything
+    /// SceneBuilder declares.</summary>
+    private const string NormalModeParam = "csky_lab_normal_mode";
+
+    private int NormalMode => _normals switch
+    {
+        NormalSource.AllFlat => 1,
+        NormalSource.Negated => 2,
+        _ => 0, // AsData and AllSmooth both use the mesh's normals (smooth swaps the mesh)
+    };
+
+    /// <summary>The override material for one surface: the surface's OWN shader with the cull token
+    /// swapped and a normal rewrite injected, plus every parameter copied across. Deriving beats
+    /// re-implementing — the world's fullbright variants carry fog, the sRGB vertex modulate, the
+    /// LIGHT_STATE spill and UV scroll, and a stand-in shader that dropped any of those would
+    /// change what you are inspecting instead of only what you asked to test.</summary>
     private ShaderMaterial OverrideMaterial(Surf s)
     {
+        if (s.Original is ShaderMaterial src && src.Shader is { } shader
+            && DerivedShader(shader, CullFor(s)) is { } derived)
+        {
+            var mat = new ShaderMaterial { Shader = derived };
+            CopyParameters(shader, src, mat);
+            mat.SetShaderParameter(NormalModeParam, NormalMode);
+            return mat;
+        }
+        // A surface whose material is not one of ours (or whose shader we could not read): fall
+        // back to the replica of SceneBuilder's shaded stage, and say so rather than skipping it.
+        if (!_warnedDeriveGap)
+        {
+            _warnedDeriveGap = true;
+            Log.Info("ui", $"mesh lab: '{s.Instance.Name}' surface {s.Index} has no readable shader — overriding it through the replica shader (fog/scroll/alpha terms are not carried there)");
+        }
         bool textured = s.Original is ShaderMaterial osm
                         && osm.GetShaderParameter("albedo_tex").VariantType != Variant.Type.Nil;
-        var mat = new ShaderMaterial { Shader = GetOverrideShader(CullFor(s), textured) };
-        if (s.Original is ShaderMaterial src)
+        var fallback = new ShaderMaterial { Shader = GetOverrideShader(CullFor(s), textured) };
+        if (s.Original is ShaderMaterial plain)
         {
             if (textured)
-                mat.SetShaderParameter("albedo_tex", src.GetShaderParameter("albedo_tex"));
+                fallback.SetShaderParameter("albedo_tex", plain.GetShaderParameter("albedo_tex"));
             else
-                mat.SetShaderParameter("albedo_color", src.GetShaderParameter("albedo_color"));
+                fallback.SetShaderParameter("albedo_color", plain.GetShaderParameter("albedo_color"));
             // Carry the depth bias so overridden surfaces keep their coplanar layering — an
             // override must differ in the thing under test and nothing else.
-            mat.SetShaderParameter("depth_bias", src.GetShaderParameter("depth_bias"));
+            fallback.SetShaderParameter("depth_bias", plain.GetShaderParameter("depth_bias"));
         }
-        mat.SetShaderParameter("normal_mode", _normals switch
+        fallback.SetShaderParameter("normal_mode", NormalMode);
+        return fallback;
+    }
+
+    private static bool _warnedDeriveGap;
+
+    // Derived shaders, keyed by the source shader and the cull mode asked of it. One per pair, for
+    // the whole session: the source shaders are themselves cached and shared across surfaces.
+    private readonly Dictionary<(ulong, int), Shader?> _derived = new();
+
+    /// <summary>Rewrites a built shader into the lab's A/B twin: the cull token in its
+    /// <c>render_mode</c> becomes <paramref name="cull"/>, and <c>fragment()</c> opens with the
+    /// normal-source rewrite. Everything else — vertex stage, fog, lights, alpha, the instance
+    /// uniform block and its declaration order — is the original text. Null when the code does not
+    /// have the two anchors, which is the caller's cue to fall back rather than guess.</summary>
+    private Shader? DerivedShader(Shader source, BaseMaterial3D.CullModeEnum cull)
+    {
+        var key = (source.GetInstanceId(), (int)cull);
+        if (_derived.TryGetValue(key, out var cached))
         {
-            NormalSource.AllFlat => 1,
-            NormalSource.Negated => 2,
-            _ => 0, // AsData and AllSmooth both use the mesh's normals (smooth swaps the mesh)
-        });
-        return mat;
+            return cached;
+        }
+        string? code = RewriteShader(source.Code, CullToken(cull));
+        var shader = code == null ? null : new Shader { Code = code };
+        _derived[key] = shader;
+        return shader;
+    }
+
+    private static string CullToken(BaseMaterial3D.CullModeEnum cull) => cull switch
+    {
+        BaseMaterial3D.CullModeEnum.Disabled => "cull_disabled",
+        BaseMaterial3D.CullModeEnum.Back => "cull_back",
+        _ => "cull_front",
+    };
+
+    private static readonly string[] CullTokens = { "cull_disabled", "cull_front", "cull_back" };
+
+    private static string? RewriteShader(string code, string cullToken)
+    {
+        int rm = code.IndexOf("render_mode", StringComparison.Ordinal);
+        int fragment = code.IndexOf("void fragment()", StringComparison.Ordinal);
+        if (rm < 0 || fragment < 0)
+        {
+            return null;
+        }
+        int rmEnd = code.IndexOf(';', rm);
+        int brace = code.IndexOf('{', fragment);
+        if (rmEnd < 0 || brace < 0)
+        {
+            return null;
+        }
+
+        string modes = code[rm..rmEnd];
+        string replaced = modes;
+        bool declared = false;
+        foreach (var token in CullTokens)
+        {
+            if (modes.Contains(token, StringComparison.Ordinal))
+            {
+                replaced = modes.Replace(token, cullToken);
+                declared = true;
+                break;
+            }
+        }
+        if (!declared)
+        {
+            // No sidedness declared ⇒ Godot's default (cull_back). Name it explicitly so the
+            // override is the mode the panel says it is.
+            replaced = modes + ", " + cullToken;
+        }
+
+        // Rewriting NORMAL at the TOP of fragment() rather than the bottom: the fullbright world
+        // path derives its LIGHT_STATE lighting normal inside the body, and a rewrite after that
+        // would leave the one thing NORMAL still drives in that variant untouched.
+        const string inject = @"
+    if (csky_lab_normal_mode == 1) {
+        // Geometric normal from screen derivatives of the view-space position. Sign follows the
+        // rendered side (FRONT_FACING) so it stays predictable under any cull mode.
+        vec3 csky_lab_g = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+        NORMAL = FRONT_FACING ? csky_lab_g : -csky_lab_g;
+    } else if (csky_lab_normal_mode == 2) {
+        NORMAL = -NORMAL;
+    }
+";
+        var sb = new System.Text.StringBuilder(code.Length + inject.Length + 64);
+        sb.Append(code, 0, rm);
+        sb.Append(replaced);
+        sb.Append(code, rmEnd, brace + 1 - rmEnd);
+        sb.Append(inject);
+        sb.Append(code, brace + 1, code.Length - brace - 1);
+        // The uniform goes after the render_mode statement, where a shader's own uniforms live.
+        sb.Insert(rm + replaced.Length + 1, $"\nuniform int {NormalModeParam} = 0;");
+        return sb.ToString();
+    }
+
+    /// <summary>Copies every uniform the source material actually carries onto the derived one. By
+    /// name, over the shader's own uniform list, so a parameter added to SceneBuilder later is
+    /// carried without touching this file.</summary>
+    private static void CopyParameters(Shader shader, ShaderMaterial from, ShaderMaterial to)
+    {
+        foreach (var entry in shader.GetShaderUniformList())
+        {
+            var dict = entry.AsGodotDictionary();
+            if (!dict.TryGetValue("name", out var nameVar))
+            {
+                continue;
+            }
+            string name = nameVar.AsString();
+            var value = from.GetShaderParameter(name);
+            if (value.VariantType != Variant.Type.Nil)
+            {
+                to.SetShaderParameter(name, value);
+            }
+        }
     }
 
     private BaseMaterial3D.CullModeEnum CullFor(Surf s) => _cull switch
@@ -783,8 +1181,30 @@ void fragment() {{
 
     private void RestoreMesh(Surf s)
     {
-        if (s.OriginalMesh != null && s.Instance.Mesh != s.OriginalMesh)
+        if (s.OriginalMesh != null && IsInstanceValid(s.Instance) && s.Instance.Mesh != s.OriginalMesh)
+        {
             s.Instance.Mesh = s.OriginalMesh;
+        }
+    }
+
+    /// <summary>Puts every collected surface back on its original material and mesh. The exact
+    /// restore the scoped lab owes on M-off, on a selection change and on teardown; a surface whose
+    /// node has since been freed (a destructible swapping to its wreck) is simply skipped.</summary>
+    private void RestoreSurfaces()
+    {
+        foreach (var s in _surfaces)
+        {
+            if (!IsInstanceValid(s.Instance))
+            {
+                continue;
+            }
+            SetOverride(s, null);
+            RestoreMesh(s);
+        }
+        if (_engineWireframe && IsInstanceValid(GetViewport()))
+        {
+            GetViewport().DebugDraw = Viewport.DebugDrawEnum.Disabled;
+        }
     }
 
     // ---- lighting -------------------------------------------------------------------------
@@ -792,9 +1212,18 @@ void fragment() {{
     private Vector3 _sunDir = new(-0.5f, -0.7f, 0.5f);
     private float _sunEnergy = 1.6f, _ambientEnergy = 0.9f;
     private bool _ambientOn = true;
+    // The scoped lab's own light. The session's sun and environment belong to the world, and a
+    // diagnostic that re-aims them changes the thing it is measuring everywhere else on screen —
+    // so in that mode the sliders drive this instead, created dark and only on first use.
+    private DirectionalLight3D? _labLight;
 
     private void ApplyLighting()
     {
+        if (Scoped)
+        {
+            ApplyScopedLighting();
+            return;
+        }
         _sun.LightEnergy = _sunEnergy;
         if (!_headlight)
             AimSun(_sunDir);
@@ -802,14 +1231,35 @@ void fragment() {{
             _env.AmbientLightEnergy = _ambientOn ? _ambientEnergy : 0f;
     }
 
+    private void ApplyScopedLighting()
+    {
+        if (_labLight == null)
+        {
+            _labLight = new DirectionalLight3D
+            {
+                Name = "mesh_lab_light",
+                LightEnergy = 0f,
+                ShadowEnabled = false,
+            };
+            _labLight.SetMeta(SelectionService.OverlayMeta, true);
+            AddChild(_labLight);
+        }
+        _labLight.LightEnergy = _sunEnergy;
+        if (!_headlight)
+            AimSun(_sunDir);
+    }
+
     private void AimSun(Vector3 dir)
     {
-        if (dir.LengthSquared() < 1e-6f)
+        var light = Scoped ? _labLight : _sun;
+        if (light == null || dir.LengthSquared() < 1e-6f)
+        {
             return;
+        }
         dir = dir.Normalized();
         // LookAt degenerates when the direction is parallel to the up hint — pick another.
         var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.999f ? Vector3.Forward : Vector3.Up;
-        _sun.LookAtFromPosition(_sun.GlobalPosition, _sun.GlobalPosition + dir, up);
+        light.LookAtFromPosition(light.GlobalPosition, light.GlobalPosition + dir, up);
     }
 
     // ---- --debug-mesh spec ------------------------------------------------------------------
@@ -846,6 +1296,13 @@ void fragment() {{
                     _ => WireMode.Edges,
                 }; break;
                 case "boxes": _boxes = true; break;
+                case "force": _forceOverride = true; break;
+                case "restore":
+                    // Scoped runs only: attach with everything the spec asked for, then detach
+                    // again on the same frame. The scripted twin of M-on-M-off, and the only way
+                    // to prove the restore is exact — the capture must match a run with no lab.
+                    _debugRestore = true;
+                    break;
                 case "headlight": _headlight = true; break;
                 case "enginewire": _engineWireframe = true; break;
                 case "cull": _cull = value switch
@@ -900,7 +1357,10 @@ void fragment() {{
 
     private Button _normalsBtn = null!, _colorBtn = null!, _wireBtn = null!,
         _cullBtn = null!, _sourceBtn = null!;
-    private CheckButton _boxBtn = null!, _headlightBtn = null!, _ambientBtn = null!, _engineWireBtn = null!;
+    private CheckButton? _boxBtn, _ambientBtn, _engineWireBtn;
+    private CheckButton _headlightBtn = null!;
+    private Label? _lightNote;
+    private string _scopedNote = "";
 
     private void BuildUi()
     {
@@ -921,31 +1381,54 @@ void fragment() {{
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 3);
 
-        box.AddChild(new Label { Text = "MESH LAB" });
-        box.AddChild(Small("M hides this panel · H damage lab · L livery lab"));
+        box.AddChild(new Label { Text = Scoped ? "MESH LAB — SELECTION" : "MESH LAB" });
+        box.AddChild(Small(Scoped
+            ? "M detaches (restores the subtree) · click / PgUp / PgDn re-target it"
+            : "M hides this panel · H damage lab · L livery lab"));
         _countsLabel = Small("");
         box.AddChild(_countsLabel);
         box.AddChild(Separator());
 
-        _normalsBtn = CycleRow(box, "normals  [G]", () => { _density = Cycle(_density); RebuildNormals(); });
-        _colorBtn = CycleRow(box, "colour   [N]", () => { _colorMode = Cycle(_colorMode); RebuildNormals(); });
+        // The single-letter shortcuts exist only in the viewer: in the scoped modes those keys fly
+        // the camera, so there the buttons are the whole interface.
+        _normalsBtn = CycleRow(box, Scoped ? "normals" : "normals  [G]", () => { _density = Cycle(_density); RebuildNormals(); });
+        _colorBtn = CycleRow(box, Scoped ? "colour" : "colour   [N]", () => { _colorMode = Cycle(_colorMode); RebuildNormals(); });
         box.AddChild(Small("cyan/blue = from file (1/2-sided)"));
         box.AddChild(Small("orange/red = FLAT FALLBACK (1/2-sided)"));
-        _wireBtn = CycleRow(box, "wireframe [W]", () => { _wire = Cycle(_wire); RebuildWireframe(); });
-        _boxBtn = CheckRow(box, "zone boxes  [B]", v => { _boxes = v; RebuildBoxes(); });
-        _engineWireBtn = CheckRow(box, "engine wireframe", v => { _engineWireframe = v; ApplyOverrides(); });
+        _wireBtn = CycleRow(box, Scoped ? "wireframe" : "wireframe [W]", () => { _wire = Cycle(_wire); RebuildWireframe(); });
+        if (!Scoped)
+        {
+            // Zone boxes are the aircraft's damage-collision boxes, and the engine wireframe is
+            // viewport-wide — neither is a property of a selected world subtree.
+            _boxBtn = CheckRow(box, "zone boxes  [B]", v => { _boxes = v; RebuildBoxes(); });
+            _engineWireBtn = CheckRow(box, "engine wireframe", v => { _engineWireframe = v; ApplyOverrides(); });
+        }
 
         box.AddChild(Separator());
         box.AddChild(Small("OVERRIDES — A/B the render decisions"));
-        _cullBtn = CycleRow(box, "cull     [C]", () => { _cull = Cycle(_cull); ApplyOverrides(); });
-        _sourceBtn = CycleRow(box, "normal src [V]", () => { _normals = Cycle(_normals); ApplyOverrides(); });
+        _cullBtn = CycleRow(box, Scoped ? "cull" : "cull     [C]", () => { _cull = Cycle(_cull); ApplyOverrides(); });
+        _sourceBtn = CycleRow(box, Scoped ? "normal src" : "normal src [V]", () => { _normals = Cycle(_normals); ApplyOverrides(); });
 
         box.AddChild(Separator());
         box.AddChild(Small("LIGHTING"));
-        _ambientBtn = CheckRow(box, "ambient", v => { _ambientOn = v; ApplyLighting(); });
+        if (Scoped)
+        {
+            // Scoped lighting drives the lab's OWN light. The world's sun and ambient are the
+            // world's; steering them to inspect one building would re-light everything else.
+            box.AddChild(Small("the lab's own light — the world sun is not touched"));
+            _lightNote = Small("");
+            box.AddChild(_lightNote);
+        }
+        else
+        {
+            _ambientBtn = CheckRow(box, "ambient", v => { _ambientOn = v; ApplyLighting(); });
+        }
         _headlightBtn = CheckRow(box, "headlight (light = camera)", v => { _headlight = v; ApplyLighting(); });
-        SliderRow(box, "ambient energy", 0f, 3f, _ambientEnergy, v => { _ambientEnergy = v; ApplyLighting(); });
-        SliderRow(box, "sun energy", 0f, 6f, _sunEnergy, v => { _sunEnergy = v; ApplyLighting(); });
+        if (!Scoped)
+        {
+            SliderRow(box, "ambient energy", 0f, 3f, _ambientEnergy, v => { _ambientEnergy = v; ApplyLighting(); });
+        }
+        SliderRow(box, Scoped ? "light energy" : "sun energy", 0f, 6f, _sunEnergy, v => { _sunEnergy = v; ApplyLighting(); });
         string[] axis = { "dir X", "dir Y", "dir Z" };
         for (int i = 0; i < 3; i++)
         {
@@ -1036,20 +1519,44 @@ void fragment() {{
         _wireBtn.Text = _wire.ToString();
         _cullBtn.Text = _cull.ToString();
         _sourceBtn.Text = _normals.ToString();
-        _boxBtn.ButtonPressed = _boxes;
         _headlightBtn.ButtonPressed = _headlight;
-        _ambientBtn.ButtonPressed = _ambientOn;
-        _engineWireBtn.ButtonPressed = _engineWireframe;
+        if (_boxBtn != null)
+        {
+            _boxBtn.ButtonPressed = _boxes;
+        }
+        if (_ambientBtn != null)
+        {
+            _ambientBtn.ButtonPressed = _ambientOn;
+        }
+        if (_engineWireBtn != null)
+        {
+            _engineWireBtn.ButtonPressed = _engineWireframe;
+        }
         _suppressCallbacks = false;
     }
 
     private void UpdateStatus()
     {
-        _countsLabel.Text = $"{_surfaces.Count} surfaces · {_triCount} tris · "
-                            + $"{_flatCount} flat ({Pct(_flatCount)}) · {_twoSidedTris} 2-sided ({Pct(_twoSidedTris)})";
-        _statusLabel.Text = _cull == CullOverride.AsData && _normals == NormalSource.AsData
-            ? "render: shipped path"
-            : $"render: OVERRIDDEN ({_cull}, {_normals})";
+        string subject = Scoped
+            ? (_target != null && IsInstanceValid(_target)
+                ? $"'{SelectionService.NameOf(_target)}' · " : "")
+            : "";
+        _countsLabel.Text = subject + $"{_surfaces.Count} surfaces · {_triCount} tris · "
+                            + $"{_flatCount} flat ({Pct(_flatCount)}) · {_twoSidedTris} 2-sided ({Pct(_twoSidedTris)})"
+                            + (_capped ? $" · CAPPED at {MaxSurfaces} surfaces / {MaxOverlayTris} drawn tris" : "");
+        if (_lightNote != null)
+        {
+            // A light that cannot reach the subject is worse than no light control: it looks like
+            // a measurement. Say which case this target is.
+            _lightNote.Text = _surfaces.Count == 0 ? ""
+                : _fullbrightSurfaces == _surfaces.Count
+                    ? "target is fullbright (unshaded) — no light reaches it"
+                    : $"{_surfaces.Count - _fullbrightSurfaces} of {_surfaces.Count} surfaces are lit";
+        }
+        _statusLabel.Text = _scopedNote.Length > 0 ? _scopedNote
+            : !_forceOverride && _cull == CullOverride.AsData && _normals == NormalSource.AsData
+                ? "render: shipped path"
+                : $"render: OVERRIDDEN ({_cull}, {_normals})";
     }
 
     private string Pct(int n) => _triCount > 0 ? $"{n * 100f / _triCount:0}%" : "—";

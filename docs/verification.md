@@ -101,7 +101,9 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     (`TIME_PHYSICS_PROCESS`, ratio-only too) for collision changes; with no monitor on the
     subsystem, call the effect unresolved.
 39. **Split the timer before choosing what to optimise — engine setters hide cost.** The clutter
-    collision build was 271 ms transform vs 3,403 ms `ConcavePolygonShape3D` BVH build.
+    collision build was 271 ms transform vs 3,403 ms `ConcavePolygonShape3D` BVH build. (That term
+    is gone since the shapes became shared: `--collision`'s cost is now the WORLD trimesh build —
+    C2 `world` 352 → 865 ms against `clutter` 47 → 56 ms. Re-split before quoting an old split.)
 40. **Do not assume a cost is on the GPU.** Viewport GPU time was 0.27 ms while the frame was
     ~133 ms of C#; this trap fired twice.
 41. **Differences smaller than the instrument are not differences.** 5537 vs 5606 ms over 3-run
@@ -420,6 +422,20 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      0.01–0.04 ms in every scenario because the fixed clock is parent-driven, so `_PhysicsProcess`
      consumers no-op and collision cost lands in `script`. Even uncapped this machine still paces at
      exactly 120 fps, so `fps`/`frame_ms` stay floors (rule 38); read `render_cpu`, `gpu` and the counts.
+
+103. **A world subtree's vertices are ABSOLUTE — its node transform is identity, so distance from
+     that frame's origin is not a size.** C1's water tower measured a 7,420 m "bounding radius"
+     (its distance from the map corner) where the object is 4×14×4 m, and the mesh lab's normal
+     lines, scaled by 2.2 % of it, drew 163 m spikes across the chapter. Measure an object's extent
+     from its own bounding BOX, never as max |v|; the aircraft, which is modelled about its origin,
+     is the case that hides this.
+
+104. **A diagnostic overlay must be provable against the shipped render, so give it a mode that
+     forces it ON at the data's own settings.** The mesh lab's `--debug-mesh=force` renders the
+     override materials with cull and normals set to what the data says, which must be pixel-identical
+     to no override at all: the derived-from-the-original shader measured 0 px, while the hand-written
+     replica it replaced moved 1,682 px of a 2,500 px subject (it carried no fog, scroll or alpha
+     term). Without that mode a broken override only shows up as a wrong conclusion later.
 
 ## What this project cannot verify itself
 

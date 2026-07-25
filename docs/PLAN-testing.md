@@ -90,9 +90,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 31. ☑ D31 — Shared selection: click leaf + ancestor-ladder breadcrumb, PgUp/PgDn, highlight box **(done 2026-07-25 — `src/UI/SelectionService.cs`; the picking audit's answer and what D32–D35 may rely on are in the item's landing note; `docs/HISTORY.md`)**
 32. ☑ D32 — Node Lab (N): tree panel synced to selection — search, frame, hide/show, dependencies **(done 2026-07-25 — `src/UI/NodeLab.cs` + `--debug-nodelab`; absorbs M3's F41; `docs/HISTORY.md`)**
-33. ☐ D33 — Mesh Lab (M) operates on the selected world subtree in freecam
+33. ☑ D33 — Mesh Lab (M) operates on the selected world subtree in freecam **(done 2026-07-25 — `MeshLab` parameterized on a `SelectionService`; the override materials are now the surface's own shader with two edits, proven 0-px against the shipped render by the new `--debug-mesh=force`; `docs/HISTORY.md`)**
 34. ☐ D34 — Damage sliders (H) on the selected destructible — supersedes M3 F40
-35. ☐ D35 — Collider wireframes (C); collision force-buildable in freecam
+35. ☑ D35 — Collider wireframes (C); collision force-buildable in freecam **(done 2026-07-25 — `src/UI/ColliderOverlay.cs` + `--collision[=show]`; on/off counts and the names that flipped are reported separately; `docs/HISTORY.md`)**
 
 ## Dependency and parallelism notes
 
@@ -796,7 +796,7 @@ pick cannot name one; it is also how anything over D31's 350 m pick cap is reach
 buttons and the two-way click sync run through `--debug-nodelab` and by construction only, and the
 layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case.
 
-## D33 ☐ Mesh Lab on the selection in freecam
+## D33 ☑ Mesh Lab on the selection in freecam
 
 **Goal.** M in freecam/anim-lab applies the existing mesh-lab overlays — normals, wireframe/seams, cull/normal-source overrides, steerable light — to **the selected subtree only**, restoring everything on deselect/toggle-off.
 
@@ -807,6 +807,32 @@ layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case
 **Verify.** In freecam over C1: select a building, M on → overlays on that building only (shot: rest of world's pixels unchanged vs baseline outside the building's screen rect); M off → byte-identical to pre-toggle shot (`--det`). The A/B that matters: `cull=inverted` on a world mesh visibly flips it (able to fail).
 
 **⚠ Traps.** Rule 56 is the whole item: any lighting/vertex divergence in the override materials silently changes what you're inspecting. Restore-on-exit must survive the selection changing while M is active.
+
+**Landed 2026-07-25** — `MeshLab` takes a `SelectionService` in a second constructor and becomes
+the *scoped* lab; M attaches, M again restores. Evidence in `docs/HISTORY.md`.
+
+**How rule 56 was answered, and the control that proves it.** The override material is **the
+surface's own shader, edited twice** — the cull token in `render_mode`, and a
+`csky_lab_normal_mode` rewrite injected at the *top* of `fragment()` (the top, because the world's
+fullbright variant derives its LIGHT_STATE lighting normal inside the body) — with every uniform
+copied by name. Deriving replaced re-implementing because a world shader carries `unshaded`, the
+sRGB vertex modulate, the light spill, cylindrical fog, UV scroll and its alpha term, none of which
+the old hand-written replica had. The new `--debug-mesh=force` token builds the overrides at the
+data's own settings, which must reproduce the shipped picture: **0 px** on both a world subtree and
+the parked plane, against **1,682 px** (of a ~2,500 px subject) through the replica. That replica
+is now the fallback for a material with no readable shader, and it announces itself.
+
+**Deviations from the item text.** Only **M** is bound in the scoped modes — the viewer's G/N/W/B/C/V
+cyclers are keys the free camera flies on, so there the panel's buttons are the interface. The light
+sliders drive the lab's **own** `DirectionalLight3D`, created dark on first use, and a fullbright
+target says "no light reaches it" rather than offering a control that does nothing; ambient, the
+zone boxes and the viewport-wide engine wireframe are hidden in scoped mode as not-subtree-scoped.
+The panel hides itself in a `--screenshot` run (the anim lab's convention), which is what let the
+scoping be measured as pixels.
+
+**Residuals.** M, the light steering and re-targeting by clicking another object while attached are
+all keypress halves — unscriptable here, so they are by construction and sit in `playtest.md`. A
+selected rung's collection is capped (3,000 surfaces, 60k drawn triangles) and says when it capped.
 
 ## D34 ☐ Damage sliders on the selected destructible (supersedes M3 F40)
 
@@ -820,7 +846,7 @@ layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case
 
 **⚠ Traps.** Rule 72 (collider assertions need collision built — pair with D35's force flag or assert on the logged flips only); rule 75 (debris is scheduled — the interactive world's clock is running, so this is the one place it "just works"; the *scripted* variant must tick past the schedule).
 
-## D35 ☐ Collider wireframes (C), collision force-buildable in freecam
+## D35 ☑ Collider wireframes (C), collision force-buildable in freecam
 
 **Goal.** C toggles wireframe rendering of every built `CollisionShape3D` (world + clutter + plane boxes), colour-coded by owner class; `--collision` forces the collision build in freecam/anim-lab (today those modes build none — rule 72), and toggling C without it prompts with the fact instead of drawing nothing silently.
 
@@ -831,3 +857,34 @@ layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case
 **Verify.** Freecam C2 with `--collision`: C on → the propane tank and gates show wireframes; kill the gate (D34) → its healthy wireframe gone, wreck's present (the rule-73 direction split, now visible). Without `--collision`: C prints the no-colliders notice. `--perf` with overlay on: draw calls rise, frame time within budget at the C4 pose.
 
 **⚠ Traps.** Rule 72 is the item's reason and its trap — never render an empty overlay as if it were "no colliders exist". Wreck-swap colliders appear at death (rule 73); a stale overlay after a kill is a lie — regenerate on swap.
+
+**Landed 2026-07-25** — `src/UI/ColliderOverlay.cs`, `--collision[=show]` and `--debug-colliders`.
+Evidence in `docs/HISTORY.md`.
+
+**What the shapes actually are, for whoever draws them next.** Two mechanisms, not one: world and
+aircraft geometry hangs its shapes on `CollisionShape3D` nodes, but the **solid clutter attaches
+shared shapes straight to a region body's RID with no node at all**, so those are read back through
+`PhysicsServer3D.BodyGetShape*` — and only through those getters, since any `ShapeOwner*` call on
+one of those bodies makes Godot rebuild it from the nodes it does not have and silently empty it.
+Two engine limits bit: an `ImmediateMesh` caps at **256 surfaces** (one surface per *body*, never
+per shape — a C2 clutter region carries thousands of placements), and a surface closed with no
+vertices is an error, so emptiness is checked before one is opened.
+
+**The staleness answer.** Rather than regenerating on a swap event, every wireframe's visibility
+**follows its shape's live `Disabled` flag**, re-read 4×/s: the wreck's colliders already exist at
+build time (disabled), so one walk covers both sides of every future death. When the tally moves it
+logs the two directions and the names that flipped — never a net, which for C2's `gate1` is +7
+against the true `col[off 1, on 8]`.
+
+**Deviations from the item text.** `--collision` is a plain build-forcer and `=show`/`--debug-colliders`
+open the overlay — the split exists because "C without `--collision`" is itself a case that must be
+tested. The overlay is bound in `--freecam`/`--anim-lab`/`--fly` but **not `--viewer`**, where C is
+the mesh lab's cull cycler; `--collision` there still builds the bodies and says why nothing draws.
+Trimeshes over 2,000 triangles (and everything past a 400k-line budget) draw as bounding boxes.
+
+**Residuals.** The C press itself is by construction (`playtest.md`). Counts are pose-dependent —
+the map-edge extender adds clutter bodies as the camera moves — and the overlay is built once, so
+bodies created after the first toggle are not in it. Cost with it up, C4 at the golden pose
+(`--perf --no-vsync`, last 60-frame window): draws 2,181 → 2,532, prims 217k → 257k, nodes
+16,607 → 19,195, `render_cpu` 1.05 → 1.42 ms, `gpu` 0.34 → 0.35 ms, memory 225 → 266 MB —
+`fps`/`frame_ms` say nothing here, pinned at this machine's 120 fps floor (rule 102).

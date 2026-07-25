@@ -234,7 +234,7 @@ public sealed partial class SpectatorCamera : Node
     {
         if (!KeyboardCaptured &&
             (Axis(Key.S, Key.W) != 0f || Axis(Key.A, Key.D) != 0f || Axis(Key.Q, Key.E) != 0f
-             || Axis(Key.Down, Key.Up) != 0f || Axis(Key.Left, Key.Right) != 0f || Axis(Key.C, Key.Space) != 0f))
+             || Axis(Key.Down, Key.Up) != 0f || Axis(Key.Left, Key.Right) != 0f || Axis(Key.Z, Key.Space) != 0f))
         {
             return true;
         }
@@ -270,8 +270,10 @@ public sealed partial class SpectatorCamera : Node
         var move = basis.Z * -(kb * (Axis(Key.S, Key.W) + Axis(Key.Down, Key.Up)) - PadAxis(JoyAxis.LeftY))
                  + basis.X * (kb * (Axis(Key.A, Key.D) + Axis(Key.Left, Key.Right)) + PadAxis(JoyAxis.LeftX));
         // Vertical stays WORLD up regardless of where the camera looks — climbing while
-        // pitched down is what you want when repositioning over a target.
-        move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.C, Key.Space)) + PadButtonAxis());
+        // pitched down is what you want when repositioning over a target. Q/E is the documented
+        // pair; Z/Space is the alternate (Z rather than C, which toggles the collider overlay —
+        // the camera polls raw key state, so sharing a key would descend on every toggle).
+        move += Vector3.Up * (kb * (Axis(Key.Q, Key.E) + Axis(Key.Z, Key.Space)) + PadButtonAxis());
         if (move.LengthSquared() < 1e-8f)
             return;
 

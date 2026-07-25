@@ -41,6 +41,12 @@ public sealed partial class SelectionService : Node
     /// on it; buildings, vehicles and animated props are all well under this. TUNE.</summary>
     public const float MaxPickDiag = 350f;
 
+    /// <summary>Node metadata marking a subtree as another tool's DRAWING rather than world content:
+    /// collider wireframes, normal lines, highlight boxes. Anything carrying it is skipped by the
+    /// pick and by the box measurement, so a debug overlay can be parented onto the object it
+    /// annotates without becoming selectable — or growing the next box measured over it.</summary>
+    public const string OverlayMeta = "csvm_overlay";
+
     // Smallest edge the highlight box is drawn at, so a meshless pivot rung is still visible. The
     // MEASURED box is what CurrentBox and the log report — only the drawing is grown.
     private const float MinHighlightEdge = 2f;
@@ -176,6 +182,10 @@ public sealed partial class SelectionService : Node
         int tested = 0, oversize = 0;
         void Walk(Node n)
         {
+            if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
+            {
+                return; // a tool's drawing, not content: never pickable
+            }
             if (n is MeshInstance3D { Mesh: { } mesh } mi && mi.IsVisibleInTree())
             {
                 var aabb = mesh.GetAabb();
@@ -299,6 +309,10 @@ public sealed partial class SelectionService : Node
         bool any = false;
         void Walk(Node n)
         {
+            if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
+            {
+                return; // a tool's drawing parked on this object is not part of its extent
+            }
             if (n is MeshInstance3D { Mesh: { } mesh } mi)
             {
                 var local = mesh.GetAabb();
