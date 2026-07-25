@@ -24,3 +24,4 @@ importantly — the instrument bugs hit on the way, labelled measured / inferred
 |---|---|---|
 | `item9-depth-bias/` | Can a conflict-local depth bias fix the C1B/C5 z-fighting? | Viable for C1B, structurally incapable for C5 — they are two different bugs. See `FINDINGS.md`. |
 | `anim-debugger-verification/` | Do the anim-debugger waves leave the game byte-identical, and is `--anim-lab` playback deterministic and live-faithful? | Yes on both; `verify.ps1` re-runs every scripted check (incl. the 2×-clock regression test). See `FINDINGS.md`. |
+| `m4-ai-data/` | Where is the per-pilot skill vector in the AI vehicle tables (`aiv.zrd.json`), and how many stats did the game actually ship? | Slots 22–30 — **nine** stats on a 1–9 scale, authored only for named pilots (29 blocks); `ia.zrd.json`'s `ace_stats` independently fixes the count at nine. The slot→stat *order* is unresolved. See `FINDINGS.md`. |

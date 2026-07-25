@@ -5934,3 +5934,46 @@ Shader-driven motion (UV scroll, precipitation, skydome) still runs on wall `TIM
 `--det` world screenshot is not yet byte-identical — measured 1.60 % floor. In `--anim-lab` only,
 CPU-driven texture cycles and puffer particles now follow the lab clock instead of wall time (they
 freeze on pause and scale with the speed selector) — the item's intent, not inertness drift.
+
+## 2026-07-25 — Milestone 4 (AI) scoping study
+
+**Landed.** `docs/SCOPING-M4-ai.md` — a scoping document, **not** a live plan and deliberately not
+named `PLAN-*` (a `PLAN-*.md` in `docs/` reads as active here, and `PLAN-testing.md` is). It carries
+the plan shape so scheduling it is a rename. Contents: the shipped-AI-data inventory measured against
+the retail extraction; the behavioural specification re-expressed in our own words from the original
+Game Design Document v1.03 (no source prose reproduced — the doc is not redistributable); a build
+assessment of what the engine can reuse unchanged versus what blocks the milestone; seven open
+questions the source cannot settle; and a 20-item wave plan whose ordering differs from the
+commissioning proposal in four places, with the reasoning for each.
+
+**The headline.** **The flying aircraft has no physics body** — `FlightController` is a bare
+`Node3D`, `PlaneBuilder` never generates collision, and `PlaneCollider`'s `BoxShape3D`s are used
+query-only as the source of `CastMotion`/`IntersectShape` calls. Nothing can shoot a plane; three of
+the six `IMPACT` surface classes (`Player`, `Enemy`, `Quicksand`) are unreachable; there are **zero**
+`CollisionLayer`/`CollisionMask` assignments repo-wide. That gates the entire milestone. Against it,
+`FlightModel.Step(FlightInput, dt)` takes a four-float struct with no player coupling and
+`ProjectilePool.Spawn` already serves three unrelated callers, so the flight and weapon halves of an
+AI pilot are free.
+
+**Verified against real data**, all measured this session and reproducible: 222 chapter-scoped patrol
+**graphs** (`ne0NNNNN.zrd.json` + `neindex.zrd.json`, 2,268 nodes / 2,149 explicit edges) — *not* the
+per-mission `net.zrd.json` the brief assumed, which stays undecoded; 414 AI vehicle blocks over 53
+`aiv.zrd.json` with slots 0/1/2/6/20/31/32/33/39/65 decoded; 42 self-describing turret specs in two
+structural families with all 8 `WEAPON.NAME` ids resolving in `weapons.zrd.json`; 23 generators in
+three shapes; 58 zeppelin records whose `cannon_fire_delay` (20 s) and 0.60/0.30 cannon damage stages
+match both the design and M3's own destructible census; and 1,309 combat voice clips over 31 pilot
+ids in 125 tokens across 11 families. **Twelve claims from the commissioning brief were wrong or
+overstated and are tabulated in the document** so they are not re-derived.
+
+**New instrument.** `analysis/m4-ai-data/` (`aiv_skill_slots.py` + `FINDINGS.md`): the per-pilot skill
+vector is `aiv` slots **22–30** — **nine** stats on a 1–9 scale, `-1` on ~380 blocks and complete on
+exactly 29, every one a named pilot. `ia.zrd.json`'s `ace_stats` is independently **nine** values in
+all 8 chapters, which fixes the count from a named key rather than an inference and turns "decode the
+AI parameter block" from open-ended RE into a bounded nine-way mapping question. The slot→stat
+**order stays unresolved on purpose**: the stunt plane and the cabbie point at different orderings,
+and the document records the discriminating test rather than picking. Two design-doc ambiguities (the
+inverted composure-check wording, two off-by-one loop-back step references) and one design-vs-data
+scale conflict (0–100 formula vs shipped 1–9) are recorded as decisions to make, not resolved.
+
+**Docs-only change.** No engine code touched; `CLAUDE.md`'s "Current status" deliberately untouched —
+M4 is not scheduled and `PLAN-testing.md` remains the sole active plan.
