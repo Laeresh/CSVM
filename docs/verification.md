@@ -510,6 +510,16 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      0.47 inflated it 32%, and every downstream check passed because they all only ever see the
      product.
 
+114. **Two documents describing the same things drift in their *descriptions* long before their
+     *lists* diverge — so a name-level sync check reports "in sync" while the prose contradicts,
+     and comparing lists cannot detect it.** CLAUDE.md's flag table vs `docs/cli.md` passed a
+     both-directions diff at 28/28 flags present, and a reading pass on the same 27 rows then
+     found four contradictions (`--frames` called a wall-clock delay when it is a sim coordinate;
+     `--debug-anim`'s edge-triggered conditions described as once-a-second; `--collision`'s C
+     overlay claimed for `--viewer`, where C is the mesh lab's cull cycler; `--view`'s settled
+     layout lumped in with its TUNE magnitudes). Where one fact must appear twice, name which copy
+     is the description of record — an unranked pair has no correct side to fix toward.
+
 ## What this project cannot verify itself
 
 These need the user:

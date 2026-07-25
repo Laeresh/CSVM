@@ -15,6 +15,67 @@ back, and is where the damage, livery and mesh labs live. A bare launch (no cont
 the launchscreen. CLAUDE.md carries a compact table of the day-to-day subset; this page is the
 long tail.
 
+## Flag index
+
+**Every flag below has exactly one bullet under `## Flags`, and that bullet is the description of
+record.** Find the flag here, then read only its bullet — one flag is one line, so this returns the
+whole thing. **Never read this file whole** — it is ~86 KB.
+
+```
+Grep "^- .--collision" docs/cli.md
+```
+
+Names only, deliberately: a gloss here would be a second description of the same flag, and that is
+exactly how `CLAUDE.md`'s day-to-day table drifted from this page (four contradictions, found
+2026-07-25). One flag, one description.
+
+**Modes and content — what gets built**
+`--viewer` · `--fly` · `--stunt` · `--freecam` · `--anim-lab` · `--menu` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--play-anim`
+
+**Placement — where the subject starts and which way it faces**
+`--pos` · `--direction` · `--lookat` · `--view` · `--spawn` · `--campos` · `--spawn-at` · `--spawn-dir`
+
+**Capture — screenshots and the scripted-run workhorses**
+`--screenshot` · `--frames` · `--shots` · `--no-focus` · `--no-vsync`
+
+**Determinism — pin a run so two runs are byte-identical**
+`--det` · `--no-det` · `--seed` · `--no-pads`
+
+**Livery and paint**
+`--paint` · `--paint-color` · `--paint-decal` · `--paint-seed` · `--rof`
+
+**Weapons, ordnance and damage**
+`--loadout` · `--rocket` · `--gun-select` · `--fire` · `--fire-rockets` · `--infinite-ammo` · `--weapon-lab` · `--weapon-mount` · `--weapon-fire` · `--weapon-test` · `--damage` · `--damage-hd` · `--destroy`
+
+**Debug labs — the scripted twin of each interactive lab key**
+`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--collision` · `--markers`
+
+**Dumps and the test harness — report text plus a verdict, then quit**
+`--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
+
+**Logging and profiling**
+`--log` · `--perf` · `--debug-anim` · `--anim-lod`
+
+**Rendering probes — is this thing drawing at all?**
+`--tex-override` · `--tex-census` · `--no-fog`
+
+**Scripted input — fly a fixed stick input, no hands**
+`--hold` · `--yaw` · `--pitch`
+
+**Data paths — override where the extraction is read from**
+`--data-root` · `--gamez` · `--textures` · `--zrdr` · `--interp` · `--sounds` · `--messages`
+
+**Audio**
+`--mute`
+
+Three flag families live in their own sections further down, with the lab they script:
+the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the world damage lab
+(`--debug-damage`).
+
+⚠ **A new flag adds its index entry and its `## Flags` bullet in the same edit.** Both are in this
+  file so they cannot drift apart. `CLAUDE.md` carries a curated day-to-day *subset* whose rows are
+  glosses, never the description of record — a behaviour change edits the bullet here.
+
 ## Flags
 - `--viewer` (the static inspection view: the parked-plane orbit, or with `--chapter=` the static world used for deterministic weather/fog/edge-continuation screenshots. Hosts **both labs, always built**: the damage lab on **H** and the livery lab on **L** — no extra flag needed for either (before 2026-07-20 the damage lab only existed when `--damage` was passed, so H silently did nothing in a plain `--viewer` — user-reported). L opens a panel with the squadron stepper (loads that squadron's colours + decals), three RGB colour sliders, the three decal slots, "reset to squadron colours", a random-livery button and a "copy CLI args" button that puts the equivalent `--paint…` arguments on the clipboard. Also hosts the **mesh lab** on **M** (2026-07-20): normal vectors, wireframe + smoothing seams, the collision zone boxes coloured by damage part, steerable lighting (ambient/sun energy, XYZ direction, headlight), and live `cull`/`normal-source` overrides for A/B-ing render decisions. All three labs start hidden, so an unadorned `--viewer` screenshot is byte-identical to the pre-paint viewer (verified by md5, including with the damage lab's hidden torn-skin panels in the model). H toggles the damage lab **as a whole** — slider panel and HUD gauges together — so it is genuinely present or absent; the panel's own checkbox still controls the gauges while it is up. Edits repaint the parked plane live via `PlaneBuilder.Repaint` — a few ms, not a model rebuild. **P** halts the simulation and **`.`** advances one frame here too — what that freezes in a parked view is the damage lab's fire trails and the weapon lab's rounds in flight)
 - `--debug-livery[=N]` (`--viewer` only: open the livery panel at launch and, with N, step the pattern N times first — one scripted screenshot then exercises the stepper + repaint + widget sync, not just the layout; same role as `--debug-scoreboard`/`--debug-join`)

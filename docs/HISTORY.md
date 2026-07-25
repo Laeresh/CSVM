@@ -7408,3 +7408,53 @@ have made the landing invisible in the cockpit: it pinned `thrustConst` to 40 an
 suites would have seen the new defaults and the pilot the old ones. Its other twelve keys were
 byte-identical to their in-code defaults, so nothing else changed. Now `verification.md` rule 112,
 because the next such file will do the same thing.
+
+## 2026-07-25 — the two doc indexes de-duplicated, and the drift they were hiding
+
+Both `CLAUDE.md` mirrors of a `docs/` list were collapsed to one copy each, after the file hit
+35,847 bytes — past its own ~35 KB budget.
+
+**The module index.** 92 one-line entries, 12,986 bytes, 36% of the file, mirroring
+`docs/architecture.md`'s 94 `##` entries 1:1. Moved verbatim (harvested by script, not retyped) to a
+new `## Module index` at the top of `architecture.md`, grouped by namespace with an orienting
+paragraph each; `CLAUDE.md` keeps an 8-line namespace map with entry counts plus the eight
+highest-traffic modules, so the common cases never open the file. The move surfaced the drift the
+duplication had already caused: **`src/Testing/GoldenShot.cs` had an architecture entry and no index
+line**, and `CSVM.Tests/` had none either — 92 → 94, now verified 1:1 in both directions.
+`architecture.md` 125.6 → 139.1 KB, self-navigating: read its index, then `Grep "## src/<path>" -A 12`.
+
+**The flag table.** Not the same case, and it was kept. It is 3,642 bytes (not 13 KB), a curated
+*subset* (28 of 89, not a mirror), and `cli.md`'s bullets are one line each so grep already returns a
+whole entry. A both-directions name diff found **zero** coverage drift. What `cli.md` actually lacked
+was any index at all — 89 flags in a flat, ungrouped 86 KB list — so it got a `## Flag index` of all
+89 in 13 categories, **names only**: a gloss there would be a second description of the same flag,
+which is the failure being fixed. Coverage machine-checked, 89/89, none unassigned, none invented.
+
+**The drift the list check could not see.** The name-level diff passing at 28/28 was itself the
+misleading instrument. A reading pass over the same 27 rows found four contradictions, each verified
+against `cli.md` before the fix: `--frames` glossed as a wall-clock *delay* when under `--det` (which
+`--screenshot` implies) it is the sim frame and changes what is captured; `--debug-anim`'s
+edge-triggered condition logging described as once-a-second, inverting its signal (silence means
+unchanged, not broken); `--collision`'s C wireframe overlay claimed for `--viewer`, where C is the
+mesh lab's cull cycler and the flag binds no overlay; and `--view`'s **settled** layout lumped in
+with its TUNE magnitudes, reopening a decided question. Two borderline also fixed — `--stage=empty`
+said "no gamez at all" while `planes.zbd` still loads (~490 ms of the ~2 s boot), and `--no-det` did
+not say it beats an *explicit* `--det`. Now `verification.md` rule 114.
+
+The root cause was that nothing ranked the copies, so no side was correct to fix toward. Three rules
+now do: a new/renamed/deleted module is an `architecture.md`-only edit (index + entry together); a
+new flag adds its `cli.md` index entry and bullet together, and `CLAUDE.md`'s rows are **glosses,
+never the description of record** — a behaviour change edits the bullet. The old "a module index
+entry is ONE line" shape rule, which had licensed the duplication outright, was replaced by "never
+restate a list another file indexes — point at that file".
+
+Also landed: `docs/agents/` (`issue-tracker.md`, `triage-labels.md`, `domain.md`) and a
+`## Agent skills` section, configuring the installed engineering skills — issues are this repo's own
+markdown (`backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`), **not** the stock template's
+`.scratch/`, which `CleanScratch.ps1` sweeps.
+
+Verified: docs-only, no build. Both indexes machine-checked against their targets in both directions
+(94/94 modules, 89/89 flags); every one of the six CLI corrections read back against the `cli.md`
+bullet it now agrees with; the documented lookups (`Grep "## src/Flight/FlightModel.cs" -A 12`,
+`Grep "^- .--collision" docs/cli.md`) each return exactly one whole entry. No script, test or `.cs`
+file parses either document. `CLAUDE.md` 35,847 → 25,246 bytes.
