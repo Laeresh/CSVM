@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Determinism core
 
 1. ☑ A1 — `GameClock`: one shared sim clock; halt (P) + frame-step (`.`) in every mode; fixed-dt under `--det`
-2. ☐ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
+2. ☑ A2 — Clock-driven shader time: `csky_time` global replaces `TIME` in every shader
 3. ☐ A3 — One master seed: per-subsystem RNGs derived from `--seed`; `CANNON_SPREAD`, crash-sound pick, spawn, liveries all pinned
 4. ☐ A4 — The `--det` bundle; `--screenshot`/dump/test runs imply it; `--no-det` opt-out
 5. ☐ A5 — `--pos`/`--direction`: one placement pair in every mode (camera in freecam/viewer, plane in fly)
@@ -124,7 +124,18 @@ frame's `Steps` at once and that would stamp every sub-step at the frame's end t
 
 **⚠ Traps.** Rule 51: verify rate with wall-paced sampling, not clock-paced. Godot's physics server keeps its own tick — this project's collision is raycasts driven by our dt (`Projectile.cs:380`, `FlightController.cs:704`), so sim state follows the clock, but anything reading `GetTicksMsec` for sim purposes is a divergence bug to hunt (`PlaneViewer.cs`, `AnimRuntime.cs` are the two current users). A1 alone does **not** freeze shader motion — water/scroll/precip keep flowing until A2; don't read that as a failure.
 
-## A2 ☐ Clock-driven shader time: `csky_time` replaces `TIME`
+## A2 ☑ Clock-driven shader time: `csky_time` replaces `TIME`
+
+**Landed 2026-07-25** — `src/Utils/ShaderTime.cs` + `CSVM/shaders/csky_time.gdshaderinc`; the
+`SceneBuilder` scroll variant and `Precipitation` converted; `--jitter` defaults 0 under `--det`.
+Evidence in `docs/HISTORY.md`. **Two sites, not three:** the plan's `PlaneViewer.cs:2317` skydome
+`TIME` does not exist — a whole-tree grep finds `TIME` only in those two files, and the skydome's
+scrolling sky layer is built through `SceneBuilder`'s scroll path, so it converted with it.
+Residuals: the remaining `--det` pixel noise is **unseeded RNG, not the clock** — the waterfall's
+mist puffer (0.52 % of the frame) and precipitation's per-instance seeds (4.75 % C2B rain, 6.27 %
+C4 snow), both A3's. The interactive halt was proved with a scripted `Halted`-at-session-start
+probe; the **P / `.` keypresses stay verified by construction**. Note for A3/C23: only C1, C1B and
+C4 carry any UV scroll at all, so a scroll-sensitive golden must be framed on one of them.
 
 **Goal.** Every shader animation runs from a global uniform `csky_time`, set once per frame from the `GameClock`. A halted clock is a true freeze-frame; under `--det`, pixel output is a function of frame count — byte-identical shots.
 
@@ -140,7 +151,7 @@ frame's `Steps` at once and that would stamp every sub-step at the frame's end t
 
 **Goal.** `--seed=N` (default 1 under `--det`) pins every random draw in the session: gun spread, crash-sound pick, spawn choice, liveries, `RANDOM_WEIGHT` dice. Same seed → same run; different seeds genuinely branch.
 
-**Evidence (confidence: traced).** Unseeded draws today: `Projectile.cs:246–247` (`GD.Randf()` — the `CANNON_SPREAD` non-determinism of verification rule 77), `FlightAudio.cs:198` (`GD.Randi()` crash-sound pick), `PlaneViewer.cs:2332` (`GD.Randi()` spawn pick), `PlaneViewer.cs:1904–1910` (paint RNG, already pinnable via `--paint-seed`), `LiveryLab.cs:67`. Already seedable: `AnimRuntime.cs:143` (the lab's `Seed`).
+**Evidence (confidence: traced).** Unseeded draws today: `Projectile.cs:246–247` (`GD.Randf()` — the `CANNON_SPREAD` non-determinism of verification rule 77), `FlightAudio.cs:198` (`GD.Randi()` crash-sound pick), `PlaneViewer.cs:2332` (`GD.Randi()` spawn pick), `PlaneViewer.cs:1904–1910` (paint RNG, already pinnable via `--paint-seed`), `LiveryLab.cs:67`. Already seedable: `AnimRuntime.cs:143` (the lab's `Seed`). **Two more surfaced by A2's verification — after A2 they are the ONLY thing left keeping a `--det` world shot from byte-identity:** `Precipitation.Init`'s `new System.Random()` particle seeds (measured 4.75 % of pixels on a C2B rain shot, 6.27 % on C4 snow; 0.00 % with the seed pinned) and the puffer particle spread (0.52 % of a C1 waterfall frame, all of it inside the mist at the base).
 
 **Approach.** Prefer **per-subsystem `RandomNumberGenerator` instances** seeded as `master ⊕ hash(subsystemName)` over one shared global sequence — call-order independent across subsystems, so adding a draw in one subsystem can't shift another's sequence. Route the four unseeded sites through named instances (`weapons`, `flightaudio`, `spawn`, `paint`); also `GD.Seed(master)` once for stragglers. `--paint-seed` stays as an override of the derived paint seed. Spawn under `--det` additionally defaults to `--spawn=0` in A4 (a pinned *choice* beats a pinned *dice roll* for scenario stability across data changes).
 

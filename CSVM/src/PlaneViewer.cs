@@ -601,9 +601,13 @@ public partial class PlaneViewer : Node3D
             _damageLab = false;
         }
         // Burst captures dither the camera by default so z-fighting flickers across frames;
-        // a single shot never jitters. --jitter=<deg> overrides (0 disables).
+        // a single shot never jitters. --det defaults it off instead: the dither exists to defeat
+        // bit-identical frames, which is the one property a deterministic run is for.
+        // --jitter=<deg> overrides either way (0 disables).
         if (_jitterDeg < 0f)
-            _jitterDeg = _screenshotShots > 1 ? 0.15f : 0f;
+        {
+            _jitterDeg = _screenshotShots > 1 && !_det ? 0.15f : 0f;
+        }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -671,6 +675,10 @@ public partial class PlaneViewer : Node3D
         // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
         // with no lit animations renders exactly as it did before they existed.
         WorldLights.RegisterGlobals();
+        // The shader clock every animated shader reads instead of Godot's TIME. Written each
+        // frame from _Process below; registered here because Godot refuses to compile a shader
+        // that references an unregistered global.
+        ShaderTime.RegisterGlobal();
 
         // Gamepad hotplug: every input read polls Pads.Connected() fresh, so a pad plugged in
         // mid-game works the moment the engine reports it. Log the roster at launch and every
@@ -2553,7 +2561,8 @@ public partial class PlaneViewer : Node3D
         // Precipitation (rain/snow) — only the missions whose weather.json carries a TYPE block
         // get a field (C4 snow, C1C/C2B rain). It shows only below the CLOUD_COVER band (the
         // rain falls from the cloud base — none above the overcast). Self-animating from the
-        // shader's TIME + camera built-ins, so it needs no _Process driving.
+        // csky_time global + the camera built-ins, so it needs no _Process driving — that uniform
+        // is the only handle on it, which is why a halted clock still stops the fall.
         _precip = Effects.Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
             _worldRoot!.AddChild(_precip);
@@ -3628,6 +3637,11 @@ public partial class PlaneViewer : Node3D
                 DriveSimSteps(clock);
             }
         }
+        // Publish the same instant to the shaders, so the animated surfaces (UV scroll,
+        // precipitation) and the CPU sim never disagree within a frame. Written unconditionally:
+        // with no session clock — the launchscreen, or the frame after a teardown — it keeps
+        // running on wall time so nothing on screen stalls behind the menu.
+        ShaderTime.Advance(_clock, delta);
         // The diagnostics below stay on wall time: a frame-budget report and a poll for entities
         // an animation has since placed are both instruments, and an instrument that freezes with
         // the thing it measures reports nothing.

@@ -15,13 +15,15 @@ namespace CSVM.Effects;
 /// <para><b>Model — a camera-following field the plane flies through.</b> One
 /// <see cref="MultiMeshInstance3D"/> (one draw call) of N small quads. Each instance carries a
 /// fixed random seed; a spatial shader turns that seed into a world position that (a) falls +
-/// drifts over <c>TIME</c> and (b) wraps into a box <b>centred on the camera</b> — so the
-/// field is world-anchored (the plane's own motion carries the particles past, correct
-/// parallax) yet infinite and cheap. The whole animation runs from the <c>TIME</c> and
-/// <c>CAMERA_POSITION_WORLD</c> shader built-ins, so there is <b>zero per-frame CPU</b>: build
-/// it once and it plays itself. A generous custom AABB keeps it from being frustum-culled when
-/// the camera is far from this node's origin (the shader positions everything around the
-/// camera, so the computed instance transforms stay near the origin).</para>
+/// drifts over the <c>csky_time</c> global (see <see cref="CSVM.Utils.ShaderTime"/>) and (b)
+/// wraps into a box <b>centred on the camera</b> — so the field is world-anchored (the plane's
+/// own motion carries the particles past, correct parallax) yet infinite and cheap. The whole
+/// animation runs from that uniform and the <c>CAMERA_POSITION_WORLD</c> built-in, so there is
+/// <b>zero per-frame CPU</b>: build it once and it plays itself — and because the uniform is the
+/// only handle, halting or fixed-stepping the sim clock is what stops or pins the fall. A
+/// generous custom AABB keeps it from being frustum-culled when the camera is far from this
+/// node's origin (the shader positions everything around the camera, so the computed instance
+/// transforms stay near the origin).</para>
 ///
 /// <para><b>SNOW</b> = small camera-facing flakes with a gentle per-instance horizontal
 /// flutter (so they don't fall in lockstep). <b>RAIN</b> = thin streak quads billboarded
@@ -60,13 +62,19 @@ public sealed partial class Precipitation : Node3D
 
     private MultiMesh _mm = null!;
 
-    // Self-animating: fall/wind drift over TIME, wrapped into a box centred on the camera. The
-    // final world position ignores the instance transform entirely (POSITION is set directly),
-    // so the instances can stay at the node origin — only the custom AABB below keeps them
-    // visible. INSTANCE_CUSTOM.xyz = the fixed base fraction [0,1)³; .w = a flutter phase.
+    // Self-animating: fall/wind drift over csky_time, wrapped into a box centred on the camera.
+    // The final world position ignores the instance transform entirely (POSITION is set
+    // directly), so the instances can stay at the node origin — only the custom AABB below keeps
+    // them visible. INSTANCE_CUSTOM.xyz = the fixed base fraction [0,1)³; .w = a flutter phase.
+    //
+    // ⚠ csky_time (the sim clock's shader-side twin), never Godot's TIME: this module has no
+    // per-frame C# hook at all, so the uniform is the ONLY handle on the animation — with TIME
+    // the rain kept falling through a halted clock and through a fixed-step capture.
     private const string ShaderCode = """
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
+
+        #include "res://shaders/csky_time.gdshaderinc"
 
         uniform sampler2D sprite : filter_linear;
         uniform vec3 tint = vec3(0.5);      // already sRGB→linear (set on the CPU, like the fog colour)
@@ -88,12 +96,12 @@ public sealed partial class Precipitation : Node3D
             vec3 seed = INSTANCE_CUSTOM.xyz;   // fixed per-instance, [0,1)³
             float phase = INSTANCE_CUSTOM.w;
             vec3 cell = box_half * 2.0;
-            vec3 world = seed * cell + fall_vel * TIME;
+            vec3 world = seed * cell + fall_vel * csky_time;
             vec3 rel = world - CAMERA_POSITION_WORLD;
             rel = mod(rel + box_half, cell) - box_half;   // wrap into [-box_half, box_half]
             if (!is_rain) {                                // snow flutter (break the lockstep fall)
-                rel.x += sin(TIME * sway_freq + phase) * sway_amp;
-                rel.z += cos(TIME * sway_freq * 0.9 + phase) * sway_amp;
+                rel.x += sin(csky_time * sway_freq + phase) * sway_amp;
+                rel.z += cos(csky_time * sway_freq * 0.9 + phase) * sway_amp;
             }
             vec3 center = CAMERA_POSITION_WORLD + rel;
 
