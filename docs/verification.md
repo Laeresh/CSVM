@@ -578,6 +578,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      off-screen window still renders while the window had never left the screen. The verdict was
      right and the reasoning was worthless; a rect probe was one command away.
 
+123. **`EnumWindows` only enumerates the CALLING thread's desktop, so "no window found" is what
+     success and a dead process look like alike — enumerate the desktop you expect it ON as well.**
+     Checking that a run on a hidden desktop stayed invisible needs both halves: `EnumWindows` here
+     (0 of 52 samples) *and* `EnumDesktopWindows` on the new desktop (50 of 52), plus the render's
+     own pixel md5. Any one alone is satisfied by a process that crashed on startup.
+
 ## What this project cannot verify itself
 
 These need the user:
