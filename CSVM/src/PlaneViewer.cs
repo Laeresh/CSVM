@@ -631,6 +631,32 @@ public partial class PlaneViewer : Node3D
         if (!_zrdrOverridden) _zrdrPath = SessionPaths.PreferUnzipped(_zrdrPath);
         if (!_soundsOverridden) _soundsPath = SessionPaths.PreferUnzipped(_soundsPath);
 
+        // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
+        // shader references, before any material using it is built. Defaults are a no-op
+        // (nothing fades) — only --fly overrides them from the mission's weather.json below.
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
+            RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+        RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
+            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
+        // The fullbright world's per-mission brightness from the weather's SUNLIGHT:
+        // 1.0 = fullbright (no darkening) for static views / missions without weather; --fly
+        // overrides it from WeatherState.WorldLight below.
+        RenderingServer.GlobalShaderParameterAdd("csky_world_light",
+            RenderingServer.GlobalShaderParameterType.Float, 1.0f);
+        // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
+        // with no lit animations renders exactly as it did before they existed.
+        WorldLights.RegisterGlobals();
+        // The shader clock every animated shader reads instead of Godot's TIME. Written each
+        // frame from _Process below; registered here because Godot refuses to compile a shader
+        // that references an unregistered global.
+        //
+        // All of these are registered before the dump branches below, which build materials of
+        // their own and then quit: registering after them left every --dump-* run emitting a
+        // missing-global error that poisons an error census.
+        ShaderTime.RegisterGlobal();
+
         // --dump-markers: a pure-data report (no world, no camera) — print the marker rig table(s)
         // and quit. Placed here, once planes.zbd's path is known, so it runs whether or not any
         // content arg was given; --headless makes it windowless.
@@ -673,28 +699,6 @@ public partial class PlaneViewer : Node3D
             GetTree().Quit();
             return;
         }
-
-        // Register the distance-fog global shader parameters SceneBuilder's world/aircraft
-        // shader references, before any material using it is built. Defaults are a no-op
-        // (nothing fades) — only --fly overrides them from the mission's weather.json below.
-        RenderingServer.GlobalShaderParameterAdd("csky_fog_color",
-            RenderingServer.GlobalShaderParameterType.Vec3, new Vector3(0.69f, 0.69f, 0.69f));
-        RenderingServer.GlobalShaderParameterAdd("csky_fog_range",
-            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
-        RenderingServer.GlobalShaderParameterAdd("csky_fog_alt",
-            RenderingServer.GlobalShaderParameterType.Vec2, new Vector2(1e8f, 1e9f));
-        // The fullbright world's per-mission brightness from the weather's SUNLIGHT:
-        // 1.0 = fullbright (no darkening) for static views / missions without weather; --fly
-        // overrides it from WeatherState.WorldLight below.
-        RenderingServer.GlobalShaderParameterAdd("csky_world_light",
-            RenderingServer.GlobalShaderParameterType.Float, 1.0f);
-        // The animated world's LIGHT_STATE point lights. Defaults to an empty set, so a session
-        // with no lit animations renders exactly as it did before they existed.
-        WorldLights.RegisterGlobals();
-        // The shader clock every animated shader reads instead of Godot's TIME. Written each
-        // frame from _Process below; registered here because Godot refuses to compile a shader
-        // that references an unregistered global.
-        ShaderTime.RegisterGlobal();
 
         // Gamepad hotplug: every input read polls Pads.Connected() fresh, so a pad plugged in
         // mid-game works the moment the engine reports it. Log the roster at launch and every

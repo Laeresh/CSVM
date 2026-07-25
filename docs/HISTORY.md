@@ -6084,3 +6084,21 @@ delta 1.08. The simulation matches exactly; `FlightController.UpdateChaseCamera`
 wall delta, which is A1's deliberate "UI and camera code stays off the sim clock". Pin flight
 captures with `--freecam` or a fixed camera; C23's goldens must avoid chase-cam poses until that
 camera moves onto the clock. Filed in `backlog.md`.
+
+## 2026-07-25 — Global shader parameters registered before the dump branches
+
+**What landed.** The `csky_fog_*` / `csky_world_light` / `WorldLights` / `csky_time` registrations
+moved above the `--dump-markers` / `--dump-weapons` / `--dump-loadout` early exits in
+`PlaneViewer._Ready`. Those branches build materials of their own and then quit, so registering
+after them left every dump run emitting one
+`!global_shader_uniforms.variables.has(p_name)` error — noise that would have failed B12's suites
+on their first green run.
+
+**Verified.** A/B on the one moved block, windowed: **1 → 0** occurrences on `--dump-loadout`, with
+all three dump tools at 0 after. The same A/B under `--headless` reads **0 → 0** — the dummy
+renderer compiles no shaders and cannot see the error at all, which is why it survived A2's
+verification and A3's mode battery. Landed as verification rule 82. Build 0 warnings / 0 errors.
+
+**Trap met on the way.** The first A/B "passed" on both sides because the file swap's `dotnet build`
+no-opped (rule 11) — the reverted file kept a stale mtime and Godot ran the old DLL. Forcing the
+rebuild is what made the difference appear.

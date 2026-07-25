@@ -262,6 +262,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     still diverges on the first `SOUND_GROUPS` pick unless `ResetRecency()` clears it in the same
     breath.
 
+82. **`--headless` compiles no shaders, so it cannot see a shader error — never take a headless run
+    as an error census for anything that builds a material.** Every `--dump-*` run was emitting a
+    missing-global error (the dump branches quit before the `csky_time` registration, since moved
+    above them), and it reproduced 1 → 0 windowed while reading 0 → 0 under `--headless`. Rule 71's
+    sibling: headless lies about pixels *and* about shaders.
+
 ## What this project cannot verify itself
 
 These need the user:
