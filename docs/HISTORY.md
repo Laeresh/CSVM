@@ -6473,3 +6473,47 @@ the `boot` caveat (it contains the menu wait) is reasoned, not measured. A true 
 cannot be forced on this machine without admin cache-flush tooling: the cold reading above is a
 freshly-written copy, which is rule 42's own scenario but is a *floor* on the cold penalty, not
 necessarily its ceiling.
+
+## 2026-07-25 — Texture drop-in: `--tex-override` + `--tex-census` (PLAN-testing C24)
+
+Two instruments hooked into `TextureArchive.Find`, the one point every consumer resolves a name
+through, so world, clutter, aircraft, puffers, clouds and gauges inherit them without knowing.
+`--tex-override=<name>[=<color>]` paints one texture flat (default magenta); `--tex-census` gives
+every texture its own hashed colour, writes the name→colour map to `.scratch/tex_census.json`, and
+counts a `--screenshot` frame into `.scratch/tex_census_<shot>.json`. `TextureCycler` freezes under
+either flag, and on an aircraft the drop-in beats the paint substitution. New: `TextureDropIn` in
+`TextureArchive.cs`, a `tex-dropin` engine suite, three xUnit tests on the colour hash.
+
+**Verified.** Override on C1/M04's moored zeppelin skin: **113,947 magenta px vs 0** in the same
+shot without the flag, all 114,820 changed pixels inside the hull. Census at the same pose:
+`lkzepskin` 88,301 px, `cloudlayer` 230,365, `zep_cab02` 478, while four textures that exist only in
+C4/C5 read 0/1/2/30 px. Rule 56: an overridden texture's visible extent is 114,820 px with the
+census off and 114,819 with it on (the one pixel is a sub-quantum blend fringe the diff method
+cannot see, not a geometry move), and a hard-alpha clutter cutout is **pixel-identical**, 803 px in
+both. Map stable: two runs md5-equal, and 167/167 names shared between a C1 and a C4 map carry the
+same colour. Inert with the flags absent: `--freecam` C1 and C4 shots md5-equal to the pre-change
+build, 0 of 921,600 px. 8-chapter `--freecam` regression, sound on, flags absent: 8/8 exit 0, one
+`ERROR:` line total, the known C3 `!is_inside_tree()`. `RunTests.ps1` green — 152 units, 8 suites.
+Both new checks seen able to fail: the unit tests failed twice on real defects while being written,
+and skipping one texel in `Flatten` failed `tex-dropin` on all 7 samples.
+
+**The tolerance decision, and why it needed measuring.** The world shader multiplies the flat by a
+**per-channel** vertex colour, so nothing lands on its exact colour (`exact` = 0 on every world shot)
+and half of the zeppelin's hull reads `184,0,196` where a pure scalar dim would give `204,0,204` —
+a chromaticity shift of 0.124, larger than any palette this size can separate. Classification is
+therefore chromaticity (linear colour over its brightest channel, invariant to a scalar dim) with
+tolerance **0.045** and an **absolute** separation of **0.03**, both taken from a sweep against the
+override's 113,947 px ground truth plus 60 textures that cannot be on screen: 75 % recall at a
+worst-case 575 px false credit. An absolute gap beat a ratio margin outright — a pixel sitting
+exactly on a flat has a winning distance of ~0, which passes any ratio test however close the rival.
+The first palette drew its two free channels uniformly in **sRGB bytes**, which bunches them in the
+corners once gamma is undone; redrawing them uniformly in **linear** ratio took the same texture
+from 55,950 to 88,301 px. Fog was measured rather than tolerated: 374,491 px classified confidently
+with `--no-fog` against 129,210 with fog on, so census shots take `--no-fog`. Standing rules 91–92.
+
+**Two things the item cannot do, stated rather than implied.** A per-texture census cannot be read
+back reliably from one shot at this texture count — counts are lower bounds and `px + contested` the
+upper one, so a count under ~1,000 px means "not shown" and an exact figure means `--tex-override`.
+And 8 bits a channel leave ~200k reachable colours, so 4 of C1's 882 textures hash to the same one;
+each collision is warned by name and counted in the map, never silently resolved by nudging a
+colour, which would make it depend on load order.

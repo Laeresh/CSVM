@@ -222,6 +222,8 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests`**, and announced as a `det …` log line |
 | `--no-det` | opt back out — wall-clock sim and live randomness under a flag that would otherwise imply `--det` |
 | `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
+| `--tex-override=<name>[=<color>]` | the named texture resolves flat magenta (or your colour) everywhere it is used — "is this thing drawing at all?" |
+| `--tex-census[=names]` | every texture resolves to its own flat colour; map to `.scratch/tex_census.json`, per-texture pixel counts for a `--screenshot` beside it. **Pair with `--no-fog`**; counts are lower bounds — see [`docs/cli.md`](docs/cli.md) |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 

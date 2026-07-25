@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 21. ☑ C21 — Startup-phase stopwatches (always-on structured timing log) **(done 2026-07-25 — `src/Utils/StartupProfile.cs`, one `[perf] startup` line per session build; `docs/HISTORY.md`)**
 22. ☐ C22 — Perf suite: fixed `--det` scenarios, A/B mode, git-ignored local history
 23. ☐ C23 — Golden-image tripwire: ~10 `--det` shots, committed md5 hashes of raw pixels
-24. ☐ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites)
+24. ☑ C24 — Texture drop-in: `--tex-override=<name>` + `--tex-census` (+ census assertions for suites) **(done 2026-07-25 — hooked into `TextureArchive.Find`; classification is chromaticity with a measured tolerance; counts are lower bounds; `docs/HISTORY.md`)**
 25. ☐ C25 — Test stages: `--stage=empty` and `--node=<cs_name>`
 26. ☐ C26 — Flight camera views: held-numpad perspectives around the plane + scripted `--view=`
 
@@ -491,7 +491,7 @@ a floor on the penalty rather than its ceiling.
 
 **⚠ Traps.** A GPU driver update can legitimately flip every hash on this machine — document "regenerate after driver updates" in the manifest header; that's the accepted cost of decision 10. Goldens are a *tripwire*, not a diagnosis — a failure is investigated with the headless instruments (census, `--debug-anim`, mesh lab), not by staring at diffs.
 
-## C24 ☐ Texture drop-in: `--tex-override` + `--tex-census`
+## C24 ☑ Texture drop-in: `--tex-override` + `--tex-census`
 
 **Goal.** (a) `--tex-override=<name>[=<color>]` — the named texture resolves to a loud flat color (default magenta): "is this thing drawing at all?", interactively or in a shot. (b) `--tex-census` — *every* texture resolves to a unique flat color; the name→color map is logged and written to `.scratch/tex_census.json`; a suite helper answers "≥N px of texture X visible from pose Y" from one `--det` shot — the machine-readable rendering map (attacks rule 49's "every metric says live, the frame is blank" class).
 
@@ -502,6 +502,39 @@ a floor on the penalty rather than its ceiling.
 **Verify.** Override: `--tex-override` on a known zeppelin skin texture, shot shows magenta exactly where the zeppelin is. Census: C1 pinned pose → counts for known-visible textures > 0, a texture from another chapter = 0 (able to fail); the census suite asserts a small curated set. Rule 33 check: nothing occluding/fogging the asserted surface at the chosen pose.
 
 **⚠ Traps.** Rule 56 — the census must not perturb geometry or materials beyond the albedo swap (no shader replacement); shading still tints flats, hence tolerance-based classification. Draw-priority/subface gotchas (`docs/formats/gotchas.md`) mean a surface can be legitimately overdrawn — pick assert poses where the subject is unoccluded.
+
+**Landed 2026-07-25** — `TextureDropIn` in `Mech3/TextureArchive.cs` (the flatten writes RGB bytes
+only, leaving size, format, alpha and mip chain alone), `TextureCycler` frozen under either flag,
+`SceneBuilder.Resolve` standing the aircraft paint substitution aside, two args in `PlaneViewer`
+plus a count call at the screenshot site, a `tex-dropin` engine suite and three xUnit tests on the
+colour hash. Evidence in `docs/HISTORY.md`; the standing rules are verification 91–92.
+
+**The tolerance decision the item left open: chromaticity + a measured tolerance AND `--no-fog` —
+both, because they answer different halves.** Fog is not residual shading to tolerate, it is the
+dominant distortion and it is switchable: the same pose classified **374,491 px** confidently with
+`--no-fog` against **129,210** with fog on (unmatched 19.4 % → 58.8 %). The tolerance covers what is
+left, which is **not** a scalar dim: the world shader multiplies the flat by a *per-channel* vertex
+colour, so half of the zeppelin's hull reads `184,0,196` where a scalar dim gives `204,0,204` — a
+chromaticity shift of 0.124, bigger than any palette this size can separate. Tolerance **0.045**
+with an **absolute** separation of **0.03** came from a sweep against a ground truth of 113,947 px
+(the same surface under `--tex-override`) plus 60 textures that exist only in C4/C5: 75 % recall at
+a worst-case 575 px credited to a texture that cannot be on screen. An absolute gap beat the ratio
+margin the approach text assumed — a pixel sitting exactly on a flat has a winning distance of ~0,
+which passes any ratio test however close the rival sits.
+
+**What the item cannot deliver, and the honest replacement.** A per-texture census is **not** a
+reliable single-shot answer at ~400 resolved textures: `px` is a lower bound, `px + contested` an
+upper one, and a count under ~1,000 px means "not shown". "Is this drawing at all?" is
+`--tex-override` — exact, needing no separation at all (113,947 px against 0) — and the census is
+the map that tells you which texture to override. Eight bits a channel also cap the palette at
+~200k colours, so 4 of C1's 882 textures collide outright; each is warned by name and counted in the
+map rather than nudged apart, which would make a colour depend on load order.
+
+**Deviation: no rendering suite.** The B12 harness runs every suite to completion inside one
+`_Ready` call and never yields a frame, so a "≥N px from pose Y" suite would need an async harness —
+C23's problem, not this item's. What landed instead is the reusable helper (`TextureDropIn.Count`,
+already driving the `--screenshot` count report) plus `tex-dropin`, which asserts the invariant the
+whole instrument rests on: the flatten repaints RGB and moves nothing else.
 
 ## C25 ☐ Test stages: `--stage=empty` and `--node=<cs_name>`
 

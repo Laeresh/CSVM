@@ -49,7 +49,18 @@ public static class Suites
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
+        into.Add(new TestHarness.Suite("tex-dropin",
+            "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
     }
+
+    /// <summary>C1 textures spanning the three alpha classes the flatten must leave alone: opaque,
+    /// hard cutout, and the soft overlays the builder alpha-blends.</summary>
+    private static readonly string[] DropInSamples =
+    {
+        "lkzepskin", "grass1", "cloudlayer", "sky1", // no alpha channel
+        "firtree1", "bush1",                          // hard cutouts
+        "abld_shadow",                                // soft baked shadow overlay
+    };
 
     // ---- pure data -----------------------------------------------------------------------------
 
@@ -197,6 +208,72 @@ public static class Suites
             ctx.Note($"{r.Summary}");
             ctx.Note($"colliders world={r.CollidableMeshes} swept={r.Rows.Count} capped={r.Capped}");
         });
+    }
+
+    // ---- needs Godot's Image, nothing else -------------------------------------------------------
+
+    private static void TexDropIn(TestContext ctx)
+    {
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        using var textures = new TextureArchive(texturesPath);
+        var colors = new Dictionary<string, Color>();
+        foreach (string name in DropInSamples)
+        {
+            var img = textures.FindImage(name);
+            ctx.Check(img != null, $"sample texture resolves texture={name}");
+            if (img == null)
+            {
+                continue;
+            }
+            int w = img.GetWidth(), h = img.GetHeight();
+            var format = img.GetFormat();
+            bool hadAlpha = format is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444;
+            byte[] before = img.GetData();
+
+            var color = TextureDropIn.ColorForName(name);
+            colors[name] = color;
+            TextureDropIn.Flatten(img, color);
+            byte[] after = img.GetData();
+
+            ctx.Check(img.GetWidth() == w && img.GetHeight() == h,
+                $"flatten keeps the size texture={name} before={w}x{h} after={img.GetWidth()}x{img.GetHeight()}");
+            ctx.Check(!img.HasMipmaps(), $"flatten adds no mipmaps texture={name}");
+            var flatFormat = img.GetFormat();
+            ctx.Check(flatFormat == (hadAlpha ? Image.Format.Rgba8 : Image.Format.Rgb8),
+                $"flatten lands in the three-channel form of the original texture={name} was={format} now={flatFormat}");
+
+            int stride = flatFormat == Image.Format.Rgba8 ? 4 : 3;
+            ctx.Same(w * h * stride, after.Length, $"{name} flattened byte count");
+            int wrongRgb = 0, wrongAlpha = 0;
+            for (int i = 0; i + stride <= after.Length; i += stride)
+            {
+                if (after[i] != color.R8 || after[i + 1] != color.G8 || after[i + 2] != color.B8)
+                {
+                    wrongRgb++;
+                }
+                // Only comparable when the source was already the same layout; a converted source
+                // has no byte-for-byte predecessor to check against.
+                if (stride == 4 && format == Image.Format.Rgba8 && after[i + 3] != before[i + 3])
+                {
+                    wrongAlpha++;
+                }
+            }
+            ctx.Same(0, wrongRgb, $"{name} texels not repainted to the flat colour");
+            ctx.Same(0, wrongAlpha, $"{name} texels whose alpha the flatten moved");
+        }
+        // The identity every count report depends on: no two of these names share a colour, and
+        // each keeps one channel pinned to full brightness.
+        var seen = new Dictionary<string, string>();
+        foreach (var (name, color) in colors)
+        {
+            string key = $"{color.R8},{color.G8},{color.B8}";
+            ctx.Check(!seen.ContainsKey(key), $"census colour is unique texture={name} colour={key} clashes_with={(seen.TryGetValue(key, out var other) ? other : "-")}");
+            seen[key] = name;
+            ctx.Check(color.R8 == 255 || color.G8 == 255 || color.B8 == 255,
+                $"census colour is full brightness texture={name} colour={key}");
+        }
+        ctx.Note($"{colors.Count} sample textures flattened, {seen.Count} distinct colours");
     }
 
     private static void DestructibleCensus(TestContext ctx)

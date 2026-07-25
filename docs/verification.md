@@ -338,6 +338,20 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     `--quit-after 120` and 3361 ms at `--quit-after 3`. And `boot` is engine start → build start, so
     on a launchscreen-driven rebuild it silently contains however long the menu was up.
 
+91. **"Is this drawing at all?" is `--tex-override`, not a census count — the census is the map that
+    tells you which texture to override.** One texture forced to a flat colour is exact and needs no
+    separation: C1/M04's moored zeppelin measured **113,947 magenta px against 0 in the same shot
+    without the flag**, with every one of the 114,820 changed pixels inside the hull. A `--tex-census`
+    count of the same surface at the same pose reads **88,301** — a lower bound, because shading
+    moves a flat far enough to contest its crowded neighbours.
+
+92. **Read a census count as a range, never a number, and run census shots with `--no-fog`.** `px` is
+    a lower bound and `px + contested` an upper one; a texture that cannot be on screen still picks
+    up stray pixels, so **treat a confident count under ~1,000 px as "not shown"** (measured worst
+    case 575 px over 60 textures that exist only in other chapters). Fog is not a thing to tolerate:
+    the same pose classified 374,491 px confidently with `--no-fog` and 129,210 px with fog on,
+    unmatched 19.4 % → 58.8 %.
+
 ## What this project cannot verify itself
 
 These need the user:

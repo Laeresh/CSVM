@@ -568,6 +568,9 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--sounds=")) { _soundsPath = arg["--sounds=".Length..]; _soundsOverridden = true; }
             else if (arg.StartsWith("--messages=")) _messagesPath = arg["--messages=".Length..];
             else if (arg == "--no-fog") _noFog = true;
+            else if (arg.StartsWith("--tex-override=")) { TextureDropIn.SetScratchDir(_repoRoot); TextureDropIn.AddOverride(arg["--tex-override=".Length..]); }
+            else if (arg == "--tex-census") { TextureDropIn.SetScratchDir(_repoRoot); TextureDropIn.EnableCensus(""); }
+            else if (arg.StartsWith("--tex-census=")) { TextureDropIn.SetScratchDir(_repoRoot); TextureDropIn.EnableCensus(arg["--tex-census=".Length..]); }
             else if (arg == "--no-focus") _noFocus = true;
             else if (arg == "--mute") _mute = true;
             else if (arg == "--debug-collision") _debugCollision = true;
@@ -3537,6 +3540,8 @@ public partial class PlaneViewer : Node3D
         long simFrame = _clock?.Frame ?? 0;
         double simTime = _clock?.Time ?? 0.0;
         Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
+        // No-op unless --tex-census: reads the frame just saved back as per-texture pixel counts.
+        TextureDropIn.CountShot(img, path);
         if (++_shotIndex >= _screenshotShots)
         {
             _screenshotPath = null;

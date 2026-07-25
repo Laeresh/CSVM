@@ -45,6 +45,17 @@ LastAlphaIsSoft ("soft" = a 0.5 scissor cutout would erase or shred it; drives b
   Godot .NET prints a full managed stack trace per PushWarning call and buries real errors.
 ⚠ IsKnownAbsent (pir_spinner, barngrill — verified absent from the whole extraction) renders
   neutral gray; debug magenta must keep meaning a genuine name-resolution failure, not a data gap.
+⚠ `TextureDropIn` (same file) is the `--tex-override`/`--tex-census` hook, and it hooks HERE because
+  Find is the one resolve point every consumer goes through. The contract is **RGB bytes only**:
+  size, pixel format, alpha channel and mip chain stay the original's, so the alpha class read just
+  above the swap — and the blend/scissor variant, cutout silhouette and mip chain that follow from
+  it — are what a normal run would have produced (measured: an overridden texture's visible extent
+  is the same 114,820 px with the census on and off; a hard-alpha clutter cutout is pixel-identical).
+⚠ Census colours are a pure hash of the name, never an assignment order — the map must mean the
+  same thing in every chapter and every run. Eight bits a channel leave ~200k colours, so ~0.5 % of
+  a chapter's names collide: warn per collision, never resolve it by nudging (that would make a
+  colour depend on what loaded first). Counting is chromaticity-based and its counts are LOWER
+  bounds; the tolerances and their evidence are in docs/cli.md.
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
@@ -234,6 +245,9 @@ frames resolve at build time while the TextureArchive is open — an incomplete 
   priority, rank, sidedness) cache key yields several ShaderMaterials per cycling source.
 ⚠ C#-side swapping is deliberate (1–7 cycling materials per chapter): no shader variant, atlas, or same-size assumption.
 ⚠ Screenshots cannot verify open water (frames differ ~2/255); use `--debug-anim`'s flipbook log.
+⚠ Frozen outright while `TextureDropIn.Active` (`--tex-override`/`--tex-census`): each frame is its
+  own texture with its own flat colour, so a running cycle would repaint the surface a different
+  colour every few frames and a census count would report whichever the shot caught.
 ⚠ The `EFFECTS` reader (`fire1`/`fire2`) is this mechanism bound to a NODE and is NOT wired up —
   it needs OBJECT_ADD_CHILD (docs/formats/effects.md).
 
