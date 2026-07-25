@@ -53,6 +53,7 @@ long tail.
 - `--debug-scoreboard` (with `--stunt`: force-complete the run on the first frame with synthetic splits so the results scoreboard renders immediately — for a deterministic `--screenshot` of the board / layout tuning; does not overwrite a real best time unless the synthetic total happens to beat it. In a splitscreen race the players finish **staggered** by index (1.5 s apart, totals padded to match) so the shot exercises the real one-finishes-while-others-fly sequence — an early `--frames` catches the waiting banner, a later one the shared board)
 - `--debug-names[=meshes|all]` (switch the **node-name labels** on at launch — the T overlay, available in both `--viewer` and flight; `meshes` (default) labels only nodes that draw something, `all` includes the empty group/pivot nodes)
 - `--debug-select[=x,y[,up]]` (`--freecam`/`--anim-lab` only — the **scripted twin of clicking an object and pressing PgUp**, because live mouse and key input are not scriptable here. On the first frame it casts the same pick ray a click would, at screen position `x,y` (default: the middle of the viewport), then walks `up` rungs toward the world root. Passed to any other mode it logs `WARN [ui] --debug-select is a --freecam/--anim-lab tool; ignoring it here`. The report goes to the `ui` log category, and it is the whole ladder, never truncated: one `select rung=i/N cs_name=… godot=… centre=(…) size=(…)` line per rung, the current one starred, plus the `select debug-pick … eye=… aim=…` line that documents the camera the pick was cast from. **Pin the camera with `--pos`/`--direction` first** — a screen-position pick is meaningless without the pose it was taken at. Example, C1's moored zeppelin: `--freecam --chapter=C1 --mission=M04 --pos=-4848,200,-5165 --direction=-1,0,0 --debug-select=852,360,8` selects an engine nacelle's mesh and walks up to `hk_zep`)
+- `--debug-nodelab[=spec]` (`--freecam`/`--anim-lab` only — open the **node lab** (N) at launch and dump its readouts to the `ui` log category. Tokens: `deps`, `dest`, `open`, `node=<cs_name>`; full behaviour under "The node lab" below)
 - `--markers` (**implies `--viewer`**: open the **marker overlay** at launch — the firepoint / pylon / target gizmos on the parked aircraft (PLAN-M3 item A3). Firepoints draw orange, the firepoints that **share a mount** magenta (the Balmoral/Brigand two-groups-one-mount case), pylons cyan, the aim `target` green. Every gizmo dot always shows so no mount position is lost; the *labels* de-clutter nearest-first (firepoints before pylons) and co-located names stack up the airframe so both read — orbit to reveal the ones the HUD reports hidden. Toggle in any `--viewer --plane` session with **K**; combine with `--screenshot` for the item-A10 firing-placement verification shots. Only on the parked plane — a `--viewer --chapter` world has no marker rig)
 - `--dump-markers[=plane]` (implies `--det`; a **pure-data report** — print each player airframe's marker rig to stdout and `./.scratch/markers_dump.txt`, then quit; needs no world or camera, so `--headless` makes it windowless. Each block lists every `firepoint*`/`pylon*`/`target` with its plane-frame position (nose −Z, right +X, up +Y), a firepoint's mirror pair, and any co-located mounts (`≡ firepointN`). This is the committed instrument the `docs/formats/markers.md` tables regenerate from. The report and its verdict come from `Probes.Markers`, which the `markers-rig` suite asserts on. The optional value filters to one airframe by model node (`player_bhawk`) or display name (`Bloodhawk`), matched case-insensitively as a substring; an unmatched value lists the available names)
 - `--dump-weapons[=id|name]` (implies `--det`; a **pure-data report** for the typed `weapons.json` reader (`WeaponDefs`, PLAN-M3 B11) — print all 48 `BALLISTICS` defs to stdout and `./.scratch/weapons_dump.txt`, then quit; windowless under `--headless`, locale-independent output. Each block gives the id, `NAME`, the `DESC` display name (resolved through `messages.json`), the ballistics/damage/allotment numbers, the class flags, and the `FIRE`/`FLYOUT`/`IMPACT` bindings (`IMPACT` by surface class). A clean run reports **no unhandled keys** — the pass criterion, and a tripwire if the data ever grows a key the reader hasn't learned; `--run-tests=weapons-defs` asserts it (plus the 48 count) and exits nonzero. Optional value filters by id (`wep_06`) or `NAME` substring)
@@ -160,3 +161,50 @@ cargotrain reads `cs_name=box_car.flt godot=@Node3D@5`, and the first reads `god
 The unnamed wrapper nodes SceneBuilder adds (`mesh`, `lights`, `col`) and our own overlays are not
 rungs. Nothing is built until something is selected, so a capture without a click — or without
 `--debug-select` — is byte-identical to one from a build without any of this.
+
+## The node lab — `N` (`--freecam` / `--anim-lab`)
+
+**N toggles a panel down the left edge** holding the world's node tree by `cs_name`, a search box,
+per-node actions and a dependency readout for whatever the shared selection currently holds. It is
+two-way: clicking an object in the world scrolls the tree to that node, clicking a tree row selects
+it in the world (and double-clicking frames the camera on it). Buttons: **Frame** (put the camera on
+the selection's measured box and orbit it), **Hide/Show** (flip the subtree's `Visible` — nothing is
+torn down, so it is reversible; an animation re-showing a node you hid is the data working, and the
+panel's live `visible=`/`in_tree=` readout is how you see that), **Deps ⟳** and a **Destructibles**
+switch.
+
+**The tree is populated one branch at a time**, on expand — a chapter world is thousands of nodes
+(C5: 8,897 named ones, 557 of them directly under the world root). A branch stops at **500 rows**
+and says so; the search box is the way past it. A tree row's children are the nearest `cs_name`
+descendants, the exact inverse of the ladder's ancestor walk, so both name the same relation.
+**The tree reaches what a click cannot** — the pick skips meshes over 350 m across, so terrain is
+unselectable by clicking, and selecting `z3terrain` from the tree (or by name, below) works.
+
+**The dependency readout** lists, for the selected node: the anim definitions anchored on it and
+those naming it (with activation, HEALTH, source and sequence names); its destructible pools with
+live HP, state, damage stage, which one is authoritative, whether it has a `DAMAGE_SEQUENCE` and how
+many thresholds; its mesh/surface/material counts with the source texture names; and its colliders.
+**When a dependency source is not built in this mode the readout says so instead of showing an empty
+list** (verification rules 43/72) — `--freecam`/`--anim-lab` build no collision at all, so the
+collider line reads `colliders NOT BUILT IN THIS MODE …` rather than a zero that looks like an
+answer. On a `--node=` slice the anim and destructible readouts carry a **PARTIAL WORLD** banner
+with the bind census, because the root-name lift is refused there (rule 91).
+
+**The Destructibles view** replaces the tree with one row per `HEALTH>0` definition in the chapter,
+each expandable to its bound node groups (camera-jumpable, with live HP), plus two coverage columns:
+**root** — does the definition's `ANIMATION_ROOT_NAME` resolve inside each bound group (`2/2`, or
+`NONE`) — and **events** — do its sequences use only event kinds the runtime acts on (`19 ok`, else
+the missing kinds by name and count). A definition that bound **nothing** is shown loudly (`⚠` on the
+name, `UNRESOLVED`), never hidden. The header carries `defs · instances · node groups · unresolved`,
+and the instance and node-group totals are the same numbers the `destructible-census` suite asserts
+(C1 267/196, C5 568/292).
+
+- `--debug-nodelab[=spec]` (`--freecam`/`--anim-lab` only — the scripted twin, since live keys and
+  mouse are not scriptable here. Opens the panel at launch and dumps its readouts to the `ui` log
+  category on the second frame, once the selection has settled. `spec` is a comma-separated token
+  list: `deps` (the dependency readout), `dest` (the destructibles view — also switches the panel to
+  it), `open` (show the panel and log nothing more — the perf/capture shape), and
+  `node=<cs_name>` (select that node first, through the tree's own `Select` entry: exact match wins,
+  else the first substring match, with the candidate list logged). No spec dumps both readouts and
+  changes no selection. Example — the C1 water tower's pool and damage script:
+  `--freecam --chapter=C1 --debug-nodelab=node=ap_h2otwr1,deps`)

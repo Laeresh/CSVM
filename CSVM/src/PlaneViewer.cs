@@ -105,6 +105,11 @@ namespace CSVM;
 ///   --debug-select[=x,y[,up]]    (--freecam/--anim-lab) synthetic click at that screen position on
 ///                                the first frame, then `up` rungs of PgUp — logs the whole
 ///                                cs_name ancestor ladder with each rung's world-frame box
+///   --debug-nodelab[=spec]       (--freecam/--anim-lab) open the node lab (N) at launch and dump
+///                                its readouts to the `ui` log category. Comma-separated tokens:
+///                                `deps`, `dest`, `open` (show the panel, log nothing more) and
+///                                `node=<cs_name>` (select that node first — the tree's own entry,
+///                                which reaches what a click cannot); default dumps both readouts
 ///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
 ///                                ia.json spawn_points); story missions (M0x) fall back to
 ///                                objectives.json PLAYER_INIT. Pair with --chapter= to match the world
@@ -251,6 +256,9 @@ public partial class PlaneViewer : Node3D
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
     private UI.SelectionService? _selection;
+    // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
+    // dependency readout for whatever the selection holds.
+    private UI.NodeLab? _nodeLab;
     // --anim-lab: the animation debugger — the chapter world as a
     // quiet stage under a deterministic fixed-dt clock with def-playback transport (UI.AnimLab).
     // The most specific mode of all, so it wins outright when combined with any other.
@@ -276,6 +284,7 @@ public partial class PlaneViewer : Node3D
     private string? _debugMesh;  // --debug-mesh[=spec]: open the mesh lab at launch, preset modes
     private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
     private string? _debugSelect; // --debug-select[=x,y[,up]]: scripted click + ladder walk (freecam/anim-lab)
+    private string? _debugNodeLab; // --debug-nodelab[=spec]: open the node lab and dump its readouts
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
@@ -588,6 +597,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-names=")) _debugNames = arg["--debug-names=".Length..];
             else if (arg == "--debug-select") _debugSelect ??= "";
             else if (arg.StartsWith("--debug-select=")) _debugSelect = arg["--debug-select=".Length..];
+            else if (arg == "--debug-nodelab") _debugNodeLab ??= "";
+            else if (arg.StartsWith("--debug-nodelab=")) _debugNodeLab = UI.NodeLab.ParseDebugSpec(arg["--debug-nodelab=".Length..]);
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -737,6 +748,11 @@ public partial class PlaneViewer : Node3D
         {
             Log.Warn("ui", $"--debug-select is a --freecam/--anim-lab tool; ignoring it here");
             _debugSelect = null;
+        }
+        if (_debugNodeLab != null && !_freecam && !_animLab)
+        {
+            Log.Warn("ui", $"--debug-nodelab is a --freecam/--anim-lab tool; ignoring it here");
+            _debugNodeLab = null;
         }
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
@@ -1284,6 +1300,17 @@ public partial class PlaneViewer : Node3D
                     {
                         DebugPick = _debugSelect != null ? UI.SelectionService.ParseDebugPick(_debugSelect) : null,
                     };
+                    // The node lab reads that selection. Its camera is resolved through a
+                    // delegate: the freecam is created further down, after this point.
+                    _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
+                        session.Builder.Scene, collisionBuilt: _fly || _damageTest)
+                    {
+                        CameraSource = () => _spectator,
+                        DebugSpec = _debugNodeLab,
+                        // The anim lab's timeline strip and transport panel own the bottom of the
+                        // window; plain freecam has nothing there.
+                        BottomMargin = _animLab ? 252 : 16,
+                    };
                 }
 
                 // Every mechanism that places or hides a world entity has now run (the mission's
@@ -1457,7 +1484,7 @@ public partial class PlaneViewer : Node3D
                     GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
                              + (_playAnim != null ? $", playing '{_playAnim}'" : "")
                              + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
-                             + " P pause · . step · R restart · F picker; click an object to follow");
+                             + " P pause · . step · R restart · F picker · N node lab; click an object to follow");
                     what += " + anim lab";
                 }
             }
@@ -1546,6 +1573,12 @@ public partial class PlaneViewer : Node3D
             if (_selection != null)
             {
                 _worldRoot!.AddChild(_selection);
+            }
+            // The node lab joins after the selection, so its first _Process (which carries the
+            // scripted dump) runs once the selection's own scripted pick has settled.
+            if (_nodeLab != null)
+            {
+                _worldRoot!.AddChild(_nodeLab);
             }
             // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
             // cull-mode and normal-source overrides. Like the other two labs it is built in every
@@ -1660,7 +1693,8 @@ public partial class PlaneViewer : Node3D
                 what += " + freecam";
                 GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
                          "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
-                         "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump)");
+                         "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
+                         "N opens the node lab");
             }
 
             if (_fly)
@@ -2384,6 +2418,7 @@ public partial class PlaneViewer : Node3D
         _edgeExtender = null;
         _weather = null;
         _selection = null;
+        _nodeLab = null;
         // The clock and the consumers it drives explicitly go with the session; a null
         // GameClock.Current puts any node that outlives the teardown back on its raw frame delta.
         _clock = null;

@@ -108,6 +108,36 @@ public sealed partial class AnimRuntime : Node
     /// C23's weapon damage and C24's death sequence act through it.</summary>
     public DestructibleRegistry Destructibles => _destructibles;
 
+    /// <summary>The world nodes a definition anchors to, for the inspect tools — the runtime's own
+    /// answer, so a readout shows what the bootstrap actually bound rather than a re-derivation.
+    /// A null entry is a global (anchorless) instance. Read-only: the list is the cached one.</summary>
+    public IReadOnlyList<Node3D?> AnchorsOf(AnimDefinition def) => Anchors(def);
+
+    /// <summary>Every world node matching a NAME pattern, optionally restricted to one subtree —
+    /// the same wildcard matching and the same memoized index the dispatch uses, exposed so an
+    /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
+    public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
+
+    /// <summary>Event kinds <c>Dispatch</c> acts on. Keep in step with its cases: a kind absent
+    /// here is one the runtime counts as unhandled and does nothing for, which is what the node
+    /// lab's coverage column reports.</summary>
+    public static readonly IReadOnlyCollection<string> HandledEventKinds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ObjectActiveState", "ObjectTranslateState", "ObjectRotateState", "ObjectScaleState",
+        "ObjectMotionFromTo", "ObjectOpacityState", "ObjectOpacityFromTo", "ObjectMotion",
+        "ObjectMotionSiScript", "Loop", "If", "Elseif", "Else", "Endif", "CallSequence",
+        "StopSequence", "CallAnimation", "StopAnimation", "InvalidateAnimation", "PufferState",
+        "LightState", "LightAnimation", "SoundNode", "Sound", "ObjectAddChild",
+    };
+
+    /// <summary>Kinds with a handler that covers only part of what the event does — reported
+    /// apart from the unhandled ones, since "acted on" and "acted on fully" are different answers.
+    /// <c>ObjectAddChild</c> handles its sound-emitter form and counts the rest as unhandled.</summary>
+    public static readonly IReadOnlyCollection<string> PartialEventKinds = new HashSet<string>(StringComparer.Ordinal)
+    {
+        "ObjectAddChild",
+    };
+
     /// <summary>
     /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
     /// node to add to the scene tree (it advances live instances in _Process). Add it to the

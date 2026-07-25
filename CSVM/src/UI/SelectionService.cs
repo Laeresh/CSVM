@@ -291,8 +291,9 @@ public sealed partial class SelectionService : Node
     /// <summary>World-frame union of a subtree's own mesh AABBs. Measured from the subtree itself
     /// rather than from a shared merge helper, and empty meshes are skipped, so nothing another
     /// system parked elsewhere in the scene can enter the box. Meshless subtree ⇒ a zero-size box
-    /// at the node's own position.</summary>
-    private static Aabb SubtreeWorldAabb(Node3D root)
+    /// at the node's own position. Public because every inspect tool wants this measurement and
+    /// none of them may take the merge-over-the-live-tree shortcut.</summary>
+    public static Aabb SubtreeWorldAabb(Node3D root)
     {
         Aabb merged = default;
         bool any = false;

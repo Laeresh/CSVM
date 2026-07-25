@@ -228,4 +228,25 @@ pass through unharmed).
   re-aim, without re-framing, as you walk the ladder. *Blocks:* D31 sign-off, and the shape of
   D32–D35, which all act on this selection.
 
+- **The node lab at the controls (D32).** Everything about this panel except its readouts is
+  unverified: live keys and mouse are unscriptable here, so N, the expand arrows, the search field,
+  the buttons and the two-way click sync ran only through `--debug-nodelab` and by construction.
+  *Where:* the same zeppelin launch as above, plus `./RunGame.ps1 --freecam --chapter=C5` for the
+  big-world case (8,897 named nodes, 557 directly under the world root). **Press N.** *Look for:*
+  (a) **does the tree open where you are?** — click the zeppelin, the tree should scroll to that
+  node; click a tree row, the world highlight should follow. (b) **Expanding.** A branch fills only
+  when opened; a branch over 500 rows stops with a "… N more — use the search box" row. Does that
+  read as a limit or as a bug? (c) **Search.** Type a fragment; results are a flat list,
+  double-click frames the camera. Is filtering as you type fast enough in C5? (d) **Frame and
+  Hide.** Frame should put the camera on the thing and orbit it; Hide should grey the row and add
+  `(hidden)`. **Hide something an animation drives (a hangar door, the train) and watch it come
+  back** — that is the data re-showing it and is correct; the panel's `visible=`/`in_tree=` line is
+  how you should be able to tell. (e) **Destructibles.** Flip the switch: C1 should read
+  `defs 132 · instances 267 · node groups 196 · 12 unresolved def(s)`, red ⚠ rows for the twelve,
+  `2/2` root coverage and `9 ok` event coverage on the bound ones; expand one and click an instance
+  to jump to it. (f) **Layout.** Checked at 1280×720 only — in `--anim-lab` the panel is squeezed
+  between the breadcrumb and the timeline, and at other window sizes nothing has been looked at.
+  *Blocks:* D32 sign-off; the panel is also the reach-around for anything the click pick refuses
+  (terrain), so say if that path is discoverable.
+
 ---

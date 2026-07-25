@@ -6862,3 +6862,86 @@ or compositor — not diagnosed), so `fps`/`frame_ms` remain floors; nothing in 
 C#-sim regression that stays under that cap. `c2b-water`'s `clutter` phase (3.6 ms) is below the
 stage's 15 ms absolute floor, so even a 4× there would go unmarked. Splitscreen, the launchscreen,
 the labs and audio are unmeasured. Standing rules: `docs/verification.md` 100–102.
+
+## 2026-07-25 — The node lab: tree, search, dependencies, destructibles (PLAN-testing D32)
+
+**N opens a dockable panel in `--freecam`/`--anim-lab`** — `src/UI/NodeLab.cs`, plus four read-only
+accessors on `AnimRuntime` (`AnchorsOf`, `FindNodes`, `HandledEventKinds`, `PartialEventKinds`),
+`SelectionService.SubtreeWorldAabb` made public, and the wiring + `--debug-nodelab[=spec]` in
+`PlaneViewer`. It absorbs **M3's F41** (destructible list + camera jump + coverage columns), which
+the plan's Wave-F overlap table already marked superseded. Nothing else in the tree changed.
+
+**What it holds.** The world's node tree by `cs_name`, populated **one branch at a time** on expand;
+a search box over a once-built flat name index; two-way sync with D31's selection (world click →
+tree row, tree row → selection, double-click frames); Frame (`SpectatorCamera.Frame`/`FollowNode`)
+and Hide/Show (`Visible` flip only); a dependency readout for the current rung; and a destructibles
+view with F41's two coverage columns.
+
+**Verified — the water tower, quoted from the run**
+(`--freecam --chapter=C1 --det --mute --debug-nodelab=node=ap_h2otwr1,deps`):
+
+```
+nodelab select name='ap_h2otwr1' → 'ap_h2otwr1' matches=1 exact=True candidates=[ap_h2otwr1]
+nodelab deps anim defs anchored_here=2 naming_this_node=0
+nodelab deps anim def=h2twr_destruction1@ap_h2otwr1 rel=anchor activation=WeaponHit health=60
+   source=compiled seqs=[DAMAGE_SEQUENCE destroy_h2twr (unnamed) ×4 h2twr_puffer]
+nodelab deps destructible pool def=h2twr_destruction1@ap_h2otwr1 hp=60/60 state=Healthy stage=0
+   authoritative=True source=compiled
+nodelab deps destructible DAMAGE_SEQUENCE def=h2twr_destruction1@ap_h2otwr1 events=6 thresholds=2
+nodelab deps geometry meshes=5 surfaces=12 materials=6 textures=h2otwr02.tif, h2otwr01.tif, …
+nodelab deps colliders NOT BUILT IN THIS MODE — --freecam/--anim-lab build the world with no
+   collision at all, so an empty list here would be the missing instrument, not missing colliders
+```
+
+Both pools show — the compiled `ap_h2otwr1` def (authoritative) and the reader's `ap_h2otwr*`
+wildcard — which is the registry's per-`(def,anchor)` keying made visible.
+
+**Verified — totals equal the `destructible-census` suite.** Full C1 reports
+`defs=132 instances=267 node_groups=196 unresolved_defs=12`, C5 `instances=568 node_groups=292` —
+the suite's committed numbers, reached through a different code path (the panel joins the program's
+`HEALTH>0` defs to the registry; the suite reads `Count`/`DistinctAnchors`).
+
+**Verified — the C25 phantom case does not appear as real.** On `--anim-lab --node=ap_radiotwr`
+the view reports **`instances=2 node_groups=2`**, not the 91 phantom instances the root-lift
+heuristic would have produced, and prints a red `PARTIAL WORLD` banner carrying the bind census
+(`root_lift_suppressed=95`) above the list. 131 of C1's 132 destructible defs then read `UNRESOLVED`
+— correct for a 20-node slice, and stated rather than hidden.
+
+**Verified — the collider notice is a notice, not an empty list, and the branch behind it works.**
+With `collisionBuilt` and `WorldSession.Options.Collision` temporarily forced on in freecam (flipped,
+built, measured, reverted — rule 10), the same node reads `colliders bodies=4 shapes_enabled=1
+shapes_disabled=3`, the rule-73 direction split. `collisionBuilt` is wired to the real option and is
+false in every mode this lab runs in today; D35's `--collision` is what flips it.
+
+**Verified — inertness, and the compare seen able to fail.** `.\RunTests.ps1` PASS: 152 units,
+8 engine suites, **11 goldens hash-identical**, exit 0, 72.7 s. The same C1 waterfall pose with the
+panel open hashes `84af3759…` against the golden's `0bb2532d…`, so a golden could have caught it.
+8-chapter sound-enabled `--freecam` (`--quit-after 240`, flags absent, full-log grep): **0 errors in
+seven chapters**, the known pre-existing C3 `!is_inside_tree()` ×1 in the eighth.
+
+**Verified — perf, panel open in the C5 city** (`RunTests.ps1 -Perf -PerfFilter c5-city`, paired
+A/B against the same build with the flag absent, read against C22's committed bands):
+`render_cpu_ms` 1.035 → 1.045 (×1.010), `gpu_ms` ×0.988, `prims` ×1.000, `nodes` +31, `draws`
+1192.1 → 1214.1 (×1.018 — **the panel's own 22 UI draw calls**, the only marked verdict metric),
+`startup.rest` +33 ms for the panel build. `frame_ms`/`fps` are pinned at this machine's 120 fps
+pace and are floors (rule 38), so a sub-5 ms CPU cost hiding under the cap is not ruled out.
+A first A/B with the *dump* also running read `script_ms` ×2.877; isolating the panel with the new
+`--debug-nodelab=open` token took it to ×1.162, which is what identified the spike as the one-off
+dump rather than a per-frame cost.
+
+**Deviations from the item text.** (1) The camera is `SpectatorCamera.Frame`/`FollowNode`, not
+`OrbitCamera`'s — the orbit camera is `--viewer`-only and this lab is freecam/anim-lab-only; the
+API is the same shape. (2) A branch is capped at 500 rows: C5's world root has **557** named direct
+children, and an uncapped root branch would defeat the laziness the tree exists for. The overflow is
+a row that names the count and points at the search box. (3) `--debug-nodelab` grew a
+`node=<cs_name>` token, because a scripted run has to reach a *known* node and a screen-position
+pick cannot name one; it goes through the tree's own `Select`, which is also how anything over the
+350 m pick cap is reached (demonstrated on C5's `z3terrain`, a 512×0×512 box).
+
+**Residuals.** The interactive half is unverified here — live mouse and key input are unscriptable
+in this project, so N, the expand arrows, the search field, the buttons and the two-way click sync
+are exercised only through `--debug-nodelab` and by construction; the panel's feel and the tree's
+usability are the user's call (`playtest.md`, beside D31's zeppelin case). The panel's layout was
+checked at 1280×720 only, where the anim lab's variant is cramped between the breadcrumb and the
+timeline. The name index is a snapshot taken on first search; freed nodes are skipped at query time
+rather than triggering a rebuild.

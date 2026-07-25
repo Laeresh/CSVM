@@ -89,7 +89,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — Inspect layer
 
 31. ☑ D31 — Shared selection: click leaf + ancestor-ladder breadcrumb, PgUp/PgDn, highlight box **(done 2026-07-25 — `src/UI/SelectionService.cs`; the picking audit's answer and what D32–D35 may rely on are in the item's landing note; `docs/HISTORY.md`)**
-32. ☐ D32 — Node Lab (N): tree panel synced to selection — search, frame, hide/show, dependencies
+32. ☑ D32 — Node Lab (N): tree panel synced to selection — search, frame, hide/show, dependencies **(done 2026-07-25 — `src/UI/NodeLab.cs` + `--debug-nodelab`; absorbs M3's F41; `docs/HISTORY.md`)**
 33. ☐ D33 — Mesh Lab (M) operates on the selected world subtree in freecam
 34. ☐ D34 — Damage sliders (H) on the selected destructible — supersedes M3 F40
 35. ☐ D35 — Collider wireframes (C); collision force-buildable in freecam
@@ -755,7 +755,7 @@ mouse and key input are unscriptable in this project, so `--debug-select` drives
 baked into the rung's local frame at selection time, so it tracks rigid motion exactly but does not
 grow to follow articulation inside the subtree.
 
-## D32 ☐ Node Lab (N): tree panel synced to selection
+## D32 ☑ Node Lab (N): tree panel synced to selection
 
 **Goal.** N toggles a dockable panel: the world's node tree (by `cs_name`), search box, two-way sync with D31's selection (click in world ⇄ click in tree), per-node actions — frame camera on it, hide/show subtree — and a **dependencies readout** for the selected node: anim defs targeting it (from `AnimProgram`), its destructible pool/HP (from `DestructibleRegistry`), its textures/materials, its colliders if built. Plus a **destructibles view** (a filter of the same tree, absorbed from M3 F41): every destructible in the chapter, camera-jumpable, with F41's coverage columns per entry — does its `ANIMATION_ROOT_NAME` resolve to real nodes, and do its sequences reference only implemented event kinds. Unresolved entries are shown loudly, never hidden.
 
@@ -766,6 +766,35 @@ grow to follow articulation inside the subtree.
 **Verify.** Scripted: open panel via a `--debug-*` arg, select a known node, dump the dependencies readout to the log, assert the water tower lists its `DAMAGE_SEQUENCE` def and pool. Destructibles view: per-chapter totals match M3 A4's census (the F41 verify — also standing as B12's `destructible-census` suite). Perf: panel open in C5 city, `--perf` frame time unchanged within noise. User pass for feel.
 
 **⚠ Traps.** Rule 43/72 family: the readout must *say* when colliders aren't built in this mode rather than showing an empty list (absence-of-instrument ≠ absence). Hide/show interacts with anim visibility ops — a def re-showing a user-hidden node is correct behaviour, not a bug; the panel should show live `Visible` state so this reads as what it is.
+
+**Landed 2026-07-25** — `src/UI/NodeLab.cs`, four read-only accessors on `AnimRuntime`
+(`AnchorsOf`/`FindNodes`/`HandledEventKinds`/`PartialEventKinds`), `SelectionService.SubtreeWorldAabb`
+made public, and `--debug-nodelab[=deps,dest,open,node=<cs_name>]` in `PlaneViewer`. Evidence in
+`docs/HISTORY.md`. **This absorbs M3's F41** — the destructible list, the camera jump and the
+root-resolves / event-kinds-implemented coverage columns are the Destructibles view here, exactly as
+the Wave-F overlap table above says; nothing is owed in M3's plan beyond the supersession mark
+already there.
+
+**Verified.** The C1 water tower reports both its pools and its `DAMAGE_SEQUENCE` (6 events,
+2 thresholds) with the compiled def marked authoritative; the destructibles totals equal the
+`destructible-census` suite's on a different code path (C1 267/196, C5 568/292); the C25 phantom
+case reads **2 instances, not 91**, behind a red `PARTIAL WORLD` banner carrying
+`root_lift_suppressed=95`; the collider line prints the not-built-in-this-mode notice, and the
+branch behind it was proved to report `bodies=4 shapes_enabled=1 shapes_disabled=3` with collision
+temporarily forced on. `.\RunTests.ps1` PASS (152 units, 8 suites, 11 goldens, exit 0) with the same
+pose seen able to fail when the panel is open; 8-chapter sound-enabled `--freecam` at 0 errors
+beyond the known C3 `!is_inside_tree()`. Perf in C5 with the panel open: every verdict metric inside
+C22's bands except `draws` +22 (the panel's own UI calls).
+
+**Three deviations.** The camera is `SpectatorCamera.Frame`/`FollowNode`, not `OrbitCamera`'s
+(the orbit camera is `--viewer`-only and this lab is not). A branch caps at 500 rows with the
+overflow stated — C5's world root has 557 named direct children. And `--debug-nodelab` grew a
+`node=<cs_name>` selector, since a scripted run must reach a *known* node and a screen-position
+pick cannot name one; it is also how anything over D31's 350 m pick cap is reached.
+
+**Residual: the interactive half is unverified** — N, the expand arrows, the search field, the
+buttons and the two-way click sync run through `--debug-nodelab` and by construction only, and the
+layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case.
 
 ## D33 ☐ Mesh Lab on the selection in freecam
 

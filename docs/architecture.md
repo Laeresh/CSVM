@@ -318,6 +318,10 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + report
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP, startanims,
 a safety net), then dispatch-table event playback; unhandled event kinds are counted, never fatal.
 ⚠ `FindAll` is memoized (`_findCache`); adding or reparenting world nodes at runtime must invalidate it.
+⚠ `HandledEventKinds`/`PartialEventKinds` are the inspect tools' view of `Dispatch`'s cases and must
+  move with them — a kind added there and not here reads as unimplemented in the coverage columns.
+  `AnchorsOf`/`FindNodes` are read-only wrappers; both are safe post-bootstrap because the anchoring
+  census is closed by then, so a tool asking cannot perturb the bind report.
 ⚠ `_Process` runs `GameClock.Current.Steps` separate `Advance(Dt)` calls, never one summed step —
   the scheduler resolves per step, so N small steps ≠ one big one. Zero steps (a halted clock)
   means no call at all, not `Advance(0)`, which would still dispatch a frame's worth of t=0 events.
@@ -1020,6 +1024,28 @@ replays a click and a ladder walk for scripted runs.
   articulation inside the subtree.
 ⚠ Builds nothing until the first selection (no CanvasLayer, no mesh): four `--det` poses are
   raw-pixel md5-identical to a build without this file.
+
+## src/UI/NodeLab.cs
+The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
+Frame / Hide-Show, a dependency readout for `SelectionService.Current` (anim defs, destructible
+pool + DAMAGE_SEQUENCE, geometry/textures, colliders) and a destructibles view with F41's coverage
+columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin.
+⚠ **Lazy per branch, never per frame.** Each expandable row carries ONE placeholder child that is
+  *reused* as its first real row on expand — no `TreeItem` is ever freed. A branch is capped at
+  `MaxBranchItems` (C5's world root has 557 named children) with the overflow stated in a row. The
+  only per-frame work while open is one status Label at 4 Hz.
+⚠ **Tree children are the nearest `cs_name` descendants** — the exact inverse of the selection
+  ladder's ancestor walk, so a world click and a tree row name the same relation.
+⚠ `Select(node)` reaches what a click cannot: `SelectionService`'s 350 m cap makes terrain
+  unpickable, and `node=<cs_name>` selects it anyway (C5 `z3terrain`, a 512×0×512 box).
+⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (rules 43/72): the
+  collider line prints the not-built-in-this-mode notice, and on a `--node=` slice the anim and
+  destructible readouts carry a PARTIAL WORLD banner with the bind census. `collisionBuilt` is
+  wired to the real `WorldSession` option but is false in every mode this lab runs in today —
+  D35's `--collision` is what flips it.
+⚠ Destructible rows come from the PROGRAM's `HEALTH>0` defs joined to the registry, so a def that
+  bound nothing shows as `UNRESOLVED`; the totals equal the `destructible-census` suite's.
+⚠ Builds no UI until N (or `--debug-nodelab`): the 11 goldens hold unchanged with it in the tree.
 
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
