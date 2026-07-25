@@ -246,14 +246,25 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     900 rendered frames give 15 sim seconds and the same final pose under `--det`, 30 sim seconds
     and a different pose without it.
 
-79. **An absent asset filename is not evidence a feature was cut — features ship under
+79. **Every screenshot baseline taken before 2026-07-25 is dead — shader-driven surfaces render
+    different pixels at any given wall moment now.** UV scroll, precipitation and the skydome moved
+    off Godot's `TIME` onto the clock-driven `csky_time` global, so a stored PNG of water, rain,
+    snow or a waterfall is a picture of a different time value; re-capture rather than compare.
+
+80. **A pose that renders identically twice is not proof a time-driven change works — most poses
+    show no animated surface at all.** Only C1 (2 models), C1B (4) and C4 (6) carry any UV scroll
+    in this install; a C3 "open water" freecam shot was byte-identical run-to-run on the pre-A2
+    build too. Find the surface first (the `texture scroll: N model(s)` log line says whether a
+    chapter has any), frame it, and prove the pose is sensitive by perturbing the time value.
+
+81. **An absent asset filename is not evidence a feature was cut — features ship under
     implementation names, and view/camera features may need no art at all.** No `*spyglass*` or
     `*padlock*` file exists in `rimage`, `rof` or any chapter texture archive, yet both shipped:
     the spyglass is `MSG_CAM2_TOG` "Toggle Spyglass" — *camera 2*. Ask "did feature X ship?"
     against `extracted/messages.json`'s `MSG_CMD_*`/`MSG_CAM*` table, which enumerates what the
     retail build let a player bind (inventory: `docs/formats/strings.md`).
 
-80. **Trust the original design document for system shape and field meaning, never for specific
+82. **Trust the original design document for system shape and field meaning, never for specific
     numbers or per-item art behaviour — those were rebalanced before release, and retail
     captures or extracted data supersede it wherever both exist.** Its structure has held
     repeatedly (two-volume danger zones, armour-then-hit-points, the zeppelin launch-altitude
@@ -261,7 +272,7 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     underbelly, while the 40/30-cal Bloodhawk visibly ejects brass from its wing mounts in
     `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`.
 
-81. **Before using a per-chapter file or node flag to tell chapters apart, prove it
+83. **Before using a per-chapter file or node flag to tell chapters apart, prove it
     discriminates — some are copy-paste boilerplate and some mean different things per
     chapter.** Seven of eight `map.json`s name the same `map_c1m04`, and C2/C2B ship C1's
     `Airport_terminal` camera presets; the gamez `terrain` flag marks the land tiles in C1/C2
@@ -289,12 +300,14 @@ If your diff lands here, suspect noise first:
 |---|---|
 | `--fly` / `--stunt`, any pose | Useless for screenshot diffs — same-build floor 30–84% of pixels; A/B with `--viewer`/`--freecam` + pinned camera |
 | `--freecam` default camera | Random spawn per launch — pin with `--spawn=N` or `--campos`/`--lookat` |
-| Precipitation (C1C/C2B/C4) | Self-animating from `TIME`; ~5–6% frame difference same-build |
-| C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+ |
+| Precipitation (C1C/C2B/C4) | ~5–6% frame difference same-build. `--det` pins the *fall* (clock-driven `csky_time`), NOT the per-instance seeds — a C2B rain shot still moves 4.75% run-to-run until A3 seeds them (0.00% measured with the seed pinned) |
+| C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |
+| UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two identical `--det` runs; `--det` now pins it to 0.00% |
+| Puffer particle spread (waterfall mist, crash smoke) | Unseeded RNG — 0.52% of a C1 waterfall frame between two `--det` runs, all of it inside the mist; A3's master seed, not the clock |
 | Bootstrap `unresolved` op count | `RandomWeight` dice — 100–107 on one unchanged build |
 | Damage-lab fire trails | 413–479 px between runs on a single tree |
 | Liveries in flight | Randomised per player per load — pin with `--paint-seed=N` |
-| Any world view | Not frame-deterministic — measure the same-build floor first |
+| Any world view | Not frame-deterministic without `--det` — measure the same-build floor first. Under `--det` the clock and shader time are pinned; what is left is the unseeded RNGs above |
 
 ## The standing checklist
 

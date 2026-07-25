@@ -5892,6 +5892,39 @@ with a `COMPLETE` banner and a `plans.md` row. `PLAN-testing.md` is now the sole
 across `backlog.md` and the archived plans were repointed to the new path. M3's remaining sign-off is
 the at-the-controls re-tests owed in `playtest.md` §1 (user-owned).
 
+## 2026-07-25 — PLAN-testing B13: the `CSVM.Tests` xUnit project
+
+**What landed.** A new `CSVM.Tests/` (net8.0, xunit 2.9.0, `ProjectReference` to `CSVM.csproj`, added
+to `CSVM.sln` with the two Export configurations mapped but not built), so `dotnet test CSVM/CSVM.sln`
+runs 135 tests. **No `CSVM/src/` file was touched** — the audit that opens the item found enough
+already-free surface that no seam had to be cut. Godot-free at runtime: `Zrdr`/`ZrdrDict`, `WavFile`,
+`SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths` (no `using Godot` at all), plus
+`GameZ`, `MarkerRig`, `AnimDefs`, `PlaneStats`, `SpawnPoints`, `PaintScheme`, `AnimProgram`, which use
+only managed structs (`Vector3`/`Basis`/`Transform3D`/`Mathf`/`Color`). Partly free: `StockLoadouts.Load`
+given an explicit path, and `TextureArchive`'s constructor / `FindByDecalIndex` / `IsKnownAbsent`.
+Engine-only, left to B12: `Loadout.Bind`, `Weather.Load` (a `GD.Print` per zone on every load),
+`SoundArchive`, `Config`, `HudMetrics`, `DestructibleRegistry`, `TextureArchive.Find`.
+
+**Two input kinds.** Committed `fixtures/` are hand-authored from `docs/formats/` — invented `probe_*`
+node names, `wep_probe_*` ids, `MSG_PROBE_*` keys — and WAV/ADPCM inputs are assembled byte by byte in
+`WavFileTests.cs` with each expected sample derived in a comment. Nothing is copied from an extraction.
+Golden invariants read the player's install through `CSVM_DATA_ROOT` (a checkout holding `extracted/`,
+the engine's convention, *or* the extraction tree itself — both probed) and record numbers only: 220
+shared readers, the per-chapter reader counts, 48 weapon defs with zero unhandled keys, 1023 messages,
+2715 sound defs / 488 sound groups, the 11 airframes' 8-firepoint / 8-pylon / 1-target rigs with two
+`markers.md` coordinates spot-checked, and every stock loadout's `wep_*` ids resolving.
+
+**Verified.** Rule 14 ritual: perturbing one expected ADPCM sample (116 → 117) failed exactly that test
+and returned `$LASTEXITCODE` 1; reverting returned 0. `dotnet test` green both ways — with
+`CSVM_DATA_ROOT` on the real tree **135 passed / 0 skipped / 0 failed, exit 0**, and against an empty
+directory **119 passed / 9 skipped / 0 failed, exit 0** (skips named individually by the runner).
+`dotnet build CSVM/CSVM.sln` still builds the game project with 0 warnings / 0 errors.
+
+**One finding the goldens produced.** A directory listing counts 222 shared readers but the loader
+yields 220: `dlgMessage` and `mp_dialog` extract to a literal JSON `null`, so they carry no reader
+list — likewise C1C's and C2B's `templates` (29→28, 26→25). Not a parser gap; recorded in the test's
+own comment so the discrepancy is stated rather than silently absorbed.
+
 ## 2026-07-25 — PLAN-testing A1: `GameClock`, the session simulation clock
 
 **Landed.** New `CSVM/src/Utils/GameClock.cs`: one object per session owning how much sim time a
@@ -5934,6 +5967,51 @@ Shader-driven motion (UV scroll, precipitation, skydome) still runs on wall `TIM
 `--det` world screenshot is not yet byte-identical — measured 1.60 % floor. In `--anim-lab` only,
 CPU-driven texture cycles and puffer particles now follow the lab clock instead of wall time (they
 freeze on pause and scale with the speed selector) — the item's intent, not inertness drift.
+
+## 2026-07-25 — PLAN-testing A2: `csky_time`, the clock-driven shader clock
+
+**Landed.** Every animated shader this project generates now reads a Godot global uniform
+`csky_time` (seconds) instead of the `TIME` built-in. New `src/Utils/ShaderTime.cs` owns it:
+`RegisterGlobal()` joins the fog / world-light / `WorldLights` adds in `PlaneViewer._Ready`, and
+`Advance(clock, delta)` publishes `GameClock.Time` once per rendered frame from `_Process`, right
+after `BeginFrame` — falling back to a wall accumulator when there is no session clock (the
+launchscreen, the frame after `ReturnToMenu`) so menu-side animation never stalls. The uniform is
+declared once in a new `CSVM/shaders/csky_time.gdshaderinc` and wraps at 3600 s, the same period as
+Godot's `TIME`, because every UV scroll rate in this install (0.07 / 0.4 / 0.5 / 0.7 / 1.0 u/s)
+times 3600 is a whole number of texture repeats. Two conversion sites, not three: `SceneBuilder`'s
+UV-scroll variant (which also builds the skydome's scrolling sky layer — the plan's separate
+"skydome `TIME`" site does not exist; a whole-tree grep found `TIME` only in `SceneBuilder` and
+`Precipitation`) and `Precipitation`'s self-animating field, which has no C# per-frame hook at all.
+`--jitter` now defaults to 0 under `--det`.
+
+**Verified.** *Headline, within the new build:* `--freecam --chapter=C1 --det --no-pads` framed on
+the C1 waterfall (`--campos=-7720,60,-3380 --lookat=-7868,40,-3449`), two runs at `--frames=120`,
+raw 32-bpp pixel buffers (rule 36) — the falls region is **0 of 28,000 px different**; the
+**pre-A2 build at the identical pose and frame count moved 30.3 % and 31.6 %** of that region
+between runs (rule 15's able-to-fail control, taken on the unchanged binary). Frame-count
+sensitivity: 120 vs 121 moves **22.7 %** of the region, 120 vs 150 **43.6 %**. *Halt is a true
+freeze:* with the clock halted from session start, frames 120 and 300 of the same waterfall pose
+are **md5-identical** (`e48772dd…`, 0 of 921,600 px) where a running clock moves 2.26 %. *Rollover:*
+publishing `t + 3600` and `t + 7200` renders the falls **pixel-identically** to `t`; `t + 1234.5`
+moves 43.8 % and `t + 3599.99` moves 16.8 % — the seam is exact, not a coincidence of a still pose.
+*Precipitation:* C2B rain is byte-identical at `--frames=120` across runs once its particle seeds
+are pinned (probe: `md5 1e6707d4…` twice; 32.9 % different at `--frames=150`). *Inertness:*
+`--viewer --plane=player_bhawk` is md5-identical (`7c2b7274…`) on the pre-A2 and A2 builds — no
+scroll variant, so no include and no shader-text change. *Jitter:* `--det --shots=3` writes three
+md5-identical frames; without `--det` the same command still dithers (30.6 % between `_00` and
+`_01`). *Regression:* 8-chapter `--freecam` (`--quit-after 180`, full-stderr grep per rules 61/71) —
+**0 errors**, every gamez-node / mesh-instance / collider / uv-clamped-surface count identical to
+the A1 baseline; no shader, uniform or compile diagnostic anywhere. Mode battery clean (0 errors):
+menu, anim lab, flight, 2P stunt race, damage lab.
+
+**Residuals.** `--det` shots are byte-identical only where nothing unseeded draws: the C1 waterfall's
+**mist puffer** still moves 0.52 % of the frame (all of it inside a 150×120 px box at the falls' base)
+and precipitation's per-instance seeds move 4.75 % (C2B rain) / 6.27 % (C4 snow) — both are A3's
+master seed, not the shader clock. The halt was proved with a scripted probe that sets `Halted` at
+session start; the interactive **P / `.` keys remain verified by construction only**. Separately, a
+**pre-existing** `!is_inside_tree()` error fires once during C3's animation bind
+(`AnimRuntime.OneShotSoundPosition`, world subtree not yet in the tree) whenever sound is enabled —
+reproduced on the unchanged pre-A2 binary; A1's baselines missed it because they ran `--mute`.
 
 ## 2026-07-25 — Design-document cross-check: five doc corrections + five readers decoded
 

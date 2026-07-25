@@ -1,0 +1,16 @@
+[
+  [
+    ["description", "MSG_PROBE_ZONE"],
+    ["category_label", "MSG_PROBE_DZ"],
+    ["help_label", "MSG_PROBE_FLYTHROUGH"],
+    ["nodes", ["probe_dz1", "probe_dz1_inner"]]
+  ],
+  [
+    ["description", "MSG_PROBE_POINT"],
+    ["help_label", "MSG_PROBE_FLYTHROUGH"],
+    ["nodes", ["probe_point"]]
+  ],
+  [
+    ["description", "MSG_PROBE_NODELESS"]
+  ]
+]

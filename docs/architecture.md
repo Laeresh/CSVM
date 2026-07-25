@@ -9,6 +9,23 @@ Narratives, diagnoses, and landed-work stories do not live here: they get a shor
 `HISTORY.md`, and git history keeps the rest. Knowledge about the game's data formats belongs in
 `docs/formats/`, not here.
 
+## CSVM.Tests/
+The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj`, listed in
+`CSVM.sln`). Covers the readers that need no running engine: `Zrdr`/`ZrdrDict`, `WavFile`,
+`SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths`, `GameZ`'s transform
+arithmetic, `MarkerRig`, `AnimDefs`, and the Godot-free halves of `StockLoadouts`/`TextureArchive`.
+⚠ Two input kinds, deliberately separate. `fixtures/` is hand-authored from `docs/formats/` with
+  invented `probe_*` names; byte-level inputs (WAV/ADPCM) are assembled in the test code so every
+  byte's provenance is visible. **A trimmed piece of a real extraction is still a game asset and
+  never gets committed** — `fixtures/README.md` restates the rule at the point of temptation.
+⚠ Golden invariants read the player's own install. `CSVM_DATA_ROOT` names a checkout holding
+  `extracted/` (the engine's own convention) or the extraction tree itself; when neither resolves,
+  `[ExtractedDataFact]`/`[ExtractedDataTheory]` set xUnit's `Skip`, so the runner reports **skipped**
+  rather than a silent pass. Golden *numbers* commit; golden *content* never does.
+⚠ Anything reaching `GD.*`, `Image`, `FileAccess`, `ProjectSettings` or a live `Node` belongs to the
+  in-engine suites instead — `Loadout.Bind`, `Weather.Load`, `SoundArchive`, `Config`, `HudMetrics`,
+  `TextureArchive.Find`. Do not refactor a reader to get it in here; that trade was declined by plan.
+
 ## src/Mech3/GameZ.cs
 Loads a mech3ax GameZ extraction (zip or unpacked dir): nodes/models/materials/textures JSON into
 plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes (field mapping:
@@ -39,6 +56,11 @@ as depth bias (priority × surface rank × node index → polygon offset).
   (16-vec4 per-instance buffer cost).
 ⚠ Hybrid by design: the 128 blend/scroll/clamp variants stay generated in C#;
   .gdshaderinc holds only the shared blocks.
+⚠ UV scroll reads the `csky_time` global (`csky_time.gdshaderinc`), never Godot's `TIME` — the
+  uniform is the sim clock's shader-side twin, and it must keep TIME's 3600 s wrap because every
+  install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
+⚠ The include is emitted ONLY on the scroll variants, so every non-scrolling material's shader
+  text stays byte-for-byte what it was (measured: the static plane viewer is md5-unchanged).
 ⚠ Do not raise DepthBiasPerLevel/SurfaceRankBias/NodeOrderBias — the measured coplanar-separation
   floor is ~1e-6 of view distance; a uniform raise scrambles the authored layering (C5 got worse).
 ⚠ Never blanket repeat_disable: UV clamp is per-surface (UvsWithinUnitSquare); 54% of surfaces tile.
@@ -615,10 +637,16 @@ edge and by vertical distance. Feel constants all TUNE (`BaseAlpha` kept low —
 
 ## src/Effects/Precipitation.cs
 Rain/snow from weather.json's precip block (`WeatherState.PrecipData`): ONE MultiMesh whose
-shader derives each quad's position from a per-instance seed + `TIME` + `CAMERA_POSITION_WORLD`,
+shader derives each quad's position from a per-instance seed + `csky_time` + `CAMERA_POSITION_WORLD`,
 wrapped into a camera-centred box — zero per-frame CPU. SNOW = fluttering flakes; RAIN =
 streaks along the data's WORLD fall velocity (not plane-relative — TUNE pending A/B); sprites
 are procedural `MakeFlakeTexture`/`MakeStreakTexture` (the original drew untextured primitives).
+⚠ This module has NO per-frame C# hook, so the `csky_time` global is the only handle on the
+  animation: halting or fixed-stepping the sim clock is the sole way to stop or pin the fall.
+  Never reintroduce `TIME` here — the rain would keep falling through a halt.
+⚠ The per-instance seeds come from an unseeded `new System.Random()`, so two runs of the same
+  `--det` pose still differ (measured 4.75% of pixels, C2B rain; 0.00% with the seed pinned) —
+  that residual is A3's master seed, not the shader clock.
 ⚠ World-sized `CustomAabb` (±40 km) stops frustum culling — the instances sit at the node origin.
 ⚠ Cloud-band gate: precip renders only BELOW the CLOUD_COVER band; a huge sentinel band
   disables the gate when a mission has precip but no cloud band.
@@ -950,7 +978,12 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
 Main.tscn root: parses args, registers shader globals + lighting + the persistent camera once in
 `_Ready`, then launchscreen or `StartSession()` — menu and CLI share one session-build path.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE; `SetupWeather` only `Set`s — the in-process
-  world rebuild must never double-Add (that errors).
+  world rebuild must never double-Add (that errors). `ShaderTime.RegisterGlobal` joins the fog /
+  world-light / `WorldLights` adds there, and must stay ahead of the first shader build: Godot
+  refuses to compile a shader naming an unregistered global.
+⚠ `_Process` calls `ShaderTime.Advance(_clock, delta)` right after `BeginFrame`, UNCONDITIONALLY —
+  the null-clock branch (launchscreen, the frame after `ReturnToMenu`) keeps shader animation on
+  wall time so nothing stalls behind the menu.
 ⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
   null-guards cover the frame before the deferred free lands.
 ⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
@@ -1007,6 +1040,23 @@ raw frame delta", so nothing outside a session breaks.
 ⚠ UI and camera code deliberately stays on the raw frame delta (HUD widgets, `SpectatorCamera`,
   the launchscreen, the flight chase/orbit camera, the `--perf` and unplaced-entity instruments):
   a halt must still let you look around, draw the HUD, and measure frame budgets.
+⚠ The GPU reads the same clock through `ShaderTime` / the `csky_time` global — that is what makes
+  a halt a true freeze-frame (measured: frames 120 and 300 of a halted C1 waterfall are md5-equal)
+  and a `--det` shot a function of the frame count. Any new animated shader takes `csky_time`.
+
+## src/Utils/ShaderTime.cs
+The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in
+`PlaneViewer._Ready` and written once per rendered frame from `GameClock.Time`. Every animated
+shader this project generates reads it instead of Godot's `TIME`.
+⚠ `RolloverSecs = 3600` is a CONTRACT, not a tuning constant: it matches Godot's
+  `rendering/limits/time/time_rollover_secs`, and every UV scroll rate in this install
+  (0.07/0.4/0.5/0.7/1.0 u/s) × 3600 is a whole number of texture repeats, so the wrap lands on an
+  identical frame. Measured: a +3600 s and a +7200 s offset render the C1 waterfall pixel-identically,
+  +1234.5 s moves 43.8% of it.
+⚠ With no session clock the value keeps advancing on the wall delta from where the last session
+  left it — the menu must not freeze, and the uniform must never sit pinned at 0.
+⚠ Declared in `res://shaders/csky_time.gdshaderinc`, one include shared by every shader that reads
+  it: a global uniform's TYPE must agree across shaders, so it is declared in exactly one place.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
