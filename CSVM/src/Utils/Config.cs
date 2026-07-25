@@ -67,7 +67,7 @@ public static class Config
         string path = ProjectSettings.GlobalizePath(resPath);
         if (!File.Exists(path))
         {
-            GD.Print($"config: no {resPath} — using in-code defaults");
+            Log.Info("core", $"config absent file={resPath} — using in-code defaults");
             return;
         }
         try
@@ -80,18 +80,18 @@ public static class Config
             var doc = JsonDocument.Parse(File.ReadAllBytes(path), opts);
             if (doc.RootElement.ValueKind != JsonValueKind.Object)
             {
-                GD.PushError($"config: {resPath} root must be a JSON object — ignoring the file");
+                Log.Error("core", $"config root is not a JSON object file={resPath} — ignoring the file");
                 doc.Dispose();
                 return;
             }
             _doc = doc;
             Flatten(doc.RootElement, "", _values);
             _fileLoaded = true;
-            GD.Print($"config: loaded {_values.Count} override(s) from {resPath}");
+            Log.Info("core", $"config loaded overrides={_values.Count} file={resPath}");
         }
         catch (JsonException e)
         {
-            GD.PushError($"config: {resPath} is not valid JSON ({e.Message}) — using in-code defaults");
+            Log.Error("core", $"config is not valid JSON file={resPath} — using in-code defaults", e);
             _values.Clear();
         }
     }
@@ -195,12 +195,12 @@ public static class Config
         {
             return true;
         }
-        // GD.Print, not PushWarning: Godot appends a two-line C# stack trace to every PushWarning,
-        // and here the trace is always Config.cs boilerplate with no diagnostic value — it would
-        // just bury the message, worst of all across the (expected) missing-key lines of a sparse file.
+        // Info, not Warn: a sparse config.json is the intended shape, so most of these misses are
+        // expected and must not read as problems. (Log.Warn is plain text either way — the reason
+        // this was never GD.PushWarning is that Godot appends a useless C# stack trace to each.)
         if (_fileLoaded && _warnedMissing.Add(key))
         {
-            GD.Print($"config: key '{key}' not in config.json — using its in-code default");
+            Log.Info("core", $"config key absent key={key} — using its in-code default");
         }
         return false;
     }
@@ -209,7 +209,7 @@ public static class Config
     {
         if (_warnedType.Add(key))
         {
-            GD.Print($"config: key '{key}' is {got}, expected {want} — using its in-code default");
+            Log.Warn("core", $"config key is wrong-typed key={key} got={got} want={want} — using its in-code default");
         }
     }
 
@@ -222,7 +222,7 @@ public static class Config
         {
             if (!_registry.ContainsKey(key))
             {
-                GD.Print($"config: key '{key}' in config.json matches no tunable — ignored (typo? wrong block?)");
+                Log.Warn("core", $"config key matches no tunable key={key} — ignored (typo? wrong block?)");
             }
         }
     }

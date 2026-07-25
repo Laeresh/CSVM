@@ -6012,3 +6012,67 @@ session start; the interactive **P / `.` keys remain verified by construction on
 **pre-existing** `!is_inside_tree()` error fires once during C3's animation bind
 (`AnimRuntime.OneShotSoundPosition`, world subtree not yet in the tree) whenever sound is enabled —
 reproduced on the unchanged pre-A2 binary; A1's baselines missed it because they ran `--mute`.
+
+## 2026-07-25 — PLAN-testing B11: `Log`, categories/levels + the always-on file sink
+
+**Landed.** `src/Utils/Log.cs` — `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine
+categories (`anim world flight weapons sound perf test ui core`) and four levels, with two sinks:
+the console (filtered by `--log=cat[:level],…`) and a **file sink that always writes everything**
+to `.scratch/logs/<mode>-<stamp>.log`, PID-suffixed on a same-second collision. Line grammar
+`[cat] message key=value`, the file prefixing a 5-char level token and **no timestamp column**, so
+a `--det` run's log is byte-identical run to run. Messages are `FormattableString`s rendered with
+`InvariantCulture`; the sink is a line-flushed `StreamWriter` (UTF-8 with BOM).
+
+**Census correction.** The plan budgeted "184 `GD.Print` sites across 29 files" (grepped 2026-07-24);
+the real figure on the day is **223 across 37 files** — M3's landing added ~40, and `PlaneViewer.cs`
+alone holds 98 of them. The plan's 8 categories had no home for the ~24 UI/lab sites, so a **ninth
+category `ui`** was added rather than widening `core`: `core` is the session/CLI/config spine a
+scripted run always wants, while the lab and launchscreen dumps are read on purpose and must be
+silenceable on their own.
+
+**Two deviations from the item text, both to protect inertness.** (1) The console default is
+`info`, not "errors and warnings only" — that is exactly what an unconverted `GD.Print` showed, so
+converting a site changes nothing you see; `--log=*:warn` spells the quieter shape when wanted.
+(2) `--debug-anim` implies `--log=anim:debug,sound:debug`, because it already opens those families'
+call-site gates and would otherwise half-work while their 35 sites are unconverted.
+
+**Migration converted 5 files / 14 sites and no more, by decision** (plan decision 9, verification
+rule 67 — bulk text rewrites have corrupted files here): `Utils/Config.cs` (`core`),
+`Mech3/Clutter.cs`, `Mech3/TextureArchive.cs`, `Flight/Weather.cs` (`world`),
+`Mech3/TextureCycler.cs` (`anim`, debug level). Each site keeps its original level except
+`TextureArchive`'s two, whose own comment recorded that the level had been compromised to dodge
+`GD.PushWarning`'s stack trace. `WorldSounds.cs` was converted and then reverted when it landed on
+another agent's active file list. `PlaneViewer.cs` took three lines only: the `--log=` arg, the
+deferred-spec application, and `Log.Open`.
+
+**Verified.** *The headline property, both directions.* `--debug-anim --log=anim,world:warn`:
+`DEBUG [anim] texture cycles` = **34 in the file, 34 on the console**; `INFO [world] weather zone`
+= **2 in the file, 0 on the console**. `--debug-anim --log=anim:info` (call-site gate open, console
+filter closed): the same anim lines are **5 in the file, 0 on the console** — the instrument is seen
+able to fail either way. *Caught error in both sinks:* a deliberately malformed `res://config.json`
+put `ERROR [core] config is not valid JSON …` on stderr and the same line **plus the full
+`JsonReaderException` stack trace** in the file — and it appears *before* the `log file=` line,
+proving the pre-open prelude flushes in order. *Crash safety (rule 65):* a live `--debug-anim`
+freecam run `Stop-Process -Force`d (TerminateProcess — no unwind, no `Dispose`) left a **1562-byte,
+18-line** log holding all 13 per-second `[anim]` ticks up to ~1 s before the kill. *Cost:* `--perf`
+medians over 30 samples, C1 `--det` freecam — same-build noise floor first (rule 7) is **1.14 ms of
+`script`** (baseline 19.11 vs 17.97); baseline→converted is **17.97 → 17.54 ms**, i.e. −0.4 ms,
+*inside* the floor and in the impossible direction, so no measurable cost (rules 37/41; `frame` sat
+pinned at 16.67 ms, the vsync floor, rule 38). Even the run with the per-frame debug site firing
+reads 18.33 ms, still inside the floor. *Locale:* the same process renders unconverted
+`ZoneFog … WorldLight = 0,80200005` and converted `[world] … world_light=0.802` — and `LogTests`
+asserts `Log.Format($"dt={1000f/60f:0.000} ms")` == `dt=16.667 ms` under a forced `de-DE`, with the
+able-to-fail control that plain interpolation there yields `16,667`. *Inertness:* baseline vs
+converted `--freecam --chapter=C1 --det --spawn=0 --no-focus` with no `--log=` differ by exactly the
+four rewritten lines (same count, same positions, same levels bar the documented `WARN` promotion)
+plus **one new line**, the `[core] log file=…` announcement; world counts identical
+(7064/3458/0/1483). *Regression:* 8-chapter `--freecam` — **0 Godot-format engine errors** in every
+chapter, warning counts identical to baseline on C1.
+
+**Tests.** `dotnet test CSVM/CSVM.sln` **142 passed / 0 failed** (135 + 7 new `LogTests` covering
+the filter grammar, the line grammar and the invariant rendering — all Godot-free, per B13's audit).
+
+**Residual.** A composite object's own `ToString()` escapes the invariant rendering
+(`FormattableString` only reaches `IFormattable` holes), so a record logged whole still emits
+current-culture floats — `Weather` now logs the `ZoneFog` fields individually for exactly this
+reason, and the constraint is recorded as a `⚠` in the module's `docs/architecture.md` entry.

@@ -438,6 +438,7 @@ public partial class PlaneViewer : Node3D
         // still means exactly this — it is simply redundant now.
         bool hasContentArg = false;
         bool playersExplicit = false; // --players= given (else a --plane= list implies the count)
+        var logSpecs = new List<string>(); // applied after the loop, so --debug-anim's implied one comes first
         foreach (var arg in OS.GetCmdlineUserArgs())
         {
             if (arg.StartsWith("--plane=")) { ParsePlanes(arg["--plane=".Length..]); hasContentArg = true; }
@@ -460,6 +461,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--no-pads") Pads.Disabled = true;
             else if (arg == "--det") _det = true;
             else if (arg == "--perf") _perf = true;
+            else if (arg.StartsWith("--log=")) logSpecs.Add(arg["--log=".Length..]);
             else if (arg.StartsWith("--anim-lod=")) _animLod = int.Parse(arg["--anim-lod=".Length..]);
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
             else if (arg.StartsWith("--menu=")) { _forceMenu = true; _menuStartScreen = arg["--menu=".Length..]; } // open on a screen (screenshot aid)
@@ -600,6 +602,28 @@ public partial class PlaneViewer : Node3D
             GD.Print("--damage is the plane lab (use --viewer --plane without --chapter); ignoring");
             _damageLab = false;
         }
+        // --debug-anim opens the call-site gates of the anim and sound families, so it is also the
+        // legacy spelling of their console filter; an explicit --log= is applied after it and can
+        // still narrow either one.
+        if (_debugAnim)
+        {
+            Log.Configure("anim:debug,sound:debug");
+        }
+        foreach (string spec in logSpecs)
+        {
+            Log.Configure(spec);
+        }
+        // Opened once the mode is settled (it names the file) and before anything else can log.
+        // The sink always takes every category at every level; --log= only widens what the
+        // console additionally shows.
+        Log.Open(_repoRoot, _animLab ? "anim-lab"
+            : _damageTest || _effectsTest || _weaponTest ? "test"
+            : _dumpMarkers || _dumpWeapons || _dumpLoadout || _dumpConfig ? "dump"
+            : _freecam ? "freecam"
+            : _viewerMode ? "viewer"
+            : _stunt ? "stunt"
+            : _fly ? "fly"
+            : "menu");
         // Burst captures dither the camera by default so z-fighting flickers across frames;
         // a single shot never jitters. --det defaults it off instead: the dither exists to defeat
         // bit-identical frames, which is the one property a deterministic run is for.

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -212,7 +213,10 @@ public sealed class WeatherState
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
                 w._zones[zone] = new ZoneFog(color, near, far,low, high, clip, WorldLightFactor(z));
-                GD.Print($"ZoneFog {zone} {w._zones[zone]}");
+                var zf = w._zones[zone];
+                // The fields, not the record: a composite ToString() renders its own floats in
+                // the current culture, so it would escape Log's invariant formatting outright.
+                Log.Info("world", $"weather zone zone={zone} fog_color={zf.FogColor.ToHtml(false)} fog_near={zf.FogNear:0.###} fog_far={zf.FogFar:0.###} fog_low={zf.FogLow:0.###} fog_high={zf.FogHigh:0.###} clip_far={zf.ClipFar:0.###} world_light={zf.WorldLight:0.###}");
             }
         w.ParsePrecip(inner);
         return w;

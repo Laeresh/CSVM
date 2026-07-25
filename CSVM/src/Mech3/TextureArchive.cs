@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.IO.Compression;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -103,11 +104,16 @@ public sealed class TextureArchive : IDisposable
         }
         else if (_reportedMissing.Add(baseName))
         {
-            // Report each distinct miss once as a plain line. GD.PushWarning would print
-            // a full managed stack trace per call in Godot .NET, which buries real errors.
-            GD.Print(IsKnownAbsent(materialTextureName)
-                ? $"[textures] {materialTextureName}: absent from game data — gray fallback"
-                : $"[textures] not found in archive: {materialTextureName}");
+            // Report each distinct miss once. Log.Warn is a plain line — GD.PushWarning would
+            // print a full managed stack trace per call in Godot .NET, burying real errors.
+            if (IsKnownAbsent(materialTextureName))
+            {
+                Log.Warn("world", $"texture absent from game data texture={materialTextureName} — gray fallback");
+            }
+            else
+            {
+                Log.Warn("world", $"texture not found in archive texture={materialTextureName}");
+            }
         }
         _cache[baseName] = tex;
         _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft);

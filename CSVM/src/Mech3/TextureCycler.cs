@@ -78,7 +78,7 @@ public sealed partial class TextureCycler : Node
                 var parts = new List<string>();
                 for (int i = 0; i < _cycles.Count; i++)
                     parts.Add($"{(i < Summary.Count ? Summary[i] : "?")}=f{_cycles[i].Current}");
-                GD.Print("anim/debug: texture cycles " + string.Join(" ", parts));
+                Log.Debug("anim", $"texture cycles {string.Join(" ", parts)}");
             }
         }
         foreach (var c in _cycles)

@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Harness + logging
 
-11. ☐ B11 — `Log`: categories/levels, `--log=` console filter, always-on full-detail file sink
+11. ☑ B11 — `Log`: categories/levels, `--log=` console filter, always-on full-detail file sink **(done 2026-07-25 — `src/Utils/Log.cs`, 9 categories, 5 files converted; `docs/HISTORY.md`)**
 12. ☐ B12 — `--run-tests`: in-engine suite registry, pass/fail report, nonzero exit code; existing dump/damage-test assertions become suites
 13. ☑ B13 — `CSVM.Tests` xUnit project: pure-logic units, local-data golden invariants, hand-authored fixtures **(done 2026-07-25 — 135 tests, no `CSVM/src/` change needed; `docs/HISTORY.md`)**
 14. ☐ B14 — `RunTests.ps1`: the single entry point (build → units → suites → goldens → summary)
@@ -183,7 +183,34 @@ C4 carry any UV scroll at all, so a scroll-sensitive golden must be framed on on
 
 # Wave B — Harness + logging
 
-## B11 ☐ `Log`: categories, levels, `--log=` filter, always-on file sink
+## B11 ☑ `Log`: categories, levels, `--log=` filter, always-on file sink
+
+**Landed 2026-07-25** — `src/Utils/Log.cs`; evidence in `docs/HISTORY.md`. Four things the item text
+got wrong or left open, settled here:
+
+- **The census is bigger than budgeted: 223 sites across 37 files, not 184/29** (M3's landing added
+  ~40). **`PlaneViewer.cs` alone holds 98 of them (44 %)** and spans every category, so it must be
+  migrated cluster by cluster and last, never while another item is editing it.
+- **A ninth category, `ui`, was added** rather than widening `core`. The 8 proposed had no home for
+  the ~24 lab/launchscreen sites (`LaunchMenu` 7, `AnimLab` 6, `MeshLab` 5, `LiveryLab` 2,
+  `WeaponLab` 2, `NodeLabels` 1, `DamageLab` 1); `core` is the session/CLI/config spine a scripted
+  run always wants to see, while lab dumps are read on purpose and must be silenceable alone.
+- **Console default is `info`, not "errors and warnings only"** — that is what an unconverted
+  `GD.Print` showed, so a converted site is inert on the console; `--log=*:warn` is the quiet shape.
+  And **`--debug-anim` implies `--log=anim:debug,sound:debug`**: it already opens those families'
+  call-site gates, and would otherwise half-work while their 35 sites are unconverted.
+- **`Log` takes a `FormattableString` rendered invariant**, so every interpolated site is fixed
+  structurally at migration time. Consequence to know before converting anything:
+  `$"a{x}" + $"b{y}"` is a `string` and will not compile (deliberate — it would have formatted in
+  the current culture already), and a composite's own `ToString()` escapes the invariant rendering
+  outright, so log a record's *fields*, never the record.
+
+**Demonstration set — 5 files, 14 sites, and NO sweep** (decision 9, rule 67): `Utils/Config.cs`
+(`core`), `Mech3/Clutter.cs`, `Mech3/TextureArchive.cs`, `Flight/Weather.cs` (`world`),
+`Mech3/TextureCycler.cs` (`anim`, debug). Levels are preserved per site except `TextureArchive`'s
+two, whose own comment recorded the level as compromised. `PlaneViewer.cs` took three lines.
+Residual for later items: the two relative-path `.scratch` writes the scout found
+(`--weapon-test`, `--effects-test`) are untouched and still B12's to fix.
 
 **Goal.** `src/Utils/Log.cs`: `Log.Info("anim", "motion target=... pos=...")` etc., categories ~ {`anim`,`world`,`flight`,`weapons`,`sound`,`perf`,`test`,`core`}, levels error/warn/info/debug. Console shows errors/warnings plus whatever `--log=cat[:level],...` enables; a **full-detail file sink always writes everything** to `.scratch/logs/<mode>-<timestamp>.log`, so a post-hoc grep never misses a category that wasn't enabled. Stable `[cat] message key=value` grammar so suites parse lines reliably.
 

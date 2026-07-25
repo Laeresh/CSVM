@@ -1042,6 +1042,28 @@ raw frame delta", so nothing outside a session breaks.
   a halt a true freeze-frame (measured: frames 120 and 300 of a halted C1 waterfall are md5-equal)
   and a `--det` shot a function of the frame count. Any new animated shader takes `csky_time`.
 
+## src/Utils/Log.cs
+The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
+(`anim world flight weapons sound perf test ui core`) and four levels. Two sinks with different
+jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file is the machine's.
+⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter. `--log=` only
+  moves the *console* threshold. That is the point: a post-hoc grep can never miss a category
+  nobody enabled before the run. Console default is info (what an unconverted `GD.Print` did);
+  warnings and errors are never suppressible; `--debug-anim` implies `--log=anim:debug,sound:debug`.
+⚠ Grammar: every line ends `[cat] message key=value`, the file prefixing a 5-char level token.
+  **No timestamp column, deliberately** — a `--det` run must produce a byte-identical log; a line
+  that needs time carries it as an explicit `key=value`.
+⚠ A message is ONE `FormattableString`, rendered invariant. `$"a{x}" + $"b{y}"` is a `string` and
+  will not compile — deliberately, since the concatenation formats its floats in the current
+  culture first. A composite's own `ToString()` escapes it too: log the fields, not the record.
+⚠ `Warn` prints plain via `GD.Print`, never `GD.PushWarning` (which appends a managed stack trace
+  per call). Line-flushed `StreamWriter`, UTF-8 **with BOM** (PowerShell 5.1 reads BOM-less as ANSI
+  and mojibakes the em dashes). Lines logged before `Open` sit in a 512-line prelude, flushed on open.
+⚠ **Migration is incremental by decision, not by neglect — do NOT bulk-sweep the remaining
+  `GD.Print` sites** (223 across 37 files; a bulk text rewrite has corrupted files here before,
+  verification rule 67). New code uses `Log`; a family converts when an item touches it, keeping
+  each site's original level unless a comment there says the level was compromised.
+
 ## src/Utils/ShaderTime.cs
 The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in
 `PlaneViewer._Ready` and written once per rendered frame from `GameClock.Time`. Every animated
