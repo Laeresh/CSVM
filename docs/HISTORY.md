@@ -6998,3 +6998,87 @@ light steering, and re-targeting the lab by clicking something else while it is 
 `playtest.md`. The overlay's counts are pose-dependent (the map-edge extender adds clutter bodies),
 big trimeshes draw as bounding boxes over 2,000 tris, and `--viewer` binds no C overlay because C
 is the mesh lab's cull cycler there (it says so when `--collision` is passed).
+
+
+## 2026-07-25 — The world damage lab: HP slider, kill and reset on any destructible (PLAN-testing D34)
+
+**H opens a panel in `--freecam`/`--anim-lab` that damages whatever the shared selection is on** —
+`src/UI/WorldDamageLab.cs`, plus `DestructibleRegistry.PoolsOn`, three census helpers lifted out of
+`Probes.Damage` into `Probes` (`EnabledColliders`, `WorldRootOf`, `CountVariants`), a shared
+`PlaneViewer.EnsureWorldEffects` that `--destroy` now goes through too, and
+`--debug-damage[=script]`. In `--viewer` H still means the parked aircraft's `DamageLab`; the two
+never exist in the same session. **This supersedes M3's F40**, which the Wave-F overlap table already
+marked; `backlog.md` holds no F-reference to delete.
+
+**What it holds.** Every destructible pool on the selected node (or the enclosing one a hit would
+reach), each with live HP, state and damage stage; on the reachable one a slider, Kill and Reset
+driving `AnimRuntime.DamageAt` / `ResetDestructible`. The slider is **absolute HP** — down spends the
+difference through the weapon-hit path, up runs `ResetDestructible` and re-damages, because the model
+has no healing. A kill reports the swap and the collider census **pre-tick** (synchronous) and the
+debris **post-tick** (scheduled).
+
+**Only one pool per object is drivable, and that decided the UI.** C1's `ap_h2otwr1` carries two
+pools with independent 60 HP — the compiled `h2twr_destruction1@ap_h2otwr1` and the reader wildcard's
+`h2twr_destruction*@ap_h2otwr*` — and `DamageAt` re-resolves through `DestructibleRegistry.Resolve`,
+so health spent on the twin drains a pool nothing can ever hit. Every pool is listed; only the
+reachable one carries controls, the rest carry the reason, and a scripted `pool=2,kill` is refused
+out loud. New verification rule 103.
+
+**Verified — the scripted sequence, quoted from the run**
+(`--freecam --chapter=C1 --det --debug-damage=node=ap_h2otwr1,hp=30,kill,tick=3.5,reset,kill`):
+
+```
+damagelab pool=1/2 def=h2twr_destruction1@ap_h2otwr1 source=compiled anchor=ap_h2otwr1
+   hp=60/60 state=Healthy stage=0 drivable=True
+damagelab pool=2/2 def=h2twr_destruction*@ap_h2otwr* source=reader anchor=ap_h2otwr1
+   hp=60/60 state=Healthy stage=0 drivable=False
+damagelab hp   … spent=30 hp=60→30 stage=0→1 state=Damaged started=[sputter_black_smoke_obj]
+damagelab kill … hp=30→0 state=Destroyed started=[sputter_fire_smoke_obj h2twr_destruction1]
+damagelab kill swap healthy=0/1 shown destroyed=1/1 shown (immediate, pre-tick)
+damagelab kill colliders off=1 on=3 (counted separately — the net hides a real removal)
+damagelab kill debris=0 sounds=0 (immediate, pre-tick — the death's debris motion is SCHEDULED)
+damagelab tick advance=3.5s debris=+2 sounds=+0 (scheduled state, post-tick)
+damagelab reset … hp=60/60 state=Healthy stage=0 swap healthy=1/1 shown destroyed=0/1 shown
+damagelab kill … hp=60→0 state=Destroyed started=[sputter_fire_smoke_obj h2twr_destruction1]
+damagelab kill swap healthy=0/1 shown destroyed=1/1 shown (immediate, pre-tick)
+damagelab kill colliders off=1 on=3 (counted separately — the net hides a real removal)
+```
+
+The second kill is line-for-line the first — the C28 idempotency check, now interactive. Colliders
+are reported as `off=` and `on=` and **never as the +2 net** (rule 73); the debris is read before and
+after the tick (rule 75), and reads 0 then +2 because the `OBJECT_MOTION` is scheduled at t≈2.2 s
+while the whole script runs inside one frame.
+
+**Verified — the panel agrees with the headless twin, number for number.**
+`--damage-test=ap_h2otwr1 --damage-hd=60` reports `swap[healthy 0/1 shown, destroyed 1/1 shown]`,
+`col[off 1, on 3]`, `debris[2 launched]`, `snd[0 played]`, `reset[healthy=✓ (h1/1,d0/1), rekill 1h ✓]`
+and `hit 1 → sputter_fire_smoke_obj, hit 1 → h2twr_destruction1`. Two code paths, one set of numbers —
+which is what the shared `Probes` census helpers are for. (`snd 0` is the tower's own data: its death
+authors no `Sound` event. C1's `m_build01` reads `sounds=2`, `debris=7`, `col[off 1, on 10]`.)
+
+**Verified — rule 72's notice is a notice, not an empty list.** `--debug-damage` forces the collision
+build on, the `--damage-test` precedent, one `||` in the same expression. With that force temporarily
+removed (flipped, built, measured, reverted — rule 10) the same kill prints
+`colliders NOT BUILT IN THIS MODE — this world was built with no collision at all, so a census here
+would read zero and lie about what the death removed`.
+
+**Confirmed, not assumed: the freecam build does NOT wire M3's world-effects runtime.**
+`BuildWorldEffectsRuntime` runs in `--fly`, `--effects-test` and under `--destroy`; a plain
+`--freecam` builds none, and the world runtime's puffer factory is torn down after the bootstrap
+(rule 76). The lab now asks for it on its **first damage action** (nothing built until then), and a
+`m_build01` kill renders its `great_balls_of_fire` in freecam — captured. **It is not a blanket
+fix:** that runtime binds a fixed 28-name closure, and the tower's progressive stages
+(`sputter_black_smoke_obj`, confirmed in `extracted/C1/cam_anim` as a `PUFFER_STATE` def) and its own
+`h2twr_puffer` sequence are not in it, so they fire, log, and draw nothing outside flight. Rule 76
+now carries that.
+
+**Verified — inertness.** `.\RunTests.ps1` PASS: 152 units, 8 engine suites, **11 goldens
+hash-identical**, exit 0, 78.8 s. Eight of those eleven are `--det --freecam` poses whose hashes were
+committed before this change, which is the byte-identity claim; the compare is seen able to fail —
+`c1-waterfall` with `--debug-damage=open` hashes `e790256d…` against the golden's `0bb2532d…`.
+8-chapter sound-enabled `--freecam` (`--quit-after 240`, flags absent, full engine-log grep):
+**0 errors in seven chapters**, the known pre-existing C3 `!is_inside_tree()` ×1 in the eighth.
+
+**Residual: the interactive half is unverified.** H, the slider drag and the Kill/Reset buttons run
+through `--debug-damage` and by construction only — live mouse and key input are unscriptable here —
+and the layout was checked at 1280×720 alone. `playtest.md` §9, beside D31's and D32's checks.

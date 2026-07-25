@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 31. ☑ D31 — Shared selection: click leaf + ancestor-ladder breadcrumb, PgUp/PgDn, highlight box **(done 2026-07-25 — `src/UI/SelectionService.cs`; the picking audit's answer and what D32–D35 may rely on are in the item's landing note; `docs/HISTORY.md`)**
 32. ☑ D32 — Node Lab (N): tree panel synced to selection — search, frame, hide/show, dependencies **(done 2026-07-25 — `src/UI/NodeLab.cs` + `--debug-nodelab`; absorbs M3's F41; `docs/HISTORY.md`)**
 33. ☑ D33 — Mesh Lab (M) operates on the selected world subtree in freecam **(done 2026-07-25 — `MeshLab` parameterized on a `SelectionService`; the override materials are now the surface's own shader with two edits, proven 0-px against the shipped render by the new `--debug-mesh=force`; `docs/HISTORY.md`)**
-34. ☐ D34 — Damage sliders (H) on the selected destructible — supersedes M3 F40
+34. ☑ D34 — Damage sliders (H) on the selected destructible — supersedes M3 F40 **(done 2026-07-25 — `src/UI/WorldDamageLab.cs` + `--debug-damage`; the two-pool honesty rule and what the effects runtime does NOT cover are in the item's landing note; `docs/HISTORY.md`)**
 35. ☑ D35 — Collider wireframes (C); collision force-buildable in freecam **(done 2026-07-25 — `src/UI/ColliderOverlay.cs` + `--collision[=show]`; on/off counts and the names that flipped are reported separately; `docs/HISTORY.md`)**
 
 ## Dependency and parallelism notes
@@ -808,6 +808,7 @@ layout was checked at 1280×720 alone. `playtest.md`, beside D31's zeppelin case
 
 **⚠ Traps.** Rule 56 is the whole item: any lighting/vertex divergence in the override materials silently changes what you're inspecting. Restore-on-exit must survive the selection changing while M is active.
 
+
 **Landed 2026-07-25** — `MeshLab` takes a `SelectionService` in a second constructor and becomes
 the *scoped* lab; M attaches, M again restores. Evidence in `docs/HISTORY.md`.
 
@@ -834,7 +835,7 @@ scoping be measured as pixels.
 all keypress halves — unscriptable here, so they are by construction and sit in `playtest.md`. A
 selected rung's collection is capped (3,000 surfaces, 60k drawn triangles) and says when it capped.
 
-## D34 ☐ Damage sliders on the selected destructible (supersedes M3 F40)
+## D34 ☑ Damage sliders on the selected destructible (supersedes M3 F40)
 
 **Goal.** When D31's selection resolves (via `DestructibleRegistry.Resolve`) to a destructible instance, H shows its pool HP with a slider + kill/reset buttons driving `AnimRuntime.DamageAt`/`ResetDestructible` — the interactive twin of `--damage-test`, on any object, in the live world.
 
@@ -845,6 +846,59 @@ selected rung's collection is capped (3,000 surfaces, 60k drawn triangles) and s
 **Verify.** Freecam C1: select the water tower, slide HP to 30 → black-smoke stage fires (log + visible once M3 D32 is in); kill → swap + collider flip logged (rule 73: report off/on separately); reset → healthy again; second kill identical (the C28 idempotency check, now interactive). Scripted variant via `--debug-select` + a scripted H for one regression-suite case.
 
 **⚠ Traps.** Rule 72 (collider assertions need collision built — pair with D35's force flag or assert on the logged flips only); rule 75 (debris is scheduled — the interactive world's clock is running, so this is the one place it "just works"; the *scripted* variant must tick past the schedule).
+
+**Landed 2026-07-25** — `src/UI/WorldDamageLab.cs` (own file, a `Node` under the session root),
+`--debug-damage[=script]`, `DestructibleRegistry.PoolsOn`, three census helpers lifted out of
+`Probes.Damage` into `Probes` so the panel and `--damage-hd` count the same way, and
+`PlaneViewer.EnsureWorldEffects` (which `--destroy` now shares). Evidence in `docs/HISTORY.md`.
+**This supersedes M3's F40** exactly as the Wave-F overlap table says; the supersession mark in M3's
+archived plan is the whole paper trail and `backlog.md` holds no F-reference to delete (re-checked).
+
+**The dependency the item told me to confirm rather than assume, and the answer is "no".** The
+freecam build does **not** wire M3's world-effects runtime — `BuildWorldEffectsRuntime` runs in
+`--fly`, `--effects-test` and, since F42, under `--destroy`; a plain `--freecam` builds none, and the
+world runtime's own puffer factory is torn down after the bootstrap (rule 76). So this item wires it,
+on the **first damage action** rather than at session start, and a killed C1 `m_build01` then renders
+its `great_balls_of_fire` in freecam (captured). **It is not a blanket fix, which is the finding
+worth carrying:** that runtime binds a fixed 28-name closure, and the water tower's progressive
+stages (`sputter_black_smoke_obj`, measured in the data as a `PUFFER_STATE` def) and its own
+`h2twr_puffer` sequence are not in it — they fire, log, and draw nothing outside flight. Rule 76 now
+says so.
+
+**The two-pool case, which decided the UI's shape.** C1's `ap_h2otwr1` resolves to **two** pools with
+independent 60 HP — compiled `h2twr_destruction1@ap_h2otwr1` and reader `h2twr_destruction*@ap_h2otwr*`
+— and `DamageAt` re-resolves through `Resolve`, so damage spent on the reader twin would drain a pool
+nothing can ever hit. **Deviation from "one slider per pool": every pool is listed with live HP, but
+only the reachable one carries the slider, Kill and Reset**; the others carry the reason instead, and
+a scripted `pool=2,kill` is refused out loud. Verification rule 103.
+
+**Verified — the scripted sequence, and it agrees with the headless twin exactly.**
+`--freecam --chapter=C1 --det --debug-damage=node=ap_h2otwr1,hp=30,kill,tick=3.5,reset,kill`:
+HP 60→30 escalates `stage=0→1` and starts `sputter_black_smoke_obj`; the kill starts
+`sputter_fire_smoke_obj h2twr_destruction1`, swaps `healthy=0/1 destroyed=1/1`, flips colliders
+**`off=1 on=3`** (rule 73 — reported as two numbers, never the +2 net), and reads **debris=0 pre-tick**;
+`tick=3.5` then reads **debris=+2** (rule 75 — the `OBJECT_MOTION` is scheduled at t≈2.2 s, and the
+whole script runs inside one frame); reset returns `hp=60/60 Healthy stage=0 healthy=1/1 destroyed=0/1`;
+the second kill is line-for-line identical (the C28 idempotency check, now interactive).
+`--damage-test=ap_h2otwr1 --damage-hd=60` reports the same `swap[healthy 0/1, destroyed 1/1]`,
+`col[off 1, on 3]`, `debris[2 launched]`, `snd[0 played]`, `reset[healthy=✓, rekill 1h ✓]` — two code
+paths, one set of numbers.
+
+**Verified — rule 72's notice is a notice.** `--debug-damage` forces the collision build on (the
+`--damage-test` precedent, one `||` in the same expression). With that force temporarily removed
+(flipped, built, measured, reverted — rule 10) the same kill prints
+`colliders NOT BUILT IN THIS MODE — … a census here would read zero and lie`, never an empty list.
+
+**Verified — inertness.** `.\RunTests.ps1` PASS: 152 units, 8 engine suites, **11 goldens
+hash-identical**, exit 0, 78.8 s — and 8 of those 11 are `--det --freecam` poses whose hashes were
+committed before this change, which is the byte-identity claim. The compare is seen able to fail:
+`c1-waterfall` with `--debug-damage=open` hashes `e790256d…` against the golden's `0bb2532d…`.
+8-chapter sound-enabled `--freecam` (`--quit-after 240`, flags absent): **0 errors in seven
+chapters**, the known pre-existing C3 `!is_inside_tree()` ×1 in the eighth.
+
+**Residual: the interactive half is unverified** — H, the slider drag, the Kill/Reset buttons and the
+panel's feel run through `--debug-damage` and by construction only; live mouse and key input are
+unscriptable here. `playtest.md` §9, beside D31's zeppelin case and D32's panel check.
 
 ## D35 ☑ Collider wireframes (C), collision force-buildable in freecam
 

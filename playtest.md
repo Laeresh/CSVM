@@ -272,4 +272,22 @@ pass through unharmed).
   a radius; and in `--fly` (C works there too) whether the yellow airframe boxes read as the shape
   the plane collides with. *Blocks:* D35 sign-off.
 
+- **The world damage lab at the controls (D34).** Same story: H, the slider drag and the Kill/Reset
+  buttons ran only through `--debug-damage` and by construction. *Where:*
+  `./RunGame.ps1 --freecam --chapter=C1` — find a water tower (or use N's search for `ap_h2otwr`),
+  **select it and press H**. *Look for:* (a) **Does H find the right thing?** Clicking a leaf deep
+  inside an object should still offer the enclosing pool — the panel's second line names the anchor a
+  hit would damage. Selecting something that is not a destructible should say so, not open empty.
+  (b) **The slider.** Dragging it down should escalate the damage stages as HP falls; dragging it
+  back **up** silently does a reset-then-re-damage (the data has no healing), so watch whether the
+  object visibly resets mid-drag and whether that reads as sane or as a glitch. (c) **Kill/Reset.**
+  Kill should swap the wreck in and throw debris a couple of seconds later; Reset should put the
+  tower back; a second Kill should look identical. (d) **The two-pool row.** `ap_h2otwr1` lists two
+  pools and only the first has controls, with a red line explaining why — is that comprehensible at
+  the controls, or does it read as a broken button? (e) **Effects.** A killed *building*
+  (`m_build01`) should burn; the water tower's smoke/fire **stages** deliberately do not render
+  outside flight (documented, not a bug) — say if the difference is confusing. (f) **Layout.**
+  1280×720 only; the panel is on the right, the node lab on the left, and in `--anim-lab` it is
+  squeezed above the timeline. *Blocks:* D34 sign-off.
+
 ---
