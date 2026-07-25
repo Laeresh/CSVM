@@ -64,6 +64,10 @@ as depth bias (priority × surface rank × node index → polygon offset).
 ⚠ Do not raise DepthBiasPerLevel/SurfaceRankBias/NodeOrderBias — the measured coplanar-separation
   floor is ~1e-6 of view distance; a uniform raise scrambles the authored layering (C5 got worse).
 ⚠ Never blanket repeat_disable: UV clamp is per-surface (UvsWithinUnitSquare); 54% of surfaces tile.
+⚠ `BuildSubtree` is the whole of the `--node=` stage's build — it already takes an arbitrary
+  GameZNode, so slicing one subtree needed no new geometry code. It sets the built root's transform
+  from the node's OWN `Local`; a caller slicing a nested node must overwrite that with
+  `GameZ.WorldTransformOf` or the subtree lands at its parent's origin.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -141,6 +145,16 @@ Builds a chapter world (fullbright): World children + partition-referenced subtr
   docs/formats/weather.md); the skydome fogs on purpose (FOG_ALTITUDE fade), never shadows/collides.
 ⚠ `HideUnplacedEntities` needs the BUILT subtree's world AABB (gamez `child_bbox` is LOCAL and
   matches all terrain); one-shot sweeps break motion targets still at origin → `RestorePlacedEntities`.
+⚠ `BuildNode` (the `--node=` stage) slices ONE named subtree out instead of walking the world, and is
+  deliberately unlike `Build` in three ways, each of which would otherwise erase the subject: no
+  `SkipWorldNode` filter (the caller named it, so even `horizon`/`dzpaths` build), no cloud-deck
+  split, and **no origin-parked registration** — the transformless vehicle a `--node=` run most often
+  asks for is exactly what `HideUnplacedEntities` switches off. It also leaves `_builtWorld` null, so
+  `CreateEdgeExtender` correctly returns nothing. `MatchNodes`/`SuggestNodes` do the lookup on the
+  SOURCE name (`.flt` optional, case-insensitive), never the Godot name — rule 60.
+⚠ `DetachedWorldAabb` is the world-frame box of a subtree **not yet in the tree** (from the built
+  meshes + node transforms). Use it, not `OrbitCamera.MergedAabb`, before the subtree is parented —
+  `GlobalTransform` on a detached node is identity and logs an error per call.
 
 ## src/Mech3/MapEdgeExtender.cs
 Rolling window (`Rings`=5 of 1024 m cells, diffed only on cell crossings) of repeated border tiles +
@@ -361,6 +375,22 @@ a safety net), then dispatch-table event playback; unhandled event kinds are cou
   pose; `Stop` alone leaves it displaced), re-apply `RESET_STATE` (healthy visible+collidable/destroyed
   hidden — undoes the swap AND the `ApplyDeathSwap` fallback), then restore HP/Status/DamageStage.
   Idempotent: destroy→reset→destroy is identical.
+⚠ **The bind never throws on a mostly-absent world — it degrades, silently, in two ways that look
+  the same from outside** (audited for the `--node=` stage). A def whose NAME resolves nothing gets
+  `Anchors() == []` and is `continue`d: *no handler ever fires*. A def that IS anchored but names a
+  node the build skipped bumps `_opsUnresolved` and dispatches into nothing: *the node is not here*.
+  Both leave a still object. `ReportResolution` turns on a bind-time census that separates them by
+  definition — `[anim] bind census …` / `bind unanchored=…` / `bind target_missing=… why=…` with
+  `index-not-built` (the compiled symbol table's gamez index was never built) vs `name-no-match`.
+  Off by default; `WorldSession` sets it for a node stage. Measured on C1 `--node=hk_zep`: 50
+  anchored, 763 unanchored, 134 target-missing, every one of them `index-not-built`.
+⚠ **`MaxRootLift`'s premise is a WHOLE-WORLD node count, so a partial world inverts it** — hence
+  `SuppressRootLift`. The 16-match cap exists so a generic `ANIMATION_ROOT_NAME` (`healthy`, 217× in
+  C1) cannot anchor a def onto every building; a single subtree drops *under* the cap, so defs that
+  never anchor in the full world anchor here, on whatever generic child the subtree owns. Measured
+  on C1's 20-node `ap_radiotwr`: **95 lifted defs and 91 phantom destructible instances**, versus 1
+  def and 2 instances with the lift refused. A caller building part of a world must set it, and the
+  refusals are counted and printed (`root_lift_suppressed=`), never dropped quietly.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with
@@ -1009,6 +1039,23 @@ Builds one chapter world and binds its `AnimProgram` — the world+anim half of 
   (AnimProgram load) · `bind` (bind + bootstrap) · `prewarm` — and those are the bulk of the
   `[perf] startup` accounting. Move a step, move its `Record` with it: a dropped phase does not
   read as missing, it reads as a growing `rest`. Keep them leaves — never nest one inside another.
+⚠ `Options.NodeSubtree` (the `--node=` stage) is the same pipeline with three steps switched off:
+  `WorldBuilder.BuildNode` replaces the world build, mission setup and clutter are skipped, and the
+  runtime's `ReportResolution` + `SuppressRootLift` go on. The anim program still loads and still
+  binds — what a partial world does to the bind is the question the stage exists to answer. Mission
+  setup is skipped rather than run because the one verb that reliably WOULD resolve is the one that
+  switches the requested subject off (C1/IA1 hides `hk_zep`); consequence: a node stage shows the
+  subtree in its gamez base state, not this mission's, including its `texture_scroll` defaults.
+
+## src/Mech3/EmptyStage.cs
+The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
+for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in the frame.
+⚠ The grid texture is DRAWN pixel-by-pixel here. Never load one — the repo ships no assets, and a
+  test stage is the easiest place to break that rule by accident.
+⚠ The collider is a sunk `BoxShape3D` whose TOP face is y=0, not a `WorldBoundaryShape3D` and not a
+  trimesh: the weapon and airframe raycasts want a definite thickness under the surface.
+⚠ It carries the `cs_name` meta (`ground`) like a built gamez node, so the impact log and the node
+  labels read a real name off it (`on ground/col`).
 
 ## src/PlaneViewer.cs
 Main.tscn root: parses args, registers shader globals + lighting + the persistent camera once in
@@ -1036,6 +1083,16 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   `--direction` is a vector, and only flight converts one to the other. `--campos`/`--spawn-at`/
   `--spawn-dir` remain as deprecated aliases with their old per-mode reach — `--campos` never places
   the plane, `--spawn-at` still moves the anim lab's parked prop — and log their replacement once.
+⚠ **`FrameCamera`'s subject box must be measured BEFORE the labs join the subtree.** `MeshLab` parks
+  three EMPTY overlay meshes at the session origin, and `OrbitCamera.MergedAabb` folds them in —
+  harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
+  `--node=` subtree 7 km out, whose box stretched back to the origin and framed it at 12 km. Hence
+  the optional `subject` argument, filled from `WorldBuilder.DetachedWorldAabb` at build time.
+⚠ `--stage=empty` and `--node=` are settled in the SAME mode-resolution block as the rest: the node
+  stage forces `--viewer` (unless `--anim-lab`) and sets `_chapterGiven`; the empty stage forces
+  `_worldMode` false, which is what routes `gamezPath` to planes.zbd and takes the third branch in
+  the build. `--node=` also turns off the anim lab's own auto-frame — on a one-object stage the
+  subject IS the stage, and re-aiming on every Play swings the camera off the only thing there.
 ⚠ `FrameCamera` synthesizes the `--viewer` orbit pivot when only a `--direction` was given: the point
   on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the eye
   swung to the aim when there is no `--pos`. It logs the value, because a synthesized pivot the user

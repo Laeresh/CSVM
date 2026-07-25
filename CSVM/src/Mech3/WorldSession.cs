@@ -28,6 +28,12 @@ namespace CSVM.Mech3;
 /// (the lab, to build puffers/decals interactively) passes <see cref="Options.KeepArchivesOpen"/>
 /// = true to skip both clears.</para>
 ///
+/// <para><b>The <c>--node=</c> stage is the same pipeline with three steps switched off.</b>
+/// <see cref="Options.NodeSubtree"/> replaces the world build with one named gamez subtree
+/// (<see cref="WorldBuilder.BuildNode"/>), skips the mission setup script and the clutter pass, and
+/// turns on the animation runtime's bind census — the program still loads and still binds, because
+/// what a partial world does to the bind is the whole question that stage exists to answer.</para>
+///
 /// <para><b>The phase boundaries are a reported contract.</b> Each step above records its own
 /// span into <see cref="StartupProfile"/> (<c>zrdr</c>, <c>world</c>, <c>clutter</c>, <c>anim</c>,
 /// <c>bind</c>, <c>prewarm</c>) and those spans are the bulk of the <c>[perf] startup</c> line's
@@ -79,6 +85,12 @@ public sealed class WorldSession
         /// <summary>Pins the runtime's RNG for a reproducible run (see
         /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>
         public int? RuntimeSeed { get; init; }
+
+        /// <summary>The <c>--node=</c> stage: build ONLY this gamez subtree instead of the whole
+        /// world. Null — the default — is the full chapter build. The caller resolves the name
+        /// (<see cref="WorldBuilder.MatchNodes"/>) so a miss can report its candidates and quit
+        /// before anything is built.</summary>
+        public GameZNode? NodeSubtree { get; init; }
     }
 
     /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
@@ -126,17 +138,32 @@ public sealed class WorldSession
         // MissionSetup.ScrollByModel); the entity half is applied afterwards, as the animation
         // runtime's bootstrap pass 0.
         long mark = StartupProfile.Mark();
-        var missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
-        if (missionSetup == null)
+        MissionSetup? missionSetup = null;
+        if (o.NodeSubtree != null)
         {
-            GD.Print($"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+            // The node stage deliberately skips it: nearly every verb would name a node this
+            // subtree does not contain, and the one thing the script reliably WOULD do is switch
+            // the requested subject off (C1/IA1 hides `hk_zep`). So a --node= build shows the
+            // subtree in its gamez base state, not in this mission's state.
+            Log.Info("world", $"node stage: mission setup skipped for {o.Chapter}/{o.Mission} — the subtree renders in its gamez base state");
+        }
+        else
+        {
+            missionSetup = MissionSetup.Load(o.InterpPath, o.Chapter, o.Mission);
+            if (missionSetup == null)
+            {
+                GD.Print($"mission setup: no script for {o.Chapter}/{o.Mission} ({o.InterpPath})");
+            }
         }
         StartupProfile.Record("zrdr", mark);
         mark = StartupProfile.Mark();
         var builder = new WorldBuilder(gamez, textures, collision: o.Collision,
             scrollOverrides: missionSetup?.ScrollByModel(gamez));
         s.Builder = builder;
-        var root = builder.Build("world1"); // every chapter has exactly one world node
+        // every chapter has exactly one world node; --node= replaces it with one named subtree
+        var root = o.NodeSubtree is { } only
+            ? builder.BuildNode(gamez, only)
+            : builder.Build("world1");
         StartupProfile.Record("world", mark);
         s.Root = root;
         // The original's material texture flipbooks (animated water/surf/wake/splash and the
@@ -165,7 +192,10 @@ public sealed class WorldSession
         // since they are real geometry (also a user decision).
         mark = StartupProfile.Mark();
         ClutterBuilder? clutterBuilder = null;
-        var clutterNames = ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
+        // Clutter stamps onto matching-textured world terrain, of which a --node= stage has none.
+        var clutterNames = o.NodeSubtree != null
+            ? new List<string>()
+            : ClutterBuilder.TemplateNames(o.InterpPath, o.Chapter);
         if (clutterNames.Count > 0)
         {
             clutterBuilder = new ClutterBuilder(gamez, textures, builder.Scene);
@@ -187,7 +217,7 @@ public sealed class WorldSession
                          + $" ({clutterBuilder.Summary})");
             }
         }
-        else
+        else if (o.NodeSubtree == null)
         {
             GD.Print($"clutter: no templates for {o.Chapter} ({o.InterpPath})");
         }
@@ -239,6 +269,14 @@ public sealed class WorldSession
             // PLAYER_RANGE conditions measure from the player, resolved per call because no camera
             // exists yet here.
             PlayerPosition = o.PlayerPosition,
+            // On a single-subtree stage most definitions legitimately resolve nothing, so the bind
+            // has to SAY which of "no handler ever fires" and "the node is not here" happened —
+            // from outside they are the same still object.
+            ReportResolution = o.NodeSubtree != null,
+            // MaxRootLift's premise is a whole-world node count; one subtree drops under the cap
+            // and lets generic ANIMATION_ROOT_NAMEs anchor definitions that have nothing to do
+            // with it. Refused here so the lab's picker lists what actually belongs to the stage.
+            SuppressRootLift = o.NodeSubtree != null,
         };
         s.Runtime = animRuntime;
         // The emitter pool has to be in the tree before the bootstrap builds into it.
@@ -250,6 +288,10 @@ public sealed class WorldSession
         mark = StartupProfile.Mark();
         animRuntime.Bind(root, animProgram);
         StartupProfile.Record("bind", mark);
+        foreach (string line in animRuntime.ResolutionLines())
+        {
+            Log.Info("anim", $"{line}");
+        }
         if (!o.KeepArchivesOpen)
         {
             animRuntime.PufferFactory = null;

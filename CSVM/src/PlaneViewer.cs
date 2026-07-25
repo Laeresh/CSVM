@@ -169,6 +169,11 @@ public partial class PlaneViewer : Node3D
 {
     private const float HorizonScale = 2.5f;
 
+    /// <summary>How many near-miss names a failed <c>--node=</c> lookup offers. A chapter holds
+    /// thousands of nodes and a substring like "zep" hits dozens; the point is a usable hint, not
+    /// a census.</summary>
+    private const int NodeSuggestCap = 20;
+
     // Splitscreen with a --pos override: lateral offset between players so they don't spawn
     // inside each other (the mission spawn lists already place players apart). TUNE.
     private const float SpawnAbreast = 60f;
@@ -210,6 +215,12 @@ public partial class PlaneViewer : Node3D
     // Reassigned on every StartSession, so a menu rebuild never inherits the last chapter's.
     private string _activeZone = "zone2";
     private string _chapter = "C1";    // which chapter's world to build (--chapter=): C1, C1B, C1C, C2, C2B, C3, C4, C5
+    // --stage=<name>: replace the chapter world with a synthetic test stage. 'empty' is the only
+    // one — no gamez at all, a generated grid over a collidable ground plane (see EmptyStage).
+    private string? _stage;
+    private bool _emptyStage;
+    // --node=<cs_name>: build ONLY that gamez subtree (--viewer / --anim-lab), camera framed on it.
+    private string? _nodeName;
     private bool _worldMode;           // render the chapter world instead of a single plane
     private bool _fly;
     // --viewer: the static inspection view. Flight is the default for any
@@ -488,6 +499,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--damage=")) { _damageLab = true; _viewerMode = true; _damagePreset = ParseDamagePreset(arg["--damage=".Length..]); hasContentArg = true; }
             else if (arg == "--chapter") { _chapterGiven = true; hasContentArg = true; }
             else if (arg.StartsWith("--chapter=")) { _chapter = arg["--chapter=".Length..]; _chapterGiven = true; hasContentArg = true; }
+            else if (arg.StartsWith("--stage=")) { _stage = arg["--stage=".Length..]; hasContentArg = true; }
+            else if (arg.StartsWith("--node=")) { _nodeName = arg["--node=".Length..]; hasContentArg = true; }
             else if (arg == "--fly") { _fly = true; hasContentArg = true; }
             else if (arg == "--stunt") { _stunt = true; hasContentArg = true; }
             else if (arg == "--freecam") { _freecam = true; hasContentArg = true; }
@@ -625,11 +638,41 @@ public partial class PlaneViewer : Node3D
             GD.Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
             _fly = _stunt = false;
         }
+        // --node= is a single-subtree INSPECTION stage: the static viewer unless the anim lab was
+        // asked for. Neither flight nor the spectator view has anything to do with one object, so
+        // an explicit combination is a contradiction and the stage wins.
+        if (_nodeName != null && !_animLab)
+        {
+            if (_fly || _stunt || _freecam)
+            {
+                GD.Print("--node= is a single-subtree inspection stage; ignoring --fly/--stunt/--freecam");
+                _fly = _stunt = _freecam = false;
+            }
+            _viewerMode = true;
+            _chapterGiven = true; // the subtree comes out of the chapter's gamez
+        }
         if (hasContentArg && !_viewerMode && !_freecam && !_animLab)
             _fly = true;
+        // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
+        // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
+        if (_stage != null)
+        {
+            if (!string.Equals(_stage, "empty", StringComparison.OrdinalIgnoreCase))
+            {
+                GD.Print($"--stage='{_stage}' is not a known stage (only 'empty'); ignoring");
+            }
+            else if (_viewerMode || _animLab || _nodeName != null)
+            {
+                GD.Print("--stage=empty has no gamez to inspect; ignoring it in --viewer/--anim-lab/--node=");
+            }
+            else
+            {
+                _emptyStage = true;
+            }
+        }
         // The static viewer shows a chapter world when asked for one, else the parked plane.
         // Flight, the spectator view and the anim lab always need the world built.
-        _worldMode = _fly || _freecam || _animLab || (_viewerMode && _chapterGiven);
+        _worldMode = !_emptyStage && (_fly || _freecam || _animLab || (_viewerMode && _chapterGiven));
         // A --plane= list of several aircraft states the player count on its own (the
         // scripted-verification path: --fly --plane=player_bhawk,player_fury = a 2P session with
         // different planes); an explicit --players= still wins.
@@ -742,6 +785,20 @@ public partial class PlaneViewer : Node3D
             Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
         }
         ResolvePlacement();
+        // The empty stage has no mission spawn list to draw from, so the subject starts over the
+        // grid origin. Routed through the same _spawnAt/_camPos fields --pos resolves into, which
+        // is why this runs after ResolvePlacement — an explicit placement still wins.
+        if (_emptyStage)
+        {
+            if (_fly)
+            {
+                _spawnAt ??= new Vector3(0f, EmptyStage.SpawnAltitude, 0f);
+            }
+            else
+            {
+                _camPos ??= EmptyStage.CameraPos;
+            }
+        }
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -880,7 +937,10 @@ public partial class PlaneViewer : Node3D
         // test harness also drives, with no session around it — can record its phases blind.
         _startup = new StartupProfile(_mode, Time.GetTicksMsec())
         {
-            Subject = _worldMode ? $"chapter={_chapter}" : $"plane={_planeName}",
+            Subject = _emptyStage ? "stage=empty"
+                : _nodeName != null ? $"chapter={_chapter} node={_nodeName}"
+                : _worldMode ? $"chapter={_chapter}"
+                : $"plane={_planeName}",
         };
         StartupProfile.Current = _startup;
         _worldRoot = new Node3D { Name = "Session" };
@@ -925,6 +985,9 @@ public partial class PlaneViewer : Node3D
         TextureArchive? labTextures = null;
         SoundArchive? labSounds = null;
         UI.AnimLab? animLab = null;
+        // The --node= subtree's world-frame box, measured at build time and kept for the framing
+        // below — see FrameCamera on why the live-tree merge is the wrong instrument here.
+        Aabb? nodeAabb = null;
         try
         {
             var sw = Stopwatch.StartNew();
@@ -975,7 +1038,57 @@ public partial class PlaneViewer : Node3D
             AnimProgram? crashProgram = null;
             SceneBuilder? worldScene = null;
             AnimRuntime? worldRuntime = null;   // the world's anim runtime — C23 routes weapon damage through it
-            if (_worldMode)
+            // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is
+            // built, so a miss reports its candidates and quits instead of half-building a world.
+            // Matching is on the source name, never the Godot node name (which is sanitized and
+            // auto-renamed); duplicates are normal, so the whole match list is logged and the first
+            // is what builds.
+            GameZNode? nodeSubtree = null;
+            if (_nodeName != null && _worldMode)
+            {
+                var matches = WorldBuilder.MatchNodes(gamez, _nodeName);
+                if (matches.Count == 0)
+                {
+                    var near = WorldBuilder.SuggestNodes(gamez, _nodeName, NodeSuggestCap);
+                    Log.Warn("world", $"--node='{_nodeName}' matches no node in {_chapter}'s gamez ({gamez.Nodes.Count} nodes)");
+                    if (near.Count > 0)
+                    {
+                        Log.Warn("world", $"--node= candidates containing '{_nodeName}': {string.Join(", ", near)}");
+                    }
+                    else
+                    {
+                        Log.Warn("world", $"--node= no name in {_chapter} contains '{_nodeName}' either — run the full world with --debug-names to read names off the objects");
+                    }
+                    _sessionTextures?.Dispose();
+                    _sessionTextures = null;
+                    GetTree().Quit();
+                    return false;
+                }
+                nodeSubtree = matches[0];
+                var labels = new List<string>();
+                foreach (var m in matches)
+                {
+                    labels.Add($"{m.Name}#{m.Index}");
+                }
+                Log.Info("world", $"--node='{_nodeName}' matched {matches.Count} node(s): {string.Join(", ", labels)}");
+                if (matches.Count > 1)
+                {
+                    Log.Warn("world", $"--node='{_nodeName}' is ambiguous — building the first ({nodeSubtree.Name}#{nodeSubtree.Index}); name a unique node or pick by eye from the list above");
+                }
+            }
+            if (_emptyStage)
+            {
+                // No gamez, no mission, no animation program: a flat collidable ground plane under
+                // a grid drawn in code. Flight, weapons and colliders work; nothing else is built.
+                mark = StartupProfile.Mark();
+                var stage = EmptyStage.Build(collision: _fly);
+                StartupProfile.Record("world", mark);
+                _plane = stage.Root;
+                meshInstances = stage.MeshInstanceCount;
+                colliders = stage.ColliderCount;
+                what = "empty stage";
+            }
+            else if (_worldMode)
             {
                 // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
                 // mission setup, AnimProgram + the AnimRuntime collaborator wiring, bind, sound
@@ -1013,6 +1126,8 @@ public partial class PlaneViewer : Node3D
                         // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
                         // scatter — in every mode, not just the lab.
                         RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
+                        // --node=: one subtree instead of the whole world (null = the full build).
+                        NodeSubtree = nodeSubtree,
                     },
                     gamez, textures, sounds, soundDefs, soundGroups);
                 _plane = session.Root;
@@ -1023,6 +1138,20 @@ public partial class PlaneViewer : Node3D
                 crashProgram = session.Program;
                 worldScene = session.Builder.Scene;
                 worldRuntime = session.Runtime;
+
+                // --node=: the built subtree's WORLD-frame box. Computed from the built meshes and
+                // the node transforms rather than from GlobalTransform, because the subtree has not
+                // joined the scene tree yet — and never from the gamez child_bbox, which is stored
+                // in the node's own frame.
+                if (nodeSubtree != null && WorldBuilder.DetachedWorldAabb(session.Root) is { } box)
+                {
+                    nodeAabb = box;
+                    Log.Info("world", $"node stage: '{nodeSubtree.Name}'#{nodeSubtree.Index} built, {builder.MeshInstanceCount} mesh instance(s), centre=({box.GetCenter().X:0},{box.GetCenter().Y:0},{box.GetCenter().Z:0}) size=({box.Size.X:0.#},{box.Size.Y:0.#},{box.Size.Z:0.#})");
+                }
+                else if (nodeSubtree != null)
+                {
+                    Log.Warn("world", $"node stage: '{nodeSubtree.Name}'#{nodeSubtree.Index} built no geometry at all — it is a group node; the camera framing has nothing to aim at");
+                }
 
                 // --damage-test: with the world built and its AnimRuntime bound, drive one
                 // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
@@ -1171,6 +1300,12 @@ public partial class PlaneViewer : Node3D
                     var camPos = _camPos ?? spawnPos;
                     var camLook = _camDir is { } labDir ? camPos + labDir : _lookAt ?? spawnLook;
                     var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
+                    // --node=: the mission spawn is meaningless on a single-subtree stage — frame
+                    // the subject instead, unless the tester placed the eye themselves.
+                    if (nodeAabb is { } nodeBox && _camPos == null && _lookAt == null && _camDir == null)
+                    {
+                        labCam.Frame(nodeBox);
+                    }
                     _worldRoot!.AddChild(labCam);
                     _spectator = labCam;
 
@@ -1201,7 +1336,11 @@ public partial class PlaneViewer : Node3D
 
                     animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
                         labStage, textures, sounds, _masterSeed, _playAnim,
-                        autoFrame: _camPos == null && _lookAt == null && _camDir == null)
+                        // On a --node= stage the subject IS the stage and is already framed; letting
+                        // the lab re-aim on every Play swings the camera off the only object there
+                        // (measured: the tower left the frame entirely on its own destruction).
+                        autoFrame: _camPos == null && _lookAt == null && _camDir == null
+                                   && nodeSubtree == null)
                     {
                         // Interactive shows the whole lab UI; a scripted --screenshot hides it so
                         // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
@@ -1382,9 +1521,20 @@ public partial class PlaneViewer : Node3D
             // already in view rather than a corner of empty sea.
             if (_freecam)
             {
-                var freecamSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
-                var (camPos, camLookAt) = ChooseSpawn(freecamSpawns, missionZrdrPath,
-                    ChooseSpawnBase(freecamSpawns), 0, "");
+                Vector3 camPos, camLookAt;
+                if (_emptyStage)
+                {
+                    // The empty stage has no mission and therefore no spawn list: look at the grid
+                    // origin, which is where a --stage=empty subject is put.
+                    camPos = EmptyStage.CameraPos;
+                    camLookAt = Vector3.Zero;
+                }
+                else
+                {
+                    var freecamSpawns = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                    (camPos, camLookAt) = ChooseSpawn(freecamSpawns, missionZrdrPath,
+                        ChooseSpawnBase(freecamSpawns), 0, "");
+                }
                 if (_camPos is { } cp) camPos = cp;
                 // The aim: a direction from wherever the eye ended up, or the named point.
                 if (_camDir is { } cd) camLookAt = camPos + cd;
@@ -1406,7 +1556,9 @@ public partial class PlaneViewer : Node3D
                 // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
                 // and the per-plane state below are per player.
                 mark = StartupProfile.Mark();
-                var planesGamez = GameZ.Load(planesGamezPath);
+                // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
+                // so there is nothing to load a second time.
+                var planesGamez = _emptyStage ? gamez : GameZ.Load(planesGamezPath);
                 StartupProfile.Record("gamez", mark);
                 // Stats are per plane, not per player (splitscreen players can pick
                 // different aircraft) — load each distinct one once, logging it as it appears.
@@ -1433,7 +1585,9 @@ public partial class PlaneViewer : Node3D
                 // stream and --paint-seed reproduces the whole field.
                 var paintRng = NewPaintRng();
                 // One spawn list for the session; each player takes the next index (wrapping).
-                var spawnList = SpawnPoints.LoadIa(missionZrdrPath, _scenario);
+                // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
+                // --pos/default override placed over the grid origin.
+                var spawnList = _emptyStage ? null : SpawnPoints.LoadIa(missionZrdrPath, _scenario);
                 int spawnBase = ChooseSpawnBase(spawnList);
 
                 // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
@@ -1479,7 +1633,11 @@ public partial class PlaneViewer : Node3D
                 // archives are read once no matter how many pilots are in.
                 StuntMission? stuntZones = null;
                 StuntRace? race = null;
-                if (_stunt)
+                if (_stunt && _emptyStage)
+                {
+                    GD.Print("--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
+                }
+                else if (_stunt)
                 {
                     stuntZones = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
                     if (stuntZones == null)
@@ -1864,7 +2022,7 @@ public partial class PlaneViewer : Node3D
         // --freecam and --anim-lab) place their own eye (FrameCamera would yank the freecam back
         // to the world's AABB orbit).
         if (!_fly && !_freecam && !_animLab)
-            FrameCamera();
+            FrameCamera(nodeAabb);
 
         // Node-name labels (T) — in BOTH the viewer and flight: reading a misplaced object's
         // name off it as you fly past is the fast way to identify it. Covers the whole session
@@ -2829,9 +2987,13 @@ public partial class PlaneViewer : Node3D
     /// ray — at the subject's nearest approach when an eye was given, otherwise the subject's own
     /// centre with the eye swung round to that direction. Either way the orbit still ORBITS the
     /// subject: dragging turns around it and the wheel dollies toward it.</summary>
-    private void FrameCamera()
+    private void FrameCamera(Aabb? subject = null)
     {
-        var aabb = OrbitCamera.MergedAabb(_plane!);
+        // The subject box. `subject` is the --node= stage's own, measured before the labs joined the
+        // subtree: MeshLab parks three EMPTY overlay meshes at the session origin, which a merge
+        // over the live tree folds in — harmless for a plane or a whole world (both already contain
+        // the origin) and ruinous for one subtree 7 km out, whose box would stretch back to it.
+        var aabb = subject ?? OrbitCamera.MergedAabb(_plane!);
         var pivot = _lookAt;
         if (pivot == null && _camDir is { } dir)
         {

@@ -338,6 +338,20 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     `--quit-after 120` and 3361 ms at `--quit-after 3`. And `boot` is engine start → build start, so
     on a launchscreen-driven rebuild it silently contains however long the menu was up.
 
+91. **A heuristic tuned against a WHOLE-WORLD population inverts when you build part of that
+    world — re-derive its premise before reusing it on a slice.** `AnimRuntime`'s
+    `ANIMATION_ROOT_NAME` lift is capped at 16 matches precisely because `healthy` appears 217× in
+    C1; a `--node=ap_radiotwr` stage has two, so the cap passes and **95 unrelated definitions
+    anchored onto the radio tower, registering 91 phantom destructible instances** (1 def and 2
+    instances with the lift refused). The smaller world did not merely show less — it showed more,
+    and wrongly.
+
+92. **Measure a subject's bounding box before other systems parent nodes into its subtree.** A merge
+    over the live tree takes whatever is there: `MeshLab`'s three EMPTY overlay meshes sit at the
+    session origin, which is invisible for a parked plane or a whole world (both already contain the
+    origin) and stretched a `--node=` subtree's box from 419 m to 5.3 km, framing the camera 12 km
+    off the only object in the scene.
+
 ## What this project cannot verify itself
 
 These need the user:

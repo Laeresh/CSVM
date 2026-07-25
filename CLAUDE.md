@@ -133,7 +133,8 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap passes, live def instances, event dispatch, motions, conditions, lights, puffers; `PlayEffectAt`/`ExternalEffect` drive the D32 world-effects runtime.
 - `src/Mech3/DestructibleRegistry.cs` — live mutable per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; feeds `ANIM_HEALTH` eval + `DAMAGE_SEQUENCE` stages, `Resolve` maps a struck collider back to its instance (weapon damage, C23).
-- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`.
+- `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); extracted from `PlaneViewer` for `--anim-lab`; `--node=` slices it to one subtree.
+- `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
 - `src/Mech3/SoundDefs.cs` — sounds.json parser: SETS `snd_*` → `SoundDef`; `LoadGroups` → `SoundGroup` (the `SOUND_GROUPS` weighted-random destruction sounds, `DYNAMIC_WEIGHTS`).
@@ -204,6 +205,8 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | Flag | Does |
 |---|---|
 | `--chapter[=C1]` | which chapter world (`C1`/`C1B`/`C1C`/`C2`/`C2B`/`C3`/`C4`/`C5`); flown by default |
+| `--stage=empty` | no gamez at all: a collidable grid ground plane + the plane, booting in ~2 s — the flight/ballistics test stage |
+| `--node=<cs_name>` | `--viewer`/`--anim-lab` build only that gamez subtree, auto-framed; multiple matches build the first, a miss lists candidates |
 | `--plane=` | which aircraft; comma-separated gives one per splitscreen player |
 | `--fly` | free flight (the default): world + skydome + plane + arcade controls |
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
