@@ -219,3 +219,20 @@ routine.
 
 The shelved upstream-contribution package is archived at [plans/upstream-pr/](plans/upstream-pr/) —
 kept because its PR bodies are the best description of what each branch actually contains.
+
+### Window focus: scripted runs stay out of your way
+
+The game window is **created without focus** (`display/window/size/no_focus` in `project.godot`), so
+a scripted run never takes the desktop from whoever is using the machine — a full `RunTests.ps1`
+launches the engine about twenty times, and before this it grabbed the foreground on most of them.
+
+`RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
+unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
+no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed
+into is that process, so it is allowed to give the foreground away (verification rules 69, 107).
+
+`RunTests.ps1` also uses the **non-console** Godot binary, whose console twin opens its own
+`Godot Engine (Console)` window. Because a GUI-subsystem binary neither blocks PowerShell nor writes
+to its stdout, every stage launches through the script's `Invoke-Godot` helper (which waits for the
+process) and reads its results from `--log-file` and the JSON reports rather than from console text.
+`--no-focus` remains as the manual lever that marks any ad-hoc run as scripted.

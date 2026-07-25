@@ -131,7 +131,15 @@ $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
 # tree named by CSVM_DATA_ROOT -- the same env var the engine and the unit tests read for
 # extracted/, so one `$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'` makes a worktree runnable.
-$GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
+# The NON-console binary on purpose. Its console twin opens a "Godot Engine (Console)" window that
+# takes the foreground, and a full run launches Godot ~19 times, so a test run repeatedly steals the
+# desktop from whoever is using it. Measured over a 45-frame run: the console build held the
+# foreground in 25 of 58 samples (the console window, the game window, and an untitled one between
+# them); this build, 0 of 52. Nothing is lost by the swap because every stage already reads its
+# results from --log-file and the JSON reports, never from stdout -- a GUI-subsystem binary hands
+# the call operator no output at all (measured: 0 lines), so anything that needs to be seen on the
+# console is echoed from the log below.
+$GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64.exe"
 $GodotExe = Join-Path $RepoRoot $GodotRel
 if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
     $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
@@ -142,6 +150,33 @@ if (-not (Test-Path $Sln)) {
 }
 if (-not (Test-Path $ScratchDir)) {
     $null = New-Item -ItemType Directory -Path $ScratchDir
+}
+
+# Runs Godot to completion and returns its exit code.
+#
+# The call operator cannot be used here: PowerShell only blocks on CONSOLE-subsystem executables, so
+# `& $gui.exe` returns the instant the process starts and every stage would measure nothing. It also
+# hands a GUI binary no stdout (measured: 0 lines), which is why every caller reads its results from
+# --log-file instead.
+#
+# Rule 63: -ArgumentList does not quote anything itself, and this repo's path contains a space, so
+# any argument carrying one is quoted here or Godot receives it split.
+function Invoke-Godot {
+    param([Parameter(Mandatory=$true)][string[]]$Arguments)
+    $quoted = @()
+    foreach ($a in $Arguments) {
+        if ($a -match '\s' -and $a -notmatch '^".*"$') {
+            # --flag=value with a space keeps the flag outside the quotes, or Godot reads the whole
+            # token as one path.
+            if ($a -match '^(--[^=]+)=(.*)$') { $quoted += ('{0}="{1}"' -f $Matches[1], $Matches[2]) }
+            else { $quoted += ('"{0}"' -f $a) }
+        } else {
+            $quoted += $a
+        }
+    }
+    $p = Start-Process -FilePath $GodotExe -ArgumentList $quoted -PassThru
+    $p.WaitForExit()
+    return $p.ExitCode
 }
 
 $Stages   = New-Object System.Collections.ArrayList
@@ -333,10 +368,21 @@ if ($SkipEngine) {
     }
     $watch = [System.Diagnostics.Stopwatch]::StartNew()
     $ErrorActionPreference = "Continue"
-    & $GodotExe --path $ProjectDir --log-file $engineLog res://scenes/Main.tscn -- $testArg
-    $engineCode = $LASTEXITCODE
+    $engineCode = Invoke-Godot @("--path", $ProjectDir, "--log-file", $engineLog,
+                                 "res://scenes/Main.tscn", "--", $testArg)
     $ErrorActionPreference = "Stop"
     $watch.Stop()
+
+    # The non-console binary writes nothing to our stdout, so the suite table that used to appear
+    # live is replayed from the log. Only the harness's own lines -- the per-suite verdicts and the
+    # summary block -- not the whole world-build chatter, which stays in the log for a post-mortem.
+    if (Test-Path $engineLog) {
+        foreach ($line in (Get-Content -Path $engineLog)) {
+            if ($line -match '^\s*\[test\]|^\s*(PASS|FAIL|SKIP)\s') {
+                Write-Host "  $line"
+            }
+        }
+    }
 
     $ePassed = -1; $eFailed = -1; $eSkipped = -1
     $failedNames = @()
@@ -370,7 +416,11 @@ if ($SkipEngine) {
     if ($Filter) {
         $detail = "$detail; filter '$Filter'"
     }
-    if ($engineCode -eq 0) {
+    # No report means no suite ran, whatever the exit code says. Treating that as a pass would let a
+    # run that never started read as a green one -- the same trap the SKIP rows exist to avoid.
+    if ($ePassed -lt 0) {
+        Add-Stage -Name "engine" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
+    } elseif ($engineCode -eq 0) {
         Add-Stage -Name "engine" -Status "PASS" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
     } else {
         Add-Stage -Name "engine" -Status "FAIL" -Seconds $watch.Elapsed.TotalSeconds -Detail $detail
@@ -492,8 +542,8 @@ if ($SkipGoldens) {
         }
         $shotArgs = @($shot.args) + @("--frames=$([int]$shot.frame)", "--screenshot=$png")
         $ErrorActionPreference = "Continue"
-        & $GodotExe --path $ProjectDir --log-file $shotLog res://scenes/Main.tscn -- @shotArgs
-        $shotCode = $LASTEXITCODE
+        $shotCode = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $shotLog,
+                                    "res://scenes/Main.tscn", "--") + $shotArgs)
         $ErrorActionPreference = "Stop"
 
         # Rule 74: --screenshot exits 0 even when the save fails, so the file's existence is the
@@ -717,8 +767,8 @@ if (-not $Perf) {
             $runArgs = @($scenario.args) + @("--det", "--mute", "--perf", "--no-vsync",
                                              "--frames=$perfFrameCount", "--screenshot=$png")
             $ErrorActionPreference = "Continue"
-            & $GodotExe --path $ProjectDir --log-file $log res://scenes/Main.tscn -- @runArgs
-            $runCode = $LASTEXITCODE
+            $runCode = Invoke-Godot (@("--path", $ProjectDir, "--log-file", $log,
+                                       "res://scenes/Main.tscn", "--") + $runArgs)
             $ErrorActionPreference = "Stop"
 
             if (-not (Test-Path $log)) {

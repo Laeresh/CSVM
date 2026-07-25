@@ -694,13 +694,25 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--view=")) _view = ParseView(arg["--view=".Length..]);
         }
 
-        // Don't steal the user's foreground focus. Screenshot mode always opts in (it renders a
-        // few frames and quits, needing no input); --no-focus is the manual lever (e.g. --freecam
-        // observation). Sets WS_EX_NOACTIVATE on Windows so the window won't hold or re-grab focus.
-        // Rendering is unaffected — a non-minimized background window still composites, so the
-        // capture stays valid. Set here (earliest we know the flags), before any world build.
-        if (_noFocus || _screenshotPath != null)
-            DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        // The window is CREATED without focus (`display/window/size/no_focus` in project.godot), so
+        // a scripted run never takes the desktop from whoever is using the machine — a full
+        // RunTests.ps1 launches the engine about twenty times. Setting the flag here instead was
+        // measured not to work: by the time any script runs the window exists and has already
+        // activated, and clearing that after the fact does not hand focus back.
+        //
+        // So the default is inverted, and an INTERACTIVE session asks for focus explicitly. A
+        // session is scripted when a flag will drive and end it by itself, or when --no-focus says
+        // so outright; everything else is somebody sitting down to play or to look at something,
+        // and wants the window it just launched.
+        bool scriptedSession = _noFocus || _screenshotPath != null || _runTests
+            || _dumpMarkers || _dumpWeapons || _dumpLoadout || _dumpConfig
+            || _damageTest || _effectsTest || _weaponTest;
+        if (!scriptedSession)
+        {
+            DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, false);
+            DisplayServer.WindowMoveToForeground();
+            Log.Debug("core", $"window: focus requested (interactive session)");
+        }
 
         // --no-vsync: let the loop run as fast as it can. A measurement flag, not a display one —
         // with the presentation wait gone, `frame`, `fps` and `script` stop being floors pinned at

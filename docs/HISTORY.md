@@ -7102,3 +7102,37 @@ git-ignored dev tuning file, so every capture was a function of one machine's un
 panels' feel, the numpad camera magnitudes, the flight-model tuning — is unverifiable in this
 project and sits in `playtest.md` §9, with D31's zeppelin case as the acceptance test the plan
 itself named as the user's call.
+
+## 2026-07-25 — Scripted runs stop stealing the desktop
+
+**The complaint.** A test run repeatedly took the foreground while the user was working. A full
+`RunTests.ps1` launches the engine ~19 times, so the milestone's own tooling had made this much
+worse than it used to be.
+
+**What it was not.** Godot exposes no CLI flag for this, and project-setting overrides on the
+command line are silently ignored — measured by overriding `viewport_width` and getting the same
+1280x720 capture and the same pixel hash. The existing `--no-focus` set `WindowFlags.NoFocus` from
+`_Ready`, which is after the window exists and has already activated; clearing or setting the flag
+then hands nothing back.
+
+**Diagnosis, and a wrong turn worth recording.** A first probe attributed windows by title and
+reported that the non-console Godot build never steals focus (0 of 52 samples). That was an
+instrument failure: the baseline window it compared against was another `CSVM (DEBUG)` session, so
+the thief was indistinguishable from the starting state. Re-attributing by **process tree** — the
+console build spawns three processes — gave the real figures: console 5 of 7, non-console 13 of 16.
+Landed as rule 106.
+
+**Fix.** `display/window/size/no_focus=true` in `project.godot` creates the window unfocused, and an
+interactive session asks for focus explicitly. The engine cannot take it back itself (Windows'
+foreground lock no-ops that, measured 0 of 120), so `RunGame.ps1` and `RunDev.ps1` hand the
+foreground over from the launching console, which is permitted. Rule 107. `RunTests.ps1` additionally
+moved to the non-console binary, which required an `Invoke-Godot` helper that waits: PowerShell does
+not block on a GUI-subsystem process, and gives it no stdout.
+
+**A second bug the change exposed.** With every launch returning instantly, the engine stage reported
+**PASS** while producing no report at all — a run that never started read as green. A missing report
+is now a FAIL, on the same principle as the SKIP rows: absence of a result is not a result.
+
+**Verified.** Full `RunTests.ps1` under a process-tree focus probe: **0 of 158 samples**, with the
+suite green throughout (152 units, 8 engine suites, 11 goldens hash-identical, exit 0). `RunGame.ps1`
+still takes focus where the unpatched engine-side grab did not.

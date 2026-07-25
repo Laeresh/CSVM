@@ -450,6 +450,23 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      nothing will ever hit while the real one sits at full — indistinguishable from "damage is
      broken". Any instrument or UI that damages a pool must name which pool it drove.
 
+106. **A window-focus probe that identifies windows by TITLE cannot tell your window from the user's
+     identically-titled one — attribute by PROCESS TREE.** A title probe "proved" the non-console
+     Godot build never steals focus (0 of 52 samples); it was comparing against a starting window
+     that happened to be another `CSVM (DEBUG)` session, so the thief and the baseline were
+     indistinguishable. Tracking the spawned process and its descendants showed the real figure,
+     13 of 16. The console build also spawns a 3-process tree, so even a PID probe misses it unless
+     it walks children.
+
+107. **A window has to be CREATED without focus — taking it back afterwards is not available to
+     you.** Setting `WindowFlags.NoFocus` from `_Ready` is too late (the window already activated,
+     and clearing the flag hands nothing back), and an engine-side `WindowMoveToForeground` is
+     no-opped by Windows' foreground lock (rule 69) — measured 0 of 120 samples. The lever is
+     `display/window/size/no_focus` in `project.godot`, which took a scripted run from 13 of 16
+     samples to 0 of 158 across a full `RunTests.ps1`. The launching console, being the process the
+     user *is* interacting with, is allowed to hand the foreground over, which is why an
+     interactive launch grabs focus from `RunGame.ps1` rather than from the engine.
+
 ## What this project cannot verify itself
 
 These need the user:
