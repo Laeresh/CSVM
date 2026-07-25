@@ -1364,6 +1364,12 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   implication and an explicit `--det`. It announces the resolved set on one `[core] det …` line, whose
   absence means the run was interactive. **Never let a constituent leak into an interactive default** —
   a bare `--fly` keeps its random spawn, random liveries and live pads.
+⚠ **`--dump-session` observes the resolution and so is a term of none of it** — absent from the
+  `--det` implication list, the `scriptedBy` chain and the `_mode` chain, all of which it reports;
+  the focus decision applies it outside the predicate rather than adding a term (rule 117). Its
+  branch runs first among the dumps, after every resolution, so it can report a command line that
+  carries another dump. Scaffolding: the SessionSpec plan's last item deletes it, and
+  `analysis/session-baseline/` keeps the matrix and baseline that outlive it.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
   block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
   `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
@@ -1549,9 +1555,13 @@ The session's randomness policy: one master seed and ten named subsystem generat
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--damage-test` inspection reports. Each probe does the work once and returns
-both halves: the report text the flag prints and writes, and a structured verdict (counts,
-per-row booleans, failure strings) a `--run-tests` suite asserts on.
+`--dump-flight` / `--dump-session` / `--damage-test` inspection reports. Each probe does the work
+once and returns both halves: the report text the flag prints and writes, and a structured verdict
+(counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
+⚠ `Session` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by that plan's last
+  item. They render pre-rendered `key = value` rows, sorted, ASCII, LF — the text is captured by a
+  PowerShell 5.1 harness into a committed baseline, so an em dash or a `\r\n` reads as a diff on
+  every row. `SessionValues` exists so an absent value is spelled `-` in all 124 places.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —

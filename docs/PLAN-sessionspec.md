@@ -106,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Prove equivalence before changing anything
 
-1. ☐ `--dump-session` scaffold + the baseline resolution matrix
+1. ☑ `--dump-session` scaffold + the baseline resolution matrix
 2. ☐ `SessionSpec` + `Parse`, raw values only, not yet consumed
 3. ☐ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
 4. ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
@@ -133,30 +133,46 @@ B8 is last by definition: it deletes the instrument the earlier items are verifi
 
 # Wave A — Prove equivalence before changing anything
 
-## A1 ☐ `--dump-session` scaffold + the baseline resolution matrix
+## A1 ☑ `--dump-session` scaffold + the baseline resolution matrix
 
-**Goal.** A `--dump-session` flag prints every resolved launch value as stable, sorted, diffable text
-and quits, and a matrix of ~30 command lines covering every mode is captured as the pre-refactor
-baseline.
+**Landed.** `--dump-session` prints 124 resolved launch settings as sorted `key = value` text and
+quits with `Probes.Session`'s verdict. `analysis/session-baseline/` holds `capture.ps1` (the
+50-command-line matrix), the committed `baseline.txt`, and `FINDINGS.md`.
 
-**Evidence (confidence: traced).** The five existing `--dump-*` probes share one shape — a
-`Testing.Probes.*` core returning `Text` + `Summary` + a verdict, a `WriteScratch` call, and a
-`GetTree().Quit(ok ? 0 : 1)` at the call site (`PlaneViewer.cs:1006-1035`, `Probes.cs`). The values
-to print all exist today as fields resolved by the end of `_Ready`. Golden coverage gaps are measured
-in the ⚠ section above.
+**Verified.** Two captures of the same build are md5-identical
+(`944310579BA214A0E99B801FC344098B`). Able-to-fail on a perturbed build: renaming `--stunt`'s forced
+scenario moved exactly the `stunt-*` rows, and a duplicate field key printed `!! duplicate key` and
+**exited 1**; after reverting both, the baseline reproduced byte for byte. `.\RunTests.ps1` PASS —
+152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0.
 
-**Approach.** Write the probe against **today's fields**, not against any new type — its whole
-purpose is to record current behaviour. `<Name the exact field set to print, and the ~30 command
-lines, so the matrix is reviewable before it is trusted.>`
+**The baseline lives in `analysis/`, not `.scratch/`.** `.scratch/` is swept by `CleanScratch.ps1`
+and this file has to survive to A4 and beyond; `analysis/README.md` records what that mistake already
+cost once. `--dump-session` is still deleted by B8 — the matrix and the baseline are not.
 
-**Verify.** `<The matrix is captured and committed to .scratch/ as the baseline; each of the ~30
-lines is inspected once by a human, because an unread baseline just launders whatever the code does
-today into "expected".>`
+**Three instrument properties had to be established before the baseline meant anything**, each a
+defect in the first draft found by reading output rather than by reasoning: a clock-derived master
+seed made the baseline differ from itself (now `<clock>` unless pinned, rule 118); absolute paths
+made it one machine's (now `{data}`/`{repo}`); and the report must be ASCII + LF, because the
+PowerShell 5.1 harness turns an em dash into mojibake that reads as a diff on every row.
 
-**⚠ Traps.** The probe must run **after** the whole of `_Ready`'s resolution and before
-`StartSession`, or it records half-resolved values. `--dump-session` must not itself imply `--det`
-in a way that changes what it reports — check against the membership rule landed 2026-07-25.
-`<Anything else found while writing it.>`
+**⚠ For A3 — two latent defects the baseline exposed.** Both recorded, neither fixed, because A1
+records current behaviour including its warts:
+1. `_dumpFlight` is missing from the `_mode` "dump" chain, so a `--dump-flight` run logs as
+   `menu-*.log` (row `probe-dump-flight`: `mode.name = menu`). A fifth copy of the rule-116 drift.
+2. `--run-tests` resolves `mode.showsMenu = true` (row `probe-run-tests`) — it is saved only by
+   returning before the menu branch. The harness's correctness rests on statement order in `_Ready`,
+   which is precisely what A3 replaces.
+
+**⚠ The observer must not be a term of what it observes** (`docs/verification.md` rule 117).
+`--dump-session` meets the `--det` membership rule *and* the `_mode` naming rule, and obeying either
+destroys the instrument: implying `--det` prints `det.on = true` on every row of a matrix whose
+subject is which command lines turn the bundle on. It is the documented exception to both, and the
+window-focus concession is taken outside the predicate rather than by adding a term to it. **A3 must
+not "tidy" it back in.**
+
+**Original approach (kept for reference).** Write the probe against today's fields, not against any
+new type; run it after the whole of `_Ready`'s resolution and before `StartSession`, or it records
+half-resolved values.
 
 ## A2 ☐ `SessionSpec` + `Parse`, raw values only, not yet consumed
 

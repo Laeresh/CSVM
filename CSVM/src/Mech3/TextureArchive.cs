@@ -306,6 +306,18 @@ public static class TextureDropIn
     /// <summary>True once <c>--tex-census</c> asked for the whole-archive colouring.</summary>
     public static bool CensusActive => _census;
 
+    /// <summary>The texture names <c>--tex-override=</c> claimed, sorted — a launch setting like
+    /// any other, readable by the reports that record what a run was asked to do.</summary>
+    public static IEnumerable<string> OverrideNames
+    {
+        get
+        {
+            var names = new List<string>(Overrides.Keys);
+            names.Sort(StringComparer.Ordinal);
+            return names;
+        }
+    }
+
     /// <summary>True when either instrument is on — the flag <see cref="TextureCycler"/> reads to
     /// hold its flipbooks still, and the aircraft paint substitution reads to step aside.</summary>
     public static bool Active => _census || Overrides.Count > 0;

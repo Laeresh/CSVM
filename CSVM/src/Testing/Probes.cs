@@ -975,6 +975,115 @@ public static class Probes
         return () => (turned += Math.Abs(m.BodyRates.Y) * EnvDt) >= Math.Tau;
     }
 
+    /// <summary>The launch resolution a session was about to run with: one sorted, aligned
+    /// <c>key = value</c> row per resolved setting, plus the structural checks that make the text
+    /// trustworthy to diff.</summary>
+    public sealed class SessionResult
+    {
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public int Fields;
+        /// <summary>Keys listed more than once by the caller. A duplicate is not cosmetic: the
+        /// second row wins the reader's eye, so a field would be compared against the wrong
+        /// value and the mismatch it hides is exactly the kind this instrument exists to catch.
+        /// </summary>
+        public readonly List<string> Duplicates = new();
+        public bool Ok => Error == null && Fields > 0 && Duplicates.Count == 0;
+    }
+
+    /// <summary>The value renderers <see cref="Session"/> reports through. Held together so every
+    /// row spells the same thing the same way: an absent value is always <c>-</c>, never an empty
+    /// column or the word "null", and every number goes through
+    /// <see cref="CultureInfo.InvariantCulture"/> — a German machine otherwise writes
+    /// <c>jitter = 0,15</c> into a baseline that a diff then reports as changed everywhere.
+    /// </summary>
+    public static class SessionValues
+    {
+        public const string Absent = "-";
+
+        public static string Str(string? s) => s == null ? Absent : s.Length == 0 ? "''" : s;
+
+        public static string Bool(bool b) => b ? "true" : "false";
+
+        public static string Num(float f) => f.ToString("0.###", CultureInfo.InvariantCulture);
+
+        public static string Num(int i) => i.ToString(CultureInfo.InvariantCulture);
+
+        public static string Num(ulong u) => u.ToString(CultureInfo.InvariantCulture);
+
+        public static string Opt(ulong? u) => u.HasValue ? Num(u.Value) : Absent;
+
+        public static string Opt(int? i) => i.HasValue ? Num(i.Value) : Absent;
+
+        public static string Opt(float? f) => f.HasValue ? Num(f.Value) : Absent;
+
+        public static string Vec(Vector3? v) =>
+            v is { } p ? $"{Num(p.X)},{Num(p.Y)},{Num(p.Z)}" : Absent;
+
+        public static string Col(Color? c) =>
+            c is { } k ? $"{Num(k.R)},{Num(k.G)},{Num(k.B)}" : Absent;
+
+        /// <summary>A list as one row. Empty and absent are rendered apart because they mean
+        /// different things to the resolution: no <c>--plane=</c> at all falls through to the
+        /// single-plane default, while an empty list would not.</summary>
+        public static string List(IEnumerable<string>? items)
+        {
+            if (items == null)
+            {
+                return Absent;
+            }
+            var list = items.ToList();
+            return list.Count == 0 ? "[]" : "[" + string.Join(",", list) + "]";
+        }
+    }
+
+    /// <summary>Renders a session's resolved launch settings as stable diffable text.
+    ///
+    /// <para>Sorted by key, so the row order is a property of the field set rather than of the
+    /// order a caller happened to list them in, and a dotted key (<c>det.seed</c>,
+    /// <c>place.pos</c>) groups its family for free. Two runs that resolve alike produce
+    /// byte-identical text; a diff points at the setting that moved.</para>
+    ///
+    /// <para>Values must already be rendered — this probe never sees a float, so it cannot be the
+    /// place a locale leaks in. See <see cref="SessionValues"/> for the renderers.</para></summary>
+    public static SessionResult Session(string args, IEnumerable<(string Key, string Value)> fields)
+    {
+        var r = new SessionResult();
+        var rows = fields.ToList();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (key, _) in rows)
+        {
+            if (!seen.Add(key))
+            {
+                r.Duplicates.Add(key);
+            }
+        }
+        rows.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+        int width = rows.Count == 0 ? 0 : rows.Max(f => f.Key.Length);
+        // Every line ends "\n" rather than AppendLine's Environment.NewLine: a baseline captured on
+        // Windows has to diff against one captured anywhere else.
+        var sb = new StringBuilder();
+        // ASCII only, deliberately: this text is captured by a PowerShell 5.1 harness and written
+        // to a committed baseline, and a single em dash round-trips through the console's ANSI
+        // codepage as mojibake that then reads as a diff on every row.
+        sb.Append("# session dump - the launch settings this command line resolved to\n");
+        sb.Append("# args: ").Append(args).Append('\n');
+        foreach (var (key, value) in rows)
+        {
+            sb.Append(key.PadRight(width)).Append(" = ").Append(value).Append('\n');
+        }
+        foreach (string dup in r.Duplicates)
+        {
+            sb.Append("!! duplicate key: ").Append(dup).Append('\n');
+        }
+        r.Fields = rows.Count;
+        r.Text = sb.ToString();
+        r.Summary = $"{rows.Count} settings"
+            + (r.Duplicates.Count > 0 ? $", {r.Duplicates.Count} DUPLICATE KEY(S)" : "");
+        return r;
+    }
+
     // ---- shared formatting -------------------------------------------------------------------
 
     private static string Opt<T>(T? v) where T : struct => v.HasValue ? v.Value.ToString() ?? "-" : "-";

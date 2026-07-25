@@ -1,0 +1,4 @@
+# The launch-resolution baseline is compared byte for byte against a freshly captured file, not
+# only through `git diff`. With core.autocrlf=true a checkout would hand it CRLF while capture.ps1
+# writes LF, and every line of a 6000-line file would read as changed on any fresh clone.
+analysis/session-baseline/baseline.txt text eol=lf

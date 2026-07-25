@@ -7497,3 +7497,54 @@ probe's documented result — `--effects-test` still 28/28 resolved and **16** b
 `--weapon-test` still 48/48 fired, 0 errors, 0 skipped — and both now log `via=--effects-test` /
 `via=--weapon-test`; `--no-det` still opts back out. New rules 115 (an instrument must quit with its
 verdict) and 116 (a derived predicate copied per consumer reports the absence it created).
+
+## 2026-07-25 — PLAN-sessionspec A1: `--dump-session` and the launch-resolution baseline
+
+The first item of the SessionSpec refactor, and the safety net the rest of it depends on. Landed:
+`--dump-session` prints every setting a command line resolved to — mode arbitration, the `--det`
+bundle, placement, paths, every probe/debug/modifier flag — as 124 sorted `key = value` rows to
+stdout and `.scratch/session_dump.txt`, then quits with `Probes.Session`'s verdict. It is written
+against `PlaneViewer`'s *current* fields on purpose: its whole job is to record what the code does
+today, so a ~1,000-line hand edit can be shown not to have changed it.
+
+`analysis/session-baseline/` holds the instrument's durable half: `capture.ps1` (50 command lines),
+the committed `baseline.txt`, and `FINDINGS.md`. The plan had drafted this into `.scratch/`, which is
+wrong for something that must survive to A4 — `.scratch/` is swept by `CleanScratch.ps1`, and
+`analysis/README.md` records what that already cost once with `probe_exempt.py`. The matrix is
+weighted toward what the pixel goldens cannot see: `--anim-lab`, `--stunt`, splitscreen and the menu
+path have **no golden coverage at all**, so a green `RunTests.ps1` is not evidence that a launch
+still resolves the way it did.
+
+**The instrument had to be made trustworthy before the baseline meant anything**, and three defects
+in the first draft were found by reading its output rather than by reasoning about it. The resolved
+master seed is drawn from the clock whenever nothing pins it, so every non-deterministic row differed
+from itself on the next capture — it now prints `<clock>` unless pinned, because the reportable fact
+is that it came from the clock, not which number came out. Absolute paths made the baseline one
+machine's; they render against `{data}`/`{repo}` tokens. And the report is ASCII + LF only: the
+PowerShell 5.1 harness turns a single em dash into mojibake that then reads as a diff on every row.
+A fourth was in the harness — `$out` (each run's console output) silently overwrote the `$Out`
+parameter holding the destination path, because PowerShell variable names are case-insensitive.
+
+**The design decision worth keeping**: `--dump-session` satisfies the `--det` membership rule (a flag
+that drives and ends a session by itself) and the `_mode` naming rule, and obeying either would have
+destroyed it — implying `--det` prints `det.on = true` on every row of a matrix whose entire subject
+is which command lines turn the bundle on, and joining the `_mode` chain reports the observer's mode
+instead of the session's. It is the documented exception to both; the one concession, window focus,
+is applied to the *decision* rather than folded into the predicate, so the rule's own expression
+stays clean. That generalised to rule 117.
+
+Two latent defects the baseline exposed, recorded and deliberately **not** fixed — A1 records current
+behaviour including its warts, or it is not a baseline. (1) `_dumpFlight` is missing from `_mode`'s
+"dump" chain, so a `--dump-flight` run writes its log as `menu-*.log`; that is a fifth copy of the
+rule-116 one-term-at-a-time drift. (2) `--run-tests` resolves `mode.showsMenu = true` and is saved
+only by returning before the menu branch — the test harness's correctness currently rests on
+statement order in `_Ready`, which is exactly what A3 replaces with a total function. Both are
+carried in the plan's A1 section as ⚠ notes for A3.
+
+Verified: two captures of the same build are md5-identical (`944310579BA214A0E99B801FC344098B`).
+Able-to-fail exercised on a deliberately perturbed build — renaming `--stunt`'s forced scenario moved
+exactly the `stunt-*` rows, and a duplicated field key printed `!! duplicate key: mode.fly`,
+`125 settings, 1 DUPLICATE KEY(S)` and **exited 1**; after reverting both, `capture.ps1` reproduced
+`baseline.txt` byte for byte. `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens
+hash-identical, exit 0, 72.5 s. New rules 117 (an instrument must not be a term of the rule it
+reports) and 118 (a baseline holding a clock-derived value or an absolute path is not a baseline).

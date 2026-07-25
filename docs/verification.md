@@ -534,6 +534,23 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      reports on a build product must read the same expression the build read, not a restatement
      of it.
 
+117. **An instrument that reports a rule must not be a term of that rule.** `--dump-session` meets
+     the `--det` membership rule (it drives and ends a session by itself) and the `_mode` naming
+     rule, and obeying either would have destroyed it: implying `--det` prints `det.on = true` on
+     every row of a matrix whose whole subject is which command lines turn the bundle on, and
+     joining the `_mode` chain reports the observer's mode instead of the session's. When a general
+     rule would make an observer change what it observes, the observer is the exception — state it
+     at the observer, and keep the rule's own expression clean (the window-focus decision here is
+     taken *outside* the predicate rather than by adding a term to it).
+
+118. **A baseline holding a clock-derived value or an absolute path is not a baseline — it only
+     reproduces on the machine and the minute that made it.** The first session dump printed the
+     resolved master seed, which is drawn from the clock whenever nothing pins it, so every
+     non-deterministic row differed from itself on the next capture; the reportable fact there is
+     *that it came from the clock*, not which number came out. Paths render against `{data}` /
+     `{repo}` tokens for the same reason. Prove it before trusting it: capture twice and compare
+     hashes — two captures of the 50-row matrix are md5-identical.
+
 ## What this project cannot verify itself
 
 These need the user:

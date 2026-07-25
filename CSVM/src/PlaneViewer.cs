@@ -9,6 +9,7 @@ using CSVM.Testing;
 using CSVM.UI;
 using CSVM.Utils;
 using Godot;
+using SV = CSVM.Testing.Probes.SessionValues;
 
 namespace CSVM;
 
@@ -309,6 +310,9 @@ public partial class PlaneViewer : Node3D
     private bool _dumpFlight;          // --dump-flight[=plane]: fly the measured manoeuvres against the original's numbers and quit
     private string _dumpFlightPlane = ""; // the optional --dump-flight= plane (node name); default the flown/default plane
     private bool _dumpConfig;          // --dump-config: write a populated tuning-config template and quit
+    // --dump-session: print every resolved launch setting and quit. The one dump that must stay
+    // invisible to the resolution it reports — see DumpSession.
+    private bool _dumpSession;
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
@@ -649,6 +653,7 @@ public partial class PlaneViewer : Node3D
             else if (arg == "--dump-flight") _dumpFlight = true;
             else if (arg.StartsWith("--dump-flight=")) { _dumpFlight = true; _dumpFlightPlane = arg["--dump-flight=".Length..]; }
             else if (arg == "--dump-config") _dumpConfig = true;
+            else if (arg == "--dump-session") _dumpSession = true;
             // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
             // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
             else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
@@ -720,10 +725,15 @@ public partial class PlaneViewer : Node3D
         // session is scripted when a flag will drive and end it by itself, or when --no-focus says
         // so outright; everything else is somebody sitting down to play or to look at something,
         // and wants the window it just launched.
+        //
+        // --dump-session is deliberately NOT a term of this predicate, even though it drives and
+        // ends a session by itself: it reports the predicate, so a run carrying it must resolve
+        // exactly as the same command line without it. It still must not grab focus, so the
+        // observer is applied to the DECISION instead of folded into the rule.
         bool scriptedSession = _noFocus || _screenshotPath != null || _runTests
             || _dumpMarkers || _dumpWeapons || _dumpLoadout || _dumpConfig
             || _damageTest || _effectsTest || _weaponTest;
-        if (!scriptedSession)
+        if (!scriptedSession && !_dumpSession)
         {
             DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, false);
             DisplayServer.WindowMoveToForeground();
@@ -1006,6 +1016,15 @@ public partial class PlaneViewer : Node3D
         //
         // Each dump quits with its probe's verdict, like --run-tests: a report that could not be
         // produced must not look to a caller like one that came out clean.
+        //
+        // --dump-session goes first, so it can report a command line that carries another dump
+        // (the dump flags are part of what it resolves) rather than being pre-empted by it.
+        if (_dumpSession)
+        {
+            GetTree().Quit(DumpSession(hasContentArg, playersExplicit, scriptedSession,
+                detExplicit, scriptedBy, detVia) ? 0 : 1);
+            return;
+        }
         if (_dumpMarkers)
         {
             GetTree().Quit(DumpMarkers() ? 0 : 1);
@@ -3344,6 +3363,213 @@ public partial class PlaneViewer : Node3D
         {
             GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
         }
+    }
+
+    /// <summary>--dump-session: print every setting this command line resolved to — mode
+    /// arbitration, the <c>--det</c> bundle, placement, paths, every probe and debug flag — as
+    /// sorted <c>key = value</c> text, to stdout and <c>./.scratch/session_dump.txt</c>, then quit.
+    ///
+    /// <para><b>This instrument must stay invisible to the rules it reports.</b> It is absent from
+    /// the <c>--det</c> implication list and from the <c>_mode</c> chain, even though it drives and
+    /// ends a session by itself and so meets the membership rule for both. A dump that implied
+    /// <c>--det</c> would report <c>det.on = true</c> on every line of a matrix whose whole subject
+    /// is which command lines turn the bundle on; one that joined the <c>_mode</c> chain would
+    /// report the observer's mode instead of the session's. The window-focus decision is the single
+    /// exception, and it is applied outside the predicate rather than folded into it.</para>
+    ///
+    /// <para>Paths render relative to <c>{data}</c>/<c>{repo}</c>: a baseline holding absolute
+    /// paths only reproduces on the machine that captured it.</para></summary>
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    private bool DumpSession(bool hasContentArg, bool playersExplicit, bool scriptedSession,
+        bool detExplicit, string scriptedBy, string detVia)
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        string Rel(string p)
+        {
+            if (p.Length == 0)
+            {
+                return SV.Absent;
+            }
+            string norm = p.Replace('\\', '/');
+            string data = _dataRoot.Replace('\\', '/');
+            string repo = _repoRoot.Replace('\\', '/');
+            // Data root first: it defaults to the repo root, and when it does not, a path under it
+            // is the more specific fact.
+            if (data.Length > 0 && norm.StartsWith(data, StringComparison.OrdinalIgnoreCase))
+            {
+                return "{data}" + norm[data.Length..];
+            }
+            if (repo.Length > 0 && norm.StartsWith(repo, StringComparison.OrdinalIgnoreCase))
+            {
+                return "{repo}" + norm[repo.Length..];
+            }
+            return norm;
+        }
+        var f = new List<(string, string)>
+        {
+            // Mode arbitration — the outcome of the five mutating if-blocks in _Ready.
+            ("mode.name", SV.Str(_mode)),
+            ("mode.fly", SV.Bool(_fly)),
+            ("mode.viewer", SV.Bool(_viewerMode)),
+            ("mode.freecam", SV.Bool(_freecam)),
+            ("mode.animLab", SV.Bool(_animLab)),
+            ("mode.stunt", SV.Bool(_stunt)),
+            ("mode.damageLab", SV.Bool(_damageLab)),
+            ("mode.world", SV.Bool(_worldMode)),
+            ("mode.emptyStage", SV.Bool(_emptyStage)),
+            ("mode.hasContentArg", SV.Bool(hasContentArg)),
+            ("mode.forceMenu", SV.Bool(_forceMenu)),
+            ("mode.menuStartScreen", SV.Str(_menuStartScreen)),
+            // What _Ready is about to do: the launchscreen, or a direct session build.
+            ("mode.showsMenu", SV.Bool(_forceMenu || !hasContentArg)),
+            ("run.scripted", SV.Bool(scriptedSession)),
+
+            // The world the session builds.
+            ("world.chapter", SV.Str(_chapter)),
+            ("world.chapterGiven", SV.Bool(_chapterGiven)),
+            ("world.mission", SV.Str(_mission)),
+            ("world.scenario", SV.Str(_scenario)),
+            ("world.scenarioExplicit", SV.Bool(_scenarioExplicit)),
+            ("world.node", SV.Str(_nodeName)),
+            ("world.stage", SV.Str(_stage)),
+            ("world.skyZone", SV.Str(_skyZone)),
+            ("world.skyZoneExplicit", SV.Bool(_skyZoneExplicit)),
+            ("world.noFog", SV.Bool(_noFog)),
+            ("world.animLod", SV.Num(_animLod)),
+            ("world.destroy", SV.Str(_destroyName)),
+
+            // The aircraft and who flies them.
+            ("plane.name", SV.Str(_planeName)),
+            ("plane.names", SV.List(_planeNames)),
+            ("plane.players", SV.Num(_players)),
+            ("plane.playersExplicit", SV.Bool(playersExplicit)),
+            ("plane.loadout", SV.Str(_loadoutOverride)),
+            ("plane.rocket", SV.Str(_rocketOverride)),
+            ("plane.gunSelect", SV.Num(_gunSelect)),
+            ("plane.infiniteAmmo", SV.Bool(_infiniteAmmo)),
+            ("plane.autoFire", SV.Bool(_autoFire)),
+            ("plane.autoFireRockets", SV.Bool(_autoFireRockets)),
+            ("plane.holdSets", SV.Num(_holdSets?.Length ?? 0)),
+
+            // Liveries.
+            ("paint.names", SV.List(_paintNames)),
+            // '|' between the three slots (body / dark trim / light trim), because a flat list of
+            // nine numbers cannot be read back as the three colours it is.
+            ("paint.colors", _paintColorOverride == null ? SV.Absent
+                : "[" + string.Join("|", _paintColorOverride.Select(c => SV.Col(c))) + "]"),
+            ("paint.decals", SV.List(_paintDecalOverride?.Select(d => SV.Num(d)))),
+            ("paint.seed", SV.Num(_paintSeed)),
+            ("paint.seedExplicit", SV.Bool(_paintSeedExplicit)),
+
+            // The --det bundle and everything it pins.
+            ("det.on", SV.Bool(_det)),
+            ("det.explicit", SV.Bool(detExplicit)),
+            ("det.noDet", SV.Bool(_noDet)),
+            ("det.scriptedBy", SV.Str(scriptedBy)),
+            ("det.via", SV.Str(detVia)),
+            ("det.seedArg", SV.Opt(_seed)),
+            // The value only when it is pinned. An unpinned master is drawn from the clock, so
+            // printing it would make every non-deterministic row of a baseline differ from itself
+            // on the next capture — and the reportable fact there is that it came from the clock.
+            ("det.masterSeed", _seedPinned ? SV.Num(_masterSeed) : "<clock>"),
+            ("det.seedPinned", SV.Bool(_seedPinned)),
+            ("det.spawnIndex", SV.Num(_spawnIndex)),
+            ("det.padsDisabled", SV.Bool(Pads.Disabled)),
+            ("det.jitterDeg", SV.Num(_jitterDeg)),
+
+            // Placement, AFTER ResolvePlacement has routed --pos/--direction onto the per-mode
+            // plumbing — the raw args are kept beside the resolved fields so the routing shows.
+            ("place.pos", SV.Vec(_pos)),
+            ("place.direction", SV.Vec(_direction)),
+            ("place.lookAt", SV.Vec(_lookAt)),
+            ("place.spawnAt", SV.Vec(_spawnAt)),
+            ("place.spawnDir", SV.Vec(_spawnDir)),
+            ("place.camPos", SV.Vec(_camPos)),
+            ("place.camDir", SV.Vec(_camDir)),
+            ("place.view", SV.Num(_view)),
+            ("place.yaw", SV.Opt(_argYaw)),
+            ("place.pitch", SV.Opt(_argPitch)),
+            ("place.deprecated", SV.List(_deprecated.Select(d => d.Old))),
+
+            // Capture.
+            ("shot.path", SV.Str(_screenshotPath)),
+            ("shot.frames", SV.Num(_screenshotFrames)),
+            ("shot.shots", SV.Num(_screenshotShots)),
+
+            // The probes that drive and end a session themselves.
+            ("probe.dumpMarkers", SV.Bool(_dumpMarkers)),
+            ("probe.dumpMarkersFilter", SV.Str(_dumpMarkersPlane)),
+            ("probe.dumpWeapons", SV.Bool(_dumpWeapons)),
+            ("probe.dumpWeaponsFilter", SV.Str(_dumpWeaponsFilter)),
+            ("probe.dumpLoadout", SV.Bool(_dumpLoadout)),
+            ("probe.dumpLoadoutFilter", SV.Str(_dumpLoadoutFilter)),
+            ("probe.dumpFlight", SV.Bool(_dumpFlight)),
+            ("probe.dumpFlightPlane", SV.Str(_dumpFlightPlane)),
+            ("probe.dumpConfig", SV.Bool(_dumpConfig)),
+            ("probe.damageTest", SV.Bool(_damageTest)),
+            ("probe.damageTestFilter", SV.Str(_damageTestFilter)),
+            ("probe.damageHd", SV.Num(_damageHd)),
+            ("probe.effectsTest", SV.Bool(_effectsTest)),
+            ("probe.weaponTest", SV.Bool(_weaponTest)),
+            ("probe.runTests", SV.Bool(_runTests)),
+            ("probe.runTestsFilter", SV.Str(_runTestsFilter)),
+            ("probe.hudFontTest", SV.Bool(_hudFontTest)),
+
+            // Inspection overlays and labs.
+            ("debug.anim", SV.Bool(_debugAnim)),
+            ("debug.animUi", SV.Bool(_debugAnimUi)),
+            ("debug.playAnim", SV.Str(_playAnim)),
+            ("debug.dzPaths", SV.Bool(_debugDzPaths)),
+            ("debug.scoreboard", SV.Bool(_debugScoreboard)),
+            ("debug.livery", SV.Opt(_debugLivery)),
+            ("debug.mesh", SV.Str(_debugMesh)),
+            ("debug.names", SV.Str(_debugNames)),
+            ("debug.select", SV.Str(_debugSelect)),
+            ("debug.nodeLab", SV.Str(_debugNodeLab)),
+            ("debug.damage", SV.Str(_debugDamage)),
+            ("debug.join", SV.Num(_debugJoin)),
+            ("debug.markersOverlay", SV.Bool(_markersOverlay)),
+            ("debug.weaponLab", SV.Bool(_weaponLab)),
+            ("debug.weaponSelect", SV.Str(_weaponSelect)),
+            ("debug.weaponMount", SV.Str(_weaponMount)),
+            ("debug.weaponFire", SV.Bool(_weaponFire)),
+
+            // Collision — the predicate three consumers used to spell for themselves.
+            ("collision.builds", SV.Bool(BuildsCollision)),
+            ("collision.force", SV.Bool(_forceCollision)),
+            ("collision.show", SV.Bool(_showColliders)),
+            ("collision.debug", SV.Bool(_debugCollision)),
+
+            // Where the data comes from. Relative, so the baseline is not one machine's.
+            ("path.dataRootOverridden", SV.Bool(_dataRoot != _repoRoot)),
+            ("path.planesGamez", Rel(_planesGamezPath)),
+            ("path.zrdr", Rel(_zrdrPath)),
+            ("path.zrdrOverridden", SV.Bool(_zrdrOverridden)),
+            ("path.sounds", Rel(_soundsPath)),
+            ("path.soundsOverridden", SV.Bool(_soundsOverridden)),
+            ("path.interp", Rel(_interpPath)),
+            ("path.messages", Rel(_messagesPath)),
+            ("path.rof", Rel(_rofPath)),
+            ("path.gamez", Rel(_gamezPath)),
+            ("path.gamezOverridden", SV.Bool(_gamezOverridden)),
+            ("path.textures", Rel(_texturesPath)),
+            ("path.texturesOverridden", SV.Bool(_texturesOverridden)),
+
+            // Texture drop-in — parse-time statics, not fields, but launch settings all the same.
+            ("tex.census", SV.Bool(Mech3.TextureDropIn.CensusActive)),
+            ("tex.overrides", SV.List(Mech3.TextureDropIn.OverrideNames)),
+
+            // Everything else the command line settles.
+            ("misc.mute", SV.Bool(_mute)),
+            ("misc.noVsync", SV.Bool(_noVsync)),
+            ("misc.perf", SV.Bool(_perf)),
+            ("misc.noFocus", SV.Bool(_noFocus)),
+        };
+        var r = Testing.Probes.Session(string.Join(" ", OS.GetCmdlineUserArgs()), f);
+        GD.Print(r.Text);
+        WriteScratch("session_dump.txt", r.Text);
+        GD.Print($"{r.Summary} → ./.scratch/session_dump.txt");
+        return r.Ok;
     }
 
     /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target

@@ -149,7 +149,7 @@ The day-to-day 28 of 89. **[`docs/cli.md`](docs/cli.md) opens with an index of a
 | `--perf` | log the frame-cost/draw-count split every 60 frames (the headless profiler stand-in) |
 | `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
-| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by every flag that drives and ends a session by itself** — `--screenshot=`, every `--dump-*`, `--damage-test`, `--effects-test`, `--weapon-test`, `--run-tests` — and announced as a `det …` log line |
+| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by every flag that drives and ends a session by itself** — `--screenshot=`, the `--dump-*` reports (not `--dump-session`, which reports the bundle), `--damage-test`, `--effects-test`, `--weapon-test`, `--run-tests` — and announced as a `det …` log line |
 | `--no-det` | opt back out — wall-clock sim and live randomness, **beating both the implication and an explicit `--det`** (`--det --no-det` runs on the wall clock) |
 | `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
 | `--tex-override=<name>[=<color>]` | the named texture resolves flat magenta (or your colour) everywhere it is used — "is this thing drawing at all?" |
@@ -188,6 +188,6 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
 
-**Active plan: [`docs/PLAN-sessionspec.md`](docs/PLAN-sessionspec.md)** — Wave A, next **A1**. Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
+**Active plan: [`docs/PLAN-sessionspec.md`](docs/PLAN-sessionspec.md)** — Wave A, next **A2**. Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
