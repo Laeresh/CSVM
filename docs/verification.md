@@ -303,7 +303,7 @@ the reason you would. If your diff lands here, suspect noise first.
 
 | Surface | Behaviour |
 |---|---|
-| `--fly` / `--stunt`, any pose | **The one row `--det` does NOT fix.** Same-build floor 30–84% of pixels unpinned; under `--det` the sim matches exactly (two runs' full logs identical) but the shot still moves — the chase camera smooths on the raw wall delta by design. Measured on a bare `--screenshot` C1 flight: 29.38% at frame 15, 3.21% at frame 120, 32.70% at frame 300, mean delta 1.1–2.4. A/B with `--viewer`/`--freecam` + pinned camera; goldens must avoid flight poses |
+| `--fly` / `--stunt`, any pose | Same-build floor 30–84% of pixels **unpinned**; under `--det` a bare `--screenshot` C1 flight is byte-identical at frames 15/120/300 (0 of 921,600 px), since the chase camera takes the sim clock's dt while running. Goldens may frame flight poses |
 | `--freecam` default camera | Random spawn per launch — `--det` forces `--spawn=0` (a pinned choice, stable across data changes); `--spawn=N`/`--campos`/`--lookat` still override |
 | Precipitation (C1C/C2B/C4) | ~5–25% frame difference under `--no-det`. Pinned outright by `--det` — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
 | C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |

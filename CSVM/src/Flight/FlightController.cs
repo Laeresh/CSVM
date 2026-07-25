@@ -1489,19 +1489,22 @@ public partial class FlightController : Node3D
             // one-shots already in flight are left to play out.
             Audio?.SetPaused(halted);
         }
-        // The cameras and the HUD run on wall time even through a halt: the point of the freeze is
-        // to look around a stopped world.
+        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
+        float simDt = clock?.FrameDt ?? (float)delta;
         if (halted)
         {
-            // free orbit around the frozen plane for framing screenshots
+            // The orbit camera runs on wall time through a halt on purpose: the point of the
+            // freeze is to fly the camera around a stopped world.
             UpdateOrbitCamera((float)delta);
         }
         else
         {
-            UpdateChaseCamera((float)delta);
+            // The chase camera trails the plane by exponential smoothing, so its pose is a
+            // function of the dt it is fed. On wall time that makes a scripted flight capture
+            // frame-rate dependent even when the simulation underneath it is pinned — the pose
+            // has to come off the same clock as the plane it follows.
+            UpdateChaseCamera(simDt);
         }
-        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
-        float simDt = clock?.FrameDt ?? (float)delta;
 
         float mph = _model.Speed * 2.23694f;
         float ft = _model.Position.Y * 3.28084f;

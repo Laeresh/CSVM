@@ -6209,3 +6209,28 @@ delta 1.1–2.4, while the sim itself matches (two runs' logs identical bar the 
 `FlightController.UpdateChaseCamera` smooths on the raw wall delta by design. Byte-identity is
 therefore a `--freecam` / `--viewer` / `--anim-lab` property; C23's goldens must still avoid flight
 poses. Filed in `backlog.md`. Landed as verification rule 83.
+
+## 2026-07-25 — The chase camera moves onto the sim clock
+
+**What landed.** `FlightController._Process` feeds `UpdateChaseCamera` the `GameClock`'s `FrameDt`
+instead of the raw frame delta. The halted orbit camera keeps wall time, deliberately — the point of
+a freeze is to fly the camera around a stopped world.
+
+**Why the earlier rule was too wide.** A1 put "UI and camera code" on the raw delta so a halt still
+lets you look around and the HUD still draws. That is right, but it only has to hold *through a
+halt*: the chase camera smooths with `1 - exp(-k·dt)`, so its pose is a function of the dt it is fed,
+and on wall time a scripted flight capture stayed frame-rate dependent even with the simulation
+underneath it pinned. Being simultaneously a view and a function of sim state, only its second half
+wanted the sim clock — and that half is the whole of what a capture sees.
+
+**Verified.** A bare `--screenshot` C1 flight, two runs at each of frames 15 / 120 / 300:
+**0 of 921,600 px** differ at all three, against the **29.38 % / 3.21 % / 32.70 %** A4 recorded the
+same command producing. Controls both ways: frames 15 vs 120 differ by 50.26 % (the pose is
+genuinely time-sensitive, rule 80), and `--no-det` still moves 54.67 %, so the opt-out survives.
+Inertness: the parked `--viewer` shot is md5 `7c2b7274…`, identical to the A1, A2 and A3 baselines —
+in Realtime mode `FrameDt` *is* the wall delta, so nothing outside a fixed clock changed. Build 0
+warnings / 0 errors, 142 tests green.
+
+**Consequence.** A4's headline verify — a bare `--screenshot` twice is md5-identical — now holds
+literally, and C23's goldens are no longer restricted to `--freecam`/`--viewer` poses. The
+`backlog.md` entry is deleted rather than marked fixed, per the standing rule.

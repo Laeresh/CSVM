@@ -746,6 +746,9 @@ The flying-aircraft node: input → FlightModel → transform, roll-following ch
 telemetry, crash and respawn; drives every HUD widget and animator, and sweeps the PlaneCollider
 boxes via CastMotion each physics frame (the old center ray stays as an anti-tunnelling backstop).
 ⚠ The chase camera slerps its BASIS, never a re-derived hard LookAt — inverted flight renders upside down.
+⚠ The chase camera takes the SIM clock's dt (its exponential smoothing makes its pose a function of
+  dt, so wall time made scripted flight captures frame-rate dependent); the halted orbit camera keeps
+  wall time on purpose, so a freeze can still be flown around.
 ⚠ SurviveHit reads the contact normal at a pose 5 cm past the cast hit — at just-touching the rest
   query finds nothing and the head-on fallback turns shallow grazes into crashes; don't shallow it.
 ⚠ A dead `critical` part crashes regardless of impact speed; billboard trees are intangible (solid clutter only).

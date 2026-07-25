@@ -184,11 +184,12 @@ derives from it. `--det`, `--anim-lab` and `--effects-test` pin the master to 1 
 lab's old default did, and what kept the effects census comparable); everything else draws from the
 clock, and the resolved value is logged so an unpinned run can be replayed.
 
-**Residual (new finding, not A3's to fix):** a `--det --fly` *screenshot* is still not byte-identical
-— 2.71 % of pixels, mean delta 1.08 — because `FlightController.UpdateChaseCamera` smooths on the
-raw wall delta, which is A1's deliberate "UI and camera code stays off the sim clock". The simulation
-is identical (two runs' full logs match bar the output filename). **C23's goldens must avoid flight
-chase-cam poses unless that camera moves onto the clock first**; filed in `backlog.md`.
+**Residual found here, since closed:** a `--det --fly` *screenshot* was not byte-identical (2.71 %
+of pixels) because `FlightController.UpdateChaseCamera` smoothed on the raw wall delta. A1's "UI and
+camera code stays off the sim clock" turned out to be the right rule stated one notch too widely —
+it only has to hold *through a halt*. The chase camera now takes the clock's dt while running,
+which took a bare `--screenshot` C1 flight to 0 of 921,600 px at frames 15/120/300, so **C23's
+goldens may frame flight poses after all**.
 
 ## A4 ☑ The `--det` bundle; scripted runs imply it
 
