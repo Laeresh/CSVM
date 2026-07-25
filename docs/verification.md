@@ -551,6 +551,21 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      `{repo}` tokens for the same reason. Prove it before trusting it: capture twice and compare
      hashes — two captures of the 50-row matrix are md5-identical.
 
+119. **"My pipe captured nothing" is not "the process printed nothing" — a Windows GUI-subsystem
+     binary started without std handles reattaches to the parent CONSOLE and writes past your
+     redirection.** Godot's non-console build calls `AttachConsole(ATTACH_PARENT_PROCESS)` and
+     reopens stdout on `CONOUT$`, so `RunTests.ps1` measured 0 captured lines while every launch
+     dumped its whole world-build chatter onto the terminal the run was started from — invisible to
+     the script, unmissable to whoever was reading that terminal. Distinguish the two by giving the
+     child real handles (`ProcessStartInfo.RedirectStandardOutput`) and checking the bytes arrive:
+     silence you can read is the only silence you have measured.
+
+120. **A PowerShell property that throws yields `$null` silently, so a scoring expression reads the
+     failure as a value.** `Start-Process -PassThru -RedirectStandard*` hands back a disposed object
+     whose `ExitCode` reads as empty, not as an error; `if ($code -eq 0)` then scored a run of 9/9
+     passing suites as FAIL. Any exit code, count or hash a verdict rests on gets asserted non-empty
+     before it is compared.
+
 ## What this project cannot verify itself
 
 These need the user:

@@ -136,9 +136,9 @@ $Inv        = [System.Globalization.CultureInfo]::InvariantCulture
 # desktop from whoever is using it. Measured over a 45-frame run: the console build held the
 # foreground in 25 of 58 samples (the console window, the game window, and an untitled one between
 # them); this build, 0 of 52. Nothing is lost by the swap because every stage already reads its
-# results from --log-file and the JSON reports, never from stdout -- a GUI-subsystem binary hands
-# the call operator no output at all (measured: 0 lines), so anything that needs to be seen on the
-# console is echoed from the log below.
+# results from --log-file and the JSON reports, never from stdout; anything that needs to be seen on
+# the console is echoed from the log below. Launching it needs Invoke-Godot -- a GUI-subsystem
+# binary neither blocks PowerShell nor keeps its output inside the caller's pipes.
 $GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64.exe"
 $GodotExe = Join-Path $RepoRoot $GodotRel
 if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
@@ -155,12 +155,22 @@ if (-not (Test-Path $ScratchDir)) {
 # Runs Godot to completion and returns its exit code.
 #
 # The call operator cannot be used here: PowerShell only blocks on CONSOLE-subsystem executables, so
-# `& $gui.exe` returns the instant the process starts and every stage would measure nothing. It also
-# hands a GUI binary no stdout (measured: 0 lines), which is why every caller reads its results from
-# --log-file instead.
+# `& $gui.exe` returns the instant the process starts and every stage would measure nothing.
 #
-# Rule 63: -ArgumentList does not quote anything itself, and this repo's path contains a space, so
-# any argument carrying one is quoted here or Godot receives it split.
+# The stream redirection is not for capture -- it is what keeps the engine off the terminal. Started
+# without std handles, the non-console binary calls AttachConsole(ATTACH_PARENT_PROCESS) and reopens
+# stdout on CONOUT$, writing straight to the console screen buffer, past whatever the caller
+# redirected; that is how a run can measure 0 captured lines while its text lands on screen anyway
+# (rule 108). Handing the process real handles at creation leaves its own stdout alone. The files
+# are only a post-mortem for a launch that dies before --log-file exists; the log is still the
+# record every stage scores itself from.
+#
+# Start-Process cannot do the redirecting: with -RedirectStandard* it disposes the object it hands
+# back, so $p.ExitCode reads as empty and every stage scores a green run as FAIL. Both pipes are
+# drained asynchronously BEFORE the wait, or a chatty launch fills the ~4 KB buffer and deadlocks.
+#
+# Rule 63: ProcessStartInfo.Arguments is one string that the callee re-splits, and this repo's path
+# contains a space, so any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
     param([Parameter(Mandatory=$true)][string[]]$Arguments)
     $quoted = @()
@@ -174,8 +184,27 @@ function Invoke-Godot {
             $quoted += $a
         }
     }
-    $p = Start-Process -FilePath $GodotExe -ArgumentList $quoted -PassThru
+    # Beside this run's own --log-file, so a crash in shot 3 of 11 leaves its evidence next to
+    # shot 3 rather than being overwritten by shot 4.
+    $streamBase = Join-Path $ScratchDir "godot"
+    for ($i = 0; $i -lt $Arguments.Count - 1; $i++) {
+        if ($Arguments[$i] -eq "--log-file") {
+            $streamBase = $Arguments[$i + 1]
+        }
+    }
+    $psi = New-Object System.Diagnostics.ProcessStartInfo
+    $psi.FileName               = $GodotExe
+    $psi.Arguments              = ($quoted -join " ")
+    $psi.WorkingDirectory       = $RepoRoot
+    $psi.UseShellExecute        = $false
+    $psi.RedirectStandardOutput = $true
+    $psi.RedirectStandardError  = $true
+    $p = [System.Diagnostics.Process]::Start($psi)
+    $outRead = $p.StandardOutput.ReadToEndAsync()
+    $errRead = $p.StandardError.ReadToEndAsync()
     $p.WaitForExit()
+    [System.IO.File]::WriteAllText("$streamBase.out", $outRead.Result)
+    [System.IO.File]::WriteAllText("$streamBase.err", $errRead.Result)
     return $p.ExitCode
 }
 
@@ -373,9 +402,10 @@ if ($SkipEngine) {
     $ErrorActionPreference = "Stop"
     $watch.Stop()
 
-    # The non-console binary writes nothing to our stdout, so the suite table that used to appear
-    # live is replayed from the log. Only the harness's own lines -- the per-suite verdicts and the
-    # summary block -- not the whole world-build chatter, which stays in the log for a post-mortem.
+    # The non-console binary's stdout is redirected away from the terminal, so the suite table that
+    # used to appear live is replayed from the log. Only the harness's own lines -- the per-suite
+    # verdicts and the summary block -- not the whole world-build chatter, which stays in the log
+    # for a post-mortem.
     if (Test-Path $engineLog) {
         foreach ($line in (Get-Content -Path $engineLog)) {
             if ($line -match '^\s*\[test\]|^\s*(PASS|FAIL|SKIP)\s') {

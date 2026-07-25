@@ -7548,3 +7548,31 @@ exactly the `stunt-*` rows, and a duplicated field key printed `!! duplicate key
 `baseline.txt` byte for byte. `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens
 hash-identical, exit 0, 72.5 s. New rules 117 (an instrument must not be a term of the rule it
 reports) and 118 (a baseline holding a clock-derived value or an absolute path is not a baseline).
+
+## 2026-07-25 — the test run's console output went to the terminal, not to the caller
+
+`RunTests.ps1` had been printing Godot's entire world-build chatter straight onto whatever terminal
+it was started from, out of band, since the focus change three commits back. The script could not see
+it: a Windows GUI-subsystem binary started without std handles calls
+`AttachConsole(ATTACH_PARENT_PROCESS)` and reopens stdout on `CONOUT$`, so the text bypasses the
+caller's pipes entirely and lands on the console screen buffer. That commit's own measurement —
+"hands the call operator no output at all (measured: 0 lines)" — was true and pointed the wrong way;
+it read the silence of the pipe as silence of the process. Reproduced minimally: launched with no
+redirection, `--version` printed nothing the caller could capture; launched with
+`RedirectStandardOutput`, the same 36 bytes arrived in the file and nothing reached the console.
+
+`Invoke-Godot` now starts the process through `ProcessStartInfo` with both streams redirected, parked
+next to that launch's own `--log-file` as `<log>.out` / `<log>.err` so a crash in shot 3 of 11 leaves
+its evidence beside shot 3. `Start-Process -RedirectStandard*` cannot do this job: it hands back a
+disposed object whose `ExitCode` reads as **empty**, which is not an error in PowerShell, so the
+first version of the fix scored a run of 9/9 passing suites as FAIL — the stage's verdict rests on
+`$engineCode -eq 0` and `$null -eq 0` is false. Both pipes are drained asynchronously before the
+wait, or a chatty launch fills the ~4 KB buffer and deadlocks. Three comments that had recorded the
+wrong conclusion ("writes nothing to our stdout") were corrected rather than left as a trap.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 engine suites, 11/11 goldens hash-identical, exit 0,
+73.3 s, with the engine's own text now appearing only where the script echoes it. The perf stage,
+which shares the helper, PASS 5/5. The focus fix that started this is intact: a process-name
+foreground probe sampling every 250 ms across a full `-Perf` run put Godot in the foreground for
+0 of 400 samples. New rules 119 (captured nothing ≠ printed nothing) and 120 (a PowerShell property
+that throws yields `$null`, so a verdict reads the failure as a value).

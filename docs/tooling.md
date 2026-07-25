@@ -232,7 +232,10 @@ no-ops `SetForegroundWindow` from a process the user is not interacting with; th
 into is that process, so it is allowed to give the foreground away (verification rules 69, 107).
 
 `RunTests.ps1` also uses the **non-console** Godot binary, whose console twin opens its own
-`Godot Engine (Console)` window. Because a GUI-subsystem binary neither blocks PowerShell nor writes
-to its stdout, every stage launches through the script's `Invoke-Godot` helper (which waits for the
-process) and reads its results from `--log-file` and the JSON reports rather than from console text.
-`--no-focus` remains as the manual lever that marks any ad-hoc run as scripted.
+`Godot Engine (Console)` window. A GUI-subsystem binary does not block PowerShell and, started
+without std handles, reattaches to the parent console and prints straight onto the terminal the run
+came from (verification rule 119) — so every stage launches through the script's `Invoke-Godot`
+helper, which waits for the process and redirects both streams to `<its --log-file>.out` / `.err`.
+Stages still read their results from `--log-file` and the JSON reports rather than from console
+text; the suite table you see live is replayed from the log. `--no-focus` remains as the manual
+lever that marks any ad-hoc run as scripted.
