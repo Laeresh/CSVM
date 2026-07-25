@@ -9,9 +9,15 @@ namespace CSVM.UI;
 /// first slice of the eventual PlaneViewer split.
 ///
 /// <para>Owns the orbit state (center / distance / yaw / pitch / drag) and steers a
-/// <see cref="Camera3D"/> it does not own. The host keeps ownership of <c>--campos</c>/<c>--lookat</c>
-/// (fed into <see cref="Frame"/>) and F11/F12 (which read <see cref="OrbitCenter"/> back out), so
-/// the pose/screenshot behaviour is unchanged — this is a pure refactor.</para>
+/// <see cref="Camera3D"/> it does not own. The host keeps ownership of the placement flags
+/// (resolved into <see cref="Frame"/>'s arguments) and F11/F12 (which read <see cref="OrbitCenter"/>
+/// back out).</para>
+///
+/// <para><b>The pivot is a POINT, not a direction.</b> <see cref="Frame"/>'s <c>lookAt</c> sets
+/// both the point the view orbits and, with the eye, the orbit radius, so a direction-only
+/// placement (<c>--direction</c>) cannot be handed straight in — the host synthesizes a pivot on
+/// the aim ray first. Collapsing that back to a direction would leave the wheel and the drag
+/// spinning about the eye.</para>
 /// </summary>
 public sealed class OrbitCamera
 {
@@ -27,19 +33,21 @@ public sealed class OrbitCamera
     }
 
     /// <summary>The point the camera orbits and aims at — the framed pivot. F11 prints it as the
-    /// orbit-mode <c>--lookat</c>, and <c>--shots</c> jitter micro-orbits about it.</summary>
+    /// orbit-mode <c>--lookat</c> (the one mode whose F11 form is a point, because only a point
+    /// reproduces the radius as well as the angle), and <c>--shots</c> jitter micro-orbits about
+    /// it.</summary>
     public Vector3 OrbitCenter => _orbitCenter;
 
-    /// <summary>Initial view angles (radians) from <c>--yaw=</c>/<c>--pitch=</c>. Set before the
-    /// first <see cref="Frame"/>; a framing with no <c>--campos</c> keeps them, one with
-    /// <c>--campos</c> reconstructs them from the eye position.</summary>
+    /// <summary>Initial view angles (radians) from <c>--yaw=</c>/<c>--pitch=</c>, or from a
+    /// <c>--direction</c> with no eye to place. Set before the first <see cref="Frame"/>; a framing
+    /// with no eye position keeps them, one with an eye reconstructs them from it.</summary>
     public float Yaw { get => _yaw; set => _yaw = value; }
     public float Pitch { get => _pitch; set => _pitch = value; }
 
     /// <summary>Frame the subject (its merged mesh <paramref name="aabb"/>). <paramref name="lookAt"/>
-    /// (<c>--lookat</c>) overrides the pivot; <paramref name="camPos"/> (<c>--campos</c>), when set,
-    /// places the eye there and reconstructs pitch/yaw from it, otherwise the distance is derived
-    /// from the AABB radius and the camera FOV.</summary>
+    /// overrides the pivot; <paramref name="camPos"/> (<c>--pos</c>), when set, places the eye there
+    /// and reconstructs pitch/yaw from it, otherwise the distance is derived from the AABB radius
+    /// and the camera FOV.</summary>
     public void Frame(Aabb aabb, Vector3? camPos, Vector3? lookAt)
     {
         _orbitCenter = lookAt ?? aabb.GetCenter();

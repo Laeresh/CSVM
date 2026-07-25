@@ -729,7 +729,7 @@ unscheduled.
 - **Race spawn fairness**: each player takes the next entry in the mission's `stunt_flying`
   spawn list, so pilots start at genuinely different distances from the first zone. Fine for
   a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
-  `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
+  `--pos` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
 ## Open fidelity questions (answerable by testing the original)
 
@@ -1018,7 +1018,7 @@ Its data is fully decoded, so it is an end-to-end exercise for free. The symptom
 of this: the pirate zeppelin builds, renders complete and flies — it is simply **above the
 clouds**, at y 1505→1546 while C1's opaque `cloudlayer` deck sits at y = 960 and the player spawns
 at y ≈ 110. Freecam onto it with `--freecam --chapter=C1 --mission=M04
---campos=-5358,1505,-2200 --lookat=-5358,1505,-1810 --no-fog`.
+"--pos=-5358,1505,-2200" "--lookat=-5358,1505,-1810" --no-fog`.
 
 **Confirmed 2026-07-22 from the script data — the "jumps" are cutscene cuts, not waypoints.**
 The user watched it move smoothly for ~20 s, jump twice about 10 s apart, then vanish, and asked

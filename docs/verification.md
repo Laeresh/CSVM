@@ -233,11 +233,12 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 77. **A weapon-impact test is reproducible ONLY under `--det`/`--seed` — `CANNON_SPREAD` is a
     per-round dice roll everywhere else.** Two `--det` C1B dives now log **8 of 8 identical impact
     positions**; the same pair without a pinned master seed shares none. Unpinned, don't rely on "I
-    hit water once": pick a chapter whose **spawn sits over** the surface you want (measured:
-    C1B/C2B dive → all water, C4 → all buildings), and assert on the **once-per-name** effect
-    breadcrumb rather than a fixed impact count (the impact log caps at 8, so a later water hit
-    still logs its effect while the surface line is capped out). **The pin is now automatic in a
-    scripted run** (rule 83); the chapter-shopping workaround is for `--no-det` and interactive runs.
+    hit water once", and assert on the **once-per-name** effect breadcrumb rather than a fixed
+    impact count (the impact log caps at 8, so a later water hit still logs its effect while the
+    surface line is capped out). **The pin is now automatic in a scripted run** (rule 83).
+    **The chapter-shopping half of this rule is retired** — `--pos`/`--direction` (rule 84) put the
+    plane over the surface you want in any chapter, so "pick a chapter whose spawn sits over water"
+    is no longer the way to get a water impact.
 
 78. **Godot's physics tick is ALREADY a fixed 1/60 s, so "two runs log identical flight telemetry"
     cannot discriminate a fixed sim clock — vary the RENDER rate instead.** Two `--det` scripted
@@ -301,6 +302,16 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     arguments its own parser did not recognise) — use `Environment.GetCommandLineArgs()`; and
     Godot still owns the handle, so open it `FileShare.ReadWrite`.
 
+87. **Place the subject instead of hunting for a scenario that happens to suit — `--pos`/`--direction`
+    reach every mode.** They put the camera where you want it in `--freecam`/`--viewer`/`--anim-lab`
+    and the *plane* where you want it in `--fly`/`--stunt`, so a water-impact test is
+    `--chapter=C1 "--pos=<over the water>" "--direction=<down it>" --hold=… --fire` rather than
+    chapter-shopping (rule 77) — measured 8 of 8 `-> Water` impacts, first run, no land crash.
+    Two traps carried by the pair: **`--direction` is a vector, `--lookat` a point**, and the one
+    place that distinction bites is the `--viewer` orbit, which pivots on the point and derives its
+    radius from it — a `--direction` there gets a *synthesized* pivot, announced on its own log
+    line. And **quote every comma-bearing argument** in PowerShell (rule 63).
+
 ## What this project cannot verify itself
 
 These need the user:
@@ -324,7 +335,7 @@ the reason you would. If your diff lands here, suspect noise first.
 | Surface | Behaviour |
 |---|---|
 | `--fly` / `--stunt`, any pose | Same-build floor 30–84% of pixels **unpinned**; under `--det` a bare `--screenshot` C1 flight is byte-identical at frames 15/120/300 (0 of 921,600 px), since the chase camera takes the sim clock's dt while running. Goldens may frame flight poses |
-| `--freecam` default camera | Random spawn per launch — `--det` forces `--spawn=0` (a pinned choice, stable across data changes); `--spawn=N`/`--campos`/`--lookat` still override |
+| `--freecam` default camera | Random spawn per launch — `--det` forces `--spawn=0` (a pinned choice, stable across data changes); `--spawn=N`/`--pos`/`--direction` still override |
 | Precipitation (C1C/C2B/C4) | ~5–25% frame difference under `--no-det`. Pinned outright by `--det` — the fall from `csky_time`, the per-instance seeds from the `precip` stream: two runs measured C2B rain 5.44% → **0.00%**, C4 snow 25.84% → **0.00%** |
 | C3 water flipbook | Baseline flips between two states (~35,250 px, delta ≤3); open water moves 14.4% of pixels with the camera frozen, amplitude ≤12/255 — a real depth flip is delta ~100+. `--det` pins it (CPU `TextureCycler` on the sim clock) |
 | UV scroll (C1 waterfall, C1B wakes, C4) | Wall-time `TIME` moved 30% of the C1 falls between two runs; `--det` pins it to **0.00%** |

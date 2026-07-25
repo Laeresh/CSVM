@@ -6293,3 +6293,59 @@ emits them. The named suspect `AnimRuntime.cs:~2666` is ruled out on the earlier
 managed `Basis.Inverse()` cannot print a `core/math/basis.cpp` location. Leading suspect is now
 `Effects/Puffer.cs`'s per-frame `GlobalPosition` sets on emitters the deaths created.
 `backlog.md`'s entry and playtest finding 13 are corrected; the transferable half is rules 84–86.
+
+## 2026-07-25 — `--pos`/`--direction`: one placement pair in every mode (PLAN-testing A5)
+
+**What landed.** `--pos=x,y,z` and `--direction=x,y,z` place the *subject of whatever mode is
+running* — the camera in `--freecam`/`--viewer`/`--anim-lab`, the plane in `--fly`/`--stunt`. One
+`ResolvePlacement` block in `PlaneViewer._Ready` routes them onto the plumbing that already carried
+placement (`_spawnAt`/`_spawnDir` in flight, `_camPos` plus a new `_camDir` elsewhere), so no
+consumer downstream decides anything. `--campos`/`--spawn-at`/`--spawn-dir` survive as deprecated
+aliases that log `WARN [core] deprecated flag=… use=…` once per run. F11 became `PrintPlacement` and
+now prints the subject per mode. `ChooseSpawn`/`LogSpawn` moved onto `Log` in passing — the German
+locale had been rendering the spawn direction as `dir=(0,97,-0,24,0,00)`, which is unreadable in
+exactly the log line this item's parity check compares.
+
+**Two decisions the plan's approach did not cover, both forced by the audit:**
+
+- **`--lookat` stays a POINT; only flight converts it.** `SpectatorCamera` keeps just the direction
+  to its look-at, so either form is lossless there — but `OrbitCamera.Frame` treats it as a true
+  pivot *and derives the orbit radius from it*, so converting at parse time would have broken the
+  `--viewer` wheel and drag. A `--viewer --direction` therefore gets a **synthesized** pivot: the
+  point on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the
+  eye swung to the aim when no `--pos` was given. It is announced on its own log line, because a
+  pivot nobody typed is what a later capture cannot explain.
+- **In `--freecam`/`--anim-lab`, `--pos` beats `--spawn-at`.** The two already overlapped there
+  (`--spawn-at` reaches the camera through `ChooseSpawn`, `--campos` layered on top). The deprecated
+  flags keep their *old per-mode meaning* rather than becoming pure renames: `--campos` still never
+  places the plane, and `--spawn-at` still moves the anim lab's parked stage prop as well as the
+  camera — which `--pos`, placing only the camera there, deliberately does not copy.
+
+**Verified.** *Alias equivalence:* a C1 `--freecam` shot from `"--pos=-6200,500,-3300"
+"--direction=0,0,-1"` is md5-identical (`7facfce6…`, decoded pixels — rule 36) to the same pose as
+`--campos`/`--lookat`; moving one coordinate 10 m moves **28.23 %** of pixels, so the compare can
+fail (rule 15). Same for `--pos` vs `--campos` alone in `--viewer` (`00695e91…`).
+*The motivating case:* `--chapter=C1 "--pos=-6500,300,-1500" "--direction=1,-0.25,0"
+"--hold=0,0,0,1" --fire --frames=300` logs **8 of 8 `-> Water` impacts on the first run, no land
+crash** — the C1 open water was located from `models.json` by classifying each mesh's dominant
+material texture the way `SceneBuilder.SurfaceForMesh` does, not by flying around. *Flight parity:*
+the same values via `--spawn-at`/`--spawn-dir` give the identical logged spawn pose
+(`pos=(-6500,300,-1500) dir=(0.970,-0.243,0.000)`), the identical 8 impacts and an md5-identical
+frame (`e980ff10…`). *The orbit still orbits:* `--viewer --pos=18,6,26 --direction=-0.5,-0.2,-0.75`
+reports `pivot --lookat=0.339,-1.064,-0.491 radius=32.613`, and a `--shots=2 --jitter=25` burst
+keeps the plane centred — where the degenerate pivot-at-the-eye the synthesis avoids
+(`--lookat=<the eye>`) swings it clean out of frame into empty sky. *Deprecation:* `--campos` passed
+twice over a 200-frame run logs the notice exactly once, in console and file sink alike.
+*F11:* verified through a temporary probe call at the screenshot-save site (live keypresses are
+unscriptable here), then reverted — flight printed the **plane's** pose 0.9 m along its track from
+the spawn with `--direction=0.97015,-0.24251,-0`, freecam and anim-lab their eye + unit direction,
+the viewer `--pos`/`--lookat=<the pivot>`. Also exercised: `--stunt`, `--players=2` (60 m abreast
+fan-out intact), `--direction` with no `--pos` in flight (logged no-op), `--lookat` alone in freecam
+(unchanged: aims from the mission spawn), `--direction` alone in the viewer.
+*Regression:* 8-chapter `--freecam --quit-after 240`, **sound enabled**, windowed (rule 82), flags
+absent — **0 errors in seven chapters, 1 in C3**, the known pre-existing `!is_inside_tree()`; node
+and mesh counts unchanged. `dotnet build` 0/0; `dotnet test` **142/142**.
+
+**Consequence.** Verification rule 77's chapter-shopping workaround ("pick a chapter whose spawn
+sits over the surface you want") is retired for placement-controllable tests; the new standing rule
+is 84.

@@ -65,7 +65,7 @@ public sealed partial class AnimLab : Node
     private readonly Node3D _stageAnchor;
     private readonly ulong _seed;
     private readonly string? _playOnLaunch;   // --play-anim=<name>
-    private readonly bool _autoFrame;         // no --campos/--lookat: frame the played def
+    private readonly bool _autoFrame;         // no --pos/--direction: frame the played def
     // The session archives, kept open for the whole lab session (WorldSession.Options
     // .KeepArchivesOpen) so puffers/decals can be built at any playhead time. The lab owns
     // their disposal — every other mode closes them when the build scope ends.
