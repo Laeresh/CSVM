@@ -281,6 +281,26 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     seed=… spawn=… livery_seed=… pads=off jitter=… via=…` log line is what a capture was taken
     under** — read it instead of assuming, and take its absence as "this run was interactive".
 
+84. **Read WHERE an error sits in the log before attributing it to the code that ran nearby.** All
+    four `det == 0` errors in a C2 `--damage-test --damage-hd=25` run are printed *after* the sweep
+    finished and both reports were written (lines 55–61 of a 62-line log) — so they cannot be
+    aborting the death sequence they were blamed for, which had already completed and reported its
+    swap, colliders and seven stage effects. An error and a symptom in the same run are not the
+    same event.
+
+85. **An error allowlist needs a CAP and a printed count, or it stops being an instrument.** A
+    pattern allowed without a bound hides the next regression inside an old error's shape, and one
+    whose count is invisible on a pass hides a drift from 1 to 7. `TestHarness.ErrorAllowlist`
+    carries `(pattern, max, why)` and the report prints `allowed N/maxx` for every entry whether or
+    not it passed; over cap fails, unknown fails.
+
+86. **Native Godot `ERROR:` lines cannot be seen from C# — capture them with `--log-file` and read
+    the file back.** They are C++ `ERR_FAIL_COND` prints to the process stderr, not managed throws
+    and not `Console.Error`, so no in-process handler sees them. Two traps in doing it:
+    `OS.GetCmdlineArgs()` does **not** contain `--log-file` (Godot hands that method only the
+    arguments its own parser did not recognise) — use `Environment.GetCommandLineArgs()`; and
+    Godot still owns the handle, so open it `FileShare.ReadWrite`.
+
 ## What this project cannot verify itself
 
 These need the user:

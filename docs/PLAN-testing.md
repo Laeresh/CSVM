@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Harness + logging
 
 11. ☑ B11 — `Log`: categories/levels, `--log=` console filter, always-on full-detail file sink **(done 2026-07-25 — `src/Utils/Log.cs`, 9 categories, 5 files converted; `docs/HISTORY.md`)**
-12. ☐ B12 — `--run-tests`: in-engine suite registry, pass/fail report, nonzero exit code; existing dump/damage-test assertions become suites
+12. ☑ B12 — `--run-tests`: in-engine suite registry, pass/fail report, nonzero exit code; existing dump/damage-test assertions become suites **(done 2026-07-25 — `src/Testing/`, 7 suites green in 16 s; `docs/HISTORY.md`)**
 13. ☑ B13 — `CSVM.Tests` xUnit project: pure-logic units, local-data golden invariants, hand-authored fixtures **(done 2026-07-25 — 135 tests, no `CSVM/src/` change needed; `docs/HISTORY.md`)**
 14. ☐ B14 — `RunTests.ps1`: the single entry point (build → units → suites → goldens → summary)
 
@@ -217,7 +217,7 @@ goldens must avoid flight poses until that camera moves onto the clock**; filed 
 
 **Deviation:** the implication list includes `--dump-config` (the plan said "every `--dump-*`", and
 it is one) but deliberately NOT `--effects-test` / `--weapon-test`, which already pin what they need
-and were left alone rather than widened by guess. `--run-tests` joins the list when B12 lands.
+and were left alone rather than widened by guess. `--run-tests` joined the list with B12.
 
 ## A5 ☐ `--pos`/`--direction`: one placement pair in every mode
 
@@ -272,7 +272,7 @@ Residual for later items: the two relative-path `.scratch` writes the scout foun
 
 **⚠ Traps.** `.scratch/` is swept by `CleanScratch.ps1` — logs are disposable by design; anything worth keeping gets moved to `analysis/` per the standing rule. Never buffer in memory (crash = lost evidence). Windows file locking: one sink per process, filename carries PID if two sessions collide.
 
-## B12 ☐ `--run-tests`: the in-engine suite harness
+## B12 ☑ `--run-tests`: the in-engine suite harness
 
 **Goal.** `--run-tests[=filter]` boots the engine, runs registered assertion suites, prints a per-suite PASS/FAIL table plus a `.scratch/test-report.json`, and **exits nonzero on any failure**. The existing proto-tests become suites: `weapons-defs` (48 defs, no unhandled keys — from `--dump-weapons`), `loadout-bind` (all 11 bind, every marker resolves — from `--dump-loadout`), `damage-stages` / `damage-hd` (the C22–C28 checks from `--damage-test`), `markers-rig`, `weapons-fire` (all 48 weapons mount and fire without error — the automated half of M3 F39's verify), `destructible-census` (per-chapter destructible totals match M3 A4's census — F41's verify, automated), plus new ones as later items add them (C24 census asserts, C23 goldens).
 
@@ -283,6 +283,47 @@ Residual for later items: the two relative-path `.scratch` writes the scout foun
 **Verify.** Rule 14 ritual: plant a deliberately failing assertion, see the nonzero exit and the report line, remove it. Then: full suite green on current data; `--run-tests=weapons` filters correctly; exit code checked from PowerShell (`$LASTEXITCODE`).
 
 **⚠ Traps.** Rule 66 (stray Godot processes poison runs — B14's script handles the kill, scoped to this worktree's binaries); rule 74 (absolute output paths only); rule 75 (suites observing scheduled effects must tick the clock via A1's machinery, in-tree, `ManualAdvance`). A suite must never write outside `.scratch/`.
+
+**Landed 2026-07-25** — `src/Testing/Probes.cs` (assertion cores), `TestHarness.cs` (registry,
+`TestContext`, table, JSON report, exit code, error screen) and `Suites.cs` (the seven suites).
+`PlaneViewer` keeps the dump flags but its four handlers are now thin wrappers over the probes —
+net −430 lines there, and the `--dump-weapons`/`--dump-markers`/`--dump-loadout`/`world_colliders`
+outputs are **byte-identical** to the pre-refactor ones (md5). The one deliberate change:
+`--damage-test` now renders invariant, so the German machine's `HEALTH 0,01` reads `HEALTH 0.01`.
+
+**Suites and measured results (C1, retail data, 16 s wall, exit 0):** `weapons-defs` 48 defs /
+0 unhandled · `markers-rig` 11/11 airframes · `loadout-bind` 11 bound / 0 failed · `weapons-fire`
+48/48 fired, 0 errors, 0 skipped · `damage-stages` 16 defs, all resolve and fire a stage ·
+`damage-hd` 16 defs, all destroyed, all reset+rekill idempotent · `destructible-census` all 8
+chapters against the committed table.
+
+**The pass criterion, decided before writing it.** A suite's verdict is its own structured checks.
+Native `ERROR:` lines are C++ `ERR_FAIL_COND` prints that **cannot** be intercepted from C#, so
+they are screened out of band: the run reads its own engine log back (`--log-file`, else the
+project's default rotating log when this run wrote it) and classifies each error against a
+**capped** allowlist — two entries today, `det == 0` (max 8) and `!is_inside_tree()` (max 4), each
+naming its open backlog item. Unknown error → fail; over cap → fail; no log → SKIP, never PASS.
+**Every allowance's count is printed even on a pass** (`allowed 1/4x …`), which is the thing that
+stops an entry swallowing a new error silently; the classifier is pure and has 7 xUnit tests in
+`CSVM.Tests` (149 total, up from 142) including "one over the cap fails".
+
+**Two live rule-74 bugs fixed on the way:** `--weapon-test` and `--effects-test` wrote through
+relative `./.scratch/` paths, which resolve against the *process* working directory — the evidence
+is a stray `CSVM/.scratch/` holding 24 MB of misplaced probe artifacts. Both now go through
+`WriteScratch` (absolute, under the repo root).
+
+**Deviation from the item text:** `destructible-census` covers all 8 chapters in one process
+(6.7 s) rather than only the run's chapter, building and freeing each non-cached world. It reads
+`DestructibleRegistry.Count`/`DistinctAnchors`, never the sweep rows, which `Probes.SweepCap` caps
+at 16.
+
+**Finding: the `det == 0` errors are not what the backlog said.** Corrected there in full; the two
+transferable halves are `docs/verification.md` rules 83–85. Briefly: they are printed *after* the
+sweep completes (so they abort nothing), they survive `--mute` (so not `WorldSounds`), the
+continuous-sweep mode never produces them (so not the stage path), no single def group reproduces
+them, and `--run-tests=damage-hd --chapter=C2` produces a byte-identical report with **0** errors —
+the harness frees its world before the frame that emits them. Leading suspect is now `Puffer`'s
+per-frame `GlobalPosition` sets on death-created emitters.
 
 ## B13 ☑ `CSVM.Tests`: the xUnit project
 

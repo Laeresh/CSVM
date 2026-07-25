@@ -1131,6 +1131,54 @@ The session's randomness policy: one master seed and ten named subsystem generat
 ⚠ `UI/LiveryLab`'s generator deliberately stays outside this — it is driven by a button press, and a
   wall-time/input-dependent path must never share a sim subsystem's stream.
 
+## src/Testing/Probes.cs
+The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
+`--damage-test` inspection reports. Each probe does the work once and returns both halves: the
+report text the flag prints and writes, and a structured verdict (counts, per-row booleans,
+failure strings) a `--run-tests` suite asserts on.
+⚠ **One source of truth.** The flags in `PlaneViewer` are thin wrappers over these; a check added
+  to a probe reaches both the report and the suite. Never re-implement a check in a suite.
+⚠ **A verdict is a field, never a glyph.** The `✓`/`✗` in a report line is formatting; the boolean
+  it came from is on `DamageRow`. Parsing a report back to automate it is the thing this replaced.
+⚠ `Probes.SweepCap` (16) caps the swept ROWS, not the registry totals — a census must read
+  `DamageResult.TotalInstances` / `DistinctAnchors` or it silently under-counts (rule 59).
+⚠ `Probes.Damage` needs the world subtree in the tree with `ManualAdvance` set: it ticks past the
+  death schedule for the debris count, and an out-of-tree global-transform read returns identity.
+⚠ Every probe forces `CultureInfo.InvariantCulture` — the damage report used to write `HEALTH 0,01`
+  on this German machine.
+
+## src/Testing/TestHarness.cs
+`--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
+scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`), the
+PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
+⚠ **In-engine is the smaller half.** Only checks that need a live Godot belong here — a built
+  plane read by global transform, a ticked chapter world, a spawning projectile pool. Anything
+  that runs without the engine goes in `CSVM.Tests` (`dotnet test`) instead.
+⚠ **SKIP is never PASS.** A suite whose input is absent throws `SuiteSkippedException` via
+  `RequireData` and is counted separately; the run still exits 0. "No data" must not read as green.
+⚠ **Engine-error policy.** Native `ERROR: …` lines are C++ `ERR_FAIL_COND` prints and cannot be
+  intercepted from C#, so they are screened out of band: the run reads its own engine log
+  (`--log-file`, else the project's default rotating log if this run wrote it) and classifies each
+  error against `ErrorAllowlist`. **Every allowance carries a cap and its measured count is printed
+  even on a pass** — an uncapped or invisible allowance is how a new error hides inside an old
+  one's shape. Unknown error → fail; over cap → fail; no log → SKIP, never PASS.
+⚠ `Screen` is pure (no Godot API, no IO) and unit-tested in `CSVM.Tests` — the classifier is the
+  one part of the harness that could turn the whole thing into a rubber stamp.
+⚠ Run **windowed**: `--headless` compiles no shaders, so a clean error screen says nothing about
+  them (rule 82). The harness logs a warning when it detects the headless display.
+⚠ A suite must never write outside `.scratch/`; `WriteArtifact`/`ScratchDir` are the only route.
+
+## src/Testing/Suites.cs
+The seven registered suites: `weapons-defs`, `markers-rig`, `loadout-bind`, `weapons-fire`,
+`damage-stages`, `damage-hd`, `destructible-census`.
+⚠ The expected numbers are **golden counts against the retail install** (48 weapon defs, 11
+  airframes, the per-chapter destructible census) — the data is a fixed input, so they are
+  invariants. Change one only with the measurement that moved it.
+⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`: a skipped weapon is a
+  success-looking outcome (no mount on this plane) that nothing else would notice.
+⚠ `--loadout=<def>` reaches `loadout-bind` — `--run-tests=loadout-bind --loadout=pbloodhawk` is the
+  real able-to-fail control (a def wanting `firepoint8` bound to the 7-firepoint Kestrel).
+
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
 the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's value for a present

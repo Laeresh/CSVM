@@ -56,9 +56,11 @@ pass through unharmed).
   smoke→fire stages** (only the death blast), and wreck pieces fly on the wrong trajectory. After the
   fix: stages render as HP falls; debris arcs correctly. → backlog 11, 12.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`
-- **Killed door (C25 — FAILED ❌).** Shooting `kkgate`'s propane tank throws `det==0`; the door does not
-  move and keeps its collider (original: door deactivates, pieces fly + fade, no collider) — likely one
-  bug with the sequence aborting. → backlog 13. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`
+- **Killed door (C25 — FAILED ❌).** Shooting `kkgate`'s propane tank leaves the door in place with its
+  collider (original: door deactivates, pieces fly + fade, no collider). The `det==0` error in the same
+  run is a **separate** bug — it prints after the sequence has already completed and reported its swap,
+  so do not expect fixing one to fix the other. → backlog 13.
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`
 - **Empty-clip** — couldn't reach a dry gun group by hand (2000+ rounds); needs the low-ammo debug knob,
   and no rocket dry cue was heard. After: one empty cue per group, once. → backlog 16, 18.
 - **Hardpoint selection** — H should select an individual pylon (each counts for itself), auto-advancing

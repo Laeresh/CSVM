@@ -186,6 +186,9 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Utils/GameClock.cs` — the session sim clock every sim consumer takes dt from: run mode (realtime/fixed), halt + single-step, time scale.
 - `src/Utils/Log.cs` — the diagnostic log: 9 categories × 4 levels, `--log=` console filter, always-on full-detail `.scratch/logs/` file sink.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global shader uniform: the clock's GPU-side twin, replacing `TIME` in every generated shader; wraps at 3600 s.
+- `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a structured verdict, shared with the suites.
+- `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext` (asserts/paths/world builder), PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
+- `src/Testing/Suites.cs` — the seven registered suites and their golden counts (48 weapon defs, 11 airframes, the per-chapter destructible census).
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named, independently-derived subsystem generators every random draw goes through.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
@@ -210,8 +213,9 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--frames=N` / `--shots=N` | warm-up delay before the shot / capture N consecutive frames |
 | `--debug-anim` | log every live animation's pose, condition verdicts and sound emitters once a second |
 | `--perf` | log the CPU/GPU/**physics** frame-time split once a second (the headless profiler stand-in) |
+| `--run-tests[=filter]` | run the in-engine assertion suites, print the PASS/FAIL/SKIP table + `.scratch/test-report.json`, **exit nonzero on any failure** |
 | `--log=` | console log filter, `cat[:level],…` over `anim`/`world`/`flight`/`weapons`/`sound`/`perf`/`test`/`ui`/`core`; every run always writes **everything** to `.scratch/logs/` regardless |
-| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*` and `--damage-test`**, and announced as a `det …` log line |
+| `--det` | the determinism bundle: fixed-dt sim clock + master seed 1 + `--spawn=0` + pinned liveries + `--no-pads` + `--jitter=0`; **implied by `--screenshot=`, every `--dump-*`, `--damage-test` and `--run-tests`**, and announced as a `det …` log line |
 | `--no-det` | opt back out — wall-clock sim and live randomness under a flag that would otherwise imply `--det` |
 | `--seed=N` | the master seed every subsystem RNG derives from (spread, crash sound, spawn, liveries, anim dice, particles); pinned to 1 by `--det` |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |

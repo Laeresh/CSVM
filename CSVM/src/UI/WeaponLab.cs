@@ -438,10 +438,26 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
+    /// <summary>The self-test's verdict: the report text plus the counts a suite asserts on.
+    /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
+    /// no mount on this plane never fires and nothing else would notice.</summary>
+    public sealed class SelfTestResult
+    {
+        public required string Report { get; init; }
+        public required int Total { get; init; }
+        public required int Ok { get; init; }
+        public required int Errors { get; init; }
+        public required int Skipped { get; init; }
+    }
+
     /// <summary>Mounts and fires every one of the 48 weapons once — each from a mount of its own
     /// class (a gun from the gun groups, a hardpoint weapon from the pylons) — catching any that
     /// throw. Returns the report (the caller also writes it).</summary>
-    public string RunSelfTest()
+    public string RunSelfTest() => SelfTest().Report;
+
+    /// <summary><see cref="RunSelfTest"/> with its counts kept, so an automated suite asserts on
+    /// numbers instead of parsing the report back.</summary>
+    public SelfTestResult SelfTest()
     {
         var sb = new StringBuilder();
         var gunMount = _gunMounts.Count > 0 ? _gunMounts[0] : (Mount?)null;
@@ -478,7 +494,14 @@ public sealed partial class WeaponLab : Node3D
             }
         }
         sb.AppendLine($"weapon-test: {ok}/{_all.Count} fired OK, {err} error(s), {skip} skipped");
-        return sb.ToString();
+        return new SelfTestResult
+        {
+            Report = sb.ToString(),
+            Total = _all.Count,
+            Ok = ok,
+            Errors = err,
+            Skipped = skip,
+        };
     }
 
     // ---- input -------------------------------------------------------------------------------

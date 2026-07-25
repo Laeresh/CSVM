@@ -6234,3 +6234,62 @@ warnings / 0 errors, 142 tests green.
 **Consequence.** A4's headline verify — a bare `--screenshot` twice is md5-identical — now holds
 literally, and C23's goldens are no longer restricted to `--freecam`/`--viewer` poses. The
 `backlog.md` entry is deleted rather than marked fixed, per the standing rule.
+
+## 2026-07-25 — PLAN-testing B12: `--run-tests`, the in-engine test harness
+
+**What landed.** `CSVM/src/Testing/` — `Probes.cs` (the assertion cores that used to live inside the
+`--dump-*` / `--damage-test` handlers, now returning report text *and* a structured verdict),
+`TestHarness.cs` (`--run-tests[=filter]`: suite registry, `TestContext` with the assert verbs, the
+resolved data paths and a `WorldSession`-backed chapter-world builder, a PASS/FAIL/SKIP table,
+`.scratch/test-report.json`, and the exit code) and `Suites.cs` (seven suites). The dump flags keep
+working and are now thin wrappers over the probes — one source of truth instead of a copy;
+`PlaneViewer.cs` shrank by ~430 lines. `WeaponLab.RunSelfTest` gained a counted twin `SelfTest()`.
+
+**Suites, measured green on the retail install (C1, 16.0 s wall, exit 0):** `weapons-defs` 48 defs /
+0 unhandled keys · `markers-rig` 11/11 airframes · `loadout-bind` 11 bound / 0 failed ·
+`weapons-fire` 48/48 fired, 0 errors, 0 skipped · `damage-stages` 16 defs, every one resolving from
+a deep descendant and firing a stage effect · `damage-hd` 16 defs, all destroyed, all
+reset-and-rekill idempotent · `destructible-census` all 8 chapters against the committed table
+(C1 267/196 … C5 568/292), read from the registry rather than the 16-def-capped sweep rows.
+
+**Verified.** Rule 14 both ways. *Planted:* C1's census expectation flipped to 268 →
+`FAIL destructible-census … !! C1 destructible instances expected=268 actual=267`, `$LASTEXITCODE`
+**1**; reverted → PASS, exit **0**. *Real bad input:* `--run-tests=loadout-bind
+--loadout=pbloodhawk` → FAIL naming the genuine binding error (`marker 'firepoint8' not found on
+the built plane`), exit **1**. `--run-tests=weapons` selects 2 of 7 suites. `--data-root=<empty>` →
+**0 passed / 0 failed / 7 skipped**, each naming its missing path, exit **0** — a skip is reported
+distinctly and never as a pass. A filesystem sweep after a full run found **nothing** written
+outside `.scratch/`. The refactor is output-preserving: `weapons_dump.txt`, `markers_dump.txt`,
+`world_colliders.txt` and a filtered `loadout_dump.txt` are **md5-identical** to the pre-refactor
+files; `damage_test.txt` differs only in `HEALTH 0,01` → `HEALTH 0.01` (the probes now force
+`InvariantCulture`, which `--damage-test` never did). Smoke: `--weapon-test` 48/48,
+`--effects-test` 28/28 resolved / 16 puffers, `--freecam --chapter=C1 --det --screenshot` 0 errors.
+`dotnet build` 0 warnings / 0 errors; `dotnet test` **149 passed / 0 failed** (142 + 7 new).
+
+**The error-screen decision, taken before writing the suites.** Native `ERROR:` lines are C++
+`ERR_FAIL_COND` prints and cannot be intercepted from C# at all, so a strict full-stderr criterion
+was never available in-process. The harness instead reads the run's own engine log back
+(Godot's `--log-file`, else the project's default rotating log when this run is the one writing it;
+with neither it reports SKIP, never PASS) and classifies every error line against a **capped**
+allowlist: `det == 0` (max 8) and `!is_inside_tree()` (max 4), each naming its open backlog item.
+Unknown error fails, over-cap fails, and **every allowance's actual count is printed even on a
+pass** — the measured full run reads `allowed 0/8x` and `allowed 1/4x`. The classifier is pure and
+carries 7 xUnit tests including "one over the cap fails". Rules 84 and 85.
+
+**Two live rule-74 bugs fixed on the way.** `--weapon-test` and `--effects-test` wrote their reports
+through relative `./.scratch/` paths, which resolve against the *process* working directory; the
+evidence was a stray `CSVM/.scratch/` holding 24 MB of misplaced probe artifacts. Both now use the
+absolute `WriteScratch` helper, and the file sweep above confirms it.
+
+**Finding — the `det == 0` errors are not what `backlog.md` said.** Measured: they are printed
+**after** the sweep has finished and both reports are written (lines 55–61 of a 62-line C2 log), so
+they cannot be aborting a death sequence that already reported its swap, colliders and seven stage
+effects; they survive `--mute`, where `AnimRuntime.Sounds` is null (4 → 4 on C2), ruling out
+`WorldSounds`; the continuous-sweep mode never produces them (0 on C1 and C2) while the
+clock-ticking discrete mode does; no single def group reproduces them (`kkgate`, `sign*`, `fcpan*`
+each 0, the unfiltered 16-def sweep 4); and `--run-tests=damage-hd --chapter=C2` produces a
+**byte-identical report with 0 errors**, because the harness frees its world before the frame that
+emits them. The named suspect `AnimRuntime.cs:~2666` is ruled out on the earlier grounds that a
+managed `Basis.Inverse()` cannot print a `core/math/basis.cpp` location. Leading suspect is now
+`Effects/Puffer.cs`'s per-frame `GlobalPosition` sets on emitters the deaths created.
+`backlog.md`'s entry and playtest finding 13 are corrected; the transferable half is rules 84–86.
