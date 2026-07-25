@@ -4,9 +4,6 @@
 states are wrong, and named several extracted structures nobody had decoded. Which corrections
 survive contact with the shipped data, and what can the undocumented readers be made to say?
 
-*(This directory states its verdicts here rather than in a `FINDINGS.md` — same content, same
-purpose as the convention in [`../README.md`](../README.md).)*
-
 **Standing rule: shipped extracted data beats the design document.** It is a July 1999
 pre-release spec — its *structure* has held up repeatedly, its *numbers* have not. Claims below
 are **measured** (from `extracted/**`), **inferred** (structure plus reasoning), or
