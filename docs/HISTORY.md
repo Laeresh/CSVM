@@ -6063,3 +6063,33 @@ system shape, never for numbers. And **prove a per-chapter file or node flag dis
 using it**: `map.json` is the same string in 7 of 8 chapters, `location.json` gives two Hollywood maps
 Sea Haven camera presets, and the gamez `terrain` flag means different things per chapter — a
 terrain-height grid built on it compared clouds to sea and called two different worlds identical.
+
+## 2026-07-25 — Backlog: combat-fidelity gaps from a design cross-check
+
+**Landed (documentation only).** Seven new `backlog.md` entries under Feature backlog, from reading
+the original pre-release design spec against the code and re-verifying every claim against
+`extracted/` and `CSVM/src` first: the unimplemented armour layer (`ARMOR_DAMAGE` has only display
+consumers, and the split *is* the DD/AP/magnesium ammo tier — 18 of 48 entries, with AP currently
+inverted into the worst round); no explosive radius (single-raycast `Impact`, `IMPACT_PROXIMITY` /
+`DETONATION_DISTANCE` parsed and printed only); the incoming-fire cue set (`bullet_warning_sg` +
+the complete `warning_shot_*` accumulator, no caller); Danger Zone scoring as an ordered pair of
+`dzpathN` gate crossings rather than one 15 m sphere; nitro booster (data complete, the numbers
+executable-resident — low priority); five small per-impact feedback gaps (`damaged_engine_sound`,
+the `injure_anims` 0.99 spark burst, silent glancing collisions vs `touchdown.zrd`'s three surface
+variants, `gunshell.zrd`, `snd_dangerzone_camera`); and `sticky_bullet_*`.
+
+**Three claims failed verification and were recorded as traps rather than work.** The crash
+"fireball leads the explosion by 0.5 s" is contradicted by `player_crash_dirt`, which authors the
+ground boom *before* the fireball cascade; `window_hit_sg`/`bullet_hit_sg` are not world-data
+orphans — they ride 80 shipped `bullethole_anims` defs (only `snd_warningshot1-3` are); and the
+spec's shell-ejection description fails twice against `OriginalScreenshots/C1B IA1 Bloodhawk tracer
+and ejection.png` / `…ejection2.png` — the Bloodhawk ejects on a 40-cal/30-cal wing fit, so
+ejection is neither gated to the large calibres nor mounted on the underbelly. That bullet was
+rewritten from the captures (brass sprite + a persistent, aft-drifting white puff cluster at the
+wing mounts), which also corroborate the open muzzle-flash and tracer look items. The section
+carries a standing weighting note: the document's structural claims have held, its per-item art and
+balance numbers have repeatedly failed — take mechanisms from it, never magnitudes.
+Two existing entries were kept in step (pass-2 casing-ejection finding unblocked; the `DzRadius`
+TUNE's open mechanism question settled), and `docs/formats/vehicle.md`'s claim that AI variants
+ship unequal `destroyable_parts` hp pairs was corrected — re-measured, all 22 defs ship them equal,
+which is the evidence the armour-pool hypothesis rests on.

@@ -84,8 +84,9 @@ A list of part entries:
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
 - **The two `hp` values are equal in every entry** — all 88 parts across the 22 defs that carry
   `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. The
-  remake takes the first as max HP. *(An earlier version of this page said AI variants differ
-  25/20 — that is wrong; nothing in this install has an unequal pair.)*
+  remake takes the first as max HP and spends only `HEALTH_DAMAGE` against it (backlogged).
+  *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
+  this install has an unequal pair.)*
 - **Hypothesis: the pair is (armor, hit points).** See [below](#the-hp-pair-armor--hit-points-hypothesis).
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part. Not tail-only: it sits on

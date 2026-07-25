@@ -123,9 +123,10 @@ work is below.
    TUNE against the two ref shots. (Distinct from the pass-1 `fix/tracer-grow-from-muzzle` position fix.)
 3. **Casing (brass) ejection is missing entirely.** The original ejects shells with a **white smoke puff**
    below/behind the plane (clusters of white puffs + tiny yellow shells in `…tracer and ejection*.png`
-   and `Water Splash.png`). Nothing in `Projectile.cs` emits casings. *Blocked on data:* check whether a
-   brass/shell-eject effect def or puffer exists in the weapons/effects data, or whether it is engine-side
-   (then it becomes a synthetic effect, a fidelity guess). Medium priority — visible, adds life to gunfire.
+   and `Water Splash.png`). Nothing in `Projectile.cs` emits casings. Medium priority — visible, adds
+   life to gunfire. **No longer blocked on data (2026-07-25):** `gunshell.zrd.json` is a complete
+   ON_CALL ejection def and a `gunshell` gamez root exists — see "Small per-impact feedback gaps"
+   item 4 under Feature backlog. Only the white puff is still unlocated.
 4. **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
    (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
    nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
@@ -717,6 +718,183 @@ unscheduled.
   a prototype, unfair as a race. Options: spawn everyone abreast from one point (the
   `--spawn-at` `SpawnAbreast` fan already does this), or rank on a per-player-normalised time.
 
+### Combat-fidelity gaps found by a design cross-check (2026-07-25)
+
+Systems whose data ships complete and whose engine half does not exist, found by reading the
+original **pre-release** design spec against the code. Every claim below was re-verified against
+`extracted/`, `CSVM/src` or a retail capture first, and each entry says which half it rests on.
+
+⚠ **How much to trust that document, measured across this pass and earlier ones.** Its
+**structural** claims have held up against our data — per-hardpoint cluster sizes, the 8-firepoint
+rig, the zeppelin launch-altitude gate, the two-volume danger zones, the armour/health damage
+split. Its **per-item art and balance numbers have repeatedly failed** — gun ranges, rocket speeds,
+zone hit points, the crash fireball's timing, and shell ejection's calibre gate and mount position.
+**So: take the mechanism from it, never the magnitudes or the art direction, and prefer extracted
+data or an `OriginalScreenshots/` capture wherever either exists.** Where an entry below rests on
+the document alone, it says so and marks the value TUNE.
+
+- **The armour layer is unimplemented, so 18 of 48 weapon entries are mis-modelled.**
+  `WeaponDef.ArmorDamage` (`WeaponDefs.cs:78,239`) has exactly two consumers and both are display
+  strings — `--dump-weapons` (`PlaneViewer.cs:2792`) and the weapon lab (`WeaponLab.cs:572`). The
+  receiving side is one pool: `PlaneDamage.PartState` is a single `float Hp` and `Apply` a flat
+  subtract (`PlaneDamage.cs:21,54-60`). Consequence, measured: **18 `BALLISTICS` entries carry
+  `ARMOR_DAMAGE != HEALTH_DAMAGE`**, and that split *is* the player ammo-type system
+  (`docs/formats/weapons.md`, "The player damage matrix") — with only health modelled,
+  armour-piercing is strictly the **worst** round in every calibre (`30 AP` 1.5 health vs `30 DD`
+  4.5), so the tier is inverted, not merely simplified. Wanted: two pools per damage zone, **armour
+  first, with overflow spilling into health 1:1 within the same shot** so a nearly-stripped zone
+  never wastes damage. The armour-then-health *order* is already settled
+  (`docs/plans/PLAN-M3-weapons.md` C23's dominance argument); the overflow rule is the spec's.
+  ⚠ **Traps.** (a) **Where the armour pool comes from is a hypothesis, not a finding.** The
+  candidate is `destroyable_parts`' undecoded second value — measured 2026-07-25 it is **equal to
+  the first on all 22 defs** (11 `p*` + 11 `r*`), which is consistent with an armour pool *and*
+  with a duplicate. Adopting it **doubles** every part's effective HP against a balanced round: a
+  balance change, not a drop-in. (b) It **contradicts C23's model 1** ("player planes — per-part HP,
+  no armour/health pair"). The new evidence against that reading is `player.json`'s `crash` block,
+  which spends **`armor_damage_range [50,300]` and `health_damage_range [50,300]`** (plus
+  `bounce_factor 0.6`) on the *player's own* collision damage — hard to explain if player planes
+  have no armour pool. Nothing in `CSVM/src` reads that block either. Settle this before writing
+  code. (c) World destructibles carry **health only** (C23, measured over 16,114 defs) — this entry
+  does not touch them.
+
+- **No explosive radius — every rocket in the engine is direct-hit-only.** `ProjectilePool.SimStep`
+  does one `IntersectRay` per round per step and `Impact` spends `weapon.HealthDamage` on that
+  single struck collider (`Projectile.cs:428-431,534`). `ImpactProximity` (14 entries, 15–500 m)
+  and `DetonationDistance` (13 entries, 1–50 m) are parsed (`WeaponDefs.cs:85-86`) and only printed
+  (`PlaneViewer.cs:2794`). Wanted: a blast sphere at the detonation point with **linear falloff
+  applied to every damage zone inside it**, a **proximity fuse** detonating at
+  `DETONATION_DISTANCE` before contact (gated by `DETONATION_DOT_PRODUCT` on the three entries that
+  carry it), and knockback on the struck body. Falloff shape and knockback magnitude are spec, not
+  data — TUNE them.
+  ⚠ **Traps.** The anim-def `proximity_damage` flag is **`false` on every def install-wide**
+  (checked all 8 chapters) — it is not the mechanism and must not be wired as one.
+  `IMPACT_PROXIMITY` is not uniformly a *damage* radius: its two largest values are `FLARE` 500 m
+  and `FLASH` 450 m, both zero-damage specials that carry `DAMAGE 0` instead of the armour/health
+  split, so a naive radius × damage loop carpets the map. And the two fields are independent — the
+  torpedo is a **1 m** fuse with a **30 m** blast.
+
+- **Incoming-fire audio: the cue set ships complete and nothing can trigger it.** `bullet_warning_sg`
+  (= `snd_bulletpass1-3`, 3D, `RANGE [20,200]`) is bound in `player.json` as `warning_shot_sound`,
+  and the whole near-miss accumulator ships with it: `warning_shot_max 2.0`,
+  `warning_shot_dissipation 2.0`, `warning_shot_interval 1.0`. `bullet_hit_sg`
+  (= `snd_ricochet1-4`) is `bullet_hit_sound` in the same file **and** a `static_sound` on the five
+  `player_pfighter-bulletN` canopy-hole defs (the `bullethole_anims` of `docs/formats/vehicle.md`,
+  10 files per chapter × 8), which also carry `window_hit_sg` (= `snd_windowhit1-3`, non-3D).
+  **No caller in `CSVM/src` for any of it.** The design's rule is that incoming-fire intensity is
+  how the player reads a shooter's distance, calibre and ammo type — with that accumulator as the
+  rate/loudness term. Implementation is a near-miss test in `Projectile.cs` against each player rig.
+  ⚠ **Traps.** These are *not* "referenced by no world data" — `window_hit_sg`/`bullet_hit_sg` sit
+  on 80 shipped defs; only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
+  named nowhere). **The blocking dependency is that nothing can shoot an aircraft:** a plane exists
+  in physics only as a `CastMotion` query shape (`PlaneCollider`, used at
+  `FlightController.cs:1376`), never as a body, so a projectile raycast can never strike one — own
+  plane or another player's. The **near-miss cue does not need that** (segment-to-point distance
+  against each `PlayerRig`), so `bullet_warning_sg` is buildable today and would sound in 2–4P
+  splitscreen; `bullet_hit_sg` waits on aircraft bodies and `window_hit_sg` on a cockpit view (the
+  bullet defs are `PlayerFirstPerson`-gated). Single-player hears none of it until M4 AI shoots back.
+
+- **Danger Zone scoring uses one sphere where the original used two gate volumes.**
+  `StuntMission.Update` tests one point against `DzRadius` 15 m, order-free
+  (`StuntMission.cs:65,293-301`). The `dzpathN` mesh's polygons 1 and 2 are the zone's **entry and
+  exit apertures** — the spec confirms both must be crossed, specifically so a tangential clip
+  cannot score. A faithful test is therefore an **ordered pair of polygon-plane crossings**, not an
+  extent-derived radius; that is the fix for the "you fly *around* the danger and still score it"
+  half of the `DzRadius` TUNE (see "TUNE constants pending playtest" → Stunt mode for the three
+  measured leads — do not re-derive them).
+  ⚠ **Traps.** `DzRadius`'s docstring claims "the original has no gate geometry" — **false**;
+  delete that line when this lands. Under a gate-pair test the `dzN` marker becomes a **HUD anchor
+  only**, so the recorded marker↔gate-midpoint discrepancy (826 m on C1 dz2) **stops mattering** —
+  it is not a blocker, and the marker must not be "fixed" onto the gates: `MarkerHud.cs:144,145,158,212`
+  and the scoreboard still consume the marker point. Do not retune `DzRadius` here (hand-tuned by
+  the user). **Ordering is a separate, unsupported case:** the spec says at least one original
+  mission required its zones in strict order, but shipped `dzones` is a bare `[dzpathN, dzN]` pair
+  list with no order field (checked C1/IA1), so any ordering was mission-scripted or engine-side —
+  untestable until campaign missions exist, and our model is order-free.
+
+- **Nitro booster — scoped, low priority (the user's standing call).** Recorded because the data is
+  complete and waiting, not as a discovery. Shipped: `MSG_CMD_NITROUS` ("Use Nitro-Booster") is a
+  bindable command and `MSG_HUD_NITRO` ("Nitrous: boost: %1 charge: %2") its two-value readout;
+  `nitrogauge` is in `instruments.zrd.json`'s cockpit layout and all 11 planes carry
+  `nitrogauge` / `nitro_backplate` / `nitro_boost` / `nitro_charge` gauge nodes in planes.zbd;
+  `nitro_boost` / `nitro_decay` are ON_CALL anim defs in `plane_props.zrd.json` (with `ai_nitro_*`
+  wrappers) firing `snd_nitrostart` / `snd_nitrostop` at `nitroprop1` and driving `nitropuff1-4`
+  plus `spin_nitrorotor1-3`; `snd_nitro` is a LOOPED 3D loop (`RANGE [30,400]`). `PropParts`
+  already classifies `nitropropN`, and both `PlaneBuilder` and each plane's own `RESET_STATE` ship
+  it INACTIVE — so the visual half is one `Kind.Nitro` unhide away.
+  ⚠ **The numeric tuning stats did not ship.** No nitro key exists in `vehicle.json` or
+  `player.json` — boost magnitude, charge capacity, burn rate, recharge rate and the speed cap are
+  executable-resident, so this needs a hand-tuned balance pass A/B'd against the original, not a
+  data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
+  buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
+
+- **Small per-impact feedback gaps — five, all with the data already shipped.** Grouped because each
+  is a few lines of wiring against an authored def and they share one theme: the moment something
+  hits the plane, or the plane touches something, is under-communicated.
+  1. **`damaged_engine_sound` is never read.** It sits on `basic_airplane`, so **every** plane
+     inherits it: `[["snd_damagedengine", 0.0, 1.0]]`, and `snd_damagedengine` is a LOOPED 3D loop
+     (`RANGE [130,420]`) — a second engine loop to blend in as the airframe takes damage.
+     `PlaneStats` reads `engine_sound` (`PlaneStats.cs:190`) and not this one. The two trailing
+     floats are unlabelled and undecoded (plausibly a health-fraction fade window).
+  2. **The per-impact spark burst — but it is *not* `got_hit_anim`.** `got_hit_anim` is parsed and
+     unread (`PlaneStats.cs:36,232`), but the defs it names only blink a `nosedamage` node eight
+     times — a cockpit indicator, which `GaugeCluster.OnPartDamage` already approximates by hand.
+     The real impact effect is the **`injure_anims` 0.99 entry**: `<part>_damage_effects` →
+     `random_gun_impact` → `yellow_sparks_follow` at a randomly chosen `pdpN` panel.
+     `DamageVisuals.cs:194-195` explicitly skips both. Now wireable — the D32 world-effects runtime
+     that plays a named effect at a point exists.
+  3. **A glancing collision is silent, and three per-surface variants ship.** `touchdown.zrd.json`
+     holds `touchdown_default` / `touchdown_dirt` / `touchdown_water` (sequences `glance_spark` /
+     `glance_dust` / `glance`), each activating `spark_touchdown` / `dust_touchdown` /
+     `splash_touchdown` with `snd_exp_ground_b` / `snd_exp_water_b`. Nothing in `CSVM/src` mentions
+     `touchdown`, and `FlightController.SurviveHit` plays **no audio and shows nothing** — only the
+     fatal `Crash()` sounds (`OnCrash` + `OnGroundExplosion`).
+  4. **Shell ejection is authored data, not a fidelity guess.** `gunshell.zrd.json` is a complete
+     ON_CALL def — `OBJECT_MOTION` on the `gunshell` node, `GRAVITY [LOCAL, -3.0, NO_ALTITUDE]`,
+     `TRANSLATION_RANGE_MIN [10,-75,1.5,0]` / `_MAX [-10,-85,1.8,0]`, `FORWARD_ROTATION TIME 1200`
+     (the tumble), `RUN_TIME 2`, then deactivate — and a `gunshell` root node exists in the chapter
+     gamez. Referenced by nothing. **This closes the "blocked on data" question in "Playtest pass 2"
+     finding 3** (casings missing): the shell half is data.
+     **What retail actually does** (`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`
+     and `…ejection2.png`, chase view, guns firing): each ejection is **one small brass casing
+     sprite plus a cluster of ~5–6 overlapping white smoke puffs**, and the puffs **persist and
+     drift aft** — in shot 2 a cluster has fallen well back and below the aircraft while a fresh
+     casing is still leaving the wing. They originate **at the wing gun mounts, outboard on each
+     wing**, not from the fuselage. Same shots corroborate two open look items: the muzzle flash is
+     a bright yellow core with orange flame at its base, elongated forward and slightly outboard
+     from the wing mount, and fires from **one wing at a time**; tracers are **short yellow dashes**
+     (findings 1 and 2 above).
+     ⚠ **The design spec is wrong here twice and was rejected against those captures** — it gates
+     shell ejection to the 50- and 70-cal guns and places it on the underbelly. The Bloodhawk in the
+     shots is ejecting, and its stock fit is 40-cal inner + 30-cal outer **wing** guns
+     (`CSVM/data/stock_loadouts.json`), so neither the calibre gate nor the underbelly holds. Do not
+     re-derive either from the document. The white puff is still unmatched to any shipped effect def
+     — locating it (or accepting a synthetic one) is the remaining unknown, and it is the larger
+     half of the visual.
+  5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
+     SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
+     the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
+     replay-camera sting — the name argues for the latter.
+  ⚠ **Dropped from this group after checking — the "fireball leads the crash explosion by 0.5 s"
+  claim does not survive the data.** In `player-player_crash_dirt.json` the `Sound snd_exp_ground_a`
+  event is authored **before** the `large_fireball` calls (which cascade at +0, +0.25, +0.25,
+  +0.25), and `large_fireball` carries no sound of its own. A lead in `FlightAudio.OnCrash` is a
+  spec claim the shipped choreography contradicts — do not add one.
+
+- **`sticky_bullet_*` — a shipped aim-assist system nothing reads.** `player.json` carries
+  `sticky_bullet_catchup_rate 5.0`, `sticky_bullet_inaccuracy 1.0`,
+  `sticky_bullet_forget_interval 1.5`, `sticky_bullet_dist_factor 0.0`; **zero references anywhere
+  in the repo.** The names read as bullet magnetism toward a tracked target — how fast rounds catch
+  up, a scatter term, and how long a round remembers its target — with distance attenuation shipped
+  **off** (`dist_factor 0`).
+  ⚠ **Traps.** `player.json` is the *global* tuning file, not a player-only one (it also holds
+  `min_ai_active_dist`, `ai_groundblow`, `ai_skill_parameters`), so whether this assists the
+  **player's** gunnery or the **AI's** is unsettled — settle that first, because "your bullets
+  curve" and "their bullets curve" are opposite feel promises. Untestable either way until aircraft
+  are hittable (see the incoming-fire entry). **The cheap first half is documentation:** no
+  `docs/formats/` page covers `player.json`'s combat/AI globals — `vehicle.md` documents only
+  `nom_gravity` and `sounds.md` the curve blocks — so `warning_shot_*`, `sticky_bullet_*`, the
+  `crash` armour/health ranges and `respawn_rad`/`respawn_el` are all undocumented shipped tuning.
+
 ## Open fidelity questions (answerable by testing the original)
 
 - **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
@@ -903,7 +1081,10 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
     two gate outlines** — 3- to 18-point planar rings bracketing the thing you fly through.
     Measured across all 54 zones in C1/C1B/C2/C3/C4/C5. So the implementation is either "cleared
     when the plane crosses the prism between the two rings", or the cheaper "per-zone radius from
-    each ring's own extent".
+    each ring's own extent". **Settled 2026-07-25 in favour of the first** — the two rings are the
+    entry and exit apertures and both must be crossed; the cheap radius reading does not stop the
+    tangential clip. Mechanism, traps and what stops mattering: "Danger Zone scoring uses one
+    sphere…" under Feature backlog. `DzRadius` stays a TUNE until that lands.
   - ❌ **`dzN`'s `RotateTranslateScale.scale` is a dead end** — measured **unit on all 53** markers.
   - ❌ **`node_bbox`/`child_bbox` are a dead end for `dzN`** — measured **all-zero on all 53** (they
     are `model_index -1` point nodes). They carry real values only on `sghangar`, the one
