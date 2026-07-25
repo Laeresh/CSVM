@@ -66,7 +66,7 @@ public sealed class PlaneStats
     public float FlightCeiling = 2500f;
 
     // player.json globals
-    public float Gravity = 9.81f;          // nom_gravity — the game's arcade gravity, m/s²
+    public float Gravity = 20.0f;          // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
     // sound (vehicle.json 'engine_sound' name + player.json curve blocks).
