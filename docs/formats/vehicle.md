@@ -57,9 +57,13 @@ A list of part entries:
 ```
 
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
-- The two `hp` values are identical for player defs (20 for pbloodhawk, 25 for
-  pdevastator); AI variants differ (25/20) — semantics of the second value undecoded, the
-  remake takes the first as max HP.
+- The two `hp` values are **identical on every def that carries the block** — all 22 of them,
+  the 11 `p*` player defs and the 11 `r*` variants (20 for pbloodhawk, 25 for pdevastator,
+  40/35/25/25 nose/tail/wings for pbalmoral). Re-measured 2026-07-25; an earlier note here
+  claiming the AI variants ship 25/20 was wrong. Semantics of the second value undecoded — the
+  equal pair matches the `armor`/`health` shape aircraft carry below, so "armour, health" is the
+  leading reading, but equality is also consistent with a plain duplicate. The remake takes the
+  first as max HP and spends only `HEALTH_DAMAGE` against it (backlogged).
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` (tail only) — engine damage/power loss on that part
   (flight-handling penalties deliberately unmodeled this run).
