@@ -238,6 +238,14 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     not on a fixed impact count (the impact log itself caps at 8, so a later water hit still logs its
     effect while the surface line is capped out).
 
+78. **Godot's physics tick is ALREADY a fixed 1/60 s, so "two runs log identical flight telemetry"
+    cannot discriminate a fixed sim clock — vary the RENDER rate instead.** Two `--det` scripted
+    `--hold` flights matched 15/15 telemetry lines, and so did two runs *without* `--det`: a check
+    that passes on both builds is not a check (rule 14). The property `--det` actually adds is that
+    sim state is a function of the FRAME COUNT, so the able-to-fail control is `--max-fps 30`:
+    900 rendered frames give 15 sim seconds and the same final pose under `--det`, 30 sim seconds
+    and a different pose without it.
+
 ## What this project cannot verify itself
 
 These need the user:

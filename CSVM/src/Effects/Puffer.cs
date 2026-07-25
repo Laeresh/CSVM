@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Effects;
@@ -629,7 +630,8 @@ public sealed partial class Puffer : Node3D
     {
         if (!_active)
             return;
-        float dt = (float)delta;
+        // Particles are sim state: they freeze with a halted clock and scale with a scaled one.
+        float dt = GameClock.Current?.FrameDt ?? (float)delta;
         _sinceStart += dt;
 
         if (_emitting)

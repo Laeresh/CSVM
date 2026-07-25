@@ -278,7 +278,19 @@ public partial class PlaneViewer : Node3D
     private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
     private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
 
+    // --det: run the session on a fixed-dt sim clock, so frame N is the same sim state on every
+    // run whatever the render rate. The clock is all it does for now — seeding, spawn and livery
+    // pinning are still their own flags.
+    private bool _det;
+
     private Node3D? _plane;
+    // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
+    // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
+    private GameClock? _clock;
+    // The physics-stepped consumers this node drives itself when the clock is not realtime, in
+    // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
+    private ProjectilePool? _projectiles;
+    private UI.WeaponLab? _weaponLabNode;
     private Mech3.MapEdgeExtender? _edgeExtender; // rolling mirrored-tile window past the map edge
     private Vector3 _deckCenter;       // the deck geometry's original AABB centre (to re-anchor it)
     private WeatherState? _weather;    // per-mission fog + cloud band (--fly only)
@@ -386,6 +398,11 @@ public partial class PlaneViewer : Node3D
 
     public override void _Ready()
     {
+        // The session clock is advanced at the top of this node's _Process, and every sim consumer
+        // reads it during the same frame — so this node has to tick first. Godot runs the lowest
+        // priority first.
+        ProcessPriority = -1000;
+
         // Load the optional tuning-override file first, before any module reads a Config value.
         // Missing/malformed file → in-code defaults (never throws); see src/Config.cs.
         Config.Load();
@@ -441,6 +458,7 @@ public partial class PlaneViewer : Node3D
             // model, which quietly makes a "deterministic" scripted screenshot not one. SDL's
             // hints don't help (Godot 4.7 enumerates the pad regardless), so the switch is ours.
             else if (arg == "--no-pads") Pads.Disabled = true;
+            else if (arg == "--det") _det = true;
             else if (arg == "--perf") _perf = true;
             else if (arg.StartsWith("--anim-lod=")) _animLod = int.Parse(arg["--anim-lod=".Length..]);
             else if (arg == "--menu") _forceMenu = true; // force the launchscreen even with other args
@@ -704,6 +722,24 @@ public partial class PlaneViewer : Node3D
     {
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
+        // One simulation clock per session. --det pins it to a fixed step in every mode; the
+        // animation lab is fixed-dt by nature (an accumulator interactively, one step per rendered
+        // frame when scripted); everything else runs at the wall delta, which is arithmetically
+        // what each consumer used before the clock existed.
+        _clock = new GameClock
+        {
+            Mode = _det || (_animLab && _screenshotPath != null) ? GameClock.RunMode.FixedStep
+                : _animLab ? GameClock.RunMode.FixedAccum
+                : GameClock.RunMode.Realtime,
+        };
+        GameClock.Current = _clock;
+        if (_det)
+        {
+            // InvariantCulture: a German locale renders this with a comma decimal, which turns a
+            // machine-read line into two fields.
+            GD.Print(string.Format(System.Globalization.CultureInfo.InvariantCulture,
+                "det: fixed-dt sim clock, {0:0.###} ms per frame", GameClock.FixedDt * 1000f));
+        }
         _camera.Fov = _fly || _freecam || _animLab ? 62 : 50;
         // One rig per rendered view, before anything camera-anchored is built (the skydome and
         // weather visuals below are per-rig). Single player reuses the main-viewport camera.
@@ -988,8 +1024,7 @@ public partial class PlaneViewer : Node3D
 
                     animLab = new UI.AnimLab(session.Runtime, session.Program, labCam, session.Root,
                         labStage, textures, sounds, _labSeed, _playAnim,
-                        autoFrame: _camPos == null && _lookAt == null,
-                        fixedFrameStep: _screenshotPath != null)
+                        autoFrame: _camPos == null && _lookAt == null)
                     {
                         // Interactive shows the whole lab UI; a scripted --screenshot hides it so
                         // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
@@ -1134,6 +1169,7 @@ public partial class PlaneViewer : Node3D
                     AutoFireAtStart = _weaponFire,
                 };
                 _worldRoot!.AddChild(weaponLab);
+                _weaponLabNode = weaponLab;
                 // --weapon-test: mount and fire every one of the 48 weapons once and report any that
                 // throw, then quit (windowless under --headless). The report is
                 // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
@@ -1240,6 +1276,7 @@ public partial class PlaneViewer : Node3D
                     DamageSink = worldRuntime != null ? worldRuntime.DamageAt : null,
                 };
                 _worldRoot!.AddChild(projectiles);
+                _projectiles = projectiles;
 
                 // The world-effects runtime (D32): one per session, rendering the impact/destruction
                 // puffer effects the world runtime cannot (its factory is gone after the build). A
@@ -1889,6 +1926,12 @@ public partial class PlaneViewer : Node3D
         _precip = null;
         _edgeExtender = null;
         _weather = null;
+        // The clock and the consumers it drives explicitly go with the session; a null
+        // GameClock.Current puts any node that outlives the teardown back on its raw frame delta.
+        _clock = null;
+        GameClock.Current = null;
+        _projectiles = null;
+        _weaponLabNode = null;
         // Clears csky_light_count, so the next world does not inherit this one's spill for the
         // frame between teardown and the new runtime's first tick.
         _worldLights?.Dispose();
@@ -3488,8 +3531,56 @@ public partial class PlaneViewer : Node3D
             : "focus: regained — audio restored, pad reads live");
     }
 
+    /// <summary>Steps the consumers whose sim normally rides Godot's physics tick. They return
+    /// early from <c>_PhysicsProcess</c> whenever the clock is not realtime (GameClock.PhysicsDt
+    /// hands them 0), because a fixed or halted sim cannot be paced by a tick it does not own.
+    /// Order is the tree order those callbacks had — the shared projectile pool before the flight
+    /// controllers, the weapon lab before the pool it owns — so a round fired this frame behaves
+    /// exactly as it did.</summary>
+    private void DriveSimSteps(GameClock clock)
+    {
+        for (int i = 0; i < clock.Steps; i++)
+        {
+            float dt = clock.Dt;
+            _projectiles?.SimStep(dt);
+            foreach (var rig in _rigs)
+            {
+                rig.Controller?.SimStep(dt);
+            }
+            if (_weaponLabNode != null)
+            {
+                _weaponLabNode.SimStep(dt);
+                _weaponLabNode.Pool.SimStep(dt);
+            }
+        }
+    }
+
+    /// <summary>Whether P / <c>.</c> may halt this session. Splitscreen flight says no: the freeze
+    /// halts the shared world, so it is not one player's to press (the same rule
+    /// <see cref="FlightController.AllowPause"/> applies to the in-flight binding).</summary>
+    private bool HaltAllowed => !_fly || _rigs.Count == 1;
+
     public override void _UnhandledInput(InputEvent @event)
     {
+        // P halts the sim, . steps it one frame — in freecam, the static viewer and the
+        // launchscreen. Flight polls P itself (FlightController, so gamepad Start keeps working)
+        // and the animation lab owns its own transport, so neither is handled here.
+        if (!_animLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
+            && _clock != null && HaltAllowed)
+        {
+            if (clockKey.Keycode == Key.P && !_fly)
+            {
+                _clock.Halted = !_clock.Halted;
+                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame)" : "clock: running");
+                return;
+            }
+            if (clockKey.Keycode == Key.Period)
+            {
+                _clock.Halted = true;
+                _clock.StepOnce();
+                return;
+            }
+        }
         if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
         {
             // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
@@ -3526,6 +3617,20 @@ public partial class PlaneViewer : Node3D
 
     public override void _Process(double delta)
     {
+        // First thing in the frame (ProcessPriority): decide how much sim time this rendered frame
+        // is worth, then — when the clock is not realtime — step the physics-driven consumers
+        // ourselves, in the tree order Godot's physics tick would have used.
+        if (_clock is { } clock)
+        {
+            clock.BeginFrame(delta);
+            if (clock.ParentDriven)
+            {
+                DriveSimSteps(clock);
+            }
+        }
+        // The diagnostics below stay on wall time: a frame-budget report and a poll for entities
+        // an animation has since placed are both instruments, and an instrument that freezes with
+        // the thing it measures reports nothing.
         if (_perf)
             ReportPerf(delta);
         // Entities switched off as unplaced (see WorldBuilder.HideUnplacedEntities) that have
@@ -3585,7 +3690,8 @@ public partial class PlaneViewer : Node3D
             // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
             // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
             // so fresh puffs spawn ahead and the plane flies into them.
-            rig.Puffs?.Update((float)delta, camPos, -rig.Camera.GlobalTransform.Basis.Z);
+            rig.Puffs?.Update(_clock?.FrameDt ?? (float)delta, camPos,
+                -rig.Camera.GlobalTransform.Basis.Z);
         }
 
         // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window

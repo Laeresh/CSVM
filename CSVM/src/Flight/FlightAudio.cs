@@ -186,6 +186,26 @@ public partial class FlightAudio : Node
         UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
     }
 
+    /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:
+    /// the engine/whine/rattle keep their sample position and volume instead of droning through a
+    /// frozen frame. One-shots already in flight are deliberately left to play out — they are
+    /// short and stopping them mid-sample is the louder artefact.</summary>
+    public void SetPaused(bool paused)
+    {
+        if (_engine != null)
+        {
+            _engine.StreamPaused = paused;
+        }
+        if (_whine != null)
+        {
+            _whine.StreamPaused = paused;
+        }
+        if (_rattle != null)
+        {
+            _rattle.StreamPaused = paused;
+        }
+    }
+
     /// <summary>Kills the flight loops (dead engine) and fires one of the game's
     /// plane-explosion one-shots.</summary>
     public void OnCrash()

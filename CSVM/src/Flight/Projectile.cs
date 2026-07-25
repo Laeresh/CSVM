@@ -390,7 +390,19 @@ public sealed partial class ProjectilePool : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        float dt = (float)delta;
+        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
+        if (dt <= 0f)
+        {
+            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
+        }
+        SimStep(dt);
+    }
+
+    /// <summary>One ballistics step: integrate every live round, raycast its segment, expire it at
+    /// RANGE, and age the muzzle/impact sprites. Public because a non-realtime clock has the
+    /// session call this instead of Godot's physics tick.</summary>
+    public void SimStep(float dt)
+    {
         var space = GetWorld3D()?.DirectSpaceState;
         for (int i = 0; i < _projHigh; i++)
         {

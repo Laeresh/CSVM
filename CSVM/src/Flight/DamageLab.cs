@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.Linq;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -96,9 +97,11 @@ public sealed partial class DamageLab : Node
             _gaugeLayer.Visible = on && _gaugesWanted;
     }
 
-    /// <summary>Burns the assigned trails in place at the parked plane.</summary>
+    /// <summary>Burns the assigned trails in place at the parked plane, on sim time — so a halted
+    /// clock freezes the fires for a still capture.</summary>
     public override void _Process(double delta) =>
-        _visuals.UpdateStatic((float)delta, _plane.GlobalPosition, _plane.GlobalTransform.Basis);
+        _visuals.UpdateStatic(GameClock.Current?.FrameDt ?? (float)delta,
+            _plane.GlobalPosition, _plane.GlobalTransform.Basis);
 
     public override void _UnhandledKeyInput(InputEvent @event)
     {
