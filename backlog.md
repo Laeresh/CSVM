@@ -620,6 +620,16 @@ unscheduled.
   have to be invented. The mount names are data (`IDS_AIRFRAMEGUNGROUPNAMES`, ui_strings
   3060–3079) and the per-plane stock table is authored, so the *placing* half is real.
 
+- **M4 (AI) is scoped but NOT scheduled** — [`docs/SCOPING-M4-ai.md`](docs/SCOPING-M4-ai.md)
+  (2026-07-25). The shipped AI data (patrol graphs, turret specs, AI vehicle rosters, generators,
+  zeppelin combat parameters, 1,309 combat voice clips) is already in the extraction and **nothing in
+  the engine reads any of it**; the document inventories it against the retail files, re-expresses the
+  original design's AI specification, and grades what the engine can reuse unchanged. **Its headline
+  blocker — the flying aircraft has no physics body, so nothing can shoot a plane — gates the whole
+  milestone.** It is a scoping study, not a plan: scheduling it means renaming it to
+  `docs/PLAN-M4-ai.md`. The per-pilot skill vector is located and bounded in
+  `analysis/m4-ai-data/FINDINGS.md`. The items below are the M3-era leads it absorbs.
+
 - **M4 dependencies discovered while planning M3** (2026-07-22) — recorded so they are not
   re-derived:
   - **Turrets are AI gunners**, not player-aimed: they acquire and engage other aircraft
