@@ -235,6 +235,11 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     runtime-played puffer effect by confirming its def started — confirm a `Puffer` was *built*
     (a non-null factory), or you are measuring a no-op. Rendering impact/destruction puffers needs a
     dedicated world-effects runtime on that crash-runtime pattern (D32), not a call into the world runtime.
+    **And that runtime is not a blanket fix — it binds a FIXED closure of effect names.** A killed C1
+    building's `great_balls_of_fire` renders through it in `--freecam`; the same kill's progressive
+    stages (`sputter_black_smoke_obj`) and the def's own `h2twr_puffer` sequence are not in the
+    closure, so they start, log, and draw nothing. Check the name is bound before reading "the def
+    started" as "the effect showed".
 77. **A weapon-impact test is reproducible ONLY under `--det`/`--seed` — `CANNON_SPREAD` is a
     per-round dice roll everywhere else.** Two `--det` C1B dives now log **8 of 8 identical impact
     positions**; the same pair without a pinned master seed shares none. Unpinned, don't rely on "I
@@ -420,6 +425,14 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      0.01–0.04 ms in every scenario because the fixed clock is parent-driven, so `_PhysicsProcess`
      consumers no-op and collision cost lands in `script`. Even uncapped this machine still paces at
      exactly 120 fps, so `fps`/`frame_ms` stay floors (rule 38); read `render_cpu`, `gpu` and the counts.
+
+103. **One object can hold several destructible HP pools, and only ONE of them is reachable by
+     damage — drive the wrong one and the object never reacts.** C1's `ap_h2otwr1` carries the
+     compiled `h2twr_destruction1@ap_h2otwr1` and the reader wildcard's `h2twr_destruction*@ap_h2otwr*`,
+     both anchored on the same node with their own 60 HP. `DamageAt` re-resolves through
+     `DestructibleRegistry.Resolve` (compiled preferred), so spending health on the twin drains a pool
+     nothing will ever hit while the real one sits at full — indistinguishable from "damage is
+     broken". Any instrument or UI that damages a pool must name which pool it drove.
 
 ## What this project cannot verify itself
 

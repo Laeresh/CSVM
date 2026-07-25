@@ -368,6 +368,82 @@ public static class Probes
 
     // ---- destructible damage -----------------------------------------------------------------
 
+    /// <summary>Every enabled collision shape under a subtree. SceneBuilder attaches a
+    /// <c>StaticBody3D</c> named <c>col</c> with one <c>CollisionShape3D</c> per collidable mesh, and
+    /// <c>SetSubtreeActive</c> toggles that shape's <c>Disabled</c> as it swaps healthy→destroyed.
+    /// The swap targets nodes through the compiled symbol table, which can resolve to geometry
+    /// OUTSIDE the small anim anchor, so a census under the anchor misses it — pass
+    /// <see cref="WorldRootOf"/> and compare the two sets around one kill.
+    /// <para><b>Report the two directions separately, never the signed sum</b> (verification rule
+    /// 73): a death both switches the healthy collider off and brings wreck colliders on, and the
+    /// net can be positive while the real removal happened.</para></summary>
+    public static HashSet<CollisionShape3D> EnabledColliders(Node root)
+    {
+        var set = new HashSet<CollisionShape3D>();
+        void Walk(Node n)
+        {
+            if (n is CollisionShape3D cs && !cs.Disabled)
+            {
+                set.Add(cs);
+            }
+            foreach (var c in n.GetChildren())
+            {
+                Walk(c);
+            }
+        }
+        Walk(root);
+        return set;
+    }
+
+    /// <summary>The top <see cref="Node3D"/> above a node — the world subtree root, so a census
+    /// walks placed + partition geometry and not the UI or the Window.</summary>
+    public static Node3D WorldRootOf(Node3D n)
+    {
+        var t = n;
+        while (t.GetParent() is Node3D p)
+        {
+            t = p;
+        }
+        return t;
+    }
+
+    /// <summary>Counts the <c>healthy</c>/<c>destroyed</c> variant nodes under a subtree and how
+    /// many of each are shown — the death-swap diagnostic. Names only: the swap mechanism itself
+    /// keys off the definition's own <c>OBJECT_ACTIVE_STATE</c>, never a name scan.</summary>
+    public static void CountVariants(Node3D root, out int healthyVisible, out int healthyAll,
+        out int destroyedVisible, out int destroyedAll)
+    {
+        int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
+        void Walk(Node3D n)
+        {
+            string cs = n.HasMeta(AnimRuntime.NameMeta)
+                ? n.GetMeta(AnimRuntime.NameMeta).AsString()
+                : n.Name.ToString();
+            if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase))
+            {
+                hAll++;
+                if (n.Visible) { hVis++; }
+            }
+            if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
+            {
+                dAll++;
+                if (n.Visible) { dVis++; }
+            }
+            foreach (var c in n.GetChildren())
+            {
+                if (c is Node3D c3)
+                {
+                    Walk(c3);
+                }
+            }
+        }
+        Walk(root);
+        healthyVisible = hVis;
+        healthyAll = hAll;
+        destroyedVisible = dVis;
+        destroyedAll = dAll;
+    }
+
     /// <summary>Sweeps one live destructible instance per distinct def (optionally filtered) and
     /// records what its damage/death did. Two modes: <paramref name="damageHd"/> &gt; 0 spends that
     /// much HEALTH_DAMAGE per discrete weapon hit (death swap, colliders, debris, sound, the
@@ -384,76 +460,6 @@ public static class Probes
 
         static bool HasDamage(AnimDefinition d) => d.Sequences.Any(s =>
             string.Equals(s.Name, "DAMAGE_SEQUENCE", StringComparison.OrdinalIgnoreCase));
-
-        // Colliders: SceneBuilder attaches a StaticBody3D "col" with a CollisionShape3D per
-        // collidable mesh, and SetSubtreeActive toggles that shape's Disabled as it swaps
-        // healthy→destroyed. The swap targets nodes via the compiled symbol table (NodeRefs), which
-        // can resolve to geometry OUTSIDE the small anim anchor — so counting under the anchor misses
-        // it. Census the WHOLE world instead and report the per-kill delta: a quiet harness kills one
-        // object at a time, so (enabled before − after) is exactly the collision it switched off.
-        static HashSet<CollisionShape3D> EnabledColliders(Node root)
-        {
-            var set = new HashSet<CollisionShape3D>();
-            void Walk(Node n)
-            {
-                if (n is CollisionShape3D cs && !cs.Disabled)
-                {
-                    set.Add(cs);
-                }
-                foreach (var c in n.GetChildren())
-                {
-                    Walk(c);
-                }
-            }
-            Walk(root);
-            return set;
-        }
-
-        // The top Node3D above an anchor — the world subtree root, so the census excludes the UI /
-        // Window and only walks placed + partition geometry.
-        static Node3D WorldRoot(Node3D n)
-        {
-            var t = n;
-            while (t.GetParent() is Node3D p)
-            {
-                t = p;
-            }
-            return t;
-        }
-
-        static void CountVariants(Node3D root, out int healthyVisible, out int healthyAll,
-            out int destroyedVisible, out int destroyedAll)
-        {
-            int hVis = 0, hAll = 0, dVis = 0, dAll = 0;
-            void Walk(Node3D n)
-            {
-                string cs = n.HasMeta(AnimRuntime.NameMeta)
-                    ? n.GetMeta(AnimRuntime.NameMeta).AsString()
-                    : n.Name.ToString();
-                if (cs.Contains("healthy", StringComparison.OrdinalIgnoreCase))
-                {
-                    hAll++;
-                    if (n.Visible) { hVis++; }
-                }
-                if (cs.Contains("destroyed", StringComparison.OrdinalIgnoreCase))
-                {
-                    dAll++;
-                    if (n.Visible) { dVis++; }
-                }
-                foreach (var c in n.GetChildren())
-                {
-                    if (c is Node3D c3)
-                    {
-                        Walk(c3);
-                    }
-                }
-            }
-            Walk(root);
-            healthyVisible = hVis;
-            healthyAll = hAll;
-            destroyedVisible = dVis;
-            destroyedAll = dAll;
-        }
 
         var result = new DamageResult
         {
@@ -523,7 +529,7 @@ public static class Probes
             target.Health = target.MaxHealth;
             target.Status = DestructibleRegistry.State.Healthy;
             target.DamageStage = 0;
-            var colBefore = damageHd > 0f ? EnabledColliders(WorldRoot(target.Anchor)) : new HashSet<CollisionShape3D>();
+            var colBefore = damageHd > 0f ? EnabledColliders(WorldRootOf(target.Anchor)) : new HashSet<CollisionShape3D>();
             int debrisBefore = runtime.BallisticMotionsLaunched;
             int soundsBefore = runtime.OneShotSoundsPlayed;
             runtime.OnInstanceStarted += OnStarted;
@@ -579,7 +585,7 @@ public static class Probes
                 // healthy door/building collision that stops blocking flight) vs ON (the wreck/debris
                 // the death — and any chained animation — brings solid). A net count hides the door
                 // removal when the death also spawns a solid wreck.
-                var colAfter = EnabledColliders(WorldRoot(target.Anchor));
+                var colAfter = EnabledColliders(WorldRootOf(target.Anchor));
                 row.CollidersOff = colBefore.Count(cs => !colAfter.Contains(cs));
                 row.CollidersOn = colAfter.Count(cs => !colBefore.Contains(cs));
                 swap += $"col[off {row.CollidersOff}, on {row.CollidersOn}]; ";
@@ -690,7 +696,7 @@ public static class Probes
                     Walk(c, name);
                 }
             }
-            Walk(WorldRoot(chosen[0].Anchor), "");
+            Walk(WorldRootOf(chosen[0].Anchor), "");
             var inv = new StringBuilder($"{cols} collidable meshes, by owner cs_name:\n");
             foreach (var (nm, c) in byName)
             {

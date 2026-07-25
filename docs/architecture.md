@@ -421,6 +421,9 @@ bootstrap, read by `ANIM_HEALTH` eval, escalated by `ApplyDamageStages`, damaged
 ⚠ Instances can exceed node groups (`Count` vs `DistinctAnchors`): the reader's wildcard def and
   the compiler's per-instance defs both bind the same nodes, so one object carries several pools
   (same HEALTH). `_authoritative` keeps ONE per anchor node, compiled-preferred.
+⚠ `PoolsOn(node)` is every pool anchored on exactly that node; pair it with `Resolve` (which names
+  the one a hit reaches) rather than filtering `All` again — the node lab and the world damage lab
+  both read it, and the ones `Resolve` does not name cannot be damaged at all.
 ⚠ `Resolve` walks the WHOLE parent chain and takes the nearest COMPILED anchor, not the first hit:
   a reader wildcard can grab an inner node the compiled def doesn't (tower `ap_h2otwr*` matches
   `ap_h2otwr.flt`, between the collider and the compiled `ap_h2otwr1` root), and the compiled def
@@ -1041,11 +1044,28 @@ columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin.
 ⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (rules 43/72): the
   collider line prints the not-built-in-this-mode notice, and on a `--node=` slice the anim and
   destructible readouts carry a PARTIAL WORLD banner with the bind census. `collisionBuilt` is
-  wired to the real `WorldSession` option but is false in every mode this lab runs in today —
-  D35's `--collision` is what flips it.
+  wired to the real `WorldSession` option, which `--debug-damage` forces on (as `--damage-test`
+  does); without it no mode this lab runs in builds collision.
 ⚠ Destructible rows come from the PROGRAM's `HEALTH>0` defs joined to the registry, so a def that
   bound nothing shows as `UNRESOLVED`; the totals equal the `destructible-census` suite's.
 ⚠ Builds no UI until N (or `--debug-nodelab`): the 11 goldens hold unchanged with it in the tree.
+
+## src/UI/WorldDamageLab.cs
+The world damage lab (H) in `--freecam`/`--anim-lab`: the destructible pools of whatever
+`SelectionService` holds, each with live HP, and a slider + Kill + Reset on the one a weapon hit
+reaches, driving `AnimRuntime.DamageAt`/`ResetDestructible`. `--debug-damage[=node=,pool=,hp=,kill,
+reset,tick=,open]` is the scripted twin (an ordered script, not a token set).
+⚠ **Only the pool `DestructibleRegistry.Resolve` names is drivable.** A node can carry several
+  `(def, anchor)` pools (C1's water tower: compiled + reader wildcard); the others are listed
+  read-only with the reason. Driving a twin damages a pool nothing can ever hit.
+⚠ **The slider is absolute HP** — down spends through `DamageAt`, up runs `ResetDestructible` then
+  re-damages, because the model has no healing (`DamageStage` only climbs).
+⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, rule 75);
+  colliders print `off=`/`on=` separately (rule 73) or the not-built notice (rule 72).
+⚠ **Freecam builds no world-effects runtime** — the first damage action asks `PlaneViewer` for the
+  one `--destroy` uses. Its bound name closure does NOT include the `sputter_*_obj` stage puffers or
+  a def's own `PUFFER_STATE`, so those fire in the log and draw nothing here (rule 76).
+⚠ Builds no UI until H (or `--debug-damage`): the 11 goldens hold unchanged with it in the tree.
 
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
@@ -1204,8 +1224,8 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
 ⚠ `RunDamageTest` (`--damage-test[=name]`, freecam) is the headless destructible harness: continuous
   HP sweep (C22 stages) or, with `--damage-hd=N`, discrete N-`HEALTH_DAMAGE` hits via `DamageAt`
   (C23/C24/C25/C26) — resolve✓ walk-up, healthy/destroyed swap, `col[off,on]` (colliders switched by
-  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision = _fly ||
-  _damageTest` so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
+  the kill), and `debris[N]` (ballistic pieces the death launched). It forces `Collision` on (as
+  `--debug-damage` does) so colliders EXIST; `--freecam` alone builds none. Discrete mode covers EVERY
   destructible (doors instant-die, no `DAMAGE_SEQUENCE`), continuous mode only the staged ones.
 ⚠ Discrete mode adds the world subtree to the tree (`ManualAdvance` so `_Process` doesn't
   double-drive) and `Advance`s the death ~3.5 s AFTER the swap/col census: the debris `OBJECT_MOTION`
@@ -1216,7 +1236,10 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   stage of the `EffectStageRoots` gamez templates + an `AnimRuntime` bound to `EffectAnimNames`'
   closure, wired to `ProjectilePool.EffectSink` and the world runtime's `ExternalEffect`. Built only
   in `--fly` (and `--effects-test`), needs the session textures kept open (they already are, for the
-  crash runtime). `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
+  crash runtime). Outside flight it is built ON DEMAND through `EnsureWorldEffects` — `--destroy` at
+  build time, the world damage lab on its first damage action — which is the one place that wires
+  `ExternalEffect`, so a plain `--freecam` regression still builds nothing extra.
+  `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
   camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
   and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
 ⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
@@ -1336,6 +1359,9 @@ failure strings) a `--run-tests` suite asserts on.
   `DamageResult.TotalInstances` / `DistinctAnchors` or it silently under-counts (rule 59).
 ⚠ `Probes.Damage` needs the world subtree in the tree with `ManualAdvance` set: it ticks past the
   death schedule for the debris count, and an out-of-tree global-transform read returns identity.
+⚠ `EnabledColliders` / `WorldRootOf` / `CountVariants` are the shared kill-census helpers — the
+  world damage lab reports through the same three, so the panel's numbers and `--damage-hd`'s
+  cannot drift apart (measured equal on C1's `ap_h2otwr1`).
 ⚠ Every probe forces `CultureInfo.InvariantCulture` — the damage report used to write `HEALTH 0,01`
   on this German machine.
 

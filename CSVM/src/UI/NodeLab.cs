@@ -1045,7 +1045,7 @@ public sealed partial class NodeLab : Node
             return;
         }
         var registry = _runtime.Destructibles;
-        var here = registry.All.Where(i => ReferenceEquals(i.Anchor, node)).ToList();
+        var here = registry.PoolsOn(node);
         var resolved = registry.Resolve(node);
         if (here.Count == 0)
         {

@@ -80,10 +80,10 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 - `ExtractRof.ps1` — extractor for the non-ZBD half: the `.rof` UI archives + DLL string tables → `extracted/rof/`. Details: `docs/tooling.md`.
 - `RunGame.ps1` / `RunDev.ps1` — play and dev launch scripts (build + Godot; dev one prompts). Details: `docs/tooling.md`.
 - `RunTests.ps1` — one command, one exit code: build → `dotnet test` → `--run-tests` → goldens → perf (`-Perf`, A/B'd via the git-ignored `perf-history.jsonl`). Details: `docs/tooling.md`.
-- `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees**; `-WhatIf`/`-Force`/`-OlderThanDays`/`-Keep`/`-SkipWorktrees`/`-IncludeDirtyWorktrees`/`-PruneBranches`. Spares backups and dirty worktrees; leaves branches alone by default.
+- `CleanScratch.ps1` — sweeps `.scratch/` artifacts **and finished `.claude/worktrees/` agent worktrees** (`-?` lists its switches). Spares backups and dirty worktrees; leaves branches alone by default.
 - `tools/` — downloaded binaries (git-ignored): pinned mech3ax v0.6.1, the mech3ax fork, the Godot 4.7 .NET editor.
 - `analysis/` — **committed** read-only analysis scripts + their `FINDINGS.md`, one dir per question. For instruments whose result `docs/` cites, because `.scratch/` is swept. No game data in them, ever.
-- `analysis/goldens/manifest.json` — the golden-image tripwire: 11 pinned `--det` shots as command line + raw-pixel md5, and its `README.md`. Hashes only, never pixels.
+- `analysis/goldens/manifest.json` — the golden-image tripwire: 11 pinned `--det` shots as command line + raw-pixel md5. Hashes only, never pixels.
 - `docs/tooling.md` — the extraction pipeline, the launch scripts, and the fork's remotes/branches/sync procedure.
 - `docs/architecture.md` — per-module purpose + still-binding constraints for `CSVM/src`, one `##` entry each. **Read a module's entry before changing it.**
 - `docs/formats/` — the public reader-format reference, one page per format family; `README.md` is the index + shared reader conventions.
@@ -142,14 +142,14 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s (ballistics/damage/ammo/flags + FIRE/FLYOUT/IMPACT bindings); inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups (independent ammo) + hardpoints, markers→muzzle nodes, turrets inert; inspect with `--dump-loadout`.
-- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics, tracers, muzzle flashes, per-surface impact sound/effect, hits that damage world destructibles.
+- `src/Flight/Projectile.cs` — `ProjectilePool`: the shared-world weapon-fire subsystem — ballistics, tracers, flashes, impact sound/effect, hits that damage destructibles.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
 - `src/Flight/HudMetrics.cs` — the one rule for HUD sizing: window height / 1440, damped by `sqrt(paneH/windowH)` for splitscreen panes.
 - `src/Flight/HudFont.cs` — the game's own 5px HUD bitmap font from `extracted/rimage`: an auto-segmented ASCII atlas drawn onto any `HudMetrics`-sized canvas.
 - `src/Flight/WeaponReadout.cs` — the selected-weapon text readout: gun group + rocket type and live ammo in the HUD font, from `MSG_HUD_GUNGAUGE`/`MSG_HUD_MISSLES` via `Messages.Fill`.
-- `src/Flight/ImpactReticle.cs` — the gun aiming pipper (`impact_point.png`): the selected group's ballistic impact point at a convergence distance, projected each frame; trails the nose, not screen-locked.
+- `src/Flight/ImpactReticle.cs` — the gun aiming pipper: the selected group's ballistic impact point at a convergence distance, projected each frame; trails the nose.
 - `src/Flight/MarkerHud.cs` — the stunt objective marker HUD: reticle, screen-edge arrow + o'clock bearing, run status, banners; one per player.
 - `src/Flight/StuntScoreboard.cs` — end-of-run results overlay: a Godot-UI panel of per-zone splits, total, and the persisted best time.
 - `src/Flight/StuntRace.cs` — splitscreen stunt race bookkeeping: one `Racer` per player, finish placings, standings, rematch reset.
@@ -179,11 +179,12 @@ Compact module index — **every module's purpose and still-binding constraints 
 - `src/UI/LaunchMenu.cs` — the in-game launchscreen: Mode → Chapter → Plane, pad join/lock, then `Launch` into a session.
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the `--viewer` geometry/shading lab (M): normal lines, smoothing seams, collider boxes, cull/normal overrides.
-- `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W, `--weapon-lab`): guns fire from named gun groups, hardpoints from pylons, at a stand-in target; copy-CLI-args; `--weapon-test` fires all 48.
+- `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W, `--weapon-lab`): gun groups and pylons fire at a stand-in target; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels, shared mounts flagged magenta.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder PgUp/PgDn walks, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependency readout, destructibles + coverage.
+- `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (H, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, click-to-follow.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
@@ -234,7 +235,7 @@ The day-to-day set. **Every flag, with its full behaviour, is in [`docs/cli.md`]
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends), **N the node lab** (tree, search, frame/hide, dependencies, destructibles); the scripted twins are `--debug-select=` and `--debug-nodelab=` ([`docs/cli.md`](docs/cli.md)).
+In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends), **N the node lab**, **H the damage lab** on the selected destructible (HP slider, kill, reset); the scripted twins are `--debug-select=`, `--debug-nodelab=` and `--debug-damage=` ([`docs/cli.md`](docs/cli.md)).
 
 ### Format gotchas
 

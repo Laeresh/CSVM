@@ -259,6 +259,12 @@ public partial class PlaneViewer : Node3D
     // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
     // dependency readout for whatever the selection holds.
     private UI.NodeLab? _nodeLab;
+    // The world damage lab (H, --freecam/--anim-lab): HP slider + kill/reset on the selection's
+    // destructible pool — the interactive twin of --damage-test.
+    private UI.WorldDamageLab? _worldDamageLab;
+    // The one world-effects runtime a plane-less session builds on demand (--destroy, the damage
+    // lab's first kill), so a death's fire and smoke render outside flight.
+    private AnimRuntime? _worldEffects;
     // --anim-lab: the animation debugger — the chapter world as a
     // quiet stage under a deterministic fixed-dt clock with def-playback transport (UI.AnimLab).
     // The most specific mode of all, so it wins outright when combined with any other.
@@ -285,6 +291,7 @@ public partial class PlaneViewer : Node3D
     private string? _debugNames; // --debug-names[=meshes|all]: switch node labels on at launch
     private string? _debugSelect; // --debug-select[=x,y[,up]]: scripted click + ladder walk (freecam/anim-lab)
     private string? _debugNodeLab; // --debug-nodelab[=spec]: open the node lab and dump its readouts
+    private string? _debugDamage;  // --debug-damage[=script]: open the world damage lab and run an ordered hp/kill/reset/tick script
     private bool _markersOverlay;      // --markers: open the firepoint/pylon overlay at launch (--viewer)
     private bool _dumpMarkers;         // --dump-markers[=plane]: print the marker rig table(s) and quit
     private string _dumpMarkersPlane = ""; // the optional --dump-markers= filter (model or display name)
@@ -599,6 +606,8 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--debug-select=")) _debugSelect = arg["--debug-select=".Length..];
             else if (arg == "--debug-nodelab") _debugNodeLab ??= "";
             else if (arg.StartsWith("--debug-nodelab=")) _debugNodeLab = UI.NodeLab.ParseDebugSpec(arg["--debug-nodelab=".Length..]);
+            else if (arg == "--debug-damage") _debugDamage ??= "";
+            else if (arg.StartsWith("--debug-damage=")) _debugDamage = UI.WorldDamageLab.ParseDebugSpec(arg["--debug-damage=".Length..]);
             else if (arg == "--markers") { _markersOverlay = true; _viewerMode = true; hasContentArg = true; }
             else if (arg == "--dump-markers") _dumpMarkers = true;
             else if (arg.StartsWith("--dump-markers=")) { _dumpMarkers = true; _dumpMarkersPlane = arg["--dump-markers=".Length..]; }
@@ -753,6 +762,11 @@ public partial class PlaneViewer : Node3D
         {
             Log.Warn("ui", $"--debug-nodelab is a --freecam/--anim-lab tool; ignoring it here");
             _debugNodeLab = null;
+        }
+        if (_debugDamage != null && !_freecam && !_animLab)
+        {
+            Log.Warn("ui", $"--debug-damage is a --freecam/--anim-lab tool; ignoring it here (--damage-test is the headless twin)");
+            _debugDamage = null;
         }
         // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
         // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
@@ -1219,10 +1233,12 @@ public partial class PlaneViewer : Node3D
                         PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                             ? cam.GlobalPosition
                             : Vector3.Zero,
-                        // The damage-test needs the collidable world (its C25 census measures which
+                        // The damage-test needs the collidable world (its census measures which
                         // destructible geometry is solid and whether death removes it) even though it
-                        // runs in the freecam (non-fly) harness.
-                        Collision = _fly || _damageTest,
+                        // runs in the freecam (non-fly) harness. --debug-damage is the same census
+                        // from the interactive panel and needs the same world; without it a kill's
+                        // collider count would read zero and lie.
+                        Collision = _fly || _damageTest || _debugDamage != null,
                         DebugAnim = _debugAnim,
                         AnimLod = _animLod,
                         DebugDzPaths = _debugDzPaths,
@@ -1302,13 +1318,27 @@ public partial class PlaneViewer : Node3D
                     };
                     // The node lab reads that selection. Its camera is resolved through a
                     // delegate: the freecam is created further down, after this point.
+                    bool collisionBuilt = _fly || _damageTest || _debugDamage != null;
                     _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
-                        session.Builder.Scene, collisionBuilt: _fly || _damageTest)
+                        session.Builder.Scene, collisionBuilt)
                     {
                         CameraSource = () => _spectator,
                         DebugSpec = _debugNodeLab,
                         // The anim lab's timeline strip and transport panel own the bottom of the
                         // window; plain freecam has nothing there.
+                        BottomMargin = _animLab ? 252 : 16,
+                    };
+                    // The world damage lab reads the same selection. Its effects runtime is built
+                    // on the first damage action, not now — an untouched session pays nothing.
+                    var damageScene = session.Builder.Scene;
+                    var damageProgram = session.Program;
+                    var damageRuntime = session.Runtime;
+                    _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, collisionBuilt)
+                    {
+                        SelectByName = name => _nodeLab?.SelectByName(name) ?? false,
+                        EffectsSource = () => EnsureWorldEffects(gamez, damageScene, textures,
+                            damageProgram, damageRuntime),
+                        DebugSpec = _debugDamage,
                         BottomMargin = _animLab ? 252 : 16,
                     };
                 }
@@ -1580,6 +1610,12 @@ public partial class PlaneViewer : Node3D
             {
                 _worldRoot!.AddChild(_nodeLab);
             }
+            // The damage lab joins after the node lab, so a scripted script can select through the
+            // node lab's name index on the frame it runs.
+            if (_worldDamageLab != null)
+            {
+                _worldRoot!.AddChild(_worldDamageLab);
+            }
             // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
             // cull-mode and normal-source overrides. Like the other two labs it is built in every
             // --viewer session and starts hidden (M), so an unadorned viewer screenshot is
@@ -1694,7 +1730,7 @@ public partial class PlaneViewer : Node3D
                 GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
                          "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
                          "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
-                         "N opens the node lab");
+                         "N opens the node lab, H the damage lab on whatever destructible is selected");
             }
 
             if (_fly)
@@ -2100,22 +2136,20 @@ public partial class PlaneViewer : Node3D
                 }
             }
 
-            // --destroy=<name> (F42): kill a named destructible at session build so a --screenshot
+            // --destroy=<name>: kill a named destructible at session build so a --screenshot
             // captures its destruction with nobody at the controls. Reuses the weapon-damage path —
             // DamageAt runs the full death (the healthy→destroyed swap fires synchronously here; the
             // debris and effects play out as the runtime self-ticks through the screenshot warm-up).
             // The world subtree is already in the tree (added above), so the death's global-transform
             // reads and the effect stage are valid. Flight already built + wired the world-effects
-            // runtime (to the projectile pool too); a plane-less --freecam builds one here so the
+            // runtime (to the projectile pool too); a plane-less --freecam asks for one here so the
             // destruction's fire/smoke still render — gated on --destroy, so a plain --freecam
             // regression builds nothing extra.
             if (_destroyName != null && worldRuntime != null)
             {
-                if (worldRuntime.ExternalEffect == null && worldScene != null)
+                if (worldScene != null)
                 {
-                    var deathEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
-                    worldRuntime.ExternalEffect =
-                        (name, pt) => deathEffects.Handles(name) && deathEffects.PlayEffectAt(name, pt);
+                    EnsureWorldEffects(gamez, worldScene, textures, crashProgram!, worldRuntime);
                 }
                 int killed = TriggerDestroy(worldRuntime, _destroyName, out var destroyBounds);
                 what += killed > 0 ? $" + destroyed {killed}× '{_destroyName}'"
@@ -2419,6 +2453,8 @@ public partial class PlaneViewer : Node3D
         _weather = null;
         _selection = null;
         _nodeLab = null;
+        _worldDamageLab = null;
+        _worldEffects = null;
         // The clock and the consumers it drives explicitly go with the session; a null
         // GameClock.Current puts any node that outlives the teardown back on its raw frame delta.
         _clock = null;
@@ -2779,6 +2815,35 @@ public partial class PlaneViewer : Node3D
         _worldRoot.AddChild(effects);
         GD.Print($"world-effects runtime: {staged}/{EffectStageRoots.Length} effect template(s) staged, "
                  + $"{EffectAnimNames.Length} effect name(s) bound");
+        return effects;
+    }
+
+    /// <summary>The session's one world-effects runtime, built on first demand and wired into the
+    /// world runtime's <see cref="AnimRuntime.ExternalEffect"/> so a death's CALL_ANIMATION renders.
+    /// Flight builds one during the session build and wires it to the projectile pool as well, so
+    /// this leaves an existing wiring alone; a plane-less <c>--freecam</c>/<c>--anim-lab</c> builds
+    /// none of its own, which is why a kill there draws nothing until something asks. Returns null
+    /// when the build fails — the HP/kill/swap/reset mechanics do not depend on it.</summary>
+    private AnimRuntime? EnsureWorldEffects(GameZ gamez, SceneBuilder worldScene,
+        TextureArchive textures, AnimProgram worldProgram, AnimRuntime worldRuntime)
+    {
+        if (_worldEffects == null)
+        {
+            try
+            {
+                _worldEffects = BuildWorldEffectsRuntime(gamez, worldScene, textures, worldProgram);
+            }
+            catch (Exception e)
+            {
+                Log.Warn("anim", $"world-effects runtime could not be built: {e.Message}");
+                return null;
+            }
+        }
+        var effects = _worldEffects;
+        if (worldRuntime.ExternalEffect == null)
+        {
+            worldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+        }
         return effects;
     }
 
