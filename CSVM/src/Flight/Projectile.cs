@@ -55,13 +55,13 @@ public sealed partial class ProjectilePool : Node3D
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
-    private const float TracerLength = 14f;   // streak length behind the round, m
-    private const float TracerWidth = 0.7f;   // m
+    private const float TracerLength = 3f;   // streak length behind the round, m
+    private const float TracerWidth = 0.0782f*2;   // m
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
                                                   // NO FLYOUT model (a chapter missing the prototype)
     private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
                                                    // MODEL body (B14): the body is the round, this is its trail
-    private const float MuzzleSize = 2.2f;    // m
+    private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
@@ -157,9 +157,9 @@ public sealed partial class ProjectilePool : Node3D
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
         // long streak into a screen-vertical bar); muzzle/impact bursts ARE round billboards.
-        _tracerMm = AddMultiMesh("tracer1", MaxProjectiles, additive: true, billboard: false, out _);
-        _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: true, out _);
-        _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: true, out _);
+        _tracerMm = AddMultiMesh("tracer_slug", MaxProjectiles, additive: true, billboard: false, out _);
+        _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: false, out _);
+        _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
         _impactFxModels = new Node3D { Name = "impact_fx" };
@@ -174,7 +174,7 @@ public sealed partial class ProjectilePool : Node3D
 
     private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi)
     {
-        var quad = new QuadMesh { Size = Vector2.One };
+        var quad = new QuadMesh { Size =Vector2.One };
         var mat = new StandardMaterial3D
         {
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -186,6 +186,7 @@ public sealed partial class ProjectilePool : Node3D
             BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
             BillboardKeepScale = true,
             VertexColorUseAsAlbedo = true,
+            Uv1Scale=new Vector3(-1.0f,1.0f,1.0f),
         };
         quad.Material = mat;
         var mm = new MultiMesh
@@ -635,7 +636,7 @@ public sealed partial class ProjectilePool : Node3D
             // muzzle instead of pre-extending a full length behind it on the spawn frame.
             float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
             float len = Mathf.Min(TracerLength * scale, traveled);
-            var basis = new Basis(xAxis * (TracerWidth * scale), yAxis * len, zAxis);
+            var basis = new Basis(yAxis * len, xAxis * (TracerWidth * scale), zAxis);
             _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
             _tracerMm.SetInstanceColor(n, p.Tint);
             n++;
