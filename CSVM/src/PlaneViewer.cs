@@ -1095,7 +1095,7 @@ public partial class PlaneViewer : Node3D
                 GD.Print($"gamepad: device {p} \"{Input.GetJoyName(p)}\" guid={Input.GetJoyGuid(p)} info={Input.GetJoyInfo(p)}");
 
         SetupLighting();
-        _camera = new Camera3D { Fov = _fly || _freecam || _animLab ? 62 : 50, Far = 60000f };
+        _camera = new Camera3D { Fov = _fly || _freecam || _animLab ? 62 : 50, Far = 40000f };
         AddChild(_camera);
         _orbit = new OrbitCamera(_camera);
         if (_argYaw is { } argYaw) _orbit.Yaw = argYaw;
