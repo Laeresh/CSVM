@@ -8,41 +8,58 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 
 ## The rules
 
-1. **Check a plan's premise against the data before writing code.** Three scheduled items died
-   this way — the fire templates one was meant to unblock are never its children, 0 of 1,152.
+### Organistaion
+
+### Development
+
+### Testing
+
+31. **A dead-still camera renders bit-identical frames — z-fighting needs `--jitter`.** 
+32. **Some real effects are below screenshot resolution.** The water flipbook differs by ~2/255
+    — a burst reads 0.01% and IS working; verify via the `--debug-anim` frame log.
+33. **Check nothing occludes, fogs or washes out the thing under test.** Forcing sprite opacity
+    to 0 moved 8 px under the cloud deck and fog; with deck hidden and fog off, 74,129 px.
+34. **One camera angle — or one scripted pose — is not a test; sweep and require a flip.** A
+    collision relabel moved the logged part at exactly one of five spawn altitudes.
+35. **Compare pixel values, not an upscaled crop.** The gauge faces carry dark *unlit* STALL /
+    LOW ALT copies (~58,0,0 vs 180+,0,0 lit) that read as lit when enlarged.
+#### Performance
+37. **`--perf`'s `script` reads ~2.2× the real frame time** (Godot's `TIME_PROCESS`); trust
+    `frame`/`fps` for absolutes, `script` only as an A/B ratio.
+38. **Numbers pinned at the 60 fps vsync cap are floors.** Read `physics`
+    (`TIME_PHYSICS_PROCESS`, ratio-only too) for collision changes; with no monitor on the
+    subsystem, call the effect unresolved.
+39. **Split the timer before choosing what to optimise — engine setters hide cost.** 
+40. **Do not assume a cost is on the GPU.** Viewport GPU time was 0.27 ms while the frame was
+    ~133 ms of C#; this trap fired twice.
+41. **Differences smaller than the instrument are not differences.** 5537 vs 5606 ms over 3-run
+    averages is noise.
+42. **Watch for cold caches.** An alarming first-run 8.1 s was the OS file cache on 630
+    freshly-written JSON files.
+### Extraction
+19. **"Is it a number" is the weakest check on junk-capable data — prefer a format flag saying
+    whether the bytes are meaningful.** A NaN/∞ guard sails past finite garbage.
+
+### OLD LIST NEED TO SORT
+1. **Check a plan's premise against the data before writing code.**
 2. **A premise check needs its own able-to-fail control, and an animation census must cover BOTH
    sources — compiled (`cam_anim`/`mis_anim`) and reader (`zrdr`).** C1's `cloudparent#` is
    reader-only; a compiled-only sweep "disproved" a true premise.
-3. **Before scheduling work from a bug report, `git log` the interval since it was filed.** One
-   z-fight was fixed the day it was reported (4.87% → 0.09%); two sessions chased the stale entry.
-4. **Confirm a symptom is a DEFECT before diagnosing it: does the original do the same?** Three
-   diagnoses failed on a pose the original also z-fights — sunk effort makes nobody re-ask this.
-5. **Check the case a plan points at can discriminate before measuring it.** A showcase leg held
-   0°, equal to the authored rest pose — the one case its real bug cannot touch.
+3. **Before scheduling work from a bug report, `git log` the interval since it was filed.**
+4. **Confirm a symptom is a DEFECT before diagnosing it: does the original do the same?** 
+5. **Check the case a plan points at can discriminate before measuring it.** 
 6. **When two coplanar layers look like variants (day/night, LOD), test the geometry
    relationship first.** The 4×-lower-res, 3×-brighter "pair" was base ground under an authored
    subface — 100.000% containment.
-7. **Measure the same-build noise floor before believing a difference.** World shots are not
-   frame-deterministic; floors measured span 1 px to 13,346 px.
-8. **Re-measure the baseline before believing a regression.** An 8.6 ms "regression" was partly
-   machine drift.
+7. **Measure the same-build noise floor before believing a difference.**
+8. **Re-measure the baseline before believing a regression.** 
 9. **Measure a pose's sensitivity to ±1 frame on ONE build before believing a screenshot A/B.**
-   An 18.32% "regression" reproduced as `--frames=120` vs `121`; `TIME`-driven surfaces need a
-   provably equal frame budget, which any shader change moves.
 10. **Never baseline with `git stash` — flip the one line under test, build, run, flip back.**
-    The stash stack is repo-global across worktrees (it reverts other agents' edits) and without
-    `-u` new files stay in place.
 11. **When an A/B swaps files, prove the new binary runs — a log line only new code can emit.**
     `Copy-Item` keeps the source mtime, so `dotnet build` no-ops and Godot runs the old DLL.
-12. **Verify each branch independently, not just combined.** A split exposed codegen
-    registrations sitting in the wrong branch's commit.
+12. **Verify each branch independently, not just combined.** 
 13. **Confirm "pre-existing" by reproducing it on the unchanged build, not by argument.**
-14. **A clean compile, passing test or unchanged number is not evidence until seen able to
-    fail.** A reverted guard still passed — a second guard was doing the work.
-15. **A screenshot that would pass identically with a no-op is not a test.** The livery lab
-    looked right over an already-painted plane.
-16. **A metric going to zero is not the outcome being right.** Raising the depth-bias constants
-    collapses a z-fight from 8.42% to 0.01% *while biasing the wrong surface to the front*.
+14. **A clean compile, passing test or unchanged number is not evidence until seen able to fail.**
 17. **When a fix makes a metric worse, look at the artifact — enumerate the states the FIXED
     code can produce, not the bug's.** An "is it reddish?" classifier scored a correctly-off
     grey panel as absent.
@@ -50,8 +67,6 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     fit proves nothing.** The blown zeppelin transforms — an unread `spline_interp` flag
     exposing uninitialised spline memory — were proved by 4.6109513952913965e27 matching the
     node's world X bit-for-bit.
-19. **"Is it a number" is the weakest check on junk-capable data — prefer a format flag saying
-    whether the bytes are meaningful.** A NaN/∞ guard sails past finite garbage.
 20. **Isolate to the single node before naming a culprit; prefer a control changing only the
     suspected mechanism over removing geometry.** Hiding a sheet group and hiding one mesh gave
     the identical 0.19% flicker — hiding proves participation, never the partner.
@@ -62,12 +77,6 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     a claim's age nor the number of documents repeating it is evidence.
 23. **A residual you have not driven to zero is not a floor.** A depth-only ramp control took a
     "mostly resampling noise" pose from 35.77% to 0.37% flicker.
-24. **Bracket a tuning constant's effect before trusting it.** Coplanar surfaces separate only
-    above a bias of ≈1e-6 of view distance; `NodeOrderBias` is 5e-8, inoperative within ~40 node
-    indices.
-25. **Locating coplanar geometry does not say which surface is at fault — establish which one
-    the original draws on top.** "86 of 102 polygons at exactly Y = 0.0" licensed a fix that
-    would have deleted palms the original shows.
 26. **A quantity read from an 8-bit capture is quantised — count the levels crossed; single
     digits means re-encode as a period, not a level.** A `fract(UV)` difference spanning ~1.4
     quantisation steps gave 46 px/texel; a stripe-period probe gave ~4.
@@ -80,36 +89,6 @@ least once — usually by returning exactly the answer the hypothesis predicted.
 29. **"After bootstrap" is not "after everything that places things" — prefer a reversible
     action plus a recheck.** Motions and OnCall defs place entities seconds later; a one-shot
     sweep switched off 35 entities merely not yet in place.
-30. **Check whether the camera pose is special before debugging an axis-aligned artifact.** The
-    "upper-left quadrant only" render was exact projection — the world origin is the map corner
-    (C1 `area` x,z ∈ [-12288, 0]).
-31. **A dead-still camera renders bit-identical frames — z-fighting needs `--jitter`.** The
-    0.15° default changed 92% of pixels at ground level and told nothing; 0.006° was useful.
-32. **Some real effects are below screenshot resolution.** The water flipbook differs by ~2/255
-    — a burst reads 0.01% and IS working; verify via the `--debug-anim` frame log.
-33. **Check nothing occludes, fogs or washes out the thing under test.** Forcing sprite opacity
-    to 0 moved 8 px under the cloud deck and fog; with deck hidden and fog off, 74,129 px.
-34. **One camera angle — or one scripted pose — is not a test; sweep and require a flip.** A
-    collision relabel moved the logged part at exactly one of five spawn altitudes.
-35. **Compare pixel values, not an upscaled crop.** The gauge faces carry dark *unlit* STALL /
-    LOW ALT copies (~58,0,0 vs 180+,0,0 lit) that read as lit when enlarged.
-36. **Never compare images by encoded bytes.** All 881 C1 texture PNGs differ byte-wise (encoder
-    only) while pixel-identical.
-37. **`--perf`'s `script` reads ~2.2× the real frame time** (Godot's `TIME_PROCESS`); trust
-    `frame`/`fps` for absolutes, `script` only as an A/B ratio.
-38. **Numbers pinned at the 60 fps vsync cap are floors.** Read `physics`
-    (`TIME_PHYSICS_PROCESS`, ratio-only too) for collision changes; with no monitor on the
-    subsystem, call the effect unresolved.
-39. **Split the timer before choosing what to optimise — engine setters hide cost.** The clutter
-    collision build was 271 ms transform vs 3,403 ms `ConcavePolygonShape3D` BVH build. (That term
-    is gone since the shapes became shared: `--collision`'s cost is now the WORLD trimesh build —
-    C2 `world` 352 → 865 ms against `clutter` 47 → 56 ms. Re-split before quoting an old split.)
-40. **Do not assume a cost is on the GPU.** Viewport GPU time was 0.27 ms while the frame was
-    ~133 ms of C#; this trap fired twice.
-41. **Differences smaller than the instrument are not differences.** 5537 vs 5606 ms over 3-run
-    averages is noise.
-42. **Watch for cold caches.** An alarming first-run 8.1 s was the OS file cache on 630
-    freshly-written JSON files.
 43. **A feature can run perfectly somewhere invisible.** 36 of C1's 38 sound emitters are built
     and stopped; `--debug-anim` prints visible-in-tree per node for this reason.
 44. **A change can be inert by construction in a chapter — say why, or "byte-identical" reads as
@@ -118,7 +97,7 @@ least once — usually by returning exactly the answer the hypothesis predicted.
     "restoring" identity.** A new handler moved exactly one chapter: the install's single
     `ON_STARTUP` opacity fade, the case it exists for.
 46. **A metric can legitimately have to not move.** The anim dedupe fix correctly held the op
-    count at 3531; expecting movement would have read as failure.
+    count at 3531; expecting movement would have read as failure.d
 47. **Two different failures look identical from outside — inject input and log what each
     candidate receives.** "Handler doesn't fire" vs "node doesn't exist" reads the same.
 48. **A visibly running system is not proof the numbers are right.** A degrees/radians slip made

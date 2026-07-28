@@ -4,7 +4,6 @@
 
 **This file is the compact, authoritative index of project context for Claude; deep detail lives in `docs/`.** Update documentation in the same turn as the change it describes:
 
-- Changes to *what the tool does from the outside* (flags, outputs, defaults, algorithms, UI, entry points) → the relevant section **here**.
 - Module purpose + still-binding constraints, as `⚠` one-liners → the module's `## src/...` entry in `docs/architecture.md` (body ≤ ~8 lines, ~12 for the heaviest). **Read a module's entry there before modifying that module.** Diagnosis narratives do NOT go there — they get a short dated `docs/HISTORY.md` entry; what survives of one is a `⚠` line or a verification.md rule.
 - A new, renamed or deleted module → **`docs/architecture.md` only**, updating its index line and its `##` entry in the same edit. This file carries the namespace map, never a per-module list; keeping both was 13 KB of duplication and had already drifted.
 - Format / reverse-engineering knowledge → `docs/formats/`.
@@ -16,23 +15,16 @@
 **Budget and shape — this file is an index, not a narrative.** It once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
 
 - **Budget: CLAUDE.md stays under ~35 KB.** If a change would push it over, the content belongs in `docs/` and this file gets a *pointer* instead. Check with `(Get-Item CLAUDE.md).Length` before adding a paragraph, not after.
-- **Shape: never restate a list another file already indexes — point at that file.** The per-module index used to live here *and* in `docs/architecture.md`; 92 lines, 13 KB, and `GoldenShot.cs` was already missing from one copy. It now lives once, at the top of `docs/architecture.md`. If a section here starts growing one line per *thing*, that list belongs in `docs/` with a pointer in its place.
-- **"Current status" holds pointers and item IDs — never a description of landed work, in any tense.** The loophole that keeps regrowing it is present-tense narrative: "C25 removes colliders on death, proven by the col census" reads like current state but is a log line; its home is the plan's item note and `docs/HISTORY.md`, and here the item is an ID at most. The section's fixed shape and permitted edits are spelled out in the section itself; the tripwire is size — over ~15 lines / ~2 KB means history crept back in.
+- **Shape: never restate a list another file already indexes — point at that file.** If a section here starts growing one line per *thing*, that list belongs in `docs/` with a pointer in its place.
+- **"Current status" holds pointers and item IDs — never a description of landed work, in any tense.** . The tripwire is size — over ~15 lines / ~2 KB means history crept in.
 
 **Standing rule — AI-assistance disclosure (decided 2026-07-21).** Every outward-facing communication about this work discloses that it was done with the help of Claude Code: PR bodies, issues, discussion posts, comments, and any community writeup — not only an initial submission. Commits carry a `Co-Authored-By: Claude` trailer. The user owns all upstream/community communication, so this is a constraint on what gets *drafted* for them, not an instruction to post anything.
 
 ## Project Description
 
-An XWVM-style remake of **Crimson Skies** (2000, Zipper Interactive, Microsoft): a modern engine that plays the original game using the player's own legally-owned game files. Nothing like this exists yet for Crimson Skies — this is a first-of-its-kind effort.
+An XWVM-style remake of **Crimson Skies** (2000, Zipper Interactive, Microsoft): a modern engine that plays the original game using the player's own legally-owned game files.
 
 **Public home: <https://github.com/Laeresh/CSVM>** (`origin`, branch `main`). The repo is named **CSVM**; use that name in outward-facing text and as the CC-BY attribution target for `docs/formats/`.
-
-Charter decided 2026-07-14 (full detail in Claude's project memory):
-
-- **Milestone 1** — complete asset extraction: fill the Crimson Skies gaps in mech3ax (`planes.zbd`, `gamez.zbd`).
-- **Milestone 2** — vertical slice: free flight only. One plane, one map (candidate: C1 instant-action arena), arcade controls, original sounds. No AI, objectives, or weapons.
-- **Milestone 3** — weapons and destruction (scoped 2026-07-22, delivered 2026-07-25): [`docs/plans/PLAN-M3-weapons.md`](docs/plans/PLAN-M3-weapons.md).
-- Long-term direction (not commitment): full campaign remake.
 
 ## 🚫 Hard rule: no game assets in version control — ever
 
@@ -65,7 +57,7 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 
 ## Coding conventions
-- Never write braceless control-flow bodies. Always wrap the body of if, else if, else, for, foreach, while, and do in braces, even for a single statement — this prevents dangling-else and merge-conflict bugs.
+- Never write braceless control-flow bodies. Always wrap the body of if, else if, else, for, foreach, while, and do in braces, even for a single statement — this prevents dangling-else and merge-conflict bugs. TODO replace this with `dotnet format CSVM.csproj`
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
 ## Repo layout
 
@@ -103,7 +95,7 @@ Godot 4.7 .NET, C# / net8.0. Build & run:
 
 ```
 dotnet build CSVM/CSVM.sln
-tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
+GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 ```
 
 (First time only: run with `--headless --import` once before running scenes.)
@@ -127,7 +119,7 @@ Highest-traffic modules, so the common cases skip the index: `PlaneViewer.cs` (s
 
 The day-to-day 28 of 89. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
-⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.** Four rows had silently contradicted that page by 2026-07-25 (`--frames` called a wall-clock delay when it is a sim coordinate; `--debug-anim` conditions claimed once-a-second when they are edge-triggered; `--collision`'s C overlay claimed in `--viewer`; `--view`'s settled layout lumped in with its TUNE magnitudes). Adding a row is rarely right — the index is one file away.
+⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right — the index is one file away.
 
 | Flag | Does |
 |---|---|
@@ -159,11 +151,11 @@ The day-to-day 28 of 89. **[`docs/cli.md`](docs/cli.md) opens with an index of a
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
 | `--mute` | skip flight audio |
 
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends), **N the node lab**, **M the mesh lab on that selection alone**, **C the built colliders** (see `--collision`), **H the damage lab** on the selected destructible; the scripted twins are `--debug-select=`, `--debug-nodelab=`, `--debug-mesh=`, `--debug-colliders` and `--debug-damage=` ([`docs/cli.md`](docs/cli.md)).
+the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 
 ### Format gotchas
 
-**The cross-cutting gotchas that bite constantly live in [`docs/formats/gotchas.md`](docs/formats/gotchas.md)** — flat-position child indexing, the Yxz Euler order, the mirrored-triangle-wave UVs, gamma-space vertex colors, draw priority + subfaces, `cull_front` and the normals minus, unpainted skins, per-chapter weather zone names. **Read it before writing any reader, transform, or shader code.**
+**The cross-cutting gotchas that bite constantly live in [`docs/formats/gotchas.md`](docs/formats/gotchas.md)** —  **Read it before writing any reader, transform, or shader code.**
 
 Full validated format documentation lives in **`docs/formats/`** — one page per format family. **`README.md` there is the index + the shared reader conventions; start there** rather than duplicating its table here. **Rule: new decodes land with their docs page in the same change.**
 
@@ -173,7 +165,7 @@ Config the installed engineering skills read. Written by `/setup-matt-pocock-ski
 
 ### Issue tracker
 
-This repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
+This repo's own markdown — `backlog.md`, a live `docs/PLAN-*.md`, `playtest.md`. No GitHub Issues yet. See [`docs/agents/issue-tracker.md`](docs/agents/issue-tracker.md).
 
 ### Triage labels
 
@@ -185,9 +177,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 ## Current status / next step
 
-**Fixed shape — five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense** — "C25 removes colliders on death" is a log line even though it reads like current state; its home is the plan's item note and `docs/HISTORY.md`, and here the item is an ID at most. If this section is longer after your edit than before it, the edit was wrong. (The weaker version of this rule let the section hit 65 KB once, and 6 KB again by 2026-07-24.)
+**Fixed shape — five short paragraphs, ~15 lines / ~2 KB: this rule, where the project is, active plan + wave position, next items, pointers.** When work lands, the only edits allowed here are: advance the wave-position clause, swap the "Next" IDs, delete text. **Adding a sentence about the landed item is forbidden in every tense** —  If this section is longer after your edit than before it, the edit was wrong.
 
-**Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md); several need two controllers, which this machine lacks) still gate calling M2.5 done.
+**Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md);
 
 **Active plan: [`docs/PLAN-sessionspec.md`](docs/PLAN-sessionspec.md)** — Wave A, next **A2**. Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
