@@ -81,7 +81,7 @@ def — its puffers ride that root and parent at world level, so they render. Tw
   `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, `great_balls_of_fire`, …) here.
 
 `--effects-test` is the headless verify: it plays each of the 28 bound names at the camera point and
-reports which resolve and which actually **build a puffer** (`verification.md` rule 76 — a started
+reports which resolve and which actually **build a puffer** (`verification.md` WORLD-12 — a started
 def whose factory/textures are absent renders nothing). Deterministic (seeded, `StopAll` between
 names): **16 build a puffer** — the fireballs (`large_fireball`/`small_fireball`/`large_30sec_fire`/
 `great_balls_of_fire`/`large_black_smokeball`/`big_splash`), the gun `*_gunhit` smoke, and the

@@ -65,7 +65,7 @@
     --det --perf --no-vsync for a fixed number of SIM frames, one JSON record per scenario
     appended to the git-ignored perf-history.jsonl at the repo root. It measures and records;
     it never judges. A regression verdict comes from a paired A/B (-PerfCompare), never from a
-    threshold: machine drift makes a committed number lie (verification rules 8, 41).
+    threshold: machine drift makes a committed number lie (verification METHOD-3, PERF-5).
 
 .PARAMETER PerfLabel
     Tags this run's history records (default "run"). The A/B protocol is: label the baseline,
@@ -75,14 +75,14 @@
     After measuring, pair each scenario against the most recent record carrying this label and
     print the ratios, with the reason each awareness metric is not a verdict. The two builds'
     CSVM.dll hashes are compared too: identical hashes mean the run measured the same binary
-    twice, which is a noise floor, not an A/B (rule 11).
+    twice, which is a noise floor, not an A/B (METHOD-6).
 
 .PARAMETER PerfFilter
     Substring filter on the perf scenario names.
 
 .PARAMETER PerfIterations
     Launches per scenario, overriding the manifest. The first (manifest "warmups") are discarded:
-    a cold OS file cache reshapes a startup profile instead of scaling it (rule 89).
+    a cold OS file cache reshapes a startup profile instead of scaling it (PERF-7).
 
 .PARAMETER PerfFrames
     Sim frames per launch, overriding the manifest.
@@ -170,7 +170,7 @@ if (-not (Test-Path $ScratchDir)) {
 # without std handles, the non-console binary calls AttachConsole(ATTACH_PARENT_PROCESS) and reopens
 # stdout on CONOUT$, writing straight to the console screen buffer, past whatever the caller
 # redirected; that is how a run can measure 0 captured lines while its text lands on screen anyway
-# (rule 108). Handing the process real handles at creation leaves its own stdout alone. The files
+# (SHELL-10). Handing the process real handles at creation leaves its own stdout alone. The files
 # are only a post-mortem for a launch that dies before --log-file exists; the log is still the
 # record every stage scores itself from.
 #
@@ -182,7 +182,7 @@ if (-not (Test-Path $ScratchDir)) {
 # std handles built by hand; the ProcessStartInfo path below is the fallback for a session that was
 # refused one, and is what keeps this readable as a plain process launch.
 #
-# Rule 63: the argument string is re-split by the callee, and this repo's path contains a space, so
+# SHELL-1: the argument string is re-split by the callee, and this repo's path contains a space, so
 # any argument carrying one is quoted here or Godot receives it split.
 function Invoke-Godot {
     param([Parameter(Mandatory=$true)][string[]]$Arguments)
@@ -272,7 +272,7 @@ function Get-StatusColor {
     return "Yellow"
 }
 
-# Rule 66: a stray Godot from an earlier run poisons the next one's error census and its
+# SHELL-2: a stray Godot from an earlier run poisons the next one's error census and its
 # window. Two filters, deliberately: a leftover of THIS script -- this tree's project dir
 # AND $Marker, an argument only this script's own launches carry, so one still alive is stuck --
 # gets killed; any other Godot on this tree is only reported. A live playtest or another agent's
@@ -596,7 +596,7 @@ if ($SkipGoldens) {
                                     "res://scenes/Main.tscn", "--") + $shotArgs)
         $ErrorActionPreference = "Stop"
 
-        # Rule 74: --screenshot exits 0 even when the save fails, so the file's existence is the
+        # SHOT-10: --screenshot exits 0 even when the save fails, so the file's existence is the
         # only proof it wrote anything.
         if (-not (Test-Path $png)) {
             $broken += "$($shot.name): no PNG written (Godot exited $shotCode) -- see $shotLog"
@@ -688,7 +688,7 @@ $PerfManifest = Join-Path $RepoRoot "analysis\perf\scenarios.json"
 $PerfDir      = Join-Path $ScratchDir "perf"
 $PerfHistory  = Join-Path $RepoRoot "perf-history.jsonl"
 # The assembly Godot actually loads. Hashing it is the only honest answer to "did the new build
-# run" (rule 11): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
+# run" (METHOD-6): a dirty tree gives A and B the same commit, and Copy-Item keeps mtimes, so
 # nothing else distinguishes two builds of one revision.
 $PerfDll      = Join-Path $ProjectDir ".godot\mono\temp\bin\Debug\CSVM.dll"
 
@@ -746,7 +746,7 @@ if (-not $Perf) {
 } else {
     Write-Stage-Banner "perf"
     # Every launch here carries the .scratch\perf output path, an argument nothing else passes --
-    # so the kill cannot reach a live playtest or a hand-run capture (rule 66).
+    # so the kill cannot reach a live playtest or a hand-run capture (SHELL-2).
     Stop-StrayGodots -Marker "\.scratch\perf\"
     if (-not $env:SDL_JOYSTICK_DIRECTINPUT) {
         $env:SDL_JOYSTICK_DIRECTINPUT = "0"
@@ -755,7 +755,7 @@ if (-not $Perf) {
         $null = New-Item -ItemType Directory -Path $PerfDir
     }
 
-    # Rule 97: PS 5.1 decodes a BOM-less UTF-8 file as the ANSI codepage.
+    # SHELL-7: PS 5.1 decodes a BOM-less UTF-8 file as the ANSI codepage.
     $perfDoc = [System.IO.File]::ReadAllText($PerfManifest) | ConvertFrom-Json
     $perfFrameCount = [int]$perfDoc.frames
     if ($PerfFrames -gt 0) {
@@ -972,7 +972,7 @@ if (-not $Perf) {
         Write-Host ""
         Write-Host "--- perf A/B: '$PerfLabel' vs '$PerfCompare' ----------------------------------" -ForegroundColor Cyan
         # A row is marked only when it clears BOTH the relative band and an absolute floor. The
-        # floor is verification rule 41 made mechanical: 0.045 ms of jitter on a 0.26 ms gpu figure
+        # floor is verification PERF-5 made mechanical: 0.045 ms of jitter on a 0.26 ms gpu figure
         # is a 17 % ratio and no difference at all.
         $verdictSet = @{}
         foreach ($m in $verdictMetrics) {
@@ -1053,14 +1053,14 @@ if (-not $Perf) {
         }
         Write-Host "  read the ratios like this:" -ForegroundColor Yellow
         Write-Host "    * marks a verdict metric past BOTH its relative band and its absolute floor -- a candidate, never a verdict. Nothing here fails." -ForegroundColor Yellow
-        Write-Host "    the bands are machine- and day-specific: re-measure by running the suite twice unchanged (rules 7, 8, 41)." -ForegroundColor Yellow
+        Write-Host "    the bands are machine- and day-specific: re-measure by running the suite twice unchanged (METHOD-2, METHOD-3, PERF-5)." -ForegroundColor Yellow
         foreach ($a in $awareness) {
             Write-Host ("    $($a.metric): $($a.why)") -ForegroundColor DarkYellow
         }
         if ($sameBinary) {
-            Write-Host "  SAME BINARY: base and change share a CSVM.dll hash -- this is a same-build noise floor, not an A/B (rule 11)." -ForegroundColor Yellow
+            Write-Host "  SAME BINARY: base and change share a CSVM.dll hash -- this is a same-build noise floor, not an A/B (METHOD-6)." -ForegroundColor Yellow
         } else {
-            Write-Host "  binaries differ (CSVM.dll hash), so the new build did run (rule 11)." -ForegroundColor DarkGray
+            Write-Host "  binaries differ (CSVM.dll hash), so the new build did run (METHOD-6)." -ForegroundColor DarkGray
         }
     }
 

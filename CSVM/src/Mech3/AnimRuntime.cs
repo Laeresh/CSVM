@@ -1229,7 +1229,7 @@ public sealed partial class AnimRuntime : Node
                     var (siteNode, siteOffset) = CallTargetSite(ev, def, anchor);
                     var callAnchor = siteNode ?? anchor;
                     // The world runtime can't render an effect template (its puffer factory is
-                    // torn down after the build, rule 76). When a death sequence calls one of the
+                    // torn down after the build, WORLD-12). When a death sequence calls one of the
                     // named destruction/impact effects, hand it to the world-effects runtime (D32),
                     // which keeps textures open, stages the templates and relocates them onto the
                     // call site — and skip the local Start that would only build nothing.
@@ -1385,7 +1385,7 @@ public sealed partial class AnimRuntime : Node
     /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
     /// the owning def). The D32 world-effects verify checks this rather than "the def ran" — a
     /// started effect whose factory is torn down or whose textures are missing builds nothing and
-    /// renders nothing (verification.md rule 76).</summary>
+    /// renders nothing (verification.md WORLD-12).</summary>
     public int PuffersBuilt;
 
     // Drives every running emitter from its host node's current world pose. Emitters follow

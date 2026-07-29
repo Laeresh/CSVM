@@ -928,8 +928,8 @@ public partial class PlaneViewer : Node3D
                 }
 
                 // --effects-test: build the world-effects runtime and play every impact/destruction
-                // effect through it, reporting which resolve and which actually build a puffer (rule
-                // 76: a started def that renders nothing vs one that does), then quit — the D32
+                // effect through it, reporting which resolve and which actually build a puffer
+                // (WORLD-12: a started def that renders nothing vs one that does), then quit — the D32
                 // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
                 // is real; the world plane subtree is added so the templates' global transforms hold.
                 if (_spec.EffectsTest && worldScene != null)
@@ -2918,7 +2918,7 @@ public partial class PlaneViewer : Node3D
         };
         if (DisplayServer.GetName() == "headless")
         {
-            // Rule 82's sibling: the dummy renderer compiles no shaders, so a shader error cannot
+            // LOG-8's sibling: the dummy renderer compiles no shaders, so a shader error cannot
             // occur — and therefore cannot be screened. Say so rather than letting the clean error
             // census read as proof.
             Log.Warn("test", $"headless display — no shaders compiled, so the error screen cannot see a shader error");
@@ -3026,7 +3026,7 @@ public partial class PlaneViewer : Node3D
 
     /// <summary>The D32 headless verify: play every impact/destruction effect through the
     /// world-effects runtime at the camera point and report whether each RESOLVES (its def is bound)
-    /// and whether it BUILDS a puffer (rule 76 — a started def whose factory/textures are missing
+    /// and whether it BUILDS a puffer (WORLD-12 — a started def whose factory/textures are missing
     /// renders nothing). Each effect is stopped before the next so effects sharing a template root
     /// (the gun family shares <c>gunhit</c>) get an independent count. Reports to stdout and
     /// <c>./.scratch/effects_test.txt</c>.</summary>
@@ -3194,7 +3194,7 @@ public partial class PlaneViewer : Node3D
     /// always-on-bottom window flag, and --position is clamped so roughly a third of the window
     /// stays on the desktop whatever you ask for (measured: 5184 and 10000 both land at 4686 on a
     /// 5120-wide desktop). Hiding is not minimizing — a minimized window stops rendering, which
-    /// turns the captures blank (rule 121).</summary>
+    /// turns the captures blank (SHOT-16).</summary>
     private static void HideScriptedWindow()
     {
         if (!OperatingSystem.IsWindows())

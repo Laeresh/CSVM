@@ -40,7 +40,7 @@ table outlive the landing.
   - **Every error is printed AFTER the sweep finished and both reports were written** (lines 55–61
     of a 62-line log). So it does **not** abort a death sequence: `kkgate`'s death reported
     `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects *before* the
-    first error line. (verification.md rule 84)
+    first error line. (verification.md LOG-9)
   - It is **not** the destructible damage/death code at all: `--run-tests=damage-hd --chapter=C2`
     produces a **byte-identical** report to the tool while emitting **0** errors, because the
     harness tears its world down before the frame that follows. So the singular basis is reached by
@@ -202,7 +202,7 @@ work is below.
     ⚠ **Traps.** The "det == 0 aborts the death sequence" hypothesis this finding was filed under is
     **disproven** — every `det == 0` line is printed *after* the sweep completed, and `kkgate`'s own
     headless kill reports `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects
-    *before* the first error (see the "Still open — det==0" item and verification.md rule 84). So the
+    *before* the first error (see the "Still open — det==0" item and verification.md LOG-9). So the
     two are separate bugs; fixing det==0 will not move this door. Note also that the headless harness
     reports the swap and collider flip as *working* here, so the defect is in what the player sees, not
     in the sequence's bookkeeping — diagnose from the live world, not from `--damage-test`. Cross-ref the
@@ -392,7 +392,7 @@ unscheduled.
   on it — Godot logs `Condition "!is_inside_tree()" is true. Returning: Transform3D()` and the
   emitter is placed at the identity origin. Measured 2026-07-25 on C3 `--freecam` (1 error; 0 with
   `--mute`, which is why every earlier regression baseline read zero — they all ran muted). Same
-  class as rule 75. Fix is either to defer the bootstrap's one-shot sounds until the subtree is in
+  class as WORLD-11. Fix is either to defer the bootstrap's one-shot sounds until the subtree is in
   the tree, or to fall back to the node's local transform chain and say so in the log.
   ⚠ Traps: a muted regression run cannot see this — grep a **sound-enabled** run's full stderr.
   Do not "fix" it by suppressing the read; the emitter really is being positioned at the origin.
@@ -451,7 +451,7 @@ unscheduled.
   its burn effect, but the water tower shows no smoke or fire — the stages are visible only in the
   panel and the log, which the user found confusing. This is the known closure limit rather than a
   damage-lab defect: the world-effects runtime binds a fixed 28-name set, and the tower's stage
-  puffers are not among them, so they start, log, and draw nothing (verification rule 76).
+  puffers are not among them, so they start, log, and draw nothing (verification WORLD-12).
   ⚠ Traps: confirming a def *started* is not confirming it rendered — check that a `Puffer` was
   built, or the measurement is of a no-op. Filed as an animation/visuals issue by the user's own
   call, not as part of D34.
@@ -1374,7 +1374,7 @@ up together.**
    if they appear. Lowering it is content invention — the same trap as the C3 palms.
 3. **An 8-chapter regression is inert here by construction.** The default mission is IA1, which
    has no intro at all; no `IA1` and no `MP` mission bootstraps a cutscene def. Verify per-mission
-   or not at all (`docs/verification.md` §3).
+   or not at all (`docs/verification.md` DIAG-10).
 4. **Verify by what disappears, not by what looks right** — `generic_intro` is shared across 12
    missions and may currently be driving things nobody has looked at.
 
@@ -1429,7 +1429,7 @@ cosmetic fix with campaign capability. Kept here so nobody re-derives it and thi
 looks right*. `generic_intro` is shared across 12 missions and may currently be driving things
 nobody has looked at, so a change here is checked by enumerating removed motion per mission. An
 8-chapter regression cannot catch any of it: the default mission is IA1, which has no intro at
-all, so the regression is inert here by construction (`docs/verification.md` §3).
+all, so the regression is inert here by construction (`docs/verification.md` DIAG-10).
 
 ## The one-frame `CallSequence` dispatch lag
 
@@ -1458,7 +1458,7 @@ fixed; this lag is a separate question about dispatch timing fidelity.
 3. **Do not measure this with the bootstrap emitter census.** `anim: N ambient sound emitter(s)`
    is printed inside `Bootstrap`, so it is a snapshot that cannot see anything created afterwards
    — which is exactly how the siren's real cause stayed hidden through a full investigation
-   (`docs/verification.md` §4). C1 legitimately reports 38 while 39 emitters exist.
+   (`docs/verification.md` LOG-2). C1 legitimately reports 38 while 39 emitters exist.
 
 **Open question this should answer:** does the original dispatch a called sequence in the same
 tick? If yes, every `CallSequence` in the install is currently a frame late and the fix is a

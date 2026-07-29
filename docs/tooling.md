@@ -105,8 +105,8 @@ Stages, in order, each reported `PASS` / `FAIL` / `SKIP` / `TODO`:
 |---|---|
 | `build` | `dotnet build CSVM/CSVM.sln`. A failure stops the run — nothing downstream can say anything about a tree that does not compile |
 | `units` | `dotnet test CSVM/CSVM.sln` (the `CSVM.Tests` xUnit project), `--no-build` since the build stage just produced the binaries. Counts are read from a TRX log in `.scratch/testresults/`, never scraped from the localized console summary |
-| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — rule 82) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
-| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — rule 36). ~53 s for 11 shots |
+| `engine` | Godot with `--run-tests` — windowed (never `--headless`: no shaders compile there, so a clean error screen would prove nothing — LOG-8) and with `--log-file .scratch/run-tests-engine.log`, which is what lets the harness screen native engine `ERROR:` lines. `--run-tests` implies `--det` by itself. Verdict from the process exit code; counts and the failing suite names from `.scratch/test-report.json`, which is deleted before the run so a dead run cannot be scored from the last one's numbers |
+| `goldens` | The golden-image tripwire: one Godot per shot in `analysis/goldens/manifest.json`, each a pinned `--det` capture with `--screenshot=` and `--log-file=` appended, compared as **md5 of the raw pixel buffer** the engine prints on its `[core] shot pixmd5=… size=… gpu=…` line (never the PNG's encoded bytes — SHOT-6). ~53 s for 11 shots |
 | `perf` | `-Perf` only: every scenario in `analysis/perf/scenarios.json` under `--det --perf --no-vsync --mute`, medians appended to the git-ignored `perf-history.jsonl`. ~88 s for 5 scenarios. It measures and records; it never judges (below) |
 
 Switches: **`-Filter <substring>`** (engine suite names only — `-Filter weapons` runs `weapons-defs`
@@ -123,7 +123,7 @@ for eyeballing — the shot's frame number and render size are checked separatel
 clock or window-size regression reads as itself rather than as "pixels moved". **`-RegenGoldens`**
 re-renders every shot and rewrites `manifest.json` in place; the emitter round-trips the file
 byte-identically, so the diff is exactly the hash lines that moved. Regeneration is deliberate and
-never automatic — see `docs/verification.md` rule 95 for when it is the right answer and when it is
+never automatic — see `docs/verification.md` GOLD-1 for when it is the right answer and when it is
 covering up a defect, and `analysis/goldens/README.md` for the shot set.
 
 ### The perf stage (`-Perf`)
@@ -143,25 +143,25 @@ draw-call pose, ~2180 calls), `c5-city` (the largest clutter build and the `LIGH
 texture). Defaults: 300 sim frames × 3 launches per scenario.
 
 **Protocol.** The first launch of each scenario is discarded — a cold file cache *reshapes* a
-startup profile instead of scaling it (rule 89) — and each kept launch also drops its first perf
+startup profile instead of scaling it (PERF-7) — and each kept launch also drops its first perf
 window, which carries the first draw's shader compilation. The record stores **medians**: over
 every kept window for the frame metrics, over the kept launches for the startup phases, plus commit,
-`--dirty` flag, GPU string and the **md5 of the `CSVM.dll` Godot loaded** (rule 11: a dirty tree
+`--dirty` flag, GPU string and the **md5 of the `CSVM.dll` Godot loaded** (METHOD-6: a dirty tree
 gives A and B the same commit, so the assembly hash is the only proof the new build ran).
 
-**A/B is the only verdict.** `-PerfLabel base` … flip the one line under test (rule 10), rebuild …
+**A/B is the only verdict.** `-PerfLabel base` … flip the one line under test (METHOD-5), rebuild …
 `-PerfLabel change -PerfCompare base` pairs each scenario against the most recent `base` record and
 prints the ratios. Identical dll hashes are called out as "SAME BINARY — a noise floor, not an A/B".
 Nothing in this stage can fail a build, and **a history trend is awareness, not evidence**.
 
 **What is read and what is refused.** Verdict metrics: `render_cpu_ms`, `gpu_ms` and the counts
 `draws` / `prims` / `nodes`, plus the startup phases. Recorded but printed as *awareness only*, each
-with its reason: `fps` and `frame_ms` (paced — floors, rule 38), `script_ms` (`TIME_PROCESS`,
-~2.2× real per rule 37, and it collapses onto the frame cap when the loop is paced), `physics_ms`
+with its reason: `fps` and `frame_ms` (paced — floors, PERF-2), `script_ms` (`TIME_PROCESS`,
+~2.2× real per PERF-1, and it collapses onto the frame cap when the loop is paced), `physics_ms`
 (`--det` makes the clock parent-driven, so `_PhysicsProcess` consumers no-op and the term is empty),
 `mem_mb` (managed-heap high-water, monotonic inside a run). A row is marked `*` only when it clears
 **both** a relative band and an absolute floor, both measured as this machine's same-build noise —
-see `docs/verification.md` rules 100–102 and the manifest's `notes`.
+see `docs/verification.md` PERF-9…PERF-11 and the manifest's `notes`.
 
 **Exit-code contract: 1 if any stage FAILED, 0 otherwise — and a skip is not a failure.** No game
 data, no Godot, `-SkipUnits`/`-SkipEngine` all report `SKIP` and keep the run at 0, but every one of
@@ -180,7 +180,7 @@ the engine suites but *not* the data-dependent units — from the primary tree t
 `extracted/`.
 
 Stray Godots are killed before the engine, golden and perf stages, **filtered to this tree's project
-dir AND an argument only that stage's own launches carry** (rule 66) — `--run-tests` for the engine
+dir AND an argument only that stage's own launches carry** (SHELL-2) — `--run-tests` for the engine
 stage, the `.scratch\goldens\` / `.scratch\perf\` output paths for the other two. All always quit by themselves, so one
 still alive is stuck and ours, while any other Godot on this tree — a live playtest, another agent,
 a hand-run capture to any other path — is reported and left alone.
@@ -230,14 +230,14 @@ Not taking focus is not the same as staying out of sight: an unfocused window st
 of what you are reading. So a scripted session also **hides its window** —
 `PlaneViewer.HideScriptedWindow` calls `ShowWindow(SW_HIDE)` once `_Ready` knows the flags. Rendering
 is unaffected (all 11 goldens hash-identical); hiding is deliberately not *minimizing*, which stops
-rendering and blanks the captures (verification rule 121).
+rendering and blanks the captures (verification SHOT-16).
 
 That still leaves a **~1 s flash** for anything the engine launches by hand, because the window
 exists from ~180 ms and `_Ready` cannot run before ~1180 ms. So `RunTests.ps1` does not rely on it:
 it runs **every launch on a separate Windows desktop** (`HiddenDesktop.ps1` — `CreateDesktop`, then
 `CreateProcess` with `STARTUPINFO.lpDesktop`). A window belongs to the desktop its process was
 started on and only one desktop is ever displayed, so this is decided *before* the process runs,
-which is the only kind of placement that works (rule 107). The summary line says which desktop was
+which is the only kind of placement that works (SHELL-9). The summary line says which desktop was
 used, because a silent fallback to the visible one looks exactly like success. If the OS refuses the
 desktop, the run continues visibly rather than failing.
 
@@ -249,12 +249,12 @@ of them; perf draw counts are identical to a visible run. Evidence and the rejec
 `RunGame.ps1` and `RunDev.ps1` hand the foreground to the new window themselves, so playing is
 unchanged. That grab lives in the launcher and not in the engine because Windows' foreground lock
 no-ops `SetForegroundWindow` from a process the user is not interacting with; the console you typed
-into is that process, so it is allowed to give the foreground away (verification rules 69, 107).
+into is that process, so it is allowed to give the foreground away (verification SHELL-5, SHELL-9).
 
 `RunTests.ps1` also uses the **non-console** Godot binary, whose console twin opens its own
 `Godot Engine (Console)` window. A GUI-subsystem binary does not block PowerShell and, started
 without std handles, reattaches to the parent console and prints straight onto the terminal the run
-came from (verification rule 119) — so every stage launches through the script's `Invoke-Godot`
+came from (verification SHELL-10) — so every stage launches through the script's `Invoke-Godot`
 helper, which waits for the process and redirects both streams to `<its --log-file>.out` / `.err`.
 Stages still read their results from `--log-file` and the JSON reports rather than from console
 text; the suite table you see live is replayed from the log. `--no-focus` remains as the manual

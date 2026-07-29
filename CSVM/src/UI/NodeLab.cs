@@ -1126,7 +1126,7 @@ public sealed partial class NodeLab : Node
     {
         if (!_collisionBuilt)
         {
-            lines.Add("colliders NOT BUILT IN THIS MODE — --freecam/--anim-lab build the world with no collision at all, so an empty list here would be the missing instrument, not missing colliders (verification rule 72)");
+            lines.Add("colliders NOT BUILT IN THIS MODE — --freecam/--anim-lab build the world with no collision at all, so an empty list here would be the missing instrument, not missing colliders (verification WORLD-9)");
             return;
         }
         int bodies = 0, on = 0, off = 0;

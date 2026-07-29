@@ -30,7 +30,7 @@ screenshot in this project can be turned into a golden by copying that value int
 
 The md5 is over the **raw pixel buffer** (`Image.GetData()`), never the encoded PNG: all 881 of this
 install's C1 texture PNGs differ byte-wise while being pixel-identical, so a file hash reports
-encoder state rather than pixels (`docs/verification.md` rule 36).
+encoder state rather than pixels (`docs/verification.md` SHOT-6).
 
 The price of a raw-pixel hash is that it is a property of **this machine's GPU**. A driver or card
 change legitimately moves every hash at once, and the manifest's `gpu` field records what the
@@ -55,13 +55,13 @@ you know which instrument to reach for.
 ## What the set does and does not cover
 
 Each entry's `exercises` field carries its measured frame-sensitivity — frame N against N+1, which is
-the check that a pose has any animated surface in it at all (rule 80: a pose that renders identically
+the check that a pose has any animated surface in it at all (SHOT-12: a pose that renders identically
 twice proves nothing, because most poses show nothing that moves). Five shots move on a one-frame
 perturbation (`c1-flight` 34.52 %, `empty-stage` 12.21 %, `c4-snow` 3.74 %, `c2b-rain` 3.47 %,
 `c1c-rain` 2.50 %, `c1-waterfall` 1.28 %); the rest are geometry-and-shading shots and say so.
 
 **Not covered, deliberately.** The `TextureCycler` flipbooks are below screenshot resolution — the
 water frames differ by ~2/255 and no pose in this set moves more than 9 px across a full cycle
-(rule 32), so `--debug-anim`'s per-flipbook frame log remains the only instrument for them. Sound is
+(SHOT-3), so `--debug-anim`'s per-flipbook frame log remains the only instrument for them. Sound is
 muted in every shot. Splitscreen, the launchscreen and the labs are unrepresented; add a shot rather
 than assuming they are watched.

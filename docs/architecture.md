@@ -311,7 +311,7 @@ Builds a chapter world (fullbright): World children + partition-referenced subtr
   split, and **no origin-parked registration** — the transformless vehicle a `--node=` run most often
   asks for is exactly what `HideUnplacedEntities` switches off. It also leaves `_builtWorld` null, so
   `CreateEdgeExtender` correctly returns nothing. `MatchNodes`/`SuggestNodes` do the lookup on the
-  SOURCE name (`.flt` optional, case-insensitive), never the Godot name — rule 60.
+  SOURCE name (`.flt` optional, case-insensitive), never the Godot name — WORLD-8.
 ⚠ `DetachedWorldAabb` is the world-frame box of a subtree **not yet in the tree** (from the built
   meshes + node transforms). Use it, not `OrbitCamera.MergedAabb`, before the subtree is parented —
   `GlobalTransform` on a detached node is identity and logs an error per call.
@@ -1185,17 +1185,17 @@ an `ImmediateMesh` wireframe outlines the current rung's subtree. `Current`/`Lad
 `CurrentBox` + the `Changed(service, freshPick)` event are the state the other inspect tools read;
 `Select(node)` is the programmatic entry (a tree panel, a search hit). `--debug-select=x,y[,up]`
 replays a click and a ladder walk for scripted runs.
-⚠ **The pick is NOT a physics raycast** — neither mode builds collision (rule 72), so it is a manual
+⚠ **The pick is NOT a physics raycast** — neither mode builds collision (WORLD-9), so it is a manual
   ray-vs-AABB scan over the visible `MeshInstance3D`s under the world root, nearest hit wins, one
   walk per click. It is AABB-accurate, not triangle-accurate. **This is the mechanism every later
   inspect tool inherits**; it was lifted out of `AnimLab.PickObject`, which no longer picks.
 ⚠ `MaxPickDiag` (350 m) skips map-scale meshes, so **terrain is unpickable by design** — a click
   that finds nothing logs `select miss … tested= skipped_oversize=` rather than going quiet.
-⚠ Rungs are the `cs_name` meta, never `Node.Name` (rule 60) — C1's second `box_car.flt` is
+⚠ Rungs are the `cs_name` meta, never `Node.Name` (WORLD-8) — C1's second `box_car.flt` is
   `godot=@Node3D@5`. SceneBuilder's unnamed `mesh`/`lights`/`col` children are skipped, and the walk
   stops below the world content root, so the outermost rung is the placed object (`hk_zep`).
 ⚠ The box is measured from the selected subtree's OWN meshes here, not via `OrbitCamera.MergedAabb`
-  over the live tree (rule 92 — an overlay parked elsewhere would enter the merge); empty meshes are
+  over the live tree (WORLD-14 — an overlay parked elsewhere would enter the merge); empty meshes are
   skipped and the highlight is parented to the service, never into the subtree it measures.
 ⚠ The highlight's corners are baked into the rung's local frame once, then it rides that node's
   `GlobalTransform` — exact for rigid motion (train, zeppelin), so it does NOT grow to follow
@@ -1213,7 +1213,7 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
 `Visible`-flipped after. Measured C2: 1,848 node-backed shapes + 10k–14k clutter placements.
 ⚠ **Its first job is the notice.** Pressing C in a mode that built no collision prints the reason on
   screen and in the log and draws NOTHING — an empty overlay would read as "nothing here is solid",
-  which is exactly rule 72's trap.
+  which is exactly WORLD-9's trap.
 ⚠ Clutter shapes hang off the region body's RID with no node, so they are read back through
   `PhysicsServer3D.BodyGetShape*` only — a `ShapeOwner*` call on one of those bodies would make
   Godot rebuild it from the nodes it does not have and silently empty it.
@@ -1222,11 +1222,11 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
   with no vertices is an error too — `HasGeometry` is checked before opening one.
 ⚠ Each wireframe's visibility follows its shape's live `Disabled` flag (re-read 4×/s), so a
   destructible's death swaps the drawing with it; the tallies are logged as **separate on and off
-  counts plus the names that flipped**, never a net (rule 73: the C2 gate nets +7 — `col[off 1, on 8]`).
+  counts plus the names that flipped**, never a net (WORLD-10: the C2 gate nets +7 — `col[off 1, on 8]`).
 ⚠ Budgets, both reported: a trimesh over `MaxShapeTris` (2,000) or past the 400k-line budget draws
   as its bounding box instead. Counts are pose-dependent — the map-edge extender adds clutter bodies.
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
-  1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (rule 102).
+  1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
 
 ## src/UI/NodeLab.cs
 The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
@@ -1241,7 +1241,7 @@ columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin.
   ladder's ancestor walk, so a world click and a tree row name the same relation.
 ⚠ `Select(node)` reaches what a click cannot: `SelectionService`'s 350 m cap makes terrain
   unpickable, and `node=<cs_name>` selects it anyway (C5 `z3terrain`, a 512×0×512 box).
-⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (rules 43/72): the
+⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (LOG-1/WORLD-9): the
   collider line prints the not-built-in-this-mode notice, and on a `--node=` slice the anim and
   destructible readouts carry a PARTIAL WORLD banner with the bind census. `collisionBuilt` is
   wired to the real `WorldSession` option, which `--debug-damage` forces on (as `--damage-test`
@@ -1260,11 +1260,11 @@ reset,tick=,open]` is the scripted twin (an ordered script, not a token set).
   read-only with the reason. Driving a twin damages a pool nothing can ever hit.
 ⚠ **The slider is absolute HP** — down spends through `DamageAt`, up runs `ResetDestructible` then
   re-damages, because the model has no healing (`DamageStage` only climbs).
-⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, rule 75);
-  colliders print `off=`/`on=` separately (rule 73) or the not-built notice (rule 72).
+⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, WORLD-11);
+  colliders print `off=`/`on=` separately (WORLD-10) or the not-built notice (WORLD-9).
 ⚠ **Freecam builds no world-effects runtime** — the first damage action asks `PlaneViewer` for the
   one `--destroy` uses. Its bound name closure does NOT include the `sputter_*_obj` stage puffers or
-  a def's own `PUFFER_STATE`, so those fire in the log and draw nothing here (rule 76).
+  a def's own `PUFFER_STATE`, so those fire in the log and draw nothing here (WORLD-12).
 ⚠ Builds no UI until H (or `--debug-damage`): the 11 goldens hold unchanged with it in the tree.
 
 ## src/UI/OrbitCamera.cs
@@ -1338,7 +1338,7 @@ DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a 
 ⚠ **Pure — no engine state, no globals, no logging, no clock.** `NoPads`/`TexOverrides`/`LogSpecs`
   are recorded, never applied; `PadsDisabled` is a value, not a write to `Pads.Disabled`;
   `PinnedSeed` is null when unpinned rather than drawing `Rng.TimeSeed()`, because a spec that read
-  the clock would not be a function of its args (rule 118). Complaints go to `Warnings` as
+  the clock would not be a function of its args (DET-9). Complaints go to `Warnings` as
   `(category, message)`, empty category meaning a bare console line. That is what keeps the surface
   reachable from `CSVM.Tests`, which has no Godot runtime to print into.
 ⚠ **Two known defects are reproduced on purpose**: `ModeName` omits `--dump-flight` from its "dump"
@@ -1428,7 +1428,7 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   its random spawn, random liveries and live pads.
 ⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
   drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
-  **never swap that for minimize**, which stops rendering and blanks every capture (rule 121).
+  **never swap that for minimize**, which stops rendering and blanks every capture (SHOT-16).
   Both directions are load-bearing: get the predicate wrong and either a test run covers the
   desktop or somebody's game launches invisible.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
@@ -1509,7 +1509,7 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   `ExternalEffect`, so a plain `--freecam` regression still builds nothing extra.
   `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
   camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
-  and reports resolve✓ + puffer-built count (rule 76) to `./.scratch/effects_test.txt`.
+  and reports resolve✓ + puffer-built count (WORLD-12) to `./.scratch/effects_test.txt`.
 ⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
   contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
@@ -1559,7 +1559,7 @@ jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file
   and mojibakes the em dashes). Lines logged before `Open` sit in a 512-line prelude, flushed on open.
 ⚠ **Migration is incremental by decision, not by neglect — do NOT bulk-sweep the remaining
   `GD.Print` sites** (223 across 37 files; a bulk text rewrite has corrupted files here before,
-  verification rule 67). New code uses `Log`; a family converts when an item touches it, keeping
+  verification SHELL-3). New code uses `Log`; a family converts when an item touches it, keeping
   each site's original level unless a comment there says the level was compromised.
 
 ## src/Utils/ShaderTime.cs
@@ -1628,7 +1628,7 @@ once and returns both halves: the report text the flag prints and writes, and a 
 ⚠ **A verdict is a field, never a glyph.** The `✓`/`✗` in a report line is formatting; the boolean
   it came from is on `DamageRow`. Parsing a report back to automate it is the thing this replaced.
 ⚠ `Probes.SweepCap` (16) caps the swept ROWS, not the registry totals — a census must read
-  `DamageResult.TotalInstances` / `DistinctAnchors` or it silently under-counts (rule 59).
+  `DamageResult.TotalInstances` / `DistinctAnchors` or it silently under-counts (LOG-5).
 ⚠ `Probes.Damage` needs the world subtree in the tree with `ManualAdvance` set: it ticks past the
   death schedule for the debris count, and an out-of-tree global-transform read returns identity.
 ⚠ `EnabledColliders` / `WorldRootOf` / `CountVariants` are the shared kill-census helpers — the
@@ -1655,7 +1655,7 @@ PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
 ⚠ `Screen` is pure (no Godot API, no IO) and unit-tested in `CSVM.Tests` — the classifier is the
   one part of the harness that could turn the whole thing into a rubber stamp.
 ⚠ Run **windowed**: `--headless` compiles no shaders, so a clean error screen says nothing about
-  them (rule 82). The harness logs a warning when it detects the headless display.
+  them (LOG-8). The harness logs a warning when it detects the headless display.
 ⚠ A suite must never write outside `.scratch/`; `WriteArtifact`/`ScratchDir` are the only route.
 
 ## src/Testing/Suites.cs
@@ -1676,9 +1676,9 @@ The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-cas
 `[core] shot pixmd5=… size=… gpu=…` on every capture; `RunTests.ps1`'s `goldens` stage parses that
 line and compares against `analysis/goldens/manifest.json`.
 ⚠ **Hash the raw buffer, never the PNG.** `Image.GetData()` only — encoded bytes differ between
-  pixel-identical images (rule 36), so a file hash reports encoder state.
+  pixel-identical images (SHOT-6), so a file hash reports encoder state.
 ⚠ **The hash is a property of this GPU.** A driver change moves every shot at once; the adapter
-  travels on the same line precisely so that case is readable rather than mysterious (rule 95).
+  travels on the same line precisely so that case is readable rather than mysterious (GOLD-1).
 ⚠ The comparison lives in PowerShell, not here: the suites in `TestHarness` run inside one `_Ready`
   call and never yield a frame, so no in-engine suite can photograph anything.
 

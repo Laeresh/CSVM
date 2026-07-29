@@ -7871,3 +7871,40 @@ arg fields, its 120-branch parse loop and its five mutating arbitration blocks; 
 now one immutable, engine-free `SessionSpec` that parses and resolves, with a closed `SessionMode`,
 computed `Det`/`SeedPinned`/`BuildsCollision`/`IsScripted`, a `FromMenu` factory the launchscreen
 derives from, and 83 facts standing behind it.
+
+## 2026-07-30 — verification.md: task-shaped sections and permanent rule IDs
+
+The flat ~120-rule list ("OLD LIST NEED TO SORT") is reorganized into 11 task-shaped sections read
+on demand — METHOD (every measurement) and DIAG (chasing a symptom) always, then only the section
+matching the instrument: SHOT, GOLD, DET, PERF, LOG, WORLD, SHELL, INSTR, SRC. Rules now carry
+permanent per-section IDs (`DET-6`): a new rule appends at its section's next free number, a
+deleted one retires its ID, nothing ever renumbers — sequential numbering had already produced
+stale citations three separate ways (RunTests.ps1 cited "rule 108" for the console-reattach trap,
+gotchas.md and gamez.md "rule 21" for the subface pair, backlog.md still cited the original
+§-section layout). Rules were condensed to the bold-imperative + one-evidence-sentence shape, and
+two rules an earlier reshuffle (615b0ce) dropped while still cited were restored: METHOD-10 (a
+test a no-op would also pass is not a test) and SHOT-6 (never compare images by encoded bytes).
+Old 16/24/25/30 stay deleted deliberately.
+
+Every citation in living files was translated content-first, never by blind number swap (~90
+sites): the four launch/test scripts, CSVM source comments (AnimRuntime, PlaneViewer, Probes,
+NodeLab, SessionSpecTests), docs/tooling.md, docs/cli.md, docs/architecture.md,
+docs/SCOPING-M4-ai.md, docs/formats/, backlog.md, analysis/goldens/README.md and
+analysis/perf/scenarios.json. HISTORY.md, docs/plans/ and finished analysis FINDINGS keep their
+historical numbering by decision — translate with the map below.
+
+Old → new: METHOD-1..17 ← 5, 7, 8, 9, 10, 11, 12, 13, 14, 15, 34, 46, 87, 111, 122, 124, 126 ·
+DIAG-1..16 ← 1, 2, 3, 4, 17, 18, 20, 22, 23, 44, 45, 47, 48, 54, 57, 70 ·
+SHOT-1..16 ← 26, 31, 32, 33, 35, 36, 49, 64, 71, 74, 79, 80, 93, 94, 99, 121 ·
+GOLD-1..2 ← 95, 96 · DET-1..9 ← 51, 62, 77, 78, 81, 83, 98, 112, 118 ·
+PERF-1..11 ← 37, 38, 39, 40, 41, 42, 89, 90, 100, 101, 102 ·
+LOG-1..12 ← 43, 50, 55, 58, 59, 61, 65, 82, 84, 85, 86, 115 ·
+WORLD-1..18 ← 6, 21, 27, 28, 29, 52, 53, 60, 72, 73, 75, 76, 91, 92, 103, 105, 110, 113 ·
+SHELL-1..13 ← 63, 66, 67, 68, 69, 88, 97, 106, 107, 119, 120, 123, 125 ·
+INSTR-1..4 ← 56, 104, 116, 117 · SRC-1..4 ← 19, 108, 109, 114.
+(These old numbers are the file's numbering as of f57a2ac; still-older documents may cite an even
+earlier numbering — resolve by content.)
+
+Verified: 122 IDs defined and every cross-reference in the repo resolves against them (two
+scripted sweeps: no `rule N` left in living files, no cited ID undefined), and `.\RunTests.ps1`
+PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, exit 0.

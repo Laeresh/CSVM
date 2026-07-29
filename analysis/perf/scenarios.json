@@ -9,11 +9,11 @@
   "dropFirstWindow": true,
   "notes": [
     "Every scenario runs under --det --perf --no-vsync --mute for a fixed number of SIM frames, ended by --frames=N --screenshot=, which also prints sim_frame= as proof the run reached exactly N.",
-    "iterations launches per scenario; the first warmups of them are thrown away (cold OS file cache reshapes a startup profile rather than scaling it -- verification rule 89). Each measured launch also drops its FIRST perf window, which carries the shader compilation of the first draw.",
+    "iterations launches per scenario; the first warmups of them are thrown away (cold OS file cache reshapes a startup profile rather than scaling it -- verification PERF-7). Each measured launch also drops its FIRST perf window, which carries the shader compilation of the first draw.",
     "A record holds MEDIANS: over every kept window for the frame metrics, over the measured launches for the startup phases.",
     "verdictMetrics are the numbers a paired A/B may be read from. awarenessMetrics are recorded and printed but never a verdict -- each carries the reason it cannot be one.",
-    "band/minAbs only mark a ratio for attention; nothing fails on them and they are not thresholds. A row is marked only when BOTH are exceeded -- the absolute floor is rule 41 written down, and without it gpu_ms flags every run on 0.045 ms of jitter over a 0.26 ms number.",
-    "The bands below are the same-build floor measured on this machine over TWO back-to-back unchanged pairs. The counts (draws, prims, nodes) came back identical to the digit in all 10 scenario pairings -- they are the sharp instrument here. The ms terms did not: render_cpu spanned 0.981-1.061 (max 0.065 ms), gpu spanned 0.672-1.173 (max 0.215 ms), startup phases spanned 0.911-1.148 once the sub-10 ms ones are set aside, and startup.total 0.977-1.045. The second pair was two to three times noisier than the first, which is why one pair is not a floor (verification rules 7, 8, 41).",
+    "band/minAbs only mark a ratio for attention; nothing fails on them and they are not thresholds. A row is marked only when BOTH are exceeded -- the absolute floor is PERF-5 written down, and without it gpu_ms flags every run on 0.045 ms of jitter over a 0.26 ms number.",
+    "The bands below are the same-build floor measured on this machine over TWO back-to-back unchanged pairs. The counts (draws, prims, nodes) came back identical to the digit in all 10 scenario pairings -- they are the sharp instrument here. The ms terms did not: render_cpu spanned 0.981-1.061 (max 0.065 ms), gpu spanned 0.672-1.173 (max 0.215 ms), startup phases spanned 0.911-1.148 once the sub-10 ms ones are set aside, and startup.total 0.977-1.045. The second pair was two to three times noisier than the first, which is why one pair is not a floor (verification METHOD-2, METHOD-3, PERF-5).",
     "Consequence, stated rather than hidden: on these scenes the sub-millisecond ms terms carry little signal, and this suite detects a frame-cost change only from about 0.25 ms and 15 % upward. A change smaller than that has to be caught by the counts or by a scenario built to magnify it.",
     "A history trend is awareness, not evidence. The only regression instrument here is a paired A/B: run the suite, flip the one line under test, rebuild, run the suite again with -PerfCompare."
   ],
@@ -26,9 +26,9 @@
     { "metric": "nodes", "band": 0.01, "minAbs": 0.5 }
   ],
   "awarenessMetrics": [
-    { "metric": "fps", "why": "paced by the display or driver, so it is a floor, not a cost (rule 38)" },
+    { "metric": "fps", "why": "paced by the display or driver, so it is a floor, not a cost (PERF-2)" },
     { "metric": "frame_ms", "why": "the same floor as fps; only a value ABOVE the cap means anything" },
-    { "metric": "script_ms", "why": "Godot's TIME_PROCESS, ~2.2x real (rule 37), and it collapses onto the frame cap when the loop is paced" },
+    { "metric": "script_ms", "why": "Godot's TIME_PROCESS, ~2.2x real (PERF-1), and it collapses onto the frame cap when the loop is paced" },
     { "metric": "physics_ms", "why": "--det makes the clock parent-driven, so _PhysicsProcess consumers no-op and this term is empty by construction" },
     { "metric": "mem_mb", "why": "the managed heap high-water, which climbs monotonically inside a run -- read a big step, never a ratio" }
   ],

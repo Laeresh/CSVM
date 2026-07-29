@@ -375,8 +375,8 @@ public static class Probes
     /// The swap targets nodes through the compiled symbol table, which can resolve to geometry
     /// OUTSIDE the small anim anchor, so a census under the anchor misses it — pass
     /// <see cref="WorldRootOf"/> and compare the two sets around one kill.
-    /// <para><b>Report the two directions separately, never the signed sum</b> (verification rule
-    /// 73): a death both switches the healthy collider off and brings wreck colliders on, and the
+    /// <para><b>Report the two directions separately, never the signed sum</b> (verification
+    /// WORLD-10): a death both switches the healthy collider off and brings wreck colliders on, and the
     /// net can be positive while the real removal happened.</para></summary>
     public static HashSet<CollisionShape3D> EnabledColliders(Node root)
     {

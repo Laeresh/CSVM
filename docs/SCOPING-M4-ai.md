@@ -76,7 +76,7 @@ otherwise.
 | **Leads only — a hypothesis with a named discriminating instrument** | D10, D11, D12, D13 | Budget for investigation; **a correct disproof that lands no code is a success here.** |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
-worktree session here; use a local commit or a file copy (`docs/verification.md` rule 10).
+worktree session here; use a local commit or a file copy (`docs/verification.md` METHOD-5).
 
 ---
 
