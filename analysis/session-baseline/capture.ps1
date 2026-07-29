@@ -22,7 +22,7 @@ if (-not (Test-Path $godot)) {
     throw "Godot not found at $godot -- see docs/tooling.md"
 }
 
-# The matrix itself lives beside this file, so compare.ps1 runs exactly the same command lines.
+# The matrix itself lives beside this file, so any other instrument runs exactly the same command lines.
 . "$PSScriptRoot/matrix.ps1"
 $sb = [System.Text.StringBuilder]::new()
 $null = $sb.Append("# CSVM launch-resolution baseline -- regenerate with analysis/session-baseline/capture.ps1`n")

@@ -7722,3 +7722,44 @@ the timestamp says otherwise.
 Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0,
 63.6 s — and `baseline.txt` re-captured md5-identical (`944310579BA214A0E99B801FC344098B`) through
 the refactored `capture.ps1`, which is what proves the matrix extraction changed no command line.
+
+## 2026-07-30 — PLAN-sessionspec B5: the arg fields are gone
+
+`PlaneViewer` lost ~108 launch-arg fields, the 120-branch parse loop, the five mutating arbitration
+blocks and the seven parse helpers — **1,293 lines deleted for 479 added** — and now holds one
+immutable `_cli` (what the user typed) and one `_spec` (what the live session was built from), which
+440 rewritten call sites read. `_Ready` keeps only what a pure value cannot do: the data-root
+precedence, `Pads.Disabled`, `TextureDropIn`, `Log.Configure`, the clock-drawn master seed, the
+`--det` announcement, and emitting the spec's held `Warnings` — which go out before `Log.Configure`,
+because that is where the loop they replace raised them.
+
+Three fields that look like args are runtime state and were renamed to say so: `_pendingShot`
+(cleared when the last burst frame lands), `_shotDelay` (the `--frames=` countdown) and
+`_pendingJoin` (consumed by the first launchscreen). The menu re-entry became
+`SessionSpec.WithMenuSelection`, applied to the live spec rather than to the pristine CLI one, which
+reproduces today's accumulate-and-patch exactly and leaves the derive-fresh decision to B6.
+
+**Verified by the instrument recorded before the refactor: `baseline.txt` re-captured md5-identical
+(`944310579BA214A0E99B801FC344098B`) — 50 command lines × 124 settings, unchanged across the whole
+deletion.** The pixel goldens cannot see resolution; this can. `.\RunTests.ps1` PASS (152 units, 9/9
+suites, 11/11 goldens hash-identical, exit 0).
+
+Because no golden covers them, nine launches were checked by hand on a hidden desktop, each exit 0
+with zero engine errors and the expected `startup mode=` line: `--anim-lab`, `--play-anim=`,
+`--stunt`, `--stunt --players=2`, a 4-pane `--fly --plane=a,b,c,d` (eyeballed — four panes, aircraft
+alternating as asked), `--menu`, `--menu --debug-join=2` (eyeballed — P1 keyboard plus two
+device-less joins), `--viewer --damage=…` and `--node=`. The menu → flight re-entry needs a keypress
+and is owed as a playtest; it is also B6's subject.
+
+The `=compare` gate was **retired here rather than deferred to B8**: it compared two independent
+resolutions, and with the field side deleted it would have compared the spec against itself. A
+passing instrument that cannot fail is worse than none, so `Probes.SessionCompare`, `SpecRows` and
+`compare.ps1` are gone; the bare `--dump-session` and its baseline — which can still fail — stay
+until B8.
+
+One self-inflicted trap, now verification rule 125: a spot-check script passed
+`--screenshot=<path with a space>` unquoted, Godot split it and wrote the PNG to `Z:\Crimson`, and
+from then on **every** launch through `Godot_..._console.exe` failed with `CreateProcess failed,
+error 193` — that wrapper spawns the real exe with a NULL application name, so `CreateProcess` tried
+`Z:\Crimson.exe`, then `Z:\Crimson`, and a PNG is not a valid executable. It outlives the process
+that caused it and reads as a corrupted install.

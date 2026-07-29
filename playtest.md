@@ -103,6 +103,14 @@ Each item below is a **re-test owed once its fix lands**; the numbered pointer i
   input, this is the toggle to veto (it shipped as its own commit and reverts cleanly).
   *Blocks:* nothing — a standing user-vetoable decision.
 
+- **Menu → flight re-entry, after the args refactor.** The launchscreen's pick now builds a
+  `SessionSpec` instead of writing nine fields, and this is the one path no automated instrument
+  reaches: it needs a keypress, so neither the goldens nor the resolution baseline cover it.
+  *Look for:* launch bare, pick Free Flight → a chapter → a plane and fly; then Esc back and launch
+  a **different** chapter and plane, and a **Stunt** run after a Free Flight one — the second launch
+  must take the new chapter/plane and must not inherit the first run's spawn scenario.
+  `./RunGame.ps1` (no args). *Blocks:* B6 (`SessionSpec.FromMenu`), which changes this path again.
+
 ---
 
 ## 3 · Flight feel & camera (TUNE — calibrate against the original)

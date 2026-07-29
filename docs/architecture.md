@@ -1342,7 +1342,11 @@ DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a 
   `Log.Warn`, which is how the spec normalises those two values engine-free.
 ⚠ Path flags are override VALUES only, null when unset — no default arithmetic here, that is
   `SessionPaths`. `DataRoot` is the raw arg; its precedence against `CSVM_DATA_ROOT` is the
-  caller's, because it is read before the arg loop and every base path derives from it.
+  caller's, because every base path derives from the winner.
+⚠ `WithMenuSelection` is applied to the LIVE spec, not to the pristine command-line one, so a second
+  launch inherits what the first settled — which is why `Scenario` is re-derived from the mode on
+  every call unless `--scenario=` pinned it. That is the accumulate-and-patch the launchscreen has
+  always done; changing the base to the pristine spec is a behaviour change, not a tidy-up.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
@@ -1377,8 +1381,18 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
   labels read a real name off it (`on ground/col`).
 
 ## src/PlaneViewer.cs
-Main.tscn root: parses args, registers shader globals + lighting + the persistent camera once in
-`_Ready`, then launchscreen or `StartSession()` — menu and CLI share one session-build path.
+Main.tscn root: registers shader globals + lighting + the persistent camera once in `_Ready`, then
+launchscreen or `StartSession()` — menu and CLI share one session-build path.
+⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
+  node holds `_cli` (what was typed) and `_spec` (what the live session was built from, which the
+  launchscreen's pick patches) and every consumer reads `_spec`. `_Ready` applies only what a pure
+  value cannot — the data-root precedence, `Pads.Disabled`, `TextureDropIn`, `Log.Configure`, the
+  clock-drawn master seed — and emits the spec's held `Warnings` before `Log.Configure`, which is
+  where the loop they replaced raised them. **A new flag is a SessionSpec change**; adding a field
+  here to hold one puts the answer in two places again, which is the smell the extraction removed.
+⚠ Three fields still look like args and are not: `_pendingShot` (nulled when the last burst frame
+  lands), `_shotDelay` (the `--frames=` countdown) and `_pendingJoin` (consumed by the first
+  launchscreen). `_menuPads` is session state too — it comes from the join flow, not from args.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE; `SetupWeather` only `Set`s — the in-process
   world rebuild must never double-Add (that errors). `ShaderTime.RegisterGlobal` joins the fog /
   world-light / `WorldLights` adds there, and must stay ahead of the first shader build: Godot
@@ -1388,24 +1402,22 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   wall time so nothing stalls behind the menu.
 ⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
   null-guards cover the frame before the deferred free lands.
-⚠ **The `--det` bundle is resolved in ONE place** — the block after `Log.Open` in `_Ready`, ahead of
-  the jitter and master-seed resolution it feeds. It sets the fixed clock, master seed 1, `--spawn=0`,
-  the pinned livery seed, `Pads.Disabled` and `--jitter=0`, each still overridable by passing that
-  flag; `--screenshot=`/`--dump-*`/`--damage-test` turn it on themselves and `--no-det` beats both the
-  implication and an explicit `--det`. It announces the resolved set on one `[core] det …` line, whose
-  absence means the run was interactive. **Never let a constituent leak into an interactive default** —
-  a bare `--fly` keeps its random spawn, random liveries and live pads.
+⚠ **The `--det` bundle is resolved on the SPEC, not here** — membership, the pinned spawn and the
+  jitter default are `SessionSpec`'s. What stays is the half a pure value cannot do: drawing an
+  unpinned master seed from the clock (`PinnedSeed ?? Rng.TimeSeed()`), writing `Pads.Disabled`, and
+  announcing the resolved set on one `[core] det …` line whose absence means the run was
+  interactive. **Never let a constituent leak into an interactive default** — a bare `--fly` keeps
+  its random spawn, random liveries and live pads.
 ⚠ **`--dump-session` observes the resolution and so is a term of none of it** — absent from the
-  `--det` implication list, the `scriptedBy` chain and the `_mode` chain, all of which it reports;
+  `--det` implication list, the `ScriptedBy` chain and the `ModeName` chain, all of which it reports;
   the focus decision applies it outside the predicate rather than adding a term (rule 117). Its
   branch runs first among the dumps, after every resolution, so it can report a command line that
   carries another dump. Scaffolding: the SessionSpec plan's last item deletes it, and
   `analysis/session-baseline/` keeps the matrix and baseline that outlive it.
-⚠ **`--dump-session=compare` is the parallel-run gate, and the BARE form must never change** — its
-  output is the committed baseline, so the second column lives behind the `=compare` value rather
-  than in the row. `SpecRows` renders the same 124 keys from `SessionSpec` through the same `SV`
-  helpers (a formatting difference would read as a resolution difference); 114 are compared and the
-  10 that are not — the derived `path.*` and `tex.overrides` — are named in the report.
+⚠ **`--dump-session`'s output IS the committed baseline** (`analysis/session-baseline/`), which is
+  what proves a change to the resolution behaviour-neutral: the goldens cannot see resolution, and
+  50 command lines × 124 settings can. Anything that changes a row — including a rename — invalidates
+  it, so re-capture and diff deliberately rather than accepting a moved hash.
 ⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
   drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
   **never swap that for minimize**, which stops rendering and blanks every capture (rule 121).
@@ -1599,14 +1611,14 @@ The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loa
 `--dump-flight` / `--dump-session` / `--damage-test` inspection reports. Each probe does the work
 once and returns both halves: the report text the flag prints and writes, and a structured verdict
 (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
-⚠ `Session` + `SessionCompare` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by
-  that plan's last item. They render pre-rendered `key = value` rows, sorted, ASCII, LF — the text
-  is captured by a PowerShell 5.1 harness into a committed baseline, so an em dash or a `\r\n` reads
-  as a diff on every row. `SessionValues` exists so an absent value is spelled `-` in all 124 places.
-⚠ **`SessionCompare` is the equivalence gate** — `field | spec` per setting, nonzero exit on any
-  disagreement, and it **names every key it does not cover** (both in the row and in the summary)
-  because a gate that silently narrows what it checks reads exactly like one that passed. A spec key
-  with no matching field row fails too, so a renamed row cannot pass as silence.
+⚠ `Session` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by that plan's last
+  item. They render `key = value` rows, sorted, ASCII, LF — the text is captured by a PowerShell 5.1
+  harness into a committed baseline, so an em dash or a `\r\n` reads as a diff on every row.
+  `SessionValues` exists so an absent value is spelled `-` in all 124 places.
+⚠ **The `SessionCompare` half is gone, deliberately.** It compared the launch fields against
+  `SessionSpec`; once the fields were deleted it would have compared the spec against itself, and an
+  instrument that cannot fail is worse than none. Re-adding a second column only makes sense while
+  two independent resolutions exist.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —

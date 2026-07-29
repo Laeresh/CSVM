@@ -1,5 +1,5 @@
 # The matrix both instruments run: label -> user args. Dot-sourced by capture.ps1 (which records
-# what each line resolves to) and by compare.ps1 (which checks SessionSpec resolves it the same),
+# what each line resolves to), and by anything else that needs the same command lines,
 # so the two can never drift into testing different command lines.
 #
 # It is weighted toward the modes the pixel goldens do not reach at all (--anim-lab, --stunt,

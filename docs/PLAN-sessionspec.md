@@ -109,11 +109,11 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `--dump-session` scaffold + the baseline resolution matrix
 2. ☑ `SessionSpec` + `Parse`, raw values only, not yet consumed
 3. ☑ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
-4. ☑ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch — **GREEN**
+4. ☑ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch — **GREEN**, retired in B5
 
 ### Wave B — Migrate, then lock it in
 
-5. ☐ Delete the arg fields; rewrite the ~183 call sites
+5. ☑ Delete the arg fields; rewrite the ~183 call sites
 6. ☐ `SessionSpec.FromMenu` and the launchscreen re-entry
 7. ☐ The xUnit resolution truth table
 8. ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
@@ -317,23 +317,55 @@ failed `--fly --players=4` with `plane.players field=4 spec=3`. `.\RunTests.ps1`
 
 # Wave B — Migrate, then lock it in
 
-## B5 ☐ Delete the arg fields; rewrite the ~183 call sites
+## B5 ☑ Delete the arg fields; rewrite the ~183 call sites
 
-**Goal.** The ~108 arg fields are gone; every site reads the spec; `PlaneViewer` holds one immutable
-`_cli` spec and one `_spec` for the live session.
+**The arg fields are gone.** `PlaneViewer` lost ~108 of them plus the 120-branch parse loop, the
+five mutating arbitration blocks and the seven parse helpers — **1,293 lines deleted for 479 added**
+— and now holds one immutable `_cli` (what the user typed) and one `_spec` (what the live session
+was built from), which 440 call sites read.
 
-**Evidence (confidence: traced).** 95 of the arg fields are write-once in `_Ready`; only 13 are
-written later, and those split into the menu re-entry (7, → B6), placement normalisation (4, → A3)
-and two genuine runtime one-shots that stay.
+**Evidence (confidence: traced).** 95 of the arg fields were write-once in `_Ready`; only 13 were
+written later, and those split into the menu re-entry (7), placement normalisation (4, landed in A3)
+and two genuine runtime one-shots.
 
-**Approach.** `<…>`
+**Approach.** `_Ready` now parses once and then does only what a pure value cannot: the data-root
+precedence, `Pads.Disabled`, `TextureDropIn`, `Log.Configure`, the clock-drawn master seed and the
+`--det` announcement — plus emitting `Warnings`, which land before `Log.Configure` because that is
+where the loop they replace raised them. Three fields stayed mutable because they are genuinely
+runtime state, and are renamed to say so: `_pendingShot` (cleared when the last burst frame lands),
+`_shotDelay` (the `--frames=` countdown) and `_pendingJoin` (consumed by the first launchscreen).
+`_menuPads` stays session state — it comes from the join flow, not from args.
 
-**Verify.** `<A1's matrix re-run and diffed clean, plus RunTests.ps1. Name the uncovered modes
-spot-checked by hand and say so plainly — the goldens cannot see anim-lab, stunt, splitscreen or the
-menu.>`
+The menu re-entry became `SessionSpec.WithMenuSelection`, applied to `_spec` rather than to `_cli`:
+that reproduces today's accumulate-and-patch exactly, so this item stays behaviour-neutral and B6
+still owns the derive-fresh decision.
 
-**⚠ Traps.** This is the ~1,000-line hand edit. A mechanical slip lands silently in any mode no
-golden exercises. `<…>`
+**The `=compare` gate was retired here, not deferred to B8.** It compared two resolutions; with one
+of them deleted it compares the spec against itself, and an instrument that cannot fail is worse
+than no instrument. `Probes.SessionCompare`, `SpecRows` and `compare.ps1` are gone. The bare
+`--dump-session` and its committed baseline — the instrument that *can* still fail — stay until B8.
+
+**Verify. `baseline.txt` re-captured md5-identical (`944310579BA214A0E99B801FC344098B`): 50 command
+lines × 124 settings, unchanged with every arg field deleted.** That is this item's real gate — the
+goldens cannot see resolution, and this can. `.\RunTests.ps1` PASS (152 units, 9/9 suites, 11/11
+goldens hash-identical, exit 0).
+
+**Hand-checked, because no golden covers them** — nine launches on a hidden desktop, each exit 0
+with zero engine errors and the expected `startup mode=` line: `--anim-lab`, `--play-anim=` (implies
+the lab), `--stunt`, `--stunt --players=2`, a 4-pane `--fly --plane=a,b,c,d` (eyeballed: four panes,
+per-player aircraft alternating as asked), `--menu`, `--menu --debug-join=2` (eyeballed: P1 keyboard
++ two device-less joins), `--viewer --damage=…` and `--node=`. **Still owed: the menu → flight
+re-entry itself**, which needs a keypress and cannot be scripted — it is in `playtest.md`, and it is
+B6's subject.
+
+**⚠ Traps.**
+1. This was the ~1,000-line hand edit; a mechanical slip lands silently in any mode no golden
+   exercises. The baseline caught resolution, but only the hand launches above cover the build path.
+2. `Log.Warn` takes a `FormattableString`, so a held message needs `$"{note.Message}"` — a plain
+   string does not compile against it.
+3. A spot-check script wrote `--screenshot=<path with a space>` unquoted, which parked a PNG at
+   `Z:\Crimson` and broke **every** Godot launch on the machine until it was removed (new
+   verification rule 125).
 
 ## B6 ☐ `SessionSpec.FromMenu` and the launchscreen re-entry
 

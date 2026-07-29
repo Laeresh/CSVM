@@ -572,6 +572,18 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      artifact until the timestamp says otherwise. Touch the file (or build clean) before the run
      that is supposed to be green.
 
+125. **An unquoted path argument does not just lose its own run — it can break every Godot launch on
+     the machine. Quote them (rule 63) and check the repo root for debris when launching starts
+     failing.** A hand spot-check passed `--screenshot=Z:\Crimson Skies\.scratch\shot.png` unquoted;
+     Godot split it at the space and wrote the PNG to `Z:\Crimson`. From then on **every** launch
+     through `Godot_..._console.exe` died with `CreateProcess failed, error 193`, because that
+     wrapper spawns the real exe with a NULL application name and `CreateProcess` then tries
+     `Z:\Crimson.exe`, then `Z:\Crimson` — and a PNG is not a valid executable. The failure survives
+     the process that caused it, points at the launcher rather than at the writer, and looks exactly
+     like a corrupted install: the main exe still runs when invoked with an explicit path, which is
+     why `RunTests.ps1` had passed minutes earlier. `RunTests.ps1`'s own `Invoke-Godot` quotes for
+     this reason; anything launching Godot by hand must do the same.
+
 ## What this project cannot verify itself
 
 These need the user:

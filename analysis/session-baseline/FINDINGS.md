@@ -113,5 +113,18 @@ clamping the player count to 3 failed `--fly --players=4` (`plane.players field=
 reverts were confirmed green — after a forced rebuild, because the first attempt restored a file
 older than the DLL and silently re-measured the perturbation (verification rule 124).
 
-The matrix now lives in `matrix.ps1`, dot-sourced by both scripts, so the recorder and the gate
-cannot drift into testing different command lines.
+The matrix now lives in `matrix.ps1`, dot-sourced by `capture.ps1`, so every instrument that needs
+these command lines reads them from one place.
+
+## What the baseline caught, and why the gate is gone (2026-07-30)
+
+The arg fields were deleted and all 440 call sites rewritten to read `SessionSpec`.
+**`baseline.txt` re-captured md5-identical (`944310579BA214A0E99B801FC344098B`)** — 50 command
+lines × 124 settings, unchanged across a 1,293-line deletion. That is the whole point of having
+recorded it *before* the refactor: the pixel goldens cannot see resolution, and this can.
+
+`compare.ps1` and `Probes.SessionCompare` were **retired in the same change, not kept for later**.
+They compared two independent resolutions; with the field side deleted, the remaining comparison is
+the spec against itself, which cannot fail. Keeping a green tautology beside the real baseline would
+have been worse than deleting it — a passing instrument that proves nothing is how a refactor gets
+declared safe on no evidence. `capture.ps1` and this baseline stay.

@@ -419,7 +419,7 @@ public sealed record SessionSpec
                 s.DamagePreset = ParseDamagePreset(arg["--damage=".Length..], rejected);
                 foreach (var bad in rejected)
                 {
-                    notes.Add(new Note("core", $"--damage: cannot parse '{bad}' (want part:fraction)"));
+                    notes.Add(new Note("", $"--damage: cannot parse '{bad}' (want part:fraction)"));
                 }
                 s.HasContentArg = true;
             }
@@ -556,6 +556,30 @@ public sealed record SessionSpec
         s.TexOverrides = texOverrides;
         s.Resolve();
         return s;
+    }
+
+    /// <summary>The launchscreen's locked picks, as a spec: the chapter, one plane per player, the
+    /// player count and whether it is a stunt run. The menu always launches flight over a chapter
+    /// world, whatever mode the command line asked for.
+    ///
+    /// <para>Applied to THIS spec rather than to the pristine command-line one, so a second launch
+    /// inherits what the first settled — <see cref="Scenario"/> is re-derived from the mode each
+    /// time for exactly that reason, unless <c>--scenario=</c> pinned it.</para></summary>
+    public SessionSpec WithMenuSelection(string chapter, IReadOnlyList<string> planeNodes, int players,
+        bool stunt)
+    {
+        var names = planeNodes.ToArray();
+        return this with
+        {
+            Chapter = chapter,
+            PlaneNames = names,
+            PlaneName = names.Length > 0 ? names[0] : PlaneName,
+            Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
+            Stunt = stunt,
+            Mode = SessionMode.Fly,
+            WorldMode = true,
+            Scenario = ScenarioExplicit ? Scenario : stunt ? "stunt_flying" : "zeppelin_run",
+        };
     }
 
     /// <summary>Turns the parsed votes into the one answer each: the mode, its modifiers, the world
