@@ -584,6 +584,15 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      why `RunTests.ps1` had passed minutes earlier. `RunTests.ps1`'s own `Invoke-Godot` quotes for
      this reason; anything launching Godot by hand must do the same.
 
+126. **A perturb-and-revert is clean when `git diff` says so, not when the content looks right — a
+     rewriting script can change the file's ENCODING while restoring its text.** The able-to-fail
+     sweep for the resolution truth table read and wrote `SessionSpec.cs` through Python with
+     `utf-8-sig`, which added a BOM the committed file never had; every perturbation reverted
+     correctly and the tree still carried a one-line diff at the end. It compiles, the tests pass,
+     and it would have ridden into the commit unnoticed. Pair rule 124's forced rebuild with a
+     `git diff --stat` on the perturbed file before believing the revert; `git checkout --` restores
+     byte-exactly when the content is meant to be unchanged.
+
 ## What this project cannot verify itself
 
 These need the user:

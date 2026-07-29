@@ -156,9 +156,13 @@ The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj
 `CSVM.sln`). Covers the readers that need no running engine: `Zrdr`/`ZrdrDict`, `WavFile`,
 `SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths`, `GameZ`'s transform
 arithmetic, `MarkerRig`, `AnimDefs`, and the Godot-free halves of `StockLoadouts`/`TextureArchive`.
-⚠ `SessionSpecMenuTests` is the launchscreen's ONLY automated coverage — the pixel goldens never
-  open the menu and `analysis/session-baseline/` drives the CLI only. A launchscreen change that
-  alters what a pick resolves to is caught here or nowhere.
+⚠ **The `SessionSpec*Tests` trio is the launch surface's only per-rule coverage.** `…Tests` is the
+  resolution truth table, `…ParserTests` the seven value grammars, `…MenuTests` the launchscreen —
+  84 facts, each shown able to fail by perturbing its rule. `analysis/session-baseline/` covers the
+  same surface as a whole-command-line regression and reports only THAT a row moved; the goldens
+  never open the menu at all. Two deliberate defects are asserted as they are and labelled at the
+  fact — do not "fix" one to make a test read better; that is a behaviour change needing its own
+  item.
 ⚠ Two input kinds, deliberately separate. `fixtures/` is hand-authored from `docs/formats/` with
   invented `probe_*` names; byte-level inputs (WAV/ADPCM) are assembled in the test code so every
   byte's provenance is visible. **A trimmed piece of a real extraction is still a game asset and

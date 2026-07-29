@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 5. ☑ Delete the arg fields; rewrite the ~183 call sites
 6. ☑ `SessionSpec.FromMenu` and the launchscreen re-entry
-7. ☐ The xUnit resolution truth table
+7. ☑ The xUnit resolution truth table
 8. ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
 
 ## Dependency and parallelism notes
@@ -423,21 +423,46 @@ part of this item nothing automated reaches, since it needs a keypress.
 2. A perturbation that drops a write can pass by landing on a default: the second-launch fact uses
    a chapter that is neither the first pick nor `C1`.
 
-## B7 ☐ The xUnit resolution truth table
+## B7 ☑ The xUnit resolution truth table
 
-**Goal.** 40–60 engine-free facts covering mode precedence, `--det` membership, `BuildsCollision`,
-`WorldMode`, `FromMenu`, placement normalisation and the 10 formerly-private parsers.
+**84 engine-free facts (296 xUnit cases) across three files**, covering mode precedence and every
+vote, step order, `ShowsMenu`/`ModeName`/`IsScripted`/`ScriptedBy`, the `--det` bundle's membership
+and everything it pins, `BuildsCollision`, `WorldMode`, the empty stage, the player count, the
+mode-gated tools, placement normalisation, `FromMenu`, and all seven formerly-private parsers.
 
-**Evidence (confidence: traced).** None of these rules has any automated coverage today. Verification
-rules 115 and 116, added 2026-07-25, both came from this file and both describe failure modes these
-tests would have caught.
+**Evidence (confidence: traced).** None of these rules had automated coverage. Verification rules
+115 and 116 both came from this file and both describe failure modes these facts now catch.
 
-**Approach.** `<…>`
+**Approach.** `SessionSpecTests` is the resolution table, `SessionSpecParserTests` the value
+grammars, `SessionSpecMenuTests` (landed in B6) the launchscreen. The parser file exists separately
+because those seven are the launch surface most likely to be wrong in a way nothing downstream
+notices — a mis-parsed vector still produces a perfectly valid session. The two deliberate defects
+are asserted **as they are** and labelled `⚠ KNOWN DEFECT` at the fact: `ModeName` omits
+`--dump-flight` from its "dump" arm, and `ShowsMenu` is true under `--run-tests`. A third, milder
+drift got its own fact once the table made it visible: `--dump-flight` turns `--det` on through
+`ScriptedBy` yet is not a term of `IsScripted`, so its window still asks for focus.
 
-**Verify.** `<dotnet test; and each rule shown able to fail — a truth table nobody has seen break is
-not yet evidence.>`
+**Verify. Every rule shown able to fail: 32 perturbations, one rule each, 32 caught.** Each edits a
+single term or block in `SessionSpec`, runs the filtered suite, and is reverted with a forced
+timestamp (rule 124). `.\RunTests.ps1` PASS — 296 units, 9/9 suites, 11/11 goldens hash-identical,
+exit 0.
 
-**⚠ Traps.** This item is what pays for B8. If it is trimmed, reopen decision 6.
+**⚠ The sweep found a hole in the tests themselves, which is the point of running it.** Disabling
+the freecam-beats-fly/viewer block broke *nothing*: the case carried `--viewer` too, so the
+viewer-beats-fly rule cleared the same modifiers and the mode ternary reached `Freecam` either way —
+the fact was passing for a different reason than it claimed. It now also asserts `--freecam --stunt`
+and `--freecam --damage`, where no other rule can clear the modifier. **A fact that passes is not
+the same as a fact that tests the rule it names**, and only the perturbation tells them apart.
+
+**⚠ Traps.**
+1. This item is what pays for B8. It is not trimmed: 84 facts against the plan's 40–60, every one
+   shown able to fail. If a future change trims it, reopen decision 6 rather than shipping B8 with
+   thin tests.
+2. An assertion whose expected value equals the parse default passes when the write it tests is
+   deleted. Expected values here are chosen away from the defaults.
+3. The sweep script wrote the source back with a BOM the committed file did not have, leaving a
+   one-line diff after a "clean" restore. Diff the perturbed file against `HEAD`, not just by eye,
+   before believing a revert (new verification rule 126).
 
 ## B8 ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
 

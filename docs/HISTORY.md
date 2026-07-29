@@ -7798,3 +7798,35 @@ launchscreen renders headless, exit 0 with zero errors: `--menu`, `--menu --debu
 The menu → flight re-entry needs a keypress, so nothing automated reaches it — **playtested at the
 controls and confirmed working (user, 2026-07-30)**, which closes the last open question on this
 path and retires its `playtest.md` entry.
+
+## 2026-07-30 — PLAN-sessionspec B7: the launch-argument resolution truth table
+
+84 engine-free facts (296 xUnit cases) across three files: `SessionSpecTests` for resolution,
+`SessionSpecParserTests` for the seven value grammars, `SessionSpecMenuTests` (B6) for the
+launchscreen. They cover mode precedence and every vote, the step orderings that ARE the behaviour,
+`ShowsMenu` / `ModeName` / `IsScripted` / `ScriptedBy`, the `--det` bundle's membership and each
+value it pins, `BuildsCollision`, `WorldMode`, the empty stage, the player count, the mode-gated
+tools, and placement normalisation. None of it had automated coverage before: verification rules 115
+and 116 both came from this surface, and both describe failure modes these facts now catch.
+
+**Every rule was shown able to fail — 32 perturbations, one rule each, 32 caught.** Each edits a
+single term or block in `SessionSpec`, runs the filtered suite and reverts with a forced timestamp
+(rule 124). The two deliberate defects are asserted as they are and labelled at the fact
+(`ModeName` omits `--dump-flight`; `ShowsMenu` is true under `--run-tests`), and the table made a
+third, milder drift visible enough to get its own fact: `--dump-flight` turns `--det` on through
+`ScriptedBy` yet is not a term of `IsScripted`, so its window still asks for focus.
+
+**The sweep found a hole in the tests, which is why it is worth running.** Disabling the
+freecam-beats-fly/viewer block broke nothing: that case carried `--viewer` as well, so the
+viewer-beats-fly rule cleared the same modifiers and the mode ternary reached `Freecam` either way —
+the fact had been passing for a different reason than it claimed. It now also asserts
+`--freecam --stunt` and `--freecam --damage`, where no other rule can clear the modifier, and the
+perturbation is caught.
+
+A second trap cost a near-miss: the sweep script rewrote `SessionSpec.cs` through Python with
+`utf-8-sig`, adding a BOM the committed file never had, so a correctly-reverted source still carried
+a one-line diff that compiled and passed. New verification rule 126 — pair rule 124's forced rebuild
+with a `git diff --stat` on the perturbed file before believing a revert.
+
+Verified: `.\RunTests.ps1` PASS — 296 units, 9/9 suites, 11/11 goldens hash-identical, exit 0. This
+item is what pays for B8; at 84 facts against the plan's 40–60, decision 6 stands.
