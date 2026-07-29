@@ -721,7 +721,7 @@ public sealed partial class WorldDamageLab : Node
     /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
     /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>. Unknown steps are reported and
     /// dropped rather than silently changing what the run does.</summary>
-    public static string ParseDebugSpec(string spec)
+    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
     {
         var kept = new List<string>();
         foreach (string step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -735,6 +735,13 @@ public sealed partial class WorldDamageLab : Node
                 || step.StartsWith("tick=", StringComparison.OrdinalIgnoreCase))
             {
                 kept.Add(step);
+                continue;
+            }
+            // See NodeLab.ParseDebugSpec: a supplied list takes the rejects as data instead of
+            // logging them, so the spec can normalise a value engine-free.
+            if (rejected != null)
+            {
+                rejected.Add(step);
                 continue;
             }
             Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open — ignoring it");

@@ -7663,3 +7663,34 @@ Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-id
 65.9 s. The load-bearing check is A1's instrument rather than the goldens, which do not reach the
 modes this plan touches: the 50-row matrix re-captured through `analysis/session-baseline/
 capture.ps1` is md5-identical to the committed baseline (`944310579BA214A0E99B801FC344098B`).
+
+## 2026-07-29 — PLAN-sessionspec A3: the launch args resolve themselves
+
+`SessionSpec.Parse` now returns a resolved spec. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/
+AnimLab — and every flag that names a mode is a *vote* gathered before anything is arbitrated:
+`--viewer`/`--damage`/`--markers`/`--weapon-*` vote viewer, `--freecam`/`--damage-test`/
+`--effects-test` vote freecam, `--anim-lab`/`--play-anim=`/`--debug-anim-ui` vote anim lab. That is
+where the parse-time implications A2 refused to carry now live, so the five mutating `if` blocks
+work on locals and end in one `Mode` assignment. `Fly`/`Viewer`/`Freecam`/`AnimLab` are computed
+from it, and eight more predicates are computed rather than stored — `ShowsMenu`, `ModeName`,
+`IsScripted`, `ScriptedBy`, `Det`, `DetVia`, `SeedPinned`, `PadsDisabled`, `BuildsCollision` — which
+is what makes "exactly one definition each" structural instead of a promise. `SessionProbe` names
+the three probes that wear a mode as a disguise, so the enum does not inherit the coercion.
+
+Purity survived resolution, which took two decisions. `PinnedSeed` is null when the seed is
+unpinned instead of drawing `Rng.TimeSeed()`: a spec that read the clock would not be a function of
+its args, the same defect A1 had to fix in the probe (rule 118). And the two lab spec grammars
+gained an optional `rejected` list — supplied, `UI.NodeLab`/`UI.WorldDamageLab.ParseDebugSpec` hand
+tokens back as data instead of `Log.Warn`ing them — so `--debug-nodelab=`/`--debug-damage=` are
+normalised in the spec with no Godot runtime under it. Two known defects are reproduced on purpose,
+because the A4 gate compares against today: `ModeName` omits `--dump-flight` from its "dump" arm,
+and `ShowsMenu` is true under `--run-tests`.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0,
+64.0 s — and A1's matrix re-captured md5-identical (`944310579BA214A0E99B801FC344098B`). Since
+nothing calls the spec, neither could have moved; the evidence that the RULES are right is a
+throwaway xUnit check that replayed all 50 baseline command lines through `SessionSpec.Parse` and
+compared every row the spec resolves — 2,400 values across 50 rows, 0 mismatches, engine-free, which
+also proves `Parse` stays GD-free. Shown able to fail by inverting `ShowsMenu`. It was deleted
+rather than kept, because A4 owns the field-vs-spec gate and B7 the truth table; what it buys A4 is
+a start from 2,400 already-agreeing values against the frozen field side.

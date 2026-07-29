@@ -146,7 +146,7 @@ instead.
 
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
-- `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` plus the pure arg parsers (vec3, planes, hold, view, paint, damage preset). Raw only — no resolution yet.
+- `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
 - `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
 
 - `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
@@ -1315,22 +1315,34 @@ Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`
   builds the default extraction-tree paths.
 
 ## src/SessionSpec.cs
-Everything the command line settles about a session, parsed once into one immutable record:
-`Parse(args)` plus the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, `ParseView`,
-`ParsePaintColors`, `ParsePaintDecals`, `ParseDamagePreset`), public so they are testable.
-⚠ **Raw means raw: a flag records only itself.** `--markers` sets `MarkersOverlay` and NOT `Viewer`,
-  `--damage-test` sets `DamageTest` and NOT `Freecam`, `--play-anim=` does not set `AnimLab`,
-  `--stunt` does not set `Fly` or move `Scenario`. Every implication — mode arbitration, the `--det`
-  bundle, placement routing, `WorldMode`, `BuildsCollision` — is resolution and lands separately.
-  Reading a raw property as the resolved answer is the one way to misuse this type.
-⚠ **`Parse` is pure — no engine state, no globals, no logging.** The three branches that reach out
-  today are recorded instead (`NoPads`, `TexOverrides`/`TexCensus`, `LogSpecs`) and complaints go to
-  `Warnings` as `(category, message)` for the caller to emit. That is what keeps the surface
+Everything the command line settles about a session, as one immutable record: `Parse(args)` parses
+**and resolves**, and the pure arg parsers (`ParseVec3`, `ParsePlanes`, `ParseHold`, `ParseView`,
+`ParsePaintColors`, `ParsePaintDecals`, `ParseDamagePreset`) are public so they are testable.
+`SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab — with Stunt/Players/EmptyStage/NodeName/
+DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a mode.
+⚠ **The raw stage never escapes.** Mode flags arrive as private fields because a vote is not an
+  outcome: `--damage`/`--markers`/`--weapon-*` all vote viewer, `--damage-test`/`--effects-test`
+  vote freecam, `--play-anim=`/`--debug-anim-ui` vote anim lab. `Fly`/`Viewer`/`Freecam`/`AnimLab`
+  are computed from `Mode`, so each has exactly one definition; properties resolution overwrites are
+  marked **Resolved** on themselves.
+⚠ **Step order in `Resolve` IS the behaviour.** `--stunt` moves `Scenario` before arbitration can
+  clear `Stunt` (`--anim-lab --stunt` still uses the stunt spawn list); the freecam/anim-lab-only
+  debug tools are dropped after `--node=` has forced the viewer. Both look like tidying chances.
+⚠ **Pure — no engine state, no globals, no logging, no clock.** `NoPads`/`TexOverrides`/`LogSpecs`
+  are recorded, never applied; `PadsDisabled` is a value, not a write to `Pads.Disabled`;
+  `PinnedSeed` is null when unpinned rather than drawing `Rng.TimeSeed()`, because a spec that read
+  the clock would not be a function of its args (rule 118). Complaints go to `Warnings` as
+  `(category, message)`, empty category meaning a bare console line. That is what keeps the surface
   reachable from `CSVM.Tests`, which has no Godot runtime to print into.
-⚠ The two lab spec grammars stay in their labs (`UI.NodeLab`/`UI.WorldDamageLab.ParseDebugSpec`,
-  which `Log.Warn` as they filter): the spec carries `--debug-nodelab=`/`--debug-damage=` verbatim.
+⚠ **Two known defects are reproduced on purpose**, because the equivalence gate compares against
+  today: `ModeName` omits `--dump-flight` from its "dump" arm, and `ShowsMenu` is true under
+  `--run-tests`. Fixing either is a behaviour change and needs its own item.
+⚠ The two lab spec grammars stay in their labs (`UI.NodeLab`/`UI.WorldDamageLab.ParseDebugSpec`);
+  they gained an optional `rejected` list so a caller can take the tokens as data instead of the
+  `Log.Warn`, which is how the spec normalises those two values engine-free.
 ⚠ Path flags are override VALUES only, null when unset — no default arithmetic here, that is
-  `SessionPaths`. `DataRoot` is the raw arg; its precedence against `CSVM_DATA_ROOT` is resolution.
+  `SessionPaths`. `DataRoot` is the raw arg; its precedence against `CSVM_DATA_ROOT` is the
+  caller's, because it is read before the arg loop and every base path derives from it.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;

@@ -1400,7 +1400,7 @@ public sealed partial class NodeLab : Node
     /// <summary>Parses <c>--debug-nodelab[=spec]</c>: a comma-separated list of <c>deps</c>,
     /// <c>dest</c>, <c>open</c> and <c>node=&lt;cs_name&gt;</c>. Unknown tokens are reported and
     /// dropped rather than silently disabling the dump the run was launched for.</summary>
-    public static string ParseDebugSpec(string spec)
+    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
     {
         var kept = new List<string>();
         foreach (string token in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
@@ -1415,6 +1415,13 @@ public sealed partial class NodeLab : Node
                 || token.StartsWith("node=", StringComparison.OrdinalIgnoreCase))
             {
                 kept.Add(token);
+                continue;
+            }
+            // A caller that supplies the list wants the tokens back as data, not in the log — that
+            // is what lets the spec normalise a value without a Godot runtime to print into.
+            if (rejected != null)
+            {
+                rejected.Add(token);
                 continue;
             }
             Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name> — ignoring it");

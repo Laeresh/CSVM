@@ -108,7 +108,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `--dump-session` scaffold + the baseline resolution matrix
 2. ☑ `SessionSpec` + `Parse`, raw values only, not yet consumed
-3. ☐ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
+3. ☑ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
 4. ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
 
 ### Wave B — Migrate, then lock it in
@@ -217,10 +217,11 @@ resolution could.
 3. The parse-time warnings (`--view=`, `--collision=`, `--damage=`) will be emitted later in the run
    than they are today once B5 lands. Log ORDER moves; no resolved value does.
 
-## A3 ☐ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
+## A3 ☑ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
 
-**Goal.** The spec resolves as one total function what `_Ready` currently does across five mutating
-`if` blocks and four separately-written predicates.
+**Landed.** `SessionSpec.Parse` now returns a **resolved** spec: `SessionMode` (`Menu`/`Fly`/
+`Viewer`/`Freecam`/`AnimLab`) plus `SessionProbe`, arbitrated in one private `Resolve()`. Still
+referenced by nothing.
 
 **Evidence (confidence: traced).** Precedence today is statement order at `PlaneViewer.cs:748-783`
 (`AnimLab > Freecam > Viewer > Fly`), with `--stunt` forcing fly, `--node=` forcing viewer unless
@@ -228,14 +229,47 @@ anim-lab, and `--stage=empty` rejected in viewer/anim-lab/node. `_worldMode` is 
 `BuildsCollision` was consolidated on 2026-07-25 and has four sources. `--det` membership was
 corrected the same day and now covers every flag that drives and ends a session by itself.
 
-**Approach.** `<…>`
+**Approach — votes in, one answer out.** Every flag that names a mode is a *vote*, gathered before
+anything is arbitrated: the viewer's are `--viewer`/`--damage`/`--markers`/`--weapon-*`, the
+freecam's `--freecam`/`--damage-test`/`--effects-test`, the anim lab's `--anim-lab`/`--play-anim=`/
+`--debug-anim-ui`. That is where the parse-time implications A2 refused to carry now live, so the
+five mutating `if` blocks operate on locals and end in one `Mode` assignment. `Fly`/`Viewer`/
+`Freecam`/`AnimLab` are computed from it — one definition each — and eight more predicates are
+computed rather than stored: `ShowsMenu`, `ModeName`, `IsScripted`, `ScriptedBy`, `Det`, `DetVia`,
+`SeedPinned`, `PadsDisabled`, `BuildsCollision`. Only what resolution genuinely *overwrites* is
+stored (mode, its modifiers, `WorldMode`, `Scenario`, `Players`, `ChapterGiven`, `View`, the three
+`--freecam`/`--anim-lab`-only debug tools, `SpawnIndex`, `JitterDeg` and the placement quintet).
 
-**Verify.** `<…>`
+`PinnedSeed` is `null` when the seed is unpinned rather than drawing `Rng.TimeSeed()`: a spec that
+read the clock would not be a function of its args, which is the defect A1 had to fix in the probe
+(rule 118). The clock draw stays with the caller. Likewise `PadsDisabled` is a value, not a write to
+`Pads.Disabled`. The two lab spec grammars gained an optional `rejected` list — supplied, they hand
+tokens back as data instead of `Log.Warn`ing them — so `--debug-nodelab=`/`--debug-damage=` can be
+normalised here without a Godot runtime under it.
 
-**⚠ Traps.** Three flags coerce the mode at *parse* time, before arbitration can see them —
-`--damage-test` and `--effects-test` force `_freecam`, `--weapon-test` forces `_viewerMode`
-(`:646-666`). They are probes wearing a mode as a disguise; model them as a `Probe?` field, or the
-enum inherits the lie. `<…>`
+**Verify.** `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0;
+A1's matrix re-captured md5-identical (`944310579BA214A0E99B801FC344098B`). Nothing calls the spec,
+so neither could have moved — the real evidence is a throwaway xUnit check that replayed all 50
+baseline command lines through `SessionSpec.Parse` and compared every row the spec resolves:
+**2,400 values across 50 rows, 0 mismatches**, engine-free (which independently proves `Parse` stays
+GD-free). Shown able to fail: inverting `ShowsMenu` failed the run. The check was deleted rather
+than kept — A4 owns the field-vs-spec gate and B7 owns the truth table — but it means **A4 starts
+knowing the spec side already agrees with the frozen field side on 2,400 values**, and can
+concentrate on the ~1,300 raw pass-through rows and on running both sides in one process.
+
+**⚠ Traps.**
+1. Three flags coerce the mode at *parse* time, before arbitration can see them — `--damage-test`
+   and `--effects-test` force `_freecam`, `--weapon-test` forces `_viewerMode` (`:646-666`). They
+   are probes wearing a mode as a disguise. Modelled as votes plus a `SessionProbe` that names the
+   coercion, so the enum does not inherit the lie.
+2. **Step order is the behaviour.** `--stunt` moves `Scenario` *before* arbitration can clear
+   `Stunt`, so `--anim-lab --stunt` still resolves to the stunt spawn list; and the
+   `--freecam`/`--anim-lab`-only debug tools are dropped *after* `--node=` has forced the viewer, so
+   `--node= --debug-select=` loses the tool. Both are load-bearing and both look like tidying
+   opportunities. The baseline replay covers them.
+3. **Two known defects are reproduced deliberately** (A1's ⚠ list): `ModeName` omits
+   `--dump-flight` from its "dump" arm, and `ShowsMenu` is true under `--run-tests`. Fixing either
+   is a behaviour change that would fail A4; it needs its own item.
 
 ## A4 ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
 

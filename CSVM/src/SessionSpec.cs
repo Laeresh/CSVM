@@ -4,31 +4,58 @@ using System.Globalization;
 using System.Linq;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM;
 
+/// <summary>The session shapes, closed. Every launch is exactly one of these; <c>Stunt</c>,
+/// <c>Players</c>, <c>EmptyStage</c>, <c>NodeName</c> and <c>DamageLab</c> are modifiers on top of
+/// one, not shapes of their own.</summary>
+public enum SessionMode
+{
+    /// <summary>No content arg (or <c>--menu</c>): the launchscreen picks the session.</summary>
+    Menu,
+    Fly,
+    Viewer,
+    Freecam,
+    AnimLab,
+}
+
+/// <summary>The probes that wear a mode as a disguise: each drives and ends a session by itself,
+/// and each asks for the mode that gives it the world it needs. Naming them keeps the coercion
+/// visible instead of letting <see cref="SessionMode"/> inherit it as if the user had asked.</summary>
+public enum SessionProbe
+{
+    None,
+    /// <summary><c>--damage-test</c>: needs a world with no aircraft in it → freecam.</summary>
+    DamageTest,
+    /// <summary><c>--effects-test</c>: same world, same reason → freecam.</summary>
+    EffectsTest,
+    /// <summary><c>--weapon-test</c>: needs a parked plane to mount weapons on → viewer.</summary>
+    WeaponTest,
+}
+
 /// <summary>
-/// One immutable value for everything the command line settles about a session: the raw args,
-/// parsed once, with no resolution applied.
+/// One immutable value for everything the command line settles about a session: parsed once, then
+/// resolved once, so a consumer reads an answer instead of re-deriving one.
 ///
-/// <para><b>Raw means raw.</b> Every property here answers "what did the command line say", never
-/// "what will the session do". A flag records only itself: <c>--markers</c> sets
-/// <see cref="MarkersOverlay"/> and NOT <see cref="Viewer"/>, <c>--damage-test</c> sets
-/// <see cref="DamageTest"/> and NOT <see cref="Freecam"/>, <c>--play-anim=</c> does not set
-/// <see cref="AnimLab"/>, and <c>--stunt</c> does not set <see cref="Fly"/> or move
-/// <see cref="Scenario"/>. Every one of those implications — and the mode arbitration, the
-/// <c>--det</c> bundle, the placement routing, <c>WorldMode</c> and <c>BuildsCollision</c> — is
-/// resolution, and resolution is a separate step. Reading a raw property as if it were the
-/// resolved answer is the one way to misuse this type.</para>
+/// <para><b><see cref="Parse"/> returns a RESOLVED spec.</b> The raw stage exists only inside it:
+/// the mode flags arrive as private fields, arbitration turns them into <see cref="Mode"/>, and the
+/// public <see cref="Fly"/>/<see cref="Viewer"/>/<see cref="Freecam"/>/<see cref="AnimLab"/> are
+/// computed from it, so there is exactly one definition of each. The properties resolution
+/// overwrites say so on themselves; everything else is what the command line said.</para>
 ///
-/// <para><b>Pure.</b> <see cref="Parse"/> touches no engine state and no globals: it does not set
-/// <c>Pads.Disabled</c>, does not call <c>TextureDropIn</c>, does not <c>Log.Configure</c> and does
-/// not log. The three arg branches that reach out and touch something today are recorded instead —
-/// <see cref="NoPads"/>, <see cref="TexOverrides"/>/<see cref="TexCensus"/>,
-/// <see cref="LogSpecs"/> — and complaints land in <see cref="Warnings"/> for the caller to emit.
-/// That is what makes the whole surface reachable from <c>CSVM.Tests</c>, which has no Godot
-/// runtime to print into.</para>
+/// <para><b>Pure.</b> Nothing here touches engine state or globals: it does not set
+/// <c>Pads.Disabled</c> (see <see cref="PadsDisabled"/>), does not call <c>TextureDropIn</c>, does
+/// not <c>Log.Configure</c>, does not draw a clock seed (see <see cref="PinnedSeed"/>) and does not
+/// log — complaints land in <see cref="Warnings"/> for the caller to emit. That is what makes the
+/// whole surface reachable from <c>CSVM.Tests</c>, which has no Godot runtime to print into.</para>
+///
+/// <para><b>Resolution reproduces today's behaviour, warts included</b>, because the equivalence
+/// gate compares against it: <see cref="ModeName"/> still omits <c>--dump-flight</c> from its
+/// "dump" chain and <see cref="ShowsMenu"/> is still true under <c>--run-tests</c>. Both are marked
+/// where they live. Fixing either is a behaviour change and belongs in its own item.</para>
 ///
 /// <para>Godot's <c>Vector3</c>/<c>Color</c> are plain managed structs, so they cost nothing here;
 /// <see cref="SessionPaths"/> is the precedent for lifting pure logic out of
@@ -36,8 +63,9 @@ namespace CSVM;
 /// </summary>
 public sealed record SessionSpec
 {
-    /// <summary>A parse-time complaint, held rather than logged so parsing stays engine-free.
-    /// The category is the <c>Log</c> one the caller should emit it under.</summary>
+    /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
+    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, or
+    /// empty for the ones that are bare console lines today (<c>GD.Print</c>).</summary>
     public readonly record struct Note(string Category, string Message);
 
     private SessionSpec()
@@ -47,33 +75,103 @@ public sealed record SessionSpec
     /// <summary>The user args this spec was parsed from, verbatim and in order.</summary>
     public IReadOnlyList<string> Args { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Parse-time complaints, in the order they arose. Nothing is logged during parse.</summary>
-    public IReadOnlyList<Note> Warnings { get; private set; } = Array.Empty<Note>();
+    private List<Note> _notes = new();
 
-    // ---- Mode-selecting flags, each recording only itself -------------------------------------
+    /// <summary>Every complaint parse and resolution raised, in order. Nothing is logged here — the
+    /// caller emits these, which is what keeps the type engine-free.</summary>
+    public IReadOnlyList<Note> Warnings => _notes;
+
+    // ---- The mode: raw votes in, one arbitrated answer out -------------------------------------
+
+    // What the command line asked for. Private, because a vote is not an outcome: several flags
+    // vote for the same mode (--markers/--damage/--weapon-* for the viewer, --damage-test/
+    // --effects-test for the freecam, --play-anim=/--debug-anim-ui for the anim lab), and the
+    // arbitration below is the only thing entitled to turn them into one.
+    private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _damageLabArg, _detArg;
 
     /// <summary>A content-selecting arg was given, so the launchscreen is bypassed.</summary>
     public bool HasContentArg { get; private set; }
-    public bool Fly { get; private set; }
+
+    /// <summary><b>Resolved.</b> The one session shape, arbitrated from every flag that votes for
+    /// one: anim lab &gt; freecam &gt; viewer &gt; fly, with <c>--node=</c> forcing the viewer
+    /// unless the anim lab was asked for, and any content arg defaulting to flight.</summary>
+    public SessionMode Mode { get; private set; } = SessionMode.Menu;
+    public bool Fly => Mode == SessionMode.Fly;
+    public bool Viewer => Mode == SessionMode.Viewer;
+    public bool Freecam => Mode == SessionMode.Freecam;
+    public bool AnimLab => Mode == SessionMode.AnimLab;
+    /// <summary><b>Resolved.</b> Flight plus the mission's danger zones — a modifier on
+    /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
-    public bool Viewer { get; private set; }
-    public bool Freecam { get; private set; }
-    public bool AnimLab { get; private set; }
+    /// <summary><b>Resolved.</b> The parked plane's per-part HP sliders — a viewer modifier,
+    /// dropped when the session builds a world instead of one aircraft.</summary>
     public bool DamageLab { get; private set; }
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
 
+    /// <summary>Which mode-coercing probe (if any) drives this session. The three set a mode at
+    /// parse time today; here they vote like anything else and this names the vote.</summary>
+    public SessionProbe Probe =>
+        DamageTest ? SessionProbe.DamageTest
+        : EffectsTest ? SessionProbe.EffectsTest
+        : WeaponTest ? SessionProbe.WeaponTest
+        : SessionProbe.None;
+
+    /// <summary>Whether <c>_Ready</c> shows the launchscreen before building anything. Independent
+    /// of <see cref="Mode"/>: <c>--menu --chapter=C4</c> resolves to flight AND shows the menu.
+    /// ⚠ True under <c>--run-tests</c> too — the harness is saved only by returning before the menu
+    /// branch. Reproduced deliberately; the equivalence gate compares against it.</summary>
+    public bool ShowsMenu => ForceMenu || !HasContentArg;
+
+    /// <summary>The session shape's name: the log file's, and the startup timing line's. ⚠ The
+    /// "dump" arm omits <c>--dump-flight</c>, so a <c>--dump-flight</c> run logs as
+    /// <c>menu-*.log</c>. That is today's behaviour, reproduced on purpose.</summary>
+    public string ModeName =>
+        Mode == SessionMode.AnimLab ? "anim-lab"
+        : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig ? "dump"
+        : Mode == SessionMode.Freecam ? "freecam"
+        : Mode == SessionMode.Viewer ? "viewer"
+        : Stunt ? "stunt"
+        : Mode == SessionMode.Fly ? "fly"
+        : "menu";
+
+    /// <summary>Whether a flag will drive and end this session by itself, so nobody is at the
+    /// controls: the window hides instead of asking for focus. ⚠ <c>--dump-session</c> is
+    /// deliberately not a term — it reports this predicate, so a command line carrying it must
+    /// resolve exactly as the same one without it (verification rule 117); the focus concession is
+    /// applied outside the predicate. <c>--dump-flight</c>'s absence is not deliberate, it is the
+    /// same drift as <see cref="ModeName"/>, kept for the gate.</summary>
+    public bool IsScripted =>
+        NoFocus || ScreenshotPath != null || RunTests
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig
+        || DamageTest || EffectsTest || WeaponTest;
+
+    /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
+    public bool WorldMode { get; private set; }
+    /// <summary><b>Resolved.</b> <c>--stage=empty</c> survived: no gamez at all, a generated grid
+    /// over a collidable ground plane.</summary>
+    public bool EmptyStage { get; private set; }
+
+    /// <summary>Whether this session builds the world's colliders — the one definition every
+    /// consumer reads. Flight needs them to fly into things; the headless damage sweep and the
+    /// world damage lab need them because a kill's collider count would otherwise read zero and
+    /// lie; <c>--collision</c> is the interactive request for them in a mode that builds none.</summary>
+    public bool BuildsCollision => Fly || DamageTest || ForceCollision || DebugDamage != null;
+
     // ---- The world ----------------------------------------------------------------------------
 
     public string Chapter { get; private set; } = "C1";
-    /// <summary><c>--chapter</c>/<c>--chapter=</c> was given. <c>--node=</c> also implies a chapter,
-    /// but that is resolution, so it does not show here.</summary>
+    /// <summary><b>Resolved.</b> A chapter world was asked for — by <c>--chapter</c>/<c>--chapter=</c>,
+    /// or by <c>--node=</c>, whose subtree comes out of the chapter's gamez.</summary>
     public bool ChapterGiven { get; private set; }
     public string Mission { get; private set; } = "IA1";
+    /// <summary><b>Resolved.</b> Which instant-action spawn list to use. <c>--stunt</c> forces
+    /// "stunt_flying" unless the tester pinned another one for a specific spawn.</summary>
     public string Scenario { get; private set; } = "zeppelin_run";
     public bool ScenarioExplicit { get; private set; }
-    /// <summary>The raw <c>--stage=</c> value, unvalidated: only "empty" names a stage, and
-    /// rejecting anything else (and rejecting it in the inspection modes) is resolution.</summary>
+    /// <summary>The <c>--stage=</c> value as given, unvalidated — only "empty" names a stage.
+    /// Whether it survived is <see cref="EmptyStage"/>.</summary>
     public string? Stage { get; private set; }
     public string? NodeName { get; private set; }
     public string SkyZone { get; private set; } = "zone2";
@@ -85,9 +183,11 @@ public sealed record SessionSpec
     // ---- The aircraft -------------------------------------------------------------------------
 
     public string PlaneName { get; private set; } = "player_bhawk";
-    /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named. Whether a
-    /// list of several implies <see cref="Players"/> is resolution.</summary>
+    /// <summary>The <c>--plane=</c> list; empty when a single plane (or none) was named.</summary>
     public IReadOnlyList<string> PlaneNames { get; private set; } = Array.Empty<string>();
+    /// <summary><b>Resolved.</b> Splitscreen panes. A <c>--plane=</c> list of several states the
+    /// count on its own; an explicit <c>--players=</c> still wins. Clamped to the rig's capacity,
+    /// and back to 1 for any static view — splitscreen is a flight mode, it needs planes to fly.</summary>
     public int Players { get; private set; } = 1;
     public bool PlayersExplicit { get; private set; }
     public string? LoadoutOverride { get; private set; }
@@ -109,37 +209,80 @@ public sealed record SessionSpec
     public ulong PaintSeed { get; private set; }
     public bool PaintSeedExplicit { get; private set; }
 
-    // ---- Determinism, as asked for — not as resolved ------------------------------------------
+    // ---- The --det bundle, resolved in one place -----------------------------------------------
 
-    /// <summary><c>--det</c> was passed. Which other flags imply the bundle is resolution.</summary>
-    public bool Det { get; private set; }
+    /// <summary>Which flag turns the bundle on by driving and ending the session itself, in
+    /// precedence order; empty when none does. ⚠ <c>--dump-session</c> is not a term (rule 117).</summary>
+    public string ScriptedBy =>
+        ScreenshotPath != null ? "--screenshot"
+        : DumpMarkers ? "--dump-markers"
+        : DumpWeapons ? "--dump-weapons"
+        : DumpLoadout ? "--dump-loadout"
+        : DumpFlight ? "--dump-flight"
+        : DumpConfig ? "--dump-config"
+        : DamageTest ? "--damage-test"
+        : EffectsTest ? "--effects-test"
+        : WeaponTest ? "--weapon-test"
+        : RunTests ? "--run-tests"
+        : "";
+
+    /// <summary><c>--det</c> was passed outright, rather than implied.</summary>
+    public bool DetExplicit => _detArg;
+    /// <summary><b>Resolved.</b> The deterministic bundle is on: fixed-dt clock, pinned master
+    /// seed, spawn 0, pinned liveries, no pads, no jitter. <c>--no-det</c> beats both the
+    /// implication and an explicit <c>--det</c> — there is one way to ask for wall-clock
+    /// behaviour, whatever else is on the command line.</summary>
+    public bool Det => !NoDet && (DetExplicit || ScriptedBy.Length > 0);
     public bool NoDet { get; private set; }
-    /// <summary><c>--seed=N</c>, null when unset. The master seed (pinned value or clock draw) is
-    /// resolution.</summary>
+    /// <summary>What turned the bundle on, for the announcement line.</summary>
+    public string DetVia => DetExplicit ? "--det" : ScriptedBy;
+    /// <summary><c>--seed=N</c>, null when unset.</summary>
     public ulong? Seed { get; private set; }
-    /// <summary><c>--spawn=N</c>; &lt; 0 means "random pick", the unset default.</summary>
+    /// <summary>Whether the master seed is pinned rather than drawn from the clock. The anim lab
+    /// pins it by nature — its whole point is an identical replay.</summary>
+    public bool SeedPinned => Seed != null || Det || Mode == SessionMode.AnimLab;
+    /// <summary>The master seed when it is pinned, else null — the clock draw stays outside, or
+    /// this type would not be a function of its args (and a baseline would differ from itself).</summary>
+    public ulong? PinnedSeed => SeedPinned ? Seed ?? Rng.DefaultSeed : null;
+    /// <summary><b>Resolved.</b> <c>--spawn=N</c>; &lt; 0 means "random pick". <c>--det</c> pins it
+    /// to 0 — a pinned CHOICE beats a pinned dice roll, since a seeded pick still moves when the
+    /// mission's spawn list grows. An explicit <c>--spawn=N</c> still wins.</summary>
     public int SpawnIndex { get; private set; } = -1;
-    /// <summary><c>--no-pads</c> was passed. Parsing does not touch <c>Pads.Disabled</c>.</summary>
+    /// <summary><c>--no-pads</c> was passed. Nothing here touches <c>Pads.Disabled</c>.</summary>
     public bool NoPads { get; private set; }
-    /// <summary><c>--jitter=</c> degrees; &lt; 0 means "auto", resolved from <c>--shots</c>/det.</summary>
+    /// <summary>Whether every gamepad is ignored: asked for, or implied by the bundle — a stick
+    /// with drift steers the free camera and nudges the flight model.</summary>
+    public bool PadsDisabled => NoPads || Det;
+    /// <summary><b>Resolved.</b> Burst camera dither in degrees. Bursts default it on so
+    /// z-fighting flickers across frames; <c>--det</c> defaults it off instead, since
+    /// bit-identical frames are the one property a deterministic run is for.</summary>
     public float JitterDeg { get; private set; } = -1f;
 
     // ---- Placement, as written on the command line --------------------------------------------
 
     public Vector3? Pos { get; private set; }
+    /// <summary><b>Resolved.</b> Normalised, and derived from <see cref="LookAt"/> in flight — a
+    /// point converted against the eye. Null once a degenerate vector is dropped.</summary>
     public Vector3? Direction { get; private set; }
+    /// <summary>A POINT, not a vector: the orbit view's pivot, and the freecam's aim when no
+    /// <c>--pos</c> was given. The conversion to a direction is one-way and flight-only.</summary>
     public Vector3? LookAt { get; private set; }
-    /// <summary>The deprecated <c>--spawn-at=</c>. <c>--pos</c> reaching the spawn is resolution.</summary>
+    /// <summary><b>Resolved.</b> Where the plane spawns: <c>--pos</c> routed here in flight, or the
+    /// deprecated <c>--spawn-at=</c>, or the empty stage's default.</summary>
     public Vector3? SpawnAt { get; private set; }
-    /// <summary>The deprecated <c>--spawn-dir=</c>.</summary>
+    /// <summary><b>Resolved.</b> The nose direction there — <c>--direction</c> routed in flight, or
+    /// the deprecated <c>--spawn-dir=</c>.</summary>
     public Vector3? SpawnDir { get; private set; }
-    /// <summary>The deprecated <c>--campos=</c>. There is no raw <c>CamDir</c>: the camera aim only
-    /// ever comes from routing <c>--direction</c>, which is resolution.</summary>
+    /// <summary><b>Resolved.</b> The camera eye: <c>--pos</c> routed here outside flight, or the
+    /// deprecated <c>--campos=</c> (which never places the plane, in any mode).</summary>
     public Vector3? CamPos { get; private set; }
+    /// <summary><b>Resolved.</b> The camera's aim, held apart from <see cref="LookAt"/> because a
+    /// direction names no pivot and the orbit view needs one.</summary>
+    public Vector3? CamDir { get; private set; }
     public float? Yaw { get; private set; }
     public float? Pitch { get; private set; }
-    /// <summary>The <c>--view=</c> numpad digit, already filtered to 1–4/6–9 (0 = chase). Whether a
-    /// view survives outside flight is resolution.</summary>
+    /// <summary><b>Resolved.</b> The <c>--view=</c> numpad digit (0 = chase). The numpad views orbit
+    /// a FLYING plane, so one asked for outside flight is dropped.</summary>
     public int View { get; private set; }
     /// <summary>Deprecated spellings seen, first-seen order, deduplicated, with their replacement.</summary>
     public IReadOnlyList<(string Old, string New)> Deprecated { get; private set; }
@@ -183,13 +326,16 @@ public sealed record SessionSpec
     public int? DebugLivery { get; private set; }
     public string? DebugMesh { get; private set; }
     public string? DebugNames { get; private set; }
+    /// <summary><b>Resolved.</b> Null outside <c>--freecam</c>/<c>--anim-lab</c>: the shared
+    /// selection lives in the two world-observation modes, the viewer's LMB is already the orbit
+    /// drag, and flight has no cursor.</summary>
     public string? DebugSelect { get; private set; }
-    /// <summary>The raw <c>--debug-nodelab=</c> spec. Its token grammar belongs to the lab
-    /// (<c>UI.NodeLab.ParseDebugSpec</c>), which logs as it filters, so normalising it stays a
-    /// consumer's job — parsing here would either duplicate the grammar or import the logging.</summary>
+    /// <summary><b>Resolved.</b> Filtered to the lab's token grammar
+    /// (<c>UI.NodeLab.ParseDebugSpec</c>, called with a reject list so it hands them back as data
+    /// instead of logging), and null outside <c>--freecam</c>/<c>--anim-lab</c>.</summary>
     public string? DebugNodeLab { get; private set; }
-    /// <summary>The raw <c>--debug-damage=</c> spec; same split as <see cref="DebugNodeLab"/>
-    /// (<c>UI.WorldDamageLab.ParseDebugSpec</c>).</summary>
+    /// <summary><b>Resolved.</b> Same treatment as <see cref="DebugNodeLab"/>, through
+    /// <c>UI.WorldDamageLab.ParseDebugSpec</c>.</summary>
     public string? DebugDamage { get; private set; }
     public int DebugJoin { get; private set; }
     public bool MarkersOverlay { get; private set; }
@@ -233,8 +379,9 @@ public sealed record SessionSpec
     /// "anim:debug,sound:debug" is not one of them — that is resolution.</summary>
     public IReadOnlyList<string> LogSpecs { get; private set; } = Array.Empty<string>();
 
-    /// <summary>Parses the user args into a spec. Last occurrence of a flag wins, as it does in the
-    /// loop this mirrors; an unrecognised arg is ignored silently, also as today.</summary>
+    /// <summary>Parses the user args and resolves them: the returned spec is the finished answer.
+    /// Last occurrence of a flag wins, as it does in the loop this mirrors; an unrecognised arg is
+    /// ignored silently, also as today.</summary>
     public static SessionSpec Parse(IEnumerable<string> args)
     {
         var argv = args.ToArray();
@@ -263,11 +410,11 @@ public sealed record SessionSpec
                 }
                 s.HasContentArg = true;
             }
-            else if (arg == "--viewer") { s.Viewer = true; s.HasContentArg = true; }
-            else if (arg == "--damage") { s.DamageLab = true; s.HasContentArg = true; }
+            else if (arg == "--viewer") { s._viewerArg = true; s.HasContentArg = true; }
+            else if (arg == "--damage") { s._damageLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--damage="))
             {
-                s.DamageLab = true;
+                s._damageLabArg = true;
                 var rejected = new List<string>();
                 s.DamagePreset = ParseDamagePreset(arg["--damage=".Length..], rejected);
                 foreach (var bad in rejected)
@@ -280,16 +427,16 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--chapter=")) { s.Chapter = arg["--chapter=".Length..]; s.ChapterGiven = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--stage=")) { s.Stage = arg["--stage=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--node=")) { s.NodeName = arg["--node=".Length..]; s.HasContentArg = true; }
-            else if (arg == "--fly") { s.Fly = true; s.HasContentArg = true; }
-            else if (arg == "--stunt") { s.Stunt = true; s.HasContentArg = true; }
-            else if (arg == "--freecam") { s.Freecam = true; s.HasContentArg = true; }
-            else if (arg == "--anim-lab") { s.AnimLab = true; s.HasContentArg = true; }
+            else if (arg == "--fly") { s._flyArg = true; s.HasContentArg = true; }
+            else if (arg == "--stunt") { s._stuntArg = true; s.HasContentArg = true; }
+            else if (arg == "--freecam") { s._freecamArg = true; s.HasContentArg = true; }
+            else if (arg == "--anim-lab") { s._animLabArg = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--play-anim=")) { s.PlayAnim = arg["--play-anim=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--seed=")) { s.Seed = ulong.Parse(arg["--seed=".Length..]); }
             else if (arg == "--debug-anim-ui") { s.DebugAnimUi = true; s.HasContentArg = true; }
             else if (arg == "--debug-anim") { s.DebugAnim = true; }
             else if (arg == "--no-pads") { s.NoPads = true; }
-            else if (arg == "--det") { s.Det = true; }
+            else if (arg == "--det") { s._detArg = true; }
             else if (arg == "--no-det") { s.NoDet = true; }
             else if (arg == "--perf") { s.Perf = true; }
             else if (arg.StartsWith("--log=")) { logSpecs.Add(arg["--log=".Length..]); }
@@ -403,12 +550,255 @@ public sealed record SessionSpec
             }
         }
 
-        s.Warnings = notes;
+        s._notes = notes;
         s.Deprecated = deprecated;
         s.LogSpecs = logSpecs;
         s.TexOverrides = texOverrides;
+        s.Resolve();
         return s;
     }
+
+    /// <summary>Turns the parsed votes into the one answer each: the mode, its modifiers, the world
+    /// selection, the player count, the <c>--det</c> bundle's pinned values and the placement
+    /// routing. Runs once, from <see cref="Parse"/>, on a spec that has not escaped yet.
+    ///
+    /// <para>The step ORDER is the behaviour, and it is the order <c>_Ready</c> ran these in. Two
+    /// places depend on it in a way that is easy to undo by tidying: <c>--stunt</c> moves
+    /// <see cref="Scenario"/> BEFORE arbitration can clear <see cref="Stunt"/>, so
+    /// <c>--anim-lab --stunt</c> still ends up on the stunt spawn list; and the <c>--freecam</c>/
+    /// <c>--anim-lab</c>-only debug tools are dropped AFTER <c>--node=</c> has forced the viewer,
+    /// so <c>--node= --debug-select=</c> loses the tool.</para></summary>
+    private void Resolve()
+    {
+        // Every flag that votes for a mode, gathered before anything is arbitrated. The probes vote
+        // like the rest: they need a world without an aircraft (or a parked plane to shoot at), and
+        // asking for it through the mode is how they get one.
+        bool fly = _flyArg || _stuntArg;
+        bool stunt = _stuntArg;
+        bool damageLab = _damageLabArg;
+        bool viewer = _viewerArg || _damageLabArg || MarkersOverlay || WeaponLab
+            || WeaponMount != null || WeaponFire || WeaponTest;
+        bool freecam = _freecamArg || DamageTest || EffectsTest;
+        bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
+
+        // --stunt is free flight over the mission's danger zones: the flight path plus the
+        // stunt_flying spawn list, unless the tester pinned another scenario for a specific spawn.
+        if (stunt && !ScenarioExplicit)
+        {
+            Scenario = "stunt_flying";
+        }
+        // --anim-lab is the animation debugger's stage: the chapter world under the lab's own
+        // clock, with no flight controller. The most specific mode of all, so it wins outright —
+        // combining it with a flight/viewer/spectator mode is a contradiction.
+        if (animLab && (fly || viewer || freecam))
+        {
+            Print("--anim-lab is the animation lab; ignoring --fly/--stunt/--viewer/--damage/--freecam");
+            fly = stunt = viewer = damageLab = freecam = false;
+        }
+        // --freecam is the spectator world view: not flight (no aircraft) and not the parked-plane
+        // viewer. Asking for a plane-less world AND a plane is a contradiction either way.
+        if (freecam && (fly || viewer))
+        {
+            Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--viewer/--damage");
+            fly = stunt = viewer = damageLab = false;
+        }
+        // Flight is the default for any content arg; --viewer opts out into the static inspection
+        // view. The explicit --viewer wins, since a bare --fly is now just the default spelled out.
+        if (viewer && fly)
+        {
+            Print("--viewer and --fly/--stunt are opposites (flight is the default); using --viewer");
+            fly = stunt = false;
+        }
+        // --node= is a single-subtree INSPECTION stage: the static viewer unless the anim lab was
+        // asked for. Neither flight nor the spectator view has anything to do with one object.
+        if (NodeName != null && !animLab)
+        {
+            if (fly || stunt || freecam)
+            {
+                Print("--node= is a single-subtree inspection stage; ignoring --fly/--stunt/--freecam");
+                fly = stunt = freecam = false;
+            }
+            viewer = true;
+            ChapterGiven = true; // the subtree comes out of the chapter's gamez
+        }
+        if (HasContentArg && !viewer && !freecam && !animLab)
+        {
+            fly = true;
+        }
+        Mode = animLab ? SessionMode.AnimLab
+            : freecam ? SessionMode.Freecam
+            : viewer ? SessionMode.Viewer
+            : fly ? SessionMode.Fly
+            : SessionMode.Menu;
+        Stunt = stunt;
+        DamageLab = damageLab;
+
+        // The numpad views orbit a FLYING plane; the other modes have their own cameras (the
+        // viewer's orbit, the spectator freecam) placed with --pos/--direction instead.
+        if (View != 0 && !Fly)
+        {
+            Warn("core", $"--view={View} is a flight camera; ignoring it outside --fly/--stunt");
+            View = 0;
+        }
+        bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
+        if (DebugSelect != null && !observing)
+        {
+            Warn("ui", "--debug-select is a --freecam/--anim-lab tool; ignoring it here");
+            DebugSelect = null;
+        }
+        if (DebugNodeLab != null && !observing)
+        {
+            Warn("ui", "--debug-nodelab is a --freecam/--anim-lab tool; ignoring it here");
+            DebugNodeLab = null;
+        }
+        if (DebugDamage != null && !observing)
+        {
+            Warn("ui", "--debug-damage is a --freecam/--anim-lab tool; ignoring it here (--damage-test is the headless twin)");
+            DebugDamage = null;
+        }
+        // The two lab spec grammars live in their labs; the reject list keeps them from logging,
+        // which is what lets this run with no engine under it.
+        DebugNodeLab = FilterSpec(DebugNodeLab, UI.NodeLab.ParseDebugSpec, "--debug-nodelab token",
+            "is not deps/dest/open/all/node=<cs_name>");
+        DebugDamage = FilterSpec(DebugDamage, UI.WorldDamageLab.ParseDebugSpec, "--debug-damage step",
+            "is not node=/pool=/hp=/kill/reset/tick=/open");
+
+        // --stage= replaces the chapter world outright, so it is a flight/spectator affair: there
+        // is no gamez to inspect, which is what the static viewer and the anim lab exist for.
+        if (Stage != null)
+        {
+            if (!string.Equals(Stage, "empty", StringComparison.OrdinalIgnoreCase))
+            {
+                Print($"--stage='{Stage}' is not a known stage (only 'empty'); ignoring");
+            }
+            else if (Mode == SessionMode.Viewer || Mode == SessionMode.AnimLab || NodeName != null)
+            {
+                Print("--stage=empty has no gamez to inspect; ignoring it in --viewer/--anim-lab/--node=");
+            }
+            else
+            {
+                EmptyStage = true;
+            }
+        }
+        // The static viewer shows a chapter world when asked for one, else the parked plane.
+        // Flight, the spectator view and the anim lab always need the world built.
+        WorldMode = !EmptyStage && (Fly || Freecam || AnimLab || (Viewer && ChapterGiven));
+        // A --plane= list of several aircraft states the player count on its own; an explicit
+        // --players= still wins.
+        if (!PlayersExplicit && PlaneNames.Count > 1)
+        {
+            Players = PlaneNames.Count;
+        }
+        Players = Mathf.Clamp(Players, 1, UI.SplitScreen.MaxPlayers);
+        if (Players > 1 && !Fly)
+        {
+            Print($"--players={Players} needs flight (nothing to fly in --viewer); using 1");
+            Players = 1;
+        }
+        if (DamageLab && WorldMode)
+        {
+            Print("--damage is the plane lab (use --viewer --plane without --chapter); ignoring");
+            DamageLab = false;
+        }
+
+        // The --det bundle. Det/PadsDisabled/SeedPinned are computed from what is settled by now;
+        // the two values it PINS are the only ones that have to be written down.
+        if (Det && SpawnIndex < 0)
+        {
+            SpawnIndex = 0;
+        }
+        if (JitterDeg < 0f)
+        {
+            JitterDeg = ScreenshotShots > 1 && !Det ? 0.15f : 0f;
+        }
+
+        ResolvePlacement();
+    }
+
+    /// <summary>Routes <c>--pos</c>/<c>--direction</c> — the one placement pair — onto the per-mode
+    /// plumbing that already carries placement: the plane's spawn override in flight, the camera's
+    /// placement everywhere else. Routing happens HERE, in one place, so no consumer downstream has
+    /// to ask what mode it is in or whether it holds a point or a vector.
+    ///
+    /// <para>The superseded spellings keep their old per-mode reach, so <c>--campos</c> still places
+    /// only a camera (never the plane) and <c>--spawn-at</c> still moves the anim lab's parked stage
+    /// prop. <c>--lookat</c> names a POINT and <c>--direction</c> a VECTOR; the conversion is
+    /// one-way and flight-only, because the orbit view PIVOTS on the point and no direction can
+    /// express that.</para></summary>
+    private void ResolvePlacement()
+    {
+        if (Fly && Direction == null && LookAt is { } aimPoint && (Pos ?? SpawnAt) is { } eye)
+        {
+            Direction = aimPoint - eye;
+        }
+        if (Direction is { } aim)
+        {
+            Direction = aim.LengthSquared() > 1e-6f ? aim.Normalized() : null;
+        }
+        if (Pos is { } place)
+        {
+            if (Fly)
+            {
+                SpawnAt = place;
+            }
+            else
+            {
+                CamPos = place;
+            }
+        }
+        if (Direction is { } dir)
+        {
+            if (Fly)
+            {
+                SpawnDir = dir;
+            }
+            else
+            {
+                CamDir = dir;
+            }
+        }
+        // A nose direction with nothing to place it on is a silently ignored argument: the spawn
+        // override only engages when a position was given.
+        if (Fly && SpawnDir != null && SpawnAt == null)
+        {
+            Warn("core", "--direction ignored: flight steers the nose from the spawn override, which needs --pos");
+        }
+        // The empty stage has no mission spawn list to draw from, so the subject starts over the
+        // grid origin — through the same fields --pos resolves into, so an explicit placement wins.
+        if (EmptyStage)
+        {
+            if (Fly)
+            {
+                SpawnAt ??= new Vector3(0f, Mech3.EmptyStage.SpawnAltitude, 0f);
+            }
+            else
+            {
+                CamPos ??= Mech3.EmptyStage.CameraPos;
+            }
+        }
+    }
+
+    /// <summary>Runs a lab's own token filter over a spec value without letting it log.</summary>
+    private string? FilterSpec(string? spec, Func<string, List<string>?, string> filter,
+        string what, string wanted)
+    {
+        if (spec == null)
+        {
+            return null;
+        }
+        var rejected = new List<string>();
+        string kept = filter(spec, rejected);
+        foreach (var token in rejected)
+        {
+            Warn("ui", $"{what} '{token}' {wanted} — ignoring it");
+        }
+        return kept;
+    }
+
+    private void Warn(string category, string message) => _notes.Add(new Note(category, message));
+
+    /// <summary>A complaint that is a bare console line today, with no log category.</summary>
+    private void Print(string message) => _notes.Add(new Note("", message));
 
     /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list — one plane per
     /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
