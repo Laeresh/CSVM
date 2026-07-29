@@ -7638,3 +7638,28 @@ on our desktop, 50 of 52 on the new one — is kept as `analysis/hidden-desktop/
 two rejected alternatives (create-minimized, which does not render; `--position`, which Godot
 clamps). New rule 123: `EnumWindows` only sees the calling desktop, so "no window found" is what
 success and a dead process look like alike.
+
+## 2026-07-29 — PLAN-sessionspec A2: `SessionSpec` + `Parse`, raw values only
+
+`CSVM/src/SessionSpec.cs` is a `sealed record` carrying everything the command line settles —
+grouped by the A1 dump's prefixes — plus `Parse(args)` and the seven arg parsers that were private
+to `PlaneViewer`: `ParseVec3`, `ParsePlanes`, `ParseView`, `ParseHold`, `ParsePaintColors`,
+`ParsePaintDecals`, `ParseDamagePreset`. Nothing calls it, which is the point: the change is
+behaviour-neutral by construction, and A3 gets a settled surface to resolve from.
+
+Two lines were drawn deliberately. **Raw means raw** — a flag records only itself, so the parse-time
+implications in today's loop did not come along (`--markers`/`--damage` no longer imply the viewer,
+`--damage-test`/`--effects-test` no longer imply the freecam, `--play-anim=` no longer implies the
+anim lab, `--stunt` neither forces flight nor moves the scenario). Those are resolution, and A3's
+own trap note says the three probe flags wearing a mode as a disguise must be modelled as probes or
+the enum inherits the lie. **`Parse` is pure** — no `Pads.Disabled`, no `TextureDropIn`, no
+`Log.Configure`, no logging at all: the three side-effecting branches are recorded as data and
+complaints accumulate in `Warnings` as `(category, message)`. `Log` ends in `GD.Print`, and B7's
+truth table runs in `CSVM.Tests`, which has no Godot runtime to print into. The two lab spec
+grammars (`UI.NodeLab`/`UI.WorldDamageLab.ParseDebugSpec`) stayed in their labs for the same
+reason — they log as they filter — so the spec carries those two values verbatim.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0,
+65.9 s. The load-bearing check is A1's instrument rather than the goldens, which do not reach the
+modes this plan touches: the 50-row matrix re-captured through `analysis/session-baseline/
+capture.ps1` is md5-identical to the committed baseline (`944310579BA214A0E99B801FC344098B`).

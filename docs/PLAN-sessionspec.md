@@ -107,7 +107,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Prove equivalence before changing anything
 
 1. ☑ `--dump-session` scaffold + the baseline resolution matrix
-2. ☐ `SessionSpec` + `Parse`, raw values only, not yet consumed
+2. ☑ `SessionSpec` + `Parse`, raw values only, not yet consumed
 3. ☐ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
 4. ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
 
@@ -174,20 +174,48 @@ not "tidy" it back in.**
 new type; run it after the whole of `_Ready`'s resolution and before `StartSession`, or it records
 half-resolved values.
 
-## A2 ☐ `SessionSpec` + `Parse`, raw values only, not yet consumed
+## A2 ☑ `SessionSpec` + `Parse`, raw values only, not yet consumed
 
-**Goal.** `CSVM/src/SessionSpec.cs` exists, parses all 112 arg branches into an immutable record, and
-is referenced by nothing in the running session.
+**Landed.** `CSVM/src/SessionSpec.cs` — a `sealed record` with `{ get; private set; }` properties
+grouped by the A1 dump's prefixes, plus `Parse(IEnumerable<string>)`. Referenced by nothing.
 
 **Evidence (confidence: traced).** `CSVM.Tests` project-references `CSVM.csproj` and already tests
 Godot-free types that use `Vector3`/`Basis` (`GameZTests.cs:38`), so no new assembly is needed;
 `SessionPaths.cs` is the proven precedent for extracting pure logic out of `PlaneViewer`.
 
-**Approach.** `<The record's shape; which of the 10 currently-private parsers move with it.>`
+**Approach — the raw/resolved split, drawn where A3 needs it.** A flag records only itself. The
+parse-time implications in today's loop are all resolution and were deliberately NOT carried over:
+`--markers`/`--damage`/`--weapon-*` no longer set `Viewer`, `--damage-test`/`--effects-test` no
+longer set `Freecam`, `--weapon-test` no longer sets `Viewer` (A3's `Probe?` trap), `--play-anim=`
+and `--debug-anim-ui` no longer set `AnimLab`. `_camDir` has no raw twin at all — it only ever
+exists as routed `--direction`. Path flags are override values, null when unset. Of the A1 dump's
+124 settings, the ~40 that are derivations (`mode.name`, `mode.world`, `mode.showsMenu`,
+`run.scripted`, `det.on`/`via`/`scriptedBy`/`masterSeed`/`seedPinned`, the resolved
+`place.*`, `collision.builds`, the `path.*Overridden` pairs) are absent by construction.
 
-**Verify.** `<Builds; dotnet test green; no behaviour change is possible because nothing calls it.>`
+**Seven parsers moved**, all `public static` so B7's truth table reaches them: `ParseVec3`,
+`ParsePlanes` (now returns the list instead of writing two fields), `ParseView` (returns 0 for a
+bad digit; the caller reports it), `ParseHold`, `ParsePaintColors`, `ParsePaintDecals`,
+`ParseDamagePreset` (skipped pairs go to an optional `rejected` list instead of `GD.Print`).
+`Deprecated()` became a local dedup inside `Parse`. The two lab grammars — `UI.NodeLab` and
+`UI.WorldDamageLab.ParseDebugSpec` — stayed put: they are their lab's vocabulary and they
+`Log.Warn` as they filter, so importing them would import the logging.
 
-**⚠ Traps.** `<…>`
+**Verify.** `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0;
+`dotnet test` 152/152. A1's 50-row matrix re-captured and md5-identical to the committed baseline
+(`944310579BA214A0E99B801FC344098B`), which is the load-bearing check: no call site changed, so no
+resolution could.
+
+**⚠ Traps.**
+1. **`Parse` must stay pure**, or B7 cannot call it: `CSVM.Tests` has no Godot runtime, and
+   `Log.*` ends in `GD.Print`. The three side-effecting branches are recorded, not performed —
+   `--no-pads` does not touch `Pads.Disabled`, `--tex-*` does not touch `TextureDropIn`, `--log=`
+   does not `Log.Configure` — and warnings accumulate in `Warnings` as `(category, message)`.
+   A3/B5 must apply and emit them; **do not "fix" this by logging from the spec.**
+2. `record` + `private set` still allows `with` **inside** the type, which is what B6's `FromMenu`
+   needs; from outside the spec is closed.
+3. The parse-time warnings (`--view=`, `--collision=`, `--damage=`) will be emitted later in the run
+   than they are today once B5 lands. Log ORDER moves; no resolved value does.
 
 ## A3 ☐ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
 
