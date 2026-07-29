@@ -989,7 +989,14 @@ public static class Probes
         /// value and the mismatch it hides is exactly the kind this instrument exists to catch.
         /// </summary>
         public readonly List<string> Duplicates = new();
-        public bool Ok => Error == null && Fields > 0 && Duplicates.Count == 0;
+        /// <summary>Settings where the two resolutions disagree, as
+        /// <c>key field=… spec=…</c>. Only <see cref="SessionCompare"/> fills this.</summary>
+        public readonly List<string> Mismatches = new();
+        /// <summary>Settings the comparison deliberately did not cover, named so a clean run
+        /// cannot be read as "everything agreed" when part of it was never asked.</summary>
+        public readonly List<string> Unowned = new();
+        public bool Ok => Error == null && Fields > 0 && Duplicates.Count == 0
+            && Mismatches.Count == 0;
     }
 
     /// <summary>The value renderers <see cref="Session"/> reports through. Held together so every
@@ -1080,6 +1087,80 @@ public static class Probes
         r.Fields = rows.Count;
         r.Text = sb.ToString();
         r.Summary = $"{rows.Count} settings"
+            + (r.Duplicates.Count > 0 ? $", {r.Duplicates.Count} DUPLICATE KEY(S)" : "");
+        return r;
+    }
+
+    /// <summary>The equivalence gate: renders each setting as <c>field | spec</c> — the value the
+    /// live session's own fields resolved to, beside the one <c>SessionSpec</c> resolved from the
+    /// same command line — and fails on any disagreement.
+    ///
+    /// <para>Two resolutions can only be compared while both exist, which is why this is a probe
+    /// inside a running <c>PlaneViewer</c> and not a unit test: the field side has no other
+    /// home.</para>
+    ///
+    /// <para>A key absent from <paramref name="spec"/> is one the spec deliberately does not own
+    /// (the derived data paths, the texture drop-in's own name grammar). Those are listed by name
+    /// in the report rather than skipped quietly — a gate that silently narrows what it checks
+    /// reads exactly like one that passed.</para></summary>
+    public static SessionResult SessionCompare(string args,
+        IEnumerable<(string Key, string Value)> fields, IReadOnlyDictionary<string, string> spec)
+    {
+        var r = new SessionResult();
+        var rows = fields.ToList();
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var (key, _) in rows)
+        {
+            if (!seen.Add(key))
+            {
+                r.Duplicates.Add(key);
+            }
+        }
+        rows.Sort((a, b) => string.CompareOrdinal(a.Key, b.Key));
+        int width = rows.Count == 0 ? 0 : rows.Max(f => f.Key.Length);
+        int valueWidth = rows.Count == 0 ? 0 : rows.Max(f => f.Value.Length);
+        var sb = new StringBuilder();
+        // ASCII + "\n", for the same reasons Session gives.
+        sb.Append("# session compare - field | spec, resolved from the same command line\n");
+        sb.Append("# args: ").Append(args).Append('\n');
+        foreach (var (key, value) in rows)
+        {
+            if (!spec.TryGetValue(key, out string? mine))
+            {
+                r.Unowned.Add(key);
+                sb.Append(key.PadRight(width)).Append(" = ").Append(value.PadRight(valueWidth))
+                  .Append(" | (not owned)\n");
+                continue;
+            }
+            bool same = string.Equals(value, mine, StringComparison.Ordinal);
+            if (!same)
+            {
+                r.Mismatches.Add($"{key} field={value} spec={mine}");
+            }
+            sb.Append(key.PadRight(width)).Append(" = ").Append(value.PadRight(valueWidth))
+              .Append(" | ").Append(mine).Append(same ? "" : "   <<< MISMATCH").Append('\n');
+        }
+        foreach (string dup in r.Duplicates)
+        {
+            sb.Append("!! duplicate key: ").Append(dup).Append('\n');
+        }
+        foreach (string bad in r.Mismatches)
+        {
+            sb.Append("!! mismatch: ").Append(bad).Append('\n');
+        }
+        // Spec keys nobody asked about: the mirror of an unowned field, and the way a renamed row
+        // shows up as something other than silence.
+        foreach (string extra in spec.Keys.Where(k => !seen.Contains(k)).OrderBy(k => k, StringComparer.Ordinal))
+        {
+            r.Mismatches.Add($"{extra} field=(absent) spec={spec[extra]}");
+            sb.Append("!! spec-only key: ").Append(extra).Append('\n');
+        }
+        r.Fields = rows.Count;
+        r.Text = sb.ToString();
+        int compared = rows.Count - r.Unowned.Count;
+        r.Summary = $"{compared} of {rows.Count} settings compared, {r.Unowned.Count} not owned ("
+            + string.Join(", ", r.Unowned) + ")"
+            + (r.Mismatches.Count > 0 ? $", {r.Mismatches.Count} MISMATCH(ES)" : ", all agree")
             + (r.Duplicates.Count > 0 ? $", {r.Duplicates.Count} DUPLICATE KEY(S)" : "");
         return r;
     }

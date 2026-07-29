@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `--dump-session` scaffold + the baseline resolution matrix
 2. ☑ `SessionSpec` + `Parse`, raw values only, not yet consumed
 3. ☑ Resolution: `SessionMode`, precedence, modifiers, `WorldMode`, the `--det` bundle, `BuildsCollision`
-4. ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
+4. ☑ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch — **GREEN**
 
 ### Wave B — Migrate, then lock it in
 
@@ -271,24 +271,47 @@ concentrate on the ~1,300 raw pass-through rows and on running both sides in one
    `--dump-flight` from its "dump" arm, and `ShowsMenu` is true under `--run-tests`. Fixing either
    is a behaviour change that would fail A4; it needs its own item.
 
-## A4 ☐ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
+## A4 ☑ **Gate:** parallel run — probe prints `field | spec`, exits nonzero on any mismatch
 
-**Goal.** For every line of the A1 matrix, the value resolved by the existing fields and the value
-resolved by `SessionSpec` are proven identical, mechanically.
+**GREEN — Wave B is unblocked.** `--dump-session=compare` resolves every setting twice in one
+process and fails on any disagreement; `analysis/session-baseline/compare.ps1` runs the whole
+matrix. **50 of 50 rows agree, 5,700 field/spec value pairs compared, exit 0.**
 
 **Evidence (confidence: traced).** Both resolutions can coexist: A2/A3 add the spec without removing
 the fields, so one run can compute and compare both. The field side only exists inside a live
 `PlaneViewer`, which is why this check is the probe rather than an xUnit test.
 
-**Approach.** `<Two-column output; a mismatch is a nonzero exit, reusing the dump exit-code contract
-landed 2026-07-25.>`
+**Approach.** `--dump-session` gained an optional value rather than a new flag: the bare form still
+prints exactly what the committed baseline holds (it must — a second column would break A1), and
+`=compare` swaps in `Probes.SessionCompare`, which pairs the field rows against a `SpecRows(spec)`
+map by key and renders `key = field | spec`, marking each disagreement inline and repeating it as a
+`!!` line. It reuses the dump exit-code contract, so the verdict is the process exit.
 
-**Verify.** `<All ~30 matrix lines agree. This is the gate for Wave B — record the run in the item
-note when it goes green.>`
+**114 of 124 settings are compared; the report NAMES the 10 it does not**, on every row, rather
+than quietly narrowing: the nine derived `path.*` values are PlaneViewer's own arithmetic over
+`SessionPaths` and the `CSVM_DATA_ROOT` precedence (the spec records override *values*, not resolved
+paths), and `tex.overrides` is `TextureDropIn`'s name grammar (extension stripped, `=colour` split
+off, sorted) where the spec keeps the raw request. A spec key with no matching field row is also a
+failure, so a renamed row shows up as something other than silence.
 
-**⚠ Traps.** A green run here proves the *rules* match; it says nothing about the call-site edits in
-B5, which is a different failure mode with a different signal. Do not let a green A4 be cited as
-evidence for B5.
+The matrix moved to `analysis/session-baseline/matrix.ps1`, dot-sourced by both `capture.ps1` and
+the new `compare.ps1`, so the two instruments cannot drift into testing different command lines.
+
+**Verify.** **50/50 rows agree, 5,700 pairs, exit 0.** Shown able to fail twice, each caught on the
+exact row and named: forcing `--stunt`'s scenario to `stunt_flyingX` failed `stunt-bare` and
+`stunt-2p` with `world.scenario field=stunt_flying spec=stunt_flyingX`, and clamping `Players` to 3
+failed `--fly --players=4` with `plane.players field=4 spec=3`. `.\RunTests.ps1` PASS (152 units,
+9/9 suites, 11/11 goldens hash-identical, exit 0); `baseline.txt` re-captured md5-identical
+(`944310579BA214A0E99B801FC344098B`) through the refactored `capture.ps1`.
+
+**⚠ Traps.**
+1. A green run here proves the *rules* match; it says nothing about the call-site edits in B5, which
+   is a different failure mode with a different signal. Do not let a green A4 be cited as evidence
+   for B5.
+2. **The bare `--dump-session` output is a committed baseline** — the compare column lives behind
+   `=compare` for that reason. Anything that changes the bare form breaks A1's artifact.
+3. Reverting the able-to-fail perturbation left the file OLDER than the DLL, so the confirming run
+   re-measured the perturbation and reported the same two failures (new verification rule 124).
 
 ---
 

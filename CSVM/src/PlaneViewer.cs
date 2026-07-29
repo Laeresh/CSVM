@@ -313,6 +313,9 @@ public partial class PlaneViewer : Node3D
     // --dump-session: print every resolved launch setting and quit. The one dump that must stay
     // invisible to the resolution it reports — see DumpSession.
     private bool _dumpSession;
+    // --dump-session=compare: run SessionSpec beside the fields and fail on any disagreement.
+    // Scaffolding for the SessionSpec plan's equivalence gate; deleted with the rest in B8.
+    private bool _dumpSessionCompare;
     private bool _damageTest;          // --damage-test[=name]: sweep one destructible's HP through its DAMAGE_SEQUENCE stages and quit
     private string _damageTestFilter = ""; // the optional --damage-test= filter (destructible NAME substring)
     private float _damageHd;           // --damage-hd=N: discrete-hit mode — apply N HEALTH_DAMAGE per hit via DamageAt, count hits to destruction (C23)
@@ -654,6 +657,9 @@ public partial class PlaneViewer : Node3D
             else if (arg.StartsWith("--dump-flight=")) { _dumpFlight = true; _dumpFlightPlane = arg["--dump-flight=".Length..]; }
             else if (arg == "--dump-config") _dumpConfig = true;
             else if (arg == "--dump-session") _dumpSession = true;
+            // =compare adds the SessionSpec column and the verdict; the bare flag's output is a
+            // committed baseline, so it must not gain a column.
+            else if (arg.StartsWith("--dump-session=")) { _dumpSession = true; _dumpSessionCompare = arg["--dump-session=".Length..] == "compare"; }
             // Builds the chapter world (via the freecam path) so a bound AnimRuntime exists, then
             // sweeps one destructible's HP after build; --freecam gives it the world without a plane.
             else if (arg == "--damage-test") { _damageTest = true; _freecam = true; hasContentArg = true; }
@@ -3569,12 +3575,159 @@ public partial class PlaneViewer : Node3D
             ("misc.perf", SV.Bool(_perf)),
             ("misc.noFocus", SV.Bool(_noFocus)),
         };
-        var r = Testing.Probes.Session(string.Join(" ", OS.GetCmdlineUserArgs()), f);
+        string args = string.Join(" ", OS.GetCmdlineUserArgs());
+        var r = _dumpSessionCompare
+            ? Testing.Probes.SessionCompare(args, f, SpecRows(SessionSpec.Parse(OS.GetCmdlineUserArgs())))
+            : Testing.Probes.Session(args, f);
         GD.Print(r.Text);
-        WriteScratch("session_dump.txt", r.Text);
-        GD.Print($"{r.Summary} → ./.scratch/session_dump.txt");
+        string file = _dumpSessionCompare ? "session_compare.txt" : "session_dump.txt";
+        WriteScratch(file, r.Text);
+        GD.Print($"{r.Summary} → ./.scratch/{file}");
         return r.Ok;
     }
+
+    /// <summary>The same 124 settings as <see cref="DumpSession"/>, resolved by
+    /// <see cref="SessionSpec"/> instead of by this node's fields — the second column of the
+    /// equivalence gate. Rendered through the same <see cref="SV"/> helpers, because a formatting
+    /// difference would read as a resolution difference.
+    ///
+    /// <para>Ten keys are deliberately absent, and the report names them: the derived data paths
+    /// (<c>path.*</c>) are this node's own arithmetic over <see cref="SessionPaths"/> and the
+    /// <c>CSVM_DATA_ROOT</c> precedence, which the spec records as override values rather than
+    /// resolving; and <c>tex.overrides</c> is <c>TextureDropIn</c>'s name grammar (extension
+    /// stripped, <c>=colour</c> split off, sorted), which the spec keeps as the raw request.</para>
+    ///
+    /// <para>Scaffolding for the SessionSpec plan's Wave A gate; deleted with the probe in B8.</para></summary>
+    private static Dictionary<string, string> SpecRows(SessionSpec s) => new(StringComparer.Ordinal)
+    {
+        ["mode.name"] = SV.Str(s.ModeName),
+        ["mode.fly"] = SV.Bool(s.Fly),
+        ["mode.viewer"] = SV.Bool(s.Viewer),
+        ["mode.freecam"] = SV.Bool(s.Freecam),
+        ["mode.animLab"] = SV.Bool(s.AnimLab),
+        ["mode.stunt"] = SV.Bool(s.Stunt),
+        ["mode.damageLab"] = SV.Bool(s.DamageLab),
+        ["mode.world"] = SV.Bool(s.WorldMode),
+        ["mode.emptyStage"] = SV.Bool(s.EmptyStage),
+        ["mode.hasContentArg"] = SV.Bool(s.HasContentArg),
+        ["mode.forceMenu"] = SV.Bool(s.ForceMenu),
+        ["mode.menuStartScreen"] = SV.Str(s.MenuStartScreen),
+        ["mode.showsMenu"] = SV.Bool(s.ShowsMenu),
+        ["run.scripted"] = SV.Bool(s.IsScripted),
+
+        ["world.chapter"] = SV.Str(s.Chapter),
+        ["world.chapterGiven"] = SV.Bool(s.ChapterGiven),
+        ["world.mission"] = SV.Str(s.Mission),
+        ["world.scenario"] = SV.Str(s.Scenario),
+        ["world.scenarioExplicit"] = SV.Bool(s.ScenarioExplicit),
+        ["world.node"] = SV.Str(s.NodeName),
+        ["world.stage"] = SV.Str(s.Stage),
+        ["world.skyZone"] = SV.Str(s.SkyZone),
+        ["world.skyZoneExplicit"] = SV.Bool(s.SkyZoneExplicit),
+        ["world.noFog"] = SV.Bool(s.NoFog),
+        ["world.animLod"] = SV.Num(s.AnimLod),
+        ["world.destroy"] = SV.Str(s.DestroyName),
+
+        ["plane.name"] = SV.Str(s.PlaneName),
+        ["plane.names"] = SV.List(s.PlaneNames),
+        ["plane.players"] = SV.Num(s.Players),
+        ["plane.playersExplicit"] = SV.Bool(s.PlayersExplicit),
+        ["plane.loadout"] = SV.Str(s.LoadoutOverride),
+        ["plane.rocket"] = SV.Str(s.RocketOverride),
+        ["plane.gunSelect"] = SV.Num(s.GunSelect),
+        ["plane.infiniteAmmo"] = SV.Bool(s.InfiniteAmmo),
+        ["plane.autoFire"] = SV.Bool(s.AutoFire),
+        ["plane.autoFireRockets"] = SV.Bool(s.AutoFireRockets),
+        ["plane.holdSets"] = SV.Num(s.HoldSets?.Length ?? 0),
+
+        ["paint.names"] = SV.List(s.PaintNames),
+        ["paint.colors"] = s.PaintColorOverride == null ? SV.Absent
+            : "[" + string.Join("|", s.PaintColorOverride.Select(c => SV.Col(c))) + "]",
+        ["paint.decals"] = SV.List(s.PaintDecalOverride?.Select(d => SV.Num(d))),
+        ["paint.seed"] = SV.Num(s.PaintSeed),
+        ["paint.seedExplicit"] = SV.Bool(s.PaintSeedExplicit),
+
+        ["det.on"] = SV.Bool(s.Det),
+        ["det.explicit"] = SV.Bool(s.DetExplicit),
+        ["det.noDet"] = SV.Bool(s.NoDet),
+        ["det.scriptedBy"] = SV.Str(s.ScriptedBy),
+        ["det.via"] = SV.Str(s.DetVia),
+        ["det.seedArg"] = SV.Opt(s.Seed),
+        ["det.masterSeed"] = s.PinnedSeed is { } pinned ? SV.Num(pinned) : "<clock>",
+        ["det.seedPinned"] = SV.Bool(s.SeedPinned),
+        ["det.spawnIndex"] = SV.Num(s.SpawnIndex),
+        ["det.padsDisabled"] = SV.Bool(s.PadsDisabled),
+        ["det.jitterDeg"] = SV.Num(s.JitterDeg),
+
+        ["place.pos"] = SV.Vec(s.Pos),
+        ["place.direction"] = SV.Vec(s.Direction),
+        ["place.lookAt"] = SV.Vec(s.LookAt),
+        ["place.spawnAt"] = SV.Vec(s.SpawnAt),
+        ["place.spawnDir"] = SV.Vec(s.SpawnDir),
+        ["place.camPos"] = SV.Vec(s.CamPos),
+        ["place.camDir"] = SV.Vec(s.CamDir),
+        ["place.view"] = SV.Num(s.View),
+        ["place.yaw"] = SV.Opt(s.Yaw),
+        ["place.pitch"] = SV.Opt(s.Pitch),
+        ["place.deprecated"] = SV.List(s.Deprecated.Select(d => d.Old)),
+
+        ["shot.path"] = SV.Str(s.ScreenshotPath),
+        ["shot.frames"] = SV.Num(s.ScreenshotFrames),
+        ["shot.shots"] = SV.Num(s.ScreenshotShots),
+
+        ["probe.dumpMarkers"] = SV.Bool(s.DumpMarkers),
+        ["probe.dumpMarkersFilter"] = SV.Str(s.DumpMarkersPlane),
+        ["probe.dumpWeapons"] = SV.Bool(s.DumpWeapons),
+        ["probe.dumpWeaponsFilter"] = SV.Str(s.DumpWeaponsFilter),
+        ["probe.dumpLoadout"] = SV.Bool(s.DumpLoadout),
+        ["probe.dumpLoadoutFilter"] = SV.Str(s.DumpLoadoutFilter),
+        ["probe.dumpFlight"] = SV.Bool(s.DumpFlight),
+        ["probe.dumpFlightPlane"] = SV.Str(s.DumpFlightPlane),
+        ["probe.dumpConfig"] = SV.Bool(s.DumpConfig),
+        ["probe.damageTest"] = SV.Bool(s.DamageTest),
+        ["probe.damageTestFilter"] = SV.Str(s.DamageTestFilter),
+        ["probe.damageHd"] = SV.Num(s.DamageHd),
+        ["probe.effectsTest"] = SV.Bool(s.EffectsTest),
+        ["probe.weaponTest"] = SV.Bool(s.WeaponTest),
+        ["probe.runTests"] = SV.Bool(s.RunTests),
+        ["probe.runTestsFilter"] = SV.Str(s.RunTestsFilter),
+        ["probe.hudFontTest"] = SV.Bool(s.HudFontTest),
+
+        ["debug.anim"] = SV.Bool(s.DebugAnim),
+        ["debug.animUi"] = SV.Bool(s.DebugAnimUi),
+        ["debug.playAnim"] = SV.Str(s.PlayAnim),
+        ["debug.dzPaths"] = SV.Bool(s.DebugDzPaths),
+        ["debug.scoreboard"] = SV.Bool(s.DebugScoreboard),
+        ["debug.livery"] = SV.Opt(s.DebugLivery),
+        ["debug.mesh"] = SV.Str(s.DebugMesh),
+        ["debug.names"] = SV.Str(s.DebugNames),
+        ["debug.select"] = SV.Str(s.DebugSelect),
+        ["debug.nodeLab"] = SV.Str(s.DebugNodeLab),
+        ["debug.damage"] = SV.Str(s.DebugDamage),
+        ["debug.join"] = SV.Num(s.DebugJoin),
+        ["debug.markersOverlay"] = SV.Bool(s.MarkersOverlay),
+        ["debug.weaponLab"] = SV.Bool(s.WeaponLab),
+        ["debug.weaponSelect"] = SV.Str(s.WeaponSelect),
+        ["debug.weaponMount"] = SV.Str(s.WeaponMount),
+        ["debug.weaponFire"] = SV.Bool(s.WeaponFire),
+
+        ["collision.builds"] = SV.Bool(s.BuildsCollision),
+        ["collision.force"] = SV.Bool(s.ForceCollision),
+        ["collision.show"] = SV.Bool(s.ShowColliders),
+        ["collision.debug"] = SV.Bool(s.DebugCollision),
+
+        ["path.zrdrOverridden"] = SV.Bool(s.Zrdr != null),
+        ["path.soundsOverridden"] = SV.Bool(s.Sounds != null),
+        ["path.gamezOverridden"] = SV.Bool(s.Gamez != null),
+        ["path.texturesOverridden"] = SV.Bool(s.Textures != null),
+
+        ["tex.census"] = SV.Bool(s.TexCensus),
+
+        ["misc.mute"] = SV.Bool(s.Mute),
+        ["misc.noVsync"] = SV.Bool(s.NoVsync),
+        ["misc.perf"] = SV.Bool(s.Perf),
+        ["misc.noFocus"] = SV.Bool(s.NoFocus),
+    };
 
     /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
     /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and

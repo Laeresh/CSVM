@@ -1401,6 +1401,11 @@ Main.tscn root: parses args, registers shader globals + lighting + the persisten
   branch runs first among the dumps, after every resolution, so it can report a command line that
   carries another dump. Scaffolding: the SessionSpec plan's last item deletes it, and
   `analysis/session-baseline/` keeps the matrix and baseline that outlive it.
+⚠ **`--dump-session=compare` is the parallel-run gate, and the BARE form must never change** — its
+  output is the committed baseline, so the second column lives behind the `=compare` value rather
+  than in the row. `SpecRows` renders the same 124 keys from `SessionSpec` through the same `SV`
+  helpers (a formatting difference would read as a resolution difference); 114 are compared and the
+  10 that are not — the derived `path.*` and `tex.overrides` — are named in the report.
 ⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
   drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
   **never swap that for minimize**, which stops rendering and blanks every capture (rule 121).
@@ -1594,10 +1599,14 @@ The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loa
 `--dump-flight` / `--dump-session` / `--damage-test` inspection reports. Each probe does the work
 once and returns both halves: the report text the flag prints and writes, and a structured verdict
 (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
-⚠ `Session` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by that plan's last
-  item. They render pre-rendered `key = value` rows, sorted, ASCII, LF — the text is captured by a
-  PowerShell 5.1 harness into a committed baseline, so an em dash or a `\r\n` reads as a diff on
-  every row. `SessionValues` exists so an absent value is spelled `-` in all 124 places.
+⚠ `Session` + `SessionCompare` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by
+  that plan's last item. They render pre-rendered `key = value` rows, sorted, ASCII, LF — the text
+  is captured by a PowerShell 5.1 harness into a committed baseline, so an em dash or a `\r\n` reads
+  as a diff on every row. `SessionValues` exists so an absent value is spelled `-` in all 124 places.
+⚠ **`SessionCompare` is the equivalence gate** — `field | spec` per setting, nonzero exit on any
+  disagreement, and it **names every key it does not cover** (both in the row and in the summary)
+  because a gate that silently narrows what it checks reads exactly like one that passed. A spec key
+  with no matching field row fails too, so a renamed row cannot pass as silence.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —

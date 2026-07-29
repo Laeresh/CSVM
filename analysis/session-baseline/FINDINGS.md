@@ -94,3 +94,24 @@ resolution item of `docs/PLAN-sessionspec.md`.
    has `mode.showsMenu = true` and no content arg. Harmless only because the `--run-tests` branch
    returns before the menu branch is reached: the correctness of the test harness currently rests on
    statement order in `_Ready`, which is exactly what the plan replaces with a total function.
+
+## The equivalence gate (2026-07-29)
+
+`compare.ps1` runs the same matrix with `--dump-session=compare`, which resolves every setting twice
+in one process — once through `PlaneViewer`'s own fields, once through `SessionSpec` — and exits
+nonzero on any disagreement. **50 of 50 rows agree; 5,700 field/spec value pairs compared.**
+
+114 of the 124 settings are compared and **the report names the other 10 on every row**: the nine
+derived `path.*` values (PlaneViewer's own arithmetic over `SessionPaths` and the `CSVM_DATA_ROOT`
+precedence — the spec records override *values*, not resolved paths) and `tex.overrides`
+(`TextureDropIn`'s name grammar, which the spec keeps as the raw request). A gate that narrows what
+it checks without saying so reads exactly like one that passed.
+
+Able-to-fail, twice, each caught on the exact row: forcing `--stunt`'s scenario to `stunt_flyingX`
+failed `stunt-bare` and `stunt-2p` (`world.scenario field=stunt_flying spec=stunt_flyingX`), and
+clamping the player count to 3 failed `--fly --players=4` (`plane.players field=4 spec=3`). Both
+reverts were confirmed green — after a forced rebuild, because the first attempt restored a file
+older than the DLL and silently re-measured the perturbation (verification rule 124).
+
+The matrix now lives in `matrix.ps1`, dot-sourced by both scripts, so the recorder and the gate
+cannot drift into testing different command lines.

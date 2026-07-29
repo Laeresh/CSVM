@@ -7694,3 +7694,31 @@ compared every row the spec resolves — 2,400 values across 50 rows, 0 mismatch
 also proves `Parse` stays GD-free. Shown able to fail by inverting `ShowsMenu`. It was deleted
 rather than kept, because A4 owns the field-vs-spec gate and B7 the truth table; what it buys A4 is
 a start from 2,400 already-agreeing values against the frozen field side.
+
+## 2026-07-29 — PLAN-sessionspec A4: the equivalence gate is green
+
+`--dump-session=compare` resolves every launch setting twice in one process — once through
+`PlaneViewer`'s own fields, once through `SessionSpec` — renders them `field | spec`, and exits
+nonzero on any disagreement. `analysis/session-baseline/compare.ps1` runs the whole matrix:
+**50 of 50 rows agree, 5,700 field/spec value pairs compared, exit 0.** Wave B is unblocked.
+
+The column lives behind a flag VALUE rather than in the row because the bare `--dump-session`
+output is A1's committed baseline. 114 of the 124 settings are compared and the report names the
+other 10 on every row — the nine derived `path.*` values (PlaneViewer's own arithmetic over
+`SessionPaths` and the `CSVM_DATA_ROOT` precedence, which the spec records as override values) and
+`tex.overrides` (`TextureDropIn`'s name grammar, kept raw by the spec). A spec key with no matching
+field row fails too, so a renamed row shows up as something other than silence. The matrix moved to
+`matrix.ps1`, dot-sourced by both `capture.ps1` and `compare.ps1`, so the recorder and the gate
+cannot drift into testing different command lines.
+
+Shown able to fail twice, each caught on the exact row and named: forcing `--stunt`'s scenario to
+`stunt_flyingX` failed `stunt-bare` and `stunt-2p`, and clamping the player count to 3 failed
+`--fly --players=4` with `plane.players field=4 spec=3`. The first revert did NOT go green — `mv`
+restored a file older than the built DLL, so `dotnet build` was a no-op and the confirming run
+re-measured the perturbation, reporting the identical failure. New verification rule 124: after a
+perturb-and-revert, force the rebuild; an unchanged result after a revert is a stale artifact until
+the timestamp says otherwise.
+
+Verified: `.\RunTests.ps1` PASS — 152 units, 9/9 suites, 11/11 goldens hash-identical, exit 0,
+63.6 s — and `baseline.txt` re-captured md5-identical (`944310579BA214A0E99B801FC344098B`) through
+the refactored `capture.ps1`, which is what proves the matrix extraction changed no command line.

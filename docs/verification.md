@@ -563,6 +563,15 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      (0 of 52 samples) *and* `EnumDesktopWindows` on the new desktop (50 of 52), plus the render's
      own pixel md5. Any one alone is satisfied by a process that crashed on startup.
 
+124. **After a perturb-and-revert, force the rebuild — restoring a file can leave it OLDER than the
+     build output, so the "reverted" run silently re-measures the perturbation.** Proving the
+     SessionSpec gate could fail meant editing the resolution, running, then moving a `.bak` back
+     over it; `mv` carries the backup's mtime, which predated the DLL, so the next `dotnet build`
+     was a no-op and the confirming run still reported the injected mismatch. The tell was that the
+     failure was *identical* to the injected one — an unchanged result after a revert is a stale
+     artifact until the timestamp says otherwise. Touch the file (or build clean) before the run
+     that is supposed to be green.
+
 ## What this project cannot verify itself
 
 These need the user:
