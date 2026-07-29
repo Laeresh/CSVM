@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Migrate, then lock it in
 
 5. ☑ Delete the arg fields; rewrite the ~183 call sites
-6. ☐ `SessionSpec.FromMenu` and the launchscreen re-entry
+6. ☑ `SessionSpec.FromMenu` and the launchscreen re-entry
 7. ☐ The xUnit resolution truth table
 8. ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
 
@@ -367,22 +367,61 @@ B6's subject.
    `Z:\Crimson` and broke **every** Godot launch on the machine until it was removed (new
    verification rule 125).
 
-## B6 ☐ `SessionSpec.FromMenu` and the launchscreen re-entry
+## B6 ☑ `SessionSpec.FromMenu` and the launchscreen re-entry
 
-**Goal.** `StartSessionFromMenu` builds a new spec from the pristine CLI spec instead of writing nine
-fields.
+**`StartSessionFromMenu` derives its spec from the pristine command line.** `SessionSpec.FromMenu`
+takes the base as a *parameter*, so the caller reads `SessionSpec.FromMenu(_cli, …)` and nothing a
+previous session settled can reach the next one.
 
-**Evidence (confidence: traced).** `PlaneViewer.cs:2482-2515` writes `_chapter`, `_planeNames`,
-`_planeName`, `_players`, `_menuPads`, `_stunt`, `_fly`, `_worldMode`, `_viewerMode` and conditionally
-`_scenario`. Three of those are patches against carry-over, each with a comment saying so.
+**Evidence (confidence: traced).** The pre-B5 code wrote nine fields at `PlaneViewer.cs:2482-2515`;
+after B5 that was one `WithMenuSelection` call on the live spec. Three of the nine were patches
+against carry-over, each with a comment saying so.
 
-**Approach.** `<…>`
+**⚠ Surfaced, as decision 5 requires: deriving fresh resolves IDENTICALLY to accumulate-and-patch.**
+No behaviour changed, and the reason is worth writing down rather than discovering again. `_spec` is
+assigned in exactly two places — `= _cli` in `_Ready`, and the menu factory's result — so the only
+fields where the live spec can differ from the pristine one are the eight the factory writes, and
+the factory writes all eight unconditionally. The base therefore cannot influence the outcome. The
+one field that could have differed is `PlaneName`, whose fallback fires only on an empty pick, and
+`LaunchMenu.AllLocked()` returns false when no slot exists — so the launchscreen cannot fire a
+launch with an empty list. **The point of the change is not the values, it is that the equality
+currently holds only because three hand-written patches happen to cover the three carry-over
+fields.** Deriving fresh makes it hold structurally.
 
-**Verify.** `<…>`
+**Approach.** `FromMenu(cli, chapter, planeNodes, stunt)` is `static` and takes its base explicitly,
+which is what makes the base impossible to get wrong — swapping it back to the live spec is a
+*compile error* (CS0026), not a silent regression. It sets Chapter / PlaneNames / PlaneName /
+Players / Stunt / Mode=Fly / WorldMode / Scenario and nothing else. The player count comes from the
+list length rather than a separate argument, since one plane per player is what the pick means.
+`_menuPads` stays session state on `PlaneViewer`: it comes from the join flow, not from args.
 
-**⚠ Traps.** If resolution differs from today's accumulate-and-patch, **stop and surface it** — see
-the note under Decisions. `_menuPads` comes from the join flow, not the CLI, so it is session state
-the factory takes as an argument rather than a spec field derived from args.
+**⚠ It deliberately does not re-resolve.** Re-running arbitration would let a `--viewer` vote win a
+second time and the menu would stop launching flight; re-running placement would move a `--pos` that
+was routed to the camera at parse time onto the menu's plane. The launchscreen overwrites an answer,
+it does not ask the question again — which is what it has always done.
+
+**Verify.** Ten engine-free facts in `CSVM.Tests/SessionSpecMenuTests.cs` — the launchscreen's only
+automated coverage anywhere, since the goldens never open it and the resolution baseline drives the
+CLI only. **Each of the eight writes was shown able to fail**: dropping it individually breaks 1–3
+facts (Chapter 2, PlaneNames 2, PlaneName 3, Players 3, Stunt 1, Mode 1→3, WorldMode 1, Scenario 2),
+and ignoring `--scenario=` breaks 1. Expected values in the carry-over fact differ from both the
+first pick and the parse default, so a dropped write cannot pass by landing on one. `.\RunTests.ps1`
+PASS (162 units, 9/9 suites, 11/11 goldens hash-identical, exit 0); `baseline.txt` md5-identical
+(`944310579BA214A0E99B801FC344098B`), as it must be — that matrix never enters the menu, so it
+confirms the CLI path is untouched and says nothing about this item. Four launchscreen renders
+headless, exit 0 and zero errors: `--menu`, `--menu --debug-join=3`, `--menu --plane= --chapter=`,
+and `--menu=plane --debug-join=1` (eyeballed: two slots, P1 choosing, P2 locked in).
+
+**The menu → flight re-entry was playtested and confirmed working** (user, 2026-07-30) — the one
+part of this item nothing automated reaches, since it needs a keypress.
+
+**⚠ Traps.**
+1. The equality above holds only while the factory writes every field a previous launch could have
+   changed. Adding a menu-settable field without adding its write re-opens the carry-over bug the
+   old patches existed to prevent — and the pristine base would then *hide* it, because the stale
+   value would come from the command line instead of the last session.
+2. A perturbation that drops a write can pass by landing on a default: the second-launch fact uses
+   a chapter that is neither the first pick nor `C1`.
 
 ## B7 ☐ The xUnit resolution truth table
 

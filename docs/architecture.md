@@ -156,6 +156,9 @@ The xUnit project `dotnet test` runs (net8.0, `ProjectReference` to `CSVM.csproj
 `CSVM.sln`). Covers the readers that need no running engine: `Zrdr`/`ZrdrDict`, `WavFile`,
 `SoundDefs`, `WeaponDefs`, `Messages`, `MissionTargets`, `SessionPaths`, `GameZ`'s transform
 arithmetic, `MarkerRig`, `AnimDefs`, and the Godot-free halves of `StockLoadouts`/`TextureArchive`.
+⚠ `SessionSpecMenuTests` is the launchscreen's ONLY automated coverage — the pixel goldens never
+  open the menu and `analysis/session-baseline/` drives the CLI only. A launchscreen change that
+  alters what a pick resolves to is caught here or nowhere.
 ⚠ Two input kinds, deliberately separate. `fixtures/` is hand-authored from `docs/formats/` with
   invented `probe_*` names; byte-level inputs (WAV/ADPCM) are assembled in the test code so every
   byte's provenance is visible. **A trimmed piece of a real extraction is still a game asset and
@@ -1343,10 +1346,17 @@ DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a 
 ⚠ Path flags are override VALUES only, null when unset — no default arithmetic here, that is
   `SessionPaths`. `DataRoot` is the raw arg; its precedence against `CSVM_DATA_ROOT` is the
   caller's, because every base path derives from the winner.
-⚠ `WithMenuSelection` is applied to the LIVE spec, not to the pristine command-line one, so a second
-  launch inherits what the first settled — which is why `Scenario` is re-derived from the mode on
-  every call unless `--scenario=` pinned it. That is the accumulate-and-patch the launchscreen has
-  always done; changing the base to the pristine spec is a behaviour change, not a tidy-up.
+⚠ **`FromMenu` is static and takes its base as a PARAMETER** — the launchscreen derives from the
+  pristine command-line spec, so nothing a previous session settled reaches the next one. Passing the
+  live spec instead is a compile error (CS0026), which is the whole point: the three carry-over
+  patches this replaced were correct only as long as somebody remembered them. It writes Chapter /
+  PlaneNames / PlaneName / Players / Stunt / Mode=Fly / WorldMode / Scenario and **must keep writing
+  every field a pick can change** — a menu-settable field added without its write re-opens the
+  carry-over bug, and the pristine base then hides it behind a command-line value.
+⚠ **`FromMenu` does not re-resolve, deliberately.** Re-running arbitration would let a `--viewer`
+  vote win a second time and the menu would stop launching flight; re-running placement would move a
+  `--pos` routed to the camera at parse time onto the menu's plane. It overwrites an answer rather
+  than asking the question again — which is what the launchscreen has always done.
 
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
@@ -1384,8 +1394,9 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 Main.tscn root: registers shader globals + lighting + the persistent camera once in `_Ready`, then
 launchscreen or `StartSession()` — menu and CLI share one session-build path.
 ⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
-  node holds `_cli` (what was typed) and `_spec` (what the live session was built from, which the
-  launchscreen's pick patches) and every consumer reads `_spec`. `_Ready` applies only what a pure
+  node holds `_cli` (what was typed) and `_spec` (what the live session was built from — a menu
+  launch replaces it with `SessionSpec.FromMenu(_cli, …)`, derived from `_cli` and never from the
+  outgoing `_spec`) and every consumer reads `_spec`. `_Ready` applies only what a pure
   value cannot — the data-root precedence, `Pads.Disabled`, `TextureDropIn`, `Log.Configure`, the
   clock-drawn master seed — and emits the spec's held `Warnings` before `Log.Configure`, which is
   where the loop they replaced raised them. **A new flag is a SessionSpec change**; adding a field

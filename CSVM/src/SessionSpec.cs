@@ -558,27 +558,38 @@ public sealed record SessionSpec
         return s;
     }
 
-    /// <summary>The launchscreen's locked picks, as a spec: the chapter, one plane per player, the
-    /// player count and whether it is a stunt run. The menu always launches flight over a chapter
-    /// world, whatever mode the command line asked for.
+    /// <summary>The spec for a launchscreen launch: the picked chapter, one plane per player, and
+    /// whether it is a stunt run. The menu always launches flight over a chapter world, whatever
+    /// mode the command line asked for — one plane each, the player count stated by the list.
     ///
-    /// <para>Applied to THIS spec rather than to the pristine command-line one, so a second launch
-    /// inherits what the first settled — <see cref="Scenario"/> is re-derived from the mode each
-    /// time for exactly that reason, unless <c>--scenario=</c> pinned it.</para></summary>
-    public SessionSpec WithMenuSelection(string chapter, IReadOnlyList<string> planeNodes, int players,
+    /// <para><b>Derived from <paramref name="cli"/>, the PRISTINE command line, never from the spec
+    /// the last session ran with.</b> Nothing a previous launch settled can reach this one, so
+    /// "clear the state the last run left" stops being a patch somebody has to remember and becomes
+    /// the shape of the thing. The base is a parameter rather than <c>this</c> precisely so it
+    /// cannot quietly become the live spec again.</para>
+    ///
+    /// <para>⚠ <b>It does not re-resolve.</b> No mode arbitration re-runs (a <c>--viewer</c> vote
+    /// would win a second time and the menu would stop launching flight) and placement is not
+    /// re-routed (<c>--pos</c> was routed to the camera at parse time under a non-flight mode, and
+    /// re-routing it here would start moving the menu's plane). Both match what the launchscreen has
+    /// always done: it overwrites an answer, it does not ask the question again.</para></summary>
+    public static SessionSpec FromMenu(SessionSpec cli, string chapter, IReadOnlyList<string> planeNodes,
         bool stunt)
     {
         var names = planeNodes.ToArray();
-        return this with
+        return cli with
         {
             Chapter = chapter,
             PlaneNames = names,
-            PlaneName = names.Length > 0 ? names[0] : PlaneName,
-            Players = Mathf.Clamp(players, 1, UI.SplitScreen.MaxPlayers),
+            // An empty pick cannot come from the launchscreen (it launches only when every joined
+            // slot is locked, and it needs at least one), so this falls back to the command line's
+            // plane rather than to whatever the last session flew.
+            PlaneName = names.Length > 0 ? names[0] : cli.PlaneName,
+            Players = Mathf.Clamp(names.Length, 1, UI.SplitScreen.MaxPlayers),
             Stunt = stunt,
             Mode = SessionMode.Fly,
             WorldMode = true,
-            Scenario = ScenarioExplicit ? Scenario : stunt ? "stunt_flying" : "zeppelin_run",
+            Scenario = cli.ScenarioExplicit ? cli.Scenario : stunt ? "stunt_flying" : "zeppelin_run",
         };
     }
 

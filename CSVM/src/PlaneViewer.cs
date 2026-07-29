@@ -2069,9 +2069,14 @@ public partial class PlaneViewer : Node3D
         }
     }
 
-    /// <summary>The launchscreen's players locked their picks: derive the session's spec — chapter,
-    /// one plane per player — bind each player's pad, and start the session. On a build failure,
-    /// return to the menu with a note rather than leave a blank screen.</summary>
+    /// <summary>The launchscreen's players locked their picks: derive this session's spec from the
+    /// pristine command line, bind each player's pad, and start the session. On a build failure,
+    /// return to the menu with a note rather than leave a blank screen.
+    ///
+    /// <para>The spec is derived from <see cref="_cli"/>, never from the outgoing
+    /// <see cref="_spec"/>, so nothing the last session settled can leak into this one. The pads are
+    /// the exception on purpose: they come from the join flow rather than from args, so they stay
+    /// session state here instead of becoming a spec field.</para></summary>
     private void StartSessionFromMenu(string chapter, IReadOnlyList<LaunchMenu.PlayerChoice> players,
         bool stunt)
     {
@@ -2080,7 +2085,7 @@ public partial class PlaneViewer : Node3D
         {
             planes.Add(p.PlaneNode);
         }
-        _spec = _spec.WithMenuSelection(chapter, planes, players.Count, stunt);
+        _spec = SessionSpec.FromMenu(_cli, chapter, planes, stunt);
         // Honour the join flow's device binding rather than re-deriving it from the roster: the
         // pad that joined as P2 in the menu must be the pad that flies P2. Single player keeps the
         // any-pad policy (null), so every connected pad flies the one plane, as before.

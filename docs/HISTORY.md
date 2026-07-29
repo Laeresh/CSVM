@@ -7763,3 +7763,38 @@ from then on **every** launch through `Godot_..._console.exe` failed with `Creat
 error 193` — that wrapper spawns the real exe with a NULL application name, so `CreateProcess` tried
 `Z:\Crimson.exe`, then `Z:\Crimson`, and a PNG is not a valid executable. It outlives the process
 that caused it and reads as a corrupted install.
+
+## 2026-07-30 — PLAN-sessionspec B6: the launchscreen derives from the pristine command line
+
+`StartSessionFromMenu` now calls `SessionSpec.FromMenu(_cli, chapter, planes, stunt)`. The factory is
+**static and takes its base as a parameter**, so the launchscreen derives from the pristine command
+line and nothing a previous session settled can reach the next one — and swapping the base back to
+the live spec is a compile error (CS0026) rather than a silent regression. It writes Chapter /
+PlaneNames / PlaneName / Players / Stunt / Mode=Fly / WorldMode / Scenario, takes the player count
+from the list length, and deliberately does **not** re-resolve: re-running arbitration would let a
+`--viewer` vote win a second time and stop the menu launching flight, and re-running placement would
+move a `--pos` routed to the camera at parse time onto the menu's plane.
+
+**Surfaced as decision 5 requires: deriving fresh resolves identically to accumulate-and-patch, and
+no behaviour changed.** `_spec` is assigned in exactly two places — `= _cli` in `_Ready` and the
+menu factory's result — so the only fields where the live spec can differ from the pristine one are
+the eight the factory writes, and it writes all eight unconditionally; the base cannot influence the
+outcome. The one field that could have differed is `PlaneName`, whose fallback fires only on an
+empty pick, and `LaunchMenu.AllLocked()` refuses to launch with no slots. The value of the change is
+therefore structural, not numeric: that equality held only because three hand-written patches
+happened to cover the three carry-over fields, and it now holds by construction.
+
+Verified by ten engine-free facts in `CSVM.Tests/SessionSpecMenuTests.cs` — the launchscreen's only
+automated coverage anywhere, since the goldens never open it and the resolution baseline drives the
+CLI only. Each of the eight writes was shown able to fail by dropping it individually (1–3 facts
+break apiece), as was ignoring `--scenario=`; the carry-over fact uses a chapter that is neither the
+first pick nor the parse default, so a dropped write cannot pass by landing on one.
+`.\RunTests.ps1` PASS (162 units, 9/9 suites, 11/11 goldens hash-identical, exit 0) and
+`baseline.txt` md5-identical (`944310579BA214A0E99B801FC344098B`) — which confirms the CLI path is
+untouched and says nothing about this item, because that matrix never enters the menu. Four
+launchscreen renders headless, exit 0 with zero errors: `--menu`, `--menu --debug-join=3`,
+`--menu --plane= --chapter=`, `--menu=plane --debug-join=1`.
+
+The menu → flight re-entry needs a keypress, so nothing automated reaches it — **playtested at the
+controls and confirmed working (user, 2026-07-30)**, which closes the last open question on this
+path and retires its `playtest.md` entry.
