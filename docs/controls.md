@@ -1,1 +1,54 @@
-In-flight keys: WASD/arrows pitch+roll, Q/E rudder, Shift/Ctrl throttle, **Space (pad B) fire guns**, **F (pad A) fire rockets** (one per pull), **G (D-pad L) select gun group** (one at a time), **H (D-pad R) select ordnance**, R respawn, P pause (halts the sim; `.` steps one frame), T node-name labels, Tab cycle stunt target, **numpad 1–9 (not 5) hold a fixed camera view around the plane** (P1's keyboard; `--view=` is its scripted twin), Esc quit. F12 screenshot, F11 print the mode's subject placement as ready-to-paste `--pos=`/`--direction=` (in `--viewer`, `--pos=`/`--lookat=`, the orbit pivot). In `--viewer`: H damage lab, L livery lab, M mesh lab, K marker overlay, W weapon lab. In `--freecam`/`--anim-lab`: **click an object to select it**, PgUp/PgDn walk its `cs_name` ancestor ladder (Home/End jump to the ends), **N the node lab**, **M the mesh lab on that selection alone**, **C the built colliders** (see `--collision`), **H the damage lab** on the selected destructible; the scripted twins are `--debug-select=`, `--debug-nodelab=`, `--debug-mesh=`, `--debug-colliders` and `--debug-damage=`
+# Controls
+
+The keys and pad buttons bound during development, grouped by the mode that
+owns them. The **scripted twin** column names the CLI flag that does the same
+thing without a human at the controls — use it in `--screenshot`/`--det` runs.
+Flags are specified in [`cli.md`](cli.md).
+
+## Flight (`--fly`, `--stunt`)
+
+| Input | Pad | Does |
+|---|---|---|
+| `WASD` / arrows | left stick | pitch + roll |
+| `Q` / `E` | shoulders | rudder |
+| `Shift` / `Ctrl` | triggers | throttle up / down |
+| `Space` | B | fire guns |
+| `F` | A | fire rockets — one per pull |
+| `G` | D-pad ← | select gun group (one at a time) |
+| `H` | D-pad → | select ordnance |
+| `R` | | respawn |
+| `Tab` | | cycle stunt target |
+| `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
+
+## Any mode
+
+| Input | Does |
+|---|---|
+| `P` | pause — halts the sim; `.` steps one frame |
+| `.` | step one frame while paused |
+| `T` | node-name labels |
+| `F12` | screenshot |
+| `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
+| `Esc` | quit |
+
+## `--viewer`
+
+| Input | Does | Scripted twin |
+|---|---|---|
+| `H` | damage lab | `--debug-damage=` |
+| `L` | livery lab | |
+| `M` | mesh lab | `--debug-mesh=` |
+| `K` | marker overlay | |
+| `W` | weapon lab | |
+
+## `--freecam`, `--anim-lab`
+
+| Input | Does | Scripted twin |
+|---|---|---|
+| click an object | select it | `--debug-select=` |
+| `PgUp` / `PgDn` | walk the selection's `cs_name` ancestor ladder | |
+| `Home` / `End` | jump to the ends of that ladder | |
+| `N` | node lab | `--debug-nodelab=` |
+| `M` | mesh lab, on that selection alone | `--debug-mesh=` |
+| `C` | show the built colliders (see `--collision`) | `--debug-colliders` |
+| `H` | damage lab on the selected destructible | `--debug-damage=` |
