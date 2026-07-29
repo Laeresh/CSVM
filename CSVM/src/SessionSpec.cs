@@ -137,11 +137,9 @@ public sealed record SessionSpec
         : "menu";
 
     /// <summary>Whether a flag will drive and end this session by itself, so nobody is at the
-    /// controls: the window hides instead of asking for focus. ⚠ <c>--dump-session</c> is
-    /// deliberately not a term — it reports this predicate, so a command line carrying it must
-    /// resolve exactly as the same one without it (verification rule 117); the focus concession is
-    /// applied outside the predicate. <c>--dump-flight</c>'s absence is not deliberate, it is the
-    /// same drift as <see cref="ModeName"/>, kept for the gate.</summary>
+    /// controls: the window hides instead of asking for focus. ⚠ <c>--dump-flight</c>'s absence is
+    /// a drift, not a decision — the same omission as <see cref="ModeName"/>'s, and it means a
+    /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || RunTests
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig
@@ -212,7 +210,7 @@ public sealed record SessionSpec
     // ---- The --det bundle, resolved in one place -----------------------------------------------
 
     /// <summary>Which flag turns the bundle on by driving and ending the session itself, in
-    /// precedence order; empty when none does. ⚠ <c>--dump-session</c> is not a term (rule 117).</summary>
+    /// precedence order; empty when none does.</summary>
     public string ScriptedBy =>
         ScreenshotPath != null ? "--screenshot"
         : DumpMarkers ? "--dump-markers"
@@ -305,7 +303,6 @@ public sealed record SessionSpec
     public bool DumpFlight { get; private set; }
     public string DumpFlightPlane { get; private set; } = "";
     public bool DumpConfig { get; private set; }
-    public bool DumpSession { get; private set; }
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -485,7 +482,6 @@ public sealed record SessionSpec
             else if (arg == "--dump-flight") { s.DumpFlight = true; }
             else if (arg.StartsWith("--dump-flight=")) { s.DumpFlight = true; s.DumpFlightPlane = arg["--dump-flight=".Length..]; }
             else if (arg == "--dump-config") { s.DumpConfig = true; }
-            else if (arg == "--dump-session") { s.DumpSession = true; }
             else if (arg == "--damage-test") { s.DamageTest = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--damage-test=")) { s.DamageTest = true; s.DamageTestFilter = arg["--damage-test=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--damage-hd=")) { s.DamageHd = Flt(arg["--damage-hd=".Length..]); }

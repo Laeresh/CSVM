@@ -1341,9 +1341,12 @@ DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a 
   the clock would not be a function of its args (rule 118). Complaints go to `Warnings` as
   `(category, message)`, empty category meaning a bare console line. That is what keeps the surface
   reachable from `CSVM.Tests`, which has no Godot runtime to print into.
-⚠ **Two known defects are reproduced on purpose**, because the equivalence gate compares against
-  today: `ModeName` omits `--dump-flight` from its "dump" arm, and `ShowsMenu` is true under
-  `--run-tests`. Fixing either is a behaviour change and needs its own item.
+⚠ **Two known defects are reproduced on purpose**: `ModeName` omits `--dump-flight` from its "dump"
+  arm, and `ShowsMenu` is true under `--run-tests` (a third, milder: `--dump-flight` turns the
+  bundle on through `ScriptedBy` yet is not a term of `IsScripted`). All three are pinned by facts
+  labelled as defects in `CSVM.Tests/SessionSpecTests.cs` — **the only thing checking this file
+  since the resolution baseline was retired**, so a rule added here needs its fact there. Fixing one
+  is a behaviour change and needs its own item.
 ⚠ The two lab spec grammars stay in their labs (`UI.NodeLab`/`UI.WorldDamageLab.ParseDebugSpec`);
   they gained an optional `rejected` list so a caller can take the tokens as data instead of the
   `Log.Warn`, which is how the spec normalises those two values engine-free.
@@ -1423,16 +1426,6 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   announcing the resolved set on one `[core] det …` line whose absence means the run was
   interactive. **Never let a constituent leak into an interactive default** — a bare `--fly` keeps
   its random spawn, random liveries and live pads.
-⚠ **`--dump-session` observes the resolution and so is a term of none of it** — absent from the
-  `--det` implication list, the `ScriptedBy` chain and the `ModeName` chain, all of which it reports;
-  the focus decision applies it outside the predicate rather than adding a term (rule 117). Its
-  branch runs first among the dumps, after every resolution, so it can report a command line that
-  carries another dump. Scaffolding: the SessionSpec plan's last item deletes it, and
-  `analysis/session-baseline/` keeps the matrix and baseline that outlive it.
-⚠ **`--dump-session`'s output IS the committed baseline** (`analysis/session-baseline/`), which is
-  what proves a change to the resolution behaviour-neutral: the goldens cannot see resolution, and
-  50 command lines × 124 settings can. Anything that changes a row — including a rename — invalidates
-  it, so re-capture and diff deliberately rather than accepting a moved hash.
 ⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
   drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
   **never swap that for minimize**, which stops rendering and blanks every capture (rule 121).
@@ -1623,17 +1616,9 @@ The session's randomness policy: one master seed and ten named subsystem generat
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--dump-session` / `--damage-test` inspection reports. Each probe does the work
+`--dump-flight` / `--damage-test` inspection reports. Each probe does the work
 once and returns both halves: the report text the flag prints and writes, and a structured verdict
 (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
-⚠ `Session` + `SessionValues` are SessionSpec-refactor scaffolding, deleted by that plan's last
-  item. They render `key = value` rows, sorted, ASCII, LF — the text is captured by a PowerShell 5.1
-  harness into a committed baseline, so an em dash or a `\r\n` reads as a diff on every row.
-  `SessionValues` exists so an absent value is spelled `-` in all 124 places.
-⚠ **The `SessionCompare` half is gone, deliberately.** It compared the launch fields against
-  `SessionSpec`; once the fields were deleted it would have compared the spec against itself, and an
-  instrument that cannot fail is worse than none. Re-adding a second column only makes sense while
-  two independent resolutions exist.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —

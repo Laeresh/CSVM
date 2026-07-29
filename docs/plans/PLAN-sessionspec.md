@@ -1,8 +1,11 @@
 # SessionSpec — one parsed, resolved value for the launch args
 
-**ACTIVE PLAN** (written 2026-07-25). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE — 2026-07-30 — all 8 items.** Archived to `docs/plans/`; kept for its evidence,
+measurements and dead ends. Statements below are as-written at the time — read them as history, not
+as current state. In particular the `--dump-session` probe and `analysis/session-baseline/`'s
+capture script, which most items verify against, were deleted by B8: `baseline.txt` survives as a
+record that can no longer be regenerated, and `CSVM.Tests/SessionSpec{,Menu,Parser}Tests.cs` (83
+facts) is what checks the launch surface now.
 
 `PlaneViewer.cs` is 4,157 lines, of which `_Ready` is 571 and `StartSession` 1,350. It carries 153
 private fields and 112 arg-parse branches; ~108 of those fields are launch args, and the ~183 sites
@@ -116,7 +119,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 5. ☑ Delete the arg fields; rewrite the ~183 call sites
 6. ☑ `SessionSpec.FromMenu` and the launchscreen re-entry
 7. ☑ The xUnit resolution truth table
-8. ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
+8. ☑ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
 
 ## Dependency and parallelism notes
 
@@ -464,18 +467,36 @@ the same as a fact that tests the rule it names**, and only the perturbation tel
    one-line diff after a "clean" restore. Diff the perturbed file against `HEAD`, not just by eye,
    before believing a revert (new verification rule 126).
 
-## B8 ☐ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
+## B8 ☑ Delete the scaffold; `architecture.md` entry; `HISTORY.md`
 
-**Goal.** `--dump-session` is removed, the CLI flag count is unchanged at 89, and the new modules are
-documented.
+**`--dump-session` is gone**, with `Probes.Session`/`SessionResult`/`SessionValues`, `DumpSession`,
+and `analysis/session-baseline/capture.ps1`. **The CLI index is back to 89 flags.**
 
-**Evidence (confidence: traced).** Decision 6.
+**Evidence (confidence: traced).** Decision 6, and B7 paid for it: 83 facts, each shown able to
+fail by perturbing its own rule. The table was not trimmed, so decision 6 stands unreopened.
 
-**Approach.** `<A `## src/SessionSpec.cs` entry in architecture.md with its ⚠ constraints; update the
-PlaneViewer entry; a dated HISTORY.md entry recording the matrix and the equivalence result.>`
+**Approach.** The probe's three vacuous survivors went too: with the flag deleted, the two
+`--dump-session` `InlineData` rows and `DumpSessionIsATermOfNothingItReports` would have passed
+against an unrecognised argument — tests that cannot fail, which is the thing this plan spent eight
+items avoiding.
 
-**Verify.** `<RunTests.ps1 green; the flag is gone from cli.md and the CLI index; CLAUDE.md's flag
-count still reads 89.>`
+**⚠ What is kept, and what it is now.** `FINDINGS.md`, `matrix.ps1` and `baseline.txt` stay, as A1
+decided when it put them outside `.scratch/`. They are a **record, not a tripwire**: the baseline
+can no longer be regenerated or fail, and `FINDINGS.md` now says so at the top, because an artifact
+that cannot fail reads exactly like one that passed. `capture.ps1` went because a script that cannot
+run is a trap for whoever tries it.
 
-**⚠ Traps.** The equivalence evidence must survive the instrument's deletion — record the matrix size
-and result in `HISTORY.md`, not just "verified".
+**⚠ State the loss plainly.** The truth table asserts rules one at a time; the baseline asserted 50
+whole command lines end to end. **No per-rule fact catches a rule nobody thought to write a fact
+for**, and that is exactly what the baseline could do. The trade was made with open eyes.
+
+**Verify.** `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, exit 0.
+`--dump-session --dump-config` now falls through to `--dump-config`, so the flag is genuinely
+unparsed rather than silently honoured. The flag is gone from `cli.md`'s index and its bullet.
+
+**⚠ The flag count was stale, not stable.** B8's goal said the count "is unchanged at 89" — but A1
+added `--dump-session` without bumping it, so CLAUDE.md had read 89 against a real 90 ever since.
+Deleting the flag makes 89 true again; the number was right today by accident. Counting also found
+that `cli.md` documents **89 flags while the parser accepts 92**: `--debug-colliders`, `--jitter`
+and `--sky-zone` appear in neither the index nor a bullet, and `--direction`/`--spawn-dir` are
+indexed with no bullet of their own. Recorded in `backlog.md` — out of scope to author here.

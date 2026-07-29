@@ -7830,3 +7830,44 @@ with a `git diff --stat` on the perturbed file before believing a revert.
 
 Verified: `.\RunTests.ps1` PASS — 296 units, 9/9 suites, 11/11 goldens hash-identical, exit 0. This
 item is what pays for B8; at 84 facts against the plan's 40–60, decision 6 stands.
+
+## 2026-07-30 — PLAN-sessionspec B8: the scaffold is deleted, and the plan is complete
+
+`--dump-session` is gone, with `Probes.Session`/`SessionResult`/`SessionValues`,
+`PlaneViewer.DumpSession` and `analysis/session-baseline/capture.ps1`. **The CLI index is back to 89
+flags.** Three vacuous survivors went with it: once the flag was unparsed, two `--dump-session`
+`InlineData` rows and `DumpSessionIsATermOfNothingItReports` would have passed against an
+unrecognised argument — tests that cannot fail, which is the thing this plan spent eight items
+avoiding. 83 facts remain.
+
+**The equivalence evidence, so it survives its instrument.** The probe printed 124 resolved settings
+per command line; `analysis/session-baseline/` ran a 50-row matrix through it, weighted toward what
+the pixel goldens cannot see (`--anim-lab`, `--stunt`, splitscreen and the menu have no golden shots
+at all). Two captures of one build were md5-identical, and the baseline reproduced md5-identical
+(`944310579BA214A0E99B801FC344098B`) across the deletion of ~108 arg fields — 50 command lines ×
+124 settings unchanged, which is what proved that refactor behaviour-neutral. The parallel-run gate
+that preceded it agreed on 50 of 50 rows over 5,700 field/spec value pairs, and was shown able to
+fail twice. `FINDINGS.md`, `matrix.ps1` and `baseline.txt` stay as the record; `capture.ps1` went
+because a script that cannot run is a trap for whoever tries it.
+
+**What is lost, plainly.** The truth table asserts rules one at a time; the baseline asserted 50
+whole command lines end to end. No per-rule fact catches a rule nobody thought to write a fact for,
+and that is precisely what the baseline could do. Decision 6 made this trade knowing it, and B7 paid
+for it at 83 facts against a plan asking 40–60, each shown able to fail.
+
+**The flag count was stale, not stable.** B8's goal said it "is unchanged at 89" — but A1 added
+`--dump-session` without bumping it, so CLAUDE.md had read 89 against a real 90 ever since; deleting
+the flag makes it true again, by accident rather than by stability. Counting properly also found
+that `cli.md` documents 89 flags while the parser accepts 92 — `--debug-colliders`, `--jitter` and
+`--sky-zone` are in neither the index nor a bullet, and `--direction`/`--spawn-dir` are indexed with
+no bullet — recorded in `backlog.md` as its own item rather than authored here.
+
+Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, exit 0 — and
+`--dump-session --dump-config` now falls through to `--dump-config`, so the flag is genuinely
+unparsed rather than silently honoured.
+
+**PLAN-sessionspec is COMPLETE (8 items)** and archived to `docs/plans/`. `PlaneViewer` lost ~108
+arg fields, its 120-branch parse loop and its five mutating arbitration blocks; the launch args are
+now one immutable, engine-free `SessionSpec` that parses and resolves, with a closed `SessionMode`,
+computed `Det`/`SeedPinned`/`BuildsCollision`/`IsScripted`, a `FromMenu` factory the launchscreen
+derives from, and 83 facts standing behind it.

@@ -3,10 +3,21 @@
 **Question.** What does each command line actually resolve to, and can that be pinned precisely
 enough that a ~1,000-line refactor of `PlaneViewer`'s argument handling is provably behaviour-neutral?
 
-**Verdict.** Yes. `--dump-session` prints every resolved launch setting (124 rows) as sorted
-`key = value` text; `capture.ps1` runs 50 command lines through it into `baseline.txt`. Two captures
-of the same build are **md5-identical**, and a deliberately perturbed build moves exactly the rows
-that rule touches. This is the pre-refactor baseline for `docs/PLAN-sessionspec.md`.
+**Verdict.** Yes, and it did its job. `--dump-session` printed every resolved launch setting (124
+rows) as sorted `key = value` text; `capture.ps1` ran 50 command lines through it into
+`baseline.txt`. Two captures of the same build were **md5-identical**, and a deliberately perturbed
+build moved exactly the rows that rule touched.
+
+**⚠ THE INSTRUMENT IS GONE.** `--dump-session` and `capture.ps1` were deleted with the last item of
+`docs/plans/PLAN-sessionspec.md`. What is left here is a RECORD, not a tripwire: `baseline.txt`
+cannot be regenerated or re-checked, so nothing in it can fail any more. Do not cite it as evidence
+that the launch arguments still resolve this way — it is evidence of what they meant *before* the
+refactor, and of what the refactor was measured against.
+
+**What checks the launch surface now:** `CSVM.Tests/SessionSpec{,Menu,Parser}Tests.cs`, 83 facts,
+each shown able to fail by perturbing its own rule. That is a strictly better instrument per rule
+and a strictly worse one per command line — it cannot catch a rule nobody wrote a fact for, where
+50 whole command lines could. That trade was made deliberately (decision 6 of the plan).
 
 ## Why it lives here rather than in `.scratch/`
 
@@ -14,19 +25,16 @@ The plan drafted it into `.scratch/`. That is wrong for a baseline: `.scratch/` 
 `CleanScratch.ps1`, and this file has to survive until the last item of a multi-wave plan verifies
 against it. The `probe_exempt.py` precedent in `../README.md` is the same mistake one step later.
 
-`--dump-session` itself is scaffolding and gets deleted when the plan lands. The matrix and the
-baseline stay: they are the record of what the launch arguments meant before the refactor, and
-nothing else in the repo holds that.
+`--dump-session` itself was scaffolding and was deleted when the plan landed. The matrix and the
+baseline stayed, as that decision anticipated: they are the record of what the launch arguments
+meant before the refactor, and nothing else in the repo holds that.
 
-## Running it
+## Running it — you cannot
 
-```
-./analysis/session-baseline/capture.ps1               # rewrite baseline.txt in place
-./analysis/session-baseline/capture.ps1 -Out new.txt  # capture elsewhere, then diff
-```
-
-~50 headless launches, about 90 s. Every row must exit 0. Read a diff row by row — a moved row is
-either the change you meant or the one you did not.
+`capture.ps1` was deleted with the flag it drove. `matrix.ps1` stays as the definition of the 50
+rows, because `baseline.txt` is labelled by those names and the coverage argument below is only
+readable against them. Reviving this means re-adding a dump flag first, and at that point the
+question is whether a per-rule fact would not serve better.
 
 ## Coverage, and why this matrix
 
@@ -83,7 +91,7 @@ After reverting both, `capture.ps1` reproduced `baseline.txt` byte for byte
 
 Neither is fixed here — the whole point of a baseline is to record current behaviour, including its
 warts, so the refactor can be shown not to have changed anything by accident. Both are for the
-resolution item of `docs/PLAN-sessionspec.md`.
+resolution item of `docs/plans/PLAN-sessionspec.md`.
 
 1. **`--dump-flight` is missing from the `_mode` "dump" chain.** Row `probe-dump-flight` resolves
    `mode.name = menu`, where every other probe resolves to `test` or `dump`. Consequence: a

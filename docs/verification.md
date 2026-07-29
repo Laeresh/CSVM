@@ -513,9 +513,10 @@ least once — usually by returning exactly the answer the hypothesis predicted.
      reports on a build product must read the same expression the build read, not a restatement
      of it.
 
-117. **An instrument that reports a rule must not be a term of that rule.** `--dump-session` meets
-     the `--det` membership rule (it drives and ends a session by itself) and the `_mode` naming
-     rule, and obeying either would have destroyed it: implying `--det` prints `det.on = true` on
+117. **An instrument that reports a rule must not be a term of that rule.** `--dump-session` (since
+     deleted — this is the rule that outlived it) met the `--det` membership rule (it drove and
+     ended a session by itself) and the mode-naming rule, and obeying either would have destroyed
+     it: implying `--det` prints `det.on = true` on
      every row of a matrix whose whole subject is which command lines turn the bundle on, and
      joining the `_mode` chain reports the observer's mode instead of the session's. When a general
      rule would make an observer change what it observes, the observer is the exception — state it

@@ -10,10 +10,10 @@ namespace CSVM.Tests;
 /// The launch-argument resolution truth table: what each command line settles, rule by rule.
 ///
 /// <para>Everything here used to be statement order inside a 571-line <c>_Ready</c>, reachable only
-/// by launching the engine. The committed baseline in <c>analysis/session-baseline/</c> covers the
-/// same surface as a whole-command-line regression — it reports that a row moved, never which rule
-/// moved it — so these facts are what name the rule. They are also what pays for deleting that
-/// baseline's instrument.</para>
+/// by launching the engine, and checked only by a whole-command-line baseline that could report
+/// THAT a row moved but never which rule moved it. These facts name the rule, and they are what
+/// paid for deleting that baseline's instrument — so this file is now the only thing standing
+/// behind the launch surface. Add the fact with the rule.</para>
 ///
 /// <para>Two known defects are asserted AS THEY ARE, marked below. Both are reproduced on purpose;
 /// fixing either is a behaviour change and needs its own item.</para>
@@ -137,7 +137,6 @@ public class SessionSpecTests
     [InlineData("--viewer")]
     [InlineData("--freecam")]
     [InlineData("--anim-lab")]
-    [InlineData("--dump-session")]
     public void AtMostOneModeBoolIsEverTrue(string arg)
     {
         var s = S(arg);
@@ -210,7 +209,6 @@ public class SessionSpecTests
     [InlineData("viewer", "--viewer")]
     [InlineData("stunt", "--stunt")]
     [InlineData("fly", "--fly")]
-    [InlineData("menu", "--dump-session")]
     public void TheSessionShapeNamesItself(string expected, string arg)
         => Assert.Equal(expected, S(arg).ModeName);
 
@@ -261,19 +259,6 @@ public class SessionSpecTests
         Assert.Equal("--dump-flight", s.ScriptedBy);
         Assert.True(s.Det);
         Assert.False(s.IsScripted);
-    }
-
-    /// <summary>The observer is a term of nothing it reports (rule 117): a command line carrying
-    /// `--dump-session` must resolve exactly as the same one without it.</summary>
-    [Fact]
-    public void DumpSessionIsATermOfNothingItReports()
-    {
-        var s = S("--dump-session");
-        Assert.False(s.Det);
-        Assert.Equal("", s.ScriptedBy);
-        Assert.False(s.IsScripted);
-        Assert.Equal("menu", s.ModeName);
-        Assert.Equal(SessionMode.Menu, s.Mode);
     }
 
     // ---- The --det bundle ----------------------------------------------------------------------
