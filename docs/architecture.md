@@ -155,6 +155,7 @@ clusters they delegate to (PLAN-planeviewer-split).
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
+- `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 
 ### Session root and tests
 
@@ -1433,8 +1434,16 @@ per-frame machinery (shader clock, `--perf`, capture tick, Esc/F11/F12) live on
   (outside the try) `FinishFraming`. They share one `BuildState` (a private nested class) instead
   of the flat local-variable graph the phases used to close over — add a new cross-phase value
   there, not as a new local. The `try`/`catch` around the whole build, and its `StartupProfile`
-  mark/record pairs per phase, are unchanged; `BuildFlightRigs` is still the ~400-line per-player
-  loop — PLAN-planeviewer-split C10 is what splits it into `FlightRigAssembler`.
+  mark/record pairs per phase, are unchanged.
+⚠ **`BuildFlightRigs` loads only the session-wide flight data** (PLAN-planeviewer-split C10): the
+  planes gamez, the per-plane stats cache, pads, the paint RNG, the spawn list/base, the weapons
+  catalogue + loadouts, the shared projectile pool, the HUD font/reticle textures and the stunt
+  mission/race. It then hands all of that to one `Session.FlightRigAssembler` as its `Inputs` and
+  calls `Assemble(pi, rig)` per rig, ascending — **anything per-player belongs in the assembler,
+  anything shared here**; the assembler's accumulated `MeshInstances`/`WhatSuffix` fold into
+  `BuildState` after the loop (before the race board's `What`, as when the loop was inline). The
+  shared race board, the rematch wiring and the splitscreen summary line stay here, since they are
+  built once the last rig is in.
 ⚠ **The `--*-test`/`--destroy=` probe wrappers moved to `Testing.ProbeRunner`**
   (PLAN-planeviewer-split A1); the runner is process-scoped (the Launcher constructs it and
   dispatches the `--dump-*`/`--run-tests` early quits itself) and every call site here is a
@@ -1818,6 +1827,26 @@ Static, spec-free lookups over a `SessionSpec`'s plane roster (PLAN-planeviewer-
 verbatim off `GameSession`): `PlaneFor(spec, index)`, `PlaneDisplayName(stats)`, `Humanize(s)`.
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
+
+## src/Session/FlightRigAssembler.cs
+Assembles one player's flight rig (PLAN-planeviewer-split C10, moved verbatim out of
+`GameSession.BuildFlightRigs`): the painted plane model, the `FlightController` and everything hung
+on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
+audio, this player's stunt run + marker/scoreboard/race entry, the spawn placement, and the crash
+runtime built after the controller joins the tree. Constructed once per session build from
+`(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
+`Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
+caller's build summary.
+⚠ **Call it in ascending player order.** `Inputs.PaintRng` and `SpawnBase` are shared streams — the
+  livery draw and the spawn index wrap are order-dependent, so reordering or parallelising the rigs
+  silently repaints and respawns the whole field.
+⚠ **The loadout (and its `--rocket=` override and `Ordnance`) is bound before the controller enters
+  the tree** — `FlightController._Ready` builds the fire state and the ordnance-type list from it.
+  Same for `FontTest` (its `_Ready` adds it to the HUD canvas). `_worldRoot.AddChild(controller)` is
+  therefore near the end, and the crash runtime is the only thing built after it.
+⚠ **`Inputs` is set once and never mutated per rig** — it is the "shared" half of the old loop's
+  local graph, made explicit. A value that differs per player is a local in `Assemble`, not a field
+  here; a new shared load belongs in `GameSession.BuildFlightRigs` and a new `Inputs` field.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime

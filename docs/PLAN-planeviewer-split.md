@@ -82,7 +82,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — break the remaining StartSession
 
 9. ☑ StartSession → ordered phase methods on GameSession
-10. ☐ Per-player flight loop + crash runtime → `src/Session/FlightRigAssembler`
+10. ☑ Per-player flight loop + crash runtime → `src/Session/FlightRigAssembler`
 11. ☐ Final sweep: `_Process` a short dispatcher, GameSession < ~800 lines, complete the plan
 
 ## Dependency and parallelism notes
@@ -278,7 +278,7 @@ mapped; the StartupProfile trace verifies ordering.
 **Verify.** `.\RunTests.ps1`; the `StartupProfile` phase marks must fire in the same order (the
 startup log is a free sequencing trace).
 
-## C10 ☐ Per-player flight loop → `src/Session/FlightRigAssembler`
+## C10 ☑ Per-player flight loop → `src/Session/FlightRigAssembler`
 
 **Goal.** The ~260-line per-player loop (PlaneBuilder + FlightController + loadout/ordnance/
 compass/gauges/reticle/audio/stunt/spawn + crash runtime hookup) becomes

@@ -8067,3 +8067,24 @@ per-player loop; PLAN-planeviewer-split C10 is the follow-up that extracts it in
 phase marks (gamez/textures/sounds/zrdr/world/clutter/anim/bind/edge/weather/plane/rest/first_frame)
 inspected on a post-refactor `--fly --det` run: fixed key order (unaffected by call order) with each
 bucket's magnitude sane for its phase, i.e. no phase's time bled into the wrong bucket.
+
+**PLAN-planeviewer-split C10 (2026-07-30): the per-player flight loop split into
+`src/Session/FlightRigAssembler`.** `GameSession.BuildFlightRigs`'s 262-line `for (pi …)` body moved
+verbatim into a new `FlightRigAssembler.Assemble(pi, rig)`: painted plane model, `FlightController`
+and everything hung on it (loadout/`--rocket=` override/pylon ordnance, compass, gauges, HUD font
+test, weapon readout, reticle, damage visuals, audio, this player's stunt run + marker /
+scoreboard / race entry), the spawn placement, and the crash runtime built after the controller
+joins the tree. `BuildFlightRigs` keeps only the session-wide loads (planes gamez, stats cache,
+pads, paint RNG, spawn list/base, weapons + loadouts, projectile pool + effect sinks, HUD
+font/reticle, stunt mission/race) and passes them as one `FlightRigAssembler.Inputs`, then loops
+`Assemble` in ascending player order; the assembler's accumulated `MeshInstances`/`WhatSuffix` fold
+into `BuildState` after the loop, before the race board's own `What` append -- the same string order
+as when the loop was inline. The shared race board, rematch wiring and splitscreen summary stay on
+`GameSession`. Both ordering traps preserved: shared-RNG draw order (livery per player, spawn index
+wrap) and loadout-before-enter-tree. `GameSession.cs` 1807 -> 1586 lines. Pure refactor, no
+behaviour change intended. Verified: `.\RunTests.ps1` PASS -- 293 units, 9/9 engine suites, 11/11
+goldens hash-identical -- plus a `--plane=player_bhawk,player_fury --players=2 --stunt --chapter=C1
+--det --screenshot` splitscreen shot captured before and after the refactor: **byte-identical PNGs**
+(md5 382fe30bd1d4d942bb280d61056efac6), and the shot inspected by hand shows the two panes still
+per-player throughout (different airframe, livery, damage dial, gun group in the readout, spawn
+position and stunt clock), which is what a shared-vs-per-player mixup would have collapsed.

@@ -1107,268 +1107,47 @@ public partial class GameSession : Node3D
                 Texture2D? reticleTex = ImpactReticle.LoadTexture(
                     Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
+                // Per-player rigs: one FlightRigAssembler over the session data above, run in
+                // ascending player order — the paint rng and the spawn index wrap are shared
+                // streams, so the draw order is load-bearing (PLAN-planeviewer-split C10; see
+                // src/Session/FlightRigAssembler.cs).
+                var assembler = new FlightRigAssembler(_spec, _liveryResolver, _spawnPicker,
+                    _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
+                    {
+                        PlanesGamez = planesGamez,
+                        StatsFor = StatsFor,
+                        RigCount = _rigs.Count,
+                        MixGain = mixGain,
+                        PadAssignment = padAssignment,
+                        PaintRng = paintRng,
+                        SpawnList = spawnList,
+                        SpawnBase = spawnBase,
+                        WeaponDefs = weaponDefs,
+                        WeaponMessages = weaponMessages,
+                        StockLoadouts = stockLoadouts,
+                        Projectiles = projectiles,
+                        HudFont = hudFont,
+                        ReticleTex = reticleTex,
+                        StuntZones = stuntZones,
+                        Race = race,
+                        Textures = state.Textures,
+                        ZrdrPath = state.ZrdrPath,
+                        MissionZrdrPath = state.MissionZrdrPath,
+                        Gamez = state.Gamez,
+                        WorldScene = state.WorldScene,
+                        WorldRuntime = state.WorldRuntime,
+                        CrashProgram = state.CrashProgram,
+                        Sounds = state.Sounds,
+                        SoundDefs = state.SoundDefs,
+                        DebugCollision = state.DebugCollision,
+                    });
                 for (int pi = 0; pi < _rigs.Count; pi++)
                 {
-                    var rig = _rigs[pi];
-                    bool verbose = pi == 0; // the per-plane detail lines are identical for every player
-                    string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
-                    // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
-                    // with one name given, that is the same plane for everyone as before.
-                    string planeName = PlaneRoster.PlaneFor(_spec, pi);
-                    var stats = StatsFor(planeName);
-
-                    // Flight repaints the field on every map load: each player draws their
-                    // own random livery (colours + decals) unless --paint pins one.
-                    mark = StartupProfile.Mark();
-                    var planeBuilder = new PlaneBuilder(planesGamez, state.Textures, spinningProps: true,
-                        scheme: _liveryResolver.SchemeFor(pi, state.ZrdrPath, randomByDefault: false, paintRng,
-                            _liveryResolver.PatternsForPlane(planesGamez, planeName)),
-                        patterns: _liveryResolver.Patterns);
-                    var planeModel = planeBuilder.Build(planeName);
-                    StartupProfile.Record("plane", mark);
-                    state.MeshInstances += planeBuilder.MeshInstanceCount;
-
-                    var controller = new FlightController
-                    {
-                        // one scripted sequence per player ('|'-separated); the last covers the rest
-                        HoldSegments = _spec.HoldSets == null ? null
-                            : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
-                        DebugCollision = state.DebugCollision,
-                        PlaneModel = planeModel,
-                        Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
-                        WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
-                        Surfaces = ControlSurfaceAnimator.Build(planeModel), // deflect ailerons/elevators/rudders
-                        Collider = PlaneCollider.Build(planeModel), // swept airframe boxes (wingtip/tail collision)
-                        // per-part HP from destroyable_parts — collisions below
-                        // the crash threshold damage the struck part instead of crashing
-                        Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
-                        // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
-                        // breaks it and passes through; every other collision stays solid.
-                        CollideDamageSink = state.WorldRuntime != null ? state.WorldRuntime.CollideDamageAt : null,
-                        // splitscreen: this player's own device(s), own pane for the HUD,
-                        // and no debug freeze (it would halt the shared world for everyone)
-                        PadDevices = padAssignment?[pi],
-                        UseKeyboard = pi == 0,
-                        PinnedView = _spec.View,
-                        HudParent = rig.Viewport,
-                        AllowPause = _rigs.Count == 1,
-                    };
-                    controller.AddChild(planeModel);
-
-                    // Guns/hardpoints: bind this plane's stock loadout (or the --loadout override) to
-                    // its built model — resolves markers to muzzle nodes + weapons to WeaponDefs.
-                    // Set before the controller enters the tree (its _Ready builds the fire state).
-                    var loadoutDefName = _spec.LoadoutOverride ?? stats.DefName;
-                    if (stockLoadouts.For(loadoutDefName) is { } ldef)
-                    {
-                        try
-                        {
-                            controller.Loadout = Loadout.Bind(ldef, planeModel, weaponDefs);
-                            controller.Projectiles = projectiles;
-                            controller.InfiniteAmmo = _spec.InfiniteAmmo;
-                            controller.AutoFire = _spec.AutoFire;
-                            controller.AutoFireRockets = _spec.AutoFireRockets;
-                            controller.InitialGunSelect = _spec.GunSelect;
-                            // --rocket=<wep_id>: swap every hardpoint's ordnance before the model is
-                            // mounted and the ordnance-type list is built (controller._Ready). A
-                            // testing hook — all 11 stock loadouts carry HE (wep_06), so this is the
-                            // only way to prove the mounted model varies by rocket type.
-                            if (_spec.RocketOverride != null)
-                            {
-                                Testing.ProbeRunner.ApplyRocketOverride(controller.Loadout, weaponDefs, _spec.RocketOverride, verbose);
-                            }
-                            // D44: hang the FLYOUT-model ordnance under the pylons — one body per pylon,
-                            // hidden as its ammo depletes. Uses the same gamez prototype the round flies.
-                            controller.Ordnance = PylonOrdnance.Build(controller.Loadout, projectiles);
-                            if (verbose)
-                            {
-                                int groups = 0;
-                                foreach (var _ in controller.Loadout.FirableGuns) { groups++; }
-                                GD.Print($"weapons: {groups} gun group(s), {controller.Loadout.Hardpoints.Count} " +
-                                         $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
-                                         $"select guns=G/dpad-L rockets=H/dpad-R" +
-                                         (_spec.GunSelect != 0 ? $" [gun-select={_spec.GunSelect}]" : "") +
-                                         (_spec.InfiniteAmmo ? " (infinite ammo)" : ""));
-                                if (controller.Ordnance is { } ord)
-                                {
-                                    GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +
-                                             (_spec.RocketOverride != null ? $" (--rocket={_spec.RocketOverride})" : ""));
-                                }
-                            }
-                        }
-                        catch (Exception e)
-                        {
-                            GD.PushWarning($"weapons: loadout bind failed for '{loadoutDefName}': {e.Message}");
-                        }
-                    }
-                    else if (verbose)
-                    {
-                        GD.Print($"weapons: no stock loadout for '{loadoutDefName}' — unarmed");
-                    }
-                    if (verbose && controller.Props != null)
-                        GD.Print($"props: {controller.Props.Count} spinning blur nodes");
-                    if (verbose && controller.WingLights != null)
-                        GD.Print($"wing lights: {controller.WingLights.Count} blinking flares");
-                    if (verbose && controller.Surfaces != null)
-                        GD.Print($"control surfaces: {controller.Surfaces.Count} deflecting nodes");
-                    if (controller.Collider != null)
-                    {
-                        if (verbose)
-                            GD.Print($"plane collider: {controller.Collider.Summary}");
-                    }
-                    else
-                    {
-                        GD.PushWarning("no airframe collision boxes — falling back to the center ray");
-                    }
-                    if (verbose && controller.Damage != null)
-                    {
-                        var partDescs = new List<string>();
-                        foreach (var p in stats.DestroyableParts)
-                            partDescs.Add($"{p.Name} {p.MaxHp:0}hp{(p.Critical ? "*" : "")}{(p.Engine ? " engine" : "")}");
-                        GD.Print($"damage parts: {string.Join(", ", partDescs)} (* = critical)");
-                    }
-
-                    // The original's heading tape, rebuilt from the chapter's own HUD
-                    // textures (compassticks2/compasstxt ship in every chapter's archive).
-                    controller.Compass = CompassTape.Build(state.Textures);
-                    if (verbose && controller.Compass != null)
-                        GD.Print("compass: heading tape from compassticks2/compasstxt");
-
-                    // The cockpit dials (altimeter / speedometer / damage display), rebuilt
-                    // from the plane's own gauges subtree in planes.zbd + the chapter's
-                    // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-                    controller.Gauges = GaugeCluster.Build(planesGamez, planeName, state.Textures,
-                        stats.DestroyableParts);
-                    if (controller.Gauges != null)
-                    {
-                        var damage = controller.Damage;
-                        if (damage != null)
-                            controller.Gauges.PartFraction = name =>
-                                damage.Parts.TryGetValue(name, out var s) ? s.Fraction : 1f;
-                        if (verbose)
-                            GD.Print("gauges: altimeter/speedometer/damage dial from the plane's gauges subtree");
-                    }
-
-                    // The bitmap-font proof overlay: draw the sample string on this pane so a 1P view
-                    // and a 4P pane can be compared (--hud-font-test). Set before the controller
-                    // enters the tree — its _Ready adds this to the HUD canvas.
-                    if (hudFont != null && _spec.HudFontTest)
-                    {
-                        controller.FontTest = new HudFontTest(hudFont, _spec.HudFontTestText);
-                        if (verbose)
-                            GD.Print($"hud-font-test: '{_spec.HudFontTestText}' via 5pointhud font");
-                    }
-
-                    // The selected-weapon text readout (E36): the gun group + rocket type and their
-                    // live ammo, drawn in the game's HUD font from the MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES
-                    // templates. Built whenever the font loaded and the plane carries a loadout.
-                    if (hudFont != null && controller.Loadout != null)
-                    {
-                        controller.WeaponReadout = WeaponReadout.Build(hudFont, weaponMessages);
-                        if (verbose)
-                            GD.Print("weapon readout: MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES via 5pointhud font");
-                    }
-
-                    // The gun aiming reticle (E37): the ballistic impact point of the selected gun
-                    // group at the convergence distance, drawn as the game's pipper — visibly
-                    // trailing the nose in a hard turn, on the rounds in steady flight.
-                    if (reticleTex != null && controller.Loadout != null)
-                    {
-                        controller.Reticle = ImpactReticle.Build(reticleTex, rig.Camera);
-                        if (verbose)
-                            GD.Print("gun reticle: ballistic impact point via impact_point.png");
-                    }
-
-                    // Visible damage: torn-skin panel flips + the low-HP smoke/fire
-                    // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
-                    if (controller.Damage != null)
-                    {
-                        var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "smokepuffer");
-                        var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "firepuffer");
-                        // per-panel fire trails (the original streams one from every damaged
-                        // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
-                        var panelTrails = new List<Effects.Puffer>();
-                        for (int i = 0; i < 4; i++)
-                            if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "firepuffer") is { } pt)
-                                panelTrails.Add(pt);
-                        controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
-                        if (verbose)
-                            GD.Print($"damage visuals: {controller.Visuals.PanelCount} panels, " +
-                                     $"smoke={(smoke != null ? "on" : "off")} fire={(fire != null ? "on" : "off")}, " +
-                                     $"{panelTrails.Count} panel fire trails");
-                    }
-
-                    // The data-driven crash rig is built AFTER the controller enters the tree
-                    // (below), so the crash def's reset states read valid global transforms.
-
-                    if (state.Sounds != null && state.SoundDefs != null)
-                    {
-                        var audio = new FlightAudio { MixGain = mixGain };
-                        audio.Setup(state.Sounds, state.SoundDefs, stats);
-                        controller.Audio = audio;
-                        controller.AddChild(audio);
-                        if (verbose)
-                            GD.Print($"audio: engine={stats.EngineSound} whine={stats.WhineSound} " +
-                                     $"rattle={stats.RattleSound}" +
-                                     (mixGain < 1f ? $" (per-player mix gain {mixGain:0.00})" : ""));
-                    }
-                    // This player's stunt run: player 1 flies the loaded instance, everyone else an
-                    // independent copy of the same zones — own progress, own clock.
-                    if (stuntZones != null)
-                    {
-                        controller.Stunt = pi == 0 ? stuntZones : stuntZones.ForAnotherPlayer();
-                        controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
-                        controller.PlayerIndex = pi;
-                        controller.DebugCompleteStunt = _spec.DebugScoreboard;
-                        // The objective marker HUD, one per pane: projects that player's
-                        // active danger zone through THEIR camera, with the edge arrow + clock
-                        // bearing + run status.
-                        controller.Marker = MarkerHud.Build(controller.Stunt, rig.Camera);
-                        if (race != null)
-                        {
-                            // Racing: no per-player splits board — the shared ranked board
-                            // below covers the whole window when the last pilot is in. The marker
-                            // HUD shows this player's placing meanwhile.
-                            race.Add(pi, controller.Stunt, PlaneRoster.PlaneDisplayName(stats));
-                            controller.Race = race;
-                            controller.Marker.Race = race;
-                            controller.Marker.PlayerIndex = pi;
-                        }
-                        else
-                        {
-                            // Solo: the end-of-run scoreboard — per-zone splits + total +
-                            // persisted best time, keyed chapter/mission/plane in
-                            // user://stunt_scores.json (race totals are deliberately not recorded).
-                            var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{planeName}";
-                            controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
-                                PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                                ScoreStore.Load(), scoreKey);
-                            GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
-                        }
-                        if (verbose)
-                        {
-                            GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
-                            state.What += $" [stunt: {controller.Stunt.TotalCount} zones]";
-                        }
-                    }
-
-                    var (spawnPos, spawnLookAt) = _spawnPicker.ChooseSpawn(spawnList, state.MissionZrdrPath, spawnBase, pi, tag);
-                    controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
-                    controller.Name = $"player{pi + 1}";
-                    rig.Controller = controller;
-                    _worldRoot!.AddChild(controller);
-
-                    // Data-driven crash (Layer 2): a per-player crash AnimRuntime that PLAYS
-                    // player_crash_dirt on a crash — the wreck breaking apart, the pieceN ballistics
-                    // and every authored effect, from the compiled def. Built here, once the
-                    // controller (and its plane model) are in the tree, so the crash def's reset
-                    // states resolve valid global transforms. The standard (and only) crash path.
-                    if (state.CrashProgram != null && state.WorldScene != null)
-                    {
-                        _worldEffectsFactory.BuildFlightCrashRuntime(controller, planeBuilder, planeName, state.Gamez,
-                            state.WorldScene, state.Textures, state.CrashProgram, verbose);
-                    }
+                    assembler.Assemble(pi, _rigs[pi]);
                 }
+                state.MeshInstances += assembler.MeshInstances;
+                state.What += assembler.WhatSuffix;
+
                 // The race's shared results board: one ranked row per player, over the
                 // WHOLE window rather than inside a pane — the race ends for everybody at once — so
                 // it goes on its own CanvasLayer above the splitscreen panes. Any player's R there
