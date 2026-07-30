@@ -4,7 +4,7 @@
 
 **This file is the compact, authoritative index of project context for Claude; deep detail lives in `docs/`.** Update documentation in the same turn as the change it describes:
 
-- Module purpose + still-binding constraints, as `⚠` one-liners → the module's `## src/...` entry in `docs/architecture.md` (body ≤ ~8 lines, ~12 for the heaviest). **Read a module's entry there before modifying that module.** Diagnosis narratives do NOT go there — they get a short dated `docs/HISTORY.md` entry; what survives of one is a `⚠` line or a verification.md rule.
+- Module purpose + still-binding constraints, as `⚠` one-liners → the module's `## src/...` entry in `docs/architecture.md` (body ≤ ~8 lines, ~12 for the heaviest; **max 3 `⚠` per module** — a 4th means an existing one merges, moves to a code comment, or dies). **Read a module's entry there before modifying that module.** Diagnosis narratives do NOT go there — they get a short dated `docs/HISTORY.md` entry; what survives of one is a `⚠` line or a verification.md rule.
 - A new, renamed or deleted module → **`docs/architecture.md` only**, updating its index line and its `##` entry in the same edit. This file carries the namespace map, never a per-module list; keeping both was 13 KB of duplication and had already drifted.
 - Format / reverse-engineering knowledge → `docs/formats/`.
 - The extraction pipeline, the launch scripts, or the mech3ax fork → `docs/tooling.md`.
@@ -102,7 +102,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 (First time only: run with `--headless --import` once before running scenes.)
 
-**Module map — the per-module index lives in [`docs/architecture.md`](docs/architecture.md), which now opens with it.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12` returns the whole entry. **Never read architecture.md whole** — it is ~140 KB. Read a module's entry before changing it.
+**Module map — the per-module index lives in [`docs/architecture.md`](docs/architecture.md), which now opens with it.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12` returns the whole entry. **Never read architecture.md whole** — it is ~110 KB. Read a module's entry before changing it.
 
 - `src/Mech3/` (30) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
 - `src/Flight/` (32) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.

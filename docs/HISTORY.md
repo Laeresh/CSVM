@@ -8120,3 +8120,19 @@ is Main.tscn's root, `GameSession` is the per-launch node freed by `QueueFree`, 
 `CaptureDirector`, `FlightRigAssembler`) are their own classes, `StartSession` reads as ordered phase
 methods, and `PlaneViewer` no longer exists anywhere. Plan complete — moved to `docs/plans/`, row
 added to `plans.md`, CLAUDE.md's "Current status" returned to no active plan.
+
+## 2026-07-30 — architecture.md warning cap + body trim
+
+Trimmed `docs/architecture.md` from 165 KB / 407 `⚠` lines to ~107 KB / 264, enforcing a new cap
+of **max 3 `⚠` per module** (rule added to CLAUDE.md's doc bullet). Three audit agents classified
+every warning in the ~47 over-cap modules against the source: cuts were warnings duplicating an
+inline comment already at the cited code site, deducible restatements of the code, or provenance/
+changelog notes; keepers are measured-evidence facts, cross-file invariants, engine footguns and
+deliberate omissions. Added a `## Cross-module conventions` section (labs-are-opt-in,
+InvariantCulture) replacing ~10 per-module copies; compressed the 12 worst section bodies
+(GameSession 149→19 lines, AnimRuntime 94→17, FlightController 46→14) back to the ≤8/12-line rule;
+stripped PLAN-planeviewer-split provenance mentions. One code comment added at
+`AnimRuntime._findCache` (reparenting invalidation — the one cut warning whose site had no
+comment; the other flagged sites already carried one). Verified: awk section census shows max 3
+`⚠` everywhere; every deleted dated/measured fact confirmed already recorded in this file;
+`.\RunTests.ps1` PASS.

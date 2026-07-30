@@ -3346,6 +3346,9 @@ public sealed partial class AnimRuntime : Node
         return result;
     }
 
+    // Memoized for the life of the runtime: results go stale if a node is ever reparented
+    // into or out of a world subtree at runtime, so nothing may do that (pooled sound
+    // emitters and crash puffers live outside the world for this reason).
     private readonly Dictionary<(string Pattern, ulong Scope), List<Node3D>> _findCache = new();
 
     // Wildcard NAME → predicate: '*' (and the '**' template form) match any run of
