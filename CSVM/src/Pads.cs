@@ -1,3 +1,4 @@
+using System;
 using System.Collections.Generic;
 using Godot;
 
@@ -66,4 +67,37 @@ public static class Pads
     /// here, which is what makes the focus gate a single switch.</summary>
     public static IEnumerable<int> For(IEnumerable<int>? bound) =>
         InputBlocked ? NoPads : bound ?? Connected();
+
+    /// <summary>Splits the connected gamepads across the players: P1 gets the first
+    /// pad (plus the keyboard, wired separately), P2–P4 the next ones in roster order. Null for a
+    /// single player — that keeps the any-pad reads, so every pad flies the one plane. A player
+    /// with no pad left gets an empty list and simply sits still (logged) — P1 still has the
+    /// keyboard, so a 2P session with no controller at all is still half-flyable.</summary>
+    public static int[][]? AssignPads(int players)
+    {
+        if (players <= 1)
+            return null;
+        var pads = Connected();
+        var assignment = new int[players][];
+        for (int i = 0; i < players; i++)
+            assignment[i] = i < pads.Count ? new[] { pads[i] } : Array.Empty<int>();
+        LogPads(assignment);
+        return assignment;
+    }
+
+    /// <summary>Log who flies what, for either source of the binding (the roster split above or
+    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.</summary>
+    public static void LogPads(int[][] assignment)
+    {
+        for (int i = 0; i < assignment.Length; i++)
+        {
+            var pads = new List<string>(assignment[i].Length);
+            foreach (int pad in assignment[i])
+                pads.Add($"pad {pad} \"{Input.GetJoyName(pad)}\"");
+            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
+                     (pads.Count > 0
+                         ? $"{(i == 0 ? " + " : "")}{string.Join(" + ", pads)}"
+                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
+        }
+    }
 }

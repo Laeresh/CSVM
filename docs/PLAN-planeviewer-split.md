@@ -69,7 +69,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Probe/dump wrappers → `src/Testing/ProbeRunner`
 2. ☑ Screenshot pipeline → `src/Testing/CaptureDirector`
-3. ☐ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
+3. ☑ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
 4. ☐ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
 5. ☐ Weather build + per-frame block → `src/Session/WeatherRig`
 6. ☐ Window-hide → `src/Utils/ScriptedWindow`
@@ -142,7 +142,7 @@ moved without moving. Also one `--shots=3` burst — identical indexed filenames
 decrementing in exactly the same place in the frame as today or every golden lands on a different
 sim frame.
 
-## A3 ☐ Livery, spawn, and pure helpers to their homes
+## A3 ☑ Livery, spawn, and pure helpers to their homes
 
 **Goal.** `PaintCatalog`/`Patterns`/`PatternsForPlane`/`ContainsPattern`/`SchemeFor`/`NewPaintRng`
 → `src/Session/LiveryResolver.cs`; `ChooseSpawnBase`/`ChooseSpawn`/`LogSpawn` →

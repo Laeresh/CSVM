@@ -394,6 +394,20 @@ public sealed partial class Puffer : Node3D
         return puffer;
     }
 
+    /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
+    /// emitter under <paramref name="parent"/>; null (logged by <see cref="PufferState.Load"/>) when
+    /// the reader or its textures are missing. Shared by the flight assembly and the
+    /// static damage lab.</summary>
+    public static Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
+        string file, string name, float duration = 0.3f)
+    {
+        var state = PufferState.Load(zrdrPath, file, name);
+        var puffer = state != null ? Create(state, textures, duration) : null;
+        if (puffer != null)
+            parent.AddChild(puffer);
+        return puffer;
+    }
+
     private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
         bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
     {

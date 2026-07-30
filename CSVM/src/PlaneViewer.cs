@@ -194,10 +194,6 @@ public partial class PlaneViewer : Node3D
     /// a census.</summary>
     private const int NodeSuggestCap = 20;
 
-    // Splitscreen with a --pos override: lateral offset between players so they don't spawn
-    // inside each other (the mission spawn lists already place players apart). TUNE.
-    private const float SpawnAbreast = 60f;
-
     // Cloud-band whiteout color: inside a cloud reads near-white (see OriginalScreenshots/
     // "C1 IA1 whiteout at height.png"), not the 0.69 gray of distance fog. TUNE. The opacity
     // (0 at the band edges → 1 at the opaque core) comes from WeatherState.WhiteoutAmount.
@@ -214,8 +210,10 @@ public partial class PlaneViewer : Node3D
     // The device-less menu players --debug-join= asks for, held until the launchscreen exists and
     // consumed there: a later return to the menu keeps whoever really joined.
     private int _pendingJoin;
-    private List<PaintScheme>? _paintCatalog;  // the 12 shipped patterns, loaded on demand
-    private PatternLibrary? _patternLibrary;   // the per-pattern region masks, loaded once
+    // Resolves each player's livery and spawn point against _spec (PLAN-planeviewer-split A3);
+    // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
+    private Session.LiveryResolver _liveryResolver = null!;
+    private Session.SpawnPicker _spawnPicker = null!;
     // The zone actually rendered: the requested sky zone when this mission defines it, otherwise the first
     // zone its weather.json does (WeatherState.ResolveZone). C5 ships zone1+zone3, so the
     // zone2 default resolves to zone1 there — CONFIRMED correct by playtest, not
@@ -618,7 +616,7 @@ public partial class PlaneViewer : Node3D
         // then flag any config.json key that matched no tunable. Both run on every launch, are
         // data-free, and print before flight — so a typo'd or misplaced override is caught loudly at
         // startup rather than silently doing nothing.
-        WarmTuningRegistry();
+        Config.WarmTuningRegistry();
         Config.ReportOrphans();
         // --dump-config: write a fully-populated tuning template (every registered key + its default,
         // nested by block) to the scratch folder and quit — the copy-and-edit source for config.json.
@@ -702,6 +700,10 @@ public partial class PlaneViewer : Node3D
         StartupProfile.Current = _startup;
         _worldRoot = new Node3D { Name = "Session" };
         AddChild(_worldRoot);
+        // Built fresh per session: a launchscreen relaunch replaces _spec wholesale (FromMenu),
+        // so these must not be cached across a rebuild.
+        _liveryResolver = new Session.LiveryResolver(_spec, _rofPath);
+        _spawnPicker = new Session.SpawnPicker(_spec);
         // Re-derive every subsystem RNG from the master before anything in the session draws, so a
         // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
         Rng.Reset(_masterSeed, _spec.SeedPinned);
@@ -1088,8 +1090,8 @@ public partial class PlaneViewer : Node3D
                     // the interesting part of the map is in view, and (below) an optional parked
                     // plane sits on it. Resolved once so the camera and plane agree.
                     var labSpawns = SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
-                    var (spawnPos, spawnLook) = ChooseSpawn(labSpawns, missionZrdrPath,
-                        ChooseSpawnBase(labSpawns), 0, "");
+                    var (spawnPos, spawnLook) = _spawnPicker.ChooseSpawn(labSpawns, missionZrdrPath,
+                        _spawnPicker.ChooseSpawnBase(labSpawns), 0, "");
 
                     // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
                     // in place of the orbit view — the lab drives it (Frame/FollowNode) on
@@ -1116,9 +1118,9 @@ public partial class PlaneViewer : Node3D
                         StartupProfile.Record("gamez", mark);
                         mark = StartupProfile.Mark();
                         var parkedBuilder = new PlaneBuilder(planesGamez, textures,
-                            scheme: SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(),
-                                PatternsForPlane(planesGamez, _spec.PlaneName)),
-                            patterns: Patterns);
+                            scheme: _liveryResolver.SchemeFor(0, zrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(),
+                                _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
+                            patterns: _liveryResolver.Patterns);
                         var parked = parkedBuilder.Build(_spec.PlaneName);
                         StartupProfile.Record("plane", mark);
                         meshInstances += parkedBuilder.MeshInstanceCount;
@@ -1166,13 +1168,13 @@ public partial class PlaneViewer : Node3D
                 // Resolved once: the livery lab below opens on exactly the scheme the plane
                 // wears, not a second roll of --paint=random.
                 mark = StartupProfile.Mark();
-                var staticPatterns = PatternsForPlane(gamez, _spec.PlaneName);
-                var staticScheme = SchemeFor(0, zrdrPath, randomByDefault: false, NewPaintRng(), staticPatterns);
+                var staticPatterns = _liveryResolver.PatternsForPlane(gamez, _spec.PlaneName);
+                var staticScheme = _liveryResolver.SchemeFor(0, zrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(), staticPatterns);
                 // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
                 // model is built bare and there is one write path for paint (its Repaint).
                 // Everywhere else the builder paints at construction as usual.
                 var builder = new PlaneBuilder(gamez, textures, damagePanels: _spec.Viewer,
-                    scheme: _spec.Viewer ? null : staticScheme, patterns: Patterns);
+                    scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns);
                 _plane = builder.Build(_spec.PlaneName);
                 StartupProfile.Record("plane", mark);
                 meshInstances = builder.MeshInstanceCount;
@@ -1193,11 +1195,11 @@ public partial class PlaneViewer : Node3D
                     }
                     else
                     {
-                        var smoke = MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "smokepuffer");
-                        var fire = MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer");
+                        var smoke = Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "smokepuffer");
+                        var fire = Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer");
                         var panelTrails = new List<Effects.Puffer>();
                         for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
-                            if (MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
+                            if (Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
                         var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
                         // the HUD gauge cluster as a lab toggle (user request): the damage
@@ -1220,8 +1222,8 @@ public partial class PlaneViewer : Node3D
                 // screenshot is byte-identical to the pre-paint viewer. L toggles it.
                 if (_spec.Viewer && builder.SkinPrefix != null)
                 {
-                    var lab = new UI.LiveryLab(builder, PaintCatalog(zrdrPath), textures, staticScheme,
-                        Patterns.PatternsFor(builder.SkinPrefix))
+                    var lab = new UI.LiveryLab(builder, _liveryResolver.PaintCatalog(zrdrPath), textures, staticScheme,
+                        _liveryResolver.Patterns.PatternsFor(builder.SkinPrefix))
                     {
                         DebugShow = _spec.DebugLivery.HasValue,
                         DebugPatternSteps = _spec.DebugLivery ?? 0,
@@ -1349,8 +1351,8 @@ public partial class PlaneViewer : Node3D
                 else
                 {
                     var freecamSpawns = SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
-                    (camPos, camLookAt) = ChooseSpawn(freecamSpawns, missionZrdrPath,
-                        ChooseSpawnBase(freecamSpawns), 0, "");
+                    (camPos, camLookAt) = _spawnPicker.ChooseSpawn(freecamSpawns, missionZrdrPath,
+                        _spawnPicker.ChooseSpawnBase(freecamSpawns), 0, "");
                 }
                 if (_spec.CamPos is { } cp) camPos = cp;
                 // The aim: a direction from wherever the eye ended up, or the named point.
@@ -1397,17 +1399,17 @@ public partial class PlaneViewer : Node3D
                 float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
                 // The launchscreen's join flow binds the pads; a CLI launch derives them
                 // from the connected roster instead.
-                var padAssignment = _menuPads ?? AssignPads(_rigs.Count);
+                var padAssignment = _menuPads ?? Pads.AssignPads(_rigs.Count);
                 if (_menuPads != null)
-                    LogPads(_menuPads);
+                    Pads.LogPads(_menuPads);
                 // One livery RNG for the session, so P1..P4 draw distinct colours from one
                 // stream and --paint-seed reproduces the whole field.
-                var paintRng = NewPaintRng();
+                var paintRng = _liveryResolver.NewPaintRng();
                 // One spawn list for the session; each player takes the next index (wrapping).
                 // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
                 // --pos/default override placed over the grid origin.
                 var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
-                int spawnBase = ChooseSpawnBase(spawnList);
+                int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
                 // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
                 // once, and ONE shared projectile/effect pool every player's guns fire into
@@ -1476,7 +1478,7 @@ public partial class PlaneViewer : Node3D
                 // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
                 // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
                 // simply omits the reticle.
-                Texture2D? reticleTex = LoadRimageTexture(
+                Texture2D? reticleTex = ImpactReticle.LoadTexture(
                     Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
                 for (int pi = 0; pi < _rigs.Count; pi++)
@@ -1486,16 +1488,16 @@ public partial class PlaneViewer : Node3D
                     string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
                     // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
                     // with one name given, that is the same plane for everyone as before.
-                    string planeName = PlaneFor(pi);
+                    string planeName = Session.PlaneRoster.PlaneFor(_spec, pi);
                     var stats = StatsFor(planeName);
 
                     // Flight repaints the field on every map load: each player draws their
                     // own random livery (colours + decals) unless --paint pins one.
                     mark = StartupProfile.Mark();
                     var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
-                        scheme: SchemeFor(pi, zrdrPath, randomByDefault: false, paintRng,
-                            PatternsForPlane(planesGamez, planeName)),
-                        patterns: Patterns);
+                        scheme: _liveryResolver.SchemeFor(pi, zrdrPath, randomByDefault: false, paintRng,
+                            _liveryResolver.PatternsForPlane(planesGamez, planeName)),
+                        patterns: _liveryResolver.Patterns);
                     var planeModel = planeBuilder.Build(planeName);
                     StartupProfile.Record("plane", mark);
                     meshInstances += planeBuilder.MeshInstanceCount;
@@ -1655,13 +1657,13 @@ public partial class PlaneViewer : Node3D
                     // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
                     if (controller.Damage != null)
                     {
-                        var smoke = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
-                        var fire = MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
+                        var smoke = Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
+                        var fire = Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
                         // per-panel fire trails (the original streams one from every damaged
                         // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
                         var panelTrails = new List<Effects.Puffer>();
                         for (int i = 0; i < 4; i++)
-                            if (MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
+                            if (Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
                         controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
                         if (verbose)
@@ -1701,7 +1703,7 @@ public partial class PlaneViewer : Node3D
                             // Racing: no per-player splits board — the shared ranked board
                             // below covers the whole window when the last pilot is in. The marker
                             // HUD shows this player's placing meanwhile.
-                            race.Add(pi, controller.Stunt, PlaneDisplayName(stats));
+                            race.Add(pi, controller.Stunt, Session.PlaneRoster.PlaneDisplayName(stats));
                             controller.Race = race;
                             controller.Marker.Race = race;
                             controller.Marker.PlayerIndex = pi;
@@ -1713,7 +1715,7 @@ public partial class PlaneViewer : Node3D
                             // user://stunt_scores.json (race totals are deliberately not recorded).
                             var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{planeName}";
                             controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
-                                PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {Humanize(_spec.Scenario)}",
+                                Session.PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {Session.PlaneRoster.Humanize(_spec.Scenario)}",
                                 ScoreStore.Load(), scoreKey);
                             GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
                         }
@@ -1724,7 +1726,7 @@ public partial class PlaneViewer : Node3D
                         }
                     }
 
-                    var (spawnPos, spawnLookAt) = ChooseSpawn(spawnList, missionZrdrPath, spawnBase, pi, tag);
+                    var (spawnPos, spawnLookAt) = _spawnPicker.ChooseSpawn(spawnList, missionZrdrPath, spawnBase, pi, tag);
                     controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
                     controller.Name = $"player{pi + 1}";
                     rig.Controller = controller;
@@ -1747,7 +1749,7 @@ public partial class PlaneViewer : Node3D
                 // is a rematch, which restarts every plane, so it routes back through the session.
                 if (race != null)
                 {
-                    var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {Humanize(_spec.Scenario)}",
+                    var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {Session.PlaneRoster.Humanize(_spec.Scenario)}",
                         exitsToMenu: _menuDriven);
                     var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
                     boardLayer.AddChild(board);
@@ -1763,7 +1765,7 @@ public partial class PlaneViewer : Node3D
                 {
                     var flown = new List<string>(_rigs.Count);
                     for (int pi = 0; pi < _rigs.Count; pi++)
-                        flown.Add($"P{pi + 1} '{PlaneFor(pi)}'");
+                        flown.Add($"P{pi + 1} '{Session.PlaneRoster.PlaneFor(_spec, pi)}'");
                     what += $" + splitscreen {string.Join(", ", flown)}";
                 }
                 else
@@ -2005,39 +2007,6 @@ public partial class PlaneViewer : Node3D
             CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
     }
 
-    /// <summary>Splits the connected gamepads across the players: P1 gets the first
-    /// pad (plus the keyboard, wired separately), P2–P4 the next ones in roster order. Null for a
-    /// single player — that keeps the any-pad reads, so every pad flies the one plane. A player
-    /// with no pad left gets an empty list and simply sits still (logged) — P1 still has the
-    /// keyboard, so a 2P session with no controller at all is still half-flyable.</summary>
-    private static int[][]? AssignPads(int players)
-    {
-        if (players <= 1)
-            return null;
-        var pads = Pads.Connected();
-        var assignment = new int[players][];
-        for (int i = 0; i < players; i++)
-            assignment[i] = i < pads.Count ? new[] { pads[i] } : Array.Empty<int>();
-        LogPads(assignment);
-        return assignment;
-    }
-
-    /// <summary>Log who flies what, for either source of the binding (the roster split above or
-    /// the launchscreen's join flow) — a silent plane is otherwise hard to diagnose.</summary>
-    private static void LogPads(int[][] assignment)
-    {
-        for (int i = 0; i < assignment.Length; i++)
-        {
-            var pads = new List<string>(assignment[i].Length);
-            foreach (int pad in assignment[i])
-                pads.Add($"pad {pad} \"{Input.GetJoyName(pad)}\"");
-            GD.Print($"player {i + 1} input: {(i == 0 ? "keyboard" : "")}" +
-                     (pads.Count > 0
-                         ? $"{(i == 0 ? " + " : "")}{string.Join(" + ", pads)}"
-                         : i == 0 ? "" : "NO DEVICE (connect a pad and relaunch)"));
-        }
-    }
-
     /// <summary>Shows the launchscreen (building it on first use) and wiring its Launch/Quit
     /// callbacks. Re-shown by <see cref="ReturnToMenu"/> after Esc-from-flight.</summary>
     private void ShowLaunchMenu()
@@ -2154,150 +2123,6 @@ public partial class PlaneViewer : Node3D
         _camera.Current = true;
         _inSession = false;
         ShowLaunchMenu();
-    }
-
-    /// <summary>The 12 named schemes shipped in vehicle.json, loaded once per session.
-    /// Empty on a read failure — paint is cosmetic and must never block a build.</summary>
-    private List<PaintScheme> PaintCatalog(string zrdrPath)
-    {
-        if (_paintCatalog != null)
-            return _paintCatalog;
-        try
-        {
-            _paintCatalog = PaintScheme.LoadCatalog(zrdrPath);
-            GD.Print($"[paint] {_paintCatalog.Count} shipped patterns: "
-                + string.Join(", ", _paintCatalog.ConvertAll(s => s.Pattern)));
-        }
-        catch (Exception e)
-        {
-            GD.Print($"[paint] vehicle.json paint catalog unavailable ({e.Message}) — flying unpainted");
-            _paintCatalog = new List<PaintScheme>();
-        }
-        return _paintCatalog;
-    }
-
-    /// <summary>The livery player <paramref name="index"/> flies, or null to build the
-    /// shipped unpainted skins. <paramref name="randomByDefault"/> is set for flight modes,
-    /// where every player gets a fresh random livery on each map load unless --paint says
-    /// otherwise; static views default to unpainted.</summary>
-    /// <summary>The original's per-pattern paint region masks, scanned once per session from
-    /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
-    /// run — aircraft then build unpainted rather than failing.</summary>
-    private PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
-
-    /// <summary>The patterns this aircraft has masks for — the list the original's paint UI
-    /// offers for that plane. Empty when the model carries no skin prefix to key on.</summary>
-    private List<string> PatternsForPlane(GameZ planesGamez, string planeNode)
-    {
-        var root = planesGamez.FindByName(planeNode);
-        var prefix = root != null ? PlanePainter.PrefixFor(planesGamez, root) : null;
-        return prefix != null ? Patterns.PatternsFor(prefix) : new List<string>();
-    }
-
-    private static bool ContainsPattern(IReadOnlyList<string> list, string name)
-    {
-        foreach (var p in list)
-            if (string.Equals(p, name, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
-    }
-
-    private PaintScheme? SchemeFor(int index, string zrdrPath, bool randomByDefault, RandomNumberGenerator rng,
-        IReadOnlyList<string>? available = null)
-    {
-        // --paint= takes one name per player like --plane=; the last covers any remainder.
-        string? name = _spec.PaintNames is { Count: > 0 }
-            ? _spec.PaintNames[Math.Min(index, _spec.PaintNames.Count - 1)]
-            : null;
-
-        // Resolve the no-paint cases before touching vehicle.json, so an unpainted static
-        // view does no extra work and logs nothing (it is the pre-paint behaviour verbatim).
-        if (string.Equals(name, "none", StringComparison.OrdinalIgnoreCase))
-            return null;
-        if (name == null && !randomByDefault)
-            return null;
-
-        var catalog = PaintCatalog(zrdrPath);
-        PaintScheme? scheme;
-        if (name == null || string.Equals(name, "random", StringComparison.OrdinalIgnoreCase))
-        {
-            // A pattern is per aircraft, so a random livery draws from the ones THIS plane
-            // actually has masks for — picking one it does not carry would paint nothing.
-            scheme = PaintScheme.Random(rng, catalog, available);
-        }
-        else
-        {
-            // Named: take the catalog's canonical colours when vehicle.json knows the pattern,
-            // else a bare scheme (BROADWAY/ITSTAXI ship masks but no vehicle def names them).
-            var known = catalog.Find(s => string.Equals(s.Pattern, name, StringComparison.OrdinalIgnoreCase)
-                                       || string.Equals(s.FolderName, name, StringComparison.OrdinalIgnoreCase));
-            bool haveMasks = available == null || available.Count == 0
-                || ContainsPattern(available, name)
-                || (known != null && ContainsPattern(available, known.FolderName));
-            if (known == null && !haveMasks)
-            {
-                var offer = available is { Count: > 0 } ? string.Join(", ", available) : "(no pattern library)";
-                GD.Print($"[paint] unknown pattern '{name}' — this aircraft has: {offer}, random, none");
-                return null;
-            }
-            scheme = known ?? new PaintScheme { Pattern = name };
-            if (!haveMasks)
-                GD.Print($"[paint] pattern '{name}' ships no skins for this aircraft — "
-                    + $"it has: {string.Join(", ", available!)}; painting decals only");
-        }
-
-        // An explicit colour/decal list overrides whatever the scheme brought, so a single
-        // colour can be dialled in against a chosen pattern.
-        if (scheme != null && (_spec.PaintColorOverride != null || _spec.PaintDecalOverride != null))
-        {
-            scheme = new PaintScheme
-            {
-                Pattern = scheme.Pattern,
-                Color1 = _spec.PaintColorOverride?[0] ?? scheme.Color1,
-                Color2 = _spec.PaintColorOverride?[1] ?? scheme.Color2,
-                Color3 = _spec.PaintColorOverride?[2] ?? scheme.Color3,
-                NoseDecal = _spec.PaintDecalOverride?[0] ?? scheme.NoseDecal,
-                TailDecal = _spec.PaintDecalOverride?[1] ?? scheme.TailDecal,
-                WingDecal = _spec.PaintDecalOverride?[2] ?? scheme.WingDecal,
-            };
-        }
-        return scheme;
-    }
-
-    /// <summary>The RNG the session's random liveries draw from: the master seed's paint stream,
-    /// so an unpinned launch repaints the field and a pinned one repeats it. --paint-seed=N
-    /// overrides the derived seed, pinning liveries alone in an otherwise random run.</summary>
-    private RandomNumberGenerator NewPaintRng() => new()
-    {
-        Seed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint),
-    };
-
-    /// <summary>The plane player <paramref name="index"/> flies: their own pick when the
-    /// launchscreen (or a --plane= list) gave one, else the last one named — so a single
-    /// --plane= puts everybody in the same aircraft.</summary>
-    private string PlaneFor(int index) =>
-        _spec.PlaneNames.Count == 0 ? _spec.PlaneName : _spec.PlaneNames[Math.Min(index, _spec.PlaneNames.Count - 1)];
-
-    /// <summary>A readable plane name for the stunt scoreboard from the vehicle.json def
-    /// name — the player defs are "p&lt;name&gt;" (pbloodhawk, ppeacemaker, pfury, …), so strip the
-    /// leading p and title-case → "Bloodhawk". Falls back to the node name. (Placeholder until the
-    /// launchscreen gets a proper data-driven roster of display names.)</summary>
-    private static string PlaneDisplayName(PlaneStats stats)
-    {
-        var d = stats.DefName;
-        string name = d.Length > 1 && (d[0] == 'p' || d[0] == 'P') ? d[1..]
-            : d.Length > 0 ? d
-            : stats.NodeName;
-        return Humanize(name);
-    }
-
-    /// <summary>"stunt_flying" → "Stunt Flying": underscores to spaces, each word title-cased.</summary>
-    private static string Humanize(string s)
-    {
-        var words = s.Split(new[] { '_', ' ' }, StringSplitOptions.RemoveEmptyEntries);
-        for (int i = 0; i < words.Length; i++)
-            words[i] = char.ToUpperInvariant(words[i][0]) + words[i][1..].ToLowerInvariant();
-        return string.Join(' ', words);
     }
 
     // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
@@ -2568,35 +2393,6 @@ public partial class PlaneViewer : Node3D
         return set;
     }
 
-    /// <summary>Loads a named PUFFER_STATE from a zrdr effects reader and builds its
-    /// emitter under <paramref name="parent"/>; null (logged by PufferState.Load) when
-    /// the reader or its textures are missing. Shared by the flight assembly and the
-    /// static damage lab.</summary>
-    /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
-    /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
-    /// so no colour-keying is needed — unlike the HUD font atlas.</summary>
-    private static Texture2D? LoadRimageTexture(string rimageDir, string file)
-    {
-        var path = Path.Combine(rimageDir, file);
-        if (!File.Exists(path))
-        {
-            GD.Print($"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
-            return null;
-        }
-        var img = Image.LoadFromFile(path);
-        return img != null ? ImageTexture.CreateFromImage(img) : null;
-    }
-
-    private static Effects.Puffer? MakePuffer(string zrdrPath, TextureArchive textures, Node parent,
-        string file, string name, float duration = 0.3f)
-    {
-        var state = Effects.PufferState.Load(zrdrPath, file, name);
-        var puffer = state != null ? Effects.Puffer.Create(state, textures, duration) : null;
-        if (puffer != null)
-            parent.AddChild(puffer);
-        return puffer;
-    }
-
     /// <summary>Loads the flown mission's weather.json and resolves <see cref="_activeZone"/>:
     /// the zone the fog AND the skydome are both built from. Called before the domes, because
     /// the zone names are per chapter — C5 ships zone1+zone3, so the `zone2` default has to fall
@@ -2718,64 +2514,6 @@ public partial class PlaneViewer : Node3D
             _worldRoot!.AddChild(_precip);
     }
 
-    /// <summary>The spawn index player 1 starts from: --spawn=N if given, else a random pick per
-    /// launch like the original. Each further player takes the next index in list order (wrapping),
-    /// so splitscreen players never share a spawn point.</summary>
-    private int ChooseSpawnBase(IReadOnlyList<SpawnPoint>? spawns)
-    {
-        if (spawns == null || spawns.Count == 0)
-            return 0;
-        return _spec.SpawnIndex >= 0
-            ? Mathf.Clamp(_spec.SpawnIndex, 0, spawns.Count - 1)
-            : (int)(Rng.Stream(Rng.Spawn).Randi() % (uint)spawns.Count);
-    }
-
-    /// <summary>Picks one player's flight spawn: a world position + a look-at point one unit
-    /// ahead along the spawn heading. Instant-action missions (IA1) draw from ia.json's scenario
-    /// spawn list at <paramref name="spawnBase"/> + the player index (wrapping). Story missions
-    /// (M0x, no ia.json) fall back to objectives.json PLAYER_INIT. A fixed C1 spawn is the last
-    /// resort if neither is present.</summary>
-    private (Vector3 pos, Vector3 lookAt) ChooseSpawn(IReadOnlyList<SpawnPoint>? spawns,
-        string missionZrdrPath, int spawnBase, int playerIndex, string tag)
-    {
-        // Debug/testing override: place the plane exactly (position + nose direction), bypassing
-        // the mission spawn list — lets a scripted run start just short of a target pointed at it,
-        // so a neutral --hold flies a straight, deterministic path (no complex maneuvering).
-        if (_spec.SpawnAt is { } at)
-        {
-            var dir = _spec.SpawnDir ?? Vector3.Forward;
-            if (dir.LengthSquared() < 1e-6f)
-                dir = Vector3.Forward;
-            dir = dir.Normalized();
-            // Splitscreen: fan the players out abreast so they don't spawn inside each other.
-            at += dir.Cross(Vector3.Up).Normalized() * (playerIndex * SpawnAbreast);
-            Log.Info("flight", $"spawn [{tag}override] pos=({at.X:0},{at.Y:0},{at.Z:0}) dir=({dir.X:0.000},{dir.Y:0.000},{dir.Z:0.000})");
-            return (at, at + dir);
-        }
-
-        if (spawns is { Count: > 0 })
-        {
-            int i = (spawnBase + playerIndex) % spawns.Count;
-            return LogSpawn($"{tag}{_spec.Scenario} #{i} of {spawns.Count}", spawns[i]);
-        }
-        // No instant-action spawns (only IA1 folders have ia.json) — use the story-mission
-        // spawn from objectives.json PLAYER_INIT (position + heading).
-        if (SpawnPoints.LoadPlayerInit(missionZrdrPath) is { } init)
-            return LogSpawn("PLAYER_INIT", init);
-
-        GD.PushWarning($"no ia.json / PLAYER_INIT spawn for {_spec.Chapter}/{_spec.Mission} — using fallback spawn");
-        return (new Vector3(-6200, 500, -3300), new Vector3(-5700, 350, -6300));
-    }
-
-    /// <summary>Turns a spawn (position + heading) into a (position, look-at) pair — the nose
-    /// (-Z) rotated by the heading (yaw about up) — and logs it for cross-checking the data.</summary>
-    private (Vector3 pos, Vector3 lookAt) LogSpawn(string label, SpawnPoint s)
-    {
-        var forward = new Basis(Vector3.Up, Mathf.DegToRad(s.HeadingDeg)) * Vector3.Forward;
-        Log.Info("flight", $"spawn [{_spec.Chapter}/{_spec.Mission} {label}] pos=({s.Position.X:0},{s.Position.Y:0},{s.Position.Z:0}) heading={s.HeadingDeg:0}°");
-        return (s.Position, s.Position + forward);
-    }
-
     private void SetupLighting()
     {
         _sun = new DirectionalLight3D
@@ -2831,28 +2569,6 @@ public partial class PlaneViewer : Node3D
             }
         }
         _orbit.Frame(aabb, _spec.CamPos, pivot);
-    }
-
-    /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
-    /// no game data, so Config's registry knows the full key set. That lets <see cref="Config.ReportOrphans"/>
-    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template — without a
-    /// built world. Read-through means the reads register on execution, so a single dummy step is the
-    /// cheapest way to run them. Add a line here as each module is wired to Config.</summary>
-    private static void WarmTuningRegistry()
-    {
-        try
-        {
-            var fm = new FlightModel(new PlaneStats());
-            fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
-            fm.Step(default, 1f / 60f);
-            // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
-            // register it here so --dump-config still documents the weapon-fire tunable.
-            Config.GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
-        }
-        catch (Exception e)
-        {
-            GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
-        }
     }
 
     [System.Runtime.InteropServices.DllImport("user32.dll")]

@@ -2,6 +2,7 @@ using System;
 using System.Collections.Generic;
 using System.IO;
 using System.Text.Json;
+using CSVM.Flight;
 using Godot;
 
 namespace CSVM.Utils;
@@ -239,6 +240,28 @@ public static class Config
             {
                 Log.Warn("core", $"config key matches no tunable key={key} — ignored (typo? wrong block?)");
             }
+        }
+    }
+
+    /// <summary>Exercise each Config-wired module's tunable reads once, with a throwaway instance and
+    /// no game data, so Config's registry knows the full key set. That lets <see cref="ReportOrphans"/>
+    /// flag config.json typos at startup and <c>--dump-config</c> emit a complete template — without a
+    /// built world. Read-through means the reads register on execution, so a single dummy step is the
+    /// cheapest way to run them. Add a line here as each module is wired to Config.</summary>
+    public static void WarmTuningRegistry()
+    {
+        try
+        {
+            var fm = new FlightModel(new PlaneStats());
+            fm.Reset(Vector3.Zero, Basis.Identity, 100f, 1f);
+            fm.Step(default, 1f / 60f);
+            // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
+            // register it here so --dump-config still documents the weapon-fire tunable.
+            GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
+        }
+        catch (Exception e)
+        {
+            GD.PushWarning($"config: tuning-registry warmup failed ({e.Message}); --dump-config may be incomplete");
         }
     }
 

@@ -7937,3 +7937,15 @@ other `--screenshot`-conditioned display choice elsewhere in `PlaneViewer` (HUD/
 behavior reorder. Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens
 hash-identical (this item's own subject); plus a manual `--stage=empty --det --shots=3` burst run —
 three indexed files (`_00`/`_01`/`_02`.png) landing on sim frames 15/16/17 as before.
+
+**PLAN-planeviewer-split A3 landed (2026-07-30): livery, spawn, and pure helpers → their homes.**
+`PaintCatalog`/`Patterns`/`PatternsForPlane`/`ContainsPattern`/`SchemeFor`/`NewPaintRng` moved off
+`PlaneViewer` verbatim into new `src/Session/LiveryResolver.cs`; `ChooseSpawnBase`/`ChooseSpawn`/
+`LogSpawn` into new `src/Session/SpawnPicker.cs` (both constructed once per session build, at the
+top of `StartSession`, from the live `_spec` — never cached across a menu rebuild). `PlaneFor`/
+`PlaneDisplayName`/`Humanize` moved to the new static `src/Session/PlaneRoster.cs`; `AssignPads`/
+`LogPads` to `Pads.cs`; `LoadRimageTexture` to `ImpactReticle.LoadTexture`; `MakePuffer` to
+`Effects.Puffer.MakePuffer`; `WarmTuningRegistry` to `Config.WarmTuningRegistry`. Pure move, no
+behavior reorder — the paint-RNG construction order/count and the per-player-index math in
+`SchemeFor` were kept verbatim (the plan's two named traps). Verified: `.\RunTests.ps1` PASS — 293
+units, 9/9 suites, 11/11 goldens hash-identical, including every foggy/livery-bearing chapter shot.

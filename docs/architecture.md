@@ -142,6 +142,16 @@ instead.
 - `src/Testing/Suites.cs` — the nine registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers PlaneViewer quits into.
+- `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
+
+### `src/Session/` — session-build extractions from `PlaneViewer`
+
+Low-coupling clusters pulled out of the living `PlaneViewer` (PLAN-planeviewer-split Wave A) ahead
+of the structural `Launcher`/`GameSession` split (Wave B).
+
+- `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
+- `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
+- `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
 
 ### Session root and tests
 
@@ -449,10 +459,13 @@ Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pad
   Interactive runs are untouched: that boundary is the bundle's whole constraint.
 ⚠ The focus gate is on `For` (the read), NOT `Connected` (the roster) — `For(bound)` never
   consults `Connected`, and an empty roster would un-join menu players (`LaunchMenu.SyncDevices`)
-  and break `PlaneViewer.AssignPads` at session build.
+  and break `Pads.AssignPads` at session build.
 ⚠ `Focused` defaults true and FAILS OPEN (headless runs unchanged); only pads need the gate —
   Godot releases held keys on focus loss, SDL pads are polled regardless.
 ⚠ Every joy read sits in a `Pads.For` loop except `MenuInput.JoinPressed` (checks `InputBlocked` inline).
+⚠ `AssignPads`/`LogPads` moved here from `PlaneViewer` (PLAN-planeviewer-split A3, verbatim) —
+  static, no session state; `PlaneViewer._menuPads` still overrides them when the launchscreen's
+  join flow bound pads itself.
 
 ## src/Mech3/MissionSetup.cs
 Parses + applies the per-mission `.gw` interp script that decides which world entities a mission
@@ -754,6 +767,9 @@ Fixed screen size scaled by `HudMetrics`; one per player pane.
   `ProjectilePool` fires, so it trails the nose in a hard turn and sits on the rounds level.
 ⚠ `Active=false` hides it (crashed / no firable gun / behind-camera); `_Draw` early-returns at zero
   height (can run before the pane is sized).
+⚠ `LoadTexture` (the `rimage`/`impact_point.png` PNG loader, moved here from `PlaneViewer` in
+  PLAN-planeviewer-split A3) is static and loader-only — it does not build a reticle; callers pass
+  its result to `Build`.
 
 ## src/Flight/MarkerHud.cs
 The stunt objective marker HUD: a viewport-filling `Control` drawing the on-screen reticle/text
@@ -845,6 +861,9 @@ state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim pa
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`.
 ⚠ Compiled-payload quirks (`interval_garbage`, Distance-trail meters, `growth_factors`): anim-definitions.md.
+⚠ `MakePuffer` (moved here from `PlaneViewer` in PLAN-planeviewer-split A3, verbatim) is the
+  `PufferState.Load` + `Create` + `AddChild` convenience the flight assembly and the static damage
+  lab both use — call it as `Effects.Puffer.MakePuffer(...)`.
 
 ## src/Effects/CloudPuffs.cs
 Synthetic ambient cloud field: ONE alpha-blended MultiMesh of cloud1/cloud2 billboards in a
@@ -1412,6 +1431,15 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   `--screenshot`-conditioned display choice here (HUD/panel visibility, `--anim-lab`'s fixed-step
   clock choice, exit-on-build-failure) reads `_captureDirector.Pending` instead of a raw field —
   see `src/Testing/CaptureDirector.cs`'s entry for the state machine and its sim-frame trap.
+⚠ **Livery/spawn resolution and a clutch of pure helpers moved out** (PLAN-planeviewer-split A3):
+  paint catalog/pattern-mask/scheme-pick logic → `Session.LiveryResolver` (`_liveryResolver`,
+  constructed at the top of `StartSession` from the live `_spec` — never cached across a menu
+  rebuild); spawn-index/spawn-point resolution → `Session.SpawnPicker` (`_spawnPicker`, same
+  lifetime); plane-roster lookups → the static `Session.PlaneRoster`; pad assignment logging →
+  `Pads.AssignPads`/`Pads.LogPads`; the reticle PNG loader → `ImpactReticle.LoadTexture`; the puffer
+  factory → `Effects.Puffer.MakePuffer`; the Config warmup → `Config.WarmTuningRegistry`. See
+  `src/Session/LiveryResolver.cs` and `src/Session/SpawnPicker.cs` for the paint-RNG-order and
+  per-player-index traps that moved with the code.
 ⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
   node holds `_cli` (what was typed) and `_spec` (what the live session was built from — a menu
   launch replaces it with `SessionSpec.FromMenu(_cli, …)`, derived from `_cli` and never from the
@@ -1727,6 +1755,35 @@ parameters.
   not through `_captureDirector`; `FrameCamera`'s orbit-pivot log line is the one call site outside
   the capture/placement paths.
 
+## src/Session/LiveryResolver.cs
+Resolves which livery each player flies (PLAN-planeviewer-split A3, moved verbatim off
+`PlaneViewer`): the shipped paint catalog (`PaintCatalog`, lazy + cached), the per-pattern
+region-mask library (`Patterns`, lazy + cached), `PatternsForPlane`, and the per-player
+`SchemeFor` pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=`
+overrides. Constructed once per session build (`_liveryResolver` in `PlaneViewer.StartSession`,
+never across a menu rebuild — a relaunch gets a fresh instance over the fresh `_spec`).
+⚠ **`NewPaintRng`'s draw order/count is load-bearing under `--det`.** Liveries are seed-pinned
+  (the master seed's paint stream, or `--paint-seed=` explicit); constructing or advancing the RNG
+  a different number of times, or in a different order relative to the other per-session RNGs,
+  reshuffles every pinned livery and moves golden hashes. Verified unchanged by the 11 goldens.
+⚠ `SchemeFor`'s `index` parameter is the PLAYER index into `_spec.PaintNames`/the paint RNG draw
+  order — keep call sites passing the same per-player index they did before the move.
+
+## src/Session/SpawnPicker.cs
+Resolves each player's flight spawn (PLAN-planeviewer-split A3, moved verbatim off `PlaneViewer`):
+`ChooseSpawnBase` (the shared `--spawn=`-or-random list index), `ChooseSpawn` (a player's
+position/look-at from that list, objectives.json `PLAYER_INIT`, or the `--spawn-at=` debug
+override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, same lifetime as
+`LiveryResolver`).
+⚠ `ChooseSpawnBase`'s random branch draws from `Rng.Stream(Rng.Spawn)` — under `--det` this is
+  pinned by the master seed same as before the move; do not reorder relative to other RNG draws.
+
+## src/Session/PlaneRoster.cs
+Static, spec-free lookups over a `SessionSpec`'s plane roster (PLAN-planeviewer-split A3, moved
+verbatim off `PlaneViewer`): `PlaneFor(spec, index)`, `PlaneDisplayName(stats)`, `Humanize(s)`.
+No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
+these are pure over their arguments.
+
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
 the typed getters (`GetFloat`/`GetInt`/`GetBool`/`GetString`) return the file's value for a present
@@ -1737,8 +1794,9 @@ key, else the caller's in-code `const` default — read-through at the point of 
   Malformed JSON / non-object root → one error line, no overrides, never throws.
 ⚠ Every getter self-registers `(key, default)`. `--dump-config` emits that registry as a full nested
   template; `ReportOrphans` warns loudly about file keys no getter queried (the typo detector); a
-  queried-but-missing key on a *loaded* file warns once. `WarmTuningRegistry` (PlaneViewer) steps a
-  throwaway `FlightModel` once so both are complete with **no built world / no game data**.
+  queried-but-missing key on a *loaded* file warns once. `WarmTuningRegistry` (moved here from
+  PlaneViewer, PLAN-planeviewer-split A3) steps a throwaway `FlightModel` once, on every launch
+  before `ReportOrphans`, so both are complete with **no built world / no game data**.
 ⚠ Read-only this pass — nothing writes the file; `res://` was chosen so a writable `user://` layer
   can later stack UNDER the getters without touching a call site. Loaded once at `_Ready`; live-reload
   (re-parse on mtime) is deferred but cheap because reads are already read-through.

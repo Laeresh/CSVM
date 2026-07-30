@@ -1,3 +1,4 @@
+using System.IO;
 using Godot;
 
 namespace CSVM.Flight;
@@ -30,6 +31,21 @@ public sealed partial class ImpactReticle : Control
     private Camera3D _camera = null!;
 
     private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)
+
+    /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
+    /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,
+    /// so no colour-keying is needed — unlike the HUD font atlas.</summary>
+    public static Texture2D? LoadTexture(string rimageDir, string file)
+    {
+        var path = Path.Combine(rimageDir, file);
+        if (!File.Exists(path))
+        {
+            GD.Print($"[reticle] no {file} in {rimageDir} — gun reticle off (run ExtractRof.ps1)");
+            return null;
+        }
+        var img = Image.LoadFromFile(path);
+        return img != null ? ImageTexture.CreateFromImage(img) : null;
+    }
 
     /// <summary>Builds the reticle over the loaded pipper texture and this player's camera. Add it to
     /// the HUD canvas; feed <see cref="ImpactPoint"/> and <see cref="Active"/> each frame.</summary>
