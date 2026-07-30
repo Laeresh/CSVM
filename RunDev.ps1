@@ -67,7 +67,12 @@ $Sln        = Join-Path $ProjectDir "CSVM.sln"
 # tree named by CSVM_DATA_ROOT -- the same env var GameSession reads for extracted/, so one
 # `$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'` makes a worktree fully runnable. Godot inherits
 # the environment, so nothing has to be forwarded on the command line.
-$GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"
+# The _console.exe wrapper fails CreateProcess (error 193) on this repo's exact path shape
+# (a space combined with enough nesting depth -- reproduced directly against the official,
+# byte-identical release binary, so it's an upstream Godot console-wrapper bug, not a corrupt
+# download). The plain .exe still writes to an inherited console when launched this way (as
+# RunTests.ps1 already relies on), so it's the working substitute until upstream fixes it.
+$GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64.exe"
 $GodotExe = Join-Path $RepoRoot $GodotRel
 if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
     $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
