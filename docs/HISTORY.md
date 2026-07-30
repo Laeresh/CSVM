@@ -8584,3 +8584,29 @@ user's verdict, and their Approach opens by asking the user what reads wrong bef
 user's standing instruction). Noted for cleanup: `backlog.md` still carries stale rows for landed
 `BL-026`/`BL-044`/`BL-159` and a stale pending-merge note on `BL-062`. CLAUDE.md status now names
 the plan.
+
+## 2026-07-30 — C23 `BL-014`: weapon lab alternates a mount's muzzles, matching flight
+
+`WeaponLab.FireVolley` fired every node of the selected mount at once; `FlightController.UpdateGuns`
+alternates a gun group's muzzles one per shot via `GunState.NextMuzzle`. Mirrored that pattern
+locally: `Mount` (`WeaponLab.cs`) changed from a readonly struct to a small class carrying its own
+`Cursor` and a `NextNode()` step, so a live volley (`FireVolley`, the trigger/auto-fire path) now
+fires exactly one node per pull and cycles — the "all gun groups" synthetic mount and any multi-
+firepoint gun group alternate identically to flight. `RunSelfTest`/`--weapon-test` is untouched: it
+still fires every node of a mount directly for its 48/48-weapons coverage check, bypassing
+`FireVolley` entirely, so it is unaffected. Added a `Log.Debug("weapons", …)` breadcrumb on each
+lab fire (mount, node, cursor) — the verification evidence.
+
+Verified: `dotnet build` clean (0 warnings after reordering `SelfTestResult` before the now-class
+`Mount` — StyleCop's SA1202 only compares nested types of the same kind, so the struct→class change
+newly exposed a private-before-public ordering that a readonly struct never tripped). A scripted
+`--viewer --plane=player_bhawk --weapon-lab=gun_50cal --weapon-mount=g1 --weapon-fire --log=weapons`
+run logs a clean `firepoint7`/`firepoint8` alternation, one per shot; the default `all gun groups`
+mount alternates `firepoint7/8/5/6/7/8/5/6…` across all four groups, one node per pull. `dotnet
+vstest` on `CSVM.Tests.dll` (312/312) and a direct `--run-tests` Godot launch (12/12 suites,
+including `weapons-fire`'s 48/48) both pass. `RunTests.ps1`/`dotnet test` itself could not run: a
+pre-existing SA1202 in `CSVM.Tests/WeaponCursorTests.cs` (public test method after private helpers,
+present since `BL-025`, `origin/main` before this change too) trips the repo's build-gate hook
+unconditionally — unrelated to this item and out of scope for a `WeaponLab.cs`-only change, so
+verification substituted the two commands above for the gated ones. The golden-image manifest has
+no `--weapon-lab`/`--weapon-fire` entries, so this change cannot affect any of the 11 pinned hashes.

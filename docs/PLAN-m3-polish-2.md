@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☐ `BL-015` Rocket smoke trail (the authored FLYOUT trail, orange→grey)
 22. ☐ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
-23. ☐ `BL-014` Weapon lab fires a group's mounts alternately, like flight
+23. ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
 24. ☐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
 25. ☐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
 
@@ -375,7 +375,7 @@ them without checking `rabbit_blur` isn't a real unrelated effect. (c) The desig
 twice here (calibre gate, underbelly mount) — rejected against captures; do not re-derive from it.
 (d) Adjacent to C24/C25's size/look tuning — coordinate, don't duplicate.
 
-## C23 ☐ `BL-014` Weapon lab fires a group's mounts alternately, like flight
+## C23 ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
 
 **Goal.** `--viewer`'s weapon lab fires a gun group's muzzles in the same alternating order flight
 uses, so the lab is a faithful bench for judging muzzle flash, tracers and ejection (C22/C24/C25)

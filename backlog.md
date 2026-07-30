@@ -199,11 +199,6 @@ work is below.
    and ejection.png`/`…ejection2.png` (one brass casing + a persisting, aft-drifting white puff cluster,
    ejecting from the wing mounts). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
    See `BL-137`/`BL-138`/`BL-141` for what wiring this actually needs beyond the def itself.
-4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
-   (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
-   nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
-   a flight bug.
-
 **Rocket visuals (findings 2, 4).**
 5. `BL-015` **The fat orange→grey smoke trail is missing — the biggest rocket gap.** A rocket with a MODEL body
    gets only a slim `RocketExhaustScale = 0.5` exhaust streak (`Projectile.cs:62`); the original's

@@ -1007,8 +1007,10 @@ stand-in target wall 15–1100 m ahead; copy-CLI-args (`--weapon-lab=<id>`).
   spark, hardpoint impacts the explosion stand-in, and `DamageSink` is null.
 ⚠ Mounts bind from the stock `Loadout`; a plane the table omits (or a bind failure) falls back to
   the raw firepoint/pylon marker rig.
-⚠ `RunSelfTest` fires all 48 weapons once, each from a mount of its class — the `--weapon-test`
-  pass check.
+⚠ A live volley (`FireVolley`, the trigger/auto-fire path) fires one mount node per pull and
+  alternates, mirroring `FlightController.UpdateGuns`'s per-group muzzle cursor — never every node
+  at once. `RunSelfTest` is the one exception: it still fires every node of a mount directly (not
+  through `FireVolley`), for the `--weapon-test` pass check across all 48 weapons.
 
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mesh under the

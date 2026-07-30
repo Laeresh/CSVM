@@ -552,16 +552,20 @@ public sealed partial class WeaponLab : Node3D
 
     /// <summary>Fires one round of the selected weapon from each muzzle of the selected mount, from a
     /// standstill (no inherited velocity — the plane is parked).</summary>
+    /// <summary>One trigger pull: fires the selected mount's next node and advances its cursor —
+    /// a multi-node mount (a gun group, or the synthetic "all" volley) alternates one muzzle per
+    /// pull, in the same order <c>FlightController.UpdateGuns</c> alternates a gun group's muzzles,
+    /// rather than firing every node at once.</summary>
     private void FireVolley()
     {
         if (SelectedWeapon is not { } w || BankMounts.Count == 0)
         {
             return;
         }
-        foreach (var n in BankMounts[_mountIndex].Nodes)
-        {
-            _pool.Spawn(w, n.GlobalTransform, Vector3.Zero);
-        }
+        var mount = BankMounts[_mountIndex];
+        var n = mount.NextNode();
+        Log.Debug("weapons", $"weapon lab fire mount={mount.Label} node={n.Name} cursor={mount.Cursor}");
+        _pool.Spawn(w, n.GlobalTransform, Vector3.Zero);
     }
 
     // ---- panel + state -----------------------------------------------------------------------
@@ -830,23 +834,6 @@ public sealed partial class WeaponLab : Node3D
         AddChild(_ui);
     }
 
-    /// <summary>A place on the parked plane a weapon fires from: a named gun group / a pylon / the
-    /// synthetic "all" volley. <see cref="Nodes"/> are the live muzzle <see cref="Node3D"/>s;
-    /// <see cref="Cli"/> is the <c>--weapon-mount=</c> token (<c>all</c>, <c>g1</c>, <c>pylon1</c>).</summary>
-    private readonly struct Mount
-    {
-        public readonly string Label;
-        public readonly string Cli;
-        public readonly IReadOnlyList<Node3D> Nodes;
-
-        public Mount(string label, string cli, IReadOnlyList<Node3D> nodes)
-        {
-            Label = label;
-            Cli = cli;
-            Nodes = nodes;
-        }
-    }
-
     /// <summary>The self-test's verdict: the report text plus the counts a suite asserts on.
     /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
     /// no mount on this plane never fires and nothing else would notice.</summary>
@@ -857,5 +844,33 @@ public sealed partial class WeaponLab : Node3D
         public required int Ok { get; init; }
         public required int Errors { get; init; }
         public required int Skipped { get; init; }
+    }
+
+    /// <summary>A place on the parked plane a weapon fires from: a named gun group / a pylon / the
+    /// synthetic "all" volley. <see cref="Nodes"/> are the live muzzle <see cref="Node3D"/>s;
+    /// <see cref="Cli"/> is the <c>--weapon-mount=</c> token (<c>all</c>, <c>g1</c>, <c>pylon1</c>).
+    /// <see cref="NextNode"/> is the mount's own firing cursor, mirroring <c>FlightController</c>'s
+    /// per-gun-group <c>GunState.NextMuzzle</c> — each pull advances it, so a multi-node mount
+    /// alternates one node per volley instead of firing every node at once.</summary>
+    private sealed class Mount
+    {
+        public readonly string Label;
+        public readonly string Cli;
+        public readonly IReadOnlyList<Node3D> Nodes;
+        public int Cursor;
+
+        public Mount(string label, string cli, IReadOnlyList<Node3D> nodes)
+        {
+            Label = label;
+            Cli = cli;
+            Nodes = nodes;
+        }
+
+        public Node3D NextNode()
+        {
+            var n = Nodes[Cursor % Nodes.Count];
+            Cursor++;
+            return n;
+        }
     }
 }
