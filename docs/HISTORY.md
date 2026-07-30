@@ -7985,3 +7985,15 @@ PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, including every fo
 (C1C rain, C2B rain, C4 snow, C5 night). The plan's manual menu-cycle check (Esc back to menu,
 relaunch a foggy chapter, confirm no `GlobalShaderParameterAdd` crash) needs interactive input this
 agent has no tool for — outstanding, flagged to the user.
+
+**PLAN-planeviewer-split A6 landed (2026-07-30): window-hide → `src/Utils/ScriptedWindow.cs`.**
+The P/Invoke `ShowWindow` + constant `SwHide` + static method `HideScriptedWindow` moved off
+`PlaneViewer` verbatim into a new `ScriptedWindow` class as `Hide()`. Fully static, Win32-only,
+one call site in `PlaneViewer._Ready` right after the `--det` block. The predicate that routes
+window hiding (scripted run) vs. focus request (interactive run) stays inline on `PlaneViewer`, since
+both directions are load-bearing (`HideScriptedWindow` does not exist upstream and hiding is not
+minimizing — minimizing stops rendering and blanks captures; the `ShowWindow(SW_HIDE)` is a
+load-bearing detail). Pure move, one-line delegation at the call site, zero behavior reorder.
+Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical; the
+hidden-desktop test harness itself proves the move works (if hiding broke, test windows appear on
+screen). Wave A complete.

@@ -131,6 +131,7 @@ determinism repo-wide — read `docs/verification.md` first.
 - `src/Utils/ShaderTime.cs` — the `csky_time` global uniform: the clock's GPU twin, replacing `TIME` in every generated shader; wraps at 3600 s.
 - `src/Utils/StartupProfile.cs` — the always-on `[perf] startup …` line: every session build split by phase, `total = boot + Σphases + rest + first_frame`.
 - `src/Utils/Rng.cs` — the session's one master seed and the ten named subsystem generators every random draw derives from.
+- `src/Utils/ScriptedWindow.cs` — Win32-only window hiding for scripted runs; `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)` on the native window.
 
 ### `src/Testing/` — the in-engine assertion harness
 
@@ -1468,10 +1469,10 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   interactive. **Never let a constituent leak into an interactive default** — a bare `--fly` keeps
   its random spawn, random liveries and live pads.
 ⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
-  drives both, right after the `--det` block. `HideScriptedWindow` uses `ShowWindow(SW_HIDE)`;
-  **never swap that for minimize**, which stops rendering and blanks every capture (SHOT-16).
-  Both directions are load-bearing: get the predicate wrong and either a test run covers the
-  desktop or somebody's game launches invisible.
+  drives both, right after the `--det` block. `ScriptedWindow.Hide()` (PLAN-planeviewer-split A6,
+  moved off `HideScriptedWindow`) uses `ShowWindow(SW_HIDE)`; **never swap that for minimize**,
+  which stops rendering and blanks every capture (SHOT-16). Both directions are load-bearing: get
+  the predicate wrong and either a test run covers the desktop or somebody's game launches invisible.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
   block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
   `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
@@ -1848,3 +1849,11 @@ key, else the caller's in-code `const` default — read-through at the point of 
 ⚠ Only `FlightModel` is wired so far (its 15 `TUNE` consts, read into locals at the top of `Step`
   so every key registers even on a frame that skips the stall/knife branches); other modules still
   read their consts directly. `config.json` is git-ignored — the consts stay the canonical values.
+
+## src/Utils/ScriptedWindow.cs
+Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
+the native window handle (PLAN-planeviewer-split A6, moved off `PlaneViewer.HideScriptedWindow`).
+Fully static, one call site in `PlaneViewer._Ready` right after the `--det` block — the same
+predicate drives both window hiding (scripted run) and focus request (interactive run).
+⚠ Hiding is not minimizing: a minimized window stops rendering, which blanks every screenshot
+  capture. `ShowWindow(SW_HIDE)` is load-bearing — never swap it for minimize.

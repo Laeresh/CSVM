@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
 4. ☑ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
 5. ☑ Weather build + per-frame block → `src/Session/WeatherRig`
-6. ☐ Window-hide → `src/Utils/ScriptedWindow`
+6. ☑ Window-hide → `src/Utils/ScriptedWindow`
 
 ### Wave B — the structural split
 
