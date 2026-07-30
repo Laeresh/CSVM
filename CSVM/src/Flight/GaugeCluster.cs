@@ -47,6 +47,9 @@ public sealed partial class GaugeCluster : Control
     public WeaponGauge? MissileGauge;
 
     // ---- tuning ----
+    // A gun belt indicator's colour by remaining fraction: green healthy, yellow low, red empty.
+    // Gun-only (BL-024): hardpoints/pylons never show this intermediate tier. TUNE.
+    internal const float IndicatorLowFrac = 0.34f;
     private const float LowAltAglM = 50f;     // LOW ALT below this height over ground (user spec)
     private const float WarnBlinkPeriod = 0.4f;  // s per on/off cycle of LOW ALT / STALL (TUNE)
     private const float DamageBlinkTime = 5f;    // s a hit part blinks (user-observed in the original)
@@ -70,10 +73,6 @@ public sealed partial class GaugeCluster : Control
     // above the speedometer. Same radius as the other dials.
     private const float MissileRadius = 85f;
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
-    // A belt indicator's colour by remaining fraction: green healthy, yellow low, red empty. The
-    // low threshold is picked so a per-pylon rocket (3 rounds) steps green(3/2)→yellow(1)→red(0)
-    // AND a gun group only warns near empty. TUNE.
-    private const float IndicatorLowFrac = 0.34f;
 
     // The needle texture's shaft is a flat full-width slab (32×128, no alpha; the hub
     // box with its two black discs fills the tail rows), but the original renders a
@@ -274,14 +273,23 @@ public sealed partial class GaugeCluster : Control
         if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
         {
             var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
-            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s);
+            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s, isGun: false);
         }
         if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
         {
             var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
-            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s);
+            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s, isGun: true);
         }
     }
+
+    // Guns: green > low > empty, indexing the 3 indicator colour variants. The low tier is
+    // gun-only — see IndicatorLowFrac's comment. Internal (not private) so the run-tests suite can
+    // assert both colour paths directly.
+    internal static int GunIndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
+
+    // Hardpoints/pylons: green > empty, no intermediate colour (confirmed against the original —
+    // BL-024). Never reuse IndicatorLowFrac here.
+    internal static int HardpointIndicatorColor(float frac) => frac <= 0f ? 2 : 0;
 
     // ---- extraction ----
 
@@ -403,9 +411,6 @@ public sealed partial class GaugeCluster : Control
     /// draws them at a damped, larger-than-proportional scale (see <see cref="HudMetrics"/>).</summary>
     private static float FromBottom(float refY, float s, float viewportH) =>
         viewportH - (HudMetrics.ReferenceHeight - refY) * s;
-
-    // green > low > empty, indexing the 3 indicator colour variants.
-    private static int IndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
 
     /// <summary>A count right-aligned into <paramref name="width"/> digit cells, space-padded
     /// (clamped 0..9999, the 4-cell readout's range).</summary>
@@ -591,9 +596,10 @@ public sealed partial class GaugeCluster : Control
     }
 
     /// <summary>Draws one weapon gauge: the labelled face, the belt lights for the slots the plane
-    /// actually has (each green/yellow/red by remaining fraction — the "step"), the right-aligned
-    /// digit count, the left-aligned type name, then the pointer rotated to the selected belt slot.</summary>
-    private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius)
+    /// actually has — guns step green/yellow/red by remaining fraction, hardpoints step green/red
+    /// with no intermediate colour — the right-aligned digit count, the left-aligned type name,
+    /// then the pointer rotated to the selected belt slot.</summary>
+    private void DrawWeaponGauge(GaugeGeom geom, WeaponGauge state, Vector2 center, float radius, bool isGun)
     {
         foreach (var p in geom.Face)
             DrawGaugePoly(p, center, radius);
@@ -601,7 +607,7 @@ public sealed partial class GaugeCluster : Control
         {
             if (i >= state.Slots.Count)
                 continue; // a belt position this airframe does not use stays dark
-            int color = IndicatorColor(state.Slots[i]);
+            int color = isGun ? GunIndicatorColor(state.Slots[i]) : HardpointIndicatorColor(state.Slots[i]);
             foreach (var p in geom.Indicators[i])
             {
                 bool bar = p.TexName.Contains("hilite", StringComparison.OrdinalIgnoreCase);

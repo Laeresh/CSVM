@@ -298,24 +298,6 @@ work is below.
     related bug; do not read one as the other. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
 
 **Gauges, selectors & cues (findings 6, 7, 9).**
-14. `BL-024` **Ammo gauge yellow tier is GUN-ONLY — hardpoint/ordnance indicators are green→red.**
-    User A/B against the original (finding 9a) confirms yellow IS present, but only on **gun ammo**
-    belts; rocket/ordnance pylon indicators step green→red with no yellow. `IndicatorLowFrac`
-    (`GaugeCluster.cs:76`) **survives for guns** — its existing justification (chosen so a 3-round
-    rocket pylon steps green→yellow→red, `GaugeCluster.cs:73-74`) was for exactly the case that must
-    NOT show yellow, so the *comment* needs rewriting, not the constant deleting.
-    *Fix shape:* `DrawWeaponGauge` (`GaugeCluster.cs:596-615`) calls one shared `IndicatorColor`
-    (`:408`) for both `_gunGaugeGeom` and `_missileGaugeGeom` (call sites `:274-283`) — split into a
-    3-state gun colour function (keeps `IndicatorLowFrac`) and a 2-state hardpoint function (green
-    above 0, red at empty, never yellow). `docs/architecture.md`'s `GaugeCluster.cs` entry is already
-    at its 3-⚠ cap — land this by merging into the existing per-GROUP/per-PYLON digit-readout bullet,
-    not by adding a 4th.
-    *Playtest after fix:* `./RunGame.ps1 --plane=player_warhawk --chapter=C1` (guns must still show
-    yellow near-empty) and a rocket-carrying plane (pylons must never show yellow).
-    ⚠ **Traps.** (a) Do not delete `IndicatorLowFrac` — still load-bearing, for guns only. (b) Do not
-    reuse it (even retuned) for hardpoints — the original has no intermediate warning colour there at
-    all, not a differently-thresholded one. (c) See `BL-142` for whether 0.34 itself is still right for
-    guns once it is no longer coincidentally serving the pylon case too.
 15. `BL-025` **Hardpoint selection should work — user correction (finding 7).** Each pylon counts for itself; **H
     should select an individual hardpoint**, with auto-advance only when the selected one empties. H is
     currently gated `_ordnanceTypes.Length > 1` and dedups to one type → nothing to cycle. *Redesign:* H

@@ -49,6 +49,8 @@ public static class Suites
 
     public static void Register(List<TestHarness.Suite> into)
     {
+        into.Add(new TestHarness.Suite("gauge-colours",
+            "the belt indicator's yellow tier is gun-only; hardpoints step green→red", GaugeColours));
         into.Add(new TestHarness.Suite("weapons-defs",
             "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
         into.Add(new TestHarness.Suite("flight-envelope",
@@ -106,6 +108,24 @@ public static class Suites
             }
         }
         ctx.Note($"{r.Summary}");
+    }
+
+    /// <summary>BL-024: the belt indicator's yellow tier belongs to guns only — a per-pylon
+    /// hardpoint steps straight from green to red at empty, matching the original.</summary>
+    private static void GaugeColours(TestContext ctx)
+    {
+        for (float frac = 0f; frac <= 1f; frac += 0.01f)
+        {
+            ctx.Check(GaugeCluster.HardpointIndicatorColor(frac) != 1, $"hardpoint colour never yellow at frac={frac:0.00}");
+        }
+        ctx.Check(GaugeCluster.HardpointIndicatorColor(0f) == 2, $"hardpoint colour red at empty");
+        ctx.Check(GaugeCluster.HardpointIndicatorColor(1f) == 0, $"hardpoint colour green at full");
+
+        ctx.Check(GaugeCluster.GunIndicatorColor(GaugeCluster.IndicatorLowFrac) == 1,
+            $"gun colour yellow at the low threshold frac={GaugeCluster.IndicatorLowFrac:0.00}");
+        ctx.Check(GaugeCluster.GunIndicatorColor(GaugeCluster.IndicatorLowFrac + 0.01f) == 0,
+            $"gun colour green just above the low threshold");
+        ctx.Check(GaugeCluster.GunIndicatorColor(0f) == 2, $"gun colour red at empty");
     }
 
     private static void WeaponsDefs(TestContext ctx)

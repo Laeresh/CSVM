@@ -59,7 +59,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — cockpit gauges & cues
 
-1. ☐ `BL-024` Split gauge colouring: yellow tier for guns only, hardpoints green→red
+1. ☑ `BL-024` Split gauge colouring: yellow tier for guns only, hardpoints green→red
 2. ☐ `BL-026` Rocket empty-clip cue swallowed by the fire-rate cooldown
 3. ☐ `BL-025` H selects individual hardpoints, even when all carry the same ammo type
 
@@ -93,7 +93,7 @@ it hardens the scripted-run harness every other item's verification leans on.
 
 # Wave A — cockpit gauges & cues
 
-## A1 ☐ `BL-024` Split gauge colouring: yellow tier for guns only
+## A1 ☑ `BL-024` Split gauge colouring: yellow tier for guns only
 
 **Goal.** Gun ammo belts keep the green→yellow→red steps; hardpoint/ordnance pylon indicators step
 green→red with no yellow, ever — matching the user's A/B against the original (playtest pass 2,

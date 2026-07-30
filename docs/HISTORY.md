@@ -8357,3 +8357,13 @@ waits on an original-game crash capture. User additions: `BL-025` promoted into 
 (per-pylon H cycling even with uniform ammo types), and new `BL-184` + `CAP-18` (does the original
 sweep the ammo-gauge arrow on weapon switch? ours snaps, `GaugeCluster.cs:613-614`) filed to
 backlog.md/playtest.md, deliberately outside the plan. CLAUDE.md status now names the plan.
+
+**2026-07-30: A1 landed (`BL-024`) — split gauge belt colouring so the yellow tier is gun-only.**
+`GaugeCluster.cs`'s shared `IndicatorColor` split into `GunIndicatorColor` (keeps `IndicatorLowFrac`,
+3-state green/yellow/red) and `HardpointIndicatorColor` (2-state green/red, never yellow);
+`DrawWeaponGauge` takes an `isGun` flag so the gun-gauge call site picks the former and the
+missile/hardpoint call site the latter. `IndicatorLowFrac`'s comment now states its gun-only
+justification. Verified: new `gauge-colours` `--run-tests` suite asserts `HardpointIndicatorColor`
+never returns yellow across a 0–1 fraction sweep while `GunIndicatorColor` still does at/below
+`IndicatorLowFrac`; full `.\RunTests.ps1` green (303 unit tests, 11/11 engine suites, 13/13 goldens
+hash-identical).
