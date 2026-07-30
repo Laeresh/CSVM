@@ -115,6 +115,9 @@ entangled ones the clock/camera) as constructor or method parameters — no back
 node. The early-quit call sites in `_Ready` (590–615) and the test/destroy sites in `StartSession`
 stay where they are, one line each.
 
+**Model recommendation.** sonnet — a mechanical move of already-thin wrappers; the test suite is
+its own verification.
+
 **Verify.** `.\RunTests.ps1` (exercises `--run-tests` + goldens); plus one `--dump-flight` and one
 `--damage-test` run by hand — same report bytes in `.scratch/`.
 
@@ -128,6 +131,9 @@ stay where they are, one line each.
 **Evidence (traced).** Fields 238–244; methods 3517–3596; the `_Process` capture block
 (~3470–3509) including `GoldenShot` + `TextureDropIn.CountShot` calls. Reads camera/orbit/rigs —
 passed in, not reached for.
+
+**Model recommendation.** sonnet — mechanical extraction, and the sim-frame countdown trap is
+exactly what the golden hashes exist to catch.
 
 **Verify.** Goldens are this item's own subject: all 11 hashes byte-identical proves the pipeline
 moved without moving. Also one `--shots=3` burst — identical indexed filenames.
@@ -147,6 +153,9 @@ sim frame.
 `_patternLibrary`, reads `_rofPath` + spec), 2721–2774 (spawn — pure over spec + `Rng`),
 2010–2036 (pads — static), 2575–2595 (loaders — static), 2838–2853 (warmup — static).
 
+**Model recommendation.** sonnet — verbatim moves of near-pure code; the RNG-order trap is written
+down and golden-guarded.
+
 **Verify.** `.\RunTests.ps1`; liveries are seed-pinned under `--det`, so the goldens catch any
 paint-RNG reorder.
 
@@ -165,6 +174,9 @@ sinks, anim-lab stage, `--destroy=`) and `BuildFlightCrashRuntime` from the per-
 `_worldEffects`/`_worldRoot` bind them to instance state — the factory holds the lazily-built
 runtime, PlaneViewer keeps a reference for teardown.
 
+**Model recommendation.** sonnet — mostly-static code with enumerable call sites; the one design
+choice (who holds the lazy runtime) is already decided above.
+
 **Verify.** `.\RunTests.ps1` (the in-engine suites cover destructibles); one
 `--destroy=<name> --screenshot` run and one `--effects-test` run by hand.
 
@@ -175,6 +187,9 @@ update block inside `_Process` become `src/Session/WeatherRig.cs` with `Build()`
 
 **Evidence (traced).** Touches `_weather`, `_activeZone`, `_precip`, per-rig canvas/puff nodes,
 `_deckCenter`, and **Sets** (never Adds) global shader params.
+
+**Model recommendation.** sonnet — a contained move with one sharp, documented trap (Set vs Add)
+that the manual menu-cycle check covers.
 
 **Verify.** `.\RunTests.ps1`; goldens include foggy chapters, so a shader-param ordering change
 shows up as a hash move.
@@ -189,6 +204,8 @@ menu cycle by hand.
 `src/Utils/ScriptedWindow.cs`.
 
 **Evidence (traced).** Fully static, Win32-only, one call site in `_Ready`.
+
+**Model recommendation.** haiku — a trivial static-class move with a single call site.
 
 **Verify.** `.\RunTests.ps1` under `HiddenDesktop.ps1` — if hiding broke, test windows appear on
 screen, which the user notices immediately.
@@ -212,6 +229,11 @@ paths, camera/orbit/sun/env references, master seed, menu pads.
 `ReturnToMenu` still calls the old teardown this commit — the QueueFree conversion is B8, so each
 commit changes one thing. Main.tscn's root script swaps to Launcher.
 
+**Model recommendation.** fable — the risk peak of the plan, and the item with the weakest
+automated coverage relative to blast radius: the goldens only cover single-shot `--det` launches,
+so the menu-relaunch cycle and the four entry shapes are verified by hand, and the
+process-scoped-vs-session-scoped call per bootstrap phase is not fully pre-enumerated.
+
 **Verify.** `.\RunTests.ps1`; by hand: menu → session → menu → session cycle (in-process relaunch
 is where persistent-node ownership breaks), one scripted `--screenshot` run, one `--run-tests` run,
 one early-quit `--dump-flight` run — all four entry shapes must still work from Launcher.
@@ -232,6 +254,9 @@ CLAUDE.md module map + high-traffic list, cli.md mentions).
 NOT node children — `_sessionTextures`, archive handles — move to `_ExitTree`/`Dispose` on
 GameSession so QueueFree covers them.
 
+**Model recommendation.** opus — deleting the null-out list is only safe if every disposal duty is
+correctly re-homed; leak/double-dispose reasoning is judgement-heavy, the rename sweep is not.
+
 **Verify.** `.\RunTests.ps1`; repeated menu ↔ session cycles watching the log for leaked-handle or
 double-dispose errors; goldens unchanged.
 
@@ -247,6 +272,9 @@ freecam, summary, framing — each under ~80 lines.
 phases are already sequential with locals handed forward. The catch block (1821–1836) must keep
 wrapping the whole build — keep the try boundary where it is.
 
+**Model recommendation.** sonnet — mechanical carving along phase boundaries that are already
+mapped; the StartupProfile trace verifies ordering.
+
 **Verify.** `.\RunTests.ps1`; the `StartupProfile` phase marks must fire in the same order (the
 startup log is a free sequencing trace).
 
@@ -259,6 +287,9 @@ compass/gauges/reticle/audio/stunt/spawn + crash runtime hookup) becomes
 **Evidence (traced).** Lines 1481–1742 plus the session flight data setup (1376–1445) that feeds
 it. The loop's inputs are enumerable: planes gamez, stats cache, pads, paint rng, spawn list,
 weapons/loadouts, HUD assets, projectile pool, rig.
+
+**Model recommendation.** opus — the loop mixes shared and per-player state with ordering-sensitive
+RNG draws and controller-enter-tree sequencing; a wrong split compiles and passes casually.
 
 **Verify.** `.\RunTests.ps1`; a `--players=2 --det --screenshot` splitscreen shot by hand (per-rig
 assembly is where a shared-vs-per-player mixup shows).
@@ -273,6 +304,9 @@ fire state) — keep that ordering.
 shader time, perf, unplaced poll, WeatherRig.Tick, edge extender, CaptureDirector.Tick);
 GameSession is under ~800 lines; `PlaneViewer.cs` is gone; the plan completes (COMPLETE banner,
 move to `docs/plans/`, row in `plans.md`, CLAUDE.md status back to "no active plan").
+
+**Model recommendation.** sonnet — cleanup and bookkeeping against a checklist; the perf A/B is the
+only judgement call and it has a recorded baseline.
 
 **Verify.** `.\RunTests.ps1` including `-Perf` (an A/B against perf-history.jsonl — the refactor
 should be frame-cost-neutral); the full 8-chapter `--freecam --chapter=<X>` regression sweep.
