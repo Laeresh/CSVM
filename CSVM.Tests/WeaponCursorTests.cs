@@ -14,62 +14,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class WeaponCursorTests
 {
-    // A model of the firing loop as UpdateRockets/UpdateGuns run it: NextArmed picks the slot, the
-    // caller decrements it, then advances the cursor on-empty (the post-decrement NextArmed). Returns
-    // the slot each shot fired from.
-    private static List<int> DrainAll(int[] ammo, int start, bool infinite = false, int maxShots = 1000)
-    {
-        var fired = new List<int>();
-        int cursor = start;
-        for (int shot = 0; shot < maxShots; shot++)
-        {
-            int idx = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite);
-            if (idx < 0)
-            {
-                break; // every slot empty — the dry-cue path
-            }
-            cursor = idx;
-            fired.Add(idx);
-            if (infinite)
-            {
-                break; // infinite never depletes; one representative shot is enough
-            }
-            ammo[idx]--;
-            // On-empty advance: the cursor leaves the slot the moment it drains.
-            int next = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite);
-            if (next >= 0)
-            {
-                cursor = next;
-            }
-        }
-        return fired;
-    }
-
-    // The cursor (== the gauge's Selected) sampled after each shot, to prove the on-empty advance.
-    private static List<int> CursorAfterEachShot(int[] ammo, int start, int shots)
-    {
-        var trace = new List<int>();
-        int cursor = start;
-        for (int s = 0; s < shots; s++)
-        {
-            int idx = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite: false);
-            if (idx < 0)
-            {
-                trace.Add(-1);
-                break;
-            }
-            cursor = idx;
-            ammo[idx]--;
-            int next = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite: false);
-            if (next >= 0)
-            {
-                cursor = next;
-            }
-            trace.Add(cursor);
-        }
-        return trace;
-    }
-
     [Fact]
     public void HStepsThroughEverySlotOnAUniformAmmoLoadout()
     {
@@ -161,5 +105,61 @@ public class WeaponCursorTests
     {
         int[] ammo = { 3 };
         Assert.Equal(0, WeaponCursor.NextSelectable(ammo.Length, i => ammo[i], from: 0, infinite: false));
+    }
+
+    // A model of the firing loop as UpdateRockets/UpdateGuns run it: NextArmed picks the slot, the
+    // caller decrements it, then advances the cursor on-empty (the post-decrement NextArmed). Returns
+    // the slot each shot fired from.
+    private static List<int> DrainAll(int[] ammo, int start, bool infinite = false, int maxShots = 1000)
+    {
+        var fired = new List<int>();
+        int cursor = start;
+        for (int shot = 0; shot < maxShots; shot++)
+        {
+            int idx = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite);
+            if (idx < 0)
+            {
+                break; // every slot empty — the dry-cue path
+            }
+            cursor = idx;
+            fired.Add(idx);
+            if (infinite)
+            {
+                break; // infinite never depletes; one representative shot is enough
+            }
+            ammo[idx]--;
+            // On-empty advance: the cursor leaves the slot the moment it drains.
+            int next = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite);
+            if (next >= 0)
+            {
+                cursor = next;
+            }
+        }
+        return fired;
+    }
+
+    // The cursor (== the gauge's Selected) sampled after each shot, to prove the on-empty advance.
+    private static List<int> CursorAfterEachShot(int[] ammo, int start, int shots)
+    {
+        var trace = new List<int>();
+        int cursor = start;
+        for (int s = 0; s < shots; s++)
+        {
+            int idx = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite: false);
+            if (idx < 0)
+            {
+                trace.Add(-1);
+                break;
+            }
+            cursor = idx;
+            ammo[idx]--;
+            int next = WeaponCursor.NextArmed(ammo.Length, i => ammo[i], cursor, infinite: false);
+            if (next >= 0)
+            {
+                cursor = next;
+            }
+            trace.Add(cursor);
+        }
+        return trace;
     }
 }
