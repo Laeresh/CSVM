@@ -428,7 +428,9 @@ startanims, a safety net), then dispatch-table event playback; unhandled event k
 never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`, fed by `ProjectilePool.DamageSink` and
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
-template stage). Second instances serve per-player crash rigs and the world-effects closure. The
+template stage). Second instances serve per-player crash rigs and the world-effects closure, built
+unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; the caller still
+`Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. The
 sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs`; this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
 `EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).

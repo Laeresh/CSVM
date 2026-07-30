@@ -417,18 +417,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// verified headless.</summary>
     public int OneShotSoundsPlayed { get; private set; }
 
-    /// <summary>
-    /// Binds a program to a built world, runs the bootstrap passes, and returns the runtime
-    /// node to add to the scene tree (it advances live instances in _Process). Add it to the
-    /// world root; it holds no state that survives a session teardown.
-    /// </summary>
-    public static AnimRuntime Apply(Node3D worldRoot, AnimProgram program)
-    {
-        var runtime = new AnimRuntime { Name = "AnimRuntime" };
-        runtime.Bind(worldRoot, program);
-        return runtime;
-    }
-
     /// <summary>Configures (but does not bind) the world-effects runtime's construction ritual: the
     /// four invariant flags a "renders effects at a call site, no ambience of its own" role always
     /// takes (<see cref="AutoStart"/>=false, <see cref="PlaceCalledTemplates"/>,
@@ -489,10 +477,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// inspect tool asks the engine instead of re-implementing the matcher. Read-only.</summary>
     public IReadOnlyList<Node3D> FindNodes(string pattern, Node3D? scope = null) => FindAll(pattern, scope);
 
-    /// <summary>Runs the bootstrap passes against a built world. Separate from
-    /// <see cref="Apply"/> so a caller can set build-time-only collaborators (notably
+    /// <summary>Runs the bootstrap passes against a built world. A separate call (not folded into
+    /// construction) so a caller can set build-time-only collaborators (notably
     /// <see cref="PufferFactory"/>, which depends on the session TextureArchive's lifetime)
-    /// before the passes fire the events that need them.</summary>
+    /// before the passes fire the events that need them. The world runtime binds directly; the
+    /// <see cref="ForEffects"/>/<see cref="ForCrashRig"/> role factories return unbound for the same
+    /// reason.</summary>
     public void Bind(Node3D worldRoot, AnimProgram program)
     {
         Name = "AnimRuntime";

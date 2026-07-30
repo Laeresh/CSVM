@@ -1,8 +1,7 @@
 # AnimRuntime role factories — retire the effects/crash construction ritual
 
-**ACTIVE PLAN** (written 2026-07-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (landed 2026-07-30). Every checklist item is ☑; moved here from `docs/` per this
+repo's plan-lifecycle convention. Kept for evidence and dead ends, read as history.
 
 Candidate 2 of the 2026-07-30 architecture review ([`.scratch/architecture-review-2026-07-30.html`](../.scratch/architecture-review-2026-07-30.html)),
 reshaped by the grilling session that produced this plan. `AnimRuntime` is constructed three ways —
@@ -254,7 +253,7 @@ B11 and B12 share `WorldEffectsFactory.cs`, run after B11 lands, not beside it.
 raw `int`, so this distinction stays at the call site (Decision 5); do not "unify" them.
 `InheritedWorldVelocity` is not a construction param (Trap #4).
 
-## B13 ☐ Delete dead `AnimRuntime.Apply`; update docs
+## B13 ☑ Delete dead `AnimRuntime.Apply`; update docs
 
 **Goal.** The fossil factory is gone and the module docs reflect the two role factories.
 

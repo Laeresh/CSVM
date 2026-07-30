@@ -8237,3 +8237,10 @@ object initializer, keeping the wreck-build/rest-pose/`Bind` scaffolding around 
 construction-site extraction, no flag/seed/behaviour change. Verified `.\RunTests.ps1` PASS: 303
 units, 10/10 engine suites, all 13 golden hashes byte-identical (including the A2 crash tripwire).
 Both role factories now land; only B13 (delete dead `Apply`, doc updates) remains.
+
+**PLAN-animruntime-role-factories complete (2026-07-30, B13).** Dead `AnimRuntime.Apply` deleted
+(confirmed zero external callers by grep); `docs/architecture.md`'s `AnimRuntime.cs` entry now notes
+the effects/crash second instances build unbound via `ForEffects`/`ForCrashRig`, the world runtime
+staying a plain inline `new AnimRuntime`. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine
+suites, all 13 golden hashes byte-identical. Plan moved to `docs/plans/` with a `COMPLETE` banner,
+row added to `plans.md`.
