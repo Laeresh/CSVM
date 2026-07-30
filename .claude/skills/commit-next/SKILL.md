@@ -39,13 +39,15 @@ Read the `## Checklist` section of the active plan. Statuses: ☐ open · ◐ in
 
 The loop's default is `/clear` between items (fresh context per task). But when the next item is strongly related to what you just did, clearing throws away context you would only rebuild — re-reading the same files, re-deriving the same findings — which burns tokens for nothing. Judge which of the three fits and recommend it with a one-line reason.
 
+**Check the model first.** Read the next item's `**Model recommendation.**` line in the plan (older plans may not have one — then skip this check). Compare it against the model running this session (you know which model you are). A mismatch weighs toward `/clear`: the whole point of continue is keeping context warm in the *same* session, and that argument collapses when the next item belongs on a different tier — a cheaper item continued on an expensive model wastes money, and an item flagged for a stronger model must not be continued on a weaker one. Only recommend **continue** on a mismatch if the in-session context is genuinely irreplaceable, and say so explicitly.
+
 Weigh the just-finished item against the next one:
 
 - **Continue (no clear)** — the next item touches the **same file(s)/module(s)** you just edited, is the **next link in a dependency chain** (e.g. B11 → B12 per the plan's dependency notes), or **relies on something established this session that isn't yet written to a doc** (a measured baseline, a hard-won mental model of a gnarly file). Clearing would re-pay exactly that cost. This is the case worth catching.
 - **`/compact`** — related, but the session is **long and full of exploration or dead ends**. Compact keeps the distilled thread (what shipped, the live findings) and sheds the transcript noise — continuity at a lower token cost than carrying everything forward.
 - **`/clear`** — the next item is **independent**: a different wave/module, no shared files, nothing it needs beyond the plan + docs (which a fresh context reloads cheaply). Safest against stale assumptions, and the loop's default. Because each item lands its own `docs/HISTORY.md` + `docs/` updates, most durable context is already on disk, so a clear rarely loses anything that matters — the exception is the un-written in-session context the "continue" case is about.
 
-State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.**
+State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.** When the plan names a model for the next item, append it: **Next item wants `<model>` (this session: `<model>`).**
 
 ## 4. Print the ready-to-paste next-task prompt
 
@@ -59,7 +61,7 @@ Before writing code: read that item's full "### <ID>" detail in the plan and the
 Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh CLAUDE.md "Current status". Commit only when I ask (with /commit-next).
 ~~~
 
-After the code block, add a single closing line matched to your step-3 recommendation:
+After the code block, add a single closing line matched to your step-3 recommendation. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
 - **continue** → *Recommended: continue — no clear needed. Say the word and I'll start `<ID>` in this context. (The block above is only if you'd rather clear anyway.)*
 - **`/compact`** → *Recommended: run `/compact`, then paste the block above to start `<ID>`.*
-- **`/clear`** → *Recommended: copy the block above, then `/clear`, then paste it to start `<ID>`.*
+- **`/clear`** → *Recommended: copy the block above, then `/clear` (and `/model <model>` per the plan, if it differs), then paste it to start `<ID>`.*
