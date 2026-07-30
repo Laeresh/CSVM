@@ -136,7 +136,7 @@ public sealed record SessionSpec
     /// a drift, not a decision — the same omission as <see cref="ModeName"/>'s, and it means a
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
-        NoFocus || ScreenshotPath != null || RunTests
+        NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
         || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig
         || DamageTest || EffectsTest || WeaponTest;
 
@@ -208,6 +208,7 @@ public sealed record SessionSpec
     /// precedence order; empty when none does.</summary>
     public string ScriptedBy =>
         ScreenshotPath != null ? "--screenshot"
+        : ExportGltfPath != null ? "--export-gltf"
         : DumpMarkers ? "--dump-markers"
         : DumpWeapons ? "--dump-weapons"
         : DumpLoadout ? "--dump-loadout"
@@ -286,6 +287,9 @@ public sealed record SessionSpec
     public string? ScreenshotPath { get; private set; }
     public int ScreenshotFrames { get; private set; } = 15;
     public int ScreenshotShots { get; private set; } = 1;
+    /// <summary>The <c>--export-gltf=</c> target path; null when the flag was absent. The plane
+    /// subtree is written there as glTF once the session builds it.</summary>
+    public string? ExportGltfPath { get; private set; }
 
     // ---- The probes that drive and end a session themselves ------------------------------------
 
@@ -524,6 +528,7 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--shots=")) { s.ScreenshotShots = Math.Max(1, int.Parse(arg["--shots=".Length..])); }
             else if (arg.StartsWith("--jitter=")) { s.JitterDeg = Flt(arg["--jitter=".Length..]); }
             else if (arg.StartsWith("--screenshot=")) { s.ScreenshotPath = arg["--screenshot=".Length..]; s.HasContentArg = true; }
+            else if (arg.StartsWith("--export-gltf=")) { s.ExportGltfPath = arg["--export-gltf=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--yaw=")) { s.Yaw = Flt(arg["--yaw=".Length..]); }
             else if (arg.StartsWith("--pitch=")) { s.Pitch = Flt(arg["--pitch=".Length..]); }
             else if (arg.StartsWith("--pos=")) { s.Pos = ParseVec3(arg["--pos=".Length..]); }

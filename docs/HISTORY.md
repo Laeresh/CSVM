@@ -8169,3 +8169,19 @@ finished-runner removal. Each was seen to fail: all ten went red under a one-lin
 perturbation (order/timing/count flips), then green on revert (METHOD-9). Verified `.\RunTests.ps1`
 PASS: 303 units (293 + 10), 9/9 engine suites, 11/11 golden hashes identical. `dotnet test` is now
 the first automated instrument for anim event semantics. Plan moved to `docs/plans/` COMPLETE.
+
+**glTF export of the viewer plane (2026-07-30):** the parked `--viewer` aircraft can now be exported
+as a static glTF model — mesh + the currently selected livery texture, with the current damage state
+baked in — for opening in Blender and other tools (see `src/Testing/GltfExporter.cs`). Two triggers:
+the scriptable one-shot `--export-gltf=<path>` (builds the plane, writes, quits; implies `--det` for
+a reproducible file, works under `--headless`) and interactive **F10** in the viewer (timestamped
+`.glb` under the git-ignored `Exports/`). `Export` reads the live scene through a throwaway
+`plane.Duplicate()` so nothing on screen is mutated: it frees the hidden panel/flare `Node3D`s (how
+damage state is baked) and the point-sprite `"lights"` instances, then converts each surface's custom
+`ShaderMaterial` skin to a glTF-serializable `StandardMaterial3D` (painted `albedo_tex` +
+vertex-colour-as-albedo, mirroring `PlaneBuilder.FlareMaterial`). Format follows the path extension
+(`.glb` self-contained default, `.gltf` JSON+bin+PNG). Live particle emitters (smoke/fire/trails) are
+correctly excluded (no animation). New in-engine `gltf-export` suite builds a plane, exports a temp
+`.glb`, and asserts it re-imports with ≥1 textured mesh — the shader-skin conversion round trip.
+Godot API used as planned: `GltfDocument.AppendFromScene`/`WriteToFilesystem`/`AppendFromFile` +
+`GenerateScene`, all returning/taking the signatures the plan assumed.

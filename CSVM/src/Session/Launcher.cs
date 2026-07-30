@@ -54,6 +54,10 @@ public partial class Launcher : Node3D
     // ad-hoc save — see src/Testing/CaptureDirector.cs's entry. Process-scoped: constructed once
     // from the launch spec, never re-armed by a menu relaunch.
     private Testing.CaptureDirector _captureDirector = null!;
+
+    // The --export-gltf= one-shot and F10's ad-hoc glTF save — see src\Testing\GltfExporter.cs's
+    // entry. Constructed once from the launch spec alongside the capture director.
+    private Testing.GltfExporter _gltfExporter = null!;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
@@ -203,6 +207,7 @@ public partial class Launcher : Node3D
             Pads.Disabled = true;
         }
         _captureDirector = new Testing.CaptureDirector(_spec);
+        _gltfExporter = new Testing.GltfExporter(_spec);
         _pendingJoin = _spec.DebugJoin;
 
 
@@ -477,6 +482,18 @@ public partial class Launcher : Node3D
             _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
             return;
         }
+        // F10 in the viewer: export the plane on screen — current livery and damage state baked
+        // in — to a timestamped .glb under the repo's git-ignored Exports/ folder.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F10 })
+        {
+            var projectDir = ProjectSettings.GlobalizePath("res://");
+            var dir = System.IO.Path.GetFullPath(System.IO.Path.Combine(projectDir, "..", "Exports"));
+            System.IO.Directory.CreateDirectory(dir);
+            var path = System.IO.Path.Combine(dir,
+                $"crimsonskies_{_spec.PlaneName}_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.glb");
+            Testing.GltfExporter.Export(_session?.Plane, path);
+            return;
+        }
     }
 
     public override void _Process(double delta)
@@ -499,6 +516,7 @@ public partial class Launcher : Node3D
 
         _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
             _session?.Plane, _menu is { Visible: true });
+        _gltfExporter.Tick(_session?.Plane, GetTree(), _spec);
     }
 
     /// <summary>Instantiates this launch's session node from the current <see cref="_spec"/> and

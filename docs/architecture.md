@@ -142,10 +142,11 @@ instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
-- `src/Testing/Suites.cs` — the nine registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope).
+- `src/Testing/Suites.cs` — the ten registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope, the glTF-export round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
+- `src/Testing/GltfExporter.cs` — exports the viewer plane subtree to glTF (mesh + current livery + baked damage) for `--export-gltf=`/F10; converts shader skins on a throwaway duplicate.
 
 ### `src/Session/` — the launch/session layer
 
@@ -1262,6 +1263,20 @@ camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
 ⚠ `Vec3Arg`/`DirArg`/`SaveScreenshot` are static — call them as `Testing.CaptureDirector.X(...)`,
   not through `_captureDirector`; `FrameCamera`'s orbit-pivot log line is the one call site outside
   the capture/placement paths.
+
+## src/Testing/GltfExporter.cs
+Exports the viewer plane's `Node3D` subtree to a glTF file — mesh + the currently painted livery
+texture, current damage state baked in, no animation. `Export(plane, path)` works on a throwaway
+`plane.Duplicate()`: it frees every hidden `Node3D` (the panel/flare `Visible` toggles are how damage
+is baked) and the point-sprite `"lights"` instances, converts each surface's custom `ShaderMaterial`
+skin to a `StandardMaterial3D` (painted `albedo_tex` + vertex-colour-as-albedo, mirroring
+`PlaneBuilder.FlareMaterial`), then `GltfDocument.AppendFromScene` + `WriteToFilesystem`. Format is
+extension-driven (`.glb` default). Two triggers: the `--export-gltf=` one-shot via the frame-stepped
+`Tick()` (waits for the plane, exports, quits with the write's success as the exit code), and F10 in
+the Launcher.
+⚠ **Export must never mutate the live scene** — all pruning and material overrides happen on the
+  duplicate, so golden screenshots are identical after an export. Convert on the node via
+  `SetSurfaceOverrideMaterial`, never on the shared `ArrayMesh`.
 
 ## src/Session/Launcher.cs
 Main.tscn's root: the once-per-process bootstrap — CLI parse into `_cli`/`_spec`, data-root

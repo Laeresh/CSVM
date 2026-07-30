@@ -18,6 +18,8 @@
 *.screenshot.png
 # F12 in-game screenshots (rendered game frames = game-derived, must not be committed)
 /Screenshots/
+# F10 / --export-gltf plane exports (game-derived geometry + textures, must not be committed)
+/Exports/
 
 # OS / editor cruft
 Thumbs.db

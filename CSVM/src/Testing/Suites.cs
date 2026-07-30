@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
 using Godot;
@@ -66,6 +67,8 @@ public static class Suites
             "per-chapter destructible registry totals", DestructibleCensus));
         into.Add(new TestHarness.Suite("tex-dropin",
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
+        into.Add(new TestHarness.Suite("gltf-export",
+            "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
     }
 
     // ---- pure data -----------------------------------------------------------------------------
@@ -203,6 +206,75 @@ public static class Suites
             plane?.Free();
             textures.Dispose();
         }
+    }
+
+    /// <summary>Exports a built plane to a temp <c>.glb</c> and asserts the file lands and re-imports
+    /// with at least one textured mesh — the round trip the viewer's <c>--export-gltf=</c>/F10 path
+    /// relies on, including that the shader skins convert to a glTF-serializable material.</summary>
+    private static void GltfExport(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var textures = new TextureArchive(texturesPath);
+        Node3D? plane = null;
+        string path = Path.Combine(ctx.ScratchDir, $"gltf-export-{ctx.PlaneName}.glb");
+        try
+        {
+            Directory.CreateDirectory(ctx.ScratchDir);
+            plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
+            ctx.Host.AddChild(plane);
+
+            var err = GltfExporter.Export(plane, path);
+            ctx.Same((long)Error.Ok, (long)err, $"export write result");
+            bool wrote = File.Exists(path) && new FileInfo(path).Length > 0;
+            ctx.Check(wrote, $"exported .glb is present and non-empty path={path}");
+
+            // Re-import the file the exporter just wrote and count the textured meshes that survived
+            // the material conversion — proves the shader skins became serializable StandardMaterials.
+            if (wrote)
+            {
+                var doc = new GltfDocument();
+                var state = new GltfState();
+                var readErr = doc.AppendFromFile(path, state);
+                ctx.Same((long)Error.Ok, (long)readErr, $"re-import read result");
+                var scene = doc.GenerateScene(state) as Node3D;
+                ctx.Check(scene != null, $"re-imported scene has a Node3D root");
+                int textured = scene == null ? 0 : CountTexturedMeshes(scene);
+                ctx.Check(textured >= 1, $"re-imported textured meshes count={textured}");
+                scene?.Free();
+            }
+        }
+        finally
+        {
+            plane?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>How many <see cref="MeshInstance3D"/> in the subtree carry a material with an albedo
+    /// texture — the glTF importer hands each surface back a <see cref="StandardMaterial3D"/>.</summary>
+    private static int CountTexturedMeshes(Node node)
+    {
+        int count = 0;
+        if (node is MeshInstance3D mesh)
+        {
+            for (int i = 0; i < mesh.GetSurfaceOverrideMaterialCount(); i++)
+            {
+                if (mesh.GetActiveMaterial(i) is BaseMaterial3D { AlbedoTexture: not null })
+                {
+                    count++;
+                    break;
+                }
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            count += CountTexturedMeshes(child);
+        }
+        return count;
     }
 
     // ---- needs a chapter world ------------------------------------------------------------------

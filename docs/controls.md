@@ -29,6 +29,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `T` | node-name labels |
 | `F12` | screenshot |
 | `F11` | print the mode's subject placement as ready-to-paste `--pos=` / `--direction=` (in `--viewer`: `--pos=` / `--lookat=`, the orbit pivot) |
+| `F10` | export the plane on screen (current livery + damage) to a timestamped `.glb` under `Exports/` — the `--export-gltf=` twin |
 | `Esc` | quit |
 
 ## `--viewer`
