@@ -210,6 +210,9 @@ public static class Config
             // The gun-ammo testing cap is read only when a plane binds its loadout, which the warmup
             // never does — register it here so --dump-config still documents it.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
+            // The whine mix gain is read only from a live FlightAudio.Update, which the warmup never
+            // drives (no SoundArchive here) — register it here so --dump-config still documents it.
+            GetFloat("flightAudio.whineMixGain", FlightAudio.WhineMixGain);
         }
         catch (Exception e)
         {

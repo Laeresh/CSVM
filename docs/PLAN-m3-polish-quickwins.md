@@ -73,7 +73,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — mechanically-wrong weapon/audio plumbing
 
 21. ☑ `BL-139` Muzzle-flash quad sits in a fixed world plane, not the aircraft's basis
-22. ☐ `BL-159` Wire `WhineMixGain` through `Config` like every other TUNE constant
+22. ☑ `BL-159` Wire `WhineMixGain` through `Config` like every other TUNE constant
 
 ### Wave D — doc drift
 
@@ -329,7 +329,7 @@ basis — one field, two suppliers; do not wire them identically. (b) Fix the st
 `Projectile.cs:132-133` ("round billboards") in the same pass. (c) `Uv1Scale = (-1,1,1)` at `:429`
 mirrors all three sprite types — confirm that was intended for all three before touching it.
 
-## C22 ☐ `BL-159` Wire `WhineMixGain` through `Config`
+## C22 ☑ `BL-159` Wire `WhineMixGain` through `Config`
 
 **Goal.** `flightAudio.whineMixGain` is live-tunable via `config.json` and appears in
 `--dump-config`, following `FlightModel`'s established pattern; the default (0.12) is unchanged.

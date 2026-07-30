@@ -720,8 +720,9 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
 in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `snd_exp_ground_a`.
-⚠ `WhineMixGain` 0.12 (TUNE): don't raise it back — reader "volume" is not a linear mix gain
-  (the original's whine sits 12–18 dB below the raw curve cap); re-derive from a new reference.
+⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
+  reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
+  cap); re-derive from a new reference.
 ⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
   driving `Update`, or the restart hook re-fires propstart.
 ⚠ `MixGain` (1/√N in splitscreen, TUNE) covers only the three loops, never the one-shots.

@@ -8504,3 +8504,20 @@ the plane. The two screenshots confirm it visually (wing-tip flashes horizontal 
 to the banked wing line when rolled). No golden fires a weapon (`--fire` is in none of the manifest's
 args, only `--hold` = pitch/roll/yaw/throttle), so muzzle/impact orientation is off every golden
 frame — hashes unchanged. Full `.\RunTests.ps1` green.
+
+## 2026-07-30 — M3 Wave C C22 `BL-159`: `WhineMixGain` wired through `Config`
+
+`FlightAudio`'s overspeed-whine mix gain (`WhineMixGain` 0.12, `FlightAudio.cs:30`) is now read via
+`Config.GetFloat("flightAudio.whineMixGain", WhineMixGain)` at the `Update` read site, the same
+read-through pattern as `FlightModel`'s tunables (`FlightModel.cs:141`). `WhineMixGain` moved from
+`private` to `internal const` so `Config` can reference the default. `Config.WarmTuningRegistry`
+registers the key directly (same as the existing `weapons.rocketSpeedScale`/`weapons.gunAmmoCap`
+lines) since a throwaway `FlightAudio` needs a `SoundArchive` the warmup doesn't have — `--dump-config`
+now emits `flightAudio.whineMixGain: 0.12` without building one.
+
+Verified: `--dump-config` template includes the new key at its default. Round-trip confirmed with a
+temporary log line (removed after) — setting `flightAudio.whineMixGain: 0.5` in `CSVM/config.json`
+and running `--fly --stage=empty --no-det --screenshot=...` changed the read value from `0.12` to
+`0.5` at the `Update` call site; the override was deleted from `config.json` afterward per the `--det`
+trap (verification DET-8) so it can't leak into a deterministic capture. Full `.\RunTests.ps1`:
+312 units, 12/12 engine suites, 13/13 goldens hash-identical — default-path behaviour unchanged.
