@@ -8567,3 +8567,20 @@ the full trace). `BL-140` is deleted from `backlog.md` (landed). No code changed
 analysis-script only, confirmed by re-reading the diff, not by `RunTests.ps1` (nothing engine-side to
 regress). This was the last open item in `PLAN-m3-polish-quickwins.md`; the plan is now complete and
 moved to `docs/plans/`.
+
+## 2026-07-30 — PLAN-m3-polish-2 scaffolded (Milestone-Polish run)
+
+Selected 14 backlog items under user-chosen criteria (M3 combat look & feel: root-caused or
+fix-shape-known, not blocked on `CAP-nn` captures or future milestones) into
+`docs/PLAN-m3-polish-2.md`: A `BL-183`/`BL-021`/`BL-174` (animation triggers & effect routing), B
+`BL-017`/`BL-041`/`BL-018`/`BL-042` (impacts & surfaces), C `BL-015`/`BL-013`(+`BL-137`/`BL-138`)/
+`BL-014`/`BL-011`/`BL-012` (weapon secondary visuals), D `BL-023`/`BL-007` (destruction bugs).
+Verified during selection: the 11 quickwins items and the six `m3-polishing` fixes
+(`BL-001`–`BL-006`, merge `bea7947` an ancestor of `main`) are landed and were excluded. User
+additions past the default 10: `BL-042` (the collider overlay is `BL-041`'s acceptance instrument,
+so it must draw true first — ordered before B12's verification), `BL-014` (the weapon lab is Wave
+C's test bench), and `BL-011`/`BL-012` (accepted as cockpit-A/B-gated: they stay ◐ until the
+user's verdict, and their Approach opens by asking the user what reads wrong before tuning — the
+user's standing instruction). Noted for cleanup: `backlog.md` still carries stale rows for landed
+`BL-026`/`BL-044`/`BL-159` and a stale pending-merge note on `BL-062`. CLAUDE.md status now names
+the plan.
