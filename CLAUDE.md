@@ -103,7 +103,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 
 **Module map — the per-module index lives in [`docs/architecture.md`](docs/architecture.md), which now opens with it.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12` returns the whole entry. **Never read architecture.md whole** — it is ~110 KB. Read a module's entry before changing it.
 
-- `src/Mech3/` (31) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
+- `src/Mech3/` (40) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
 - `src/Flight/` (32) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
 - `src/Effects/` (3) — particle systems: puffers, the ambient cloud field, precipitation.
 - `src/UI/` (15) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).

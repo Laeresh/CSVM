@@ -48,6 +48,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
+- `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -440,6 +441,18 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 ⚠ `MaxRootLift`'s 16-match cap assumes WHOLE-WORLD node counts — a partial `--node=` build drops
   under the cap and anchors phantom defs, so it must set `SuppressRootLift` (measured on C1's
   `ap_radiotwr`: 95 lifted defs / 91 phantom instances vs 1 / 2 with the lift refused).
+
+## src/Mech3/Anim/
+`AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
+namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
+`AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum.
+⚠ `RestOf`, `_rng`, and `SetSubtreeOpacity` on `AnimRuntime` are `internal` (not `private`)
+  specifically so these motion types can reach them — same-assembly only, no wider exposure
+  intended; don't widen further without a reason.
+⚠ A node carries at most ONE motion per `MotionChannel` (`Transform` or `Opacity`) — a transform
+  motion and an opacity fade coexist on the same node, but two motions on the same channel evict
+  each other (`AnimRuntime.AddMotion`).
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.
