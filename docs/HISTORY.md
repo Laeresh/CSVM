@@ -8381,3 +8381,34 @@ per-group/per-shot breadcrumbs. Verified: a headless stock-Bloodhawk `--fire-roc
 cooldown window — exactly once (`grep -c` on the breadcrumb = 1); full `.\RunTests.ps1` green (303
 unit tests, 11/11 engine suites, 13/13 goldens hash-identical), confirming live-fire cadence is
 unchanged.
+
+**2026-07-30: A3 landed (`BL-025`) — H selects individual pylons even on a uniform-ammo loadout, and
+both weapons auto-advance the instant a slot empties.** Replaced ordnance-*type* cycling with *pylon*
+cycling in `FlightController`. The old `_rocketSel` (index into de-duplicated `_ordnanceTypes`) and
+its `_ordnanceTypes.Length > 1` gate meant all 11 stock loadouts — one hardpoint type each — had
+nothing to cycle. Both fields are gone; a single `_selectedPylon` cursor now doubles as the
+H-selected pylon and the firing cursor. H (`CycleWeaponSelectors`) steps it to the next armed pylon;
+`NextArmedHardpoint` fires from it; and `UpdateRockets` advances the cursor to the next armed pylon
+the moment the fired pylon empties — **on the emptying shot, not on the next trigger pull** (user
+correction) — so the gauge arrow leaves the spent pylon straight away, while still draining the
+selected pylon fully first (`BL-001` order preserved when H is untouched). The same on-empty switch
+was applied to **gun groups** (`UpdateGuns`): when the selected firable group runs dry it hands off to
+the next group with ammo instead of just clicking empty, and the dry cue now sounds only when every
+group is spent. The missile gauge's `Selected`/`Count`/`Type` read the selected pylon directly. The
+stepping is lifted into a new engine-free `WeaponCursor` (`NextArmed`/`NextSelectable` as pure index
+math, shared by both weapons) so it unit-tests without a live node; `FlightController` caches
+`_firableGuns` for the gun cursor's indexed ammo access. Verified: 9 `WeaponCursorTests` (H steps
+0→1→2→3→wrap on uniform ammo, skips empties, drains-then-advances-exactly-one, cursor advances on the
+emptying shot not the next pull, all-empty → `-1` for the dry cue, infinite-ammo, single-slot) —
+covering guns and rockets alike since they share the cursor, and the deterministic stand-in for the
+"scripted H-press run"; a headless Warhawk `--fire-rockets` drain (8 pylons × 3) fired pylon1→2→3→4…
+in order and sounded the all-empty cue exactly once after the 24th shot (A2 preserved); full
+`.\RunTests.ps1` green (312 unit tests, 11/11 engine suites, 13/13 goldens hash-identical). Whether
+the gauge arrow should *sweep* to the new slot rather than snap stays `BL-184` (blocked on `CAP-18`).
+**User playtest-confirmed 2026-07-30** (`PT-05`, now closed): H and G both move the gauge arrows and
+the on-empty auto-switch works at the controls. Added a config-only testing knob
+`weapons.gunAmmoCap` (`Config.GetInt`, default 0 = off) that caps every firable gun group's load so
+the gun hand-off is reachable without draining thousands of stock rounds — verified live on the
+Balmoral (2 firable groups) with `gunAmmoCap: 3`: group 1 drained and handed off to group 2 in one
+short `--fire --no-det` run; it registers in `--dump-config` and drops under `--det` like every other
+tunable (DET-8).

@@ -61,7 +61,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-024` Split gauge colouring: yellow tier for guns only, hardpoints green→red
 2. ☑ `BL-026` Rocket empty-clip cue swallowed by the fire-rate cooldown
-3. ☐ `BL-025` H selects individual hardpoints, even when all carry the same ammo type
+3. ☑ `BL-025` H selects individual hardpoints, even when all carry the same ammo type
 
 ### Wave B — spurious errors, hangs, and lab correctness
 
@@ -142,7 +142,7 @@ last shot and grep the run's log for the cue event firing exactly once per dry s
 existing latch; keep it. The backlog's original line numbers (`:782-793`) predate refactors — the
 live gate is at `:1197-1209`.
 
-## A3 ☐ `BL-025` H selects individual hardpoints, even with uniform ammo
+## A3 ☑ `BL-025` H selects individual hardpoints, even with uniform ammo
 
 **Goal.** H cycles through the plane's individual hardpoints (each pylon counts for itself, and its
 slot shows on the missile gauge's arrow), regardless of whether the pylons carry different ammo

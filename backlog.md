@@ -27,7 +27,7 @@ table outlive the landing.
 
 | Finding | Branch | Change | Confirm in the cockpit |
 |---|---|---|---|
-| **`BL-001`** Rocket advances to the next pylon after one shot (round-robin) instead of draining the selected pylon | `fix/rocket-drain-pylon` | `FlightController.NextArmedHardpoint`: keep the cursor on the just-fired pylon (`_nextPylon = idx`) instead of `+1`; the scan skips it once dry | wing empties one pylon fully, in order, before the next starts (see "Rocket firing order" under Feature backlog) |
+| **`BL-001`** Rocket advances to the next pylon after one shot (round-robin) instead of draining the selected pylon | `fix/rocket-drain-pylon` | `FlightController.NextArmedHardpoint`: keep the cursor on the just-fired pylon (`_selectedPylon = idx`) instead of `+1`; the scan skips it once dry | wing empties one pylon fully, in order, before the next starts (see "Rocket firing order" under Feature backlog) |
 | **`BL-002`** A rocket that reaches max range vanishes silently | `fix/rocket-detonate-at-range` | `Projectile._PhysicsProcess`: at range-expiry a **rocket** calls `Impact(weapon, pos, null)` (default-surface effect+sound); guns still expire silently | the `default` IMPACT effect reads acceptably as a mid-air self-destruct (not a ground/water splash floating in the sky) |
 | **`BL-003`** Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
 | **`BL-004`** Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
@@ -109,18 +109,6 @@ table outlive the landing.
   `sghangar_doors` as an intended case, but the shipped C2 data does not make them destructible — an
   aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
   passage" is its own playtest.
-
-- `BL-010` **Hardpoint ordnance won't cycle by key or pad (H / D-pad Right) — not a code defect.** The input is
-  wired and does mutate state (`FlightController.RocketSelectPressed` → `CycleWeaponSelectors`), but it
-  is gated `_ordnanceTypes.Length > 1`, and all 11 stock loadouts carry a single hardpoint type
-  (`wep_06`), so after dedup there is exactly one ordnance type and nothing to cycle. (Gun-group select
-  **G** works because several planes have 2+ firable gun groups.) The real question is **design**, the
-  same one flagged in "Rocket firing order": does the original let the player select an individual
-  **hardpoint**, or only drain them in pylon order? Meaningful mixed-ordnance cycling arrives with mixed
-  loadouts (the M4 gun/hardpoint configurator, Feature backlog). Nothing to fix in M3.
-  **⚠ Reopened by pass 2 (2026-07-25):** the user says per-hardpoint *selection* should work (H selects
-  a pylon; auto-advance only when the selected one empties) — so this is no longer "nothing to fix." See
-  "Playtest pass 2" finding 15 below.
 
 - `BL-183` **C3 spiderweb: wrong-trigger bug, not a conflicting-animation bug — `EXECUTION_BY_RANGE` is
   silently dropped.** There is exactly **one** animation definition anywhere that touches `spiderweb`
@@ -298,17 +286,6 @@ work is below.
     related bug; do not read one as the other. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
 
 **Gauges, selectors & cues (findings 6, 7, 9).**
-15. `BL-025` **Hardpoint selection should work — user correction (finding 7).** Each pylon counts for itself; **H
-    should select an individual hardpoint**, with auto-advance only when the selected one empties. H is
-    currently gated `_ordnanceTypes.Length > 1` and dedups to one type → nothing to cycle. *Redesign:* H
-    cycles **pylons**, not ordnance types; the selected pylon drains, then auto-advances. Composes with the
-    `fix/rocket-drain-pylon` order fix. ⚠ Fidelity: confirm the original truly offers per-hardpoint
-    *selection* (vs fixed-order draining) before building any indicator — the user believes it does.
-    **Re-confirmed by the user 2026-07-30 as a decision, not a question:** cycling must work even
-    when every hardpoint carries the same ammo type. Scheduled as `PLAN-m3-polish-quickwins` item A3.
-    Whether the gauge arrow *animates* to the new slot is separate — `BL-184`, blocked on `CAP-18`.
-    *Playtest after fix:* confirm H selects an individual pylon (each counts for itself), auto-advancing
-    only when the selected one empties. `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
 16. `BL-026` **Rocket empty-clip cue never heard (finding 6b).** The cue plays on a dry pull
     (`FlightController.cs:789-793`), but the dry branch is only reached when `_rocketCooldown <= 0`
     (`:782`) — a pull within 1 s of the last shot returns early and stays silent. *Investigate:* is the

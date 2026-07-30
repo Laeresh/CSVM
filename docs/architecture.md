@@ -65,6 +65,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
+- `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
@@ -539,6 +540,17 @@ Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
   fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
 ⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
   (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
+
+## src/Flight/WeaponCursor.cs
+The ammo-slot selector as pure index math, shared by rocket hardpoints (H, `_selectedPylon`) and
+firable gun groups (G, `_gunSel`), lifted out of `FlightController` so it unit-tests without a live
+node (`WeaponCursorTests`). `NextArmed` is the firing cursor — the selected slot while it has rounds,
+else the next armed slot forward-wrapping (`-1` when all empty); `NextSelectable` is where the manual
+selector moves — the next armed slot strictly after the cursor, skipping empties. Each slot is its own
+position regardless of ordnance/weapon type, so H cycles even a uniform loadout (all 11 stock planes
+carry one hardpoint type). `FlightController` owns the two cursor fields and the gauge `Selected`
+feeds and advances each cursor the instant its slot empties (in `UpdateRockets`/`UpdateGuns`); this
+file is stateless.
 
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated

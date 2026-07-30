@@ -104,7 +104,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 **Module map — the per-module index lives in [`docs/architecture.md`](docs/architecture.md), which now opens with it.** Find the module in that index, then read only its `##` entry: `Grep "## src/Flight/FlightModel.cs" -A 12` returns the whole entry. **Never read architecture.md whole** — it is ~110 KB. Read a module's entry before changing it.
 
 - `src/Mech3/` (40) — extraction readers, the GameZ→Godot builders, and the animation runtime: install → live world.
-- `src/Flight/` (32) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
+- `src/Flight/` (33) — the aircraft as a flying, shooting, damageable thing, plus its HUD and stunt mode.
 - `src/Effects/` (3) — particle systems: puffers, the ambient cloud field, precipitation.
 - `src/UI/` (15) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
@@ -183,6 +183,6 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md);
 
-**Active plan: [`docs/PLAN-m3-polish-quickwins.md`](docs/PLAN-m3-polish-quickwins.md)** (started 2026-07-30) — 11 backlog items (quick-win/code-verifiable + user-added `BL-025`) in waves A/B/C/D; wave A in progress. **Next:** A3 (`BL-025`). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
+**Active plan: [`docs/PLAN-m3-polish-quickwins.md`](docs/PLAN-m3-polish-quickwins.md)** (started 2026-07-30) — 11 backlog items (quick-win/code-verifiable + user-added `BL-025`) in waves A/B/C/D; wave A complete. **Next:** wave B — B12 (`BL-049`) first (it hardens the scripted-run harness). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

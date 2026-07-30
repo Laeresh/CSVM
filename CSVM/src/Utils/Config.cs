@@ -207,6 +207,9 @@ public static class Config
             // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
             // register it here so --dump-config still documents the weapon-fire tunable.
             GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
+            // The gun-ammo testing cap is read only when a plane binds its loadout, which the warmup
+            // never does — register it here so --dump-config still documents it.
+            GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
         }
         catch (Exception e)
         {
