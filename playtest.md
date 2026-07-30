@@ -131,12 +131,20 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
 
+- `PT-05` **Surface-class impacts (`BL-041` landed).** The area-quorum vote is measured good
+  (census + scripted impact runs: water → splash, `nycity` → building hit, the wooden dock → plain
+  ricochet), but nobody has *flown* it. *Look for:* gunfire into a C2 building gives a ricochet,
+  not a splash; gunfire into water gives the splash; no building sounds wet.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. ⚠ Do not judge by the
+  **C** collider overlay until `BL-042` lands — its wireframes draw offset from the geometry, so
+  read the impact effects and sounds, not the colours.
+
 ---
 
 ## Everything else
 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
 `*Playtest after fix:*` line — the weapons re-tests (`BL-011`–`BL-028`), the inspect-tool
-follow-ups (`BL-041`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
+follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the C3 spiderweb trigger (`BL-183`). Do not re-add them
 here; the entry brings its own test when the fix lands.

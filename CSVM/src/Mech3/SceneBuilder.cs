@@ -455,6 +455,34 @@ void fragment() {
         }
     }
 
+    // Total triangulated area of one polygon, triangulated exactly as EmitPolygon does
+    // (strip order for tri_strips, a fan otherwise) — a strip's raw index list is not an
+    // outline, so fanning it would measure the wrong shape.
+    private static float PolygonArea(GameZMesh mesh, GameZPolygon poly)
+    {
+        int n = poly.VertexIndices.Count;
+        if (n < 3)
+            return 0f;
+        float Tri(int a, int b, int c)
+        {
+            var va = mesh.Vertices[poly.VertexIndices[a]];
+            return 0.5f * (mesh.Vertices[poly.VertexIndices[b]] - va)
+                .Cross(mesh.Vertices[poly.VertexIndices[c]] - va).Length();
+        }
+        float area = 0f;
+        if (poly.TriangleStrip)
+        {
+            for (int i = 0; i + 2 < n; i++)
+                area += Tri(i, i + 1, i + 2);
+        }
+        else
+        {
+            for (int i = 1; i + 1 < n; i++)
+                area += Tri(0, i, i + 1);
+        }
+        return area;
+    }
+
     private static string Sanitize(string name)
     {
         // Godot node names must not contain . : @ / " %
@@ -558,33 +586,46 @@ void fragment() {
         ColliderCount++;
     }
 
-    /// <summary>The dominant surface class of a mesh's colliding geometry — the majority material
-    /// texture, classified by name (water: <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>;
-    /// buildings: <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>). Null =
-    /// terrain / unclassified (the default IMPACT variant). Cached per mesh index.</summary>
+    /// <summary>The dominant surface class of a mesh's colliding geometry — an area-weighted
+    /// vote over its polygons' material textures, classified by name (water:
+    /// <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>; buildings:
+    /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>). Unclassified
+    /// polygons abstain but still count toward the whole: the winning tag must cover at least
+    /// half the mesh's total surface area, otherwise the mesh is null = terrain / unclassified
+    /// (the default IMPACT variant). A count-based vote that skipped abstentions let a single
+    /// stray polygon tag a whole mesh — half of C2's tagged meshes were tagged on a minority
+    /// of their own polygons. Cached per mesh index.</summary>
     private string? SurfaceForMesh(int meshIndex)
     {
         if (_surfaceCache.TryGetValue(meshIndex, out var cached))
             return cached;
-        var counts = new Dictionary<string, int>();
-        string? best = null;
-        int bestN = 0;
-        foreach (var poly in _gamez.Meshes[meshIndex].Polygons)
+        var mesh = _gamez.Meshes[meshIndex];
+        var areas = new Dictionary<string, float>();
+        float total = 0f;
+        foreach (var poly in mesh.Polygons)
         {
+            float area = PolygonArea(mesh, poly);
+            total += area;
             if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
                 continue;
-            var tex = _gamez.Materials[poly.MaterialIndex].TextureName;
-            var tag = ClassifySurface(tex);
+            var tag = ClassifySurface(_gamez.Materials[poly.MaterialIndex].TextureName);
             if (tag == null)
                 continue;
-            counts.TryGetValue(tag, out int n);
-            counts[tag] = ++n;
-            if (n > bestN)
+            areas.TryGetValue(tag, out float a);
+            areas[tag] = a + area;
+        }
+        string? best = null;
+        float bestArea = 0f;
+        foreach (var (tag, a) in areas)
+        {
+            if (a > bestArea)
             {
-                bestN = n;
+                bestArea = a;
                 best = tag;
             }
         }
+        if (total <= 0f || bestArea < 0.5f * total)
+            best = null;
         _surfaceCache[meshIndex] = best;
         return best;
     }

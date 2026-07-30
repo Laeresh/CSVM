@@ -8610,3 +8610,22 @@ present since `BL-025`, `origin/main` before this change too) trips the repo's b
 unconditionally — unrelated to this item and out of scope for a `WeaponLab.cs`-only change, so
 verification substituted the two commands above for the gated ones. The golden-image manifest has
 no `--weapon-lab`/`--weapon-fire` entries, so this change cannot affect any of the 11 pinned hashes.
+
+## 2026-07-30 — M3 Wave B B12 BL-041: surface-classification vote redesigned (area quorum)
+
+`SceneBuilder.SurfaceForMesh` no longer lets a texture-name minority tag a mesh: the count vote
+that skipped unclassified polygons is replaced by an area-weighted vote (polygons triangulated
+exactly as `EmitPolygon` — strip order for tri_strips, a fan otherwise) with a quorum — the winning
+class must cover ≥50% of the mesh's total polygon area, unclassified area counting as abstentions.
+Chosen over a count quorum because area is the static analogue of `--tex-census` coverage and it
+keeps real buildings a count quorum would drop (C1 mesh 433: buildings on 78% of area, 16% of
+polygons). Measured with the updated `analysis/surface-classification/census.py` (old numbers
+reproduced first: C2 96 of 190 minority-tagged, C1 42/109, C4 70/106): tags now C2 190→89
+(57 water, 32 buildings), C1 109→75, C4 106→39; every reclassification inspected is a former
+mis-tag — the `puffertexture` fire mesh ("water" on 1/76 via its splash poly), shoreline tiles,
+docks, the boardwalk, cranes, tugs, water towers. In-engine: three scripted `--det` dives in C2
+read the impact breadcrumbs — open water `g29239` 8/8 Water + `splash1.flt`, `nycity` 8/8
+Buildings, reclassified dock `g36347` 8/8 Default, no splash. `RunTests.ps1` green (312 units,
+12/12 suites, 13/13 goldens hash-identical — the tags draw nothing). Known accepted residual in
+FINDINGS.md: huts whose walls match no pattern fall to default. `BL-041` deleted from backlog; the
+at-the-controls read is `playtest.md` `PT-05` (overlay colours unreadable until `BL-042`/B14).

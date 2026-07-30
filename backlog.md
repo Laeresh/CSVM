@@ -471,30 +471,6 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-041` **Surface classification mis-tags buildings as water and water as buildings — and it is a
-  GAMEPLAY bug, not an overlay one.** Found via D35's collider wireframes in C2, where some
-  buildings drew in the water colour and some water tiles in the building colour. `ColliderOverlay`
-  colours by `SceneBuilder.SurfaceMeta` and **`Projectile` picks the impact sound and effect from
-  that same metadata**, so a mis-tagged building answers a hit with a water splash and the water
-  impact sound. `SurfaceForMesh` votes over a mesh's polygons but **skips unclassified ones**, so
-  the winner is a majority of whatever matched a texture-name pattern rather than a majority of the
-  mesh: measured, **96 of C2's 190 tagged meshes (51 %) are tagged on a minority of their own
-  polygons**, the thinnest being `water` on **1 of 76**. C1 42 of 109, C4 70 of 106. Full numbers
-  and the replication script: `analysis/surface-classification/`.
-  ⚠ Traps: **the `soil` field on every material looks like the answer and is not** — it is almost
-  entirely `Default` (C2 has one `Water` material out of 484) and its other values (`Mech`,
-  `NoSlip`, `Silt`) are MechWarrior 3 soil types inherited from mech3ax, so reading it would
-  classify essentially nothing. **The design document does not describe the mechanism either** — it
-  confirms only that impact effect and sound follow the surface hit; searched and recorded as a
-  dead end, not a gap. Do not "fix" this by widening the name patterns without measuring: the vote
-  itself is what is broken, and `--tex-census` is the instrument for checking which textures
-  actually cover a surface. Do not read the overlay as the defect — it is the instrument that
-  found it, and it was accurate.
-  *Playtest after fix:* gunfire into a C2 building should give a ricochet and debris, not a splash;
-  gunfire into water should give the splash; no building should sound wet.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire`, press **C** with `--collision` to see which
-  surfaces the engine believes are which. *Blocks:* closing the surface-classification item.
-
 - `BL-042` **Collider wireframes sit offset from their meshes, all on the same axis — the wireframe only,
   not the colliders.** Seen in D35's overlay. The user confirmed in flight that the collision
   itself is correct: the plane flies *through* the drawn wireframe where the real collider is not,

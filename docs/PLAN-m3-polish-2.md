@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — impacts & surfaces
 
 11. ☐ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist
-12. ☐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa)
+12. ◐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); the at-the-controls overlay read stays owed until B14 draws true
 13. ☐ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
 14. ☐ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
 
@@ -239,7 +239,7 @@ look magnitude is TUNE — the mechanism is the deliverable. (c) `BL-041`'s mis-
 if B12 hasn't landed yet, a correct sea collider can still classify wrong — verify tag, not just
 hit.
 
-## B12 ☐ `BL-041` Fix the surface-classification polygon vote
+## B12 ◐ `BL-041` Fix the surface-classification polygon vote
 
 **Goal.** A C2 building answers gunfire with ricochet/debris, water with a splash; no building
 sounds wet. `ColliderOverlay` colours agree with reality.
