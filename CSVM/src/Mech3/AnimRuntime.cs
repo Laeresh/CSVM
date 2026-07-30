@@ -232,6 +232,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// case LIGHT_STATE is tracked but never rendered.</summary>
     public WorldLights? Lights;
 
+    // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
+    // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
+    // pin the whole sequence. Any future WeaponHit/crash handler's randomness must route through
+    // this same _rng, or a replay stops being identical the day the handler lands.
+    internal Random _rng = new();
+
     /// <summary>ANIMATION_ROOT_NAME matches above this count are generic per-object roots
     /// ('healthy' appears 217Ã— in C1) â€” those defs belong to game objects (planes, zeppelin
     /// parts), not to world nodes. The genuine building templates lift â‰¤ 9 instances.</summary>
@@ -345,12 +351,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
     // and a normal bootstrap's ambient toggle is a no-op rather than a second bootstrap.
     private bool _ambientStarted;
-
-    // The runtime's dice: RANDOM_WEIGHT verdicts, SOUND_GROUPS one-shot picks, crash-debris
-    // scatter. One field rather than scattered GD.Randf() calls so the session's master seed can
-    // pin the whole sequence. Any future WeaponHit/crash handler's randomness must route through
-    // this same _rng, or a replay stops being identical the day the handler lands.
-    internal Random _rng = new();
 
     private int? _seed;
 
@@ -1006,6 +1006,43 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         inst.Health = inst.MaxHealth;
         inst.Status = DestructibleRegistry.State.Healthy;
         inst.DamageStage = 0;
+    }
+
+    // ---- state application ----
+    /// <summary>The node's authored pose, remembered the first time anything moves it, so
+    /// every pose op stays an offset from the rest pose rather than compounding.</summary>
+    internal Transform3D RestOf(Node3D node)
+    {
+        if (!_rest.TryGetValue(node, out var rest))
+            _rest[node] = rest = node.Transform;
+        return rest;
+    }
+
+    // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
+    // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
+    // alpha into one would fade every other node that happens to use it. Meshes whose shader
+    // has no alpha path (opaque variants, where SceneBuilder deliberately omits the uniform)
+    // silently ignore the parameter, which is correct â€” every opaque target the data touches
+    // asks for 1.0 â€” but a genuine partial opacity landing on one is counted, not swallowed.
+    internal void SetSubtreeOpacity(Node3D node, float alpha)
+    {
+        if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
+            return;
+        _opacity[node] = alpha;
+
+        // Colliders default to enabled, so an untracked root is treated as currently collidable;
+        // walk the subtree only on a genuine crossing of the invisibility threshold.
+        bool collidable = alpha > OpacityCollisionEpsilon;
+        bool wasCollidable = !_opacityCollidable.TryGetValue(node, out bool tracked) || tracked;
+        if (wasCollidable != collidable)
+        {
+            SetCollidersEnabled(node, collidable);
+        }
+        _opacityCollidable[node] = collidable;
+
+        int applied = ApplyOpacity(node, alpha);
+        if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
+            Count("ObjectOpacityState(no alpha path)");
     }
 
     private static string Sample(List<string> shown, int total) =>
@@ -2687,16 +2724,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return _matcherCache[pattern] = match;
     }
 
-    // ---- state application ----
-    /// <summary>The node's authored pose, remembered the first time anything moves it, so
-    /// every pose op stays an offset from the rest pose rather than compounding.</summary>
-    internal Transform3D RestOf(Node3D node)
-    {
-        if (!_rest.TryGetValue(node, out var rest))
-            _rest[node] = rest = node.Transform;
-        return rest;
-    }
-
     // The *_STATE poses use the same absolute-in-parent-frame convention as
     // OBJECT_MOTION_FROM_TO â€” see FromToMotion's remarks for the evidence. OBJECT_TRANSLATE_STATE
     // carries an explicit RELATIVE flag (false in all 1143 uses in this install) and
@@ -2724,33 +2751,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         var rest = RestOf(target);
         target.Basis = rest.Basis.Orthonormalized().Scaled(scale);
         _opsApplied++;
-    }
-
-    // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
-    // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
-    // alpha into one would fade every other node that happens to use it. Meshes whose shader
-    // has no alpha path (opaque variants, where SceneBuilder deliberately omits the uniform)
-    // silently ignore the parameter, which is correct â€” every opaque target the data touches
-    // asks for 1.0 â€” but a genuine partial opacity landing on one is counted, not swallowed.
-    internal void SetSubtreeOpacity(Node3D node, float alpha)
-    {
-        if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
-            return;
-        _opacity[node] = alpha;
-
-        // Colliders default to enabled, so an untracked root is treated as currently collidable;
-        // walk the subtree only on a genuine crossing of the invisibility threshold.
-        bool collidable = alpha > OpacityCollisionEpsilon;
-        bool wasCollidable = !_opacityCollidable.TryGetValue(node, out bool tracked) || tracked;
-        if (wasCollidable != collidable)
-        {
-            SetCollidersEnabled(node, collidable);
-        }
-        _opacityCollidable[node] = collidable;
-
-        int applied = ApplyOpacity(node, alpha);
-        if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
-            Count("ObjectOpacityState(no alpha path)");
     }
 
     // Any still-visible node named like a destroyed variant that no definition touched:

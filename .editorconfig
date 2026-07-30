@@ -101,6 +101,9 @@ dotnet_diagnostic.SA1214.severity = warning
 dotnet_diagnostic.SA1215.severity = none
 # conflicts with file-scoped namespaces (csharp_style_namespace_declarations above)
 dotnet_diagnostic.SA1200.severity = none
+# fires unconditionally regardless of the blanket severity=none default above; this
+# repo doesn't mandate XML doc comments, so it's permanent noise, not a defect.
+dotnet_diagnostic.SA0001.severity = none
 
 [*.{tscn,tres,gd,godot}]
 insert_final_newline = false

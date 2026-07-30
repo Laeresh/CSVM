@@ -7,7 +7,7 @@
           {
             "type": "command",
             "shell": "powershell",
-            "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($j.tool_input.command -match 'RunTests\\.ps1|dotnet\\s+test') { dotnet format 'CSVM/CSVM.csproj' --verbosity quiet }; exit 0",
+            "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($j.tool_input.command -match 'RunTests\\.ps1|dotnet\\s+test|git\\s+commit') { dotnet format 'CSVM/CSVM.csproj' --verbosity quiet; $buildOutput = dotnet build 'CSVM/CSVM.csproj' --verbosity quiet --nologo -t:Rebuild 2>&1; $remaining = $buildOutput | Select-String -Pattern 'SA\\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }; if ($remaining) { $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }; [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.'); exit 2 } }; exit 0",
             "timeout": 300,
             "statusMessage": "dotnet format before tests..."
           }
