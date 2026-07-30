@@ -147,11 +147,11 @@ you've already ruled out so it isn't re-chased.>
 what NOT to touch if that's a live risk.>
 
 **Model recommendation.** <Which model tier should execute this item, by name without a version
-number (e.g. haiku / sonnet / opus / fable), with a one-line why — mechanical or exploratory work goes to a
+number (e.g. sonnet / opus / fable), with a one-line why — mechanical or exploratory work goes to a
 cheaper model, judgement-heavy or high-blast-radius work to a stronger one. Optionally suffix a
 reasoning-effort override when the item clearly warrants one (e.g. "sonnet, low effort" for a
 mechanical fan-out); omit it to inherit the session default — don't invent a tier you can't
-justify.>
+justify. Never recommend haiku.>
 
 **Verify.** <The specific check that proves it: the exact capture/pose/command, plus the regression
 surface. "An unchanged number is not evidence unless you've seen it able to fail" — take a baseline
