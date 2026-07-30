@@ -70,7 +70,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ Probe/dump wrappers → `src/Testing/ProbeRunner`
 2. ☑ Screenshot pipeline → `src/Testing/CaptureDirector`
 3. ☑ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
-4. ☐ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
+4. ☑ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
 5. ☐ Weather build + per-frame block → `src/Session/WeatherRig`
 6. ☐ Window-hide → `src/Utils/ScriptedWindow`
 
@@ -162,7 +162,7 @@ paint-RNG reorder.
 **⚠ Traps.** `NewPaintRng` draw order feeds pinned liveries — do not change when or how many times
 the rng is constructed or advanced. `SchemeFor` is per-player-index; keep the index math verbatim.
 
-## A4 ☐ Effect/crash stage factories → `src/Session/WorldEffectsFactory`
+## A4 ☑ Effect/crash stage factories → `src/Session/WorldEffectsFactory`
 
 **Goal.** `BuildEffectStage` ×2, `BuildWorldEffectsRuntime`, `EnsureWorldEffects`,
 `BuildFlightCrashRuntime`, `CollectRestPoses`/`CollectVisibility`, `BuildCrashAnchorSet`, and the

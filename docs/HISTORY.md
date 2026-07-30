@@ -7949,3 +7949,20 @@ top of `StartSession`, from the live `_spec` — never cached across a menu rebu
 behavior reorder — the paint-RNG construction order/count and the per-player-index math in
 `SchemeFor` were kept verbatim (the plan's two named traps). Verified: `.\RunTests.ps1` PASS — 293
 units, 9/9 suites, 11/11 goldens hash-identical, including every foggy/livery-bearing chapter shot.
+
+**PLAN-planeviewer-split A4 landed (2026-07-30): effect/crash stage factories → `src/Session/WorldEffectsFactory.cs`.**
+`BuildEffectStage` (×2), `BuildWorldEffectsRuntime`, `EnsureWorldEffects`, `BuildFlightCrashRuntime`,
+`CollectRestPoses`/`CollectVisibility`, `BuildCrashAnchorSet`, and the static name tables
+(`EffectTemplateRoots`/`EffectAnimNames`/`EffectStageRoots`/`CrashAnchorNodes`/`EffectRuntimeTtl`)
+moved off `PlaneViewer` verbatim into a new `WorldEffectsFactory` class, constructed once per session
+(`_worldEffectsFactory`, top of `StartSession`, same lifetime as `_liveryResolver`/`_spawnPicker`)
+from `(_spec, _worldRoot, playerPositionFunc)` — the player-position lambda that used to live inline
+in `BuildWorldEffectsRuntime` moved into the ctor call instead. Per the plan's already-decided design,
+the factory holds the lazily-built world-effects runtime itself (its own `_worldEffects` field,
+unmirrored on `PlaneViewer` — the runtime node is freed by `_worldRoot.QueueFree()` on `ReturnToMenu`
+regardless, and the factory itself is rebuilt fresh next session same as its A3 siblings). Pure move,
+no behavior reorder. Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens
+hash-identical; plus a manual `--freecam --chapter=C1 --destroy=ap_h2otwr1` run (world-effects runtime
+18/18 templates staged, `ap_h2otwr1` HP 60→0 DESTROYED, death sequence ran) and a manual
+`--freecam --chapter=C1 --effects-test` run (28/28 effect names resolved, 16 built a puffer) — both
+match the pre-move report shape.

@@ -1540,16 +1540,14 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   is scheduled (t≈2.2 s), so it needs the clock ticked — and ticking an out-of-tree world spams
   `!is_inside_tree` (global-transform reads). Swap/col are measured pre-tick (immediate post-death),
   debris post-tick; being in-tree also makes positions real (no more C23 (0,0,0) trap).
-⚠ `BuildWorldEffectsRuntime` (D32) builds the one world-effects runtime: a hidden `world_effects`
-  stage of the `EffectStageRoots` gamez templates + an `AnimRuntime` bound to `EffectAnimNames`'
-  closure, wired to `ProjectilePool.EffectSink` and the world runtime's `ExternalEffect`. Built only
-  in `--fly` (and `--effects-test`), needs the session textures kept open (they already are, for the
-  crash runtime). Outside flight it is built ON DEMAND through `EnsureWorldEffects` — `--destroy` at
-  build time, the world damage lab on its first damage action — which is the one place that wires
-  `ExternalEffect`, so a plain `--freecam` regression still builds nothing extra.
-  `--effects-test` (`RunEffectsTest`) is its headless verify: plays each effect at the
-  camera point, seeds the RNG for reproducibility, `StopAll`s between names (they share `trailpuffer2`),
-  and reports resolve✓ + puffer-built count (WORLD-12) to `./.scratch/effects_test.txt`.
+⚠ **The effect/crash stage factories moved out** (PLAN-planeviewer-split A4):
+  `BuildWorldEffectsRuntime`/`EnsureWorldEffects`/`BuildFlightCrashRuntime` and the effect/crash-anchor
+  name tables → `Session.WorldEffectsFactory` (`_worldEffectsFactory`, constructed at the top of
+  `StartSession` alongside `_liveryResolver`). `--effects-test` (`RunEffectsTest`, still in
+  `ProbeRunner`) is its headless verify: plays each effect at the camera point, seeds the RNG for
+  reproducibility, `StopAll`s between names (they share `trailpuffer2`), and reports resolve✓ +
+  puffer-built count (WORLD-12) to `./.scratch/effects_test.txt`. See
+  `src/Session/WorldEffectsFactory.cs`'s entry for the runtime-ownership split.
 ⚠ `TriggerDestroy` (`--destroy=<name>`, F42) kills every destructible whose def/anim/anchor-`cs_name`
   contains the name (deduped to authoritative anchors, capped 64) via `DamageAt` — the swap fires
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
@@ -1783,6 +1781,27 @@ Static, spec-free lookups over a `SessionSpec`'s plane roster (PLAN-planeviewer-
 verbatim off `PlaneViewer`): `PlaneFor(spec, index)`, `PlaneDisplayName(stats)`, `Humanize(s)`.
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
+
+## src/Session/WorldEffectsFactory.cs
+Builds the impact/destruction effect stages and the per-player crash runtime
+(PLAN-planeviewer-split A4, moved verbatim off `PlaneViewer`): the world-effects runtime (D32) and
+`BuildFlightCrashRuntime`. Constructed once per session (`_worldEffectsFactory`, same lifetime as
+`LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`
+— the ctor closure over `PlaneViewer`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
+in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`.
+⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
+  lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
+  there); `PlaneViewer` no longer mirrors that reference — `_worldRoot.QueueFree()` on `ReturnToMenu`
+  already frees the runtime node, and the factory itself is discarded and rebuilt fresh next
+  `StartSession`, same as `LiveryResolver`/`SpawnPicker` (neither of which is explicitly nulled on
+  teardown either). Do not add a `PlaneViewer`-side cache of the runtime "for symmetry" — it would be
+  a second place to keep in sync with the factory's.
+⚠ `BuildEffectStage`, `BuildCrashAnchorSet` and `EffectAnimNames` are `public static` (no session
+  state) — `PlaneViewer`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
+  them as `Session.WorldEffectsFactory.X`, not through the instance.
+⚠ `BuildWorldEffectsRuntime`/`EnsureWorldEffects`/`BuildFlightCrashRuntime` read `_spec.DebugAnim` and
+  `_worldRoot` off the factory instance instead of a passed session — same values, same lifetime, just
+  no longer re-passed at every call site.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;
