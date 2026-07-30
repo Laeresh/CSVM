@@ -8444,6 +8444,8 @@ stopping at the plane root, 6/6); `--debug-nodelab=node=player_bhawk` selects it
 mesh lab binds all 49 of the plane's surfaces (`mesh lab on 'player_bhawk': 49 shaded`). The scoped
 light's own A/B pixel diff is not scriptable — `MeshLab.AttachScoped` applies geometry overrides but
 defers lighting to the interactive slider path (`applyLighting:false`), a pre-existing harness limit,
-so the binding log is the acceptance evidence and the at-the-controls light check moves to `PT-05`.
-Freecam is untouched (its `ExtraRoots` stays empty → byte-identical pick path, 0 errors). Full
-`.\RunTests.ps1` green (312 unit tests, 12/12 engine suites, 13/13 goldens hash-identical, none moved).
+so the binding log is the acceptance evidence and the at-the-controls light check was owed as `PT-05`
+(**confirmed at the controls 2026-07-30**: the light sliders shade the selected plane, not the world
+— `PT-05` closed). Freecam is untouched (its `ExtraRoots` stays empty → byte-identical pick path,
+0 errors). Full `.\RunTests.ps1` green (312 unit tests, 12/12 engine suites, 13/13 goldens
+hash-identical, none moved).
