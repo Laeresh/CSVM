@@ -110,7 +110,7 @@ public sealed class WorldBuilder
 
     // The horizontal overcast DECK — the sheet covering the whole map at one altitude, as
     // opposed to the cloud1/cloud2 sprites. Split out of the static world (into CloudDeck) so
-    // PlaneViewer can make it follow the player. In C1 it is 144 top-level 1024-unit tiles at
+    // GameSession can make it follow the player. In C1 it is 144 top-level 1024-unit tiles at
     // y=960 covering the whole map (each a partition-referenced Object3d leaf).
     //
     // Classified STRUCTURALLY, not by texture. The old rule was
@@ -257,7 +257,7 @@ public sealed class WorldBuilder
     public int ScrollingModelCount => _scene.ScrollingModelCount;
 
     /// <summary>The overcast deck as a separate node so the caller can make it follow the
-    /// player (see PlaneViewer): the opaque overcast sheet tracks the plane and flips
+    /// player (see GameSession): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its
     /// original altitude; null if the world has no map-covering deck (C1B/C2/C3/C5).</summary>
     public Node3D? CloudDeck { get; private set; }
@@ -309,7 +309,7 @@ public sealed class WorldBuilder
 
         var root = new Node3D { Name = worldName };
         // The cloudlayer deck is collected into its own node (kept a child of the world root at
-        // identity, so its world-space tile geometry stays put) that PlaneViewer moves to follow
+        // identity, so its world-space tile geometry stays put) that GameSession moves to follow
         // the player; everything else goes into the static world root.
         var deck = new Node3D { Name = "cloud_deck" };
 
@@ -570,7 +570,7 @@ public sealed class WorldBuilder
     /// <summary>
     /// The other half of <see cref="HideUnplacedEntities"/>: restores anything that has since moved
     /// off the world origin, because moving is proof that a definition owns it after all. Call
-    /// repeatedly (PlaneViewer polls it once a second) — an entity leaves the origin whenever its
+    /// repeatedly (GameSession polls it once a second) — an entity leaves the origin whenever its
     /// motion happens to start, and for an OnCall definition that can be at any time, so there is
     /// no deadline after which it is safe to stop asking. Costs one vector compare per node still
     /// hidden, and each one drops out of the list for good once restored.
@@ -628,7 +628,7 @@ public sealed class WorldBuilder
     /// <c>zone2</c> request there matched no child, the skip predicate below skipped both, and
     /// C5 built an empty dome. An absent zone therefore falls back to the horizon's first zone
     /// child, mirroring <see cref="Flight.WeatherState.ResolveZone"/>. In the normal path
-    /// PlaneViewer has already resolved the zone against the mission's weather.json and this
+    /// GameSession has already resolved the zone against the mission's weather.json and this
     /// fallback is a no-op; it exists so a mission with no weather.json still gets a dome.</para>
     /// </summary>
     public Node3D? BuildHorizon(string zone = "zone2")

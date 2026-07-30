@@ -8,7 +8,7 @@ namespace CSVM.UI;
 /// <see cref="SubViewportContainer"/> + <see cref="SubViewport"/> with its own
 /// <see cref="Camera3D"/>, all rendering the SAME <see cref="World3D"/> as the main viewport —
 /// one shared world, N views into it. Built only for 2+ players; a single player keeps
-/// PlaneViewer's original main-viewport camera untouched (so the 1P render path is unchanged).
+/// GameSession's original main-viewport camera untouched (so the 1P render path is unchanged).
 ///
 /// <para><b>Layout</b> (the plan's decision): 2P = a horizontal split, one pane above the other;
 /// 3P and 4P = a 2×2 grid, with 3P leaving the last quadrant empty (black). Panes are laid out
@@ -17,7 +17,7 @@ namespace CSVM.UI;
 ///
 /// <para><b>Per-player visibility layers.</b> Most of the world is shared geometry every camera
 /// sees. But the skydome, the cloud deck and the ambient cloud puffs are *camera-anchored*
-/// singletons (PlaneViewer re-centers them on "the camera" each frame) — with several players
+/// singletons (GameSession re-centers them on "the camera" each frame) — with several players
 /// they must exist once per player and each camera must see only its own copy. So each player
 /// owns one visual layer out of a reserved band at the top of Godot's 20 (<see cref="PlayerLayerBit0"/>
 /// = layers 17–20): the player's private copies are moved onto that layer

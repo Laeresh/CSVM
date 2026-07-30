@@ -73,7 +73,7 @@ public sealed partial class LiveryLab : Node
     public override void _Ready()
     {
         BuildUi();
-        // The lab is the single owner of the livery in --viewer: PlaneViewer builds the model
+        // The lab is the single owner of the livery in --viewer: GameSession builds the model
         // bare and the initial scheme is applied HERE, through the same Repaint every slider
         // uses. So `--viewer --paint=X --screenshot` exercises the repaint path end to end —
         // if Repaint broke, that shot would show an unpainted plane. An unpainted viewer

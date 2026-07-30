@@ -1298,7 +1298,7 @@ public sealed partial class AnimRuntime : Node
     // ---- PUFFER_STATE ----
 
     /// <summary>
-    /// Builds a <see cref="Effects.Puffer"/> for a state, or null. Supplied by PlaneViewer and
+    /// Builds a <see cref="Effects.Puffer"/> for a state, or null. Supplied by GameSession and
     /// valid only DURING the world build: a puffer bakes its texture atlas at construction
     /// from the session's <see cref="TextureArchive"/>, which is disposed when the build ends.
     /// Cleared afterwards, so a later request is reported rather than silently faulting on a
@@ -2264,7 +2264,7 @@ public sealed partial class AnimRuntime : Node
         n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
 
     /// <summary>A node's world position, valid DURING the bootstrap too. The world subtree
-    /// is still detached while the bootstrap passes run (PlaneViewer parents it after the
+    /// is still detached while the bootstrap passes run (GameSession parents it after the
     /// build), and Godot's <c>GlobalPosition</c> both returns identity and logs an error for
     /// a node outside the tree — one line per evaluation, which is thousands. Accumulate the
     /// local transforms instead; the world node itself rests at the origin, so the result is

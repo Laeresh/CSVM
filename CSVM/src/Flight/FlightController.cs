@@ -140,7 +140,7 @@ public partial class FlightController : Node3D
     /// compiled <c>player_crash_dirt</c> definition on a crash — the airframe hides, the wreck
     /// breaks apart and the <c>pieceN</c> ballistics, sparks, fireball cluster, black smokeball,
     /// dirt burst and burning-debris arcs all fire from the extracted data. It advances itself (its
-    /// own <c>_Process</c>). The standard crash path (built by <c>PlaneViewer</c> for every flown
+    /// own <c>_Process</c>). The standard crash path (built by <c>GameSession</c> for every flown
     /// plane); null only when the crash program/scene were unavailable, and the plane then just
     /// hides on a crash.</summary>
     public AnimRuntime? CrashRuntime;

@@ -91,7 +91,7 @@ public sealed class WorldLights : IDisposable
 
     /// <summary>Submits one active light. <paramref name="color"/> is the data's own sRGB
     /// value; it is linearised here, since the world shader works in linear space (the same
-    /// conversion PlaneViewer applies to FOG_COLOR).</summary>
+    /// conversion GameSession applies to FOG_COLOR).</summary>
     public void Add(Vector3 pos, Color color, float rangeMin, float rangeMax)
     {
         // A degenerate or inverted range would make the shader's smoothstep undefined. The data

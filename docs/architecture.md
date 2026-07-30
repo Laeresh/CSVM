@@ -116,7 +116,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
 - `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (H, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
-- `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `PlaneViewer` for `--anim-lab`.
+- `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `GameSession` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, follows the selection.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
 
@@ -145,12 +145,13 @@ instead.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
 
-### `src/Session/` — session-build extractions from `PlaneViewer`
+### `src/Session/` — the launch/session layer
 
-The launch/session layer extracted from `PlaneViewer` (PLAN-planeviewer-split): the `Launcher`
-scene root plus the low-coupling session-build clusters it and the session node delegate to.
+The `Launcher` scene root, the per-launch `GameSession` node, and the low-coupling session-build
+clusters they delegate to (PLAN-planeviewer-split).
 
-- `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `PlaneViewer` session node per launch.
+- `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `GameSession` session node per launch.
+- `src/Session/GameSession.cs` — the per-launch session node (instantiated by `Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`; return-to-menu `QueueFree`s it.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
@@ -158,9 +159,8 @@ scene root plus the low-coupling session-build clusters it and the session node 
 ### Session root and tests
 
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
-- `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
+- `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `GameSession`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
-- `src/PlaneViewer.cs` — the per-launch session node (instantiated by `Session.Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`.
 
 - `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
 
@@ -308,7 +308,7 @@ re-skins the flares; WingLightBlinker flashes them.
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
 (`BuildHorizon` makes the camera-anchored skydome), `fvol*`, `dzpaths`. Splits the overcast deck into
-`CloudDeck` (PlaneViewer moves it with the player); hides origin-parked unplaced vehicles.
+`CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
 ⚠ Cloud/sky is a TEXTURE test (`IsCloudOrSkyTexture`), never node names. Collision exempts via
   `IsNonSolidSkyTexture` (= that AND NOT `skywal*`, a BUILDING texture) — narrow there only; the
   shared predicate also drives the cloud alpha-blend rule and MapEdgeExtender's tile filter.
@@ -465,8 +465,8 @@ Owns the phantom policy (span every pad, never `pads[0]`), `Disabled` (`--no-pad
 ⚠ `Focused` defaults true and FAILS OPEN (headless runs unchanged); only pads need the gate —
   Godot releases held keys on focus loss, SDL pads are polled regardless.
 ⚠ Every joy read sits in a `Pads.For` loop except `MenuInput.JoinPressed` (checks `InputBlocked` inline).
-⚠ `AssignPads`/`LogPads` moved here from `PlaneViewer` (PLAN-planeviewer-split A3, verbatim) —
-  static, no session state; `PlaneViewer._menuPads` still overrides them when the launchscreen's
+⚠ `AssignPads`/`LogPads` moved here from `GameSession` (PLAN-planeviewer-split A3, verbatim) —
+  static, no session state; `GameSession._menuPads` still overrides them when the launchscreen's
   join flow bound pads itself.
 
 ## src/Mech3/MissionSetup.cs
@@ -769,7 +769,7 @@ Fixed screen size scaled by `HudMetrics`; one per player pane.
   `ProjectilePool` fires, so it trails the nose in a hard turn and sits on the rounds level.
 ⚠ `Active=false` hides it (crashed / no firable gun / behind-camera); `_Draw` early-returns at zero
   height (can run before the pane is sized).
-⚠ `LoadTexture` (the `rimage`/`impact_point.png` PNG loader, moved here from `PlaneViewer` in
+⚠ `LoadTexture` (the `rimage`/`impact_point.png` PNG loader, moved here from `GameSession` in
   PLAN-planeviewer-split A3) is static and loader-only — it does not build a reticle; callers pass
   its result to `Build`.
 
@@ -806,7 +806,7 @@ new best — never worsens a record).
 Splitscreen race bookkeeping: one `Racer` per player (own `StuntMission`, `Rank`, `FinishTime`);
 finishing stamps the next placing, `RaceCompleted` fires when the last pilot is in; `Standings()`
 orders finishers by placing then in-flight players by progress; `Restart()` (rematch) resets
-every mission and clears placings — the planes are respawned by PlaneViewer, which owns them.
+every mission and clears placings — the planes are respawned by GameSession, which owns them.
 ⚠ `FinishTime` is snapshotted separately from `Mission.Elapsed` so the board still reads
   correctly after a rematch has reset the missions.
 ⚠ Deliberately not a Node — it is freed with the session, so the `RunCompleted` subscriptions
@@ -832,7 +832,7 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
   order; `ResolveZone`'s fallback is the file's FIRST zone); `SW_ZONE*` twins are excluded.
 ⚠ The default stays `zone2` (user decision) — which zone a mission flies is in no file
   (negative result in weather.md), so a fallback is the only correct behaviour.
-⚠ `ParseColor` normalizes dual-encoded triples (÷255 iff any component > 1); PlaneViewer treats
+⚠ `ParseColor` normalizes dual-encoded triples (÷255 iff any component > 1); GameSession treats
   every result as DX7 sRGB and linearises.
 
 ## src/Flight/FlightAudio.cs
@@ -863,7 +863,7 @@ state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim pa
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`.
 ⚠ Compiled-payload quirks (`interval_garbage`, Distance-trail meters, `growth_factors`): anim-definitions.md.
-⚠ `MakePuffer` (moved here from `PlaneViewer` in PLAN-planeviewer-split A3, verbatim) is the
+⚠ `MakePuffer` (moved here from `GameSession` in PLAN-planeviewer-split A3, verbatim) is the
   `PufferState.Load` + `Create` + `AddChild` convenience the flight assembly and the static damage
   lab both use — call it as `Effects.Puffer.MakePuffer(...)`.
 
@@ -1017,7 +1017,7 @@ boxes via CastMotion each physics frame (the old center ray stays as an anti-tun
 ⚠ PadDevices null = every connected pad, never pads[0] (phantom devices read idle); UseKeyboard
   gates keys to P1; AllowPause is false in splitscreen — the freeze halts the shared world.
 ⚠ The sim half is `SimStep(dt)`, called either by `_PhysicsProcess` (realtime clock) or by
-  `PlaneViewer` (fixed/halted clock — `GameClock.PhysicsDt` returns 0). There is no local `_paused`
+  `GameSession` (fixed/halted clock — `GameClock.PhysicsDt` returns 0). There is no local `_paused`
   any more: P / gamepad Start is polled in `_Process` (which keeps running) and toggles
   `GameClock.Halted`; the halt then simply stops the SimStep calls, and `_Process` seeds the orbit
   camera on the transition and pauses the engine loops. The cameras and HUD stay on wall time.
@@ -1284,7 +1284,7 @@ reset,tick=,open]` is the scripted twin (an ordered script, not a token set).
   re-damages, because the model has no healing (`DamageStage` only climbs).
 ⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, WORLD-11);
   colliders print `off=`/`on=` separately (WORLD-10) or the not-built notice (WORLD-9).
-⚠ **Freecam builds no world-effects runtime** — the first damage action asks `PlaneViewer` for the
+⚠ **Freecam builds no world-effects runtime** — the first damage action asks `GameSession` for the
   one `--destroy` uses. Its bound name closure does NOT include the `sputter_*_obj` stage puffers or
   a def's own `PUFFER_STATE`, so those fire in the log and draw nothing here (WORLD-12).
 ⚠ Builds no UI until H (or `--debug-damage`): the 11 goldens hold unchanged with it in the tree.
@@ -1295,7 +1295,7 @@ owns the orbit state and drives a `Camera3D` it does not own; `Frame` takes the 
 resolved, and `MergedAabb(Node3D)` merges a subtree's world-space mesh AABBs (shared with the anim lab).
 ⚠ **`Frame`'s `lookAt` is a PIVOT POINT, not a direction** — with the eye it also sets the orbit
   RADIUS, which the wheel and the drag then work in. A `--direction` cannot be passed through here;
-  `PlaneViewer.FrameCamera` synthesizes a pivot on the aim ray first. Collapsing that back to a
+  `GameSession.FrameCamera` synthesizes a pivot on the aim ray first. Collapsing that back to a
   direction (radius 0) leaves the camera spinning about its own eye — measured: a 25° `--jitter`
   swings the parked plane clean out of frame, where the synthesized pivot keeps it centred.
 ⚠ The FOV read in `Frame` is 50 — the orbit view never runs in `--fly`/`--freecam`, where FOV is 62.
@@ -1313,7 +1313,7 @@ shared selection, and a staged effect/crash anchor set so placeless on-call defs
   so a scripted `--debug-select` run still tracks what it picked.
 ⚠ The lab does not own its clock: it drives the session `GameClock` (P → `Halted`, `.` →
   `StepOnce`, the speed buttons → `Scale`) and takes `Steps`/`Dt` from it. The mode is
-  `PlaneViewer`'s choice — FixedAccum interactively, FixedStep in a scripted `--screenshot` run, so
+  `GameSession`'s choice — FixedAccum interactively, FixedStep in a scripted `--screenshot` run, so
   captures land on exact step counts.
 ⚠ The clock hand-off is `AnimRuntime.ManualAdvance`, NOT `SetProcess(false)` (READY auto-enable trap).
 ⚠ Ordering: `Play` sets the timeline focus BEFORE `AnimRuntime.Play` (t=0 events dispatch
@@ -1340,7 +1340,7 @@ ticks below, one lane per Initial sequence; a slanted first-firing connector = s
 Static resolver for the extracted-data paths (`ChapterTextures`/`ChapterGamez`/`ChapterZrdr`/
 `MissionZrdr`) under a data root, plus `PreferUnzipped` (an unpacked sibling dir beats its `.zip`).
 ⚠ Pure path arithmetic — the only I/O is `PreferUnzipped`'s directory-exists probe.
-⚠ The `--gamez=`/`--textures=` override policy deliberately stays in PlaneViewer; this class only
+⚠ The `--gamez=`/`--textures=` override policy deliberately stays in GameSession; this class only
   builds the default extraction-tree paths.
 
 ## src/SessionSpec.cs
@@ -1391,7 +1391,7 @@ DamageLab as modifiers and `SessionProbe` naming the three probes that coerce a 
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
 ⚠ Stops before the per-view steps (unplaced-entity watch, edge extender, horizon, weather — those
-  stay in PlaneViewer) and does NOT add `Root` to the tree; effects go under `Options.EffectsParent`.
+  stay in GameSession) and does NOT add `Root` to the tree; effects go under `Options.EffectsParent`.
 ⚠ Disposal contract: `textures`/`sounds` stay the caller's `using` locals — nulls `PufferFactory` +
   the sound loader after bootstrap (prewarming first) unless `Options.KeepArchivesOpen` (the lab).
 ⚠ Returning `Program` keeps crash-effect-param loading in the caller — no Mech3→Flight dep here.
@@ -1419,13 +1419,13 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 ⚠ It carries the `cs_name` meta (`ground`) like a built gamez node, so the impact log and the node
   labels read a real name off it (`on ground/col`).
 
-## src/PlaneViewer.cs
-The per-launch session node (PLAN-planeviewer-split B7): `Session.Launcher` (Main.tscn's root)
+## src/Session/GameSession.cs
+The per-launch session node (PLAN-planeviewer-split B7/B8): `Session.Launcher` (Main.tscn's root)
 instantiates one per launch with `(SessionSpec, LauncherContext)`, adds it to the tree, then runs
-`StartSession()` — menu and CLI share that one build path; `Teardown()` + free is the return-to-menu
-path. Bootstrap, launchscreen, persistent camera/lighting and the process-wide per-frame machinery
-(shader clock, `--perf`, capture tick, Esc/F11/F12) live on `src/Session/Launcher.cs` — read that
-entry too before touching anything around the build's edges.
+`StartSession()` — menu and CLI share that one build path; return-to-menu is a bare `QueueFree`
+(`Launcher.ReturnToMenu`). Bootstrap, launchscreen, persistent camera/lighting and the process-wide
+per-frame machinery (shader clock, `--perf`, capture tick, Esc/F11/F12) live on
+`src/Session/Launcher.cs` — read that entry too before touching anything around the build's edges.
 ⚠ **The `--*-test`/`--destroy=` probe wrappers moved to `Testing.ProbeRunner`**
   (PLAN-planeviewer-split A1); the runner is process-scoped (the Launcher constructs it and
   dispatches the `--dump-*`/`--run-tests` early quits itself) and every call site here is a
@@ -1450,8 +1450,15 @@ entry too before touching anything around the build's edges.
   hold one puts the answer in two places again, which is the smell the extraction removed.
   `_menuPads` is the deliberate exception and is not an arg — it is join-flow session state and
   rides the `LauncherContext`, never the spec.
-⚠ `Teardown()` (the Launcher's return-to-menu path) QueueFrees `_worldRoot` and nulls every cached
-  session ref, so `_Process` null-guards cover the frame before the deferred free lands.
+⚠ **There is no `Teardown()` — return-to-menu is `QueueFree` (PLAN-planeviewer-split B8).** The whole
+  session subtree (world, plane, HUD, rigs, effects) hangs under `_worldRoot`, a child of this node,
+  so it frees atomically with the node — no field-by-field null-out. Only the duties `QueueFree`
+  cannot reach run in `_Notification` on `NotificationExitTree`: null the published `GameClock.Current`
+  (a static, not a child), `Dispose()` `_worldLights` (clears `csky_light_count`) and `_sessionTextures`
+  (the archive kept open for lazy crash puffers), and restore the persistent camera's `Current` (splitscreen
+  stood it down). All three disposals are null-guarded, so a failed build that already disposed them does
+  not double-free; the menu relaunch happens a frame after this node has exited, so nulling `GameClock.Current`
+  never races the next session setting it.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
   block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
   `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
@@ -1464,7 +1471,7 @@ entry too before touching anything around the build's edges.
   harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
   `--node=` subtree 7 km out, whose box stretched back to the origin and framed it at 12 km. Hence
   the optional `subject` argument, filled from `WorldBuilder.DetachedWorldAabb` at build time.
-⚠ **`PlaneViewer.BuildsCollision` is the only spelling of "does this session build colliders".** Four
+⚠ **`GameSession.BuildsCollision` is the only spelling of "does this session build colliders".** Four
   sources — `_fly`, `_damageTest`, `--collision`, `--debug-damage` — and `--collision` is the
   interactive one: the world's colliders are a flight-build product, so the C overlay and any hand
   check in `--freecam`/`--anim-lab`/`--viewer` need it or they measure an absence. The node lab, the
@@ -1533,7 +1540,7 @@ entry too before touching anything around the build's edges.
 
 ## src/Utils/GameClock.cs
 The session's simulation clock: one object deciding how much sim time a rendered frame is worth.
-`BeginFrame(wallDelta)` (first thing in `PlaneViewer._Process`) sets `Steps` + `Dt`; consumers read
+`BeginFrame(wallDelta)` (first thing in `GameSession._Process`) sets `Steps` + `Dt`; consumers read
 `FrameDt` once per frame, or loop `Steps` times on `Dt` when they must see each sub-step.
 Published as `GameClock.Current` (session-scoped, nulled by `ReturnToMenu`); a null means "use your
 raw frame delta", so nothing outside a session breaks.
@@ -1544,7 +1551,7 @@ raw frame delta", so nothing outside a session breaks.
   `--det`, which every scripted flag implies). `Halted` is orthogonal to all three: 0 steps until
   `StepOnce`. Under FixedStep `--frames=N` is exactly sim frame N (`sim_frame=120 sim_time=2`).
 ⚠ `PhysicsDt` returns 0 in every non-realtime mode and while halted, and **0 means the consumer
-  returns without stepping** — `PlaneViewer.DriveSimSteps` calls its `SimStep` instead, `Steps`
+  returns without stepping** — `GameSession.DriveSimSteps` calls its `SimStep` instead, `Steps`
   times, in the tree order Godot's physics tick used (projectile pool → flight controllers;
   weapon lab → the pool it owns). Godot's physics tick keeps its own 60 Hz cadence regardless, so
   it cannot be the sim clock.
@@ -1579,7 +1586,7 @@ jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file
 
 ## src/Utils/ShaderTime.cs
 The GPU's view of the clock: the `csky_time` global shader uniform (seconds), registered once in
-`PlaneViewer._Ready` and written once per rendered frame from `GameClock.Time`. Every animated
+`Launcher._Ready` and written once per rendered frame from `GameClock.Time`. Every animated
 shader this project generates reads it instead of Godot's `TIME`.
 ⚠ `RolloverSecs = 3600` is a CONTRACT, not a tuning constant: it matches Godot's
   `rendering/limits/time/time_rollover_secs`, and every UV scroll rate in this install
@@ -1602,7 +1609,7 @@ rest=… first_frame=…` line per session build. `Mark()`/`Record(phase, mark)`
   `rest` = build minus its phases: real uninstrumented work, not an error term.
 ⚠ `first_frame` is measured at the top of the SECOND `_Process` after the build, so the first draw
   (and its shader compilation) is inside it. A run that quits during the build prints
-  `first_frame=none` — emitted from `PlaneViewer`'s `NotificationExitTree`, the only hook those
+  `first_frame=none` — emitted from `GameSession`'s `NotificationExitTree`, the only hook those
   headless probes still reach — and its build closes at teardown, so its `rest` also holds whatever
   the probe itself did (`--damage-test`'s sweep). Don't read a probe run's `rest` as build overhead.
 ⚠ `boot` is engine start → build start, so on a launchscreen-driven rebuild it also holds however
@@ -1708,10 +1715,10 @@ caller's spec between calls, so a cached one would silently answer with a stale 
   throwaway `TestHost` world) and the `Camera3D` as parameters and returns the exit code plus the
   fixed-step `GameClock` it created via `out` — the caller assigns its own `_clock` field and
   calls `GetTree().Quit(code)` itself. `RunEffectsTest` likewise takes the camera and the caller's
-  `EffectAnimNames` table (still on `PlaneViewer` as of A1 — moves to `WorldEffectsFactory` in A4).
+  `EffectAnimNames` table (`WorldEffectsFactory.EffectAnimNames`, passed in per call).
 ⚠ `ApplyRocketOverride` and `TriggerDestroy` are static (no instance state) — call them as
   `Testing.ProbeRunner.X(...)`, not through `_probeRunner`.
-⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `PlaneViewer`'s
+⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `GameSession`'s
   `--weapon-test` report (not itself a moved wrapper) also writes through `_probeRunner.WriteScratch`
   rather than duplicating the helper.
 
@@ -1723,7 +1730,7 @@ save (PLAN-planeviewer-split A2), constructed once in `Launcher._Ready` from the
 alive. No back-reference to the host node — `Tick`/`PrintPlacement` take the
 camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
 ⚠ **`--frames=N` is a sim coordinate, not a wall-clock delay** — `Tick`'s warm-up countdown
-  decrements exactly once per `_Process` call, in the same place in the frame PlaneViewer's inline
+  decrements exactly once per `_Process` call, in the same place in the frame GameSession's inline
   block used to; move that decrement anywhere else (an early return above it, a second call path)
   and every golden lands on a different sim frame. `Pending` (was `_pendingShot != null`) is the
   predicate every other `--screenshot`-conditioned choice elsewhere reads — never re-derive it from
@@ -1737,7 +1744,7 @@ Main.tscn's root (PLAN-planeviewer-split B7): the once-per-process bootstrap —
 `_cli`/`_spec`, data-root precedence + base paths, `Pads.Disabled`/`TextureDropIn`/`Log`/master-seed
 side effects, the `--dump-*`/`--run-tests` early quits — plus everything that persists across
 in-process relaunches: camera, orbit rig, sun, WorldEnvironment, launchscreen, focus mute, and the
-per-frame shader clock / `--perf` / capture tick. `LaunchSession()` instantiates a `PlaneViewer`
+per-frame shader clock / `--perf` / capture tick. `LaunchSession()` instantiates a `GameSession`
 session node per launch; `ReturnToMenu` calls its `Teardown()` and frees it.
 ⚠ `GlobalShaderParameterAdd` (fog / world-light / `WorldLights` / `ShaderTime.RegisterGlobal`) runs
   in `_Ready` ONCE, ahead of both the dump branches and the first shader build — a session rebuild
@@ -1776,10 +1783,10 @@ session node per launch; `ReturnToMenu` calls its `Teardown()` and frees it.
 
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies (PLAN-planeviewer-split A3, moved verbatim off
-`PlaneViewer`): the shipped paint catalog (`PaintCatalog`, lazy + cached), the per-pattern
+`GameSession`): the shipped paint catalog (`PaintCatalog`, lazy + cached), the per-pattern
 region-mask library (`Patterns`, lazy + cached), `PatternsForPlane`, and the per-player
 `SchemeFor` pick that reads a `SessionSpec`'s `--paint=`/`--paint-color=`/`--paint-decal=`
-overrides. Constructed once per session build (`_liveryResolver` in `PlaneViewer.StartSession`,
+overrides. Constructed once per session build (`_liveryResolver` in `GameSession.StartSession`,
 never across a menu rebuild — a relaunch gets a fresh instance over the fresh `_spec`).
 ⚠ **`NewPaintRng`'s draw order/count is load-bearing under `--det`.** Liveries are seed-pinned
   (the master seed's paint stream, or `--paint-seed=` explicit); constructing or advancing the RNG
@@ -1789,7 +1796,7 @@ never across a menu rebuild — a relaunch gets a fresh instance over the fresh 
   order — keep call sites passing the same per-player index they did before the move.
 
 ## src/Session/SpawnPicker.cs
-Resolves each player's flight spawn (PLAN-planeviewer-split A3, moved verbatim off `PlaneViewer`):
+Resolves each player's flight spawn (PLAN-planeviewer-split A3, moved verbatim off `GameSession`):
 `ChooseSpawnBase` (the shared `--spawn=`-or-random list index), `ChooseSpawn` (a player's
 position/look-at from that list, objectives.json `PLAYER_INIT`, or the `--spawn-at=` debug
 override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, same lifetime as
@@ -1799,26 +1806,26 @@ override), and `LogSpawn`. Constructed once per session build (`_spawnPicker`, s
 
 ## src/Session/PlaneRoster.cs
 Static, spec-free lookups over a `SessionSpec`'s plane roster (PLAN-planeviewer-split A3, moved
-verbatim off `PlaneViewer`): `PlaneFor(spec, index)`, `PlaneDisplayName(stats)`, `Humanize(s)`.
+verbatim off `GameSession`): `PlaneFor(spec, index)`, `PlaneDisplayName(stats)`, `Humanize(s)`.
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime
-(PLAN-planeviewer-split A4, moved verbatim off `PlaneViewer`): the world-effects runtime (D32) and
+(PLAN-planeviewer-split A4, moved verbatim off `GameSession`): the world-effects runtime (D32) and
 `BuildFlightCrashRuntime`. Constructed once per session (`_worldEffectsFactory`, same lifetime as
 `LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`
-— the ctor closure over `PlaneViewer`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
+— the ctor closure over `GameSession`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
 in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`.
 ⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
   lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
-  there); `PlaneViewer` no longer mirrors that reference — `_worldRoot.QueueFree()` on `ReturnToMenu`
-  already frees the runtime node, and the factory itself is discarded and rebuilt fresh next
-  `StartSession`, same as `LiveryResolver`/`SpawnPicker` (neither of which is explicitly nulled on
-  teardown either). Do not add a `PlaneViewer`-side cache of the runtime "for symmetry" — it would be
-  a second place to keep in sync with the factory's.
+  there); `GameSession` no longer mirrors that reference — the runtime node hangs under `_worldRoot`,
+  so freeing the session node on `ReturnToMenu` frees it too, and the factory itself is discarded and
+  rebuilt fresh next `StartSession`, same as `LiveryResolver`/`SpawnPicker`. Do not add a
+  `GameSession`-side cache of the runtime "for symmetry" — it would be a second place to keep in sync
+  with the factory's.
 ⚠ `BuildEffectStage`, `BuildCrashAnchorSet` and `EffectAnimNames` are `public static` (no session
-  state) — `PlaneViewer`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
+  state) — `GameSession`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
   them as `Session.WorldEffectsFactory.X`, not through the instance.
 ⚠ `BuildWorldEffectsRuntime`/`EnsureWorldEffects`/`BuildFlightCrashRuntime` read `_spec.DebugAnim` and
   `_worldRoot` off the factory instance instead of a passed session — same values, same lifetime, just
@@ -1826,20 +1833,21 @@ in effect since it is only ever evaluated per-frame from inside the built `AnimR
 
 ## src/Session/WeatherRig.cs
 Loads/applies the flown mission's weather and drives its per-frame rig state
-(PLAN-planeviewer-split A5, moved verbatim off `PlaneViewer`): `LoadWeather`/`SetupWeather` become
+(PLAN-planeviewer-split A5, moved verbatim off `GameSession`): `LoadWeather`/`SetupWeather` become
 `Build`, and the per-rig skydome/whiteout/deck/puff update block from `_Process` becomes `Tick`.
 Constructed once per session (`_weatherRig`, same lifetime as `LiveryResolver`/`SpawnPicker`/
-`WorldEffectsFactory`); nulled by `ReturnToMenu` (unlike those three) because `_Process` calls
-`Tick` every frame and needs the null guard for the frame before the deferred `QueueFree` lands.
-⚠ **The horizon (skydome) build loop stays on `PlaneViewer`** — it's a `SceneBuilder` concern, not
+`WorldEffectsFactory`) and discarded with the session node on return-to-menu — its per-rig nodes
+hang under `_worldRoot`, so the `QueueFree` of the session frees them; `_Process`'s `_weatherRig?.Tick`
+null guard covers the frame before that deferred free lands (it can never be null mid-session).
+⚠ **The horizon (skydome) build loop stays on `GameSession`** — it's a `SceneBuilder` concern, not
   weather state. `Build` takes it as a `buildDomes` callback, invoked between resolving the zone and
   applying fog/whiteout/puffs/precip, at exactly the point the original inline code ran it — do not
   reorder `Build`'s three steps (zone → domes → setup) relative to each other.
 ⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
-  `PlaneViewer._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
+  `Launcher._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
   relaunch that flies a second foggy mission crashes on the duplicate `Add`.
 ⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
-  (`PlaneViewer`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
+  (`GameSession`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
   guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
 
 ## src/Utils/Config.cs
@@ -1853,7 +1861,7 @@ key, else the caller's in-code `const` default — read-through at the point of 
 ⚠ Every getter self-registers `(key, default)`. `--dump-config` emits that registry as a full nested
   template; `ReportOrphans` warns loudly about file keys no getter queried (the typo detector); a
   queried-but-missing key on a *loaded* file warns once. `WarmTuningRegistry` (moved here from
-  PlaneViewer, PLAN-planeviewer-split A3) steps a throwaway `FlightModel` once, on every launch
+  GameSession, PLAN-planeviewer-split A3) steps a throwaway `FlightModel` once, on every launch
   before `ReportOrphans`, so both are complete with **no built world / no game data**.
 ⚠ Read-only this pass — nothing writes the file; `res://` was chosen so a writable `user://` layer
   can later stack UNDER the getters without touching a call site. Loaded once at `_Ready`; live-reload
@@ -1864,8 +1872,8 @@ key, else the caller's in-code `const` default — read-through at the point of 
 
 ## src/Utils/ScriptedWindow.cs
 Win32-only window hiding for scripted runs: `ScriptedWindow.Hide()` calls `ShowWindow(SW_HIDE)` on
-the native window handle (PLAN-planeviewer-split A6, moved off `PlaneViewer.HideScriptedWindow`).
-Fully static, one call site in `PlaneViewer._Ready` right after the `--det` block — the same
+the native window handle (PLAN-planeviewer-split A6, moved off the old session bootstrap's
+`HideScriptedWindow`). Fully static, one call site in `Launcher._Ready` right after the `--det` block — the same
 predicate drives both window hiding (scripted run) and focus request (interactive run).
 ⚠ Hiding is not minimizing: a minimized window stops rendering, which blanks every screenshot
   capture. `ShowWindow(SW_HIDE)` is load-bearing — never swap it for minimize.

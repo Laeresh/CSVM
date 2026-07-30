@@ -5,13 +5,13 @@ namespace CSVM;
 /// <summary>
 /// Where the extracted game data lives on disk: resolves the per-chapter and per-mission
 /// extraction paths (gamez / texture / zrdr) under a data root, preferring an unpacked sibling
-/// folder over its <c>.zip</c>. Extracted from <see cref="PlaneViewer"/> so
+/// folder over its <c>.zip</c>. Extracted from <see cref="CSVM.Session.GameSession"/> so
 /// <c>--anim-lab</c> resolves the same paths a normal session
 /// does. Pure path arithmetic — the only I/O is <see cref="PreferUnzipped"/>'s directory-exists
 /// probe.
 ///
 /// <para>The <c>--gamez=</c>/<c>--textures=</c>/<c>--zrdr=</c>/<c>--sounds=</c> CLI overrides are
-/// the caller's policy and stay in <see cref="PlaneViewer"/>; this class only builds the default
+/// the caller's policy and stay in <see cref="CSVM.Session.GameSession"/>; this class only builds the default
 /// extraction-tree paths.</para>
 /// </summary>
 public static class SessionPaths

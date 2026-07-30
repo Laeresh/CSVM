@@ -59,7 +59,7 @@ public enum SessionProbe
 ///
 /// <para>Godot's <c>Vector3</c>/<c>Color</c> are plain managed structs, so they cost nothing here;
 /// <see cref="SessionPaths"/> is the precedent for lifting pure logic out of
-/// <see cref="PlaneViewer"/> this way.</para>
+/// <see cref="CSVM.Session.GameSession"/> this way.</para>
 /// </summary>
 public sealed record SessionSpec
 {

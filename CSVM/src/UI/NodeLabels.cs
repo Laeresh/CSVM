@@ -56,7 +56,7 @@ public sealed partial class NodeLabels : Node
     public float Radius { get; init; } = 1500f;
 
     /// <summary>Subtrees whose nodes sort *after* everything else, so they claim screen space
-    /// only where nothing else wants it. PlaneViewer passes the player aircraft in flight:
+    /// only where nothing else wants it. GameSession passes the player aircraft in flight:
     /// it is always the nearest thing to the camera by a wide margin, so nearest-first would
     /// otherwise spend every label on the plane you are sitting in while the world you are
     /// actually inspecting goes unnamed. Deprioritised, not excluded — a misplaced node can

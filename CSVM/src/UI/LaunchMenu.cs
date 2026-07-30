@@ -11,7 +11,7 @@ namespace CSVM.UI;
 /// RunGame.ps1). Three screens in sequence — <b>Mode</b> (Free Flight / Stunt Flying) →
 /// <b>Chapter</b> (the eight chapter worlds) → <b>Plane</b> (the player roster, with a couple of
 /// stats from <see cref="PlaneStats"/>) — after which <see cref="Launch"/> fires with the chosen
-/// chapter, the per-player plane + pad, and the mode; PlaneViewer builds the world through the
+/// chapter, the per-player plane + pad, and the mode; GameSession builds the world through the
 /// normal arg-driven pipeline (the menu just fills in the same selections the CLI would).
 ///
 /// <para><b>Join flow.</b> Two phases, in this order. First player 1 — the keyboard plus
@@ -40,7 +40,7 @@ namespace CSVM.UI;
 /// for keyboard and pad, and — the reason the join flow needs it — reads a <i>named device</i>,
 /// which actions cannot. Edge detection + auto-repeat live in MenuInput.</para>
 ///
-/// <para>Re-entrant: PlaneViewer tears the world down and calls <see cref="ShowMenu"/> again on
+/// <para>Re-entrant: the Launcher frees the session and calls <see cref="ShowMenu"/> again on
 /// Esc-from-flight, so this resets to the Mode screen, clears the plane locks (joined players
 /// stay joined) and re-primes every input edge — a held Esc that returned here must not
 /// immediately re-trigger Back, and a held Start must not re-join anyone.</para>

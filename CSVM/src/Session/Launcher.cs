@@ -16,10 +16,10 @@ namespace CSVM.Session;
 /// global shader parameters exactly once, runs the early-quit probes (<c>--dump-*</c>,
 /// <c>--run-tests</c>), and builds the persistent camera / orbit rig / sun / WorldEnvironment.
 ///
-/// Each launch then instantiates a <see cref="PlaneViewer"/> session node, constructed with the
+/// Each launch then instantiates a <see cref="GameSession"/> session node, constructed with the
 /// launch's spec and a <see cref="LauncherContext"/> carrying the persistent references; Esc from
-/// a menu-launched flight tears that node down (<see cref="ReturnToMenu"/>) and shows the
-/// launchscreen again. The full user-arg reference lives on <see cref="PlaneViewer"/> and in
+/// a menu-launched flight frees that node (<see cref="ReturnToMenu"/> QueueFrees it) and shows the
+/// launchscreen again. The full user-arg reference lives on <see cref="GameSession"/> and in
 /// docs/cli.md.
 /// </summary>
 public partial class Launcher : Node3D
@@ -59,9 +59,9 @@ public partial class Launcher : Node3D
     private OrbitCamera _orbit = null!;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): each launch instantiates a
-    // PlaneViewer session node, freed again by ReturnToMenu. The camera, lights and global shader
+    // GameSession node, freed again by ReturnToMenu. The camera, lights and global shader
     // params live on `this` and persist across sessions.
-    private PlaneViewer? _session; // the current session node (null at the launchscreen)
+    private GameSession? _session; // the current session node (null at the launchscreen)
     private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
 
@@ -405,7 +405,7 @@ public partial class Launcher : Node3D
     /// CLI launch leaves the log to tell the story, exactly as the single-root class did).</summary>
     private bool LaunchSession()
     {
-        _session = new PlaneViewer(_spec, new LauncherContext
+        _session = new GameSession(_spec, new LauncherContext
         {
             RepoRoot = _repoRoot,
             DataRoot = _dataRoot,
@@ -508,15 +508,16 @@ public partial class Launcher : Node3D
         }
     }
 
-    /// <summary>Tears down the current session node (its own teardown drops every cached session
-    /// reference and disposal duty, then the node is freed) and shows the launchscreen again — the
-    /// in-process rebuild path for Esc-from-flight and failed builds. The camera / lights / shader
-    /// globals persist on <c>this</c>.</summary>
+    /// <summary>Frees the current session node and shows the launchscreen again — the in-process
+    /// rebuild path for Esc-from-flight and failed builds. The whole session subtree hangs under the
+    /// node, so <c>QueueFree</c> tears it down; the non-child duties (the published clock, the world
+    /// lights, the session texture archive, the main-camera restore) run in the node's
+    /// <c>_Notification</c> on <c>NotificationExitTree</c>. The camera / lights / shader globals
+    /// persist on <c>this</c>.</summary>
     private void ReturnToMenu()
     {
         if (_session != null)
         {
-            _session.Teardown();
             _session.QueueFree();
             _session = null;
         }

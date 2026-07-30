@@ -5,13 +5,13 @@ namespace CSVM.Flight;
 
 /// <summary>
 /// Everything one player's *view* owns for a session. A single-player session has
-/// exactly one rig wrapping PlaneViewer's original main-viewport camera, so the 1P path is
+/// exactly one rig wrapping GameSession's original main-viewport camera, so the 1P path is
 /// unchanged; splitscreen has one per pane (see <see cref="UI.SplitScreen"/>).
 ///
 /// <para>The rig exists because the flight view is not just a camera: the skydome, the cloud
 /// deck, the ambient cloud puffs and the cloud-band whiteout overlay are all anchored to
 /// <i>the</i> camera every frame, so each player needs a private copy of each, on that player's
-/// visual layer. PlaneViewer's per-frame anchoring loops over rigs; everything else in the world
+/// visual layer. GameSession's per-frame anchoring loops over rigs; everything else in the world
 /// (terrain, clutter, map-edge extension, precipitation, all aircraft) is shared and rendered in
 /// every pane.</para>
 /// </summary>
@@ -20,7 +20,7 @@ public sealed class PlayerRig
     /// <summary>0-based player index (player 1 = 0).</summary>
     public int Index;
 
-    /// <summary>This player's camera. Single player: PlaneViewer's own camera in the main
+    /// <summary>This player's camera. Single player: GameSession's own camera in the main
     /// viewport. Splitscreen: a camera parented to the player's SubViewport (whose local
     /// transform is therefore its world transform).</summary>
     public Camera3D Camera = null!;

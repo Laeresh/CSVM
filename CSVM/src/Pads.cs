@@ -25,7 +25,7 @@ namespace CSVM;
 /// only in that the input gate also follows window focus, but conflating them breaks things:
 /// <c>LaunchMenu.SyncDevices</c> reads the roster to drop a player <i>whose pad disconnected</i>,
 /// so an empty roster while alt-tabbed would un-join every joined player, and
-/// <c>PlaneViewer.AssignPads</c> reads it once at session build, so alt-tabbing during a chapter
+/// <c>Pads.AssignPads</c> reads it once at session build, so alt-tabbing during a chapter
 /// load would leave the whole session pad-less until relaunch. A pad that is merely unfocused has
 /// not gone away.</para>
 /// </summary>
@@ -36,7 +36,7 @@ public static class Pads
     public static bool Disabled;
 
     /// <summary>Whether the game window currently has focus, maintained by
-    /// <c>PlaneViewer._Notification</c>. Pad <i>reads</i> are gated on it, so a
+    /// <c>Launcher._Notification</c>. Pad <i>reads</i> are gated on it, so a
     /// stick held (or drifting) while the player is alt-tabbed cannot fly the plane, steer the
     /// free camera or scroll the launchscreen.
     ///

@@ -10,8 +10,8 @@ using Godot;
 
 namespace CSVM.Testing;
 
-/// <summary>The `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers PlaneViewer/
-/// GameSession quits into: each reads a <see cref="SessionSpec"/> (passed per call, since a
+/// <summary>The `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and
+/// GameSession quit into: each reads a <see cref="SessionSpec"/> (passed per call, since a
 /// menu launch can replace the caller's spec between calls) plus the base paths settled once in
 /// `_Ready`, produces a report to stdout and `./.scratch/`, and hands back a verdict for the
 /// caller's exit code. No reference back to the host node — the two probes that need one
@@ -219,7 +219,7 @@ public sealed class ProbeRunner
     /// renders nothing). Each effect is stopped before the next so effects sharing a template root
     /// (the gun family shares <c>gunhit</c>) get an independent count. Reports to stdout and
     /// <c>./.scratch/effects_test.txt</c>. <paramref name="effectAnimNames"/> is the caller's
-    /// static name table (still on PlaneViewer as of A1 — moves to WorldEffectsFactory in A4).</summary>
+    /// static name table (<c>WorldEffectsFactory.EffectAnimNames</c>).</summary>
     public void RunEffectsTest(SessionSpec spec, Camera3D camera, Mech3.AnimRuntime effects,
         string[] effectAnimNames)
     {

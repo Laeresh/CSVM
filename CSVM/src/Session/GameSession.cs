@@ -10,194 +10,30 @@ using CSVM.UI;
 using CSVM.Utils;
 using Godot;
 
-namespace CSVM;
+namespace CSVM.Session;
 
 /// <summary>
 /// The per-launch session node: loads one aircraft from the player's own
 /// extracted game data and renders it with orbit controls — or, with --fly,
 /// free flight over the chapter world with arcade controls.
 ///
-/// <see cref="Session.Launcher"/> (Main.tscn's root) owns the bootstrap, the launchscreen and the
+/// <see cref="Launcher"/> (Main.tscn's root) owns the bootstrap, the launchscreen and the
 /// persistent camera/lighting, and instantiates one of these per launch — the menu's selection
 /// and the CLI feed the same StartSession build path — constructed with the launch's settled
-/// <see cref="SessionSpec"/> and a <see cref="Session.LauncherContext"/> carrying the persistent
-/// references. Esc from a menu-launched flight tears it down again (Launcher.ReturnToMenu).
-///
-/// F12 (any mode) saves the current frame to a timestamped PNG under the repo's
-/// git-ignored Screenshots/ folder. F11 (any mode) prints the mode's subject placement as
-/// ready-to-paste --pos=/--direction= args for reproducing a view.
-///
-/// User args (after "--" on the command line):
-///   --plane=player_bhawk         which aircraft root node to build. A comma-separated list gives
-///                                one plane per splitscreen player (--plane=player_bhawk,player_fury)
-///                                and implies --players= that count unless --players says otherwise
-///   --damage[=part:frac,…]       (static --plane mode) damage lab: one HP slider per
-///                                destroyable part drives the item-10c damage visuals on
-///                                the parked plane — torn-skin panel flips, panel fires
-///                                burning in place, the ≤10% nose smoke/fire pair.
-///                                Optional presets (fraction 0–1, or a percent when >1):
-///                                --damage=leftwing:0.25,nose:40. H hides the sliders;
-///                                combine with --screenshot for deterministic damage shots
-///   --markers                    (implies --viewer) open the marker overlay at launch: the
-///                                firepoint / pylon / target gizmos on the parked aircraft,
-///                                shared mounts flagged. Toggle in a plain --viewer with K
-///   --dump-markers[=plane]       print each player airframe's firepoint / pylon / target rig
-///                                (name, plane-frame position, gun pair, shared mounts) to
-///                                stdout and ./.scratch/markers_dump.txt, then quit; the
-///                                optional value filters to one plane (model or display name)
-///   --dump-weapons[=id|name]     print the typed weapons.json table (WeaponDefs) — one block
-///                                per def with ballistics, flags and FIRE/FLYOUT/IMPACT bindings
-///                                — to stdout and ./.scratch/weapons_dump.txt, then quit; a clean
-///                                run reports no unhandled keys. Optional filter by id / NAME
-///   --dump-loadout[=plane]       build each plane and bind its stock loadout (Loadout), printing
-///                                the resolved gun groups + hardpoints to ./.scratch/loadout_dump.txt,
-///                                then quit; a missing marker prints a loud error. Filter by plane
-///   --dump-flight[=plane]        fly a throwaway FlightModel through the manoeuvres the original
-///                                was measured flying (video-decoded goldens) and print both
-///                                numbers side by side, to stdout and ./.scratch/flight_dump.txt,
-///                                then quit; targets exist for the Bloodhawk only
-///   --loadout=<def>              bind this loadout def instead of the plane's own (testing override;
-///                                exercises the missing-marker error with --dump-loadout; in flight
-///                                the flown plane carries that loadout)
-///   --fire                       hold the gun trigger down (scripted firing runs); in interactive
-///                                flight the gun trigger is Space / gamepad B
-///   --fire-rockets               hold the rocket trigger down (scripted runs); in interactive flight
-///                                the rocket trigger is F / gamepad A (one rocket per pull, 1 s cooldown)
-///   --gun-select=N               initial gun group (0-based; 0 = first group, the default). Only one
-///                                group fires at a time (a testing hook; interactively cycle with G / D-pad Left)
-///   --infinite-ammo              guns/hardpoints fire without depleting (weapon testing)
-///   --damage-test[=name]         build the --chapter world, then drive one destructible's HP from
-///                                full to zero, logging which DAMAGE_SEQUENCE stage effect fires at
-///                                which health, then quit (C22 verify until F40; optional name filter)
-///   --effects-test               build the --chapter world, play every impact/destruction effect
-///                                through the world-effects runtime and report which build a puffer,
-///                                then quit (D32 verify: a started def that renders nothing vs one that does)
-///   --destroy=name               kill a named destructible (def / anim / node name, substring) at
-///                                session build so a --screenshot captures its destruction with nobody
-///                                at the controls — pairs with --freecam + --pos/--direction (F42).
-///                                Use --damage-test to list a chapter's destructible names
-///   --chapter[=C1]               build a chapter's world (its single "world1") instead of one
-///                                plane; takes C1, C1B, C1C, C2, C2B, C3, C4, C5. Drives the
-///                                default gamez + textures to ../extracted/<chapter>/…
-///   --fly                        free flight: chapter world + original skydome + aircraft +
-///                                arcade controls (WASD/arrows pitch+roll, Q/E rudder,
-///                                Shift/Ctrl throttle, R respawn; gamepad: left stick,
-///                                LB/RB rudder, RT/LT throttle, Y respawn).
-///                                Combine with --chapter= to fly a different chapter (default C1)
-///   --stunt                      stunt-flying mode: --fly + the mission's danger zones (ia.json
-///                                dzones) as fly-through objectives, spawning from the stunt_flying
-///                                spawn list. Completion shows in the text HUD
-///   --anim-lab                   the animation debugger: the chapter world
-///                                as a quiet stage (reset states applied, nothing playing) under
-///                                a deterministic fixed-dt clock with def-playback transport
-///                                controls — see UI.AnimLab. Wins over every other mode
-///   --play-anim=name             (implies --anim-lab) play this def at launch and auto-frame
-///                                the orbit camera on its anchor; composes with --screenshot
-///   --seed=N                     the master seed every subsystem RNG derives from (gun spread,
-///                                crash sound, spawn, liveries, animation dice, particles) —
-///                                same seed, same run; different seeds genuinely branch. Pinned
-///                                to 1 by --det/--anim-lab/--effects-test, drawn from the clock
-///                                otherwise (the resolved value is logged, so it can be replayed)
-///   --det                        the deterministic bundle: fixed-dt sim clock + master seed 1 +
-///                                --spawn=0 + pinned liveries + --no-pads + --jitter=0, each
-///                                overridable by passing it explicitly. Implied by --screenshot=,
-///                                every --dump-*, and --damage-test; the resolved set is announced
-///                                on one `det …` log line so a capture documents itself
-///   --no-det                     opt back out — wall-clock sim clock and live randomness, even
-///                                under a flag that would otherwise imply --det
-///   --debug-dzpaths              build the danger-zone route ribbons (the dzpaths subtree the
-///                                world skips — AI/route data the original never renders); debug only
-///   --debug-select[=x,y[,up]]    (--freecam/--anim-lab) synthetic click at that screen position on
-///                                the first frame, then `up` rungs of PgUp — logs the whole
-///                                cs_name ancestor ladder with each rung's world-frame box
-///   --debug-nodelab[=spec]       (--freecam/--anim-lab) open the node lab (N) at launch and dump
-///                                its readouts to the `ui` log category. Comma-separated tokens:
-///                                `deps`, `dest`, `open` (show the panel, log nothing more) and
-///                                `node=<cs_name>` (select that node first — the tree's own entry,
-///                                which reaches what a click cannot); default dumps both readouts
-///   --mission=IA1                which mission's spawns --fly uses (default IA1 = instant action,
-///                                ia.json spawn_points); story missions (M0x) fall back to
-///                                objectives.json PLAYER_INIT. Pair with --chapter= to match the world
-///   --scenario=zeppelin_run      which instant-action scenario's spawn list to spawn from
-///                                (zeppelin_run, dogfight_ace, dogfight_squadron, stunt_flying, …)
-///   --spawn=N                    force spawn index N in that list (default: random pick, like the
-///                                original — relaunch to sample the others; the pick is logged)
-///   --spawn-at=x,y,z             deprecated spelling of --pos in flight
-///   --spawn-dir=x,y,z            deprecated spelling of --direction in flight
-///   --sky-zone=zone2             which horizon zone to render in --fly: zone2 = night
-///                                (moon/stars, what the original shows at the C1 airfield),
-///                                zone1 = day haze (likely test-only, unfinished gray cap).
-///                                Also selects which zone's distance fog (weather.json) applies.
-///                                If given in static --chapter mode, the skydome + fog + cloud-
-///                                band whiteout render there too (put the camera inside the map
-///                                via --pos — deterministic fog/whiteout verification shots)
-///   --gamez=path                 GameZ zip/dir (default: ../extracted/planes.zip;
-///                                in --chapter/--fly modes: the chapter's gamez, default C1/gamez.zip)
-///   --textures=path              texture zip (default: ../extracted/<chapter>/texture.zip, chapter=C1)
-///   --zrdr=path                  zrdr extraction zip/dir with plane stats (default: ../extracted/zrdr.zip)
-///   --interp=path                interp.zbd extraction (default: ../extracted/interp.json) — the
-///                                boot scripts naming each chapter's clutter templates (forest
-///                                trees, river bushes) placed onto matching-textured terrain
-///   --sounds=path                sound extraction zip/dir (default: ../extracted/soundsh.zip)
-///   --messages=path              message string table (default: ../extracted/messages.json) —
-///                                resolves targets.json MSG_* keys for the stunt marker text
-///   --mute                       skip flight audio (engine loop, overspeed whine, rattle, crash)
-///   --no-vsync                   uncap the frame loop, so --perf's frame/fps/script report the
-///                                work done instead of sitting pinned at the refresh rate. The
-///                                simulation is unchanged under --det: one sim step per rendered
-///                                frame, however fast the frames come
-///   --debug-collision            draw the plane's collision probe (the swept ray of the
-///                                crash test; green, red on impact)
-///   --players=N                  splitscreen: fly N planes (1–4) in one shared
-///                                world, each in its own pane with its own camera, sky, HUD and
-///                                input device. 2P = stacked top/bottom, 3–4P = 2×2 grid. P1 =
-///                                keyboard + the first pad, P2–P4 = the next pads in order.
-///                                Requires --fly/--stunt; N=1 is the normal single-player path.
-///                                Launched from the menu instead, the join flow binds the pads
-///   --debug-join=N               (launchscreen only) add N device-less players to the join strip
-///                                so the splitscreen aircraft select can be screenshot without N
-///                                controllers; they can never act (and the last starts locked, so
-///                                both panel states show), making the shot deterministic
-///   --hold=pitch,roll,yaw,thr    scripted flight input instead of the keyboard (automated runs);
-///                                ';'-separated segments with '@seconds' durations sequence inputs
-///                                (e.g. --hold=1,0,0,0.5@3;0,0,0,0 — pull 3 s, then release), the
-///                                last segment holds forever, respawn restarts the sequence.
-///                                '|' separates PER-PLAYER sequences for --players (the last one
-///                                covers any remaining players)
-///   --frames=N                   frames to render before --screenshot fires (default 15)
-///   --shots=N                    capture N consecutive frames (default 1); for z-fighting
-///                                debugging — flicker is only visible across frames. N>1 writes
-///                                indexed files (foo.png -> foo_00.png, foo_01.png, …)
-///   --jitter=deg                 per-frame camera dither for --shots bursts (default 0.15°
-///                                when N>1, else 0). Micro-orbits the eye around the framed
-///                                point so a still camera doesn't render bit-identical frames;
-///                                0 disables. Only applies in static (non-fly) mode.
-///   --pos=x,y,z                  place the mode's subject here: the camera in --freecam/--viewer/
-///                                --anim-lab, the plane in --fly/--stunt (bypassing the mission
-///                                spawn list — e.g. start just short of a target, or over water)
-///   --direction=x,y,z            which way it faces there: the view direction, or the nose
-///   --lookat=x,y,z               the point form of --direction; also the --viewer orbit pivot
-///   --view=1-9                   hold one of the numpad flight-camera perspectives for the whole
-///                                run (2 belly, 1/3 below-flank, 4/6 flank, 7/9 above-flank, 8
-///                                ahead looking back); flight only, 5 is unbound
-///   --campos=x,y,z               deprecated spelling of --pos in the camera modes
-///   --screenshot=path            render a few frames, save a PNG, then quit
-///   --menu[=mode|chapter|plane]  force the in-game launchscreen even alongside other args (it
-///                                otherwise shows only on a bare no-content-arg launch); the
-///                                optional screen name opens it there (a --screenshot layout aid)
+/// <see cref="SessionSpec"/> and a <see cref="LauncherContext"/> carrying the persistent
+/// references. Esc from a menu-launched flight frees it again (Launcher.ReturnToMenu QueueFrees
+/// this node; disposal duties that outlive its child subtree run in <c>_Notification</c> on
+/// <c>NotificationExitTree</c>).
 /// </summary>
-public partial class PlaneViewer : Node3D
+public partial class GameSession : Node3D
 {
     private const float HorizonScale = 2.5f;
 
-    /// <summary>How many near-miss names a failed <c>--node=</c> lookup offers. A chapter holds
+    /// How many near-miss names a failed <c>--node=</c> lookup offers. A chapter holds
     /// thousands of nodes and a substring like "zep" hits dozens; the point is a usable hint, not
-    /// a census.</summary>
+    /// a census.
     private const int NodeSuggestCap = 20;
 
-    // Cloud-band whiteout color: inside a cloud reads near-white (see OriginalScreenshots/
-    // "C1 IA1 whiteout at height.png"), not the 0.69 gray of distance fog. TUNE. The opacity
-    // (0 at the band edges → 1 at the opaque core) comes from WeatherState.WhiteoutAmount.
     // Everything this launch settled, parsed and resolved once (see SessionSpec) — the command
     // line verbatim, or the launchscreen's pick (SessionSpec.FromMenu). Every consumer below reads
     // it and nothing re-derives a launch setting; the pristine command line stays on the Launcher.
@@ -207,8 +43,8 @@ public partial class PlaneViewer : Node3D
     private readonly int[][]? _menuPads;
     // Resolves each player's livery and spawn point against _spec (PLAN-planeviewer-split A3);
     // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
-    private Session.LiveryResolver _liveryResolver = null!;
-    private Session.SpawnPicker _spawnPicker = null!;
+    private LiveryResolver _liveryResolver = null!;
+    private SpawnPicker _spawnPicker = null!;
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
@@ -222,12 +58,12 @@ public partial class PlaneViewer : Node3D
     // The effect/crash stage factory (PLAN-planeviewer-split A4) — builds the world-effects runtime
     // (D32, lazily, on demand for a plane-less session: --destroy, the damage lab's first kill) and
     // each player's crash runtime. Constructed once per session, same lifetime as _liveryResolver.
-    private Session.WorldEffectsFactory _worldEffectsFactory = null!;
+    private WorldEffectsFactory _worldEffectsFactory = null!;
     // Loads/applies the flown mission's weather and drives its per-frame rig state
     // (PLAN-planeviewer-split A5) — see src/Session/WeatherRig.cs's entry. Constructed once per
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
-    private Session.WeatherRig? _weatherRig;
+    private WeatherRig? _weatherRig;
     // The --screenshot=/--shots=/--frames= state machine (PLAN-planeviewer-split A2) — see
     // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
     // Ticks it); held here for the Pending reads that gate display choices during the build.
@@ -245,13 +81,16 @@ public partial class PlaneViewer : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private UI.WeaponLab? _weaponLabNode;
-    private Mech3.MapEdgeExtender? _edgeExtender; // rolling mirrored-tile window past the map edge
+    // rolling mirrored-tile window past the map edge
+    private Mech3.MapEdgeExtender? _edgeExtender; 
     // One rig per rendered view: its camera plus the camera-anchored copies only it
     // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
-    private readonly List<Vector3> _focusPoints = new(); // scratch: rig camera positions for the edge extender
-    private UI.SplitScreen? _split;    // the splitscreen pane rig (null in single player)
+    // scratch: rig camera positions for the edge extender
+    private readonly List<Vector3> _focusPoints = new(); 
+    // the splitscreen pane rig (null in single player)
+    private UI.SplitScreen? _split;    
     // The persistent rendering nodes, owned by the Launcher and kept across sessions; this node
     // only configures them. The mesh lab steers the sun and ambient, which is why both ride the
     // context rather than staying local to the Launcher's lighting setup.
@@ -265,13 +104,15 @@ public partial class PlaneViewer : Node3D
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
-    private Node3D? _worldRoot;    // the current session's subtree (world/plane/HUD/effects)
-    private readonly bool _menuDriven; // launched into the menu → Esc from flight returns there, not quit
+    private Node3D? _worldRoot;    
+    // launched into the menu → Esc from flight returns there, not quit
+    private readonly bool _menuDriven; 
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
-    private WorldLights? _worldLights; // the session's LIGHT_STATE point lights (see WorldLights)
+    // the session's LIGHT_STATE point lights (see WorldLights)
+    private WorldLights? _worldLights; 
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
     // path hands it to the AnimLab node instead). Disposed by ReturnToMenu on teardown so a map reload
@@ -293,12 +134,13 @@ public partial class PlaneViewer : Node3D
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private readonly string _dataRoot;
-    private readonly string _planesGamezPath;  // extracted/planes.zip — the aircraft models (always this)
+    private readonly string _planesGamezPath;  
     private readonly string _zrdrPath;
     private readonly string _soundsPath;
     private readonly string _interpPath;
     private readonly string _messagesPath;
-    private readonly string _rofPath;          // the extracted UI archive (paint patterns)
+    // the extracted UI archive (paint patterns)
+    private readonly string _rofPath;          
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
     private readonly Testing.ProbeRunner _probeRunner;
@@ -313,13 +155,13 @@ public partial class PlaneViewer : Node3D
     /// <paramref name="ctx"/> carries the Launcher's settled paths, the persistent rendering
     /// nodes, the process-scoped services and the join flow's pad binding. The caller adds the
     /// node to the tree and then runs <see cref="StartSession"/>.</summary>
-    public PlaneViewer(SessionSpec spec, Session.LauncherContext ctx)
+    public GameSession(SessionSpec spec, LauncherContext ctx)
     {
         // The session clock is advanced at the top of this node's _Process, and every sim consumer
         // reads it during the same frame — so this node has to tick first. Godot runs the lowest
         // priority first (the Launcher sits one notch behind at -999).
         ProcessPriority = -1000;
-        Name = "PlaneViewer";
+        Name = "GameSession";
         _spec = spec;
         _repoRoot = ctx.RepoRoot;
         _dataRoot = ctx.DataRoot;
@@ -371,9 +213,9 @@ public partial class PlaneViewer : Node3D
         AddChild(_worldRoot);
         // Built fresh per session: a launchscreen relaunch replaces _spec wholesale (FromMenu),
         // so these must not be cached across a rebuild.
-        _liveryResolver = new Session.LiveryResolver(_spec, _rofPath);
-        _spawnPicker = new Session.SpawnPicker(_spec);
-        _worldEffectsFactory = new Session.WorldEffectsFactory(_spec, _worldRoot,
+        _liveryResolver = new LiveryResolver(_spec, _rofPath);
+        _spawnPicker = new SpawnPicker(_spec);
+        _worldEffectsFactory = new WorldEffectsFactory(_spec, _worldRoot,
             () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam ? cam.GlobalPosition : Vector3.Zero);
         // Re-derive every subsystem RNG from the master before anything in the session draws, so a
         // rebuild (Esc to the launchscreen and back) repeats the run rather than continuing it.
@@ -467,7 +309,7 @@ public partial class PlaneViewer : Node3D
             // builds the effect-template roots from the world gamez.
             AnimProgram? crashProgram = null;
             SceneBuilder? worldScene = null;
-            AnimRuntime? worldRuntime = null;   // the world's anim runtime — C23 routes weapon damage through it
+            AnimRuntime? worldRuntime = null;   // the world's anim runtime
             // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is
             // built, so a miss reports its candidates and quits instead of half-building a world.
             // Matching is on the source name, never the Godot node name (which is sanitized and
@@ -610,7 +452,7 @@ public partial class PlaneViewer : Node3D
                 {
                     _worldRoot!.AddChild(_plane);
                     var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(gamez, worldScene, textures, session.Program);
-                    _probeRunner.RunEffectsTest(_spec, _camera, effects, Session.WorldEffectsFactory.EffectAnimNames);
+                    _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
                     GetTree().Quit();
                     return false;
                 }
@@ -685,26 +527,9 @@ public partial class PlaneViewer : Node3D
                 }
                 if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
                 {
-                    // The original skydome, anchored to the camera each frame. Scaled up so
-                    // plain depth testing keeps it behind everything: a camera-centered dome
-                    // looks identical at any scale (zero parallax), and at 2.5× (~22 km
-                    // radius) it is beyond the farthest terrain (~17.4 km corner-to-corner)
-                    // while well inside the camera's 40 km far plane. In static --chapter mode
-                    // only an explicit --sky-zone adds it (an outside orbit view is better
-                    // without the enclosing dome; with --pos inside the map it works).
-                    // One dome per rig: it follows *a* camera, so each splitscreen pane needs
-                    // its own on that player's visual layer.
-                    //
-                    // The mission's weather.json is loaded FIRST because it owns the zone
-                    // table: it is what resolves --sky-zone's default against the zones this
-                    // chapter actually ships (C5 has zone1+zone3, not zone2),
-                    // and the dome must be built for the same zone the fog comes from.
+
                     mark = StartupProfile.Mark();
-                    // LoadWeather / SetupWeather live on WeatherRig now (PLAN-planeviewer-split
-                    // A5); buildDomes stands in for this loop, invoked between them at exactly
-                    // the point the inline code ran it — the horizon build stays here because
-                    // it's a SceneBuilder concern, not weather state.
-                    _weatherRig = new Session.WeatherRig(_spec, _worldRoot!);
+                    _weatherRig = new WeatherRig(_spec, _worldRoot!);
                     _weatherRig.Build(missionZrdrPath, _rigs, textures, activeZone =>
                     {
                         foreach (var rig in _rigs)
@@ -751,8 +576,8 @@ public partial class PlaneViewer : Node3D
                     // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
                     // the templates.
                     var labStage = new Node3D { Name = "lab_stage_anchor" };
-                    int effectRoots = Session.WorldEffectsFactory.BuildEffectStage(gamez, session.Builder.Scene, labStage);
-                    labStage.AddChild(Session.WorldEffectsFactory.BuildCrashAnchorSet());
+                    int effectRoots = WorldEffectsFactory.BuildEffectStage(gamez, session.Builder.Scene, labStage);
+                    labStage.AddChild(WorldEffectsFactory.BuildCrashAnchorSet());
                     session.Root.AddChild(labStage);
                     session.Runtime.IndexStage(labStage);
                     session.Runtime.PlaceCalledTemplates = true;
@@ -1160,7 +985,7 @@ public partial class PlaneViewer : Node3D
                     string tag = _rigs.Count > 1 ? $"P{pi + 1} " : "";
                     // Each player flies their own pick (the launchscreen's join flow / a --plane= list);
                     // with one name given, that is the same plane for everyone as before.
-                    string planeName = Session.PlaneRoster.PlaneFor(_spec, pi);
+                    string planeName = PlaneRoster.PlaneFor(_spec, pi);
                     var stats = StatsFor(planeName);
 
                     // Flight repaints the field on every map load: each player draws their
@@ -1375,7 +1200,7 @@ public partial class PlaneViewer : Node3D
                             // Racing: no per-player splits board — the shared ranked board
                             // below covers the whole window when the last pilot is in. The marker
                             // HUD shows this player's placing meanwhile.
-                            race.Add(pi, controller.Stunt, Session.PlaneRoster.PlaneDisplayName(stats));
+                            race.Add(pi, controller.Stunt, PlaneRoster.PlaneDisplayName(stats));
                             controller.Race = race;
                             controller.Marker.Race = race;
                             controller.Marker.PlayerIndex = pi;
@@ -1387,7 +1212,7 @@ public partial class PlaneViewer : Node3D
                             // user://stunt_scores.json (race totals are deliberately not recorded).
                             var scoreKey = $"{_spec.Chapter}/{_spec.Mission}/{planeName}";
                             controller.Scoreboard = StuntScoreboard.Build(controller.Stunt,
-                                Session.PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {Session.PlaneRoster.Humanize(_spec.Scenario)}",
+                                PlaneRoster.PlaneDisplayName(stats), $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                                 ScoreStore.Load(), scoreKey);
                             GD.Print($"stunt scoreboard: splits + best time (key '{scoreKey}')");
                         }
@@ -1421,7 +1246,7 @@ public partial class PlaneViewer : Node3D
                 // is a rematch, which restarts every plane, so it routes back through the session.
                 if (race != null)
                 {
-                    var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {Session.PlaneRoster.Humanize(_spec.Scenario)}",
+                    var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
                         exitsToMenu: _menuDriven);
                     var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
                     boardLayer.AddChild(board);
@@ -1437,7 +1262,7 @@ public partial class PlaneViewer : Node3D
                 {
                     var flown = new List<string>(_rigs.Count);
                     for (int pi = 0; pi < _rigs.Count; pi++)
-                        flown.Add($"P{pi + 1} '{Session.PlaneRoster.PlaneFor(_spec, pi)}'");
+                        flown.Add($"P{pi + 1} '{PlaneRoster.PlaneFor(_spec, pi)}'");
                     what += $" + splitscreen {string.Join(", ", flown)}";
                 }
                 else
@@ -1583,7 +1408,7 @@ public partial class PlaneViewer : Node3D
     }
 
     /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view.
-    /// One player keeps PlaneViewer's own main-viewport camera and the default visual
+    /// One player keeps the session's own main-viewport camera and the default visual
     /// layers, so the single-player render path is byte-for-byte what it was. Two or more build
     /// the <see cref="SplitScreen"/> pane rig: the main camera stands down (the panes cover the
     /// screen) and each pane gets its own camera, culling every other player's private
@@ -1648,20 +1473,6 @@ public partial class PlaneViewer : Node3D
         }
     }
 
-    // Node.Duplicate() copies plain properties but not per-instance shader parameters, which
-    // SceneBuilder relies on for the coplanar draw order (node_bias) and the fog opt-outs. Walk
-    // both trees in lockstep (Duplicate preserves child order) and re-apply them.
-    // **This must list every instance uniform SceneBuilder can set**, or a duplicated subtree
-    // silently renders with the shader's default instead of the value the source was given.
-    // `csky_opacity` was once missing from this list.
-    // ⚠ **That omission was LATENT, not live — the claimed symptom is disproven.** The claim
-    // was that `OBJECT_OPACITY_STATE` poses cloud decks, so panes 2–4 would show an opaque deck
-    // where pane 1 shows 0.6. Measured in a 2-player C1 session: the opacity-animated node is
-    // `world1/g27816/l2586/cloudparent` (0.6, as C1's reader-only `clouds.zrd.json` authors), and
-    // it sits in **`world1`, which every pane shares** — it is not duplicated at all. The subtree
-    // this loop actually copies (WorldBuilder's flat `cloudlayer` deck) carries **no**
-    // `csky_opacity` on any node, in any chapter. So nothing diverges today; the entry is here to
-    // keep the list complete, and the ordering rule below is the reason completeness matters.
     private static readonly string[] InstanceShaderParams =
         { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
 
@@ -1689,50 +1500,6 @@ public partial class PlaneViewer : Node3D
         race.Restart();
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
-    }
-
-    /// <summary>Tears down the session (frees <see cref="_worldRoot"/> and drops every cached
-    /// session reference and disposal duty) — called by the Launcher's ReturnToMenu, right before
-    /// it frees this node, for Esc-from-flight and failed builds. The camera / lights / shader
-    /// globals persist on the Launcher.</summary>
-    public void Teardown()
-    {
-        if (_worldRoot != null)
-        {
-            _worldRoot.QueueFree();
-            _worldRoot = null;
-        }
-        // Drop the cached session references so _Process (which may run once more before the
-        // deferred QueueFree lands) skips them via its null guards. The rigs go with the session
-        // (their cameras live in the freed SubViewports); the main-viewport camera is ours and
-        // comes back on for whatever the next session builds.
-        _plane = null;
-        _edgeExtender = null;
-        _weatherRig = null;
-        _selection = null;
-        _nodeLab = null;
-        _worldDamageLab = null;
-        // The clock and the consumers it drives explicitly go with the session; a null
-        // GameClock.Current puts any node that outlives the teardown back on its raw frame delta.
-        _clock = null;
-        GameClock.Current = null;
-        _projectiles = null;
-        _weaponLabNode = null;
-        // Clears csky_light_count, so the next world does not inherit this one's spill for the
-        // frame between teardown and the new runtime's first tick.
-        _worldLights?.Dispose();
-        _worldLights = null;
-        // The session-owned texture archive, kept open past its build scope so the data-driven crash
-        // could bake puffers lazily; drop it here so a map reload disposes the previous one.
-        _sessionTextures?.Dispose();
-        _sessionTextures = null;
-        // Stop polling the torn-down world's origin-parked entities (their nodes are going away).
-        _unplacedWatch = null;
-        _unplacedRecheck = 0.0;
-        _rigs.Clear();
-        _split = null;
-        _camera.Current = true;
-        InSession = false;
     }
 
     /// <summary>Smallest orbit radius a synthesized pivot may sit at, so an aim ray that passes
@@ -1775,14 +1542,34 @@ public partial class PlaneViewer : Node3D
 
     public override void _Notification(int what)
     {
-        // The focus mute lives on the Launcher (it is process state, not session state); what is
-        // left here is the startup line's last chance.
+        // The focus mute lives on the Launcher (it is process state, not session state). What is
+        // left here is the session's teardown: every duty that QueueFree does NOT cover on its own.
+        // Return-to-menu is now a bare QueueFree (Launcher.ReturnToMenu) — the whole session subtree
+        // (world, plane, HUD, rigs, effects) hangs under _worldRoot, a child of this node, so it
+        // frees atomically with us and needs no manual null-out. Only the non-child duties run here.
         if (what == (int)NotificationExitTree)
         {
             // A run that quits inside the session build (the headless probes) never renders a
             // frame, so this is the only place its startup breakdown can still be reported.
             // Idempotent: a session that did render has already emitted and this does nothing.
             _startup?.Emit();
+            // The published clock is a static pointer, not a child: null it so any node that
+            // outlives this teardown falls back to its raw frame delta (GameClock.Current == null).
+            // A later session sets it again in StartSession; the menu-relaunch happens in a frame
+            // after this node has exited, so the two never race.
+            GameClock.Current = null;
+            // Clears csky_light_count so the next world does not inherit this one's light spill;
+            // idempotent, and null-guarded (a failed build never set it).
+            _worldLights?.Dispose();
+            _worldLights = null;
+            // The session-owned texture archive, kept open past its build scope so the data-driven
+            // crash could bake puffers lazily. Not a node, so QueueFree cannot reach it; dispose it
+            // here. Null-guarded — a failed build disposed and nulled it already, so no double free.
+            _sessionTextures?.Dispose();
+            _sessionTextures = null;
+            // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
+            // the panes rendered, and the launchscreen and the next session expect it current.
+            _camera.Current = true;
         }
     }
 

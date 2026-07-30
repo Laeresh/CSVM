@@ -228,7 +228,7 @@ launches the engine about twenty times, and before this it grabbed the foregroun
 
 Not taking focus is not the same as staying out of sight: an unfocused window still *opens in front*
 of what you are reading. So a scripted session also **hides its window** —
-`PlaneViewer.HideScriptedWindow` calls `ShowWindow(SW_HIDE)` once `_Ready` knows the flags. Rendering
+`ScriptedWindow.Hide` calls `ShowWindow(SW_HIDE)` once `Launcher._Ready` knows the flags. Rendering
 is unaffected (all 11 goldens hash-identical); hiding is deliberately not *minimizing*, which stops
 rendering and blanks the captures (verification SHOT-16).
 

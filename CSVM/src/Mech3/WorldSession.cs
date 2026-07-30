@@ -7,7 +7,7 @@ namespace CSVM.Mech3;
 
 /// <summary>
 /// Builds one chapter world and binds its animation program to it: the world+anim half of
-/// <see cref="CSVM.PlaneViewer"/>'s session build. Extracted from that class
+/// <see cref="CSVM.Session.GameSession"/>'s session build. Extracted from that class
 /// so the <c>--anim-lab</c> mode builds the same world+runtime a
 /// normal flight/viewer session does, without duplicating any of it.
 ///

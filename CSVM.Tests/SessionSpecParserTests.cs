@@ -9,7 +9,7 @@ using Xunit;
 namespace CSVM.Tests;
 
 /// <summary>
-/// The argument value grammars. All seven were <c>private</c> inside <c>PlaneViewer</c> and so had
+/// The argument value grammars. All seven were <c>private</c> inside <c>GameSession</c> and so had
 /// no coverage at all; they are the parts of the launch surface most likely to be wrong in a way
 /// nothing downstream notices, because a mis-parsed vector or hold sequence still produces a
 /// perfectly valid session.

@@ -9,12 +9,12 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>Builds the impact/destruction effect stages and the per-player crash runtime
-/// (PLAN-planeviewer-split A4, moved verbatim off <c>PlaneViewer</c>): the world-effects runtime
+/// (PLAN-planeviewer-split A4, moved verbatim off <c>GameSession</c>): the world-effects runtime
 /// (D32, one per session, lazily built on first demand) and <see cref="BuildFlightCrashRuntime"/>
 /// (one per player, built once its controller joins the tree). Constructed once per session
-/// (<c>_worldEffectsFactory</c> in <c>PlaneViewer.StartSession</c>, same lifetime as
+/// (<c>_worldEffectsFactory</c> in <c>GameSession.StartSession</c>, same lifetime as
 /// <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>); holds the lazily-built world-effects
-/// runtime itself — <c>PlaneViewer</c> keeps its own reference only for teardown
+/// runtime itself — <c>GameSession</c> keeps its own reference only for teardown
 /// (<c>ReturnToMenu</c> nulls both).</summary>
 public sealed class WorldEffectsFactory
 {

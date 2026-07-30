@@ -11,7 +11,7 @@ namespace CSVM.Flight;
 ///
 /// It is a plain Godot-UI overlay (panel + containers + labels), distinct from the in-flight
 /// HUD's hand-drawn marker/dials — a modal results screen, not a flight instrument. R starts a
-/// fresh run (FlightController resets the mission + respawns), Esc quits (PlaneViewer's global
+/// fresh run (FlightController resets the mission + respawns), Esc quits (Launcher's global
 /// handler; a menu-launched flight returns to the launchscreen instead). The panel hides itself the moment
 /// the run is no longer complete (i.e. after a restart), so the next run's board is clean.
 /// </summary>

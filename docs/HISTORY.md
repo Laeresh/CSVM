@@ -8020,3 +8020,30 @@ code: a concurrent hand-run `--run-tests` collided with the gate's engine stage 
 `.scratch/test-report.json` (now LOG-13), and one `c1-flight` golden run exited 1 silently after
 its first frame with no diagnostic in any stream — unreproduced (3 of 4 gates passed with the
 identical pinned hash), logged in backlog.md.
+
+**PLAN-planeviewer-split B8 landed (2026-07-30): `PlaneViewer` → `src/Session/GameSession.cs`;
+teardown = QueueFree; the name is retired.** The session node is renamed to `GameSession` and moved
+into `namespace CSVM.Session` (`git mv`, history preserved); `Launcher._session` and its one
+construction site follow. The ~18-field null-out `Teardown()` is deleted — `Launcher.ReturnToMenu`
+is now a bare `QueueFree`. The safety argument: the whole session subtree (world, plane, HUD, rigs,
+effects, weather, skydome/puffs) hangs under `_worldRoot`, a child of the node, so it frees
+atomically — the null-outs only ever existed to guard `_Process` on the *old* persistent root,
+which no longer outlives its subtree. The four duties `QueueFree` cannot reach moved into
+`_Notification` on `NotificationExitTree`: null the published `GameClock.Current` (a static, not a
+child), `Dispose()` `_worldLights` (clears `csky_light_count`) and `_sessionTextures` (the archive
+kept open for lazy crash puffers), and restore the persistent camera's `Current` (splitscreen stood
+it down). All three disposals are null-guarded against the in-build failure path that already
+disposed-and-nulled them, and the menu relaunch always lands a frame after the freed node's
+`_ExitTree`, so nulling the clock never races the next session setting it. The dead `PlaneViewer`
+name is swept out of the whole codebase (source comments + `docs/architecture.md` entry rename and
+body, `CLAUDE.md` module map + high-traffic list, `cli.md`/`tooling.md`), with the handful of
+behaviour-moved references re-attributed to their real owners (`Launcher._Ready` for the shader-
+global Add and window-hide, `Pads.AssignPads`, `WorldEffectsFactory.EffectAnimNames`) rather than
+blindly renamed. Also removed the stale ~160-line CLI-arg doc block from the class header — args are
+parsed by `Launcher` into `SessionSpec` and the reference of record is `docs/cli.md`. Verified:
+`.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical — plus a scripted
+env-var probe (reverted, never committed) that drove initial → menu → session ×3 in one process,
+tearing down and rebuilding across separate frames: four builds with byte-identical anim census
+(814 defs, 616 ON_STARTUP+5, 615 live instances, 267 destructibles — no accumulation, so no node or
+handle leak), no double-dispose / `is_inside_tree` / double-`Add` / exception noise in any stream,
+clean exit 0.

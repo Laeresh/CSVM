@@ -326,7 +326,7 @@ public sealed class WeatherState
     // TOP_COLOR/BOTTOM_COLOR). Any component strictly > 1 means the whole triple is 0–255 and
     // is divided by 255 — verified unambiguous across all weather.json (the only 1.0-bearing
     // colour is a float sky-fog [0.80,0.84,1.0], whose max is exactly 1, so it stays a float).
-    // These are DX7 sRGB framebuffer values; PlaneViewer converts them to linear for the shader.
+    // These are DX7 sRGB framebuffer values; GameSession converts them to linear for the shader.
     private static Color? ParseColor(List<object?>? list)
     {
         if (list is not { Count: >= 3 } || list[0] is not float r || list[1] is not float g || list[2] is not float b)

@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — the structural split
 
 7. ☑ `Launcher` becomes the Main.tscn root; PlaneViewer becomes the instantiated session node
-8. ☐ PlaneViewer → `src/Session/GameSession.cs`; teardown = QueueFree; docs rename sweep
+8. ☑ PlaneViewer → `src/Session/GameSession.cs`; teardown = QueueFree; docs rename sweep
 
 ### Wave C — break the remaining StartSession
 
@@ -243,7 +243,7 @@ SessionSpec change (the PLAN-sessionspec rule). `SessionSpec.FromMenu(_cli, …)
 pristine `_cli` Launcher holds, never from the outgoing session's spec. `_pendingJoin`/`_menuPads`
 are session/join state, not args — they ride the ctx, not the spec.
 
-## B8 ☐ PlaneViewer → `src/Session/GameSession.cs`; teardown = QueueFree
+## B8 ☑ PlaneViewer → `src/Session/GameSession.cs`; teardown = QueueFree
 
 **Goal.** The session node is renamed/moved to `src/Session/GameSession.cs`; `ReturnToMenu` frees
 the node and shows the menu — the ~18-field null-out list is deleted; docs renamed in the same

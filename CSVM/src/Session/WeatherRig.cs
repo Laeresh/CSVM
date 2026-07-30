@@ -9,12 +9,12 @@ using Godot;
 namespace CSVM.Session;
 
 /// <summary>Loads and applies the flown mission's weather, and drives its per-frame rig state
-/// (PLAN-planeviewer-split A5, moved verbatim off <c>PlaneViewer</c>): <c>LoadWeather</c> +
+/// (PLAN-planeviewer-split A5, moved verbatim off <c>GameSession</c>): <c>LoadWeather</c> +
 /// <c>SetupWeather</c> become <see cref="Build"/>, and the per-rig skydome/whiteout/deck/puff
 /// update block from <c>_Process</c> becomes <see cref="Tick"/>. Constructed once per session
-/// (<c>_weatherRig</c> in <c>PlaneViewer.StartSession</c>, same lifetime as
+/// (<c>_weatherRig</c> in <c>GameSession.StartSession</c>, same lifetime as
 /// <see cref="LiveryResolver"/>/<see cref="SpawnPicker"/>/<see cref="WorldEffectsFactory"/>).
-/// The horizon (skydome) build loop itself stays on <c>PlaneViewer</c> — it is a
+/// The horizon (skydome) build loop itself stays on <c>GameSession</c> — it is a
 /// <c>SceneBuilder</c> concern, not weather state — so <see cref="Build"/> takes it as a callback
 /// invoked between the zone resolving and the fog/whiteout/puffs/precip setup, at exactly the
 /// point the original code ran it.</summary>
@@ -51,7 +51,7 @@ public sealed class WeatherRig
 
     /// <summary>The deck geometry's original AABB centre, so <see cref="Tick"/> can re-anchor it
     /// under each player every frame. Set separately from <see cref="Build"/> because the cloud
-    /// deck is world geometry (<c>PlaneViewer</c>'s <c>cloudDeck</c>), not weather state, and is
+    /// deck is world geometry (<c>GameSession</c>'s <c>cloudDeck</c>), not weather state, and is
     /// built whenever a chapter world loads — not only when this rig itself gets built.</summary>
     public void SetDeckCenter(Vector3 center) => _deckCenter = center;
 
@@ -178,7 +178,7 @@ public sealed class WeatherRig
     /// <summary>Everything anchored to *a* camera, once per rig — one in single player, one per
     /// pane in splitscreen (each on that player's own visual layer): re-centers the skydome,
     /// fades the cloud-band whiteout, re-anchors the cloud deck, and advances the ambient puffs.
-    /// Moved verbatim off <c>PlaneViewer._Process</c>.</summary>
+    /// Moved verbatim off <c>GameSession._Process</c>.</summary>
     public void Tick(IReadOnlyList<PlayerRig> rigs, float dt)
     {
         foreach (var rig in rigs)

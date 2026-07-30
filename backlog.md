@@ -236,6 +236,20 @@ work is below.
 
 ## Blocked / deferred
 
+- **Stale `PlaneViewer` references linger in four docs the B8 rename sweep deliberately skipped.**
+  Found 2026-07-30 while retiring the `PlaneViewer` name (PLAN-planeviewer-split B8). Remaining hits:
+  `docs/formats/weather.md` (`PlaneViewer.SetupWeather`/`LoadWeather`, ~4), `docs/formats/weapon-effects.md`
+  (`PlaneViewer.BuildWorldEffectsRuntime`), `docs/formats/anim-definitions.md` (`PlaneViewer.SetupWeather`),
+  and `docs/SCOPING-M4-ai.md` (prose + `PlaneViewer.cs:<line>` refs).
+  - ⚠ **Traps.** Do **not** blind-rename these to `GameSession` — it would be *wrong*. The named
+    methods moved off the class in *earlier* waves: `SetupWeather`/`LoadWeather` → `WeatherRig.Build`
+    (A5), `BuildWorldEffectsRuntime` → `WorldEffectsFactory` (A4). The correct fix is re-pointing to
+    the new owner/method, which is A4/A5 doc-cleanup, not a rename — it needs reading the code, not
+    the class name. The `SCOPING-M4-ai.md` line numbers were already invalidated by B7's extraction
+    and by the B8 `git mv` to `GameSession.cs`; it is a future-milestone planning doc likely rewritten
+    when M4 starts, so re-numbering it now is churn. Schedule the formats/ fixes with the next touch
+    of those pages; leave SCOPING until M4 is picked up.
+
 - **`docs/cli.md` documents 89 flags; the parser accepts 92.** Found 2026-07-30 by the flag-count
   check the SessionSpec plan's last item required, not by anything routine — nothing counts these
   two against each other, so the drift was silent and is presumably years-agnostic rather than new.
