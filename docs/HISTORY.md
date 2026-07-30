@@ -7997,3 +7997,26 @@ load-bearing detail). Pure move, one-line delegation at the call site, zero beha
 Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical; the
 hidden-desktop test harness itself proves the move works (if hiding broke, test windows appear on
 screen). Wave A complete.
+
+**PLAN-planeviewer-split B7 landed (2026-07-30): `Session.Launcher` is Main.tscn's root; PlaneViewer
+is the instantiated session node.** New `src/Session/Launcher.cs` takes the `_Ready` bootstrap
+verbatim (CLI parse, data-root + base paths, log/seed/window/pads side effects, shader-global
+registration, `--dump-*`/`--run-tests` early quits, persistent camera/orbit/sun/env), the menu flow
+(`ShowLaunchMenu`/`StartSessionFromMenu`/`ReturnToMenu`), focus mute, Esc/F11/F12 input, and the
+process-wide `_Process` tail (`ShaderTime.Advance`, `ReportPerf`, `CaptureDirector.Tick`) — the
+last three had to move or they would stall at the launchscreen, where no session node exists.
+`PlaneViewer` is now constructed per launch with `(SessionSpec, LauncherContext)` — the ctx carries
+paths, camera/orbit/sun/env, ProbeRunner/CaptureDirector, master seed, `MenuDriven` and the join
+flow's `MenuPads` — keeps `ProcessPriority -1000` (Launcher sits at -999, so the frame order
+matches the old single root), and keeps the old field-null-out teardown as `Teardown()`, which
+`Launcher.ReturnToMenu` calls before freeing the node; the QueueFree conversion is B8. Verified:
+`.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical — plus the four entry
+shapes by hand: a scripted env-var probe (reverted, never committed) drove menu → C1 session →
+menu → C1 session → menu in one process (identical anim census both builds, menu re-shown, no
+shader double-Add, clean exit — also closing A5's outstanding menu-cycle check), `--menu
+--screenshot` captures the launchscreen, `--run-tests` passes windowed and headless, and an
+early-quit `--dump-flight` exits 0 with a full table. Two gate flakes along the way, neither the
+code: a concurrent hand-run `--run-tests` collided with the gate's engine stage over
+`.scratch/test-report.json` (now LOG-13), and one `c1-flight` golden run exited 1 silently after
+its first frame with no diagnostic in any stream — unreproduced (3 of 4 gates passed with the
+identical pinned hash), logged in backlog.md.

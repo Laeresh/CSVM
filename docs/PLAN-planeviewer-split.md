@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — the structural split
 
-7. ☐ `Launcher` becomes the Main.tscn root; PlaneViewer becomes the instantiated session node
+7. ☑ `Launcher` becomes the Main.tscn root; PlaneViewer becomes the instantiated session node
 8. ☐ PlaneViewer → `src/Session/GameSession.cs`; teardown = QueueFree; docs rename sweep
 
 ### Wave C — break the remaining StartSession
@@ -212,7 +212,7 @@ screen, which the user notices immediately.
 
 # Wave B — the structural split
 
-## B7 ☐ `Launcher` becomes the Main.tscn root
+## B7 ☑ `Launcher` becomes the Main.tscn root
 
 **Goal.** `src/Session/Launcher.cs` is Main.tscn's root: today's `_Ready` bootstrap (SessionSpec
 parse + warnings, data-root/paths, Pads/TextureDropIn/Log/Rng/shader-global side effects,

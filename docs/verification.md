@@ -299,6 +299,10 @@ cite these IDs.
   tell a failed measurement from a clean one.** All four `--dump-*` reports printed their
   error and exited 0; check a probe's exit code with a deliberately broken input
   (`--data-root=` at a path that does not exist).
+- **LOG-13** — **Never run a manual engine probe while `RunTests.ps1` is running — the two
+  share `.scratch/` outputs (`test-report.json`, same-second log names) and the collision
+  reads as a phantom engine FAIL.** A concurrent hand-run `--run-tests` made the gate's
+  engine stage die in 0.9 s, "exited -1 with no report", while the code was fine (B7).
 
 ## WORLD — world data & engine traps
 

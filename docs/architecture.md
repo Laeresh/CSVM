@@ -142,14 +142,15 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/Suites.cs` — the nine registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
-- `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers PlaneViewer quits into.
+- `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
 
 ### `src/Session/` — session-build extractions from `PlaneViewer`
 
-Low-coupling clusters pulled out of the living `PlaneViewer` (PLAN-planeviewer-split Wave A) ahead
-of the structural `Launcher`/`GameSession` split (Wave B).
+The launch/session layer extracted from `PlaneViewer` (PLAN-planeviewer-split): the `Launcher`
+scene root plus the low-coupling session-build clusters it and the session node delegate to.
 
+- `src/Session/Launcher.cs` — Main.tscn root: the once-per-process bootstrap (args → paths → log/seed/window), shader-global registration, persistent camera/lighting, launchscreen + menu flow; instantiates a `PlaneViewer` session node per launch.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
@@ -159,7 +160,7 @@ of the structural `Launcher`/`GameSession` split (Wave B).
 - `src/Pads.cs` — single owner of "which gamepads exist": the phantom-device policy (span every pad) plus the `--no-pads` switch.
 - `src/SessionPaths.cs` — resolves extracted-data paths (per-chapter gamez/texture/zrdr; `PreferUnzipped`); extracted from `PlaneViewer`.
 - `src/SessionSpec.cs` — the launch args as one immutable, engine-free value: `Parse` parses **and** resolves (closed `SessionMode`, `--det` bundle, placement, `BuildsCollision`), plus the pure arg parsers.
-- `src/PlaneViewer.cs` — Main.tscn root: parses the user args, then shows the launchscreen or builds a session (rigs, world, plane, HUD, weather).
+- `src/PlaneViewer.cs` — the per-launch session node (instantiated by `Session.Launcher`): builds one session — rigs, world, plane, HUD, weather — from its `SessionSpec`.
 
 - `CSVM.Tests/` — the xUnit project (`dotnet test`): engine-free reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
 
@@ -1419,16 +1420,18 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
   labels read a real name off it (`on ground/col`).
 
 ## src/PlaneViewer.cs
-Main.tscn root: registers shader globals + lighting + the persistent camera once in `_Ready`, then
-launchscreen or `StartSession()` — menu and CLI share one session-build path.
-⚠ **The `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers moved to
-  `Testing.ProbeRunner`** (PLAN-planeviewer-split A1); `_probeRunner` is constructed in `_Ready`
-  once the base paths settle and every remaining call site is a one-line delegation passing the
-  current `_spec` — see `src/Testing/ProbeRunner.cs`'s entry for the split's shape.
-⚠ **The `--screenshot=`/`--shots=`/`--frames=` capture pipeline moved to
-  `Testing.CaptureDirector`** (PLAN-planeviewer-split A2): `_captureDirector` is constructed in
-  `_Ready` from the launch spec (process-scoped, never re-armed by a menu relaunch) and `Tick()`ed
-  from the tail of `_Process`; F11/F12 delegate to `PrintPlacement`/`SaveScreenshot`. Every other
+The per-launch session node (PLAN-planeviewer-split B7): `Session.Launcher` (Main.tscn's root)
+instantiates one per launch with `(SessionSpec, LauncherContext)`, adds it to the tree, then runs
+`StartSession()` — menu and CLI share that one build path; `Teardown()` + free is the return-to-menu
+path. Bootstrap, launchscreen, persistent camera/lighting and the process-wide per-frame machinery
+(shader clock, `--perf`, capture tick, Esc/F11/F12) live on `src/Session/Launcher.cs` — read that
+entry too before touching anything around the build's edges.
+⚠ **The `--*-test`/`--destroy=` probe wrappers moved to `Testing.ProbeRunner`**
+  (PLAN-planeviewer-split A1); the runner is process-scoped (the Launcher constructs it and
+  dispatches the `--dump-*`/`--run-tests` early quits itself) and every call site here is a
+  one-line delegation passing `_spec` — see `src/Testing/ProbeRunner.cs`'s entry.
+⚠ **The `--screenshot=`/`--shots=`/`--frames=` capture pipeline is `Testing.CaptureDirector`**
+  (PLAN-planeviewer-split A2), owned and `Tick()`ed by the Launcher (B7). Every
   `--screenshot`-conditioned display choice here (HUD/panel visibility, `--anim-lab`'s fixed-step
   clock choice, exit-on-build-failure) reads `_captureDirector.Pending` instead of a raw field —
   see `src/Testing/CaptureDirector.cs`'s entry for the state machine and its sim-frame trap.
@@ -1441,38 +1444,14 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   factory → `Effects.Puffer.MakePuffer`; the Config warmup → `Config.WarmTuningRegistry`. See
   `src/Session/LiveryResolver.cs` and `src/Session/SpawnPicker.cs` for the paint-RNG-order and
   per-player-index traps that moved with the code.
-⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
-  node holds `_cli` (what was typed) and `_spec` (what the live session was built from — a menu
-  launch replaces it with `SessionSpec.FromMenu(_cli, …)`, derived from `_cli` and never from the
-  outgoing `_spec`) and every consumer reads `_spec`. `_Ready` applies only what a pure
-  value cannot — the data-root precedence, `Pads.Disabled`, `TextureDropIn`, `Log.Configure`, the
-  clock-drawn master seed — and emits the spec's held `Warnings` before `Log.Configure`, which is
-  where the loop they replaced raised them. **A new flag is a SessionSpec change**; adding a field
-  here to hold one puts the answer in two places again, which is the smell the extraction removed.
-⚠ Three fields still look like args and are not: `_pendingShot` (nulled when the last burst frame
-  lands), `_shotDelay` (the `--frames=` countdown) and `_pendingJoin` (consumed by the first
-  launchscreen). `_menuPads` is session state too — it comes from the join flow, not from args.
-⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE; `Session.WeatherRig.Build` (PLAN-planeviewer-split
-  A5, moved off `SetupWeather`) only `Set`s — the in-process world rebuild must never double-Add
-  (that errors). `ShaderTime.RegisterGlobal` joins the fog / world-light / `WorldLights` adds there,
-  and must stay ahead of the first shader build: Godot refuses to compile a shader naming an
-  unregistered global.
-⚠ `_Process` calls `ShaderTime.Advance(_clock, delta)` right after `BeginFrame`, UNCONDITIONALLY —
-  the null-clock branch (launchscreen, the frame after `ReturnToMenu`) keeps shader animation on
-  wall time so nothing stalls behind the menu.
-⚠ `ReturnToMenu` QueueFrees `_worldRoot` and nulls every cached session ref, so `_Process`
-  null-guards cover the frame before the deferred free lands.
-⚠ **The `--det` bundle is resolved on the SPEC, not here** — membership, the pinned spawn and the
-  jitter default are `SessionSpec`'s. What stays is the half a pure value cannot do: drawing an
-  unpinned master seed from the clock (`PinnedSeed ?? Rng.TimeSeed()`), writing `Pads.Disabled`, and
-  announcing the resolved set on one `[core] det …` line whose absence means the run was
-  interactive. **Never let a constituent leak into an interactive default** — a bare `--fly` keeps
-  its random spawn, random liveries and live pads.
-⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
-  drives both, right after the `--det` block. `ScriptedWindow.Hide()` (PLAN-planeviewer-split A6,
-  moved off `HideScriptedWindow`) uses `ShowWindow(SW_HIDE)`; **never swap that for minimize**,
-  which stops rendering and blanks every capture (SHOT-16). Both directions are load-bearing: get
-  the predicate wrong and either a test run covers the desktop or somebody's game launches invisible.
+⚠ **It parses no args and resolves nothing.** The Launcher parses the command line and hands this
+  node the one spec its session is built from (`SessionSpec.FromMenu(_cli, …)` for a menu launch);
+  every consumer reads `_spec`. **A new flag is a SessionSpec change**; adding a field here to
+  hold one puts the answer in two places again, which is the smell the extraction removed.
+  `_menuPads` is the deliberate exception and is not an arg — it is join-flow session state and
+  rides the `LauncherContext`, never the spec.
+⚠ `Teardown()` (the Launcher's return-to-menu path) QueueFrees `_worldRoot` and nulls every cached
+  session ref, so `_Process` null-guards cover the frame before the deferred free lands.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** — `ResolvePlacement`, after the `--det`
   block (it needs `_fly`, settled far earlier). Flight gets `_spawnAt`/`_spawnDir`, everything else
   `_camPos`/`_camDir`; nothing downstream re-decides. **Do not "simplify" `_camDir` into `_lookAt`:**
@@ -1480,12 +1459,6 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   `--direction` is a vector, and only flight converts one to the other. `--campos`/`--spawn-at`/
   `--spawn-dir` remain as deprecated aliases with their old per-mode reach — `--campos` never places
   the plane, `--spawn-at` still moves the anim lab's parked prop — and log their replacement once.
-⚠ **`ReportPerf`'s window is 60 RENDERED frames, not a wall second** — under `--det` that is exactly
-  60 sim steps, so two runs of a scenario produce the same number of samples, which is what makes
-  `RunTests.ps1 -Perf`'s paired medians comparable. Keep the line one flat `key=value` string: the
-  script parses it. `--no-vsync` (vsync off + `Engine.MaxFps 0`) exists only so the ms terms stop
-  reading the refresh rate; it changes no simulation, because the fixed clock steps per rendered
-  frame. **`physics_ms` is empty under `--det` by construction** — see `GameClock.ParentDriven`.
 ⚠ **`FrameCamera`'s subject box must be measured BEFORE the labs join the subtree.** `MeshLab` parks
   three EMPTY overlay meshes at the session origin, and `OrbitCamera.MergedAabb` folds them in —
   harmless for a parked plane or a whole world (both already contain the origin), ruinous for a
@@ -1509,15 +1482,12 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   on the aim ray nearest the plane's AABB centre (min radius 1 m), or the AABB centre with the eye
   swung to the aim when there is no `--pos`. It logs the value, because a synthesized pivot the user
   never typed is exactly the thing a later capture cannot explain.
-⚠ F11 (`PrintPlacement`) prints the SUBJECT, per mode: in flight player 1's plane pose (position +
-  nose `-Z`), not the chase camera; in the orbit view `--pos`/`--lookat` (only a point reproduces the
-  radius); elsewhere `--pos`/`--direction`. Directions print to 5 decimals — 3 would quantise a unit
-  vector's aim to ~0.03°.
 ⚠ Owns the session `GameClock`: built per session (mode from `--det`/`--anim-lab`), published as
   `GameClock.Current`, nulled on teardown. `ProcessPriority = -1000` so `BeginFrame` runs before
-  any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
-  `SimStep` consumers when the clock is not realtime; P/`.` are bound in `_UnhandledInput` for
-  freecam/viewer only (flight polls P itself, the anim lab owns its own transport).
+  any consumer reads the clock — do not let another node undercut it (the Launcher sits one notch
+  behind at -999). `DriveSimSteps` steps the `SimStep` consumers when the clock is not realtime;
+  P/`.` are bound in `_UnhandledInput` for freecam/viewer only (flight polls P itself, the anim
+  lab owns its own transport).
 ⚠ **Weather (PLAN-planeviewer-split A5) moved to `Session.WeatherRig`**: `_weatherRig` is
   constructed and `Build()`-ed here, but the per-rig horizon build LOOP stays inline — it's a
   `SceneBuilder` concern, not weather state — passed to `Build` as the `buildDomes` callback that
@@ -1529,8 +1499,6 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   built for this session). See `src/Session/WeatherRig.cs`'s entry.
 ⚠ Per-rig: the skydome is REBUILT per rig (star mesh `csky_light_fade` instance uniform); the cloud
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
-⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
-  has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
 ⚠ **Owns the session `StartupProfile`** — built at the TOP of `StartSession` (before `_worldRoot`)
   and published as `StartupProfile.Current`; `EndBuild()` on the success return, `Frame()` from
   `_Process`, `Emit()` from `NotificationExitTree` for the runs that quit mid-build. Its phases here
@@ -1732,7 +1700,8 @@ line and compares against `analysis/goldens/manifest.json`.
 ## src/Testing/ProbeRunner.cs
 The `--dump-markers`/`--dump-weapons`/`--dump-flight`/`--dump-loadout`/`--run-tests`/
 `--effects-test`/`--damage-test`/`--destroy=` probe wrappers (PLAN-planeviewer-split A1),
-constructed once in `PlaneViewer._Ready` after the base paths settle and held as `_probeRunner`.
+constructed once in `Launcher._Ready` after the base paths settle (B7) — the Launcher dispatches
+the `--dump-*`/`--run-tests` early quits itself and hands the runner to each session node.
 Each method reads a `SessionSpec` passed **per call**, not stored — a menu launch can replace the
 caller's spec between calls, so a cached one would silently answer with a stale launch's flags.
 ⚠ **No back-reference to the host node.** `RunTestSuites` takes the parent `Node` (to host its
@@ -1748,10 +1717,11 @@ caller's spec between calls, so a cached one would silently answer with a stale 
 
 ## src/Testing/CaptureDirector.cs
 The `--screenshot=`/`--shots=`/`--frames=` state machine plus F11/F12's placement print and ad-hoc
-save (PLAN-planeviewer-split A2), constructed once in `PlaneViewer._Ready` from the launch spec and
-held as `_captureDirector`; `Tick()` runs from the tail of `_Process`. No back-reference to the host
-node — `Tick`/`PrintPlacement` take the camera/orbit/rigs/clock/plane/menu-visible they need as
-parameters.
+save (PLAN-planeviewer-split A2), constructed once in `Launcher._Ready` from the launch spec
+(process-scoped, never re-armed by a menu relaunch); `Tick()` runs from the Launcher's `_Process`
+(B7), which is what keeps `--menu --screenshot` capturing the launchscreen with no session node
+alive. No back-reference to the host node — `Tick`/`PrintPlacement` take the
+camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
 ⚠ **`--frames=N` is a sim coordinate, not a wall-clock delay** — `Tick`'s warm-up countdown
   decrements exactly once per `_Process` call, in the same place in the frame PlaneViewer's inline
   block used to; move that decrement anywhere else (an early return above it, a second call path)
@@ -1761,6 +1731,48 @@ parameters.
 ⚠ `Vec3Arg`/`DirArg`/`SaveScreenshot` are static — call them as `Testing.CaptureDirector.X(...)`,
   not through `_captureDirector`; `FrameCamera`'s orbit-pivot log line is the one call site outside
   the capture/placement paths.
+
+## src/Session/Launcher.cs
+Main.tscn's root (PLAN-planeviewer-split B7): the once-per-process bootstrap — CLI parse into
+`_cli`/`_spec`, data-root precedence + base paths, `Pads.Disabled`/`TextureDropIn`/`Log`/master-seed
+side effects, the `--dump-*`/`--run-tests` early quits — plus everything that persists across
+in-process relaunches: camera, orbit rig, sun, WorldEnvironment, launchscreen, focus mute, and the
+per-frame shader clock / `--perf` / capture tick. `LaunchSession()` instantiates a `PlaneViewer`
+session node per launch; `ReturnToMenu` calls its `Teardown()` and frees it.
+⚠ `GlobalShaderParameterAdd` (fog / world-light / `WorldLights` / `ShaderTime.RegisterGlobal`) runs
+  in `_Ready` ONCE, ahead of both the dump branches and the first shader build — a session rebuild
+  must never double-Add (that errors; `WeatherRig.Build` only `Set`s), and Godot refuses to compile
+  a shader naming an unregistered global.
+⚠ **The `--det` bundle is resolved on the SPEC, not here** — what stays is the half a pure value
+  cannot do: drawing an unpinned master seed from the clock (`PinnedSeed ?? Rng.TimeSeed()`),
+  writing `Pads.Disabled`, and announcing the resolved set on one `[core] det …` line whose absence
+  means the run was interactive. **Never let a constituent leak into an interactive default** — a
+  bare `--fly` keeps its random spawn, random liveries and live pads.
+⚠ **A scripted session HIDES its window, an interactive one asks for focus** — the same predicate
+  drives both, right after the `--det` block. `ScriptedWindow.Hide()` uses `ShowWindow(SW_HIDE)`;
+  **never swap that for minimize**, which stops rendering and blanks every capture (SHOT-16). Both
+  directions are load-bearing: get the predicate wrong and either a test run covers the desktop or
+  somebody's game launches invisible.
+⚠ **It holds the pristine `_cli`; `_spec` is what the live session was built from.** A menu launch
+  replaces `_spec` with `SessionSpec.FromMenu(_cli, …)` — derived from `_cli`, never from the
+  outgoing spec. **A new flag is a SessionSpec change, never a Launcher or context field.**
+  `_pendingJoin` (consumed by the first launchscreen) and `_menuPads` (the join flow's binding,
+  handed to the session via `LauncherContext`) are session/join state, not args.
+⚠ `_Process` runs at priority -999 — right behind the session node's -1000, ahead of everything
+  else, the same point in the frame the single-root class ran. `ShaderTime.Advance` is
+  UNCONDITIONAL: the null-clock branch (launchscreen, the frame after a teardown) keeps shader
+  animation on wall time so nothing stalls behind the menu. The only clock it owns is
+  `RunTestSuites`' out-param; everything else reads `GameClock.Current`.
+⚠ **`ReportPerf`'s window is 60 RENDERED frames, not a wall second** — under `--det` exactly 60 sim
+  steps, so two runs produce the same number of samples, which is what makes `RunTests.ps1 -Perf`'s
+  paired medians comparable. Keep the line one flat `key=value` string: the script parses it.
+  **`physics_ms` is empty under `--det` by construction** — see `GameClock.ParentDriven`.
+⚠ F11 (`CaptureDirector.PrintPlacement`) prints the SUBJECT, per mode: in flight player 1's plane
+  pose (position + nose `-Z`), not the chase camera; in the orbit view `--pos`/`--lookat` (only a
+  point reproduces the radius); elsewhere `--pos`/`--direction`. Directions print to 5 decimals —
+  3 would quantise a unit vector's aim to ~0.03°.
+⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
+  has no gain plumbing and one-shots bypass `MixGain`, so most audio would stay audible.
 
 ## src/Session/LiveryResolver.cs
 Resolves which livery each player flies (PLAN-planeviewer-split A3, moved verbatim off
