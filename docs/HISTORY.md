@@ -8219,3 +8219,12 @@ able-to-fail: perturbing the crash rig's `Rng.NewIntSeed(Rng.Crash)` draw (`+ 1`
 (`a660598…` → `083ad0b…`), reverting restored it bit-for-bit. Verified `.\RunTests.ps1` PASS: 303
 units, 10/10 engine suites, 13/13 golden hashes (12 prior unchanged + the new shot). Wave A is now
 complete; both role factories (B11/B12) have a tripwire to verify against.
+
+**AnimRuntime role factory: `ForEffects` extracted (2026-07-30, PLAN-animruntime-role-factories B11).**
+`AnimRuntime.ForEffects(seed, pufferParent, pufferFactory, debugMotions, effectTtl, playerPosition)`
+bakes the four invariant construction flags (`AutoStart=false`, `PlaceCalledTemplates`,
+`NameResolveFallback`, `SoundHandledElsewhere`) and returns an unbound runtime; `WorldEffectsFactory
+.BuildWorldEffectsRuntime` now calls it instead of an inline object initializer, keeping its own
+`Bind`/`AddChild` sequencing untouched. Pure construction-site extraction, no flag/seed/behaviour
+change. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine suites, all 13 golden hashes
+byte-identical (including the A1 effects tripwire and the A2 crash tripwire, neither of which moved).

@@ -137,23 +137,13 @@ public sealed class WorldEffectsFactory
         var stage = new Node3D { Name = "world_effects", Visible = false };
         _worldRoot.AddChild(stage);
         int staged = BuildEffectStage(gamez, worldScene, stage, EffectStageRoots);
-        var effects = new AnimRuntime
-        {
-            AutoStart = false,
-            DebugMotions = _spec.DebugAnim,
-            PufferParent = _worldRoot,
-            PufferFactory = st => Puffer.Create(st, textures, sustained: true),
-            PlaceCalledTemplates = true,
-            NameResolveFallback = true,
-            EffectTtl = EffectRuntimeTtl,
-            // The impact/death SOUND an effect def carries is already played by the projectile pool
-            // (D30) or the world runtime (D31); this runtime only renders the puffers.
-            SoundHandledElsewhere = true,
-            // Several gun effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice
-            // decide which effects render at all — its own stream off the master seed.
-            Seed = Rng.IntSeedFor(Rng.Effects),
-            PlayerPosition = _playerPosition,
-        };
+        // The impact/death SOUND an effect def carries is already played by the projectile pool
+        // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
+        // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
+        // off the master seed — decide which effects render at all.
+        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects), _worldRoot,
+            st => Puffer.Create(st, textures, sustained: true), _spec.DebugAnim, EffectRuntimeTtl,
+            _playerPosition);
         // Bind name resolution to the (hidden) template stage — so the effect names resolve to
         // these templates and not to the world's or the crash roots' same-named nodes — but parent
         // the runtime node itself under the visible world root, a plain logic node that self-ticks.

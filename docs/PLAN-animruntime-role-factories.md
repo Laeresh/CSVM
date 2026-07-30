@@ -96,7 +96,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — Extract the factories (behaviour-preserving; Wave A is its tripwire)
 
-11. ☐ `AnimRuntime.ForEffects(...)` + rewire `BuildWorldEffectsRuntime`
+11. ☑ `AnimRuntime.ForEffects(...)` + rewire `BuildWorldEffectsRuntime`
 12. ☐ `AnimRuntime.ForCrashRig(...)` + rewire `BuildFlightCrashRuntime`
 13. ☐ Delete dead `AnimRuntime.Apply`; update `docs/architecture.md` + `docs/HISTORY.md`
 
@@ -112,7 +112,7 @@ needed; this is a linear single-context plan.
 
 # Wave A — Pin the two uncovered paths
 
-## A1 ☐ Effects-runtime tripwire
+## A1 ☑ Effects-runtime tripwire
 
 **Goal.** `.\RunTests.ps1` contains one deterministic check whose value depends on the effects
 runtime (`ForEffects`) actually constructing and rendering a puffer — so a later flag/seed
@@ -190,7 +190,7 @@ and a fixed player count so the draw order is pinned.
 
 # Wave B — Extract the factories
 
-## B11 ☐ `AnimRuntime.ForEffects(...)` + rewire `BuildWorldEffectsRuntime`
+## B11 ☑ `AnimRuntime.ForEffects(...)` + rewire `BuildWorldEffectsRuntime`
 
 **Goal.** `BuildWorldEffectsRuntime` constructs its runtime through a named factory that hides the
 four invariant booleans; its call site shrinks to the role-varying values, and behaviour is identical.

@@ -429,6 +429,33 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return runtime;
     }
 
+    /// <summary>Configures (but does not bind) the world-effects runtime's construction ritual: the
+    /// four invariant flags a "renders effects at a call site, no ambience of its own" role always
+    /// takes (<see cref="AutoStart"/>=false, <see cref="PlaceCalledTemplates"/>,
+    /// <see cref="NameResolveFallback"/>, <see cref="SoundHandledElsewhere"/>). The caller still calls
+    /// <see cref="Bind"/> + adds the returned node to the tree — this only hides the invariant block.
+    /// <paramref name="pufferParent"/> must be the world root even for a per-player caller (the crash
+    /// lesson: a PUFFER_STATE emitter goes TopLevel the moment it emits, so parenting it anywhere else
+    /// leaves it drawn-but-unrendered).</summary>
+    public static AnimRuntime ForEffects(int seed, Node3D pufferParent,
+        Func<Effects.PufferState, Effects.Puffer?> pufferFactory, bool debugMotions, float effectTtl,
+        Func<Vector3> playerPosition)
+    {
+        return new AnimRuntime
+        {
+            AutoStart = false,
+            PlaceCalledTemplates = true,
+            NameResolveFallback = true,
+            SoundHandledElsewhere = true,
+            DebugMotions = debugMotions,
+            PufferParent = pufferParent,
+            PufferFactory = pufferFactory,
+            EffectTtl = effectTtl,
+            Seed = seed,
+            PlayerPosition = playerPosition,
+        };
+    }
+
     /// <summary>The world nodes a definition anchors to, for the inspect tools â€” the runtime's own
     /// answer, so a readout shows what the bootstrap actually bound rather than a re-derivation.
     /// A null entry is a global (anchorless) instance. Read-only: the list is the cached one.</summary>
