@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — impacts & surfaces
 
-11. ☐ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist
+11. ❌ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist — disproven 2026-07-30: the sea already collides, tags `water`, splashes and sounds; follow-up `BL-186` (splash imperceptible)
 12. ◐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); the at-the-controls overlay read stays owed until B14 draws true
 13. ☐ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
 14. ☑ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
@@ -212,7 +212,18 @@ lab first. (b) Not `BL-046`/`BL-061`: `DamageVisuals` never touches `EffectStage
 
 # Wave B — impacts & surfaces
 
-## B11 ☐ `BL-017` Water impacts: sea gets a projectile-layer collider
+## B11 ❌ `BL-017` Water impacts: sea gets a projectile-layer collider
+
+**Outcome (2026-07-30): disproven — no code.** The C1B sea is already fully collidable and
+`water`-tagged: six `--pos`/`--hold`/`--fire` dive probes across the map (including the mission spawn
+and 2 km past the map edge, on extension tiles) each logged 8/8 `impact: … -> Water` on distinct sea
+tiles, instanced `splash1.flt` and selected `snd_water_bullet`. The plane does NOT fall through to the
+under-map backstop either — a sea dive logs `CRASH into g28178/col` (classified Ground, BL-059's known
+gap), so the "must not change" constraint described a behaviour that never existed. The user's
+"nothing at all" has two measured mechanisms: gun rounds expire silently at RANGE = 1000 m (4 s of
+fire at 1380 m slant → zero impacts — the same false negative that produced this item's premise, now
+verification.md METHOD-18), and the landed splash covers 0–12 px at 300 m (`--tex-census=splash`,
+SHOT-14). The splash *look* is the real gap → `BL-186`.
 
 **Goal.** Gun and rocket rounds striking the sea produce a hit — splash effect and sound — instead
 of passing through.

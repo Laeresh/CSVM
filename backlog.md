@@ -221,18 +221,23 @@ work is below.
    `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
 **Impacts & surfaces (findings 3, 4).**
-7. `BL-017` **Water impacts produce NOTHING — the sea has no collider.** Hits fire only on a raycast collider
-   strike (`Projectile.cs:416`); the sea isn't collidable, so gun/rocket rounds pass straight through →
-   no hit, no splash, no sound (user, grilled: "nothing at all"). **This supersedes the pass-1 claim that
-   the D30 water splash worked in flight** — that reading was headless/forced, not at-the-controls. *Fix
-   shape:* give the sea surface a `water`-tagged collider (the `SurfaceMeta` classifier already keys off
-   it, `Projectile.cs:544`) so raycasts register; then the splash instances. Target = small white
-   `Splash0N`-style sprites walking across the surface (`Water Splash.png`). ⚠ A sea collider interacts
-   with the crash system — a water crash today falls through to the under-map backstop (see the water-
-   crash-variant feature-backlog item). Scope the collider so it feeds *impacts* without turning every
-   sea-skim into a crash (e.g. a projectile-only collision layer).
-   *Playtest after fix:* once the sea has a collider, look for small white splash sprites on water
-   impacts. `./RunGame.ps1 --plane=player_bhawk --chapter=C1B` (over water).
+7. `BL-186` **Water impacts land but READ as nothing — the splash is imperceptible, and out-of-range rounds
+   expire silently.** Replaces the disproven `BL-017` "the sea has no collider" (2026-07-30): the C1B sea
+   is fully collidable and `water`-tagged — six dive-fire probes across the map (incl. the mission spawn
+   and 2 km past the map edge on extension tiles) each log 8/8 `-> Water` impacts on distinct sea tiles,
+   instance `splash1.flt` and select `snd_water_bullet`. What "nothing at all" actually was: (a) gun
+   rounds expire **silently at RANGE = 1000 m** — from 400 m altitude in a 17° dive the sea is 1380 m
+   slant away, and 4 s of continuous fire produces zero impacts; (b) when rounds do land, `splash1.flt`
+   covers **0–12 px at 300 m** (`--tex-census=splash`: `splashbase` 0 confident / 644 contested,
+   `splash01` 0/8 — SHOT-14's "not shown"). *Fix shape:* the original's small white `Splash0N` sprite
+   burst walking across the surface (`Water Splash.png`); size/count/life are TUNE. Open fidelity
+   question: does the original splash when rounds range-expire over water? (needs a CAP of the original.)
+   ⚠ Traps: do **not** add a sea collider — it exists, and the disproven premise was the instrument's own
+   artifact (a fire probe beyond the weapon's RANGE logs nothing whatever the sea has — METHOD-18); keep
+   probe slant under ~800 m. The whole mechanism (collider → `ClassifySurface` → per-surface IMPACT
+   binding → model + sound) is live — only the *look* is missing; sound audibility is unverified (user).
+   *Playtest after fix:* small white splash sprites + audible sound on water gunfire. Get low over the
+   water first — rounds only reach ~1000 m. `./RunGame.ps1 --plane=player_bhawk --chapter=C1B`.
 8. `BL-018` **Dirt impact too prominent — should be small tumbling debris.** Dirt falls to the stand-in spark: one
    big `ImpactSize = 3 m` orange billboard (`Projectile.cs:66,515`). Original = small, **randomly-rotated
    tumbling debris** sprites (`Dirt Splash.png`: "not billboards — rotating randomly"). *Fix shape:* a
@@ -690,9 +695,10 @@ unscheduled.
   2. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
      (`FlightController.cs`) returns `CrashSurface.Ground` for every crash. **Water**
      (`player_crash_water`: `plane_big_splash` + `large_steam_spray`, the `destroy_crash` sequence)
-     needs a sea-surface signal the collision system does not expose (a water crash today falls
-     through the collider-less sea to the under-map backstop, which respawns rather than crashing);
-     note `snd_exp_water_a`. **Air** (`player_crash_default`, no-impact destruct, `destroyed=false`,
+     needs `ClassifySurface` to read the struck collider's `SceneBuilder.SurfaceMeta` tag instead of
+     returning Ground unconditionally — the sea IS collidable and `water`-tagged (measured 2026-07-30:
+     a C1B sea dive logs `CRASH into g28178/col` and plays the dirt crash; the signal is already on
+     the `hitBody` the sweep reports); note `snd_exp_water_a`. **Air** (`player_crash_default`, no-impact destruct, `destroyed=false`,
      pieces arc away, per-piece `large_firetrail`) has **no trigger until weapons (M3)** can down a
      plane mid-flight — a building crash is `_dirt`, not air. Data: `extracted/C1/cam_anim/`
      (`player-player_crash_*.json` + the effect defs); full decode in `docs/HISTORY.md` (2026-07-23).

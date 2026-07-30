@@ -8656,3 +8656,22 @@ collider is not") is not reproduced by this fix on any stock aircraft, and the t
 paths read correct by eye — so the exact mechanism behind that specific in-flight observation is
 still open if it recurs. Tracked as `BL-198`, naming the two paths this pass did not exercise
 (a destructible's healthy→wreck collider swap, and `MapEdgeExtender`'s mirrored edge tiles).
+
+## 2026-07-30 — M3 polish-2 B11 (BL-017): disproven — the sea already collides, splashes and sounds
+
+The item's premise ("the sea has no collider, so water impacts produce nothing") is false. Measured
+on the unchanged build: six `--pos`/`--direction`/`--hold`/`--fire` dive probes across C1B — map
+centre, the IA1 mission spawn (-6748,-8885), three far corners, and 2 km PAST the map edge on the
+mirrored extension tiles — each logged 8/8 `impact: … -> Water` on a distinct sea tile
+(`g28178`/`g28204`/`g28227`/`g28287`/`g28295`/`g28305`/`g28265` `/col`), instanced `splash1.flt`
+(2 meshes) and selected `snd_water_bullet` (present in `sounds.zrd.json` → `bullet_water.wav`). The
+companion claim — "a water crash falls through to the under-map backstop" — is also stale: a sea
+dive logs `CRASH into g28178/col` (classified Ground; the Ground-only `ClassifySurface` is BL-059's
+open item, whose stale fall-through wording was corrected too). What the playtest actually saw, both
+reproduced: (a) gun rounds expire **silently at RANGE = 1000 m** — 4 s of continuous fire from
+400 m altitude in a 17° dive (1380 m slant) logged zero impacts, the exact false negative that
+produced the report, now `verification.md` **METHOD-18**; (b) a landed splash is imperceptible —
+`--tex-census=splash --no-fog` at 300 m read `splashbase` 0 confident/644 contested px, `splash01`
+0/8 (SHOT-14's "not shown"). No code changed; collider counts by construction unmoved;
+`.\RunTests.ps1` green. `BL-017` deleted; the real gap (the `Splash0N` sprite look + the
+range-expiry fidelity question) is the new `BL-186` with traps.

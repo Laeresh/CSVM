@@ -66,6 +66,11 @@ cite these IDs.
   its text.** A Python `utf-8-sig` round-trip added a BOM the committed file never had;
   pair METHOD-16's forced rebuild with `git diff --stat`, and restore with `git checkout --`
   when the content is meant to be unchanged.
+- **METHOD-18** — **A fire probe measures nothing past the weapon's RANGE — gun rounds
+  expire silently there, so "no impact" is the aim geometry's verdict, not the surface's;
+  keep the slant under RANGE.** 4 s of continuous 40slug fire (RANGE 1000 m) at 1380 m
+  slant logged zero impacts over a fully collidable sea and filed as "the sea has no
+  collider" (BL-017, disproven).
 
 ## DIAG — chasing a symptom
 
