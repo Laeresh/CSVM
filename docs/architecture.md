@@ -1405,6 +1405,13 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   `Testing.ProbeRunner`** (PLAN-planeviewer-split A1); `_probeRunner` is constructed in `_Ready`
   once the base paths settle and every remaining call site is a one-line delegation passing the
   current `_spec` — see `src/Testing/ProbeRunner.cs`'s entry for the split's shape.
+⚠ **The `--screenshot=`/`--shots=`/`--frames=` capture pipeline moved to
+  `Testing.CaptureDirector`** (PLAN-planeviewer-split A2): `_captureDirector` is constructed in
+  `_Ready` from the launch spec (process-scoped, never re-armed by a menu relaunch) and `Tick()`ed
+  from the tail of `_Process`; F11/F12 delegate to `PrintPlacement`/`SaveScreenshot`. Every other
+  `--screenshot`-conditioned display choice here (HUD/panel visibility, `--anim-lab`'s fixed-step
+  clock choice, exit-on-build-failure) reads `_captureDirector.Pending` instead of a raw field —
+  see `src/Testing/CaptureDirector.cs`'s entry for the state machine and its sim-frame trap.
 ⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
   node holds `_cli` (what was typed) and `_spec` (what the live session was built from — a menu
   launch replaces it with `SessionSpec.FromMenu(_cli, …)`, derived from `_cli` and never from the
@@ -1703,6 +1710,22 @@ caller's spec between calls, so a cached one would silently answer with a stale 
 ⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `PlaneViewer`'s
   `--weapon-test` report (not itself a moved wrapper) also writes through `_probeRunner.WriteScratch`
   rather than duplicating the helper.
+
+## src/Testing/CaptureDirector.cs
+The `--screenshot=`/`--shots=`/`--frames=` state machine plus F11/F12's placement print and ad-hoc
+save (PLAN-planeviewer-split A2), constructed once in `PlaneViewer._Ready` from the launch spec and
+held as `_captureDirector`; `Tick()` runs from the tail of `_Process`. No back-reference to the host
+node — `Tick`/`PrintPlacement` take the camera/orbit/rigs/clock/plane/menu-visible they need as
+parameters.
+⚠ **`--frames=N` is a sim coordinate, not a wall-clock delay** — `Tick`'s warm-up countdown
+  decrements exactly once per `_Process` call, in the same place in the frame PlaneViewer's inline
+  block used to; move that decrement anywhere else (an early return above it, a second call path)
+  and every golden lands on a different sim frame. `Pending` (was `_pendingShot != null`) is the
+  predicate every other `--screenshot`-conditioned choice elsewhere reads — never re-derive it from
+  the spec, since a burst clears it mid-session.
+⚠ `Vec3Arg`/`DirArg`/`SaveScreenshot` are static — call them as `Testing.CaptureDirector.X(...)`,
+  not through `_captureDirector`; `FrameCamera`'s orbit-pivot log line is the one call site outside
+  the capture/placement paths.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

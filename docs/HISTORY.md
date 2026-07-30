@@ -7923,3 +7923,17 @@ behavior reorder. Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/
 hash-identical; plus a manual `--dump-flight` run (clean 6/6-scenario envelope report) and a manual
 `--freecam --chapter=C1 --damage-test` run (16 defs swept of 267 instances across 196 groups, 2412
 colliders) — both match the in-suite runs' report shape byte-for-byte.
+
+**PLAN-planeviewer-split A2 landed (2026-07-30): screenshot pipeline → `src/Testing/CaptureDirector.cs`.**
+The `--screenshot=`/`--shots=`/`--frames=` state machine (`_pendingShot`/`_shotDelay`/`_shotIndex`/
+`_shotBaseXform`/`_shotPivot`, `ApplyShotJitter`, `IndexedShotPath`, `SaveScreenshot`,
+`PrintPlacement`, `Vec3Arg`/`DirArg`, and the capture block at the tail of `_Process`) moved off
+`PlaneViewer` verbatim into a new `CaptureDirector` class, constructed once in `_Ready` from the
+launch spec (`_captureDirector`) and `Tick()`ed from the same spot in `_Process` the inline block
+used to occupy — the sim-frame countdown decrements in the identical place in the frame. Every
+other `--screenshot`-conditioned display choice elsewhere in `PlaneViewer` (HUD/panel visibility,
+`--anim-lab`'s fixed-step clock choice, exit-on-build-failure) now reads the new
+`_captureDirector.Pending` property instead of the raw `_pendingShot != null` field. Pure move, no
+behavior reorder. Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens
+hash-identical (this item's own subject); plus a manual `--stage=empty --det --shots=3` burst run —
+three indexed files (`_00`/`_01`/`_02`.png) landing on sim frames 15/16/17 as before.

@@ -109,7 +109,7 @@ GODOT --path CSVM res://scenes/Main.tscn -- --plane=player_bhawk
 - `src/Effects/` (3) — particle systems: puffers, the ambient cloud field, precipitation.
 - `src/UI/` (15) — launchscreen, splitscreen rig, and the inspection labs (each with a scripted `--debug-*` twin).
 - `src/Utils/` (6) — session-wide services: clock, log, seed, shader time, config, startup profile. Determinism lives here.
-- `src/Testing/` (4) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
+- `src/Testing/` (6) — the in-engine assertion harness behind `--run-tests` and the `--dump-*` probes.
 - `src/` root (3) — `PlaneViewer.cs` (Main.tscn root: args → launchscreen or session), `SessionPaths.cs`, `Pads.cs`.
 - `CSVM.Tests/` — the xUnit project: engine-free reader units. Anything reaching `GD.*` or a live `Node` belongs in `src/Testing/` instead.
 
@@ -183,6 +183,6 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests ([`playtest.md`](playtest.md);
 
-**Active plan: [`docs/PLAN-planeviewer-split.md`](docs/PLAN-planeviewer-split.md)** — the PlaneViewer god-class breakup (Launcher / GameSession split), at Wave A. Next: A2 (screenshot → CaptureDirector). Pure refactor: the 11 golden hashes must stay byte-identical on every commit. Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
+**Active plan: [`docs/PLAN-planeviewer-split.md`](docs/PLAN-planeviewer-split.md)** — the PlaneViewer god-class breakup (Launcher / GameSession split), at Wave A. Next: A3 (livery/spawn/pure helpers → their homes). Pure refactor: the 11 golden hashes must stay byte-identical on every commit. Verify a change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.

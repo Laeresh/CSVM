@@ -235,13 +235,9 @@ public partial class PlaneViewer : Node3D
     // The one world-effects runtime a plane-less session builds on demand (--destroy, the damage
     // lab's first kill), so a death's fire and smoke render outside flight.
     private AnimRuntime? _worldEffects;
-    // The capture still owed, taken from the spec at launch and cleared once written — a --shots=
-    // burst counts down through _shotIndex and this goes null when the last frame lands.
-    private string? _pendingShot;
-    private int _shotDelay;            // frames still to wait before the first capture
-    private int _shotIndex;            // 0-based index of the shot being written
-    private Transform3D? _shotBaseXform;  // camera pose captured at the first burst frame
-    private Vector3 _shotPivot;           // micro-orbit centre (keeps the subject framed)
+    // The --screenshot=/--shots=/--frames= state machine and F11/F12's placement print and
+    // ad-hoc save (PLAN-planeviewer-split A2) — see src/Testing/CaptureDirector.cs's entry.
+    private Testing.CaptureDirector _captureDirector = null!;
     // The master seed every subsystem generator derives from (see Utils.Rng). Pinned runs take the
     // spec's value; everything else draws from the clock, which is why it is resolved here and not
     // in the spec.
@@ -461,8 +457,7 @@ public partial class PlaneViewer : Node3D
         {
             Pads.Disabled = true;
         }
-        _pendingShot = _spec.ScreenshotPath;
-        _shotDelay = _spec.ScreenshotFrames;
+        _captureDirector = new Testing.CaptureDirector(_spec);
         _pendingJoin = _spec.DebugJoin;
 
 
@@ -716,7 +711,7 @@ public partial class PlaneViewer : Node3D
         // what each consumer used before the clock existed.
         _clock = new GameClock
         {
-            Mode = _spec.Det || (_spec.AnimLab && _pendingShot != null) ? GameClock.RunMode.FixedStep
+            Mode = _spec.Det || (_spec.AnimLab && _captureDirector.Pending) ? GameClock.RunMode.FixedStep
                 : _spec.AnimLab ? GameClock.RunMode.FixedAccum
                 : GameClock.RunMode.Realtime,
         };
@@ -1147,7 +1142,7 @@ public partial class PlaneViewer : Node3D
                         // Interactive shows the whole lab UI; a scripted --screenshot hides it so
                         // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
                         // to capture the timeline (the same convention as --debug-livery).
-                        ShowUi = _pendingShot == null || _spec.DebugAnimUi,
+                        ShowUi = !_captureDirector.Pending || _spec.DebugAnimUi,
                         // The lab's camera follows whichever rung of the shared selection is current.
                         Selection = _selection,
                     };
@@ -1364,7 +1359,7 @@ public partial class PlaneViewer : Node3D
                 _spectator = new SpectatorCamera(_camera, camPos, camLookAt)
                 {
                     // A scripted --screenshot run wants the frame clean of the overlay.
-                    ShowReadout = _pendingShot == null,
+                    ShowReadout = !_captureDirector.Pending,
                 };
                 _worldRoot!.AddChild(_spectator);
                 what += " + freecam";
@@ -1836,8 +1831,10 @@ public partial class PlaneViewer : Node3D
             }
             _sessionTextures?.Dispose();
             _sessionTextures = null;
-            if (_pendingShot != null)
+            if (_captureDirector.Pending)
+            {
                 GetTree().Quit(1);
+            }
             return false;
         }
 
@@ -1856,7 +1853,7 @@ public partial class PlaneViewer : Node3D
             {
                 DebugSpec = _spec.DebugMesh,
                 // A scripted capture is about the geometry, not the panel over it.
-                ShowPanel = _pendingShot == null,
+                ShowPanel = !_captureDirector.Pending,
             });
         }
 
@@ -2822,7 +2819,7 @@ public partial class PlaneViewer : Node3D
             {
                 float ahead = Mathf.Max((aabb.GetCenter() - eye).Dot(dir), MinOrbitRadius);
                 pivot = eye + dir * ahead;
-                Log.Info("core", $"orbit pivot from --direction: --lookat={Vec3Arg(pivot.Value)} radius={ahead:0.###}");
+                Log.Info("core", $"orbit pivot from --direction: --lookat={Testing.CaptureDirector.Vec3Arg(pivot.Value)} radius={ahead:0.###}");
             }
             else
             {
@@ -3031,7 +3028,7 @@ public partial class PlaneViewer : Node3D
         // F12 anywhere (orbit view or free flight): grab the current frame to a file.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
         {
-            SaveScreenshot();
+            Testing.CaptureDirector.SaveScreenshot(GetViewport());
             return;
         }
         // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
@@ -3039,7 +3036,7 @@ public partial class PlaneViewer : Node3D
         // deterministic --screenshot run.
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
         {
-            PrintPlacement();
+            _captureDirector.PrintPlacement(_spec, _rigs, _camera, _orbit);
             return;
         }
         if (_spec.Fly || _spec.Freecam || _spec.AnimLab)
@@ -3145,128 +3142,8 @@ public partial class PlaneViewer : Node3D
             _edgeExtender.Update(_focusPoints);
         }
 
-        if (_pendingShot == null)
-            return;
-        // Nothing built yet: only shoot once a session's plane exists — unless the launchscreen is
-        // up (--menu --screenshot captures the menu itself for layout verification).
-        if (_plane == null && _menu is not { Visible: true })
-            return;
-        if (--_shotDelay > 0)             // still counting down the warm-up delay
-            return;
-        // Delay elapsed: grab one frame per _Process call for _spec.ScreenshotShots frames,
-        // then quit. A single shot keeps the original path verbatim; a burst (for z-fight
-        // debugging, where flicker only shows across frames) writes indexed files. The
-        // captured image is the PREVIOUS frame's render, so file _00 is the un-jittered
-        // baseline and _01.. carry the dither applied below — all distinct, which is all
-        // the flip-through needs.
-        var img = GetViewport().GetTexture().GetImage();
-        var path = _spec.ScreenshotShots > 1 ? IndexedShotPath(_pendingShot, _shotIndex) : _pendingShot;
-        img.SavePng(path);
-        // The sim frame is part of what the capture IS: under the fixed clock one rendered frame is
-        // exactly one sim step, so this number pins the moment the shot shows.
-        long simFrame = _clock?.Frame ?? 0;
-        double simTime = _clock?.Time ?? 0.0;
-        Log.Info("core", $"screenshot saved: {path} sim_frame={simFrame} sim_time={simTime:0.###}");
-        // The golden-image tripwire's whole input: a hash of the RAW pixels (never the PNG, whose
-        // encoded bytes differ between identical images), the size that hash is only valid at, and
-        // the adapter that drew it. Emitted on every capture so any shot can become a golden.
-        Log.Info("core", $"shot pixmd5={GoldenShot.PixelHash(img)} size={img.GetWidth()}x{img.GetHeight()} gpu={GoldenShot.Adapter()}");
-        // No-op unless --tex-census: reads the frame just saved back as per-texture pixel counts.
-        TextureDropIn.CountShot(img, path);
-        if (++_shotIndex >= _spec.ScreenshotShots)
-        {
-            _pendingShot = null;
-            GetTree().Quit();
-            return;
-        }
-        if (_spec.JitterDeg > 0f && !_spec.Fly)
-            ApplyShotJitter();
+        _captureDirector.Tick(GetViewport(), GetTree(), _spec, _clock, _orbit, _camera, _plane,
+            _menu is { Visible: true });
     }
 
-    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
-    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
-    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
-    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
-    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
-    /// frame (and the plane's own motion already surfaces the fight).</summary>
-    private void ApplyShotJitter()
-    {
-        if (_shotBaseXform is not { } baseX)
-        {
-            baseX = _camera.GlobalTransform;
-            _shotBaseXform = baseX;
-            _shotPivot = _orbit.OrbitCenter;   // the point the orbit camera aims at
-        }
-        // Golden-angle spread so consecutive frames differ maximally.
-        float mag = Mathf.DegToRad(_spec.JitterDeg);
-        float phase = _shotIndex * 2.399963f;
-        var rot = new Basis(Vector3.Up, mag * Mathf.Cos(phase))
-                * new Basis(baseX.Basis.X.Normalized(), mag * Mathf.Sin(phase));
-        // Rigidly rotate the whole camera about the pivot: rotating both the eye offset and
-        // the basis by the same rotation preserves the aim exactly, so framing is kept.
-        var origin = _shotPivot + rot * (baseX.Origin - _shotPivot);
-        _camera.GlobalTransform = new Transform3D(rot * baseX.Basis, origin);
-    }
-
-    /// <summary>Insert a zero-padded frame index before the extension:
-    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
-    private static string IndexedShotPath(string path, int index)
-    {
-        var dir = Path.GetDirectoryName(path) ?? "";
-        var stem = Path.GetFileNameWithoutExtension(path);
-        var ext = Path.GetExtension(path);
-        return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
-    }
-
-    /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode) —
-    /// the same pair that placed it, so a pose found by hand reproduces in a deterministic
-    /// --screenshot run. In flight that subject is the PLANE (player 1's position and nose), not
-    /// the chase camera, because that is what --pos/--direction place there. The orbit view prints
-    /// --lookat rather than --direction: its framed point is a pivot, and only the point
-    /// reproduces the orbit radius as well as the angle.</summary>
-    private void PrintPlacement()
-    {
-        if (_spec.Fly && _rigs.Count > 0 && _rigs[0].Controller is { } controller)
-        {
-            var xform = controller.GlobalTransform;
-            Log.Info("core", $"placement: --pos={Vec3Arg(xform.Origin)} --direction={DirArg(-xform.Basis.Z)}");
-            return;
-        }
-        var pos = _camera.GlobalPosition;
-        if (_spec.Freecam || _spec.AnimLab || _spec.Fly)
-        {
-            Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --direction={DirArg(-_camera.GlobalTransform.Basis.Z)}");
-            return;
-        }
-        Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --lookat={Vec3Arg(_orbit.OrbitCenter)}");
-    }
-
-    /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
-    /// culture, trimmed to 3 decimals).</summary>
-    private static string Vec3Arg(Vector3 v) =>
-        string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
-
-    /// <summary>Same, for a direction — normalized, and finer, since a unit vector's components
-    /// are small enough that 3 decimals would quantise the aim to ~0.03°.</summary>
-    private static string DirArg(Vector3 v) =>
-        string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
-
-    /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
-    /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
-    /// orbit viewer and free flight; the full viewport is captured, HUD overlay included.</summary>
-    private void SaveScreenshot()
-    {
-        var projectDir = ProjectSettings.GlobalizePath("res://");
-        var dir = Path.GetFullPath(Path.Combine(projectDir, "..", "Screenshots"));
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, $"crimsonskies_{DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
-        var img = GetViewport().GetTexture().GetImage();
-        var err = img.SavePng(path);
-        if (err == Error.Ok)
-            GD.Print($"screenshot saved: {path}");
-        else
-            GD.PrintErr($"screenshot failed ({err}): {path}");
-    }
 }

@@ -68,7 +68,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — leaf extractions from the living PlaneViewer
 
 1. ☑ Probe/dump wrappers → `src/Testing/ProbeRunner`
-2. ☐ Screenshot pipeline → `src/Testing/CaptureDirector`
+2. ☑ Screenshot pipeline → `src/Testing/CaptureDirector`
 3. ☐ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
 4. ☐ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
 5. ☐ Weather build + per-frame block → `src/Session/WeatherRig`
@@ -121,7 +121,7 @@ its own verification.
 **Verify.** `.\RunTests.ps1` (exercises `--run-tests` + goldens); plus one `--dump-flight` and one
 `--damage-test` run by hand — same report bytes in `.scratch/`.
 
-## A2 ☐ Screenshot pipeline → `src/Testing/CaptureDirector`
+## A2 ☑ Screenshot pipeline → `src/Testing/CaptureDirector`
 
 **Goal.** The screenshot state machine — `_pendingShot`/`_shotDelay`/`_shotIndex`/
 `_shotBaseXform`/`_shotPivot`, `ApplyShotJitter`, `IndexedShotPath`, `SaveScreenshot`,
