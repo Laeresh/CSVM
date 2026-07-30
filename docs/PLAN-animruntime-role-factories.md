@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — Pin the two uncovered paths (baseline BEFORE touching construction)
 
-1. ☐ Effects-runtime tripwire — a `--det` flight golden that renders ≥1 `ForEffects` puffer
+1. ☑ Effects-runtime tripwire — a `--det` flight golden that renders ≥1 `ForEffects` puffer
 2. ☐ Crash-runtime tripwire — minimal `--crash[=frame]` flag + a `--det` crash golden
 
 ### Wave B — Extract the factories (behaviour-preserving; Wave A is its tripwire)

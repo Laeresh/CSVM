@@ -8185,3 +8185,20 @@ correctly excluded (no animation). New in-engine `gltf-export` suite builds a pl
 `.glb`, and asserts it re-imports with ≥1 textured mesh — the shader-skin conversion round trip.
 Godot API used as planned: `GltfDocument.AppendFromScene`/`WriteToFilesystem`/`AppendFromFile` +
 `GenerateScene`, all returning/taking the signatures the plan assumed.
+
+**Effects-runtime tripwire, PLAN-animruntime-role-factories A1 (2026-07-30):** the `ForEffects`
+construction path (`WorldEffectsFactory.BuildWorldEffectsRuntime`) had zero headless coverage — every
+existing golden is a freecam/viewer/empty-stage shot or `c1-flight`'s unarmed hold, none of which
+route a kill through the world-effects runtime. Added `c1-destroy-effects` to
+`analysis/goldens/manifest.json`: a **flight** session (`--chapter=C1 --plane=player_bhawk`) that
+kills the single `ap_radiotwr` instance via `--destroy=radiotwr.flt` (the `.flt`-suffixed anchor name
+is the only substring that matches exactly one of C1's two radio-tower placements sharing that def —
+plain `ap_radiotwr` kills both and made the auto-picked bounds/frame order-dependent), with
+`--pos`/`--direction`/`--hold` aiming the chase camera at the kill site since flight's camera doesn't
+auto-frame the way freecam's `--destroy` path does. `ap_radiotwr`'s death sequence
+`CALL_ANIMATION`s `great_balls_of_fire`/`large_black_smokeball` — both in `EffectAnimNames` — through
+`AnimRuntime.ExternalEffect` into the world-effects runtime's own `PufferFactory`/`Rng.Effects` die;
+the captured frame (120) visibly shows the fire puffer. Confirmed able-to-fail: renaming the
+`Rng.Effects` subsystem string moved the hash (`5efeefaa0…` → `64c0cdd3…`), reverting restored it
+bit-for-bit. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine suites, 12/12 golden hashes
+(11 prior unchanged + the new shot). A1 done; A2 (crash-runtime tripwire) is next, then Wave B.
