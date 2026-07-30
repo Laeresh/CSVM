@@ -87,7 +87,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☐ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist
 12. ◐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); the at-the-controls overlay read stays owed until B14 draws true
 13. ☐ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
-14. ☐ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
+14. ☑ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
 
 ### Wave C — weapon secondary visuals
 
@@ -287,7 +287,7 @@ against `Dirt Splash.png`. Confirm building/water impacts unchanged.
 **⚠ Traps.** `BL-019` (building vs dirt effects identical for HE rockets) is a *separate*
 classification/lookup question — do not fold it in; this item is the gun-impact sprite look only.
 
-## B14 ☐ `BL-042` Collider-overlay wireframes hug their geometry
+## B14 ☑ `BL-042` Collider-overlay wireframes hug their geometry
 
 **Goal.** The **C** collision overlay draws every wireframe where its collider actually is — on
 world nodes, clutter, and the plane's own boxes alike — so it can be trusted as the acceptance

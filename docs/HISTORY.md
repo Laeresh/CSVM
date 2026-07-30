@@ -8629,3 +8629,30 @@ Buildings, reclassified dock `g36347` 8/8 Default, no splash. `RunTests.ps1` gre
 12/12 suites, 13/13 goldens hash-identical — the tags draw nothing). Known accepted residual in
 FINDINGS.md: huts whose walls match no pattern fall to default. `BL-041` deleted from backlog; the
 at-the-controls read is `playtest.md` `PT-05` (overlay colours unreadable until `BL-042`/B14).
+
+## 2026-07-30 — B14 `BL-042`: collider-overlay plane boxes drawn in the wrong frame
+
+`ColliderOverlay` drew the flown aircraft's swept airframe boxes parented to the plane MODEL node.
+`PlaneCollider.Parts.Local` is documented (and used by `FlightController`'s own sweep/embed checks)
+as expressed in the model's PARENT frame — the `FlightController` — so parenting the drawing under
+the model itself applied the model's own GameZ-authored local transform a second time, on top of
+the controller's live pose. Fixed by passing the controller (not the model) as the draw parent:
+`GameSession.cs` now adds `(rig.Controller, airframe)` to `ColliderOverlay.Planes` instead of
+`(rig.Controller.PlaneModel, airframe)`; the tuple field is renamed `Root` → `Frame` to name what
+it actually is.
+
+**Verified.** Build, 312 units, all 12 `--run-tests` suites, and all 13 goldens hash-identical
+(`.\RunTests.ps1`, 81.7 s). Before/after `--screenshot` pairs (`--fly --plane=<x> --stage=empty
+--collision=show --view=6`) for all 11 stock aircraft are byte-identical md5 — every stock plane's
+model root is already `Transform3D.Identity`, so the fix is currently inert in play but structurally
+correct, and matches `PlaneCollider`'s own documented frame contract. Separately checked (not
+touched, both already correct): the node-backed world path and the clutter
+`PhysicsServer3D.BodyGetShape*` path, by close-up `--freecam --chapter=C2 --collision=show`
+screenshots — building and clutter-house wireframes hug their meshes exactly at both a city-block
+overview and a roof-level close-up.
+
+**Residual.** The original report ("the plane flies through the drawn wireframe where the real
+collider is not") is not reproduced by this fix on any stock aircraft, and the two other build
+paths read correct by eye — so the exact mechanism behind that specific in-flight observation is
+still open if it recurs. Tracked as `BL-198`, naming the two paths this pass did not exercise
+(a destructible's healthy→wreck collider swap, and `MapEdgeExtender`'s mirrored edge tiles).

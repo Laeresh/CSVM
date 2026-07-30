@@ -86,8 +86,11 @@ public sealed partial class ColliderOverlay : Node
     public bool DebugShow { get; init; }
 
     /// <summary>The flown aircraft and their swept airframe boxes. Those are shape resources the
-    /// flight code casts with directly, not scene nodes, so they are passed in rather than found.</summary>
-    public IReadOnlyList<(Node3D Root, PlaneCollider Collider)> Planes { get; init; } =
+    /// flight code casts with directly, not scene nodes, so they are passed in rather than found.
+    /// <c>Frame</c> is the FlightController, not the plane model — <see cref="PlaneCollider"/>'s
+    /// boxes are expressed in the model's PARENT frame, so drawing them under the model itself
+    /// would apply its own local transform a second time.</summary>
+    public IReadOnlyList<(Node3D Frame, PlaneCollider Collider)> Planes { get; init; } =
         Array.Empty<(Node3D, PlaneCollider)>();
 
     public override void _Process(double delta)
@@ -430,7 +433,7 @@ public sealed partial class ColliderOverlay : Node
         }
         Walk(_world);
 
-        foreach (var (root, collider) in Planes)
+        foreach (var (frame, collider) in Planes)
         {
             var mesh = new ImmediateMesh();
             mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
@@ -441,8 +444,10 @@ public sealed partial class ColliderOverlay : Node
             }
             mesh.SurfaceEnd();
             // The airframe boxes are cast per frame by the flight code rather than being switched
-            // on and off, so they follow the overlay itself.
-            _unswitched.Add(MakeDraw(mesh, root, "col_wire_plane"));
+            // on and off, so they follow the overlay itself. Drawn under the FlightController
+            // (frame), which is the plane model's parent and the frame Collider.Parts.Local is
+            // already expressed in — parenting to the model itself would double its own transform.
+            _unswitched.Add(MakeDraw(mesh, frame, "col_wire_plane"));
             perClass["plane"] = perClass.GetValueOrDefault("plane") + collider.Parts.Count;
         }
 

@@ -1034,9 +1034,13 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
 (world / water / buildings / clutter / plane / other), built once on the first toggle and
 `Visible`-flipped after. Measured C2: 1,848 node-backed shapes + 10k–14k clutter placements.
 ⚠ **Its first job is the notice.** Pressing C in a mode that built no collision prints the reason
-  and draws NOTHING — an empty overlay would read as "nothing here is solid" (WORLD-9).
-⚠ The tallies are logged as **separate on and off counts plus the names that flipped**, never a
-  net (WORLD-10: the C2 gate nets +7 — `col[off 1, on 8]`).
+  and draws NOTHING — an empty overlay would read as "nothing here is solid" (WORLD-9). The
+  tallies that follow are logged as **separate on and off counts plus the names that flipped**,
+  never a net (WORLD-10: the C2 gate nets +7 — `col[off 1, on 8]`).
+⚠ The plane's airframe boxes are drawn parented to the `FlightController`, never the plane MODEL
+  node: `PlaneCollider.Parts.Local` is expressed in the model's PARENT frame (see that class's own
+  doc), so parenting under the model itself doubles the model's own local transform — inert on all
+  11 stock aircraft today since their model roots are identity, but wrong the moment one isn't.
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
   1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
 

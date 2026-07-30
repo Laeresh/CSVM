@@ -199,6 +199,11 @@ work is below.
    and ejection.png`/`…ejection2.png` (one brass casing + a persisting, aft-drifting white puff cluster,
    ejecting from the wing mounts). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
    See `BL-137`/`BL-138`/`BL-141` for what wiring this actually needs beyond the def itself.
+4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
+   (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
+   nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
+   a flight bug.
+
 **Rocket visuals (findings 2, 4).**
 5. `BL-015` **The fat orange→grey smoke trail is missing — the biggest rocket gap.** A rocket with a MODEL body
    gets only a slim `RocketExhaustScale = 0.5` exhaust streak (`Projectile.cs:62`); the original's
@@ -471,18 +476,26 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-042` **Collider wireframes sit offset from their meshes, all on the same axis — the wireframe only,
-  not the colliders.** Seen in D35's overlay. The user confirmed in flight that the collision
-  itself is correct: the plane flies *through* the drawn wireframe where the real collider is not,
-  so this is a rendering-transform bug in `ColliderOverlay`, not a collision one.
-  ⚠ Traps: a single shared axis points at one wrong frame rather than per-shape noise — suspect a
-  local-vs-world or parent-transform mix-up in how the shape's transform is composed, and note the
-  overlay draws clutter shapes via `PhysicsServer3D.BodyGetShape*` (they have no nodes) on a
-  different path from node-backed ones, so check which of the two is offset before assuming both.
-  Do not verify by eye alone: the plane-collider boxes come from a separate path again.
-  *Playtest after fix:* the wireframe should hug the geometry it belongs to on world nodes, clutter,
-  and the plane's own boxes alike — three separate code paths, so check all three, not just the one
-  that was fixed. `./RunGame.ps1 --freecam --chapter=C2 --collision=show`.
+- `BL-198` **`BL-042`'s plane-box fix removed a real bug but did not reproduce the originally-reported
+  symptom — if the wireframe still reads offset from the controls, the mechanism is still open.**
+  `ColliderOverlay` drew the plane's airframe boxes parented to the plane MODEL node, but
+  `PlaneCollider.Parts.Local` is expressed in the model's PARENT frame (the `FlightController`,
+  per its own class doc) — drawing under the model doubled the model's own local transform. Fixed
+  by parenting to the controller instead (`GameSession.cs`, `ColliderOverlay.cs`). Byte-identical
+  screenshots on all 11 stock aircraft (`--fly --plane=<x> --stage=empty --collision=show --view=6`)
+  before/after prove every stock plane's model-root transform is already identity, so the fix has
+  **no visible effect on any shipped aircraft today** — it only guards against a future plane (or a
+  data change) whose root carries a real offset.
+  ⚠ Traps: (a) do not re-chase the plane-box path again without new evidence — it is now verified
+  correct by construction, matching `PlaneCollider`'s documented frame contract. (b) The
+  node-backed world path and the clutter (`PhysicsServer3D.BodyGetShape*`) path were both checked
+  by close-up freecam screenshot (C2, buildings and house roofs) and hug their meshes exactly — do
+  not re-suspect them without a fresh repro. (c) Not checked: a destructible's collider mid
+  healthy→wreck swap, and `MapEdgeExtender`'s mirrored edge tiles — both build collision through
+  paths this pass did not exercise, and either is a plausible home for the original "flew through
+  the wireframe" report if it recurs.
+  *Playtest after fix:* fly into a C2 building and watch the **C** overlay at the moment of impact —
+  the crash should happen exactly where the wireframe is drawn, not past it.
 
 - `BL-044` **The node lab's hide action does not change the tree row it applies to.** The world node toggles
   correctly and the button's own text flips Show/Hide, but the row's text and colour stay as they

@@ -1389,9 +1389,13 @@ public partial class GameSession : Node3D
             var planeColliders = new List<(Node3D, PlaneCollider)>();
             foreach (var rig in _rigs)
             {
-                if (rig.Controller is { Collider: { } airframe, PlaneModel: { } model })
+                // Collider.Parts.Local is expressed in the plane MODEL's parent frame (the
+                // FlightController — see PlaneCollider's class doc), not the model's own: the
+                // model root carries its own GameZ local transform, so drawing the boxes as its
+                // children would apply that transform a second time.
+                if (rig.Controller is { Collider: { } airframe, PlaneModel: { } } controller)
                 {
-                    planeColliders.Add((model, airframe));
+                    planeColliders.Add((controller, airframe));
                 }
             }
             _worldRoot!.AddChild(new UI.ColliderOverlay(_plane, BuildsCollision)
