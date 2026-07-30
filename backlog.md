@@ -170,9 +170,9 @@ work is below.
    and not looking like the original** — treat 0.5 m as a waypoint, not an answer, and re-measure the
    live build before re-tuning. Ref: `MuzzleFlash1..3.png` (small textured starburst) and shot 2 of
    `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` (one compact forward flash on a
-   single wing) remain the target. **Orientation is a separate defect with its own entry** — see
-   `BL-139`: the quad sits in a fixed world plane and should sit in the firing aircraft's own x/y
-   basis. ⚠ This flash also masks A10 muzzle-placement verification (finding 11: "hard to see with the
+   single wing) remain the target. **Orientation is now plane-local** (the flash rolls in the firing
+   aircraft's x/y basis; the world-locked-quad defect that had its own entry is fixed), so only
+   size/look remain here. ⚠ This flash also masks A10 muzzle-placement verification (finding 11: "hard to see with the
    large flash") — re-check A10 now that it is smaller.
    *Playtest after fix:* judge muzzle-flash shape and size against `OriginalScreenshots/C1B IA1
    Bloodhawk tracer and ejection.png`/`…ejection2.png` (one compact forward flash, one wing at a
@@ -1315,23 +1315,6 @@ the document alone, it says so and marks the value TUNE.
   *Fix shape:* a short-lived aft-drifting smoke puff (reuse the existing `Sprite`/`RenderSprites` path
   with a velocity field) plus an actual `OmniLight3D` flash reusing the def's range/colour values —
   separate from the size/look work in `BL-011`/`BL-012`.
-
-- `BL-139` **Muzzle-flash orientation is world-locked; it should be plane-local.** In the original the
-  muzzle flash is **not** camera-facing — it is oriented to the **aircraft's x/y axes, orthogonal to
-  the muzzle direction**, so it rolls with the plane. Ours does neither: `RenderSprites`
-  (`Projectile.cs:405`) builds `new Basis(Vector3.Right * size, Vector3.Up * size, Vector3.Back *
-  size)` from **global** axes, and the `Sprite` struct (`Projectile.cs:662-669`) carries no
-  orientation field at all — so every flash sits in one fixed world plane regardless of how the
-  aircraft is banked. (Billboarding was deliberately switched off for these multimeshes,
-  `Projectile.cs:135-136`; that intent was right — the defect is the world basis that replaced it.)
-  *Fix shape:* add an orientation/basis field to `Sprite` and feed the firing plane's basis at spawn.
-  ⚠ **Traps.** (a) **Impacts share `RenderSprites` but almost certainly want the surface normal, not
-  the plane's basis** — one field, two different suppliers, so do not wire them identically. (b) The
-  class comment at `Projectile.cs:132-133` still reads "muzzle/impact bursts ARE round billboards",
-  which is now false and will mislead the next reader — fix it in the same pass. (c) The same
-  hand-tuning commit added `Uv1Scale = (-1,1,1)` in the shared `AddMultiMesh`
-  (`Projectile.cs:429`), horizontally mirroring **all three** sprite types (tracer, muzzle, impact) —
-  confirm that was intended for all three, not just one.
 
 - `BL-140` **`docs/formats/weapon-effects.md`'s "confirmed in C1" gamez-root claim for
   `gunshell`/`muzzle_burst` is true only at the name level — neither carries a mesh in C1's own

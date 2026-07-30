@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — mechanically-wrong weapon/audio plumbing
 
-21. ☐ `BL-139` Muzzle-flash quad sits in a fixed world plane, not the aircraft's basis
+21. ☑ `BL-139` Muzzle-flash quad sits in a fixed world plane, not the aircraft's basis
 22. ☐ `BL-159` Wire `WhineMixGain` through `Config` like every other TUNE constant
 
 ### Wave D — doc drift
@@ -291,7 +291,19 @@ screenshot A/B under `--det`). World click-selection regression: freecam click-s
 
 # Wave C — mechanically-wrong weapon/audio plumbing
 
-## C21 ☐ `BL-139` Muzzle flash: plane-local orientation, not world-locked
+## C21 ☑ `BL-139` Muzzle flash: plane-local orientation, not world-locked
+
+**Landed 2026-07-30.** Added a `Sprite.Orient` basis field consumed by `RenderSprites`; the muzzle
+flash is fed the firing muzzle's world basis (inherits the plane's roll) at `Spawn`, impacts a
+*distinct* supplier — a basis from the struck surface normal (`hit["normal"]` threaded through
+`Impact` to spark + explosion), a mid-air range-expiry detonation falling back to the old
+world-facing quad (byte-identical). Stale "round billboards" comment fixed; `Uv1Scale=(-1,1,1)`
+confirmed intended for all three sprite types, left untouched. Objective `--det` log (breadcrumb
+reads the stored basis back, `match` vs aircraft basis, able-to-fail): level firing pass logs
+`x=(1,0,0) y=(0,1,0)` at both t=0.02/1.02 s; banked pass logs `x=(-0.98,0.22,-0.01)
+y=(-0.22,-0.97,0.05)` at t=1.02 s (rolled), `match=1.000` throughout. Two screenshots (level vs
+banked) confirm visually. No golden fires a weapon, so muzzle/impact orientation is off every golden
+frame — hashes unchanged. Full `.\RunTests.ps1` green.
 
 **Goal.** The muzzle-flash quad is oriented in the firing aircraft's x/y basis (rolling with the
 plane), instead of one fixed world plane.

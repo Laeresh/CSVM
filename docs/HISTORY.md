@@ -8479,3 +8479,28 @@ C5): 0 `!is_inside_tree()` and 0 other `ERROR:` (bar the unrelated pre-existing 
 warning present in baseline too) every chapter — only C3 has a bootstrap one-shot SOUND, matching the
 measured evidence. Full `.\RunTests.ps1` green: 312 unit tests, 12/12 engine suites (engine errors
 clean), 13/13 goldens hash-identical.
+
+**2026-07-30 — M3 polish quick-wins C21 (`BL-139`): muzzle flash is plane-local, not world-locked.**
+The muzzle-flash / impact burst quads shared a fixed world basis in `RenderSprites`
+(`new Basis(Vector3.Right, Vector3.Up, Vector3.Back)`), so a flash sat in the same world plane
+regardless of how the aircraft was banked; the `Sprite` struct carried no orientation. Billboarding
+was deliberately off for these multimeshes (`Projectile.cs`) and stays off — the world basis that
+replaced it was the defect. Fix: added a `Sprite.Orient` basis field consumed by `RenderSprites`;
+the muzzle flash is fed the firing muzzle's world basis (which inherits the plane's roll/pitch/yaw)
+at `Spawn`, and impacts are fed a *distinct* supplier — a basis built from the struck surface normal
+(threaded from the raycast `hit["normal"]` through `Impact` to the spark and the stand-in explosion),
+with a mid-air range-expiry detonation (no surface) falling back to the old world-facing quad so that
+case stays byte-identical. Stale class comment "muzzle/impact bursts ARE round billboards" corrected;
+the shared `Uv1Scale=(-1,1,1)` UV mirror was confirmed intended for all three sprite types and left
+untouched. `BL-011` (flash size/look) stays an open by-eye TUNE — out of scope.
+
+Verified. Objective `--det` geometric log (added breadcrumb reads the stored sprite basis back and
+prints `match` against the aircraft basis, able-to-fail — a regression that stopped feeding `Orient`
+reads 0): a firing empty-stage pass level vs. banked (`--fire --hold=0,0,0,1` vs `--hold=0,1,0,1`,
+`--frames=90 --screenshot`). Level: both samples `x=(1,0,0) y=(0,1,0)`, `match=1.000`. Banked: the
+first flash at t=0.02 s is still level (plane not yet rolled), but by t=1.02 s the basis is
+`x=(-0.98,0.22,-0.01) y=(-0.22,-0.97,0.05)`, `match=1.000` throughout — the flash basis rolled with
+the plane. The two screenshots confirm it visually (wing-tip flashes horizontal when level, aligned
+to the banked wing line when rolled). No golden fires a weapon (`--fire` is in none of the manifest's
+args, only `--hold` = pitch/roll/yaw/throttle), so muzzle/impact orientation is off every golden
+frame — hashes unchanged. Full `.\RunTests.ps1` green.

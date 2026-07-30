@@ -555,7 +555,10 @@ file is stateless.
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
-muzzle flashes, the per-surface IMPACT sound + effect model, and the stand-in spark.
+muzzle flashes, the per-surface IMPACT sound + effect model, and the stand-in spark. Each burst
+sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash rolls in the firing
+plane's basis, the impact spark/explosion faces the struck surface normal — a fixed world plane for
+neither (BL-139); tracers stay velocity-aligned, and none of the three is billboarded.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly

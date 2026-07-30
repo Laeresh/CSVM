@@ -109,6 +109,7 @@ public sealed partial class ProjectilePool : Node3D
     private Camera3D? _listener;               // billboards align their streak to this camera
     private int _sfxNext;
     private bool _flyoutPoseLogged;
+    private int _muzzleBasisLogs;
     private int _impactsLogged;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
@@ -130,7 +131,9 @@ public sealed partial class ProjectilePool : Node3D
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
-        // long streak into a screen-vertical bar); muzzle/impact bursts ARE round billboards.
+        // long streak into a screen-vertical bar); muzzle/impact bursts are oriented quads too, each
+        // carrying its own basis (Sprite.Orient) — the muzzle flash rolls in the firing plane's
+        // basis, the impact spark faces the struck surface normal; neither is a fixed world plane.
         _tracerMm = AddMultiMesh("tracer_slug", MaxProjectiles, additive: true, billboard: false, out _);
         _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
@@ -199,7 +202,26 @@ public sealed partial class ProjectilePool : Node3D
         }
 
         if (_muzzle.Count < MaxFlashes)
-            _muzzle.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint });
+        {
+            // The flash quad rolls with the firing aircraft: its orientation IS the muzzle's world
+            // basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane.
+            var planeBasis = muzzle.Basis.Orthonormalized();
+            _muzzle.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = planeBasis });
+            // Verification breadcrumbs (two, low-volume): the first flash reads the stored sprite
+            // basis back and confirms it IS the aircraft basis at spawn (match≈1.000 — a regression
+            // that stopped feeding Orient would read 0); a second sample once the plane has had a
+            // second to maneuver shows that basis rolled with it, not locked to a world plane.
+            double t = GameClock.Current?.Time ?? 0.0;
+            if (_muzzleBasisLogs < 2 && (_muzzleBasisLogs == 0 || t >= 1.0))
+            {
+                _muzzleBasisLogs++;
+                var stored = _muzzle[^1].Orient;
+                float match = (stored.X.Dot(planeBasis.X) + stored.Y.Dot(planeBasis.Y) + stored.Z.Dot(planeBasis.Z)) / 3f;
+                GD.Print($"muzzle flash basis: x=({stored.X.X:0.00},{stored.X.Y:0.00},{stored.X.Z:0.00}) " +
+                         $"y=({stored.Y.X:0.00},{stored.Y.Y:0.00},{stored.Y.Z:0.00}) " +
+                         $"stored==aircraft match={match:0.000} t={t:0.00}s");
+            }
+        }
     }
 
     /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> body — its <c>.flt</c> prototype root
@@ -274,7 +296,7 @@ public sealed partial class ProjectilePool : Node3D
                 var hit = space.IntersectRay(_ray);
                 if (hit.Count > 0)
                 {
-                    Impact(p.Weapon, (Vector3)hit["position"], hit["collider"].Obj as Node);
+                    Impact(p.Weapon, (Vector3)hit["position"], hit["collider"].Obj as Node, (Vector3)hit["normal"]);
                     p.Alive = false;
                     KillModel(ref p);
                     continue;
@@ -289,7 +311,9 @@ public sealed partial class ProjectilePool : Node3D
                 // rounds must NOT: that would pop a spark/sound at ~1000 m on every bullet.
                 if (p.Weapon.IsRocket)
                 {
-                    Impact(p.Weapon, p.Pos, null);
+                    // Mid-air range-expiry detonation: no struck surface, so no normal — the impact
+                    // sprite falls back to the world-facing quad (SurfaceBasis handles a zero normal).
+                    Impact(p.Weapon, p.Pos, null, Vector3.Zero);
                 }
                 p.Alive = false;   // spent
                 KillModel(ref p);
@@ -355,6 +379,21 @@ public sealed partial class ProjectilePool : Node3D
         return new Transform3D(Basis.LookingAt(dir, up), pos);
     }
 
+    // The impact sprite's orientation: the quad faces the struck surface (local Z = the surface
+    // normal), so a spark sits against the wall/ground it hit rather than in a fixed world plane.
+    // A degenerate normal — a mid-air range-expiry detonation, which has no surface — falls back to
+    // the original world-facing quad (Right/Up/Back), leaving that case byte-identical.
+    private static Basis SurfaceBasis(Vector3 normal)
+    {
+        if (normal.LengthSquared() < 1e-6f)
+            return new Basis(Vector3.Right, Vector3.Up, Vector3.Back);
+        var z = normal.Normalized();
+        var up = Mathf.Abs(z.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
+        var x = up.Cross(z).Normalized();
+        var y = z.Cross(x).Normalized();
+        return new Basis(x, y, z);
+    }
+
     private static void KillModel(ref Proj p)
     {
         if (p.Model != null)
@@ -402,7 +441,7 @@ public sealed partial class ProjectilePool : Node3D
         {
             float k = 1f - s.Age / s.Life;            // shrink + fade over life
             float size = s.Size * (0.6f + 0.4f * k);
-            var basis = new Basis(Vector3.Right * size, Vector3.Up * size, Vector3.Back * size);
+            var basis = new Basis(s.Orient.X * size, s.Orient.Y * size, s.Orient.Z * size);
             mm.SetInstanceTransform(n, new Transform3D(basis, s.Pos));
             var c = s.Tint;
             c.A = k;
@@ -514,9 +553,12 @@ public sealed partial class ProjectilePool : Node3D
         return true;
     }
 
-    private void Impact(WeaponDef weapon, Vector3 point, Node? collider)
+    private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal)
     {
         var surface = ClassifySurface(collider);
+        // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
+        // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
+        var orient = SurfaceBasis(normal);
         // Verification breadcrumb: the first few impacts confirm hit detection + surface
         // classification (B15) without needing a lucky screenshot; then it goes quiet.
         if (_impactsLogged < 8)
@@ -547,12 +589,12 @@ public sealed partial class ProjectilePool : Node3D
             // A hardpoint weapon with no world-effects runtime to render its real fireball: a
             // scene-less pool (the weapon lab). Show an explosion burst stand-in in place of the
             // single spark, so the blast is visible. Flight keeps its real puffer (EffectSink set).
-            SpawnExplosion(point);
+            SpawnExplosion(point, orient);
         }
         else if (!showedModel && _impact.Count < MaxFlashes)
         {
             var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
-            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint });
+            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint, Orient = orient });
         }
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
         if (effect?.Sound is { } snd)
@@ -564,7 +606,7 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>A stand-in fireball: a cluster of large, bright, additive sprites at the hit point,
     /// varied in size/life/tint, so a hardpoint impact reads as an explosion where the real puffer
     /// effect cannot be built (no world-effects runtime).</summary>
-    private void SpawnExplosion(Vector3 point)
+    private void SpawnExplosion(Vector3 point, Basis orient)
     {
         for (int i = 0; i < ExplosionSprites && _impact.Count < MaxFlashes; i++)
         {
@@ -576,6 +618,7 @@ public sealed partial class ProjectilePool : Node3D
                 Life = ExplosionLife * (0.6f + 0.6f * t),
                 Size = ExplosionSize * (0.7f + 0.6f * t),
                 Tint = new Color(1f, 0.45f + 0.4f * t, 0.12f * t), // deep orange → yellow core
+                Orient = orient,
             });
         }
     }
@@ -666,6 +709,9 @@ public sealed partial class ProjectilePool : Node3D
         public float Life;
         public float Size;
         public Color Tint;
+        public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
+                               // Muzzle flashes roll in the firing plane's basis; impact sprites
+                               // face the struck surface normal — a fixed world plane for neither.
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
