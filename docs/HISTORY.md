@@ -7966,3 +7966,22 @@ hash-identical; plus a manual `--freecam --chapter=C1 --destroy=ap_h2otwr1` run 
 18/18 templates staged, `ap_h2otwr1` HP 60→0 DESTROYED, death sequence ran) and a manual
 `--freecam --chapter=C1 --effects-test` run (28/28 effect names resolved, 16 built a puffer) — both
 match the pre-move report shape.
+
+**PLAN-planeviewer-split A5 landed (2026-07-30): weather build + per-frame block → `src/Session/WeatherRig.cs`.**
+`LoadWeather`/`SetupWeather` moved off `PlaneViewer` verbatim into a new `WeatherRig` class as
+`Build`, and the `_Process` per-rig skydome/whiteout/deck/puff update block moved verbatim as `Tick`.
+Constructed once per session (`_weatherRig`, same lifetime as `_worldEffectsFactory`), but — unlike
+its A3/A4 siblings — nulled by `ReturnToMenu`, because `_Process` calls `Tick` unconditionally every
+frame and needs the null guard for the frame before the deferred `QueueFree` lands (the same reason
+`_weather`/`_precip` were nulled there before the move). The per-rig horizon BUILD loop stays inline
+on `PlaneViewer` (`SceneBuilder` concern, not weather state); `Build` takes it as a `buildDomes`
+callback invoked between resolving the zone and applying fog/whiteout/puffs/precip, at exactly the
+point the original inline code ran it, so the three-step order (zone → domes → setup) is unchanged.
+`_deckCenter` moved into the rig (`SetDeckCenter`, called from the `cloudDeck != null` branch,
+guarded `_weatherRig?.` since that branch is broader than "this session built weather"). Pure move,
+no behavior reorder; the one documented trap (`Set`, never `Add`, on the global shader params) holds
+by construction — `WeatherRig` calls only `GlobalShaderParameterSet`. Verified: `.\RunTests.ps1`
+PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, including every foggy chapter shot
+(C1C rain, C2B rain, C4 snow, C5 night). The plan's manual menu-cycle check (Esc back to menu,
+relaunch a foggy chapter, confirm no `GlobalShaderParameterAdd` crash) needs interactive input this
+agent has no tool for — outstanding, flagged to the user.

@@ -1451,10 +1451,11 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
 ⚠ Three fields still look like args and are not: `_pendingShot` (nulled when the last burst frame
   lands), `_shotDelay` (the `--frames=` countdown) and `_pendingJoin` (consumed by the first
   launchscreen). `_menuPads` is session state too — it comes from the join flow, not from args.
-⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE; `SetupWeather` only `Set`s — the in-process
-  world rebuild must never double-Add (that errors). `ShaderTime.RegisterGlobal` joins the fog /
-  world-light / `WorldLights` adds there, and must stay ahead of the first shader build: Godot
-  refuses to compile a shader naming an unregistered global.
+⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE; `Session.WeatherRig.Build` (PLAN-planeviewer-split
+  A5, moved off `SetupWeather`) only `Set`s — the in-process world rebuild must never double-Add
+  (that errors). `ShaderTime.RegisterGlobal` joins the fog / world-light / `WorldLights` adds there,
+  and must stay ahead of the first shader build: Godot refuses to compile a shader naming an
+  unregistered global.
 ⚠ `_Process` calls `ShaderTime.Advance(_clock, delta)` right after `BeginFrame`, UNCONDITIONALLY —
   the null-clock branch (launchscreen, the frame after `ReturnToMenu`) keeps shader animation on
   wall time so nothing stalls behind the menu.
@@ -1516,8 +1517,15 @@ launchscreen or `StartSession()` — menu and CLI share one session-build path.
   any consumer reads the clock — do not let another node undercut it. `DriveSimSteps` steps the
   `SimStep` consumers when the clock is not realtime; P/`.` are bound in `_UnhandledInput` for
   freecam/viewer only (flight polls P itself, the anim lab owns its own transport).
-⚠ `LoadWeather` precedes the per-rig horizon loop; everything reads `_activeZone` (assigned
-  unconditionally per load) — dome + fog always share a zone, rebuilds never inherit a stale one.
+⚠ **Weather (PLAN-planeviewer-split A5) moved to `Session.WeatherRig`**: `_weatherRig` is
+  constructed and `Build()`-ed here, but the per-rig horizon build LOOP stays inline — it's a
+  `SceneBuilder` concern, not weather state — passed to `Build` as the `buildDomes` callback that
+  runs between zone-resolve and fog/whiteout/puffs setup, at the same point the old inline code
+  ran it; everything the callback builds reads the zone `Build` resolves, so dome + fog always
+  share a zone. `_Process` drives the per-rig skydome/whiteout/deck/puffs update via
+  `_weatherRig?.Tick(_rigs, dt)`; `_deckCenter` moved into the rig too (`SetDeckCenter`, called
+  whenever a chapter's cloud deck geometry loads, independent of whether `_weatherRig` itself was
+  built for this session). See `src/Session/WeatherRig.cs`'s entry.
 ⚠ Per-rig: the skydome is REBUILT per rig (star mesh `csky_light_fade` instance uniform); the cloud
   deck is duplicated + `CopyInstanceShaderParams` — `Node.Duplicate()` drops instance shader params.
 ⚠ Focus mute is the master-bus mute on purpose; `MixGain = 0` is the wrong mechanism — WorldSounds
@@ -1802,6 +1810,24 @@ in effect since it is only ever evaluated per-frame from inside the built `AnimR
 ⚠ `BuildWorldEffectsRuntime`/`EnsureWorldEffects`/`BuildFlightCrashRuntime` read `_spec.DebugAnim` and
   `_worldRoot` off the factory instance instead of a passed session — same values, same lifetime, just
   no longer re-passed at every call site.
+
+## src/Session/WeatherRig.cs
+Loads/applies the flown mission's weather and drives its per-frame rig state
+(PLAN-planeviewer-split A5, moved verbatim off `PlaneViewer`): `LoadWeather`/`SetupWeather` become
+`Build`, and the per-rig skydome/whiteout/deck/puff update block from `_Process` becomes `Tick`.
+Constructed once per session (`_weatherRig`, same lifetime as `LiveryResolver`/`SpawnPicker`/
+`WorldEffectsFactory`); nulled by `ReturnToMenu` (unlike those three) because `_Process` calls
+`Tick` every frame and needs the null guard for the frame before the deferred `QueueFree` lands.
+⚠ **The horizon (skydome) build loop stays on `PlaneViewer`** — it's a `SceneBuilder` concern, not
+  weather state. `Build` takes it as a `buildDomes` callback, invoked between resolving the zone and
+  applying fog/whiteout/puffs/precip, at exactly the point the original inline code ran it — do not
+  reorder `Build`'s three steps (zone → domes → setup) relative to each other.
+⚠ **`GlobalShaderParameterSet`, never `Add`.** `GlobalShaderParameterAdd` runs once per process in
+  `PlaneViewer._Ready`; `Build`'s fog/whiteout writes must stay `Set`-only, or every in-process menu
+  relaunch that flies a second foggy mission crashes on the duplicate `Add`.
+⚠ `SetDeckCenter` is called separately from `Build`, whenever a chapter's cloud deck geometry loads
+  (`PlaneViewer`'s `cloudDeck != null` branch) — broader than "this rig has weather", so it is
+  guarded with `_weatherRig?.SetDeckCenter(...)` rather than assumed non-null.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

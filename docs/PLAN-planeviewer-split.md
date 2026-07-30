@@ -71,7 +71,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Screenshot pipeline → `src/Testing/CaptureDirector`
 3. ☑ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
 4. ☑ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
-5. ☐ Weather build + per-frame block → `src/Session/WeatherRig`
+5. ☑ Weather build + per-frame block → `src/Session/WeatherRig`
 6. ☐ Window-hide → `src/Utils/ScriptedWindow`
 
 ### Wave B — the structural split
@@ -180,7 +180,7 @@ choice (who holds the lazy runtime) is already decided above.
 **Verify.** `.\RunTests.ps1` (the in-engine suites cover destructibles); one
 `--destroy=<name> --screenshot` run and one `--effects-test` run by hand.
 
-## A5 ☐ Weather → `src/Session/WeatherRig`
+## A5 ☑ Weather → `src/Session/WeatherRig`
 
 **Goal.** `LoadWeather`/`SetupWeather` (2603–2716) plus the per-rig skydome/whiteout/deck/puff
 update block inside `_Process` become `src/Session/WeatherRig.cs` with `Build()` + `Tick()`.
