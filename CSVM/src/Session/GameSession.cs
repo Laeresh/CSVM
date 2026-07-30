@@ -196,6 +196,44 @@ public partial class GameSession : Node3D
     /// global shader params live on the Launcher and persist across sessions. Called by the
     /// Launcher once this node is in the tree. Returns true on success; false (leaving the partial
     /// _worldRoot for the caller to free) when the build threw.</summary>
+    /// <summary>Per-build state threaded through StartSession's phase methods — the archives,
+    /// world-build outputs and running counts that used to be locals shared across one flat try
+    /// block (PLAN-planeviewer-split C9). Local to a single StartSession call; nothing here is
+    /// cached across a rebuild.</summary>
+    private sealed class BuildState
+    {
+        public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",
+            MessagesPath = "", PlanesGamezPath = "";
+        public bool Mute, DebugCollision;
+        public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
+
+        public GameZ Gamez = null!;
+        public TextureArchive Textures = null!;
+        public bool HaveSounds;
+        public SoundArchive? Sounds;
+        public Dictionary<string, SoundDef>? SoundDefs;
+        public Dictionary<string, SoundGroup>? SoundGroups;
+        // The archives that outlive this build scope in the anim lab (the lab node owns their
+        // disposal); a failed build closes them from StartSession's catch instead.
+        public TextureArchive? LabTextures;
+        public SoundArchive? LabSounds;
+        public UI.AnimLab? AnimLabNode;
+
+        public GameZNode? NodeSubtree;
+        // The --node= subtree's world-frame box, measured at build time and kept for the framing
+        // step at the very end — see FrameCamera on why the live-tree merge is the wrong instrument.
+        public Aabb? NodeAabb;
+
+        public int MeshInstances;
+        public int Colliders;
+        public string What = "";
+
+        public Node3D? CloudDeck;
+        public AnimProgram? CrashProgram;
+        public SceneBuilder? WorldScene;
+        public AnimRuntime? WorldRuntime;
+    }
+
     public bool StartSession()
     {
         // The startup timing line, opened before anything is built and closed when the session's
@@ -238,500 +276,578 @@ public partial class GameSession : Node3D
 
         // The build body reads the base paths as plain locals (unchanged from when this was inline
         // in _Ready); the chapter-dependent paths are recomputed here so a new launchscreen chapter
-        // selection takes effect on rebuild.
-        string dataRoot = _dataRoot, zrdrPath = _zrdrPath, soundsPath = _soundsPath,
-            interpPath = _interpPath, messagesPath = _messagesPath, planesGamezPath = _planesGamezPath;
-        bool mute = _spec.Mute, debugCollision = _spec.DebugCollision;
+        // selection takes effect on rebuild. Carried on BuildState so the phase methods below share
+        // them without re-deriving anything.
+        var state = new BuildState
+        {
+            DataRoot = _dataRoot, ZrdrPath = _zrdrPath, SoundsPath = _soundsPath,
+            InterpPath = _interpPath, MessagesPath = _messagesPath, PlanesGamezPath = _planesGamezPath,
+            Mute = _spec.Mute, DebugCollision = _spec.DebugCollision,
+        };
+        state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
+        state.GamezPath = _spec.Gamez
+            ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter) : _planesGamezPath);
+        state.MissionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
 
-        string texturesPath = _spec.Textures
-            ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
-        string gamezPath = _spec.Gamez
-            ?? (_spec.WorldMode ? SessionPaths.ChapterGamez(_dataRoot, _spec.Chapter)
-            : _planesGamezPath);
-        var missionZrdrPath = SessionPaths.MissionZrdr(_dataRoot, _spec.Chapter, _spec.Mission);
-
-        // The anim lab keeps the session archives open (WorldSession.Options.KeepArchivesOpen):
-        // the AnimLab node owns their disposal so puffers/decals can build at any playhead time.
-        // Until that node exists, a failed lab build must close them from the catch below — in
-        // every other mode they are `using` locals inside the try, as before.
-        TextureArchive? labTextures = null;
-        SoundArchive? labSounds = null;
-        UI.AnimLab? animLab = null;
-        // The --node= subtree's world-frame box, measured at build time and kept for the framing
-        // below — see FrameCamera on why the live-tree merge is the wrong instrument here.
-        Aabb? nodeAabb = null;
+        Stopwatch sw;
         try
         {
-            var sw = Stopwatch.StartNew();
-            long mark = StartupProfile.Mark();
-            var gamez = GameZ.Load(gamezPath);
-            StartupProfile.Record("gamez", mark);
-            mark = StartupProfile.Mark();
-            var textures = new TextureArchive(texturesPath);
-            StartupProfile.Record("textures", mark);
-            // The texture archive stays open past this build scope: the data-driven crash bakes its
-            // effect puffers lazily at crash time (the same reason --anim-lab keeps it open). The lab
-            // owns its copy (labTextures, freed with the lab node); every other mode hands it to the
-            // session (_sessionTextures), which ReturnToMenu disposes on teardown so a map reload drops
-            // the previous archive instead of leaking it. A failed build disposes it from the catch.
-            if (_spec.AnimLab)
-            {
-                labTextures = textures;
-            }
-            else
-            {
-                _sessionTextures = textures;
-            }
-            // Opened before the world build rather than with the flight audio below, because the
-            // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
-            // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
-            // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
-            bool haveSounds = !mute && (File.Exists(soundsPath) || Directory.Exists(soundsPath));
-            mark = StartupProfile.Mark();
-            var sounds = haveSounds ? new SoundArchive(soundsPath) : null;
-            StartupProfile.Record("sounds", mark);
-            using var soundsScope = _spec.AnimLab ? null : sounds;
-            labSounds = _spec.AnimLab ? sounds : null;
-            mark = StartupProfile.Mark();
-            var soundDefs = haveSounds ? SoundDefs.Load(zrdrPath) : null;
-            // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
-            // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
-            var soundGroups = haveSounds ? SoundDefs.LoadGroups(zrdrPath) : null;
-            StartupProfile.Record("zrdr", mark);
-            if (!mute && !haveSounds)
-                GD.PushWarning($"sound archive not found, flying silent: {soundsPath}");
-            int meshInstances;
-            int colliders = 0;
-            string what;
-            Node3D? cloudDeck = null; // the world's cloudlayer overcast (copied per player below)
-            // The world's merged anim program + SceneBuilder, captured for the per-player crash
-            // runtime (Layer 2): the program holds player_crash_dirt + the effect defs, the scene
-            // builds the effect-template roots from the world gamez.
-            AnimProgram? crashProgram = null;
-            SceneBuilder? worldScene = null;
-            AnimRuntime? worldRuntime = null;   // the world's anim runtime
-            // --node=<cs_name>: resolve the request against the chapter gamez BEFORE anything is
-            // built, so a miss reports its candidates and quits instead of half-building a world.
-            // Matching is on the source name, never the Godot node name (which is sanitized and
-            // auto-renamed); duplicates are normal, so the whole match list is logged and the first
-            // is what builds.
-            GameZNode? nodeSubtree = null;
-            if (_spec.NodeName != null && _spec.WorldMode)
-            {
-                var matches = WorldBuilder.MatchNodes(gamez, _spec.NodeName);
-                if (matches.Count == 0)
-                {
-                    var near = WorldBuilder.SuggestNodes(gamez, _spec.NodeName, NodeSuggestCap);
-                    Log.Warn("world", $"--node='{_spec.NodeName}' matches no node in {_spec.Chapter}'s gamez ({gamez.Nodes.Count} nodes)");
-                    if (near.Count > 0)
-                    {
-                        Log.Warn("world", $"--node= candidates containing '{_spec.NodeName}': {string.Join(", ", near)}");
-                    }
-                    else
-                    {
-                        Log.Warn("world", $"--node= no name in {_spec.Chapter} contains '{_spec.NodeName}' either — run the full world with --debug-names to read names off the objects");
-                    }
-                    _sessionTextures?.Dispose();
-                    _sessionTextures = null;
-                    GetTree().Quit();
-                    return false;
-                }
-                nodeSubtree = matches[0];
-                var labels = new List<string>();
-                foreach (var m in matches)
-                {
-                    labels.Add($"{m.Name}#{m.Index}");
-                }
-                Log.Info("world", $"--node='{_spec.NodeName}' matched {matches.Count} node(s): {string.Join(", ", labels)}");
-                if (matches.Count > 1)
-                {
-                    Log.Warn("world", $"--node='{_spec.NodeName}' is ambiguous — building the first ({nodeSubtree.Name}#{nodeSubtree.Index}); name a unique node or pick by eye from the list above");
-                }
-            }
+            sw = Stopwatch.StartNew();
+            LoadArchives(state);
+            // The anim lab keeps the session archives open past this build scope
+            // (WorldSession.Options.KeepArchivesOpen): the AnimLab node owns their disposal so
+            // puffers/decals can build at any playhead time. Until that node exists, a failed lab
+            // build must close them from the catch below — in every other mode they are `using`
+            // scoped to this whole try, as before.
+            using var soundsScope = _spec.AnimLab ? null : state.Sounds;
+            if (!ResolveNodeSubtree(state))
+                return false;
             if (_spec.EmptyStage)
             {
-                // No gamez, no mission, no animation program: a flat collidable ground plane under
-                // a grid drawn in code. Flight, weapons and colliders work; nothing else is built.
-                mark = StartupProfile.Mark();
-                var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
-                StartupProfile.Record("world", mark);
-                _plane = stage.Root;
-                meshInstances = stage.MeshInstanceCount;
-                colliders = stage.ColliderCount;
-                what = "empty stage";
+                BuildEmptyStage(state);
             }
             else if (_spec.WorldMode)
             {
-                // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
-                // mission setup, AnimProgram + the AnimRuntime collaborator wiring, bind, sound
-                // prewarm — extracted to WorldSession so --anim-lab builds the same
-                // world+runtime. The per-view steps below (unplaced watch, edge extender, per-rig
-                // horizon + weather) stay here and read the returned builder. WorldSession does NOT
-                // add its Root to the tree — _worldRoot.AddChild(_plane) below still owns that.
-                var session = WorldSession.Build(
-                    new WorldSession.Options
-                    {
-                        DataRoot = dataRoot,
-                        Chapter = _spec.Chapter,
-                        Mission = _spec.Mission,
-                        ZrdrPath = zrdrPath,
-                        InterpPath = interpPath,
-                        MissionZrdrPath = missionZrdrPath,
-                        EffectsParent = _worldRoot!,
-                        // PLAYER_RANGE conditions + the sound listener measure from player 1's
-                        // camera — the honest answer in every mode (chase cam, free camera, orbit
-                        // eye); resolved per call because none of those cameras exist yet here.
-                        PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
-                            ? cam.GlobalPosition
-                            : Vector3.Zero,
-                        // The damage-test needs the collidable world (its census measures which
-                        // destructible geometry is solid and whether death removes it) even though it
-                        // runs in the freecam (non-fly) harness. Two interactive levers switch the
-                        // same build: --collision, because the collider overlay needs bodies to
-                        // draw, and --debug-damage, because a kill's collider count would otherwise
-                        // read zero and lie.
-                        Collision = BuildsCollision,
-                        DebugAnim = _spec.DebugAnim,
-                        AnimLod = _spec.AnimLod,
-                        DebugDzPaths = _spec.DebugDzPaths,
-                        // The lab: quiet stage (ambient playback deferred to its A toggle),
-                        // archives kept open for interactive effect builds.
-                        KeepArchivesOpen = _spec.AnimLab,
-                        AutoStart = !_spec.AnimLab,
-                        // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
-                        // scatter — in every mode, not just the lab.
-                        RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
-                        // --node=: one subtree instead of the whole world (null = the full build).
-                        NodeSubtree = nodeSubtree,
-                    },
-                    gamez, textures, sounds, soundDefs, soundGroups);
-                _plane = session.Root;
-                var builder = session.Builder;
-                cloudDeck = session.CloudDeck;
-                // Owned by the session so a teardown drops the previous world's lights.
-                _worldLights = session.Lights;
-                crashProgram = session.Program;
-                worldScene = session.Builder.Scene;
-                worldRuntime = session.Runtime;
-
-                // --node=: the built subtree's WORLD-frame box. Computed from the built meshes and
-                // the node transforms rather than from GlobalTransform, because the subtree has not
-                // joined the scene tree yet — and never from the gamez child_bbox, which is stored
-                // in the node's own frame.
-                if (nodeSubtree != null && WorldBuilder.DetachedWorldAabb(session.Root) is { } box)
-                {
-                    nodeAabb = box;
-                    Log.Info("world", $"node stage: '{nodeSubtree.Name}'#{nodeSubtree.Index} built, {builder.MeshInstanceCount} mesh instance(s), centre=({box.GetCenter().X:0},{box.GetCenter().Y:0},{box.GetCenter().Z:0}) size=({box.Size.X:0.#},{box.Size.Y:0.#},{box.Size.Z:0.#})");
-                }
-                else if (nodeSubtree != null)
-                {
-                    Log.Warn("world", $"node stage: '{nodeSubtree.Name}'#{nodeSubtree.Index} built no geometry at all — it is a group node; the camera framing has nothing to aim at");
-                }
-
-                // --damage-test: with the world built and its AnimRuntime bound, drive one
-                // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
-                // stand-in until F40's interactive HP control lands. The world subtree is added to
-                // the tree (ManualAdvance so _Process doesn't double-drive) because C26 ticks the
-                // death sequences forward, which reads global transforms — invalid on an out-of-tree
-                // node (`!is_inside_tree()` spam). It also makes the C25 collider positions real.
-                if (_spec.DamageTest)
-                {
-                    _worldRoot!.AddChild(_plane);
-                    session.Runtime.ManualAdvance = true;
-                    _probeRunner.RunDamageTest(_spec, session.Runtime);
-                    GetTree().Quit();
+                if (!BuildWorldStage(state))
                     return false;
-                }
-
-                // --effects-test: build the world-effects runtime and play every impact/destruction
-                // effect through it, reporting which resolve and which actually build a puffer
-                // (WORLD-12: a started def that renders nothing vs one that does), then quit — the D32
-                // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
-                // is real; the world plane subtree is added so the templates' global transforms hold.
-                if (_spec.EffectsTest && worldScene != null)
-                {
-                    _worldRoot!.AddChild(_plane);
-                    var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(gamez, worldScene, textures, session.Program);
-                    _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
-                    GetTree().Quit();
-                    return false;
-                }
-
-                // The shared world selection: click-pick plus the cs_name ancestor ladder PgUp/PgDn
-                // walks, in the two modes that observe a live world with a cursor. Created here so
-                // the anim lab below can bind its camera-follow to it; it joins the tree with the
-                // rest of the session, and builds no HUD and no highlight until something is
-                // picked, so an unadorned capture is unchanged.
-                if (_spec.Freecam || _spec.AnimLab)
-                {
-                    _selection = new UI.SelectionService(_plane, _camera)
-                    {
-                        DebugPick = _spec.DebugSelect != null ? UI.SelectionService.ParseDebugPick(_spec.DebugSelect) : null,
-                    };
-                    // The node lab reads that selection. Its camera is resolved through a
-                    // delegate: the freecam is created further down, after this point.
-                    _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
-                        session.Builder.Scene, BuildsCollision)
-                    {
-                        CameraSource = () => _spectator,
-                        DebugSpec = _spec.DebugNodeLab,
-                        // The anim lab's timeline strip and transport panel own the bottom of the
-                        // window; plain freecam has nothing there.
-                        BottomMargin = _spec.AnimLab ? 252 : 16,
-                    };
-                    // The world damage lab reads the same selection. Its effects runtime is built
-                    // on the first damage action, not now — an untouched session pays nothing.
-                    var damageScene = session.Builder.Scene;
-                    var damageProgram = session.Program;
-                    var damageRuntime = session.Runtime;
-                    _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, BuildsCollision)
-                    {
-                        SelectByName = name => _nodeLab?.SelectByName(name) ?? false,
-                        EffectsSource = () => _worldEffectsFactory.EnsureWorldEffects(gamez, damageScene, textures,
-                            damageProgram, damageRuntime),
-                        DebugSpec = _spec.DebugDamage,
-                        BottomMargin = _spec.AnimLab ? 252 : 16,
-                    };
-                }
-
-                // Every mechanism that places or hides a world entity has now run (the mission's
-                // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
-                // anything still sitting on the world origin is content this mission never placed
-                // — the chapter build script parks every vehicle there (see
-                // WorldBuilder.HideUnplacedEntities). Retail data leaves a few switched on:
-                // C5/IA1's piratezep is the reported "zeppelin buried in the ground".
-                // Switched off immediately so none of it is ever seen; _Process then polls
-                // RestorePlacedEntities, which puts back anything a time-based motion moves.
-                _unplacedWatch = builder;
-                if (builder.HideUnplacedEntities() is { Count: > 0 } unplaced)
-                {
-                    GD.Print($"world: {unplaced.Count} unplaced entit(y/ies) left at the origin, "
-                             + "switched off: " + string.Join(", ", unplaced));
-                }
-
-                // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
-                // chapter's clutter) that follows the plane past the map boundary, so the world
-                // continues indefinitely under the fog like the original's tile-reload grid
-                // (see MapEdgeExtender). On in --fly and in static weathered views (--sky-zone,
-                // for edge-verification shots); off for plain orbit viewing (honest data view).
-                if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
-                {
-                    mark = StartupProfile.Mark();
-                    _edgeExtender = builder.CreateEdgeExtender(session.Clutter);
-                    StartupProfile.Record("edge", mark);
-                    if (_edgeExtender != null)
-                    {
-                        _plane.AddChild(_edgeExtender);
-                        GD.Print("map edge: rolling mirrored-tile window active");
-                    }
-                }
-                if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
-                {
-
-                    mark = StartupProfile.Mark();
-                    _weatherRig = new WeatherRig(_spec, _worldRoot!);
-                    _weatherRig.Build(missionZrdrPath, _rigs, textures, activeZone =>
-                    {
-                        foreach (var rig in _rigs)
-                        {
-                            var dome = builder.BuildHorizon(activeZone);
-                            if (dome == null)
-                                break;
-                            dome.Scale = Vector3.One * HorizonScale;
-                            if (rig.VisualLayer != 0)
-                                UI.SplitScreen.SetVisualLayer(dome, rig.VisualLayer);
-                            _worldRoot!.AddChild(dome);
-                            rig.Horizon = dome;
-                        }
-                    });
-                    StartupProfile.Record("weather", mark);
-                }
-                meshInstances = builder.MeshInstanceCount;
-                colliders = builder.ColliderCount;
-                // Read after the domes, since C1's daytime sky layer is a horizon child.
-                if (builder.ScrollingModelCount > 0)
-                    GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
-                what = $"chapter {_spec.Chapter} world";
-
-                // The animation debugger (--anim-lab): the lab node owns the clock and the
-                // transport; the world above is its quiet stage (AutoStart=false — reset states
-                // and mission setup applied, nothing playing until A or --play-anim).
-                if (_spec.AnimLab)
-                {
-                    // The lab feeds Advance itself in fixed 1/60 s steps. ManualAdvance, not
-                    // SetProcess(false): Godot re-enables processing at READY for nodes that
-                    // override _Process, and the runtime enters the tree (with _plane, below)
-                    // after this line — a SetProcess here is silently undone and the world runs
-                    // at 2× (fixed steps + wall dt). See AnimRuntime.ManualAdvance.
-                    session.Runtime.ManualAdvance = true;
-
-                    // Build the lab's effect/crash stage under ONE staging node the lab moves in
-                    // front of the camera: the effect-template roots WorldBuilder skips (the
-                    // fireball/spark/smokeball/fire/trail/dirt roots the world never renders
-                    // ambiently), plus a meshless player crash-anchor set (healthy/destroyed/pieces
-                    // the crash def targets). Indexed so a played crash/effect def resolves its
-                    // puffer hosts AND its healthy/destroyed anchors HERE — scoped to this subtree —
-                    // instead of onto one of C1's 217 generic 'healthy' world nodes. With
-                    // PlaceCalledTemplates on, a CALL_ANIMATION relocates the called template onto
-                    // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
-                    // the templates.
-                    var labStage = new Node3D { Name = "lab_stage_anchor" };
-                    int effectRoots = WorldEffectsFactory.BuildEffectStage(gamez, session.Builder.Scene, labStage);
-                    labStage.AddChild(WorldEffectsFactory.BuildCrashAnchorSet());
-                    session.Root.AddChild(labStage);
-                    session.Runtime.IndexStage(labStage);
-                    session.Runtime.PlaceCalledTemplates = true;
-                    GD.Print($"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
-
-                    // The spawn the mission would place the player at — the camera starts here so
-                    // the interesting part of the map is in view, and (below) an optional parked
-                    // plane sits on it. Resolved once so the camera and plane agree.
-                    var labSpawns = SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
-                    var (spawnPos, spawnLook) = _spawnPicker.ChooseSpawn(labSpawns, missionZrdrPath,
-                        _spawnPicker.ChooseSpawnBase(labSpawns), 0, "");
-
-                    // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
-                    // in place of the orbit view — the lab drives it (Frame/FollowNode) on
-                    // play/pick. Starts at the mission spawn; --pos/--direction override.
-                    var camPos = _spec.CamPos ?? spawnPos;
-                    var camLook = _spec.CamDir is { } labDir ? camPos + labDir : _spec.LookAt ?? spawnLook;
-                    var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
-                    // --node=: the mission spawn is meaningless on a single-subtree stage — frame
-                    // the subject instead, unless the tester placed the eye themselves.
-                    if (nodeAabb is { } nodeBox && _spec.CamPos == null && _spec.LookAt == null && _spec.CamDir == null)
-                    {
-                        labCam.Frame(nodeBox);
-                    }
-                    _worldRoot!.AddChild(labCam);
-                    _spectator = labCam;
-
-                    // Optional stage prop: --plane= parks that aircraft at the mission spawn
-                    // point. No FlightController — unpainted by default like every static view
-                    // (--paint still applies one).
-                    if (_spec.PlaneNames.Count > 0)
-                    {
-                        mark = StartupProfile.Mark();
-                        var planesGamez = GameZ.Load(planesGamezPath);
-                        StartupProfile.Record("gamez", mark);
-                        mark = StartupProfile.Mark();
-                        var parkedBuilder = new PlaneBuilder(planesGamez, textures,
-                            scheme: _liveryResolver.SchemeFor(0, zrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(),
-                                _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
-                            patterns: _liveryResolver.Patterns);
-                        var parked = parkedBuilder.Build(_spec.PlaneName);
-                        StartupProfile.Record("plane", mark);
-                        meshInstances += parkedBuilder.MeshInstanceCount;
-                        _worldRoot!.AddChild(parked);
-                        parked.Position = spawnPos;
-                        if ((spawnLook - spawnPos).LengthSquared() > 1e-6f)
-                        {
-                            parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
-                        }
-                        what += $" + parked '{_spec.PlaneName}'";
-                    }
-
-                    animLab = new UI.AnimLab(session.Runtime, session.Program, labCam,
-                        labStage, textures, sounds, _masterSeed, _spec.PlayAnim,
-                        // On a --node= stage the subject IS the stage and is already framed; letting
-                        // the lab re-aim on every Play swings the camera off the only object there
-                        // (measured: the tower left the frame entirely on its own destruction).
-                        autoFrame: _spec.CamPos == null && _spec.LookAt == null && _spec.CamDir == null
-                                   && nodeSubtree == null)
-                    {
-                        // Interactive shows the whole lab UI; a scripted --screenshot hides it so
-                        // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
-                        // to capture the timeline (the same convention as --debug-livery).
-                        ShowUi = !_captureDirector.Pending || _spec.DebugAnimUi,
-                        // The lab's camera follows whichever rung of the shared selection is current.
-                        Selection = _selection,
-                    };
-                    _worldRoot!.AddChild(animLab);
-                    GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
-                             + (_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")
-                             + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
-                             + " P pause · . step · R restart · F picker · N node lab; click an object to follow");
-                    what += " + anim lab";
-                }
             }
             else
             {
-                // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
-                // Every --viewer session gets one now, so H always has something
-                // to toggle; --damage only decides whether it opens straight away. Built
-                // hidden otherwise, and the panels are built hidden regardless, so a plain
-                // --viewer still renders byte-identically.
-                // Static views build unpainted unless --paint asks (randomByDefault: false),
-                // so every existing orbit/damage screenshot renders exactly as before.
-                // Resolved once: the livery lab below opens on exactly the scheme the plane
-                // wears, not a second roll of --paint=random.
-                mark = StartupProfile.Mark();
-                var staticPatterns = _liveryResolver.PatternsForPlane(gamez, _spec.PlaneName);
-                var staticScheme = _liveryResolver.SchemeFor(0, zrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(), staticPatterns);
-                // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
-                // model is built bare and there is one write path for paint (its Repaint).
-                // Everywhere else the builder paints at construction as usual.
-                var builder = new PlaneBuilder(gamez, textures, damagePanels: _spec.Viewer,
-                    scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns);
-                _plane = builder.Build(_spec.PlaneName);
-                StartupProfile.Record("plane", mark);
-                meshInstances = builder.MeshInstanceCount;
-                what = $"'{_spec.PlaneName}'";
-
-                // Damage lab: per-part HP sliders driving the item-10c damage visuals on the
-                // parked plane — the same DamageVisuals/puffer pipeline as flight, with the
-                // distance-interval trails burning in place (DamageLab). Present in every
-                // --viewer session (H), opened at launch only by --damage.
-                if (_spec.Viewer)
-                {
-                    mark = StartupProfile.Mark();
-                    var stats = PlaneStats.Load(zrdrPath, _spec.PlaneName);
-                    StartupProfile.Record("zrdr", mark);
-                    if (stats.DestroyableParts.Count == 0)
-                    {
-                        GD.Print($"damage lab: '{_spec.PlaneName}' ({stats.DefName}) has no destroyable_parts");
-                    }
-                    else
-                    {
-                        var smoke = Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "smokepuffer");
-                        var fire = Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer");
-                        var panelTrails = new List<Effects.Puffer>();
-                        for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
-                            if (Effects.Puffer.MakePuffer(zrdrPath, textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
-                                panelTrails.Add(pt);
-                        var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
-                        // the HUD gauge cluster as a lab toggle (user request): the damage
-                        // dial mirrors the sliders, blinks on decreases like a flight hit
-                        var labGauges = GaugeCluster.Build(gamez, _spec.PlaneName, textures, stats.DestroyableParts);
-                        _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _spec.DamagePreset, labGauges)
-                        {
-                            StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for H
-                        });
-                        GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
-                                 $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails"
-                                 + (_spec.DamageLab ? "" : " (hidden — H)"));
-                        what += _spec.DamageLab ? " + damage lab" : " + damage lab (H)";
-                    }
-                }
-
-                // Livery lab (--viewer): pattern / RGB colour sliders / decal slots, repainting
-                // the parked plane live via PlaneBuilder.Repaint. Built hidden-by-default state
-                // is "unpainted" unless --paint named a scheme, so an unadorned --viewer
-                // screenshot is byte-identical to the pre-paint viewer. L toggles it.
-                if (_spec.Viewer && builder.SkinPrefix != null)
-                {
-                    var lab = new UI.LiveryLab(builder, _liveryResolver.PaintCatalog(zrdrPath), textures, staticScheme,
-                        _liveryResolver.Patterns.PatternsFor(builder.SkinPrefix))
-                    {
-                        DebugShow = _spec.DebugLivery.HasValue,
-                        DebugPatternSteps = _spec.DebugLivery ?? 0,
-                    };
-                    _worldRoot!.AddChild(lab);
-                    what += " + livery lab";
-                }
-
-                if (_spec.Viewer)
-                    what += " + mesh lab";
+                BuildStaticStage(state);
             }
+            if (!AttachPlaneAndLabs(state))
+                return false;
+            AssignCloudDeckIfBuilt(state);
+            BuildFreecamSpectator(state);
+            if (_spec.Fly)
+            {
+                BuildFlightRigs(state);
+            }
+            ApplyDestroyOverride(state);
+            LogBuildSummary(state, sw);
+        }
+        catch (Exception e)
+        {
+            GD.PrintErr($"failed to load session: {e}");
+            // A failed build: nothing yet owns the archives kept open past the build scope (the
+            // AnimLab node in the lab case, ReturnToMenu's teardown otherwise), so dispose them here.
+            if (state.AnimLabNode == null)
+            {
+                state.LabTextures?.Dispose();
+                state.LabSounds?.Dispose();
+            }
+            _sessionTextures?.Dispose();
+            _sessionTextures = null;
+            if (_captureDirector.Pending)
+            {
+                GetTree().Quit(1);
+            }
+            return false;
+        }
+
+        FinishFraming(state);
+        _startup?.EndBuild();
+        InSession = true;
+        return true;
+    }
+
+    /// <summary>Loads the session's core archives — gamez, textures, sounds, sound defs/groups —
+    /// and routes the texture/sound archives to whichever owner outlives this build scope (the
+    /// anim lab node, or the session for teardown).</summary>
+    private void LoadArchives(BuildState state)
+    {
+        long mark = StartupProfile.Mark();
+        state.Gamez = GameZ.Load(state.GamezPath);
+        StartupProfile.Record("gamez", mark);
+        mark = StartupProfile.Mark();
+        var textures = new TextureArchive(state.TexturesPath);
+        StartupProfile.Record("textures", mark);
+        state.Textures = textures;
+        // The texture archive stays open past this build scope: the data-driven crash bakes its
+        // effect puffers lazily at crash time (the same reason --anim-lab keeps it open). The lab
+        // owns its copy (LabTextures, freed with the lab node); every other mode hands it to the
+        // session (_sessionTextures), which ReturnToMenu disposes on teardown so a map reload drops
+        // the previous archive instead of leaking it. A failed build disposes it from the catch.
+        if (_spec.AnimLab)
+        {
+            state.LabTextures = textures;
+        }
+        else
+        {
+            _sessionTextures = textures;
+        }
+        // Opened before the world build rather than with the flight audio below, because the
+        // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
+        // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
+        // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
+        state.HaveSounds = !state.Mute && (File.Exists(state.SoundsPath) || Directory.Exists(state.SoundsPath));
+        mark = StartupProfile.Mark();
+        var sounds = state.HaveSounds ? new SoundArchive(state.SoundsPath) : null;
+        StartupProfile.Record("sounds", mark);
+        state.Sounds = sounds;
+        state.LabSounds = _spec.AnimLab ? sounds : null;
+        mark = StartupProfile.Mark();
+        state.SoundDefs = state.HaveSounds ? SoundDefs.Load(state.ZrdrPath) : null;
+        // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
+        // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
+        state.SoundGroups = state.HaveSounds ? SoundDefs.LoadGroups(state.ZrdrPath) : null;
+        StartupProfile.Record("zrdr", mark);
+        if (!state.Mute && !state.HaveSounds)
+            GD.PushWarning($"sound archive not found, flying silent: {state.SoundsPath}");
+    }
+
+    /// <summary>--node=&lt;cs_name&gt;: resolve the request against the chapter gamez BEFORE
+    /// anything is built, so a miss reports its candidates and quits instead of half-building a
+    /// world. Matching is on the source name, never the Godot node name (which is sanitized and
+    /// auto-renamed); duplicates are normal, so the whole match list is logged and the first is
+    /// what builds. Returns false if the session must abort (the tree quit is already issued).</summary>
+    private bool ResolveNodeSubtree(BuildState state)
+    {
+        if (_spec.NodeName == null || !_spec.WorldMode)
+            return true;
+        var matches = WorldBuilder.MatchNodes(state.Gamez, _spec.NodeName);
+        if (matches.Count == 0)
+        {
+            var near = WorldBuilder.SuggestNodes(state.Gamez, _spec.NodeName, NodeSuggestCap);
+            Log.Warn("world", $"--node='{_spec.NodeName}' matches no node in {_spec.Chapter}'s gamez ({state.Gamez.Nodes.Count} nodes)");
+            if (near.Count > 0)
+            {
+                Log.Warn("world", $"--node= candidates containing '{_spec.NodeName}': {string.Join(", ", near)}");
+            }
+            else
+            {
+                Log.Warn("world", $"--node= no name in {_spec.Chapter} contains '{_spec.NodeName}' either — run the full world with --debug-names to read names off the objects");
+            }
+            _sessionTextures?.Dispose();
+            _sessionTextures = null;
+            GetTree().Quit();
+            return false;
+        }
+        state.NodeSubtree = matches[0];
+        var labels = new List<string>();
+        foreach (var m in matches)
+        {
+            labels.Add($"{m.Name}#{m.Index}");
+        }
+        Log.Info("world", $"--node='{_spec.NodeName}' matched {matches.Count} node(s): {string.Join(", ", labels)}");
+        if (matches.Count > 1)
+        {
+            Log.Warn("world", $"--node='{_spec.NodeName}' is ambiguous — building the first ({state.NodeSubtree.Name}#{state.NodeSubtree.Index}); name a unique node or pick by eye from the list above");
+        }
+        return true;
+    }
+
+    /// <summary>--stage=empty: no gamez, no mission, no animation program — a flat collidable
+    /// ground plane under a grid drawn in code. Flight, weapons and colliders work; nothing else
+    /// is built.</summary>
+    private void BuildEmptyStage(BuildState state)
+    {
+        long mark = StartupProfile.Mark();
+        var stage = EmptyStage.Build(collision: _spec.Fly || _spec.ForceCollision);
+        StartupProfile.Record("world", mark);
+        _plane = stage.Root;
+        state.MeshInstances = stage.MeshInstanceCount;
+        state.Colliders = stage.ColliderCount;
+        state.What = "empty stage";
+    }
+
+    /// <summary>Builds the chapter world (world1) and binds its animation program, then the
+    /// per-view steps that read it back: node-name framing, the damage/effects-test probes, the
+    /// shared world selection + node/damage labs, unplaced-entity hiding, the map-edge extender,
+    /// per-rig weather, and (--anim-lab) the animation debugger stage. Returns false if the
+    /// session must abort (a probe quit is already issued).</summary>
+    private bool BuildWorldStage(BuildState state)
+    {
+        // Build the world (world1) and bind its animation program: WorldBuilder, clutter,
+        // mission setup, AnimProgram + the AnimRuntime collaborator wiring, bind, sound
+        // prewarm — extracted to WorldSession so --anim-lab builds the same
+        // world+runtime. The per-view steps below (unplaced watch, edge extender, per-rig
+        // horizon + weather) stay here and read the returned builder. WorldSession does NOT
+        // add its Root to the tree — _worldRoot.AddChild(_plane) below still owns that.
+        var session = WorldSession.Build(
+            new WorldSession.Options
+            {
+                DataRoot = state.DataRoot,
+                Chapter = _spec.Chapter,
+                Mission = _spec.Mission,
+                ZrdrPath = state.ZrdrPath,
+                InterpPath = state.InterpPath,
+                MissionZrdrPath = state.MissionZrdrPath,
+                EffectsParent = _worldRoot!,
+                // PLAYER_RANGE conditions + the sound listener measure from player 1's
+                // camera — the honest answer in every mode (chase cam, free camera, orbit
+                // eye); resolved per call because none of those cameras exist yet here.
+                PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
+                    ? cam.GlobalPosition
+                    : Vector3.Zero,
+                // The damage-test needs the collidable world (its census measures which
+                // destructible geometry is solid and whether death removes it) even though it
+                // runs in the freecam (non-fly) harness. Two interactive levers switch the
+                // same build: --collision, because the collider overlay needs bodies to
+                // draw, and --debug-damage, because a kill's collider count would otherwise
+                // read zero and lie.
+                Collision = BuildsCollision,
+                DebugAnim = _spec.DebugAnim,
+                AnimLod = _spec.AnimLod,
+                DebugDzPaths = _spec.DebugDzPaths,
+                // The lab: quiet stage (ambient playback deferred to its A toggle),
+                // archives kept open for interactive effect builds.
+                KeepArchivesOpen = _spec.AnimLab,
+                AutoStart = !_spec.AnimLab,
+                // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
+                // scatter — in every mode, not just the lab.
+                RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
+                // --node=: one subtree instead of the whole world (null = the full build).
+                NodeSubtree = state.NodeSubtree,
+            },
+            state.Gamez, state.Textures, state.Sounds, state.SoundDefs, state.SoundGroups);
+        _plane = session.Root;
+        var builder = session.Builder;
+        state.CloudDeck = session.CloudDeck;
+        // Owned by the session so a teardown drops the previous world's lights.
+        _worldLights = session.Lights;
+        state.CrashProgram = session.Program;
+        state.WorldScene = session.Builder.Scene;
+        state.WorldRuntime = session.Runtime;
+
+        // --node=: the built subtree's WORLD-frame box. Computed from the built meshes and
+        // the node transforms rather than from GlobalTransform, because the subtree has not
+        // joined the scene tree yet — and never from the gamez child_bbox, which is stored
+        // in the node's own frame.
+        if (state.NodeSubtree != null && WorldBuilder.DetachedWorldAabb(session.Root) is { } box)
+        {
+            state.NodeAabb = box;
+            Log.Info("world", $"node stage: '{state.NodeSubtree.Name}'#{state.NodeSubtree.Index} built, {builder.MeshInstanceCount} mesh instance(s), centre=({box.GetCenter().X:0},{box.GetCenter().Y:0},{box.GetCenter().Z:0}) size=({box.Size.X:0.#},{box.Size.Y:0.#},{box.Size.Z:0.#})");
+        }
+        else if (state.NodeSubtree != null)
+        {
+            Log.Warn("world", $"node stage: '{state.NodeSubtree.Name}'#{state.NodeSubtree.Index} built no geometry at all — it is a group node; the camera framing has nothing to aim at");
+        }
+
+        // --damage-test: with the world built and its AnimRuntime bound, drive one
+        // destructible's HP through its DAMAGE_SEQUENCE stages and quit — the C22 verify
+        // stand-in until F40's interactive HP control lands. The world subtree is added to
+        // the tree (ManualAdvance so _Process doesn't double-drive) because C26 ticks the
+        // death sequences forward, which reads global transforms — invalid on an out-of-tree
+        // node (`!is_inside_tree()` spam). It also makes the C25 collider positions real.
+        if (_spec.DamageTest)
+        {
+            _worldRoot!.AddChild(_plane);
+            session.Runtime.ManualAdvance = true;
+            _probeRunner.RunDamageTest(_spec, session.Runtime);
+            GetTree().Quit();
+            return false;
+        }
+
+        // --effects-test: build the world-effects runtime and play every impact/destruction
+        // effect through it, reporting which resolve and which actually build a puffer
+        // (WORLD-12: a started def that renders nothing vs one that does), then quit — the D32
+        // headless verify. Added to the tree (self-ticking) so puffers spawn and the census
+        // is real; the world plane subtree is added so the templates' global transforms hold.
+        if (_spec.EffectsTest && state.WorldScene != null)
+        {
+            _worldRoot!.AddChild(_plane);
+            var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, session.Program);
+            _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
+            GetTree().Quit();
+            return false;
+        }
+
+        // The shared world selection: click-pick plus the cs_name ancestor ladder PgUp/PgDn
+        // walks, in the two modes that observe a live world with a cursor. Created here so
+        // the anim lab below can bind its camera-follow to it; it joins the tree with the
+        // rest of the session, and builds no HUD and no highlight until something is
+        // picked, so an unadorned capture is unchanged.
+        if (_spec.Freecam || _spec.AnimLab)
+        {
+            _selection = new UI.SelectionService(_plane, _camera)
+            {
+                DebugPick = _spec.DebugSelect != null ? UI.SelectionService.ParseDebugPick(_spec.DebugSelect) : null,
+            };
+            // The node lab reads that selection. Its camera is resolved through a
+            // delegate: the freecam is created further down, after this point.
+            _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
+                session.Builder.Scene, BuildsCollision)
+            {
+                CameraSource = () => _spectator,
+                DebugSpec = _spec.DebugNodeLab,
+                // The anim lab's timeline strip and transport panel own the bottom of the
+                // window; plain freecam has nothing there.
+                BottomMargin = _spec.AnimLab ? 252 : 16,
+            };
+            // The world damage lab reads the same selection. Its effects runtime is built
+            // on the first damage action, not now — an untouched session pays nothing.
+            var damageScene = session.Builder.Scene;
+            var damageProgram = session.Program;
+            var damageRuntime = session.Runtime;
+            _worldDamageLab = new UI.WorldDamageLab(_selection, damageRuntime, BuildsCollision)
+            {
+                SelectByName = name => _nodeLab?.SelectByName(name) ?? false,
+                EffectsSource = () => _worldEffectsFactory.EnsureWorldEffects(state.Gamez, damageScene, state.Textures,
+                    damageProgram, damageRuntime),
+                DebugSpec = _spec.DebugDamage,
+                BottomMargin = _spec.AnimLab ? 252 : 16,
+            };
+        }
+
+        // Every mechanism that places or hides a world entity has now run (the mission's
+        // interp setup script as bootstrap pass 0, then the ON_STARTUP definitions), so
+        // anything still sitting on the world origin is content this mission never placed
+        // — the chapter build script parks every vehicle there (see
+        // WorldBuilder.HideUnplacedEntities). Retail data leaves a few switched on:
+        // C5/IA1's piratezep is the reported "zeppelin buried in the ground".
+        // Switched off immediately so none of it is ever seen; _Process then polls
+        // RestorePlacedEntities, which puts back anything a time-based motion moves.
+        _unplacedWatch = builder;
+        if (builder.HideUnplacedEntities() is { Count: > 0 } unplaced)
+        {
+            GD.Print($"world: {unplaced.Count} unplaced entit(y/ies) left at the origin, "
+                     + "switched off: " + string.Join(", ", unplaced));
+        }
+
+        // Map-edge continuation: a rolling window of mirrored terrain tiles (WITH the
+        // chapter's clutter) that follows the plane past the map boundary, so the world
+        // continues indefinitely under the fog like the original's tile-reload grid
+        // (see MapEdgeExtender). On in --fly and in static weathered views (--sky-zone,
+        // for edge-verification shots); off for plain orbit viewing (honest data view).
+        if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
+        {
+            long edgeMark = StartupProfile.Mark();
+            _edgeExtender = builder.CreateEdgeExtender(session.Clutter);
+            StartupProfile.Record("edge", edgeMark);
+            if (_edgeExtender != null)
+            {
+                _plane.AddChild(_edgeExtender);
+                GD.Print("map edge: rolling mirrored-tile window active");
+            }
+        }
+        if (_spec.Fly || _spec.Freecam || _spec.SkyZoneExplicit)
+        {
+            long weatherMark = StartupProfile.Mark();
+            _weatherRig = new WeatherRig(_spec, _worldRoot!);
+            _weatherRig.Build(state.MissionZrdrPath, _rigs, state.Textures, activeZone =>
+            {
+                foreach (var rig in _rigs)
+                {
+                    var dome = builder.BuildHorizon(activeZone);
+                    if (dome == null)
+                        break;
+                    dome.Scale = Vector3.One * HorizonScale;
+                    if (rig.VisualLayer != 0)
+                        UI.SplitScreen.SetVisualLayer(dome, rig.VisualLayer);
+                    _worldRoot!.AddChild(dome);
+                    rig.Horizon = dome;
+                }
+            });
+            StartupProfile.Record("weather", weatherMark);
+        }
+        state.MeshInstances = builder.MeshInstanceCount;
+        state.Colliders = builder.ColliderCount;
+        // Read after the domes, since C1's daytime sky layer is a horizon child.
+        if (builder.ScrollingModelCount > 0)
+            GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
+        state.What = $"chapter {_spec.Chapter} world";
+
+        // The animation debugger (--anim-lab): the lab node owns the clock and the
+        // transport; the world above is its quiet stage (AutoStart=false — reset states
+        // and mission setup applied, nothing playing until A or --play-anim).
+        if (_spec.AnimLab)
+        {
+            BuildAnimLabStage(state, session);
+        }
+        return true;
+    }
+
+    /// <summary>--anim-lab: the animation debugger's quiet stage — the effect/crash anchor
+    /// stage, the mission spawn point, the freecam-style SpectatorCamera, an optional parked
+    /// --plane= prop, and the AnimLab node itself (timeline + transport).</summary>
+    private void BuildAnimLabStage(BuildState state, WorldSession session)
+    {
+        // The lab feeds Advance itself in fixed 1/60 s steps. ManualAdvance, not
+        // SetProcess(false): Godot re-enables processing at READY for nodes that
+        // override _Process, and the runtime enters the tree (with _plane, below)
+        // after this line — a SetProcess here is silently undone and the world runs
+        // at 2× (fixed steps + wall dt). See AnimRuntime.ManualAdvance.
+        session.Runtime.ManualAdvance = true;
+
+        // Build the lab's effect/crash stage under ONE staging node the lab moves in
+        // front of the camera: the effect-template roots WorldBuilder skips (the
+        // fireball/spark/smokeball/fire/trail/dirt roots the world never renders
+        // ambiently), plus a meshless player crash-anchor set (healthy/destroyed/pieces
+        // the crash def targets). Indexed so a played crash/effect def resolves its
+        // puffer hosts AND its healthy/destroyed anchors HERE — scoped to this subtree —
+        // instead of onto one of C1's 217 generic 'healthy' world nodes. With
+        // PlaceCalledTemplates on, a CALL_ANIMATION relocates the called template onto
+        // the (in-front-of-camera) call site. IndexStage runs the reset states, hiding
+        // the templates.
+        var labStage = new Node3D { Name = "lab_stage_anchor" };
+        int effectRoots = WorldEffectsFactory.BuildEffectStage(state.Gamez, session.Builder.Scene, labStage);
+        labStage.AddChild(WorldEffectsFactory.BuildCrashAnchorSet());
+        session.Root.AddChild(labStage);
+        session.Runtime.IndexStage(labStage);
+        session.Runtime.PlaceCalledTemplates = true;
+        GD.Print($"anim-lab: stage — {effectRoots} effect template(s) + player anchor set built + indexed");
+
+        // The spawn the mission would place the player at — the camera starts here so
+        // the interesting part of the map is in view, and (below) an optional parked
+        // plane sits on it. Resolved once so the camera and plane agree.
+        var labSpawns = SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
+        var (spawnPos, spawnLook) = _spawnPicker.ChooseSpawn(labSpawns, state.MissionZrdrPath,
+            _spawnPicker.ChooseSpawnBase(labSpawns), 0, "");
+
+        // Camera: the freecam SpectatorCamera (RMB look, WASD/QE move), like --freecam,
+        // in place of the orbit view — the lab drives it (Frame/FollowNode) on
+        // play/pick. Starts at the mission spawn; --pos/--direction override.
+        var camPos = _spec.CamPos ?? spawnPos;
+        var camLook = _spec.CamDir is { } labDir ? camPos + labDir : _spec.LookAt ?? spawnLook;
+        var labCam = new SpectatorCamera(_camera, camPos, camLook) { ShowReadout = false };
+        // --node=: the mission spawn is meaningless on a single-subtree stage — frame
+        // the subject instead, unless the tester placed the eye themselves.
+        if (state.NodeAabb is { } nodeBox && _spec.CamPos == null && _spec.LookAt == null && _spec.CamDir == null)
+        {
+            labCam.Frame(nodeBox);
+        }
+        _worldRoot!.AddChild(labCam);
+        _spectator = labCam;
+
+        // Optional stage prop: --plane= parks that aircraft at the mission spawn
+        // point. No FlightController — unpainted by default like every static view
+        // (--paint still applies one).
+        if (_spec.PlaneNames.Count > 0)
+        {
+            long mark = StartupProfile.Mark();
+            var planesGamez = GameZ.Load(state.PlanesGamezPath);
+            StartupProfile.Record("gamez", mark);
+            mark = StartupProfile.Mark();
+            var parkedBuilder = new PlaneBuilder(planesGamez, state.Textures,
+                scheme: _liveryResolver.SchemeFor(0, state.ZrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(),
+                    _liveryResolver.PatternsForPlane(planesGamez, _spec.PlaneName)),
+                patterns: _liveryResolver.Patterns);
+            var parked = parkedBuilder.Build(_spec.PlaneName);
+            StartupProfile.Record("plane", mark);
+            state.MeshInstances += parkedBuilder.MeshInstanceCount;
+            _worldRoot!.AddChild(parked);
+            parked.Position = spawnPos;
+            if ((spawnLook - spawnPos).LengthSquared() > 1e-6f)
+            {
+                parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
+            }
+            state.What += $" + parked '{_spec.PlaneName}'";
+        }
+
+        var animLab = new UI.AnimLab(session.Runtime, session.Program, labCam,
+            labStage, state.Textures, state.Sounds, _masterSeed, _spec.PlayAnim,
+            // On a --node= stage the subject IS the stage and is already framed; letting
+            // the lab re-aim on every Play swings the camera off the only object there
+            // (measured: the tower left the frame entirely on its own destruction).
+            autoFrame: _spec.CamPos == null && _spec.LookAt == null && _spec.CamDir == null
+                       && state.NodeSubtree == null)
+        {
+            // Interactive shows the whole lab UI; a scripted --screenshot hides it so
+            // the 3D shot stays byte-identical — unless --debug-anim-ui forces it on
+            // to capture the timeline (the same convention as --debug-livery).
+            ShowUi = !_captureDirector.Pending || _spec.DebugAnimUi,
+            // The lab's camera follows whichever rung of the shared selection is current.
+            Selection = _selection,
+        };
+        _worldRoot!.AddChild(animLab);
+        state.AnimLabNode = animLab;
+        GD.Print($"anim-lab: quiet stage, seed {_masterSeed}, fixed dt 1/60"
+                 + (_spec.PlayAnim != null ? $", playing '{_spec.PlayAnim}'" : "")
+                 + " — freecam (RMB look, WASD/QE move); transport on the button panel,"
+                 + " P pause · . step · R restart · F picker · N node lab; click an object to follow");
+        state.What += " + anim lab";
+    }
+
+    /// <summary>The parked-plane static view (--viewer or a bare --plane=): builds the model
+    /// unpainted (--viewer) or pre-painted, then the damage / livery labs that only make sense
+    /// on a parked plane.</summary>
+    private void BuildStaticStage(BuildState state)
+    {
+        // The damage lab needs the pdpN torn-skin panels the plain viewer skips.
+        // Every --viewer session gets one now, so H always has something
+        // to toggle; --damage only decides whether it opens straight away. Built
+        // hidden otherwise, and the panels are built hidden regardless, so a plain
+        // --viewer still renders byte-identically.
+        // Static views build unpainted unless --paint asks (randomByDefault: false),
+        // so every existing orbit/damage screenshot renders exactly as before.
+        // Resolved once: the livery lab below opens on exactly the scheme the plane
+        // wears, not a second roll of --paint=random.
+        long mark = StartupProfile.Mark();
+        var staticPatterns = _liveryResolver.PatternsForPlane(state.Gamez, _spec.PlaneName);
+        var staticScheme = _liveryResolver.SchemeFor(0, state.ZrdrPath, randomByDefault: false, _liveryResolver.NewPaintRng(), staticPatterns);
+        // In --viewer the LIVERY LAB owns the livery and applies it itself, so the
+        // model is built bare and there is one write path for paint (its Repaint).
+        // Everywhere else the builder paints at construction as usual.
+        var builder = new PlaneBuilder(state.Gamez, state.Textures, damagePanels: _spec.Viewer,
+            scheme: _spec.Viewer ? null : staticScheme, patterns: _liveryResolver.Patterns);
+        _plane = builder.Build(_spec.PlaneName);
+        StartupProfile.Record("plane", mark);
+        state.MeshInstances = builder.MeshInstanceCount;
+        state.What = $"'{_spec.PlaneName}'";
+
+        // Damage lab: per-part HP sliders driving the item-10c damage visuals on the
+        // parked plane — the same DamageVisuals/puffer pipeline as flight, with the
+        // distance-interval trails burning in place (DamageLab). Present in every
+        // --viewer session (H), opened at launch only by --damage.
+        if (_spec.Viewer)
+        {
+            mark = StartupProfile.Mark();
+            var stats = PlaneStats.Load(state.ZrdrPath, _spec.PlaneName);
+            StartupProfile.Record("zrdr", mark);
+            if (stats.DestroyableParts.Count == 0)
+            {
+                GD.Print($"damage lab: '{_spec.PlaneName}' ({stats.DefName}) has no destroyable_parts");
+            }
+            else
+            {
+                var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "smokepuffer");
+                var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer");
+                var panelTrails = new List<Effects.Puffer>();
+                for (int i = 0; i < 8; i++) // pool one per pdp panel — the lab can flip all of them
+                    if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, _worldRoot!, "pufftrails.json", "firepuffer") is { } pt)
+                        panelTrails.Add(pt);
+                var visuals = new DamageVisuals(builder.DamagePanels, _plane, stats, smoke, fire, panelTrails);
+                // the HUD gauge cluster as a lab toggle (user request): the damage
+                // dial mirrors the sliders, blinks on decreases like a flight hit
+                var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
+                _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _spec.DamagePreset, labGauges)
+                {
+                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for H
+                });
+                GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
+                         $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails"
+                         + (_spec.DamageLab ? "" : " (hidden — H)"));
+                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (H)";
+            }
+        }
+
+        // Livery lab (--viewer): pattern / RGB colour sliders / decal slots, repainting
+        // the parked plane live via PlaneBuilder.Repaint. Built hidden-by-default state
+        // is "unpainted" unless --paint named a scheme, so an unadorned --viewer
+        // screenshot is byte-identical to the pre-paint viewer. L toggles it.
+        if (_spec.Viewer && builder.SkinPrefix != null)
+        {
+            var lab = new UI.LiveryLab(builder, _liveryResolver.PaintCatalog(state.ZrdrPath), state.Textures, staticScheme,
+                _liveryResolver.Patterns.PatternsFor(builder.SkinPrefix))
+            {
+                DebugShow = _spec.DebugLivery.HasValue,
+                DebugPatternSteps = _spec.DebugLivery ?? 0,
+            };
+            _worldRoot!.AddChild(lab);
+            state.What += " + livery lab";
+        }
+
+        if (_spec.Viewer)
+            state.What += " + mesh lab";
+    }
+
+    /// <summary>Joins the built subject to the tree, then the labs shared by every mode that
+    /// observes it: the world selection/node/damage labs (if built), the viewer's mesh lab, the
+    /// marker overlay and the weapon lab. Returns false if the session must abort (--weapon-test
+    /// already issued its quit).</summary>
+    private bool AttachPlaneAndLabs(BuildState state)
+    {
             _worldRoot!.AddChild(_plane);
             // The shared selection joins after the world does: its pick walk and its highlight box
             // both read GlobalTransform, which on a detached subtree is identity + error spam.
@@ -767,7 +883,7 @@ public partial class GameSession : Node3D
             if (_spec.Viewer && !_spec.WorldMode && _plane != null)
             {
                 _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
-                what += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
+                state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
             }
             // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
             // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
@@ -777,8 +893,8 @@ public partial class GameSession : Node3D
             // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
             if (_spec.Viewer && !_spec.WorldMode && _plane != null)
             {
-                mark = StartupProfile.Mark();
-                var labWeapons = WeaponDefs.Load(zrdrPath, Messages.Load(messagesPath));
+                long mark = StartupProfile.Mark();
+                var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
                 StartupProfile.Record("zrdr", mark);
                 // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
                 // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
@@ -799,7 +915,7 @@ public partial class GameSession : Node3D
                         break;
                     }
                 }
-                var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, textures, _camera, _spec.PlaneName)
+                var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName)
                 {
                     DebugShow = _spec.WeaponLab,
                     InitialWeapon = _spec.WeaponSelect,
@@ -820,63 +936,76 @@ public partial class GameSession : Node3D
                     GetTree().Quit();
                     return false;
                 }
-                what += _spec.WeaponLab ? " + weapon lab" : " + weapon lab (W)";
+                state.What += _spec.WeaponLab ? " + weapon lab" : " + weapon lab (W)";
             }
-            // The deck is now in the tree at its original position; remember its centre so
-            // _Process can re-anchor it under each player every frame, and give every rig past
-            // the first its own copy (the deck follows *a* camera — see AssignCloudDecks).
-            if (cloudDeck != null)
-            {
-                _weatherRig?.SetDeckCenter(OrbitCamera.MergedAabb(cloudDeck).GetCenter());
-                AssignCloudDecks(cloudDeck);
-            }
+            return true;
+    }
 
-            // Spectator mode (--freecam): the live world with no aircraft at all, observed from
-            // a free-flying camera. It starts where the mission would have spawned the player
-            // (or wherever --pos put it), so the interesting part of the map is
-            // already in view rather than a corner of empty sea.
-            if (_spec.Freecam)
-            {
-                Vector3 camPos, camLookAt;
-                if (_spec.EmptyStage)
-                {
-                    // The empty stage has no mission and therefore no spawn list: look at the grid
-                    // origin, which is where a --stage=empty subject is put.
-                    camPos = EmptyStage.CameraPos;
-                    camLookAt = Vector3.Zero;
-                }
-                else
-                {
-                    var freecamSpawns = SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
-                    (camPos, camLookAt) = _spawnPicker.ChooseSpawn(freecamSpawns, missionZrdrPath,
-                        _spawnPicker.ChooseSpawnBase(freecamSpawns), 0, "");
-                }
-                if (_spec.CamPos is { } cp) camPos = cp;
-                // The aim: a direction from wherever the eye ended up, or the named point.
-                if (_spec.CamDir is { } cd) camLookAt = camPos + cd;
-                else if (_spec.LookAt is { } la) camLookAt = la;
-                _spectator = new SpectatorCamera(_camera, camPos, camLookAt)
-                {
-                    // A scripted --screenshot run wants the frame clean of the overlay.
-                    ShowReadout = !_captureDirector.Pending,
-                };
-                _worldRoot!.AddChild(_spectator);
-                what += " + freecam";
-                GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
-                         "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
-                         "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
-                         "N opens the node lab, H the damage lab on whatever destructible is selected");
-            }
+    /// <summary>The deck is now in the tree at its original position; remember its centre so
+    /// _Process can re-anchor it under each player every frame, and give every rig past the
+    /// first its own copy (the deck follows *a* camera — see AssignCloudDecks).</summary>
+    private void AssignCloudDeckIfBuilt(BuildState state)
+    {
+        if (state.CloudDeck != null)
+        {
+            _weatherRig?.SetDeckCenter(OrbitCamera.MergedAabb(state.CloudDeck).GetCenter());
+            AssignCloudDecks(state.CloudDeck);
+        }
+    }
 
-            if (_spec.Fly)
-            {
+    /// <summary>Spectator mode (--freecam): the live world with no aircraft at all, observed
+    /// from a free-flying camera. It starts where the mission would have spawned the player (or
+    /// wherever --pos put it), so the interesting part of the map is already in view rather than
+    /// a corner of empty sea.</summary>
+    private void BuildFreecamSpectator(BuildState state)
+    {
+        if (!_spec.Freecam)
+            return;
+        Vector3 camPos, camLookAt;
+        if (_spec.EmptyStage)
+        {
+            // The empty stage has no mission and therefore no spawn list: look at the grid
+            // origin, which is where a --stage=empty subject is put.
+            camPos = EmptyStage.CameraPos;
+            camLookAt = Vector3.Zero;
+        }
+        else
+        {
+            var freecamSpawns = SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
+            (camPos, camLookAt) = _spawnPicker.ChooseSpawn(freecamSpawns, state.MissionZrdrPath,
+                _spawnPicker.ChooseSpawnBase(freecamSpawns), 0, "");
+        }
+        if (_spec.CamPos is { } cp) camPos = cp;
+        // The aim: a direction from wherever the eye ended up, or the named point.
+        if (_spec.CamDir is { } cd) camLookAt = camPos + cd;
+        else if (_spec.LookAt is { } la) camLookAt = la;
+        _spectator = new SpectatorCamera(_camera, camPos, camLookAt)
+        {
+            // A scripted --screenshot run wants the frame clean of the overlay.
+            ShowReadout = !_captureDirector.Pending,
+        };
+        _worldRoot!.AddChild(_spectator);
+        state.What += " + freecam";
+        GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
+                 "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
+                 "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
+                 "N opens the node lab, H the damage lab on whatever destructible is selected");
+    }
+
+    /// <summary>--fly (and --stunt): builds every rendered rig's aircraft — model, loadout,
+    /// HUD, audio, stunt/crash hookup — sharing the session-wide flight data (planes gamez,
+    /// per-plane stats, weapons, the projectile pool) loaded once above the per-player loop.
+    /// PLAN-planeviewer-split C10 is the follow-up that splits the per-player body out of this
+    /// method into its own FlightRigAssembler.</summary>
+    private void BuildFlightRigs(BuildState state)
+    {
                 // Session-wide flight data, loaded once and shared by every player: the aircraft
                 // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
                 // and the per-plane state below are per player.
-                mark = StartupProfile.Mark();
+                long mark = StartupProfile.Mark();
                 // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
                 // so there is nothing to load a second time.
-                var planesGamez = _spec.EmptyStage ? gamez : GameZ.Load(planesGamezPath);
+                var planesGamez = _spec.EmptyStage ? state.Gamez : GameZ.Load(state.PlanesGamezPath);
                 StartupProfile.Record("gamez", mark);
                 // Stats are per plane, not per player (splitscreen players can pick
                 // different aircraft) — load each distinct one once, logging it as it appears.
@@ -885,7 +1014,7 @@ public partial class GameSession : Node3D
                 {
                     if (statsCache.TryGetValue(plane, out var cached))
                         return cached;
-                    var loaded = PlaneStats.Load(zrdrPath, plane);
+                    var loaded = PlaneStats.Load(state.ZrdrPath, plane);
                     statsCache[plane] = loaded;
                     GD.Print($"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s " +
                              $"weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} " +
@@ -905,7 +1034,7 @@ public partial class GameSession : Node3D
                 // One spawn list for the session; each player takes the next index (wrapping).
                 // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
                 // --pos/default override placed over the grid origin.
-                var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(missionZrdrPath, _spec.Scenario);
+                var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
                 int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
                 // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
@@ -915,18 +1044,18 @@ public partial class GameSession : Node3D
                 // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
                 // (`he_rocket` …) from the chapter's own prototype roots (B14).
                 mark = StartupProfile.Mark();
-                var weaponMessages = Messages.Load(messagesPath);
-                var weaponDefs = WeaponDefs.Load(zrdrPath, weaponMessages);
+                var weaponMessages = Messages.Load(state.MessagesPath);
+                var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
                 var stockLoadouts = StockLoadouts.Load();
                 StartupProfile.Record("zrdr", mark);
-                var projectiles = new ProjectilePool(textures, sounds, soundDefs,
-                    flyoutGamez: gamez, flyoutScene: worldScene)
+                var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
+                    flyoutGamez: state.Gamez, flyoutScene: state.WorldScene)
                 {
                     Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
                     // Route weapon hits to the world's destructibles (C23): the pool's raycast
                     // reports the struck collider, the runtime resolves it to a destructible and
                     // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
-                    DamageSink = worldRuntime != null ? worldRuntime.DamageAt : null,
+                    DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
                 };
                 _worldRoot!.AddChild(projectiles);
                 _projectiles = projectiles;
@@ -936,12 +1065,12 @@ public partial class GameSession : Node3D
                 // rocket impact plays its named effect here; the world runtime routes a death's
                 // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
                 // the templates, so it is built only when the world was.
-                if (worldScene != null)
+                if (state.WorldScene != null)
                 {
-                    var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(gamez, worldScene, textures, crashProgram!);
+                    var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
                     projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
-                    if (worldRuntime != null)
-                        worldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+                    if (state.WorldRuntime != null)
+                        state.WorldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
                 }
 
                 // Stunt run: the mission's danger-zone objectives from ia.json
@@ -957,7 +1086,7 @@ public partial class GameSession : Node3D
                 }
                 else if (_spec.Stunt)
                 {
-                    stuntZones = StuntMission.Load(gamez, missionZrdrPath, Messages.Load(messagesPath));
+                    stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, Messages.Load(state.MessagesPath));
                     if (stuntZones == null)
                         // Expected for the chapters whose IA1 has no dzones (C1C, C2B) — a data
                         // fact, not a fault, so a plain line (log hygiene: no stack traces).
@@ -991,20 +1120,20 @@ public partial class GameSession : Node3D
                     // Flight repaints the field on every map load: each player draws their
                     // own random livery (colours + decals) unless --paint pins one.
                     mark = StartupProfile.Mark();
-                    var planeBuilder = new PlaneBuilder(planesGamez, textures, spinningProps: true,
-                        scheme: _liveryResolver.SchemeFor(pi, zrdrPath, randomByDefault: false, paintRng,
+                    var planeBuilder = new PlaneBuilder(planesGamez, state.Textures, spinningProps: true,
+                        scheme: _liveryResolver.SchemeFor(pi, state.ZrdrPath, randomByDefault: false, paintRng,
                             _liveryResolver.PatternsForPlane(planesGamez, planeName)),
                         patterns: _liveryResolver.Patterns);
                     var planeModel = planeBuilder.Build(planeName);
                     StartupProfile.Record("plane", mark);
-                    meshInstances += planeBuilder.MeshInstanceCount;
+                    state.MeshInstances += planeBuilder.MeshInstanceCount;
 
                     var controller = new FlightController
                     {
                         // one scripted sequence per player ('|'-separated); the last covers the rest
                         HoldSegments = _spec.HoldSets == null ? null
                             : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
-                        DebugCollision = debugCollision,
+                        DebugCollision = state.DebugCollision,
                         PlaneModel = planeModel,
                         Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
                         WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
@@ -1015,7 +1144,7 @@ public partial class GameSession : Node3D
                         Damage = stats.DestroyableParts.Count > 0 ? new PlaneDamage(stats.DestroyableParts) : null,
                         // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
                         // breaks it and passes through; every other collision stays solid.
-                        CollideDamageSink = worldRuntime != null ? worldRuntime.CollideDamageAt : null,
+                        CollideDamageSink = state.WorldRuntime != null ? state.WorldRuntime.CollideDamageAt : null,
                         // splitscreen: this player's own device(s), own pane for the HUD,
                         // and no debug freeze (it would halt the shared world for everyone)
                         PadDevices = padAssignment?[pi],
@@ -1101,14 +1230,14 @@ public partial class GameSession : Node3D
 
                     // The original's heading tape, rebuilt from the chapter's own HUD
                     // textures (compassticks2/compasstxt ship in every chapter's archive).
-                    controller.Compass = CompassTape.Build(textures);
+                    controller.Compass = CompassTape.Build(state.Textures);
                     if (verbose && controller.Compass != null)
                         GD.Print("compass: heading tape from compassticks2/compasstxt");
 
                     // The cockpit dials (altimeter / speedometer / damage display), rebuilt
                     // from the plane's own gauges subtree in planes.zbd + the chapter's
                     // HUD textures (needle/lowalt/stall/<plane>_damage/hilite/hatchptrn).
-                    controller.Gauges = GaugeCluster.Build(planesGamez, planeName, textures,
+                    controller.Gauges = GaugeCluster.Build(planesGamez, planeName, state.Textures,
                         stats.DestroyableParts);
                     if (controller.Gauges != null)
                     {
@@ -1154,13 +1283,13 @@ public partial class GameSession : Node3D
                     // trail (pufftrails.json → dense_firetrail's smokepuffer/firepuffer pair).
                     if (controller.Damage != null)
                     {
-                        var smoke = Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "smokepuffer");
-                        var fire = Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer");
+                        var smoke = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "smokepuffer");
+                        var fire = Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "firepuffer");
                         // per-panel fire trails (the original streams one from every damaged
                         // panel — clearly visible in OriginalScreenshots/Videos/C1 IA1 Crash.mp4)
                         var panelTrails = new List<Effects.Puffer>();
                         for (int i = 0; i < 4; i++)
-                            if (Effects.Puffer.MakePuffer(zrdrPath, textures, controller, "pufftrails.json", "firepuffer") is { } pt)
+                            if (Effects.Puffer.MakePuffer(state.ZrdrPath, state.Textures, controller, "pufftrails.json", "firepuffer") is { } pt)
                                 panelTrails.Add(pt);
                         controller.Visuals = new DamageVisuals(planeBuilder.DamagePanels, planeModel, stats, smoke, fire, panelTrails);
                         if (verbose)
@@ -1172,10 +1301,10 @@ public partial class GameSession : Node3D
                     // The data-driven crash rig is built AFTER the controller enters the tree
                     // (below), so the crash def's reset states read valid global transforms.
 
-                    if (sounds != null && soundDefs != null)
+                    if (state.Sounds != null && state.SoundDefs != null)
                     {
                         var audio = new FlightAudio { MixGain = mixGain };
-                        audio.Setup(sounds, soundDefs, stats);
+                        audio.Setup(state.Sounds, state.SoundDefs, stats);
                         controller.Audio = audio;
                         controller.AddChild(audio);
                         if (verbose)
@@ -1219,11 +1348,11 @@ public partial class GameSession : Node3D
                         if (verbose)
                         {
                             GD.Print("stunt marker HUD: projected marker + edge arrow + clock bearing");
-                            what += $" [stunt: {controller.Stunt.TotalCount} zones]";
+                            state.What += $" [stunt: {controller.Stunt.TotalCount} zones]";
                         }
                     }
 
-                    var (spawnPos, spawnLookAt) = _spawnPicker.ChooseSpawn(spawnList, missionZrdrPath, spawnBase, pi, tag);
+                    var (spawnPos, spawnLookAt) = _spawnPicker.ChooseSpawn(spawnList, state.MissionZrdrPath, spawnBase, pi, tag);
                     controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
                     controller.Name = $"player{pi + 1}";
                     rig.Controller = controller;
@@ -1234,10 +1363,10 @@ public partial class GameSession : Node3D
                     // and every authored effect, from the compiled def. Built here, once the
                     // controller (and its plane model) are in the tree, so the crash def's reset
                     // states resolve valid global transforms. The standard (and only) crash path.
-                    if (crashProgram != null && worldScene != null)
+                    if (state.CrashProgram != null && state.WorldScene != null)
                     {
-                        _worldEffectsFactory.BuildFlightCrashRuntime(controller, planeBuilder, planeName, gamez,
-                            worldScene, textures, crashProgram, verbose);
+                        _worldEffectsFactory.BuildFlightCrashRuntime(controller, planeBuilder, planeName, state.Gamez,
+                            state.WorldScene, state.Textures, state.CrashProgram, verbose);
                     }
                 }
                 // The race's shared results board: one ranked row per player, over the
@@ -1263,85 +1392,79 @@ public partial class GameSession : Node3D
                     var flown = new List<string>(_rigs.Count);
                     for (int pi = 0; pi < _rigs.Count; pi++)
                         flown.Add($"P{pi + 1} '{PlaneRoster.PlaneFor(_spec, pi)}'");
-                    what += $" + splitscreen {string.Join(", ", flown)}";
+                    state.What += $" + splitscreen {string.Join(", ", flown)}";
                 }
                 else
                 {
-                    what += $" + '{_spec.PlaneName}' flying";
+                    state.What += $" + '{_spec.PlaneName}' flying";
                 }
-            }
+    }
 
-            // --destroy=<name>: kill a named destructible at session build so a --screenshot
-            // captures its destruction with nobody at the controls. Reuses the weapon-damage path —
-            // DamageAt runs the full death (the healthy→destroyed swap fires synchronously here; the
-            // debris and effects play out as the runtime self-ticks through the screenshot warm-up).
-            // The world subtree is already in the tree (added above), so the death's global-transform
-            // reads and the effect stage are valid. Flight already built + wired the world-effects
-            // runtime (to the projectile pool too); a plane-less --freecam asks for one here so the
-            // destruction's fire/smoke still render — gated on --destroy, so a plain --freecam
-            // regression builds nothing extra.
-            if (_spec.DestroyName != null && worldRuntime != null)
-            {
-                if (worldScene != null)
-                {
-                    _worldEffectsFactory.EnsureWorldEffects(gamez, worldScene, textures, crashProgram!, worldRuntime);
-                }
-                int killed = Testing.ProbeRunner.TriggerDestroy(worldRuntime, _spec.DestroyName, out var destroyBounds);
-                what += killed > 0 ? $" + destroyed {killed}× '{_spec.DestroyName}'"
-                                   : $" + destroy '{_spec.DestroyName}' (no match)";
-                // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
-                // camera themselves (--pos/--direction) — so a bare `--freecam --chapter=CX
-                // --destroy=name --screenshot=x.png` is a complete, self-framing destruction shot.
-                if (killed > 0 && _spectator != null && _spec.CamPos == null && _spec.LookAt == null
-                    && _spec.CamDir == null && destroyBounds.Size.LengthSquared() > 0f)
-                {
-                    _spectator.Frame(destroyBounds);
-                }
-            }
-            else if (_spec.DestroyName != null)
-            {
-                GD.Print($"--destroy='{_spec.DestroyName}' ignored: no chapter world " +
-                         "(pair it with --freecam/--fly + --chapter=)");
-            }
-
-            GD.Print($"loaded {what}: {gamez.Nodes.Count} gamez nodes, " +
-                     $"{meshInstances} mesh instances, {colliders} colliders, " +
-                     $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped surfaces, {sw.ElapsedMilliseconds} ms");
-            if (_rigs.Count > 1)
-                foreach (var rig in _rigs)
-                    GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
-                             $"cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} " +
-                             $"deck={(rig.Deck != null ? "own" : "none")} " +
-                             $"puffs={(rig.Puffs != null ? "own" : "none")} " +
-                             $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
-            if (textures.MissingTextures.Count > 0)
-                GD.Print($"[textures] {textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
-                         string.Join(", ", textures.MissingTextures));
-        }
-        catch (Exception e)
+    /// <summary>--destroy=&lt;name&gt;: kill a named destructible at session build so a
+    /// --screenshot captures its destruction with nobody at the controls. Reuses the
+    /// weapon-damage path — DamageAt runs the full death (the healthy→destroyed swap fires
+    /// synchronously here; the debris and effects play out as the runtime self-ticks through the
+    /// screenshot warm-up). The world subtree is already in the tree (added above), so the
+    /// death's global-transform reads and the effect stage are valid. Flight already built +
+    /// wired the world-effects runtime (to the projectile pool too); a plane-less --freecam asks
+    /// for one here so the destruction's fire/smoke still render — gated on --destroy, so a
+    /// plain --freecam regression builds nothing extra.</summary>
+    private void ApplyDestroyOverride(BuildState state)
+    {
+        if (_spec.DestroyName != null && state.WorldRuntime != null)
         {
-            GD.PrintErr($"failed to load session: {e}");
-            // A failed build: nothing yet owns the archives kept open past the build scope (the
-            // AnimLab node in the lab case, ReturnToMenu's teardown otherwise), so dispose them here.
-            if (animLab == null)
+            if (state.WorldScene != null)
             {
-                labTextures?.Dispose();
-                labSounds?.Dispose();
+                _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!, state.WorldRuntime);
             }
-            _sessionTextures?.Dispose();
-            _sessionTextures = null;
-            if (_captureDirector.Pending)
+            int killed = Testing.ProbeRunner.TriggerDestroy(state.WorldRuntime, _spec.DestroyName, out var destroyBounds);
+            state.What += killed > 0 ? $" + destroyed {killed}× '{_spec.DestroyName}'"
+                               : $" + destroy '{_spec.DestroyName}' (no match)";
+            // Auto-frame the plane-less freecam on what it killed, unless the tester placed the
+            // camera themselves (--pos/--direction) — so a bare `--freecam --chapter=CX
+            // --destroy=name --screenshot=x.png` is a complete, self-framing destruction shot.
+            if (killed > 0 && _spectator != null && _spec.CamPos == null && _spec.LookAt == null
+                && _spec.CamDir == null && destroyBounds.Size.LengthSquared() > 0f)
             {
-                GetTree().Quit(1);
+                _spectator.Frame(destroyBounds);
             }
-            return false;
         }
+        else if (_spec.DestroyName != null)
+        {
+            GD.Print($"--destroy='{_spec.DestroyName}' ignored: no chapter world " +
+                     "(pair it with --freecam/--fly + --chapter=)");
+        }
+    }
 
+    /// <summary>The "loaded ..." summary line + the per-pane/texture-census follow-ups, printed
+    /// once the whole build (including any --fly rigs) has finished.</summary>
+    private void LogBuildSummary(BuildState state, Stopwatch sw)
+    {
+        GD.Print($"loaded {state.What}: {state.Gamez.Nodes.Count} gamez nodes, " +
+                 $"{state.MeshInstances} mesh instances, {state.Colliders} colliders, " +
+                 $"{Mech3.SceneBuilder.ClampedSurfaceTotal} uv-clamped surfaces, {sw.ElapsedMilliseconds} ms");
+        if (_rigs.Count > 1)
+            foreach (var rig in _rigs)
+                GD.Print($"view P{rig.Index + 1}: layer {Mathf.Log(rig.VisualLayer) / Mathf.Log(2) + 1:0} " +
+                         $"cull 0x{rig.Camera.CullMask:X5}, sky={(rig.Horizon != null ? "own" : "none")} " +
+                         $"deck={(rig.Deck != null ? "own" : "none")} " +
+                         $"puffs={(rig.Puffs != null ? "own" : "none")} " +
+                         $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
+        if (state.Textures.MissingTextures.Count > 0)
+            GD.Print($"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
+                     string.Join(", ", state.Textures.MissingTextures));
+    }
+
+    /// <summary>The post-build framing pass, run whether or not the try succeeded is already
+    /// decided by the caller: subject framing for the static views, the freecam/anim-lab mesh
+    /// lab, the collider wireframe overlay, and the node-name label layer.</summary>
+    private void FinishFraming(BuildState state)
+    {
         // Only the static views frame their subject; flight and the spectator camera (both
         // --freecam and --anim-lab) place their own eye (FrameCamera would yank the freecam back
         // to the world's AABB orbit).
         if (!_spec.Fly && !_spec.Freecam && !_spec.AnimLab)
-            FrameCamera(nodeAabb);
+            FrameCamera(state.NodeAabb);
 
         // Mesh lab on the selection (M) — the freecam/anim-lab twin of the viewer's lab above. It
         // owns no subtree until M attaches it to whatever the shared selection has, and restores
@@ -1400,11 +1523,6 @@ public partial class GameSession : Node3D
             // the parked aircraft IS the subject.
             Deprioritise = flownPlanes,
         });
-
-        // The build is done; everything from here to the first drawn frame is `first_frame`.
-        _startup?.EndBuild();
-        InSession = true;
-        return true;
     }
 
     /// <summary>Creates this session's <see cref="PlayerRig"/>s — one per rendered view.

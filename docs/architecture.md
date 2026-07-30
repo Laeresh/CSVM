@@ -1426,6 +1426,15 @@ instantiates one per launch with `(SessionSpec, LauncherContext)`, adds it to th
 (`Launcher.ReturnToMenu`). Bootstrap, launchscreen, persistent camera/lighting and the process-wide
 per-frame machinery (shader clock, `--perf`, capture tick, Esc/F11/F12) live on
 `src/Session/Launcher.cs` — read that entry too before touching anything around the build's edges.
+⚠ **`StartSession`'s build body is an ordered sequence of phase methods** (PLAN-planeviewer-split
+  C9): `LoadArchives` → `ResolveNodeSubtree` → `BuildEmptyStage`/`BuildWorldStage`
+  (→ `BuildAnimLabStage`)/`BuildStaticStage` → `AttachPlaneAndLabs` → `AssignCloudDeckIfBuilt` →
+  `BuildFreecamSpectator` → `BuildFlightRigs` → `ApplyDestroyOverride` → `LogBuildSummary`, then
+  (outside the try) `FinishFraming`. They share one `BuildState` (a private nested class) instead
+  of the flat local-variable graph the phases used to close over — add a new cross-phase value
+  there, not as a new local. The `try`/`catch` around the whole build, and its `StartupProfile`
+  mark/record pairs per phase, are unchanged; `BuildFlightRigs` is still the ~400-line per-player
+  loop — PLAN-planeviewer-split C10 is what splits it into `FlightRigAssembler`.
 ⚠ **The `--*-test`/`--destroy=` probe wrappers moved to `Testing.ProbeRunner`**
   (PLAN-planeviewer-split A1); the runner is process-scoped (the Launcher constructs it and
   dispatches the `--dump-*`/`--run-tests` early quits itself) and every call site here is a

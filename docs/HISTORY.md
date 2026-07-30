@@ -8047,3 +8047,23 @@ tearing down and rebuilding across separate frames: four builds with byte-identi
 (814 defs, 616 ON_STARTUP+5, 615 live instances, 267 destructibles — no accumulation, so no node or
 handle leak), no double-dispose / `is_inside_tree` / double-`Add` / exception noise in any stream,
 clean exit 0.
+
+**PLAN-planeviewer-split C9 (2026-07-30): `StartSession`'s remainder split into ordered phase
+methods on `GameSession`.** The ~1200-line build body inside the one `try` now reads as
+`LoadArchives` -> `ResolveNodeSubtree` -> `BuildEmptyStage`/`BuildWorldStage` (-> `BuildAnimLabStage`)
+/`BuildStaticStage` -> `AttachPlaneAndLabs` -> `AssignCloudDeckIfBuilt` -> `BuildFreecamSpectator` ->
+`BuildFlightRigs` -> `ApplyDestroyOverride` -> `LogBuildSummary`, then (outside the `try`)
+`FinishFraming` -- each a named private method instead of one flat block. The dozens of locals the
+phases used to share (gamez, textures, sounds/soundDefs/soundGroups, meshInstances/colliders/what,
+cloudDeck, crashProgram/worldScene/worldRuntime, nodeSubtree/nodeAabb, labTextures/labSounds/animLab)
+moved onto one private `BuildState` passed to each phase; the `using var soundsScope` disposal stays
+at the `try`'s own scope (not inside `LoadArchives`) so the sound archive still lives for the whole
+build, matching the pre-refactor lifetime exactly. The `try`/`catch` boundary and the abort paths
+(--node= miss, --damage-test/--effects-test/--weapon-test) are unchanged -- each aborting phase
+returns `false` and `StartSession` propagates it. `BuildFlightRigs` is still the ~400-line
+per-player loop; PLAN-planeviewer-split C10 is the follow-up that extracts it into
+`FlightRigAssembler`. Pure refactor, no behaviour change intended. Verified: `.\RunTests.ps1` PASS --
+293 units, 9/9 engine suites, 11/11 goldens hash-identical -- plus the `[perf] startup` log line's
+phase marks (gamez/textures/sounds/zrdr/world/clutter/anim/bind/edge/weather/plane/rest/first_frame)
+inspected on a post-refactor `--fly --det` run: fixed key order (unaffected by call order) with each
+bucket's magnitude sane for its phase, i.e. no phase's time bled into the wrong bucket.

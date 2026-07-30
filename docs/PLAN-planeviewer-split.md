@@ -81,7 +81,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — break the remaining StartSession
 
-9. ☐ StartSession → ordered phase methods on GameSession
+9. ☑ StartSession → ordered phase methods on GameSession
 10. ☐ Per-player flight loop + crash runtime → `src/Session/FlightRigAssembler`
 11. ☐ Final sweep: `_Process` a short dispatcher, GameSession < ~800 lines, complete the plan
 
