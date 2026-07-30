@@ -8547,3 +8547,23 @@ index (summing every category line) totals 94; its `## Flags` bullets total 95 l
 to 94 flags once the 2 shared-bullet flags and the 3 doubled-bullet flags are netted out. No behaviour
 changed (doc-only) — confirmed by a full `.\RunTests.ps1`: 312 units, 12/12 engine suites, 13/13
 goldens hash-identical.
+
+**`weapon-effects.md`'s meshless-root overclaim corrected — D32, `BL-140` (2026-07-30).** The doc
+listed `gunshell`/`muzzle_burst` as prototype roots "confirmed in C1" alongside genuinely-meshed
+roots, and the original `BL-140` evidence (C1-only) read both as `model_index: -1` with "zero real
+children" — implying neither resolves to any mesh. A new script,
+`analysis/weapon-effects-node-shape/check_meshless_roots.py`, swept all 8 chapters' `nodes.json` and
+found the "zero real children" premise itself wrong: each root has exactly **one** child, in every
+chapter. `muzzle_burst`'s child (`dummy`) is also meshless — that subtree really is invisible.
+`gunshell`'s child (`g1`) carries a real mesh (`model_index: 60` in every chapter, 10 vertices / 7
+polygons), structurally parented under `gunshell` itself. `weapon-effects.md`'s "Projectile
+prototypes" section now footnotes this distinction ("resolves to a node" vs. "carries a mesh") and
+cross-refs `BL-137`. Landing this also corrected two downstream backlog claims built on the wrong
+premise: the "Small per-impact feedback gaps" item 4 evidence (now says the casing mesh exists, one
+node below the root) and `BL-141`'s traced parent chain, whose node numbers turned out to be off by
+the same `+1` anim-def-ptr convention `BL-137` already flagged — at the raw index, model 60's node
+is `gunshell`'s own child, not "unrelated by parentage" as `BL-141` concluded (see `FINDINGS.md` for
+the full trace). `BL-140` is deleted from `backlog.md` (landed). No code changed — doc + backlog +
+analysis-script only, confirmed by re-reading the diff, not by `RunTests.ps1` (nothing engine-side to
+regress). This was the last open item in `PLAN-m3-polish-quickwins.md`; the plan is now complete and
+moved to `docs/plans/`.

@@ -198,7 +198,7 @@ work is below.
    *Playtest after fix:* once casings eject, judge against `OriginalScreenshots/C1B IA1 Bloodhawk tracer
    and ejection.png`/`…ejection2.png` (one brass casing + a persisting, aft-drifting white puff cluster,
    ejecting from the wing mounts). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
-   See `BL-137`/`BL-138`/`BL-140`/`BL-141` for what wiring this actually needs beyond the def itself.
+   See `BL-137`/`BL-138`/`BL-141` for what wiring this actually needs beyond the def itself.
 4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
    (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
    nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
@@ -1237,12 +1237,14 @@ the document alone, it says so and marks the value TUNE.
      shots is ejecting, and its stock fit is 40-cal inner + 30-cal outer **wing** guns
      (`CSVM/data/stock_loadouts.json`), so neither the calibre gate nor the underbelly holds. Do not
      re-derive either from the document. The white puff is still unmatched to any shipped effect def.
-     **Measured further: the casing's own solid body is unmatched too** — C1's `gunshell` node (204)
-     carries `model_index: -1` and zero real mesh children (same shape as the documented empty
-     template roots, `docs/formats/world-structure.md:6`), so nothing in this chapter's gamez gives
-     the moving `gunshell` node a mesh to show. See `BL-140`/`BL-141`. Locating a mesh/texture for
-     either half (or accepting synthetic ones for both) is the remaining unknown, and it is the larger
-     half of the visual.
+     **Measured further, corrected across all 8 chapters (`analysis/weapon-effects-node-shape/`):**
+     the `gunshell` root itself carries `model_index: -1`, but its one child (`g1`) carries a real
+     mesh (`model_index: 60`, 10 vertices / 7 polygons), structurally parented under `gunshell` —
+     so the moving `gunshell` node *does* have a mesh to show, one level below the root
+     (`docs/formats/weapon-effects.md`'s gunshell/muzzle_burst footnote). `BL-141`'s `shell1`/`shell2`
+     texture pair is still unmatched to it. Wiring the child mesh onto the ejection anchor is the
+     remaining unknown for the casing half; the white smoke puff cluster is unmatched to any shipped
+     effect def for the other half.
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
@@ -1298,22 +1300,6 @@ the document alone, it says so and marks the value TUNE.
   with a velocity field) plus an actual `OmniLight3D` flash reusing the def's range/colour values —
   separate from the size/look work in `BL-011`/`BL-012`.
 
-- `BL-140` **`docs/formats/weapon-effects.md`'s "confirmed in C1" gamez-root claim for
-  `gunshell`/`muzzle_burst` is true only at the name level — neither carries a mesh in C1's own
-  `nodes.json`.** `weapon-effects.md:124-135` lists both under "Projectile prototypes (gamez roots) …
-  all confirmed in C1," alongside genuinely-meshed roots like `slug.flt`/`splash1.flt`. Measured
-  directly: C1 `nodes.json` node 204 (`gunshell`, matching the anim def's `ptr: 203` via that reader's
-  own off-by-one node numbering) and node 166 (`muzzle_burst`) both carry `model_index: -1` and **zero
-  real children** (`child_indices` holds only the node's own index — the same "no real children" shape
-  as the documented empty template roots `fire1.flt`/`splash_box`,
-  `docs/formats/world-structure.md:6`). So relocating either root onto a call site today would
-  move/light an invisible point, not a visible casing or flash body.
-  *Fix shape:* check the other 7 chapters' `nodes.json` for the same two node names before touching
-  the doc — if every chapter agrees, `weapon-effects.md`'s wording needs a footnote distinguishing
-  "the name resolves to a node" from "the node carries a mesh." Cross-ref `BL-137`.
-  ⚠ **Traps.** Do not assume `shell1.png`/`shell2.png` fill this gap — see `BL-141`; they trace to an
-  unrelated mesh chain, not to the `gunshell` node.
-
 - `BL-141` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
   nothing: not `gunshell`, not any reader def, not any engine code.**
   `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
@@ -1324,9 +1310,21 @@ the document alone, it says so and marks the value TUNE.
   Grepped `CSVM/src` and every `extracted/*/cam_anim/*.json` / `extracted/*/*/zrdr/*.json` for
   `shell1`/`shell2`/`rabbit_blur`/`gunshell`: only the texture files and this one material/model pair
   exist; nothing calls, anchors, or names them from any weapon-effect def.
+  ⚠ **Correction (`BL-140`'s 8-chapter sweep, `analysis/weapon-effects-node-shape/`).** The node
+  numbers above are off by the same `+1` anim-def-ptr convention noted in `BL-137` — raw
+  `nodes.json` index 204, not 205, is the `g1`/model-60 node — and at the raw index, its
+  `parent_indices` is `[203]` (`gunshell`) only, not the `rabbit_blur`/`g11`/`rabbit_blur` chain
+  this entry describes (those names sit at nearby *list positions*, not as this node's actual
+  parents). Model 60's node **is** `gunshell`'s own only child, contradicting "no relation to
+  `gunshell` … by parentage" above. The `shell1`/`shell2` textures are still unmatched to it — that
+  part of this entry stands — but "the data gives no mesh" is no longer true for `gunshell`
+  specifically; see the corrected footnote in `docs/formats/weapon-effects.md`. Not re-investigated
+  further here — whether `rabbit_blur` itself is real terrain-effect geometry, model 60's actual
+  visual shape, and the `rabbit_blur`/`g11` chain's true relationship to model 60's node are still
+  open.
   *Fix shape:* none — this is a "confirm before assuming" flag for whoever picks up
-  `BL-013`/`BL-137`. If a casing sprite is ever hand-authored (since the data gives no mesh, per
-  `BL-140`), do not reach for `shell1`/`shell2` without first checking whether `rabbit_blur` is itself
+  `BL-013`/`BL-137`. If a casing sprite is ever hand-authored, do not reach for `shell1`/`shell2`
+  without first checking whether `rabbit_blur` is itself
   a real, unrelated visual effect (a motion-blur streak) that repurposing its texture would break.
 
 ### Flight-model gaps the video calibration measured (2026-07-25)

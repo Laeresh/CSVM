@@ -1,8 +1,7 @@
 # M3 polish — quick wins, code-verifiable
 
-**ACTIVE PLAN** (written 2026-07-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (landed 2026-07-30). Every checklist item is ☑; moved here from `docs/` per this
+repo's plan-lifecycle convention. Kept for evidence and dead ends, read as history.
 
 Ten items drawn from `backlog.md` under two user-chosen criteria (2026-07-30): **quick wins** (small,
 root cause already pinned or an explicit fix shape written down) and **code-verifiable only**
@@ -78,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — doc drift
 
 31. ☑ `BL-031` `docs/cli.md` documents 89 flags, the parser accepts 92
-32. ☐ `BL-140` `weapon-effects.md` "confirmed in C1" overclaims meshless `gunshell`/`muzzle_burst`
+32. ☑ `BL-140` `weapon-effects.md` "confirmed in C1" overclaims meshless `gunshell`/`muzzle_burst`
 
 ## Dependency and parallelism notes
 

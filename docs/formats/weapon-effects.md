@@ -125,14 +125,26 @@ tag), `cockpit_bulletholes.zrd.json` (hits on the player's own canopy), and the 
 
 `FLYOUT`'s `MODEL` and a few `IMPACT`/`FIRE` targets name a **node prototype**, a model root
 present in every chapter's `nodes.json` (all confirmed in C1). `SceneBuilder` instances it at
-the firepoint or impact point:
+the firepoint or impact point. "Confirmed" here means **the name resolves to a gamez node**,
+not that the node carries a mesh — see the footnote below for `gunshell`/`muzzle_burst`, the
+two names known to differ:
 
 | Group | Prototype roots |
 |---|---|
 | Gun rounds (`FLYOUT MODEL`) | `slug.flt`, `dumdum.flt`, `armorpiercing.flt`, `magnesium.flt` |
 | Ordnance (`FLYOUT MODEL`) | `ap_rocket`, `he_rocket`, `flak`, `flash`, `beeper`, `scatter`, `incendiary`, `smoker`, `sonic`, `reararc`, `a_torpedo`, `aaflak`, `cannonball` |
-| Muzzle | `muzzle_burst`, `muzzle_burst_slug` / `_ap` / `_dum` / `_mag`, `muzzle_burst2` |
-| Impact / misc | `gunhit`, `dum_gunhit`, `mag_gunhit`, `gunshell`, `ballflare.flt`, `bsplsh.flt`, `splash1.flt` |
+| Muzzle | `muzzle_burst`¹, `muzzle_burst_slug` / `_ap` / `_dum` / `_mag`, `muzzle_burst2` |
+| Impact / misc | `gunhit`, `dum_gunhit`, `mag_gunhit`, `gunshell`¹, `ballflare.flt`, `bsplsh.flt`, `splash1.flt` |
+
+¹ Measured across all 8 chapters (`analysis/weapon-effects-node-shape/`, `BL-140`): both roots
+carry `model_index: -1` (no mesh of their own) and exactly one child. `muzzle_burst`'s child
+(`dummy`) is also `model_index: -1` — the whole subtree is genuinely meshless, so instancing
+this root alone lights/moves nothing visible. `gunshell`'s child (`g1`) carries a real mesh
+(`model_index: 60` in every chapter, 10 vertices / 7 polygons) and is structurally parented
+under `gunshell` itself — so the *casing* prototype does resolve to a visible mesh, one node
+below the name `FLYOUT`/`CallAnimation` target. `BL-137` (the shared-anchor firing-rate
+blocker) and any future ejection work should instance/anchor the `g1` child, not assume the
+root is a bare point.
 
 `firepoint` is the marker prototype (the aircraft's own firepoints are documented in
 [markers.md](markers.md)).
