@@ -1,6 +1,6 @@
 ---
 name: commit-next
-description: Commit the current plan-item's changes, then print a ready-to-paste prompt for the next open checklist item. Use when finishing a plan item and moving to the next (the commit → /clear → continue loop).
+description: Commit the current plan-item's changes, then print a ready-to-paste prompt for the next open checklist item and copy it to the clipboard. Use when finishing a plan item and moving to the next (the commit → /clear → continue loop).
 ---
 
 You are closing out one item of the active plan and teeing up the next. This skill runs while you still have the context of the task you just finished — use it. Do the three steps in order, then stop.
@@ -61,7 +61,15 @@ Before writing code: read that item's full "### <ID>" detail in the plan and the
 Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh CLAUDE.md "Current status". Commit only when I ask (with /commit-next).
 ~~~
 
-After the code block, add a single closing line matched to your step-3 recommendation. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
-- **continue** → *Recommended: continue — no clear needed. Say the word and I'll start `<ID>` in this context. (The block above is only if you'd rather clear anyway.)*
-- **`/compact`** → *Recommended: run `/compact`, then paste the block above to start `<ID>`.*
-- **`/clear`** → *Recommended: copy the block above, then `/clear` (and `/model <model>` per the plan, if it differs), then paste it to start `<ID>`.*
+Then copy that exact prompt text into the clipboard with the PowerShell tool, using a single-quoted here-string (closing `'@` at column 0):
+
+~~~
+Set-Clipboard -Value @'
+<the prompt text, verbatim>
+'@
+~~~
+
+After the code block, add a single closing line matched to your step-3 recommendation, noting the prompt is already in the clipboard. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
+- **continue** → *Recommended: continue — no clear needed. Say the word and I'll start `<ID>` in this context. (The block above is already in your clipboard if you'd rather clear anyway.)*
+- **`/compact`** → *Recommended: run `/compact`, then paste the block above (already in your clipboard) to start `<ID>`.*
+- **`/clear`** → *Recommended: `/clear` (and `/model <model>` per the plan, if it differs), then paste — the block above is already in your clipboard.*
