@@ -65,7 +65,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — spurious errors, hangs, and lab correctness
 
-11. ☐ `BL-040` `!is_inside_tree()` error on every sound-enabled world bind
+11. ☑ `BL-040` `!is_inside_tree()` error on every sound-enabled world bind
 12. ☑ `BL-049` `--headless` + `--screenshot` NREs forever instead of failing loudly
 13. ☑ `BL-044` Node lab: hidden subtree's tree row doesn't reflect live `Visible` state
 14. ☑ `BL-043` Player plane unreachable by selection in `--anim-lab`
@@ -178,7 +178,17 @@ assuming index == slot. (d) Coordinate with A1/A2: shared files, land Wave A seq
 
 # Wave B — spurious errors, hangs, and lab correctness
 
-## B11 ☐ `BL-040` `!is_inside_tree()` error on sound-enabled world bind
+## B11 ☑ `BL-040` `!is_inside_tree()` error on sound-enabled world bind
+
+**Landed 2026-07-30.** Confirmed the traced backtrace in code: `Bind`→`Bootstrap`→`RunAmbientPasses`
+→`Start`→`HandleSound`→`OneShotSoundPosition` read `GlobalTransform` on the still-detached world
+subtree (`WorldSession.cs:238` binds before GameSession parents the root). Fix mirrors the existing
+`WorldPos` helper: a new `WorldTransform(node, out composed)` composes the ancestor chain when the
+node is out of tree (keeping the basis so an AT_NODE offset rotates correctly), and the one caller
+logs the fallback with the resulting world position. Verified sound-enabled (not `--mute`): C3
+`--freecam` stderr now shows **0** `!is_inside_tree()` (baseline 1), and the log carries
+`snd_waterfall` at `(-4385.7, 145.7, -4872.7)` — clearly non-origin. 8-chapter sound-enabled freecam
+regression: 0 errors every chapter (only C3 has a bootstrap one-shot). Full suite + 13 goldens green.
 
 **Goal.** A sound-enabled world bind emits zero `!is_inside_tree()` errors, and bootstrap one-shot
 sound emitters are positioned at their real world position, not the identity origin.

@@ -1108,6 +1108,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return xform.Origin;
     }
 
+    /// <summary>A node's world transform, valid DURING the bootstrap too â€” the same detached-subtree
+    /// problem <see cref="WorldPos"/> solves, but keeping the basis so an AT_NODE offset still rotates
+    /// into place. <paramref name="composed"/> reports whether the ancestor chain had to be walked
+    /// (the world root not yet parented), so the caller can log the fallback rather than let Godot
+    /// spam <c>!is_inside_tree()</c> and return an origin transform.</summary>
+    private static Transform3D WorldTransform(Node3D node, out bool composed)
+    {
+        composed = !node.IsInsideTree();
+        if (!composed)
+            return node.GlobalTransform;
+        var xform = node.Transform;
+        for (var p = node.GetParent() as Node3D; p != null; p = p.GetParent() as Node3D)
+            xform = p.Transform * xform;
+        return xform;
+    }
+
     /// <summary>
     /// Resolves a condition's node reference. The compiled form is a **1-based index into the
     /// definition's <c>nodes</c> support array** (mech3ax resolves indices to names for every
@@ -2017,7 +2033,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             offset = ev.Data.Vec3("translate");
         }
         host ??= anchor;
-        return host is { } h && IsInstanceValid(h) ? h.GlobalTransform * offset : Vector3.Zero;
+        if (host is not { } h || !IsInstanceValid(h))
+            return Vector3.Zero;
+        var pos = WorldTransform(h, out bool composed) * offset;
+        if (composed)
+            Log.Info("sound", $"one-shot SOUND '{ev.Data.Str("name")}' positioned by out-of-tree ancestor composition at {pos} (world root not parented at bootstrap)");
+        return pos;
     }
 
     /// <summary>

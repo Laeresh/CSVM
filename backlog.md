@@ -492,19 +492,6 @@ unscheduled.
   ⚠ Traps: don't attribute it to the concurrent-run collision — that failure mode is instant
   (0.9 s, LOG-13); this one died seconds in, with nothing else running.
 
-### World / animation
-
-- `BL-040` **One `!is_inside_tree()` error during every sound-enabled world bind.** `AnimRuntime.Bind` →
-  `Bootstrap` → `RunAmbientPasses` → `Start` dispatches a `SOUND` event while the world subtree is
-  still out of the tree, and `OneShotSoundPosition` (`AnimRuntime.cs:1405`) reads `GlobalTransform`
-  on it — Godot logs `Condition "!is_inside_tree()" is true. Returning: Transform3D()` and the
-  emitter is placed at the identity origin. Measured 2026-07-25 on C3 `--freecam` (1 error; 0 with
-  `--mute`, which is why every earlier regression baseline read zero — they all ran muted). Same
-  class as WORLD-11. Fix is either to defer the bootstrap's one-shot sounds until the subtree is in
-  the tree, or to fall back to the node's local transform chain and say so in the log.
-  ⚠ Traps: a muted regression run cannot see this — grep a **sound-enabled** run's full stderr.
-  Do not "fix" it by suppressing the read; the emitter really is being positioned at the origin.
-
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
 - `BL-041` **Surface classification mis-tags buildings as water and water as buildings — and it is a

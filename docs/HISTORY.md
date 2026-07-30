@@ -8449,3 +8449,33 @@ so the binding log is the acceptance evidence and the at-the-controls light chec
 — `PT-05` closed). Freecam is untouched (its `ExtraRoots` stays empty → byte-identical pick path,
 0 errors). Full `.\RunTests.ps1` green (312 unit tests, 12/12 engine suites, 13/13 goldens
 hash-identical, none moved).
+
+## 2026-07-30 — B11 `BL-040`: `!is_inside_tree()` error on sound-enabled world bind fixed
+
+Every sound-enabled world bind logged exactly one `Condition "!is_inside_tree()" is true. Returning:
+Transform3D()` (measured 2026-07-25 on C3 `--freecam`; 0 with `--mute` — which is why every earlier
+regression baseline, all muted, read zero). Reproduced and traced the backtrace in code:
+`AnimRuntime.Bind`→`Bootstrap`→`RunAmbientPasses`→`Start`→`HandleSound`→`OneShotSoundPosition`
+(`AnimRuntime.cs`) reads `GlobalTransform` on a node in the world subtree, but `WorldSession.Build`
+binds the runtime (`WorldSession.cs:238`) *before* `GameSession` parents the world root into the
+scene tree — so `GlobalTransform` is out of tree, Godot logs the error and returns identity, placing
+the one-shot emitter at the origin instead of its real pose. Same class as verification WORLD-11.
+
+Fix mirrors the file's existing `WorldPos` helper (which already composes the ancestor chain for the
+detached-bootstrap case): added `WorldTransform(Node3D, out bool composed)` — returns
+`GlobalTransform` when in tree, otherwise accumulates the local-transform chain up the ancestors
+(keeping the basis so an AT_NODE `pos`/`translate` offset rotates correctly), and reports via
+`composed` whether it fell back. `OneShotSoundPosition` now uses it and, when the fallback engages,
+logs a `[sound]` line with the computed world position — so the emitter's placement is visible
+rather than silently wrong. The read is *fixed*, not suppressed: the emitter now lands at its real
+world pose. No new `docs/architecture.md` ⚠ — the module is at its 3-⚠ cap and the constraint lives
+in the `WorldTransform`/`WorldPos` doc comments (the rule's "moves to a code comment" branch).
+
+Verified sound-enabled (**not** `--mute`, per the trap): C3 `--freecam --screenshot` stderr now
+greps **0** `!is_inside_tree()` (baseline 1), and stdout carries `one-shot SOUND 'snd_waterfall'
+positioned by out-of-tree ancestor composition at (-4385.731, 145.65591, -4872.6846)` — the C3
+waterfall, clearly non-origin. 8-chapter sound-enabled freecam regression (C1/C1B/C1C/C2/C2B/C3/C4/
+C5): 0 `!is_inside_tree()` and 0 other `ERROR:` (bar the unrelated pre-existing `.scratch/` PNG-path
+warning present in baseline too) every chapter — only C3 has a bootstrap one-shot SOUND, matching the
+measured evidence. Full `.\RunTests.ps1` green: 312 unit tests, 12/12 engine suites (engine errors
+clean), 13/13 goldens hash-identical.
