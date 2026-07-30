@@ -1552,13 +1552,6 @@ needs one of them to move needs a new measurement first.
   different axis, and pitch's own coupling to speed (`BL-092`'s induced-drag gap) makes conflating the
   two easy to get wrong.
 
-- `BL-098` **Owed captures, each blocking one of the above.** `CAP-01` (sustained banked max-pull
-  turn → induced drag), `CAP-02` (low pass along a canyon wall → ground blow, the only possible
-  source) and `CAP-03` (level top speed at 5500 / 6000 / 6500 / 6800 ft → the altitude limit), all
-  listed with their framing requirements in `playtest.md` §0 alongside the rest of the owed set.
-  The capture spec and the clip-validity gate are in `analysis/video-flight-calibration/FINDINGS.md`;
-  **auto head turn must be off or the clip is unusable**, which cost two takes already.
-
 ## Open fidelity questions (answerable by testing the original)
 
 - `BL-099` **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
