@@ -312,6 +312,19 @@ public sealed partial class NodeLab : Node
         return true;
     }
 
+    /// <summary>Test-only hooks for the synchronous <c>--run-tests</c> harness, which runs a whole
+    /// suite inside one <c>_Ready</c> call and so never gets a live engine frame to wait out the
+    /// panel's own 4 Hz status timer or its selection-changed event. These call the exact private
+    /// paths a live session fires on its own.</summary>
+    internal void RevealSelectionForTest() => RevealSelection();
+
+    internal void RefreshStatusForTest() => UpdateStatus();
+
+    internal (string Text, bool Dim)? RowStateForTest(Node3D node) =>
+        _nodeItem.TryGetValue(node.GetInstanceId(), out var item)
+            ? (item.GetText(0), item.GetCustomColor(0) == Dim)
+            : null;
+
     // ---- static helpers -------------------------------------------------------------------
 
     private static Label Small(string text)
@@ -606,6 +619,34 @@ public sealed partial class NodeLab : Node
         {
             _hideBtn.Text = node != null && IsInstanceValid(node) && !node.Visible ? "Show" : "Hide";
         }
+        RefreshTreeVisibility();
+    }
+
+    /// <summary>Re-reads live <c>Visible</c> for every bound row on the panel's existing 4 Hz
+    /// status cadence, so a def re-showing a node updates its row without user input — the row
+    /// reflects the node, it never latches what a button last did.</summary>
+    private void RefreshTreeVisibility()
+    {
+        if (_tree == null || _destView)
+        {
+            return;
+        }
+        foreach (var (nodeId, item) in _nodeItem)
+        {
+            if (item == _rootItem || GodotObject.InstanceFromId(nodeId) is not Node3D node || !IsInstanceValid(node))
+            {
+                continue;
+            }
+            item.SetText(0, RowText(node));
+            if (node.Visible)
+            {
+                item.ClearCustomColor(0);
+            }
+            else
+            {
+                item.SetCustomColor(0, Dim);
+            }
+        }
     }
 
     // ---- selection sync -----------------------------------------------------------------------
@@ -750,10 +791,10 @@ public sealed partial class NodeLab : Node
         _rootItem.SetText(0, $"search '{query}' — {hits.Count} of {total} match(es)");
         _rootItem.SetCustomColor(0, Amber);
         _rootItem.SetSelectable(0, false);
-        foreach (var (name, node) in hits)
+        foreach (var (_, node) in hits)
         {
             var item = tree.CreateItem(_rootItem);
-            item.SetText(0, name);
+            item.SetText(0, RowText(node));
             if (!node.Visible)
             {
                 item.SetCustomColor(0, Dim);

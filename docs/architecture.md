@@ -1034,7 +1034,9 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
 The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
 Frame / Hide-Show, a dependency readout for `SelectionService.Current` (anim defs, destructible
 pool + DAMAGE_SEQUENCE, geometry/textures, colliders) and a destructibles view with F41's coverage
-columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin.
+columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin. A row's text/colour
+follow live `Node3D.Visible`, re-read on the panel's 4 Hz status cadence rather than latched off the
+hide button, so a def re-showing a hidden node reads visible again on its own (BL-044).
 ⚠ **Tree children are the nearest `cs_name` descendants** — the exact inverse of the selection
   ladder's ancestor walk; `Select(node)` bypasses the 350 m pick cap (C5 `z3terrain`).
 ⚠ **A mode-dependent source SAYS it is absent, never shows an empty list** (LOG-1/WORLD-9): the

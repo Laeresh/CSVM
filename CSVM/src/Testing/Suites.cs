@@ -2,6 +2,7 @@ using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.UI;
 using Godot;
 
 namespace CSVM.Testing;
@@ -71,6 +72,8 @@ public static class Suites
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("nodelab-visibility",
+            "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
     }
 
     // ---- pure data -----------------------------------------------------------------------------
@@ -422,5 +425,98 @@ public static class Suites
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
             });
         }
+    }
+
+    // ---- BL-044: node lab tree rows must follow live Visible ------------------------------------
+
+    /// <summary>Hides a node through the lab's own Hide action, then re-shows it through a real
+    /// <c>RESET_STATE</c> def (the same path a world animation uses) and checks the tree row both
+    /// times — never through the button, only through <c>Node3D.Visible</c>. A def re-showing a
+    /// node the user hid is correct behaviour (see BL-044's trap), so the row must follow it.
+    ///
+    /// <para>Deliberately a chapter other than <see cref="TestContext.Chapter"/>: that one is
+    /// cached and shared with <c>damage-hd</c>, which leaves its swept defs re-killed, so reusing
+    /// it here would make the candidate search depend on suite run order. Any other chapter is
+    /// always built fresh and torn down by <see cref="TestContext.WithWorld"/>.</para></summary>
+    private static void NodeLabVisibility(TestContext ctx)
+    {
+        ctx.WithWorld("C2", collision: false, world =>
+        {
+            DestructibleRegistry.Instance? chosen = null;
+            Node3D? healthy = null;
+            foreach (var inst in world.Runtime.Destructibles.All)
+            {
+                if (inst.Def.ResetState == null)
+                {
+                    continue;
+                }
+                if (FindVariant(inst.Anchor, "healthy") is { Visible: true } found)
+                {
+                    chosen = inst;
+                    healthy = found;
+                    break;
+                }
+            }
+            ctx.Check(chosen != null,
+                $"chapter has a destructible with a visible 'healthy' variant and a RESET_STATE chapter={ctx.Chapter}");
+            if (chosen == null || healthy == null)
+            {
+                return;
+            }
+
+            var selection = new SelectionService(world.Session.Root, ctx.Camera);
+            var lab = new NodeLab(world.Session.Root, selection, world.Runtime, world.Session.Program,
+                world.Session.Builder.Scene, collisionBuilt: false);
+            ctx.Host.AddChild(selection);
+            ctx.Host.AddChild(lab);
+            try
+            {
+                lab.Toggle();
+                selection.Select(healthy);
+                lab.RevealSelectionForTest();
+                lab.ToggleHide();
+                ctx.Check(!healthy.Visible, $"ToggleHide actually hides the node node={SelectionService.NameOf(healthy)}");
+
+                var hidden = lab.RowStateForTest(healthy);
+                ctx.Check(hidden is { Dim: true } row1 && row1.Text.Contains("(hidden)"),
+                    $"row reads hidden right after the button node={SelectionService.NameOf(healthy)} text={hidden?.Text} dim={hidden?.Dim}");
+
+                // The re-show is a real def, not the lab: RESET_STATE's OBJECT_ACTIVE_STATE events
+                // are what an animation uses to bring the healthy subtree back, with no button
+                // press and nothing telling the lab this node exists.
+                world.Runtime.ResetDestructible(chosen);
+                ctx.Check(healthy.Visible, $"RESET_STATE re-shows the node node={SelectionService.NameOf(healthy)}");
+
+                lab.RefreshStatusForTest();
+                var shown = lab.RowStateForTest(healthy);
+                ctx.Check(shown is { Dim: false } row2 && !row2.Text.Contains("(hidden)"),
+                    $"row follows the def's re-show without user input node={SelectionService.NameOf(healthy)} text={shown?.Text} dim={shown?.Dim}");
+            }
+            finally
+            {
+                lab.Free();
+                selection.Free();
+            }
+        });
+    }
+
+    // The first descendant (inclusive) whose cs_name contains the tag — "healthy"/"destroyed" name
+    // their variant subtrees exactly as CountVariants (Probes.cs) scans for, but this returns the
+    // node itself rather than a count.
+    private static Node3D? FindVariant(Node3D node, string tag)
+    {
+        string cs = node.HasMeta(AnimRuntime.NameMeta) ? node.GetMeta(AnimRuntime.NameMeta).AsString() : node.Name.ToString();
+        if (node.HasMeta(AnimRuntime.NameMeta) && cs.Contains(tag, System.StringComparison.OrdinalIgnoreCase))
+        {
+            return node;
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D n3d && FindVariant(n3d, tag) is { } found)
+            {
+                return found;
+            }
+        }
+        return null;
     }
 }

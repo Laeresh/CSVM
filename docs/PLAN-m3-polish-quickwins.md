@@ -67,7 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ☐ `BL-040` `!is_inside_tree()` error on every sound-enabled world bind
 12. ☑ `BL-049` `--headless` + `--screenshot` NREs forever instead of failing loudly
-13. ☐ `BL-044` Node lab: hidden subtree's tree row doesn't reflect live `Visible` state
+13. ☑ `BL-044` Node lab: hidden subtree's tree row doesn't reflect live `Visible` state
 14. ☐ `BL-043` Player plane unreachable by selection in `--anim-lab`
 
 ### Wave C — mechanically-wrong weapon/audio plumbing
@@ -224,7 +224,7 @@ null-check the capture and `Quit(1)` as a backstop for future renderer-less path
 child keeps running and **holds the log handle, contaminating the next run's logs** (this once
 manufactured a bogus 16,576-error reading). Verify by process list, not exit code alone.
 
-## B13 ☐ `BL-044` Node lab hide action doesn't update the tree row
+## B13 ☑ `BL-044` Node lab hide action doesn't update the tree row
 
 **Goal.** A hidden subtree is visibly hidden in the node lab's tree row (text/colour), and a node an
 animation re-shows reads visible again on its own.
