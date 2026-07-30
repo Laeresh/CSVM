@@ -8152,3 +8152,20 @@ became the top-level `EventDispatch`. Verified `.\RunTests.ps1 -Perf` PASS: 293 
 suites, **11/11 golden hashes identical** (the move is invisible), perf recorded with stable draw
 counts (PERF-10 — believe the counts). The extraction is protected only by the goldens until A2's
 tests land.
+
+**Sequence interpreter charter landed (2026-07-30, PLAN-sequencerunner-seam A2 — plan COMPLETE):**
+`CSVM.Tests/SequenceRunnerTests.cs` encodes the interpreter's ten documented semantics as ten named,
+headless xUnit tests, driven through the real `AnimInstance`/`SequenceRunner` behind a small
+`RecordingHost : ISequenceHost` fake (records every dispatch, scripts per-kind durations and
+tag→verdict conditions, returns false for control-flow kinds so LOOP/IF logic is exercised not
+bypassed). Fixtures are hand-authored C# shaped like the documented cases — no game data — with
+0.25/0.5 s offsets and dt (binary-exact, so a fire lands on a definite step). The ten: START_TIME
+gates the carrying event not its successor (bowl sign), authored Loop Count 0 = infinite,
+instant-iteration loop fires once per frame, timed-body loop restarts immediately, trailing Loop
+offset is an inter-cycle pause, nested taken-branch fall-through to the right ENDIF + failed
+condition advances (depth-aware Scan), Else-without-If runs the branch, Animation/Sequence absolute
+vs Event/null relative, the 256-fires-per-frame guard, and AnimInstance concurrent sequences +
+finished-runner removal. Each was seen to fail: all ten went red under a one-line-per-test
+perturbation (order/timing/count flips), then green on revert (METHOD-9). Verified `.\RunTests.ps1`
+PASS: 303 units (293 + 10), 9/9 engine suites, 11/11 golden hashes identical. `dotnet test` is now
+the first automated instrument for anim event semantics. Plan moved to `docs/plans/` COMPLETE.

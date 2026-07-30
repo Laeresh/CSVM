@@ -1,8 +1,9 @@
 # SequenceRunner seam — extract the sequence interpreter behind `ISequenceHost`
 
-**ACTIVE PLAN** (written 2026-07-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE — 2026-07-30 — both items (Wave A).** Archived to `docs/plans/`; kept for its evidence
+and recorded decisions. Statements below are as-written at the time — read them as history, not
+current state; in particular the AnimRuntime.cs line numbers in the A1 Evidence are from before the
+extraction and no longer resolve (re-locate by symbol name in `SequenceRunner.cs`).
 
 `AnimRuntime.cs` (3,538 lines) nests the sequence interpreter — `SequenceRunner`, the event-clock /
 LOOP / IF-ELSEIF engine — as a private class that reaches its host at exactly three points:
@@ -73,7 +74,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the seam and its charter
 
 1. ☑ Extract `SequenceRunner.cs`: the four types move, `AnimRuntime` implements `ISequenceHost` explicitly
-2. ☐ The headless charter: `RecordingHost` fake + the ten documented behaviours as named xUnit tests
+2. ☑ The headless charter: `RecordingHost` fake + the ten documented behaviours as named xUnit tests
 
 ## Dependency and parallelism notes
 
@@ -130,7 +131,7 @@ load-bearing); A2's tests land *after* the move, so the move itself is protected
 goldens. (4) The comments' measured evidence (bowl-sign percentages, the Loop-Count-0 survey) moves
 untouched — trimming is explicitly out of scope.
 
-## A2 ☐ The headless charter: `RecordingHost` fake + the ten documented behaviours as named xUnit tests
+## A2 ☑ The headless charter: `RecordingHost` fake + the ten documented behaviours as named xUnit tests
 
 **Goal.** `CSVM.Tests/SequenceRunnerTests.cs` encodes the interpreter's documented semantics as ten
 named, headless tests; `dotnet test` becomes the first automated instrument for anim event
