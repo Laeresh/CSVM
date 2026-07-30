@@ -5,7 +5,7 @@
 .DESCRIPTION
     The "play the game" entry point (as opposed to RunDev.ps1, the dev helper with
     console prompts). It runs `dotnet build`, then launches the game with NO user args,
-    so PlaneViewer shows the in-game launchscreen: pick Free Flight or Stunt Flying,
+    so Launcher shows the in-game launchscreen: pick Free Flight or Stunt Flying,
     then the chapter (map), then the aircraft, all with the keyboard or a controller
     (see the Milestone 2.5 launchscreen). Nothing is chosen on the command line.
 
@@ -14,7 +14,7 @@
     launchscreen and builds directly -- handy for jumping straight into a specific
     setup. Flight is the default for those: --plane=player_fury flies the Fury, and
     --viewer is what asks for the static inspection view instead. See
-    CSVM/src/PlaneViewer.cs for the full arg list.
+    docs/cli.md for the full arg list.
 
 .EXAMPLE
     .\RunGame.ps1
@@ -36,7 +36,7 @@ $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
-# tree named by CSVM_DATA_ROOT -- the same env var PlaneViewer reads for extracted/, so one
+# tree named by CSVM_DATA_ROOT -- the same env var GameSession reads for extracted/, so one
 # `$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'` makes a worktree fully runnable. Godot inherits
 # the environment, so nothing has to be forwarded on the command line.
 $GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"

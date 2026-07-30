@@ -8088,3 +8088,35 @@ goldens hash-identical -- plus a `--plane=player_bhawk,player_fury --players=2 -
 (md5 382fe30bd1d4d942bb280d61056efac6), and the shot inspected by hand shows the two panes still
 per-player throughout (different airframe, livery, damage dial, gun group in the readout, spawn
 position and stunt clock), which is what a shared-vs-per-player mixup would have collapsed.
+
+**PLAN-planeviewer-split C11 (2026-07-30): final sweep — plan complete.** `_Process` was already the
+short dispatcher the item asked for (clock/sim step, the startup-line frame, the unplaced-entity
+poll, `_weatherRig?.Tick`, the edge extender — shader clock/`--perf`/`CaptureDirector.Tick` live one
+notch behind on `Launcher`, correctly, since they're process-scoped): nothing to change there. The
+sweep found and fixed one real defect from the C9 split — a `<summary>` doc comment for
+`StartSession` had been left stranded above the `BuildState` nested class instead of above
+`StartSession` itself, two consecutive `<summary>` blocks on one declaration — moved back to the
+right method; also stripped trailing whitespace repo-wide in the file. `GameSession.cs` is ~1580
+lines, not the ~800 the plan's Wave C goal named: the remaining phase methods (`BuildWorldStage`,
+`BuildFlightRigs`, `BuildAnimLabStage`, `BuildStaticStage`, `AttachPlaneAndLabs`) read/write ~15
+GameSession instance fields apiece, unlike the Wave A/C10 extractions' clean input/output boundaries
+— pulling them into standalone classes now would mean back-referencing GameSession or threading that
+field list through as by-ref parameters, real behavior-change risk against a byte-identical-goldens
+bar, for a plan that is out of scope for "any further decomposition" by its own preamble. Decided not
+to chase the number at that cost (see `docs/architecture.md`'s `GameSession.cs` entry for the
+detail); a further split is unscheduled work, not a defect. Swept the repo for `PlaneViewer`: the
+file was already gone (B8); re-pointed the three stale `docs/formats/` mentions to their real
+post-split owners (`WeatherRig.Build`, `WorldEffectsFactory.BuildWorldEffectsRuntime`) and two
+scripts (`RunDev.ps1`, `RunGame.ps1`) and one shader comment that still named the retired class;
+left `docs/SCOPING-M4-ai.md` (a future-milestone doc, backlog-recorded, fixed when M4 starts).
+Verified: `.\RunTests.ps1 -Perf` PASS — 293 units, 9/9 engine suites, 11/11 goldens hash-identical,
+perf measured across 5 scenarios in line with the pre-existing trend (frame time pinned at vsync,
+draw counts/node counts unchanged) — plus a full 8-chapter `--freecam --chapter=<X> --det --mute`
+sweep, zero engine errors (the one `no audio session` warning is the known allowlisted line),
+sane per-chapter mesh/node counts (C5 largest at 11,438 nodes/4,726 mesh instances, C2B smallest at
+4,901/2,709) and a successful screenshot capture in every chapter. Milestone goal reached: `Launcher`
+is Main.tscn's root, `GameSession` is the per-launch node freed by `QueueFree`, the heavy sub-builds
+(`LiveryResolver`, `SpawnPicker`, `WorldEffectsFactory`, `WeatherRig`, `ProbeRunner`,
+`CaptureDirector`, `FlightRigAssembler`) are their own classes, `StartSession` reads as ordered phase
+methods, and `PlaneViewer` no longer exists anywhere. Plan complete — moved to `docs/plans/`, row
+added to `plans.md`, CLAUDE.md's "Current status" returned to no active plan.

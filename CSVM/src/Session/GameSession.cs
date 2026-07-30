@@ -82,15 +82,15 @@ public partial class GameSession : Node3D
     private ProjectilePool? _projectiles;
     private UI.WeaponLab? _weaponLabNode;
     // rolling mirrored-tile window past the map edge
-    private Mech3.MapEdgeExtender? _edgeExtender; 
+    private Mech3.MapEdgeExtender? _edgeExtender;
     // One rig per rendered view: its camera plus the camera-anchored copies only it
     // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
     // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
     private readonly List<PlayerRig> _rigs = new();
     // scratch: rig camera positions for the edge extender
-    private readonly List<Vector3> _focusPoints = new(); 
+    private readonly List<Vector3> _focusPoints = new();
     // the splitscreen pane rig (null in single player)
-    private UI.SplitScreen? _split;    
+    private UI.SplitScreen? _split;
     // The persistent rendering nodes, owned by the Launcher and kept across sessions; this node
     // only configures them. The mesh lab steers the sun and ambient, which is why both ride the
     // context rather than staying local to the Launcher's lighting setup.
@@ -104,15 +104,15 @@ public partial class GameSession : Node3D
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
-    private Node3D? _worldRoot;    
+    private Node3D? _worldRoot;
     // launched into the menu → Esc from flight returns there, not quit
-    private readonly bool _menuDriven; 
+    private readonly bool _menuDriven;
 
     /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
     /// launchscreen only once a world is actually up).</summary>
     public bool InSession { get; private set; }
     // the session's LIGHT_STATE point lights (see WorldLights)
-    private WorldLights? _worldLights; 
+    private WorldLights? _worldLights;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
     // bake its effect puffers lazily at crash time (the same reason --anim-lab keeps it open, but that
     // path hands it to the AnimLab node instead). Disposed by ReturnToMenu on teardown so a map reload
@@ -134,13 +134,13 @@ public partial class GameSession : Node3D
     // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
     // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
     private readonly string _dataRoot;
-    private readonly string _planesGamezPath;  
+    private readonly string _planesGamezPath;
     private readonly string _zrdrPath;
     private readonly string _soundsPath;
     private readonly string _interpPath;
     private readonly string _messagesPath;
     // the extracted UI archive (paint patterns)
-    private readonly string _rofPath;          
+    private readonly string _rofPath;
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
     private readonly Testing.ProbeRunner _probeRunner;
@@ -189,13 +189,6 @@ public partial class GameSession : Node3D
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
     internal Node3D? Plane => _plane;
 
-
-    /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
-    /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
-    /// node build again — the launchscreen's in-process world rebuild. The camera, lights and
-    /// global shader params live on the Launcher and persist across sessions. Called by the
-    /// Launcher once this node is in the tree. Returns true on success; false (leaving the partial
-    /// _worldRoot for the caller to free) when the build threw.</summary>
     /// <summary>Per-build state threaded through StartSession's phase methods — the archives,
     /// world-build outputs and running counts that used to be locals shared across one flat try
     /// block (PLAN-planeviewer-split C9). Local to a single StartSession call; nothing here is
@@ -234,6 +227,12 @@ public partial class GameSession : Node3D
         public AnimRuntime? WorldRuntime;
     }
 
+    /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
+    /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
+    /// node build again — the launchscreen's in-process world rebuild. The camera, lights and
+    /// global shader params live on the Launcher and persist across sessions. Called by the
+    /// Launcher once this node is in the tree. Returns true on success; false (leaving the partial
+    /// _worldRoot for the caller to free) when the build threw.</summary>
     public bool StartSession()
     {
         // The startup timing line, opened before anything is built and closed when the session's
@@ -1435,7 +1434,6 @@ public partial class GameSession : Node3D
         }
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
-
 
     public override void _Notification(int what)
     {

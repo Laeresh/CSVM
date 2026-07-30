@@ -1555,6 +1555,21 @@ per-frame machinery (shader clock, `--perf`, capture tick, Esc/F11/F12) live on
   synchronously, the runtime self-ticks the death out during the `--screenshot` warm-up. `--freecam`
   auto-frames the killed object (unless `--pos`/`--direction` set) and builds the world-effects runtime
   itself (gated on `--destroy`, so a plain `--freecam` regression is byte-identical) so its fire renders.
+⚠ **`_Process` is a short dispatcher** (PLAN-planeviewer-split C11, final sweep): clock/sim step,
+  the startup-line frame, the unplaced-entity poll, `_weatherRig?.Tick`, the edge extender — the
+  shader clock, `--perf` and `CaptureDirector.Tick` are NOT here, they're one `ProcessPriority` notch
+  behind on the Launcher (see its entry) because they're process-scoped, not session-scoped.
+⚠ **The ~800-line target from the plan's Wave C goal did not fully hold** — the file is ~1580 lines
+  after the sweep, not ~800. The remaining phase methods (`BuildWorldStage`, `BuildFlightRigs`,
+  `BuildAnimLabStage`, `BuildStaticStage`, `AttachPlaneAndLabs`) read/write ~15 GameSession instance
+  fields apiece (`_plane`, `_worldLights`, `_selection`, `_nodeLab`, `_weatherRig`, `_edgeExtender`,
+  `_unplacedWatch`, …) — unlike the Wave A/C10 extractions, which had clean input/output boundaries,
+  pulling these into standalone classes now means either back-referencing GameSession (the pattern
+  those extractions deliberately avoided) or threading the field list through as by-ref parameters,
+  which is real behavior-change risk for a plan whose bar is byte-identical goldens. Decided not to
+  chase the number at that cost; the final sweep instead fixed a stray orphaned XML-doc comment (a
+  `<summary>` for `StartSession` left stranded above `BuildState` by the C9 split) and trailing
+  whitespace. A further decomposition of these five methods is unscheduled work, not a defect.
 
 ## src/Utils/GameClock.cs
 The session's simulation clock: one object deciding how much sim time a rendered frame is worth.

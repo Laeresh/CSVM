@@ -1,8 +1,10 @@
 # PlaneViewer split — Launcher / GameSession refactor
 
-**ACTIVE PLAN** (written 2026-07-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans/plans.md), when every item lands.
+**COMPLETE — 2026-07-30 — all 11 items (Waves A–C).** Archived to `docs/plans/`; kept for its
+evidence, measurements and dead ends. Statements below are as-written at the time — read them as
+history, not as current state. In particular the line numbers under "Milestone goal" and Wave A are
+from the 3597-line `PlaneViewer.cs` as of f57a2ac and drift as items landed; re-locate by method
+name. See C11's "Outcome" note for where the plan's own ~800-line goal did not fully hold and why.
 
 `CSVM/src/PlaneViewer.cs` is 3597 lines / 216 KB — the Main.tscn root owns the entire app: the
 19-phase CLI bootstrap (`_Ready`, 392–682), the launchscreen, session build (`StartSession`,
@@ -83,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 9. ☑ StartSession → ordered phase methods on GameSession
 10. ☑ Per-player flight loop + crash runtime → `src/Session/FlightRigAssembler`
-11. ☐ Final sweep: `_Process` a short dispatcher, GameSession < ~800 lines, complete the plan
+11. ☑ Final sweep: `_Process` a short dispatcher, GameSession < ~800 lines, complete the plan
 
 ## Dependency and parallelism notes
 
@@ -298,7 +300,7 @@ assembly is where a shared-vs-per-player mixup shows).
 the loadout/rocket override is set before the controller enters the tree (its `_Ready` builds the
 fire state) — keep that ordering.
 
-## C11 ☐ Final sweep and plan completion
+## C11 ☑ Final sweep and plan completion
 
 **Goal.** `_Process` on GameSession reads as a short dispatcher (clock/sim, startup frame,
 shader time, perf, unplaced poll, WeatherRig.Tick, edge extender, CaptureDirector.Tick);
@@ -310,3 +312,24 @@ only judgement call and it has a recorded baseline.
 
 **Verify.** `.\RunTests.ps1` including `-Perf` (an A/B against perf-history.jsonl — the refactor
 should be frame-cost-neutral); the full 8-chapter `--freecam --chapter=<X>` regression sweep.
+
+**Outcome.** `_Process` was already exactly this dispatcher — nothing to change. The line-count goal
+did NOT fully hold: `GameSession.cs` sits at ~1580 lines, not ~800. The remaining phase methods
+(`BuildWorldStage`, `BuildFlightRigs`, `BuildAnimLabStage`, `BuildStaticStage`, `AttachPlaneAndLabs`)
+read/write ~15 GameSession instance fields apiece — unlike the Wave A/C10 extractions, which had
+clean input/output boundaries, moving these into standalone classes now means either
+back-referencing GameSession (the pattern those extractions deliberately avoided) or threading the
+field list through as by-ref parameters: real behavior-change risk against this plan's
+byte-identical-goldens bar, and explicitly out of scope by this plan's own preamble ("no further
+decomposition of `_Process`'s weather/deck loops beyond named methods" generalizes to: don't force a
+Wave D that wasn't decided). Asked the user how to weigh the line-count target against that risk;
+answer was a light, honest sweep rather than a risky forced extraction. The sweep did find and fix
+one real defect from C9 — an orphaned `<summary>` doc comment for `StartSession` stranded above
+`BuildState` — plus stripped trailing whitespace. Re-pointed the three stale `PlaneViewer.*`
+mentions in `docs/formats/` to their real post-split owners and fixed two scripts + one shader
+comment; left `docs/SCOPING-M4-ai.md` (a future-milestone doc, deferred to M4 in `backlog.md`).
+Verified: `.\RunTests.ps1 -Perf` PASS (293 units, 9/9 engine suites, 11/11 goldens hash-identical,
+perf in line with the pre-existing trend) plus a full 8-chapter `--freecam --chapter=<X> --det
+--mute` sweep: zero engine errors, sane mesh/node counts, successful capture in every chapter. See
+`docs/HISTORY.md`'s C11 entry and `docs/architecture.md`'s `GameSession.cs` entry for the full
+detail.

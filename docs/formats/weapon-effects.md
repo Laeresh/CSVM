@@ -65,7 +65,7 @@ effect **animation**, splits by what the bound name resolves to:
 
 ### Engine wiring (M3, D32) — the world-effects runtime
 
-That dedicated runtime is now built (`PlaneViewer.BuildWorldEffectsRuntime`): one per session, a
+That dedicated runtime is now built (`WorldEffectsFactory.BuildWorldEffectsRuntime`): one per session, a
 world-scoped `AnimRuntime` bound to the closure of every impact/destruction effect name, over a
 **hidden** stage of their gamez template roots (`gunhit`, `flame_ball_01`, `he_ring`, …), with a
 live puffer factory (the session textures stay open for the crash runtime already).

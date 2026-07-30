@@ -3,7 +3,7 @@
 Part of the [format documentation](README.md) (see also [zrdr.md](zrdr.md),
 [world-structure.md](world-structure.md)). Covers the mission's `weather.json` reader: distance fog, the cloud-cover
 whiteout band, wind, and the shared **colour-triple encoding rule**. Consumed by
-`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `PlaneViewer.SetupWeather`.
+`CSVM/src/Flight/Weather.cs` (`WeatherState`) + `Session.WeatherRig.Build`.
 
 Seeded 2026-07-18 with the item-3 fog-colour decode; grown the same day with precipitation
 (item 5) and the `SUNLIGHT_*` world-lighting decode (item 6, the night/overcast brightness
@@ -50,7 +50,7 @@ Rule (`Weather.ParseColor`): **divide the triple by 255 iff any component is str
 - no integer colour is all-{0,1} (smallest non-zero integer component is 16); `[0,0,0]`
   is black under either interpretation.
 
-The normalized value is a **DX7 sRGB framebuffer colour**: PlaneViewer converts it
+The normalized value is a **DX7 sRGB framebuffer colour**: `WeatherRig` converts it
 sRGB→linear before handing it to the world shader (which mixes fog in linear space).
 Round-trip check: a fully-fogged pixel renders back at its source byte value — C4's 192
 measures 192 gray, C1's 0.69 measures 176 (0.69·255).
@@ -123,7 +123,7 @@ The remake already renders it: the `zone2` default matches nothing in C5 and
 ⚠ **Do not "simplify" the fallback into taking the horizon subtree's first zone instead.** The
 two orders disagree — C5's weather.json lists `ZONE1` first, its horizon lists `zone3` first
 (above) — so that change would silently render the sky of one zone with the fog of another.
-`PlaneViewer.LoadWeather` resolves against weather.json *first* and passes the result into
+`WeatherRig`'s `LoadWeather` step resolves against weather.json *first* and passes the result into
 `BuildHorizon`, which is what keeps the pair consistent; `BuildHorizon`'s own fallback is a
 no-op in that path and exists only for a mission with no weather.json at all.
 
@@ -170,7 +170,7 @@ per-mission scalar `WorldLight = clamp(AMBIENT + DIFFUSE·k, 0.15, 1)`, with `k 
 average up-facing sun incidence — **one TUNE constant** calibrated to the C1/IA1 reference
 (`OriginalScreenshots/C1 IA1 Zone1 environment Spawn3.png`: overcast deck 210→169, terrain
 →~57). It then self-scales from the data: C1/IA1 → 0.80, C1B night → 0.43, C1C day →
-clamp 1.0. `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); PlaneViewer sets
+clamp 1.0. `Weather.WorldLightFactor` computes it (`ZoneFog.WorldLight`); `WeatherRig` sets
 the global shader scalar `csky_world_light` — **linearised** first, so the shader's
 linear-space `ALBEDO ×` lands the dimming in gamma space (matching the DX7 chain
 texel×vertex×light, all sRGB-space; a raw linear ×0.80 only reaches 210→190, gamma-space

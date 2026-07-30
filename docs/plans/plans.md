@@ -29,3 +29,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-M3-weapons.md](PLAN-M3-weapons.md) | M3 weapons & destruction — guns/rockets, world destructibles, effects, HUD (Waves A–F) | 2026-07-25 |
 | [PLAN-testing.md](PLAN-testing.md) | Deterministic test infrastructure + the inspect layer (18 items) | 2026-07-25 |
 | [PLAN-sessionspec.md](PLAN-sessionspec.md) | `SessionSpec`: the launch args as one parsed, resolved, engine-free value (8 items, Waves A–B) | 2026-07-30 |
+| [PLAN-planeviewer-split.md](PLAN-planeviewer-split.md) | PlaneViewer god-class breakup: Launcher / GameSession split (11 items, Waves A–C) | 2026-07-30 |

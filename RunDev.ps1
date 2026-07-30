@@ -25,7 +25,7 @@
                                 prompts for the plane unless --plane= is given.
 
     Any other CSVM user args are forwarded as-is (see
-    CSVM/src/PlaneViewer.cs for the full list: --mission=, --scenario=,
+    docs/cli.md for the full list: --mission=, --scenario=,
     --spawn=, --sky-zone=, --mute, --debug-collision, --hold=, etc).
 
 .EXAMPLE
@@ -64,7 +64,7 @@ $ProjectDir = Join-Path $RepoRoot "CSVM"
 $Sln        = Join-Path $ProjectDir "CSVM.sln"
 
 # tools/ is git-ignored, so a git worktree checkout has no Godot. Fall back to the primary
-# tree named by CSVM_DATA_ROOT -- the same env var PlaneViewer reads for extracted/, so one
+# tree named by CSVM_DATA_ROOT -- the same env var GameSession reads for extracted/, so one
 # `$env:CSVM_DATA_ROOT = 'Z:\Crimson Skies'` makes a worktree fully runnable. Godot inherits
 # the environment, so nothing has to be forwarded on the command line.
 $GodotRel = "tools\godot\Godot_v4.7-stable_mono_win64\Godot_v4.7-stable_mono_win64_console.exe"

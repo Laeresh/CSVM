@@ -127,7 +127,7 @@ ad-hoc third fog state applied to a cutscene camera, **not a zone selector** —
 [weather.md](weather.md#which-zone-a-mission-flies-is-not-in-any-file-searched-exhaustively-2026-07-22)).
 `AnimRuntime` therefore does not implement it: one occurrence, on the one cutscene camera the
 remake does not run, and implementing it would mean a second write path onto the `csky_fog_*`
-globals that `PlaneViewer.SetupWeather` owns. If the user ever observes fog visibly changing
+globals that `Session.WeatherRig.Build` owns. If the user ever observes fog visibly changing
 *during* a mission somewhere else, that is evidence for the engine-side zone switch and this
 should be revisited.
 

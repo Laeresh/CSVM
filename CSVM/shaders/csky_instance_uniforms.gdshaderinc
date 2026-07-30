@@ -14,7 +14,7 @@
 //
 // Adding a uniform: append it at the END, here, once. Never declare an instance uniform in a
 // shader body. Appending (rather than inserting) keeps every existing index stable, which
-// matters because `PlaneViewer.InstanceShaderParams` re-applies these by name after
+// matters because `GameSession.InstanceShaderParams` re-applies these by name after
 // `Duplicate()` and any live `SetInstanceShaderParameter` call resolves through the same map.
 //
 // ⚠ DO NOT include this file from a shader that would otherwise declare NO instance uniform.
