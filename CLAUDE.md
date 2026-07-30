@@ -11,6 +11,7 @@
 - A way a MEASUREMENT can mislead (non-determinism, an instrument that manufactures its own answer, a masked effect) → `docs/verification.md`, as a transferable rule. A dated `HISTORY.md` entry alone buries it — nobody reads a chronological log before starting work. Shape: a bold 1–2-line imperative + at most one sentence of measured evidence — no narrative.
 - Landed work → a dated entry appended to `docs/HISTORY.md` — a few lines: what landed, how verified, outcome — plus tick the active plan's checklist and **swap** the "Current status" next-step pointer. The status section must be no longer after the landing edit than before it; the description of what landed lives in those two files, never here.
 - Pure refactors with no external effect → usually no update needed. When in doubt, update.
+
 - If a task is delegated to a subagent use cheaper models when appropriate. For example sonnet for exploration.
 
 **Budget and shape — this file is an index, not a narrative.** It once grew to 162 KB because every session appended while nobody owned the total; three rules keep that from happening again:
