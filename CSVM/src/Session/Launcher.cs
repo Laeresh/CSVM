@@ -264,6 +264,17 @@ public partial class Launcher : Node3D
         {
             Log.Warn("core", $"deprecated flag={old} use={replacement}");
         }
+
+        // --headless + --screenshot can never produce a frame: the dummy renderer's GetImage()
+        // comes back null forever, so the capture loop never counts down and the process never
+        // quits — an orphan that still holds the log handle (docs/verification.md SHOT-9).
+        // Reject the combo here, before any session builds, rather than let it hang.
+        if (_spec.ScreenshotPath != null && DisplayServer.GetName() == "headless")
+        {
+            Log.Error("core", $"--screenshot needs a real GPU context; --headless never renders a capturable frame — drop one of the two flags");
+            GetTree().Quit(1);
+            return;
+        }
         // The --det bundle is settled on the spec; what is left here is the two things a pure value
         // cannot do — draw an unpinned seed from the clock, and announce the resolved set.
         //

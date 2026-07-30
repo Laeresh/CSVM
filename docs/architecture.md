@@ -1299,6 +1299,9 @@ camera/orbit/rigs/clock/plane/menu-visible they need as parameters.
 ⚠ `Vec3Arg`/`DirArg`/`SaveScreenshot` are static — call them as `Testing.CaptureDirector.X(...)`,
   not through `_captureDirector`; `FrameCamera`'s orbit-pivot log line is the one call site outside
   the capture/placement paths.
+⚠ **`Tick`'s `GetImage()` can come back null** (a renderer with no GPU context, e.g. `--headless`)
+  — it quits nonzero instead of NRE-looping forever (BL-049); `Launcher._Ready` rejects the known
+  `--headless`+`--screenshot` combo earlier, so this is the backstop for a future renderer-less path.
 
 ## src/Testing/GltfExporter.cs
 Exports the viewer plane's `Node3D` subtree to a glTF file — mesh + the currently painted livery
@@ -1317,7 +1320,8 @@ the Launcher.
 ## src/Session/Launcher.cs
 Main.tscn's root: the once-per-process bootstrap — CLI parse into `_cli`/`_spec`, data-root
 precedence, `Pads.Disabled`/`TextureDropIn`/`Log`/master-seed side effects, the
-`--dump-*`/`--run-tests` early quits — plus everything that persists across in-process relaunches
+`--dump-*`/`--run-tests` early quits, the `--headless`+`--screenshot` rejection (after `Log.Open`,
+so the message actually lands somewhere) — plus everything that persists across in-process relaunches
 (camera, orbit rig, sun, WorldEnvironment, launchscreen, focus mute, the per-frame shader clock /
 `--perf` / capture tick at priority -999). `LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via

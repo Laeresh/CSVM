@@ -91,6 +91,14 @@ public sealed class CaptureDirector
         // baseline and _01.. carry the dither applied below — all distinct, which is all
         // the flip-through needs.
         var img = viewport.GetTexture().GetImage();
+        if (img == null)
+        {
+            // Backstop for any renderer-less path the arg-parse guard in Launcher._Ready doesn't
+            // catch: quit loudly instead of NRE-looping forever on a null image every frame.
+            Log.Error("core", $"screenshot capture failed: no image from the viewport (no GPU context?)");
+            tree.Quit(1);
+            return;
+        }
         var path = spec.ScreenshotShots > 1 ? IndexedShotPath(_pendingShot, _shotIndex) : _pendingShot;
         img.SavePng(path);
         // The sim frame is part of what the capture IS: under the fixed clock one rendered frame is

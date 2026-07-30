@@ -591,23 +591,6 @@ unscheduled.
   damage path left latched. Check what the original shows on a crash before wiring anything.
 - `BL-048` **Gauge needles are the wrong shape** — they come from the game's own HUD textures. Could be
   drawn procedurally instead in a future Hi-Def mode.
-- `BL-049` **`--headless` + `--screenshot` NREs forever instead of capturing.** `PlaneViewer._Process`'s
-  capture block calls `GetViewport().GetTexture().GetImage()`, which returns **null under the dummy
-  renderer** (`texture_2d_get: Parameter "t" is null`,
-  `servers/rendering/dummy/storage/texture_storage.h:110`). The NRE is caught and logged by Godot's
-  C# bridge, so the frame counter never advances past the capture and **the process never quits** —
-  one C1 run produced a **206 MB** stderr log in ~10 minutes and was still going. Found 2026-07-22
-  while running the polish-4 item 7 regression; pre-existing, unrelated to that change.
-  **Screenshot runs must be windowed.** Worth either making the capture path fail loudly and quit
-  (null check + `GetTree().Quit()`), or rejecting `--headless` together with `--screenshot` at
-  arg-parse time with a clear message.
-  ⚠ **Traps.** The failure is silent from the *caller's* side: `Start-Process -Wait` returns exit 0
-  because the console wrapper exits while the real Godot child keeps running, so a harness that
-  trusts the exit code reports a clean pass and leaves an orphan writing to the log file. That
-  orphan then **contaminates the next run's logs** — it holds a handle on the log path and keeps
-  appending, which manufactured a bogus "16,576 errors in C1B" reading before it was spotted (the
-  same class as `docs/verification.md`'s foreign-Godot rule, self-inflicted).
-
 - `BL-050` **`OBJECT_MOTION_FROM_TO`'s `*_delta` channels are silently dropped — all 26 of them.**
   `FromToMotion.Channel` reads a channel as `data.Obj(name)` and then looks for `from`/`to` keys.
   The absolute channels ship that shape (919/919 `rotate`, 401/401 `translate`, 663/663 `scale` all

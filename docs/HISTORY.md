@@ -8412,3 +8412,15 @@ the gun hand-off is reachable without draining thousands of stock rounds — ver
 Balmoral (2 firable groups) with `gunAmmoCap: 3`: group 1 drained and handed off to group 2 in one
 short `--fire --no-det` run; it registers in `--dump-config` and drops under `--det` like every other
 tunable (DET-8).
+
+**M3 Wave B B12 — `BL-049`: `--headless` + `--screenshot` fails loudly instead of hanging forever
+(2026-07-30).** `Launcher._Ready` now rejects the combo right after `Log.Open` (so the message
+actually lands in a log): `--screenshot` with `DisplayServer.GetName() == "headless"` logs an error
+and `GetTree().Quit(1)` instead of letting `CaptureDirector.Tick` NRE-loop on a null `GetImage()`
+forever (SHOT-9 in `docs/verification.md`). Added a backstop null-check in `Tick` itself
+(`Quit(1)` on a null image) for any future renderer-less path the arg-time guard doesn't name.
+Verified: `--headless --screenshot=` now exits 1 in ~1s with the rejection message logged, no PNG
+written, no orphan process on the process list (the trap this item names: a wrapper exit code alone
+can't tell a hung child from a clean one); normal windowed `--screenshot` still captures
+(`player_bhawk`, exit 0, PNG written); full `.\RunTests.ps1` green (312 unit tests, 11/11 engine
+suites, 13/13 goldens hash-identical, none moved).

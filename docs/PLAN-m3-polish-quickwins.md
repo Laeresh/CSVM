@@ -66,7 +66,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — spurious errors, hangs, and lab correctness
 
 11. ☐ `BL-040` `!is_inside_tree()` error on every sound-enabled world bind
-12. ☐ `BL-049` `--headless` + `--screenshot` NREs forever instead of failing loudly
+12. ☑ `BL-049` `--headless` + `--screenshot` NREs forever instead of failing loudly
 13. ☐ `BL-044` Node lab: hidden subtree's tree row doesn't reflect live `Visible` state
 14. ☐ `BL-043` Player plane unreachable by selection in `--anim-lab`
 
@@ -202,7 +202,7 @@ regression, sound-enabled.
 **⚠ Traps.** A muted regression run cannot see this — every earlier zero-baseline ran muted. Do not
 fix by suppressing the read; the emitter really is misplaced. Same class as verification WORLD-11.
 
-## B12 ☐ `BL-049` `--headless` + `--screenshot` hangs forever
+## B12 ☑ `BL-049` `--headless` + `--screenshot` hangs forever
 
 **Goal.** The combination fails loudly and exits nonzero (or is rejected at arg-parse with a clear
 message) instead of NRE-looping and never quitting.
