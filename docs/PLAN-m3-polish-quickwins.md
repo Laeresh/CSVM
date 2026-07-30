@@ -60,7 +60,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — cockpit gauges & cues
 
 1. ☑ `BL-024` Split gauge colouring: yellow tier for guns only, hardpoints green→red
-2. ☐ `BL-026` Rocket empty-clip cue swallowed by the fire-rate cooldown
+2. ☑ `BL-026` Rocket empty-clip cue swallowed by the fire-rate cooldown
 3. ☐ `BL-025` H selects individual hardpoints, even when all carry the same ammo type
 
 ### Wave B — spurious errors, hangs, and lab correctness
@@ -120,7 +120,7 @@ hardpoints — the original has no intermediate colour there at all. (c) `docs/a
 digit-readout bullet, don't add a 4th. (d) Re-tuning 0.34 for guns is `BL-142`, a separate
 by-eye TUNE — out of this plan's scope; leave its backlog entry in place.
 
-## A2 ☐ `BL-026` Rocket empty-clip cue swallowed by the cooldown
+## A2 ☑ `BL-026` Rocket empty-clip cue swallowed by the cooldown
 
 **Goal.** A dry rocket-trigger pull sounds the empty cue (once, via `_rocketDryWarned`) even when
 pulled within the fire-rate cooldown window of the last shot.

@@ -1203,7 +1203,7 @@ public partial class FlightController : Node3D
         // runs) auto-repeats — and either way the FIRE_RATE cooldown caps the launch rate.
         bool pull = AutoFireRockets ? fire : (fire && !_rocketFirePrev);
         _rocketFirePrev = fire;
-        if (!pull || _rocketCooldown > 0f)
+        if (!pull)
         {
             return;
         }
@@ -1214,7 +1214,12 @@ public partial class FlightController : Node3D
             {
                 _rocketDryWarned = true;
                 Audio?.PlayEmptyClip();
+                GD.Print("rocket: dry pull, all pylons empty — empty-clip cue");
             }
+            return;
+        }
+        if (_rocketCooldown > 0f)
+        {
             return;
         }
         _rocketDryWarned = false;

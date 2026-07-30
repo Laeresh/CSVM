@@ -8367,3 +8367,17 @@ justification. Verified: new `gauge-colours` `--run-tests` suite asserts `Hardpo
 never returns yellow across a 0–1 fraction sweep while `GunIndicatorColor` still does at/below
 `IndicatorLowFrac`; full `.\RunTests.ps1` green (303 unit tests, 11/11 engine suites, 13/13 goldens
 hash-identical).
+
+**2026-07-30: A2 landed (`BL-026`) — rocket empty-clip cue no longer swallowed by the cooldown.**
+`FlightController.UpdateRockets` evaluated `NextArmedHardpoint()` (the dry check) after the
+`_rocketCooldown > 0f` early-return, so a pull inside `1/FireRate` s of the last shot returned
+silently instead of reaching the `_rocketDryWarned` cue. Reordered: the pull gate returns early,
+then `NextArmedHardpoint()` runs unconditionally, then the cooldown gate applies only to the live-fire
+path — the dry branch (and its `_rocketDryWarned` latch, unchanged) now runs regardless of cooldown
+state. Added a `GD.Print` breadcrumb next to the cue for log verification, matching the existing
+per-group/per-shot breadcrumbs. Verified: a headless stock-Bloodhawk `--fire-rockets` soak
+(`--stage=empty --frames=700 --screenshot=`) launched all 9 `wep_06` rockets (3 pylons × `CLUSTER_SIZE
+3`), and the dry cue fired on the very next sim frame after the 9th shot — inside that shot's 1 s
+cooldown window — exactly once (`grep -c` on the breadcrumb = 1); full `.\RunTests.ps1` green (303
+unit tests, 11/11 engine suites, 13/13 goldens hash-identical), confirming live-fire cadence is
+unchanged.
