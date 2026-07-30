@@ -8344,3 +8344,16 @@ before the fix on the identical command. `RunTests.ps1` fully green, all 13 gold
 the `--det` path is unchanged by construction. No automated seam holds wall-clock render pacing (the
 suites all run parent-driven), so the lock is DET-10 plus the probe recipe above, not a test.
 **User playtest passed (2026-07-30): "shimmer is gone."**
+
+## 2026-07-30 — PLAN-m3-polish-quickwins scaffolded (Milestone-Polish run)
+
+Selected 11 backlog items under user-chosen criteria (quick wins, code-verifiable acceptance only)
+into `docs/PLAN-m3-polish-quickwins.md`: A `BL-024`/`BL-026`/`BL-025` (gauges & cues), B
+`BL-040`/`BL-049`/`BL-044`/`BL-043` (errors, hangs, labs), C `BL-139`/`BL-159` (weapon/audio
+plumbing), D `BL-031`/`BL-140` (doc drift). Verified during selection: the six `m3-polishing`
+fixes (`BL-001`–`BL-006`) are already merged to `main` (code present), so they were excluded as
+done; `BL-026`/`BL-159` re-verified open in code. `BL-047` was dropped from the shortlist — its fix
+waits on an original-game crash capture. User additions: `BL-025` promoted into Wave A as a decision
+(per-pylon H cycling even with uniform ammo types), and new `BL-184` + `CAP-18` (does the original
+sweep the ammo-gauge arrow on weapon switch? ours snaps, `GaugeCluster.cs:613-614`) filed to
+backlog.md/playtest.md, deliberately outside the plan. CLAUDE.md status now names the plan.

@@ -59,6 +59,12 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | `CAP-05` | Stall & knife-edge recovery | A full stall entry and recovery, plus a sustained knife-edge | `BL-115`, `BL-124` |
 | `CAP-06` | Graded stall-warning reference | The airspeed dial's warning blink **through the approach to stall**, not only after it | `BL-148` |
 
+### HUD — ammo gauge in frame
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
+| `CAP-18` | Weapon-switch gauge arrow | Cycle gun groups (G) and hardpoints several times each way with the ammo gauge readable — does the pointer **sweep** to the new slot or snap instantly, and if it sweeps, over roughly how long? | `BL-184` |
+
 ### Camera
 
 | ID | Capture | What must be in frame | Unblocks |

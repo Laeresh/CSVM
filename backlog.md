@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-184`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-185`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -322,6 +322,9 @@ work is below.
     cycles **pylons**, not ordnance types; the selected pylon drains, then auto-advances. Composes with the
     `fix/rocket-drain-pylon` order fix. ⚠ Fidelity: confirm the original truly offers per-hardpoint
     *selection* (vs fixed-order draining) before building any indicator — the user believes it does.
+    **Re-confirmed by the user 2026-07-30 as a decision, not a question:** cycling must work even
+    when every hardpoint carries the same ammo type. Scheduled as `PLAN-m3-polish-quickwins` item A3.
+    Whether the gauge arrow *animates* to the new slot is separate — `BL-184`, blocked on `CAP-18`.
     *Playtest after fix:* confirm H selects an individual pylon (each counts for itself), auto-advancing
     only when the selected one empties. `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
 16. `BL-026` **Rocket empty-clip cue never heard (finding 6b).** The cue plays on a dry pull
@@ -1553,6 +1556,17 @@ needs one of them to move needs a new measurement first.
   two easy to get wrong.
 
 ## Open fidelity questions (answerable by testing the original)
+
+- `BL-184` **Does the original animate the ammo-gauge arrow on weapon switch?** Our gauge already
+  draws the pointer (`gg`/`mgarrow`) rotated to the selected belt slot, but the rotation is applied
+  instantly — `DrawWeaponGauge` recomputes `-(360°/Positions) * Selected` per frame with no tween
+  (`GaugeCluster.cs:613-614`). The user recalls the original's pointer visibly *moving* to the
+  next/previous gun/hardpoint slot when switching (2026-07-30). Blocked on `CAP-18`
+  (`playtest.md`): film G/H switching in the original with the gauge readable — sweep vs snap, and
+  if a sweep, roughly how long it takes. If confirmed, the fix is a short tween of the arrow angle;
+  acceptance is a capture A/B, so it is deliberately **not** in `PLAN-m3-polish-quickwins`
+  (code-verifiable-only criteria) — land it in a later look-and-feel pass, after `BL-024`/`BL-025`
+  so the gauge draw path has stopped moving.
 
 - `BL-099` **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
   TEST BY THE USER — scheduled into polish run 4 as item 3 on 2026-07-22, then moved back here the
