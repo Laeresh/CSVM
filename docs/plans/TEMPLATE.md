@@ -129,7 +129,7 @@ parallelism.">
 
 <!-- ========================= PER-ITEM DETAIL ========================= -->
 <!-- One section per checklist item. The heading carries the ID + status + title so it's greppable
-     and the status matches the checklist. The four bold sub-sections are [core]; ⚠ Traps is [core]
+     and the status matches the checklist. The five bold sub-sections are [core]; ⚠ Traps is [core]
      the moment an item has a known pitfall. -->
 
 # Wave A — <name>
@@ -145,6 +145,13 @@ you've already ruled out so it isn't re-chased.>
 
 **Approach.** <How to do it, concretely — the files/functions to touch, the pattern to reuse. Name
 what NOT to touch if that's a live risk.>
+
+**Model recommendation.** <Which model tier should execute this item, by name without a version
+number (e.g. haiku / sonnet / opus), with a one-line why — mechanical or exploratory work goes to a
+cheaper model, judgement-heavy or high-blast-radius work to a stronger one. Optionally suffix a
+reasoning-effort override when the item clearly warrants one (e.g. "sonnet, low effort" for a
+mechanical fan-out); omit it to inherit the session default — don't invent a tier you can't
+justify.>
 
 **Verify.** <The specific check that proves it: the exact capture/pose/command, plus the regression
 surface. "An unchanged number is not evidence unless you've seen it able to fail" — take a baseline
