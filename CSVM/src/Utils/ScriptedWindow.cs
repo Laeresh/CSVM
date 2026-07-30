@@ -6,9 +6,6 @@ namespace CSVM.Utils;
 /// <summary>Win32-only window hiding for scripted runs.</summary>
 public static class ScriptedWindow
 {
-    [System.Runtime.InteropServices.DllImport("user32.dll")]
-    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
-
     private const int SwHide = 0;
 
     /// <summary>Takes a scripted run's window off the screen entirely. `no_focus` only stops the
@@ -33,4 +30,7 @@ public static class ScriptedWindow
         ShowWindow(hwnd, SwHide);
         Log.Debug("core", $"window: hidden (scripted session)");
     }
+
+    [System.Runtime.InteropServices.DllImport("user32.dll")]
+    private static extern bool ShowWindow(nint hWnd, int nCmdShow);
 }

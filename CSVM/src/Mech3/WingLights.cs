@@ -21,18 +21,18 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class WingLights
 {
-    /// <summary>The wingtip flare sprite nodes toggled by the blink anim (wing_flare1/2).</summary>
-    public static bool IsFlare(string name) =>
-        name.StartsWith("wing_flare", StringComparison.OrdinalIgnoreCase);
-
     /// <summary>The glow sprite the flare quads are skinned with. It is also used by a few
     /// real airframe meshes (lwingbend, piece1, …), so the additive-billboard treatment is
     /// scoped to the flare nodes by name, not routed through this texture.</summary>
     public const string FlareTexture = "oil_liteflare";
 
+    /// <summary>Blink cycle length — wing_light.json's LOOP SEQUENCE_OFFSET.</summary>
+    public const float BlinkPeriod = 1.5f;
+
     /// <summary>Warm amber the original flashes the lights — wing_light.json's LIGHT_STATE COLOR.</summary>
     public static readonly Color FlareColor = new(0.88f, 0.78f, 0.36f);
 
-    /// <summary>Blink cycle length — wing_light.json's LOOP SEQUENCE_OFFSET.</summary>
-    public const float BlinkPeriod = 1.5f;
+    /// <summary>The wingtip flare sprite nodes toggled by the blink anim (wing_flare1/2).</summary>
+    public static bool IsFlare(string name) =>
+        name.StartsWith("wing_flare", StringComparison.OrdinalIgnoreCase);
 }

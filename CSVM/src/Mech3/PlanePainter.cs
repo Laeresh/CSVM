@@ -44,11 +44,6 @@ public sealed class PlanePainter
     // baseName -> the substitute texture (painted skin or swapped decal); null = leave as is.
     private readonly Dictionary<string, ImageTexture?> _cache = new(StringComparer.OrdinalIgnoreCase);
 
-    public PaintScheme Scheme => _scheme;
-
-    /// <summary>Skins this painter actually repainted, for a one-line build summary.</summary>
-    public int PaintedSkins { get; private set; }
-
     /// <param name="skinPrefix">The aircraft's skin-texture prefix without the underscore
     /// ("blo", "kes", …). <see cref="PrefixFor"/> derives it from the model's own materials.</param>
     public PlanePainter(TextureArchive textures, PatternLibrary library, PaintScheme scheme, string skinPrefix)
@@ -58,6 +53,11 @@ public sealed class PlanePainter
         _scheme = scheme;
         _prefix = skinPrefix;
     }
+
+    public PaintScheme Scheme => _scheme;
+
+    /// <summary>Skins this painter actually repainted, for a one-line build summary.</summary>
+    public int PaintedSkins { get; private set; }
 
     /// <summary>True when this scheme's pattern ships no skins for this aircraft, so only its
     /// decals can change. The original's UI never offers such a combination.</summary>
@@ -118,6 +118,24 @@ public sealed class PlanePainter
         ImageTexture? made = decalSlot >= 0 ? DecalFor(decalSlot) : PaintedSkin(baseName, original);
         _cache[baseName] = made;
         return made ?? original;
+    }
+
+    private static void CopyAlphaFrom(ImageTexture? original, byte[] data, int w, int h)
+    {
+        if (original == null)
+            return;
+        var src = original.GetImage();
+        if (src == null || src.GetWidth() != w || src.GetHeight() != h)
+            return;
+        if (src.GetFormat() != Image.Format.Rgba8)
+        {
+            src = (Image)src.Duplicate();
+            src.Convert(Image.Format.Rgba8);
+        }
+        var sd = src.GetData();
+        int n = Math.Min(w * h, sd.Length / 4);
+        for (int i = 0; i < n; i++)
+            data[i * 4 + 3] = sd[i * 4 + 3];
     }
 
     // <prefix>_noselogo / _taillogo / _winglogo are 16x16 placeholders, never artwork: the
@@ -212,23 +230,5 @@ public sealed class PlanePainter
         img.GenerateMipmaps();
         PaintedSkins++;
         return ImageTexture.CreateFromImage(img);
-    }
-
-    private static void CopyAlphaFrom(ImageTexture? original, byte[] data, int w, int h)
-    {
-        if (original == null)
-            return;
-        var src = original.GetImage();
-        if (src == null || src.GetWidth() != w || src.GetHeight() != h)
-            return;
-        if (src.GetFormat() != Image.Format.Rgba8)
-        {
-            src = (Image)src.Duplicate();
-            src.Convert(Image.Format.Rgba8);
-        }
-        var sd = src.GetData();
-        int n = Math.Min(w * h, sd.Length / 4);
-        for (int i = 0; i < n; i++)
-            data[i * 4 + 3] = sd[i * 4 + 3];
     }
 }

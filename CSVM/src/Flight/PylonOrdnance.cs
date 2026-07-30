@@ -18,17 +18,13 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class PylonOrdnance
 {
-    private sealed class Mount
-    {
-        public Hardpoint Hardpoint = null!;
-        public Node3D Model = null!;
-        public bool Shown;
-    }
-
     private readonly List<Mount> _mounts;
     private int _hidesLogged;
 
     private PylonOrdnance(List<Mount> mounts) => _mounts = mounts;
+
+    /// <summary>The number of pylons currently showing a mounted model — for the setup breadcrumb.</summary>
+    public int Count => _mounts.Count;
 
     /// <summary>Instances one ordnance body per loaded pylon and parents it to that pylon marker,
     /// nose-forward at the mount. Returns null when nothing could be mounted — no projectile pool, a
@@ -61,9 +57,6 @@ public sealed class PylonOrdnance
         return mounts.Count > 0 ? new PylonOrdnance(mounts) : null;
     }
 
-    /// <summary>The number of pylons currently showing a mounted model — for the setup breadcrumb.</summary>
-    public int Count => _mounts.Count;
-
     /// <summary>Syncs each mounted body's visibility to its pylon's live ammo — shown while the pylon
     /// holds ordnance, hidden at zero. Cheap: writes <see cref="Node3D.Visible"/> only on a change.
     /// Driven each frame after the rocket-firing update; a respawn refill shows on the next frame.</summary>
@@ -85,5 +78,12 @@ public sealed class PylonOrdnance
                 }
             }
         }
+    }
+
+    private sealed class Mount
+    {
+        public Hardpoint Hardpoint = null!;
+        public Node3D Model = null!;
+        public bool Shown;
     }
 }

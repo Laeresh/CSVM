@@ -26,32 +26,10 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class MarkerRig
 {
-    public enum MarkerKind { Firepoint, Pylon, Target }
-
-    /// <param name="Ordinal">The trailing number (<c>firepoint7</c> → 7); 0 for <c>target</c>.</param>
-    /// <param name="Local">Plane-frame position (metres), relative to the airframe origin.</param>
-    public readonly record struct Marker(string Name, MarkerKind Kind, int Ordinal, Vector3 Local);
-
     /// <summary>Positions closer than this (metres) count as one physical mount. The data reuses
     /// the exact same coordinate for a shared mount, so any small positive tolerance separates
     /// "same point" from the next-nearest firepoint (the closest distinct pair here is ~0.5 m).</summary>
     public const float CoLocateTolerance = 1e-2f;
-
-    public string PlaneRoot { get; }
-
-    /// <summary>Every firepoint/pylon/target under the plane, sorted kind then ordinal.</summary>
-    public IReadOnlyList<Marker> Markers { get; }
-
-    /// <summary>Groups of ≥2 indices into <see cref="Markers"/> that share a position — two gun
-    /// groups on one mount. Empty for the airframes whose every firepoint is distinct.</summary>
-    public IReadOnlyList<IReadOnlyList<int>> CoLocated { get; }
-
-    private MarkerRig(string planeRoot, List<Marker> markers, List<IReadOnlyList<int>> coLocated)
-    {
-        PlaneRoot = planeRoot;
-        Markers = markers;
-        CoLocated = coLocated;
-    }
 
     /// <summary>The 11 player airframes, model-node name → display name (see markers.md's mapping
     /// table). The dump tool iterates this when no plane is named; a display name only makes the
@@ -70,6 +48,24 @@ public sealed class MarkerRig
         ("player_kestrel", "Kestrel"),
         ("player_peacemaker", "Peacemaker"),
     };
+
+    private MarkerRig(string planeRoot, List<Marker> markers, List<IReadOnlyList<int>> coLocated)
+    {
+        PlaneRoot = planeRoot;
+        Markers = markers;
+        CoLocated = coLocated;
+    }
+
+    public enum MarkerKind { Firepoint, Pylon, Target }
+
+    public string PlaneRoot { get; }
+
+    /// <summary>Every firepoint/pylon/target under the plane, sorted kind then ordinal.</summary>
+    public IReadOnlyList<Marker> Markers { get; }
+
+    /// <summary>Groups of ≥2 indices into <see cref="Markers"/> that share a position — two gun
+    /// groups on one mount. Empty for the airframes whose every firepoint is distinct.</summary>
+    public IReadOnlyList<IReadOnlyList<int>> CoLocated { get; }
 
     /// <summary>Classifies a node name as a weapon marker. Returns false for everything else in
     /// the markers group (cockpit_camera, exhaust*, ground_level, …) and for the bare, unnumbered
@@ -95,17 +91,6 @@ public sealed class MarkerRig
             return true;
         }
         return false;
-    }
-
-    private static bool TrySuffix(string name, string prefix, out int ordinal)
-    {
-        ordinal = 0;
-        if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
-        {
-            return false;
-        }
-        return int.TryParse(name.AsSpan(prefix.Length), NumberStyles.None,
-            CultureInfo.InvariantCulture, out ordinal) && ordinal > 0;
     }
 
     /// <summary>Reads a plane's marker rig from GameZ, or null when the root node is absent.
@@ -183,11 +168,6 @@ public sealed class MarkerRig
         return groups;
     }
 
-    /// <summary>The mirror partner ordinal of a firepoint: gun pairs are consecutive
-    /// (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
-    /// one centreline mount with no fp8 — its partner simply isn't in the rig.</summary>
-    private static int MirrorPartner(int ordinal) => (ordinal % 2 == 1) ? ordinal + 1 : ordinal - 1;
-
     /// <summary>One human-readable dump block for this plane: a header line, then every marker
     /// with its plane-frame position and — for firepoints — its mirror pair, and — for any
     /// co-located marker — the other names sharing that mount. This is the text the
@@ -259,6 +239,26 @@ public sealed class MarkerRig
         return sb.ToString();
     }
 
+    private static bool TrySuffix(string name, string prefix, out int ordinal)
+    {
+        ordinal = 0;
+        if (!name.StartsWith(prefix, StringComparison.OrdinalIgnoreCase))
+        {
+            return false;
+        }
+        return int.TryParse(name.AsSpan(prefix.Length), NumberStyles.None,
+            CultureInfo.InvariantCulture, out ordinal) && ordinal > 0;
+    }
+
+    /// <summary>The mirror partner ordinal of a firepoint: gun pairs are consecutive
+    /// (fp1,fp2)(fp3,fp4)…, so odd n pairs with n+1 and even n with n−1. The Kestrel's fp7 is the
+    /// one centreline mount with no fp8 — its partner simply isn't in the rig.</summary>
+    private static int MirrorPartner(int ordinal) => (ordinal % 2 == 1) ? ordinal + 1 : ordinal - 1;
+
     private static string Vec(Vector3 v) => string.Format(CultureInfo.InvariantCulture,
         "( {0,7:+0.00;-0.00; 0.00}, {1,7:+0.00;-0.00; 0.00}, {2,7:+0.00;-0.00; 0.00} )", v.X, v.Y, v.Z);
+
+    /// <param name="Ordinal">The trailing number (<c>firepoint7</c> → 7); 0 for <c>target</c>.</param>
+    /// <param name="Local">Plane-frame position (metres), relative to the airframe origin.</param>
+    public readonly record struct Marker(string Name, MarkerKind Kind, int Ordinal, Vector3 Local);
 }

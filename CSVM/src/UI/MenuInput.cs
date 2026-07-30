@@ -20,11 +20,6 @@ namespace CSVM.UI;
 /// </summary>
 public sealed class MenuInput
 {
-    // Auto-repeat while a direction is held (TUNE; carried over from the original LaunchMenu).
-    private const float RepeatInitial = 0.42f;   // s before the first repeat
-    private const float RepeatInterval = 0.12f;  // s between repeats after that
-    private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
-
     /// <summary>Whether this player also flies the keyboard (player 1 only).</summary>
     public bool Keyboard;
 
@@ -35,10 +30,6 @@ public sealed class MenuInput
     /// so binding player 1 to <c>pads[0]</c> would leave a real controller dead in the menu. Idle
     /// devices read as zero, so reading several is safe.</summary>
     public int[] Pads = Array.Empty<int>();
-
-    /// <summary>The single pad this player is bound to, or −1 when it has none or several
-    /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
-    public int Pad => Pads.Length == 1 ? Pads[0] : -1;
 
     // Results of the last Poll, valid until the next one.
     public int Move;        // −1 up, +1 down, 0 none (auto-repeat already applied)
@@ -53,9 +44,18 @@ public sealed class MenuInput
     /// evidence that this player owns the pad.</summary>
     public int LastActivePad = -1;
 
+    // Auto-repeat while a direction is held (TUNE; carried over from the original LaunchMenu).
+    private const float RepeatInitial = 0.42f;   // s before the first repeat
+    private const float RepeatInterval = 0.12f;  // s between repeats after that
+    private const float StickDeadzone = 0.5f;    // |LeftY| past this counts as a d-pad press
+
     private bool _acceptPrev, _backPrev, _startPrev;
     private int _dirPrev;
     private float _repeatTimer;
+
+    /// <summary>The single pad this player is bound to, or −1 when it has none or several
+    /// (player 1's unclaimed set) — for logging and the join bookkeeping.</summary>
+    public int Pad => Pads.Length == 1 ? Pads[0] : -1;
 
     /// <summary>A short description of what drives this player, for the menu's join strip.</summary>
     public string DeviceLabel
@@ -68,6 +68,13 @@ public sealed class MenuInput
             return pads.Length == 0 ? "no device" : pads;
         }
     }
+
+    /// <summary>Whether an unbound pad is pressing Start — the join gesture. Static because the
+    /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
+    /// edge-detects per device. Gated like every other pad read, so nobody joins while the
+    /// window is in the background.</summary>
+    public static bool JoinPressed(int pad) =>
+        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 
     /// <summary>Reads this player's devices and fills the result fields.</summary>
     public void Poll(float dt)
@@ -106,6 +113,19 @@ public sealed class MenuInput
             LastActivePad = active;
     }
 
+    /// <summary>Seeds the edge flags from the current state (no press is reported for anything
+    /// already held) and clears the last results.</summary>
+    public void Prime()
+    {
+        _acceptPrev = RawAccept();
+        _backPrev = RawBack();
+        _startPrev = RawStart();
+        _dirPrev = RawDir();
+        _repeatTimer = RepeatInitial;
+        Move = 0;
+        Accept = Back = Start = false;
+    }
+
     /// <summary>The first of this player's pads currently producing menu input (excluding Start).
     /// Phantom devices never register — they read idle — so a pad found here is demonstrably a
     /// real one somebody is holding.</summary>
@@ -121,19 +141,6 @@ public sealed class MenuInput
                 return pad;
         }
         return -1;
-    }
-
-    /// <summary>Seeds the edge flags from the current state (no press is reported for anything
-    /// already held) and clears the last results.</summary>
-    public void Prime()
-    {
-        _acceptPrev = RawAccept();
-        _backPrev = RawBack();
-        _startPrev = RawStart();
-        _dirPrev = RawDir();
-        _repeatTimer = RepeatInitial;
-        Move = 0;
-        Accept = Back = Start = false;
     }
 
     private bool KeyDown(Key key) => Keyboard && Input.IsKeyPressed(key);
@@ -181,11 +188,4 @@ public sealed class MenuInput
     /// <summary>Start is the join gesture, so it is pad-only: the keyboard is always player 1,
     /// who is joined from the start and has nothing to join.</summary>
     private bool RawStart() => PadButton(JoyButton.Start);
-
-    /// <summary>Whether an unbound pad is pressing Start — the join gesture. Static because the
-    /// pad has no player (and therefore no <see cref="MenuInput"/>) until it joins; the caller
-    /// edge-detects per device. Gated like every other pad read, so nobody joins while the
-    /// window is in the background.</summary>
-    public static bool JoinPressed(int pad) =>
-        !CSVM.Pads.InputBlocked && Input.IsJoyButtonPressed(pad, JoyButton.Start);
 }

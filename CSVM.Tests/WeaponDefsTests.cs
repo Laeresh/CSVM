@@ -10,8 +10,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class WeaponDefsTests
 {
-    private static WeaponDefs Load() => WeaponDefs.Load(TestData.Fixture("zrdr"));
-
     [Fact]
     public void EveryBallisticsEntryIsIndexedByIdAndKeptInFileOrder()
     {
@@ -146,4 +144,6 @@ public class WeaponDefsTests
         // Load without a message table: the display name must not go blank.
         Assert.Equal("MSG_PROBE_GUN", Load().Get("wep_probe_gun")!.DisplayName);
     }
+
+    private static WeaponDefs Load() => WeaponDefs.Load(TestData.Fixture("zrdr"));
 }

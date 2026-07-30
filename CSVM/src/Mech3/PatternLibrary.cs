@@ -109,14 +109,14 @@ public sealed class PatternLibrary
     private readonly Dictionary<(string Pattern, string Skin), PaintBitmap?> _cache = new();
     private readonly List<string> _order = new();
 
+    /// <summary>A library with no patterns — what an unpainted build uses, and the fallback
+    /// when the rof extraction is absent.</summary>
+    public static PatternLibrary Empty { get; } = new();
+
     /// <summary>Every pattern folder found, in scan order.</summary>
     public IReadOnlyList<string> Patterns => _order;
 
     public bool IsEmpty => _order.Count == 0;
-
-    /// <summary>A library with no patterns — what an unpainted build uses, and the fallback
-    /// when the rof extraction is absent.</summary>
-    public static PatternLibrary Empty { get; } = new();
 
     /// <summary>Scans an extracted `rof` tree. <paramref name="rofRoot"/> is the extraction
     /// root (the folder holding ASSETS). Never throws.</summary>

@@ -35,17 +35,26 @@ namespace CSVM.Mech3;
 /// the conservatism the revival plan asks for at this step — and let the port be proven
 /// by rendering the same scene from both trees.</para>
 /// </summary>
+public struct GameZLight
+{
+    public Vector3 Position;
+    public Color Color;
+    public float SizeScale;  // source unk08: 0 (default) / 1 / 2 / 5 — relative sprite size
+    public float MaxSizePx;  // source unk64: max sprite size in pixels (30 where set)
+    public float Range;      // source unk68 (else unk52): visibility range in metres, 0 = unset
+}
+
 public sealed class GameZ
 {
-    public List<GameZNode> Nodes { get; } = new();
-    public List<GameZMesh> Meshes { get; } = new();
-    public List<GameZMaterial> Materials { get; } = new();
-
     // textures.json order. Only the unified shape needs it: its materials reference
     // textures by index, where the legacy shape inlined the name. Empty when legacy.
     private readonly List<string> _textureNames = new();
 
     private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
+
+    public List<GameZNode> Nodes { get; } = new();
+    public List<GameZMesh> Meshes { get; } = new();
+    public List<GameZMaterial> Materials { get; } = new();
 
     /// <summary>Loads from a mech3ax output ZIP, or from a directory of the same JSON files.</summary>
     public static GameZ Load(string path)
@@ -79,16 +88,6 @@ public sealed class GameZ
         return gz;
     }
 
-    /// <summary>Opens the first of <paramref name="names"/> the archive actually has —
-    /// how the models.json / meshes.json rename is absorbed.</summary>
-    private static Stream OpenEntry(ZipArchive zip, params string[] names)
-    {
-        foreach (var name in names)
-            if (zip.GetEntry(name) is { } entry)
-                return entry.Open();
-        throw new FileNotFoundException($"none of [{string.Join(", ", names)}] present in archive");
-    }
-
     public GameZNode? FindByName(string name)
     {
         foreach (var n in Nodes)
@@ -114,6 +113,65 @@ public sealed class GameZ
             n = p >= 0 ? Nodes[p] : null;
         }
         return xf;
+    }
+
+    /// <summary>Opens the first of <paramref name="names"/> the archive actually has —
+    /// how the models.json / meshes.json rename is absorbed.</summary>
+    private static Stream OpenEntry(ZipArchive zip, params string[] names)
+    {
+        foreach (var name in names)
+            if (zip.GetEntry(name) is { } entry)
+                return entry.Open();
+        throw new FileNotFoundException($"none of [{string.Join(", ", names)}] present in archive");
+    }
+
+    private static Transform3D ParseTransform(JsonElement tf)
+    {
+        // translation/rotation/matrix (legacy) vs translate/rotate/original (unified).
+        // Scale exists only in the unified shape and is unit on every node of every
+        // chapter and of planes.zbd (0 of 4181 non-unit), so it is deliberately ignored.
+        var tr = ParseVec3(tf.TryGetProperty("translation", out var t) ? t : tf.GetProperty("translate"));
+        Basis basis;
+        if ((tf.TryGetProperty("matrix", out var m) || tf.TryGetProperty("original", out m))
+            && m.ValueKind == JsonValueKind.Object)
+        {
+            // Stored transposed: the actual rotation matrix has columns (a,b,c), (d,e,f), (g,h,i).
+            // The unified shape spells those r00..r02, r10..r12, r20..r22 (and appends the
+            // translation as r30..r32, which duplicates "translate" and is not read).
+            float M(string legacy, string unified) =>
+                (m.TryGetProperty(legacy, out var v) ? v : m.GetProperty(unified)).GetSingle();
+            basis = new Basis(
+                new Vector3(M("a", "r00"), M("b", "r01"), M("c", "r02")),
+                new Vector3(M("d", "r10"), M("e", "r11"), M("f", "r12")),
+                new Vector3(M("g", "r20"), M("h", "r21"), M("i", "r22")));
+        }
+        else
+        {
+            // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z) — Godot's YXZ order
+            // (verified numerically against the 221 nodes that carry both forms).
+            basis = Basis.FromEuler(ParseVec3(tf.TryGetProperty("rotation", out var r) ? r : tf.GetProperty("rotate")),
+                EulerOrder.Yxz);
+        }
+        return new Transform3D(basis, tr);
+    }
+
+    private static JsonProperty FirstProperty(JsonElement e)
+    {
+        foreach (var p in e.EnumerateObject())
+            return p;
+        throw new InvalidDataException("empty enum wrapper object");
+    }
+
+    private static Vector3 ParseVec3(JsonElement e) => new(
+        e.GetProperty("x").GetSingle(),
+        e.GetProperty("y").GetSingle(),
+        e.GetProperty("z").GetSingle());
+
+    private static byte[] BufferAll(Stream s)
+    {
+        using var ms = new MemoryStream();
+        s.CopyTo(ms);
+        return ms.ToArray();
     }
 
     private void EnsureParentMap()
@@ -217,36 +275,6 @@ public sealed class GameZ
                 node.Local = ParseTransform(FirstProperty(tf).Value);
             Nodes.Add(node);
         }
-    }
-
-    private static Transform3D ParseTransform(JsonElement tf)
-    {
-        // translation/rotation/matrix (legacy) vs translate/rotate/original (unified).
-        // Scale exists only in the unified shape and is unit on every node of every
-        // chapter and of planes.zbd (0 of 4181 non-unit), so it is deliberately ignored.
-        var tr = ParseVec3(tf.TryGetProperty("translation", out var t) ? t : tf.GetProperty("translate"));
-        Basis basis;
-        if ((tf.TryGetProperty("matrix", out var m) || tf.TryGetProperty("original", out m))
-            && m.ValueKind == JsonValueKind.Object)
-        {
-            // Stored transposed: the actual rotation matrix has columns (a,b,c), (d,e,f), (g,h,i).
-            // The unified shape spells those r00..r02, r10..r12, r20..r22 (and appends the
-            // translation as r30..r32, which duplicates "translate" and is not read).
-            float M(string legacy, string unified) =>
-                (m.TryGetProperty(legacy, out var v) ? v : m.GetProperty(unified)).GetSingle();
-            basis = new Basis(
-                new Vector3(M("a", "r00"), M("b", "r01"), M("c", "r02")),
-                new Vector3(M("d", "r10"), M("e", "r11"), M("f", "r12")),
-                new Vector3(M("g", "r20"), M("h", "r21"), M("i", "r22")));
-        }
-        else
-        {
-            // Euler angles compose as R = Ry(y)·Rx(x)·Rz(z) — Godot's YXZ order
-            // (verified numerically against the 221 nodes that carry both forms).
-            basis = Basis.FromEuler(ParseVec3(tf.TryGetProperty("rotation", out var r) ? r : tf.GetProperty("rotate")),
-                EulerOrder.Yxz);
-        }
-        return new Transform3D(basis, tr);
     }
 
     private void ParseMeshes(Stream stream)
@@ -431,25 +459,6 @@ public sealed class GameZ
             Materials.Add(mat);
         }
     }
-
-    private static JsonProperty FirstProperty(JsonElement e)
-    {
-        foreach (var p in e.EnumerateObject())
-            return p;
-        throw new InvalidDataException("empty enum wrapper object");
-    }
-
-    private static Vector3 ParseVec3(JsonElement e) => new(
-        e.GetProperty("x").GetSingle(),
-        e.GetProperty("y").GetSingle(),
-        e.GetProperty("z").GetSingle());
-
-    private static byte[] BufferAll(Stream s)
-    {
-        using var ms = new MemoryStream();
-        s.CopyTo(ms);
-        return ms.ToArray();
-    }
 }
 
 public sealed class GameZNode
@@ -461,7 +470,6 @@ public sealed class GameZNode
     // so this is the original engine's draw order — the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).
     public int Index;
-    public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
     public Transform3D? Local;
     public float LodRangeMin = -1f; // Lod nodes only; 0 = nearest/highest detail
     public List<int>? PartitionNodes; // World nodes only: distinct subtree roots placed via the spatial grid
@@ -471,15 +479,12 @@ public sealed class GameZNode
     public bool HasArea;
     public float AreaLeft, AreaTop, AreaRight, AreaBottom;
     public int PartitionCols, PartitionRows;
+
+    public List<int> Children { get; } = new(); // indices into GameZ.Nodes (list positions, not node_index)
 }
 
 public sealed class GameZMesh
 {
-    public List<Vector3> Vertices { get; } = new();
-    public List<Vector3> Normals { get; } = new();
-    public List<GameZPolygon> Polygons { get; } = new();
-    public List<GameZLight> Lights { get; } = new(); // point-sprite lights (stars, nav beacons)
-
     // Null on a legacy (v0.6.1) extraction, which doesn't carry these fields — see the
     // ParseMeshes remark. "Facade" is the original's own billboard-sprite classification;
     // FacadeMode names the rotation axis (SceneBuilder.GetCylindricalAxis/IsGlowSpriteMesh).
@@ -490,20 +495,15 @@ public sealed class GameZMesh
     // textures do NOT scroll — their motion in the original is the splash puffers, not a
     // UV animation).
     public Vector2 TextureScroll;
-}
 
-public struct GameZLight
-{
-    public Vector3 Position;
-    public Color Color;
-    public float SizeScale;  // source unk08: 0 (default) / 1 / 2 / 5 — relative sprite size
-    public float MaxSizePx;  // source unk64: max sprite size in pixels (30 where set)
-    public float Range;      // source unk68 (else unk52): visibility range in metres, 0 = unset
+    public List<Vector3> Vertices { get; } = new();
+    public List<Vector3> Normals { get; } = new();
+    public List<GameZPolygon> Polygons { get; } = new();
+    public List<GameZLight> Lights { get; } = new(); // point-sprite lights (stars, nav beacons)
 }
 
 public sealed class GameZPolygon
 {
-    public List<int> VertexIndices { get; } = new();
     public List<int>? NormalIndices;
     public List<Vector2>? UvCoords;
     public List<Color>? VertexColors; // baked per-corner lighting, parallel to VertexIndices
@@ -523,18 +523,20 @@ public sealed class GameZPolygon
     // SubfaceBias. Carried by terrain patches (terpat*), cliff/river transitions, piers
     // and C5's cblock street layer — 658 polygons in C5, none at all in C1B.
     public bool Subface;
+
+    public List<int> VertexIndices { get; } = new();
 }
 
 public sealed class GameZMaterial
 {
-    public string? TextureName; // set for Textured materials (e.g. "bldhwk_cowling.tif", may be truncated to 20 chars)
-    public Color Color = Colors.White; // set for Colored materials
-
     /// <summary>The material's own texture flipbook (the gamez `cycle` block), frame names in
     /// order — empty for the overwhelming majority. Frame 0 repeats <see cref="TextureName"/>.
     /// Driven by <see cref="TextureCycler"/>; the original's animated water/surf/wake/splash
     /// and the walking-crowd sprites are all this one mechanism.</summary>
     public readonly List<string> CycleTextures = new();
+
+    public string? TextureName; // set for Textured materials (e.g. "bldhwk_cowling.tif", may be truncated to 20 chars)
+    public Color Color = Colors.White; // set for Colored materials
 
     /// <summary>Flipbook rate in frames per second (gamez `speed`: 4–12 across this install).</summary>
     public float CycleSpeed;

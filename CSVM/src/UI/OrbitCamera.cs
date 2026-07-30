@@ -44,6 +44,34 @@ public sealed class OrbitCamera
     public float Yaw { get => _yaw; set => _yaw = value; }
     public float Pitch { get => _pitch; set => _pitch = value; }
 
+    /// <summary>Merges every mesh AABB under <paramref name="root"/> into one world-space box —
+    /// the subject box <see cref="Frame"/> takes. A subtree with no meshes returns a zero-size
+    /// box at the origin, which callers must special-case (the anim lab substitutes a nominal
+    /// box around the node's own position). Moved verbatim from GameSession's ComputeAabb
+    /// so the lab frames arbitrary world subtrees through the same
+    /// code; the nodes must be in the scene tree (GlobalTransform on a detached node is
+    /// identity, and Godot logs an error per call).</summary>
+    public static Aabb MergedAabb(Node3D root)
+    {
+        Aabb merged = default;
+        bool first = true;
+        void Walk(Node node)
+        {
+            if (node is MeshInstance3D mi && mi.Mesh != null)
+            {
+                var box = mi.GlobalTransform * mi.Mesh.GetAabb();
+                merged = first ? box : merged.Merge(box);
+                first = false;
+            }
+            foreach (var child in node.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(root);
+        return merged;
+    }
+
     /// <summary>Frame the subject (its merged mesh <paramref name="aabb"/>). <paramref name="lookAt"/>
     /// overrides the pivot; <paramref name="camPos"/> (<c>--pos</c>), when set, places the eye there
     /// and reconstructs pitch/yaw from it, otherwise the distance is derived from the AABB radius
@@ -79,34 +107,6 @@ public sealed class OrbitCamera
             Mathf.Cos(_yaw) * Mathf.Cos(_pitch));
         _camera.Position = _orbitCenter + dir * _orbitDistance;
         _camera.LookAt(_orbitCenter, Vector3.Up);
-    }
-
-    /// <summary>Merges every mesh AABB under <paramref name="root"/> into one world-space box —
-    /// the subject box <see cref="Frame"/> takes. A subtree with no meshes returns a zero-size
-    /// box at the origin, which callers must special-case (the anim lab substitutes a nominal
-    /// box around the node's own position). Moved verbatim from GameSession's ComputeAabb
-    /// so the lab frames arbitrary world subtrees through the same
-    /// code; the nodes must be in the scene tree (GlobalTransform on a detached node is
-    /// identity, and Godot logs an error per call).</summary>
-    public static Aabb MergedAabb(Node3D root)
-    {
-        Aabb merged = default;
-        bool first = true;
-        void Walk(Node node)
-        {
-            if (node is MeshInstance3D mi && mi.Mesh != null)
-            {
-                var box = mi.GlobalTransform * mi.Mesh.GetAabb();
-                merged = first ? box : merged.Merge(box);
-                first = false;
-            }
-            foreach (var child in node.GetChildren())
-            {
-                Walk(child);
-            }
-        }
-        Walk(root);
-        return merged;
     }
 
     /// <summary>Feed one input event: LMB toggles orbit-drag, the wheel zooms, and drag motion

@@ -14,10 +14,6 @@ public class SoundDefsTests
 {
     private static string FixtureDir => TestData.Fixture("zrdr");
 
-    private static Dictionary<string, SoundDef> Defs() => SoundDefs.Load(FixtureDir);
-
-    private static Dictionary<string, SoundGroup> Groups() => SoundDefs.LoadGroups(FixtureDir);
-
     [Fact]
     public void EverySetsBlockContributesItsEntries()
     {
@@ -116,6 +112,10 @@ public class SoundDefsTests
         Assert.Equal("snd_probe_second", plain.Pick(new ConstantRandom(0.6)));
         Assert.Equal("snd_probe_second", plain.Pick(new ConstantRandom(0.6)));
     }
+
+    private static Dictionary<string, SoundDef> Defs() => SoundDefs.Load(FixtureDir);
+
+    private static Dictionary<string, SoundGroup> Groups() => SoundDefs.LoadGroups(FixtureDir);
 
     private static float[] Weights(SoundGroup group)
     {

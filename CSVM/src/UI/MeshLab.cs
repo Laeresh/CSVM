@@ -47,39 +47,61 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class MeshLab : Node
 {
-    // ---- modes ------------------------------------------------------------------------
-
-    /// <summary>What the normal lines are coloured by. Provenance is the default because it
-    /// is the one that maps onto a real question (is this patch flat-shaded?); direction is
-    /// the conventional engine view; winding tests whether a normal opposes its own polygon.</summary>
-    public enum NormalColorMode { Provenance, Direction, Winding }
-
-    /// <summary>Off / one line per triangle at its centroid / one line per triangle corner.
-    /// Per-corner is the honest picture (it shows split vertices) but it is ~3× the lines
-    /// and reads as a hairball on a small aircraft, so per-face is the default.</summary>
-    public enum NormalDensity { Off, PerFace, PerCorner }
-
-    public enum WireMode { Off, Edges, EdgesAndSeams, SeamsOnly }
-
-    /// <summary>Culling override. AsData honours the per-polygon SHOW_BACKFACE flag the
-    /// builder read (unk2); Inverted is cull_back — i.e. the opposite of this project's
-    /// "the visible side is the CCW loop" reading, so it tests that convention directly.</summary>
-    public enum CullOverride { AsData, AllDoubleSided, AllSingleSided, Inverted }
-
-    /// <summary>Normal override. AllFlat derives a geometric normal per fragment from screen
-    /// derivatives; AllSmooth re-welds the mesh on the CPU and area-averages; Negated is the
-    /// sanity check that shows what genuinely-reversed normals look like on this model.</summary>
-    public enum NormalSource { AsData, AllFlat, AllSmooth, Negated }
-
     // ---- state ------------------------------------------------------------------------
 
-    private Node3D? _target;
+    /// <summary>The most surfaces the lab reads back off one subtree. A rung high up the ladder can
+    /// carry a whole partition; collecting it would stall the frame and drown the overlays. Over the
+    /// cap the lab still works on what it took and SAYS it was capped, rather than quietly
+    /// diagnosing part of the object.</summary>
+    private const int MaxSurfaces = 3000;
+
+    /// <summary>And the most triangles the line overlays emit. Independent of the collection cap:
+    /// the counts stay honest for the whole subtree, only the drawing stops.</summary>
+    private const int MaxOverlayTris = 60000;
+
+    // Normal line length as a fraction of the aircraft's bounding radius, so the lines read
+    // the same on the Balmoral and the autogyro. TUNE.
+    private const float NormalLenFrac = 0.022f;
+
+    /// <summary>The uniform the derived shader carries, named so it cannot collide with anything
+    /// SceneBuilder declares.</summary>
+    private const string NormalModeParam = "csky_lab_normal_mode";
+
+    private static readonly Dictionary<string, Color> PartColors = new()
+    {
+        ["nose"] = new Color(1f, 0.9f, 0.2f),
+        ["tail"] = new Color(1f, 0.3f, 1f),
+        ["leftwing"] = new Color(0.2f, 0.9f, 1f),
+        ["rightwing"] = new Color(1f, 0.55f, 0.1f),
+    };
+
+    private static readonly string[] CullTokens = { "cull_disabled", "cull_front", "cull_back" };
+
+    private static bool _warnedDeriveGap;
+
+    private static bool _warnedOverrideGap;
+
     private readonly PlaneCollider? _collider;
     private readonly DirectionalLight3D _sun;
     private readonly Godot.Environment? _env;
     private readonly Camera3D _camera;
     // Set only in the scoped (--freecam/--anim-lab) mode: the shared selection the lab follows.
     private readonly SelectionService? _selection;
+
+    // The aircraft's geometry, read back once from the built ArrayMeshes and cached in the
+    // plane's own frame. Rebuilding the overlays is then pure line emission.
+    private readonly List<Surf> _surfaces = new();
+
+    private readonly Dictionary<int, Shader> _overrideShaders = new();
+
+    // Derived shaders, keyed by the source shader and the cull mode asked of it. One per pair, for
+    // the whole session: the source shaders are themselves cached and shared across surfaces.
+    private readonly Dictionary<(ulong, int), Shader?> _derived = new();
+
+    private readonly Dictionary<Surf, ArrayMesh> _smoothed = new();
+
+    private Node3D? _target;
+
     private bool _scopedActive;
 
     private NormalColorMode _colorMode = NormalColorMode.Provenance;
@@ -95,36 +117,39 @@ public sealed partial class MeshLab : Node
     private MeshInstance3D _normalDraw = null!, _wireDraw = null!, _boxDraw = null!;
     private bool _suppressCallbacks;
 
-    // The aircraft's geometry, read back once from the built ArrayMeshes and cached in the
-    // plane's own frame. Rebuilding the overlays is then pure line emission.
-    private readonly List<Surf> _surfaces = new();
     private int _triCount, _flatCount, _twoSidedTris;
 
-    /// <summary>One committed surface, flattened into plane-local space. Indices are always
-    /// materialised (SurfaceTool commits indexed, but an unindexed surface is legal).</summary>
-    private sealed class Surf
-    {
-        public required MeshInstance3D Instance;
-        public required int Index;
-        public required Vector3[] Verts;
-        public required Vector3[] Normals;
-        public required int[] Tris;
-        public required bool DoubleSided;
-        public required bool Fullbright;
-        public required Material? Original;
-        public Mesh? OriginalMesh;
-    }
+    private int _debugCycles;
+    private bool _scopedPending;
+    private bool _debugRestore;
 
-    /// <summary>--debug-mesh[=spec]: open the panel at launch and preset modes, so one
-    /// scripted screenshot exercises the overlays rather than an empty panel. Same role as
-    /// --debug-livery / --debug-scoreboard. In a scoped run it also stands in for the M press,
-    /// attaching the lab to whatever the run selected. Null = flag absent.</summary>
-    public string? DebugSpec { get; init; }
+    private bool _capped;
+    private int _fullbrightSurfaces;
 
-    /// <summary>Whether the panel is shown when the scoped lab attaches. A scripted
-    /// <c>--screenshot</c> run turns it off, the same convention the anim lab follows, so the
-    /// capture answers a question about the geometry rather than about the UI over it.</summary>
-    public bool ShowPanel { get; init; } = true;
+    // Parent of the three overlay meshes in the scoped mode: one node the lab owns, whose transform
+    // follows the target each frame. In --viewer the overlays stay children of the parked plane,
+    // which is where they have always been.
+    private Node3D? _overlayRoot;
+
+    // --debug-mesh=force: build the override materials even when both cyclers sit on AsData. The
+    // lab's able-to-fail control — an override that only ever differs in the thing under test must
+    // render the shipped picture when asked for the shipped settings, and this is what measures it.
+    private bool _forceOverride;
+
+    private Vector3 _sunDir = new(-0.5f, -0.7f, 0.5f);
+    private float _sunEnergy = 1.6f, _ambientEnergy = 0.9f;
+    private bool _ambientOn = true;
+    // The scoped lab's own light. The session's sun and environment belong to the world, and a
+    // diagnostic that re-aims them changes the thing it is measuring everywhere else on screen —
+    // so in that mode the sliders drive this instead, created dark and only on first use.
+    private DirectionalLight3D? _labLight;
+
+    private Button _normalsBtn = null!, _colorBtn = null!, _wireBtn = null!,
+        _cullBtn = null!, _sourceBtn = null!;
+    private CheckButton? _boxBtn, _ambientBtn, _engineWireBtn;
+    private CheckButton _headlightBtn = null!;
+    private Label? _lightNote;
+    private string _scopedNote = "";
 
     /// <summary>The <c>--viewer</c> lab: one fixed subtree (the parked aircraft) for the session.</summary>
     public MeshLab(Node3D planeRoot, PlaneCollider? collider, DirectionalLight3D sun,
@@ -150,7 +175,49 @@ public sealed partial class MeshLab : Node
         Name = "mesh_lab";
     }
 
+    // ---- modes ------------------------------------------------------------------------
+
+    /// <summary>What the normal lines are coloured by. Provenance is the default because it
+    /// is the one that maps onto a real question (is this patch flat-shaded?); direction is
+    /// the conventional engine view; winding tests whether a normal opposes its own polygon.</summary>
+    public enum NormalColorMode { Provenance, Direction, Winding }
+
+    /// <summary>Off / one line per triangle at its centroid / one line per triangle corner.
+    /// Per-corner is the honest picture (it shows split vertices) but it is ~3× the lines
+    /// and reads as a hairball on a small aircraft, so per-face is the default.</summary>
+    public enum NormalDensity { Off, PerFace, PerCorner }
+
+    public enum WireMode { Off, Edges, EdgesAndSeams, SeamsOnly }
+
+    /// <summary>Culling override. AsData honours the per-polygon SHOW_BACKFACE flag the
+    /// builder read (unk2); Inverted is cull_back — i.e. the opposite of this project's
+    /// "the visible side is the CCW loop" reading, so it tests that convention directly.</summary>
+    public enum CullOverride { AsData, AllDoubleSided, AllSingleSided, Inverted }
+
+    /// <summary>Normal override. AllFlat derives a geometric normal per fragment from screen
+    /// derivatives; AllSmooth re-welds the mesh on the CPU and area-averages; Negated is the
+    /// sanity check that shows what genuinely-reversed normals look like on this model.</summary>
+    public enum NormalSource { AsData, AllFlat, AllSmooth, Negated }
+
+    /// <summary>--debug-mesh[=spec]: open the panel at launch and preset modes, so one
+    /// scripted screenshot exercises the overlays rather than an empty panel. Same role as
+    /// --debug-livery / --debug-scoreboard. In a scoped run it also stands in for the M press,
+    /// attaching the lab to whatever the run selected. Null = flag absent.</summary>
+    public string? DebugSpec { get; init; }
+
+    /// <summary>Whether the panel is shown when the scoped lab attaches. A scripted
+    /// <c>--screenshot</c> run turns it off, the same convention the anim lab follows, so the
+    /// capture answers a question about the geometry rather than about the UI over it.</summary>
+    public bool ShowPanel { get; init; } = true;
+
     private bool Scoped => _selection != null;
+
+    private int NormalMode => _normals switch
+    {
+        NormalSource.AllFlat => 1,
+        NormalSource.Negated => 2,
+        _ => 0, // AsData and AllSmooth both use the mesh's normals (smooth swaps the mesh)
+    };
 
     public override void _Ready()
     {
@@ -201,24 +268,6 @@ public sealed partial class MeshLab : Node
         if (_selection != null)
         {
             _selection.Changed -= OnSelectionChanged;
-        }
-    }
-
-    private int _debugCycles;
-    private bool _scopedPending;
-    private bool _debugRestore;
-
-    /// <summary>Adopts the viewer's existing lighting as the lab's starting state instead of
-    /// inventing one, so the sliders open on what you are actually looking at and an untouched
-    /// lab writes nothing.</summary>
-    private void SeedLighting()
-    {
-        _sunDir = -_sun.GlobalTransform.Basis.Z;
-        _sunEnergy = _sun.LightEnergy;
-        if (_env != null)
-        {
-            _ambientEnergy = _env.AmbientLightEnergy;
-            _ambientOn = _ambientEnergy > 0f;
         }
     }
 
@@ -281,6 +330,295 @@ public sealed partial class MeshLab : Node
         // the sharpest normals test the lab has, and it needs no reasoning about geometry.
         var fwd = -_camera.GlobalTransform.Basis.Z;
         AimSun(fwd);
+    }
+
+    // ---- static helpers -----------------------------------------------------------------
+
+    private static T Cycle<T>(T value) where T : struct, Enum
+    {
+        var all = Enum.GetValues<T>();
+        int i = Array.IndexOf(all, value);
+        return all[(i + 1) % all.Length];
+    }
+
+    private static IEnumerable<Node> Descendants(Node root)
+    {
+        foreach (var c in root.GetChildren())
+        {
+            yield return c;
+            foreach (var d in Descendants(c))
+                yield return d;
+        }
+    }
+
+    // ---- provenance ---------------------------------------------------------------------
+
+    private static Vector3 FaceNormal(Surf s, int t)
+    {
+        var a = s.Verts[s.Tris[t]];
+        var b = s.Verts[s.Tris[t + 1]];
+        var c = s.Verts[s.Tris[t + 2]];
+        var n = (b - a).Cross(c - a);
+        return n.LengthSquared() > 1e-14f ? n.Normalized() : Vector3.Up;
+    }
+
+    /// <summary>True when this triangle's three corner normals are equal to each other and to
+    /// its winding normal — the exact signature of SceneBuilder's flat fallback. See the class
+    /// doc for the false-positive case.</summary>
+    private static bool IsFlatFallback(Surf s, int t)
+    {
+        if (s.Normals.Length == 0)
+            return true;
+        var n0 = s.Normals[s.Tris[t]];
+        var n1 = s.Normals[s.Tris[t + 1]];
+        var n2 = s.Normals[s.Tris[t + 2]];
+        const float eps = 1e-3f;
+        if ((n0 - n1).LengthSquared() > eps || (n0 - n2).LengthSquared() > eps)
+            return false;
+        return (n0 - FaceNormal(s, t)).LengthSquared() <= eps;
+    }
+
+    private static MeshInstance3D MakeDrawNode(string name, Node parent)
+    {
+        var mi = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = new ImmediateMesh(),
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                VertexColorUseAsAlbedo = true,
+                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            },
+        };
+        mi.SetMeta(SelectionService.OverlayMeta, true);
+        parent.AddChild(mi);
+        return mi;
+    }
+
+    // ---- wireframe ----------------------------------------------------------------------
+
+    private static (long, long) EdgeKey(Vector3 a, Vector3 b)
+    {
+        long ka = Quantise(a), kb = Quantise(b);
+        return ka <= kb ? (ka, kb) : (kb, ka);
+    }
+
+    private static long Quantise(Vector3 v)
+    {
+        // 0.1 mm buckets: far below any real feature on these models, far above float noise.
+        unchecked
+        {
+            long h = (long)Mathf.Round(v.X * 10000f);
+            h = h * 1000003 + (long)Mathf.Round(v.Y * 10000f);
+            h = h * 1000003 + (long)Mathf.Round(v.Z * 10000f);
+            return h;
+        }
+    }
+
+    /// <summary>An edge is a hard smoothing seam when the triangles meeting on it disagree
+    /// about the normal at a shared position — i.e. the shading breaks across this edge.
+    /// These outline the flat/smooth patch boundaries directly.</summary>
+    private static bool IsSeam(Surf s, List<(int Tri, int A, int B)> list)
+    {
+        if (s.Normals.Length == 0 || list.Count < 2)
+            return false;
+        var (_, a0, b0) = list[0];
+        for (int i = 1; i < list.Count; i++)
+        {
+            var (_, a1, b1) = list[i];
+            // the two triangles may name the edge in either order
+            bool sameOrder = Quantise(s.Verts[a0]) == Quantise(s.Verts[a1]);
+            var na = s.Normals[sameOrder ? a1 : b1];
+            var nb = s.Normals[sameOrder ? b1 : a1];
+            if ((s.Normals[a0] - na).LengthSquared() > 1e-4f
+                || (s.Normals[b0] - nb).LengthSquared() > 1e-4f)
+                return true;
+        }
+        return false;
+    }
+
+    // ---- zone boxes ---------------------------------------------------------------------
+
+    private static Color ColorFor(string part) =>
+        PartColors.TryGetValue(part, out var c) ? c : new Color(0.7f, 0.7f, 0.7f);
+
+    private static void EmitBox(ImmediateMesh im, Transform3D xf, Vector3 size, Color col)
+    {
+        var h = size * 0.5f;
+        Span<Vector3> corners = stackalloc Vector3[8];
+        for (int i = 0; i < 8; i++)
+            corners[i] = xf * new Vector3(
+                (i & 1) == 0 ? -h.X : h.X,
+                (i & 2) == 0 ? -h.Y : h.Y,
+                (i & 4) == 0 ? -h.Z : h.Z);
+        ReadOnlySpan<int> pairs = stackalloc int[]
+        {
+            0,1, 2,3, 4,5, 6,7,   // x
+            0,2, 1,3, 4,6, 5,7,   // y
+            0,4, 1,5, 2,6, 3,7,   // z
+        };
+        im.SurfaceSetColor(col);
+        for (int i = 0; i < pairs.Length; i += 2)
+        {
+            im.SurfaceAddVertex(corners[pairs[i]]);
+            im.SurfaceAddVertex(corners[pairs[i + 1]]);
+        }
+    }
+
+    // ---- render overrides ----------------------------------------------------------------
+
+    private static string CullToken(BaseMaterial3D.CullModeEnum cull) => cull switch
+    {
+        BaseMaterial3D.CullModeEnum.Disabled => "cull_disabled",
+        BaseMaterial3D.CullModeEnum.Back => "cull_back",
+        _ => "cull_front",
+    };
+
+    private static string? RewriteShader(string code, string cullToken)
+    {
+        int rm = code.IndexOf("render_mode", StringComparison.Ordinal);
+        int fragment = code.IndexOf("void fragment()", StringComparison.Ordinal);
+        if (rm < 0 || fragment < 0)
+        {
+            return null;
+        }
+        int rmEnd = code.IndexOf(';', rm);
+        int brace = code.IndexOf('{', fragment);
+        if (rmEnd < 0 || brace < 0)
+        {
+            return null;
+        }
+
+        string modes = code[rm..rmEnd];
+        string replaced = modes;
+        bool declared = false;
+        foreach (var token in CullTokens)
+        {
+            if (modes.Contains(token, StringComparison.Ordinal))
+            {
+                replaced = modes.Replace(token, cullToken);
+                declared = true;
+                break;
+            }
+        }
+        if (!declared)
+        {
+            // No sidedness declared ⇒ Godot's default (cull_back). Name it explicitly so the
+            // override is the mode the panel says it is.
+            replaced = modes + ", " + cullToken;
+        }
+
+        // Rewriting NORMAL at the TOP of fragment() rather than the bottom: the fullbright world
+        // path derives its LIGHT_STATE lighting normal inside the body, and a rewrite after that
+        // would leave the one thing NORMAL still drives in that variant untouched.
+        const string inject = @"
+    if (csky_lab_normal_mode == 1) {
+        // Geometric normal from screen derivatives of the view-space position. Sign follows the
+        // rendered side (FRONT_FACING) so it stays predictable under any cull mode.
+        vec3 csky_lab_g = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
+        NORMAL = FRONT_FACING ? csky_lab_g : -csky_lab_g;
+    } else if (csky_lab_normal_mode == 2) {
+        NORMAL = -NORMAL;
+    }
+";
+        var sb = new System.Text.StringBuilder(code.Length + inject.Length + 64);
+        sb.Append(code, 0, rm);
+        sb.Append(replaced);
+        sb.Append(code, rmEnd, brace + 1 - rmEnd);
+        sb.Append(inject);
+        sb.Append(code, brace + 1, code.Length - brace - 1);
+        // The uniform goes after the render_mode statement, where a shader's own uniforms live.
+        sb.Insert(rm + replaced.Length + 1, $"\nuniform int {NormalModeParam} = 0;");
+        return sb.ToString();
+    }
+
+    /// <summary>Copies every uniform the source material actually carries onto the derived one. By
+    /// name, over the shader's own uniform list, so a parameter added to SceneBuilder later is
+    /// carried without touching this file.</summary>
+    private static void CopyParameters(Shader shader, ShaderMaterial from, ShaderMaterial to)
+    {
+        foreach (var entry in shader.GetShaderUniformList())
+        {
+            var dict = entry.AsGodotDictionary();
+            if (!dict.TryGetValue("name", out var nameVar))
+            {
+                continue;
+            }
+            string name = nameVar.AsString();
+            var value = from.GetShaderParameter(name);
+            if (value.VariantType != Variant.Type.Nil)
+            {
+                to.SetShaderParameter(name, value);
+            }
+        }
+    }
+
+    // ---- smooth-normal rebuild -------------------------------------------------------------
+
+    /// <summary>Sets (or clears) this surface's override material.
+    ///
+    /// <para>Godot bounds-checks the <b>instance's</b> <c>surface_override_materials</c> array,
+    /// which is NOT the same number as the mesh's surface count: MeshInstance3D sizes that array
+    /// when the mesh is assigned, so a mesh whose surfaces were committed <i>afterwards</i> —
+    /// which is exactly what SceneBuilder does, committing into an already-assigned ArrayMesh —
+    /// can leave it short. Checking the mesh instead was the first cut's bug and it errors per
+    /// call (<c>p_surface = 0 is out of bounds (size() = 0)</c>). Re-assigning the mesh forces
+    /// the resize.</para>
+    ///
+    /// <para>It recovers rather than skips because this is a diagnostic lab: a silently
+    /// un-overridden surface means half an A/B, and a conclusion drawn from it would be
+    /// wrong. Clearing (mat null) on a missing slot is genuinely a no-op, so that returns
+    /// early and startup — where every surface is cleared — touches nothing.</para></summary>
+    private static void SetOverride(Surf s, Material? mat)
+    {
+        var mesh = s.Instance.Mesh;
+        if (mesh == null || s.Index >= mesh.GetSurfaceCount())
+            return;
+        if (mat == null && s.Instance.GetSurfaceOverrideMaterialCount() <= s.Index)
+            return; // no slot ⇒ nothing was ever set there ⇒ nothing to clear
+        if (s.Instance.GetSurfaceOverrideMaterialCount() <= s.Index)
+        {
+            s.Instance.Mesh = null;
+            s.Instance.Mesh = mesh;
+        }
+        if (s.Instance.GetSurfaceOverrideMaterialCount() > s.Index)
+        {
+            s.Instance.SetSurfaceOverrideMaterial(s.Index, mat);
+        }
+        else if (!_warnedOverrideGap)
+        {
+            _warnedOverrideGap = true;
+            GD.Print($"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot — "
+                     + "override not applied there (results for that surface are not A/B'd)");
+        }
+    }
+
+    // ---- UI -----------------------------------------------------------------------------------
+
+    private static Label Small(string text)
+    {
+        var l = new Label { Text = text };
+        l.AddThemeFontSizeOverride("font_size", 11);
+        return l;
+    }
+
+    private static HSeparator Separator() => new();
+
+    /// <summary>Adopts the viewer's existing lighting as the lab's starting state instead of
+    /// inventing one, so the sliders open on what you are actually looking at and an untouched
+    /// lab writes nothing.</summary>
+    private void SeedLighting()
+    {
+        _sunDir = -_sun.GlobalTransform.Basis.Z;
+        _sunEnergy = _sun.LightEnergy;
+        if (_env != null)
+        {
+            _ambientEnergy = _env.AmbientLightEnergy;
+            _ambientOn = _ambientEnergy > 0f;
+        }
     }
 
     // ---- scoped attach / detach -----------------------------------------------------------
@@ -362,27 +700,7 @@ public sealed partial class MeshLab : Node
         UpdateStatus();
     }
 
-    private static T Cycle<T>(T value) where T : struct, Enum
-    {
-        var all = Enum.GetValues<T>();
-        int i = Array.IndexOf(all, value);
-        return all[(i + 1) % all.Length];
-    }
-
     // ---- geometry read-back -------------------------------------------------------------
-
-    /// <summary>The most surfaces the lab reads back off one subtree. A rung high up the ladder can
-    /// carry a whole partition; collecting it would stall the frame and drown the overlays. Over the
-    /// cap the lab still works on what it took and SAYS it was capped, rather than quietly
-    /// diagnosing part of the object.</summary>
-    private const int MaxSurfaces = 3000;
-
-    /// <summary>And the most triangles the line overlays emit. Independent of the collection cap:
-    /// the counts stay honest for the whole subtree, only the drawing stops.</summary>
-    private const int MaxOverlayTris = 60000;
-
-    private bool _capped;
-    private int _fullbrightSurfaces;
 
     /// <summary>Reads every built surface back out of its ArrayMesh into the target's local space.
     /// Done once per target: the parked aircraft never moves, and re-reading per toggle would make
@@ -469,49 +787,7 @@ public sealed partial class MeshLab : Node
             }
     }
 
-    private static IEnumerable<Node> Descendants(Node root)
-    {
-        foreach (var c in root.GetChildren())
-        {
-            yield return c;
-            foreach (var d in Descendants(c))
-                yield return d;
-        }
-    }
-
-    // ---- provenance ---------------------------------------------------------------------
-
-    private static Vector3 FaceNormal(Surf s, int t)
-    {
-        var a = s.Verts[s.Tris[t]];
-        var b = s.Verts[s.Tris[t + 1]];
-        var c = s.Verts[s.Tris[t + 2]];
-        var n = (b - a).Cross(c - a);
-        return n.LengthSquared() > 1e-14f ? n.Normalized() : Vector3.Up;
-    }
-
-    /// <summary>True when this triangle's three corner normals are equal to each other and to
-    /// its winding normal — the exact signature of SceneBuilder's flat fallback. See the class
-    /// doc for the false-positive case.</summary>
-    private static bool IsFlatFallback(Surf s, int t)
-    {
-        if (s.Normals.Length == 0)
-            return true;
-        var n0 = s.Normals[s.Tris[t]];
-        var n1 = s.Normals[s.Tris[t + 1]];
-        var n2 = s.Normals[s.Tris[t + 2]];
-        const float eps = 1e-3f;
-        if ((n0 - n1).LengthSquared() > eps || (n0 - n2).LengthSquared() > eps)
-            return false;
-        return (n0 - FaceNormal(s, t)).LengthSquared() <= eps;
-    }
-
     // ---- overlays -----------------------------------------------------------------------
-
-    // Parent of the three overlay meshes in the scoped mode: one node the lab owns, whose transform
-    // follows the target each frame. In --viewer the overlays stay children of the parked plane,
-    // which is where they have always been.
-    private Node3D? _overlayRoot;
 
     private void BuildDrawNodes()
     {
@@ -529,26 +805,6 @@ public sealed partial class MeshLab : Node
         _boxDraw = MakeDrawNode("mesh_lab_boxes", parent);
     }
 
-    private static MeshInstance3D MakeDrawNode(string name, Node parent)
-    {
-        var mi = new MeshInstance3D
-        {
-            Name = name,
-            Mesh = new ImmediateMesh(),
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            MaterialOverride = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                VertexColorUseAsAlbedo = true,
-                Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            },
-        };
-        mi.SetMeta(SelectionService.OverlayMeta, true);
-        parent.AddChild(mi);
-        return mi;
-    }
-
     private void RefreshAll(bool applyLighting = true)
     {
         RebuildNormals();
@@ -560,10 +816,6 @@ public sealed partial class MeshLab : Node
         SyncWidgets();
         UpdateStatus();
     }
-
-    // Normal line length as a fraction of the aircraft's bounding radius, so the lines read
-    // the same on the Balmoral and the autogyro. TUNE.
-    private const float NormalLenFrac = 0.022f;
 
     private void RebuildNormals()
     {
@@ -715,55 +967,7 @@ public sealed partial class MeshLab : Node
         im.SurfaceEnd();
     }
 
-    private static (long, long) EdgeKey(Vector3 a, Vector3 b)
-    {
-        long ka = Quantise(a), kb = Quantise(b);
-        return ka <= kb ? (ka, kb) : (kb, ka);
-    }
-
-    private static long Quantise(Vector3 v)
-    {
-        // 0.1 mm buckets: far below any real feature on these models, far above float noise.
-        unchecked
-        {
-            long h = (long)Mathf.Round(v.X * 10000f);
-            h = h * 1000003 + (long)Mathf.Round(v.Y * 10000f);
-            h = h * 1000003 + (long)Mathf.Round(v.Z * 10000f);
-            return h;
-        }
-    }
-
-    /// <summary>An edge is a hard smoothing seam when the triangles meeting on it disagree
-    /// about the normal at a shared position — i.e. the shading breaks across this edge.
-    /// These outline the flat/smooth patch boundaries directly.</summary>
-    private static bool IsSeam(Surf s, List<(int Tri, int A, int B)> list)
-    {
-        if (s.Normals.Length == 0 || list.Count < 2)
-            return false;
-        var (_, a0, b0) = list[0];
-        for (int i = 1; i < list.Count; i++)
-        {
-            var (_, a1, b1) = list[i];
-            // the two triangles may name the edge in either order
-            bool sameOrder = Quantise(s.Verts[a0]) == Quantise(s.Verts[a1]);
-            var na = s.Normals[sameOrder ? a1 : b1];
-            var nb = s.Normals[sameOrder ? b1 : a1];
-            if ((s.Normals[a0] - na).LengthSquared() > 1e-4f
-                || (s.Normals[b0] - nb).LengthSquared() > 1e-4f)
-                return true;
-        }
-        return false;
-    }
-
     // ---- zone boxes ---------------------------------------------------------------------
-
-    private static readonly Dictionary<string, Color> PartColors = new()
-    {
-        ["nose"] = new Color(1f, 0.9f, 0.2f),
-        ["tail"] = new Color(1f, 0.3f, 1f),
-        ["leftwing"] = new Color(0.2f, 0.9f, 1f),
-        ["rightwing"] = new Color(1f, 0.55f, 0.1f),
-    };
 
     private void RebuildBoxes()
     {
@@ -805,40 +1009,7 @@ public sealed partial class MeshLab : Node
         im.SurfaceEnd();
     }
 
-    private static Color ColorFor(string part) =>
-        PartColors.TryGetValue(part, out var c) ? c : new Color(0.7f, 0.7f, 0.7f);
-
-    private static void EmitBox(ImmediateMesh im, Transform3D xf, Vector3 size, Color col)
-    {
-        var h = size * 0.5f;
-        Span<Vector3> corners = stackalloc Vector3[8];
-        for (int i = 0; i < 8; i++)
-            corners[i] = xf * new Vector3(
-                (i & 1) == 0 ? -h.X : h.X,
-                (i & 2) == 0 ? -h.Y : h.Y,
-                (i & 4) == 0 ? -h.Z : h.Z);
-        ReadOnlySpan<int> pairs = stackalloc int[]
-        {
-            0,1, 2,3, 4,5, 6,7,   // x
-            0,2, 1,3, 4,6, 5,7,   // y
-            0,4, 1,5, 2,6, 3,7,   // z
-        };
-        im.SurfaceSetColor(col);
-        for (int i = 0; i < pairs.Length; i += 2)
-        {
-            im.SurfaceAddVertex(corners[pairs[i]]);
-            im.SurfaceAddVertex(corners[pairs[i + 1]]);
-        }
-    }
-
     // ---- render overrides ----------------------------------------------------------------
-
-    private readonly Dictionary<int, Shader> _overrideShaders = new();
-
-    // --debug-mesh=force: build the override materials even when both cyclers sit on AsData. The
-    // lab's able-to-fail control — an override that only ever differs in the thing under test must
-    // render the shipped picture when asked for the shipped settings, and this is what measures it.
-    private bool _forceOverride;
 
     private void ApplyOverrides()
     {
@@ -862,17 +1033,6 @@ public sealed partial class MeshLab : Node
         GetViewport().DebugDraw = _engineWireframe
             ? Viewport.DebugDrawEnum.Wireframe : Viewport.DebugDrawEnum.Disabled;
     }
-
-    /// <summary>The uniform the derived shader carries, named so it cannot collide with anything
-    /// SceneBuilder declares.</summary>
-    private const string NormalModeParam = "csky_lab_normal_mode";
-
-    private int NormalMode => _normals switch
-    {
-        NormalSource.AllFlat => 1,
-        NormalSource.Negated => 2,
-        _ => 0, // AsData and AllSmooth both use the mesh's normals (smooth swaps the mesh)
-    };
 
     /// <summary>The override material for one surface: the surface's OWN shader with the cull token
     /// swapped and a normal rewrite injected, plus every parameter copied across. Deriving beats
@@ -913,12 +1073,6 @@ public sealed partial class MeshLab : Node
         return fallback;
     }
 
-    private static bool _warnedDeriveGap;
-
-    // Derived shaders, keyed by the source shader and the cull mode asked of it. One per pair, for
-    // the whole session: the source shaders are themselves cached and shared across surfaces.
-    private readonly Dictionary<(ulong, int), Shader?> _derived = new();
-
     /// <summary>Rewrites a built shader into the lab's A/B twin: the cull token in its
     /// <c>render_mode</c> becomes <paramref name="cull"/>, and <c>fragment()</c> opens with the
     /// normal-source rewrite. Everything else — vertex stage, fog, lights, alpha, the instance
@@ -935,94 +1089,6 @@ public sealed partial class MeshLab : Node
         var shader = code == null ? null : new Shader { Code = code };
         _derived[key] = shader;
         return shader;
-    }
-
-    private static string CullToken(BaseMaterial3D.CullModeEnum cull) => cull switch
-    {
-        BaseMaterial3D.CullModeEnum.Disabled => "cull_disabled",
-        BaseMaterial3D.CullModeEnum.Back => "cull_back",
-        _ => "cull_front",
-    };
-
-    private static readonly string[] CullTokens = { "cull_disabled", "cull_front", "cull_back" };
-
-    private static string? RewriteShader(string code, string cullToken)
-    {
-        int rm = code.IndexOf("render_mode", StringComparison.Ordinal);
-        int fragment = code.IndexOf("void fragment()", StringComparison.Ordinal);
-        if (rm < 0 || fragment < 0)
-        {
-            return null;
-        }
-        int rmEnd = code.IndexOf(';', rm);
-        int brace = code.IndexOf('{', fragment);
-        if (rmEnd < 0 || brace < 0)
-        {
-            return null;
-        }
-
-        string modes = code[rm..rmEnd];
-        string replaced = modes;
-        bool declared = false;
-        foreach (var token in CullTokens)
-        {
-            if (modes.Contains(token, StringComparison.Ordinal))
-            {
-                replaced = modes.Replace(token, cullToken);
-                declared = true;
-                break;
-            }
-        }
-        if (!declared)
-        {
-            // No sidedness declared ⇒ Godot's default (cull_back). Name it explicitly so the
-            // override is the mode the panel says it is.
-            replaced = modes + ", " + cullToken;
-        }
-
-        // Rewriting NORMAL at the TOP of fragment() rather than the bottom: the fullbright world
-        // path derives its LIGHT_STATE lighting normal inside the body, and a rewrite after that
-        // would leave the one thing NORMAL still drives in that variant untouched.
-        const string inject = @"
-    if (csky_lab_normal_mode == 1) {
-        // Geometric normal from screen derivatives of the view-space position. Sign follows the
-        // rendered side (FRONT_FACING) so it stays predictable under any cull mode.
-        vec3 csky_lab_g = normalize(cross(dFdx(VERTEX), dFdy(VERTEX)));
-        NORMAL = FRONT_FACING ? csky_lab_g : -csky_lab_g;
-    } else if (csky_lab_normal_mode == 2) {
-        NORMAL = -NORMAL;
-    }
-";
-        var sb = new System.Text.StringBuilder(code.Length + inject.Length + 64);
-        sb.Append(code, 0, rm);
-        sb.Append(replaced);
-        sb.Append(code, rmEnd, brace + 1 - rmEnd);
-        sb.Append(inject);
-        sb.Append(code, brace + 1, code.Length - brace - 1);
-        // The uniform goes after the render_mode statement, where a shader's own uniforms live.
-        sb.Insert(rm + replaced.Length + 1, $"\nuniform int {NormalModeParam} = 0;");
-        return sb.ToString();
-    }
-
-    /// <summary>Copies every uniform the source material actually carries onto the derived one. By
-    /// name, over the shader's own uniform list, so a parameter added to SceneBuilder later is
-    /// carried without touching this file.</summary>
-    private static void CopyParameters(Shader shader, ShaderMaterial from, ShaderMaterial to)
-    {
-        foreach (var entry in shader.GetShaderUniformList())
-        {
-            var dict = entry.AsGodotDictionary();
-            if (!dict.TryGetValue("name", out var nameVar))
-            {
-                continue;
-            }
-            string name = nameVar.AsString();
-            var value = from.GetShaderParameter(name);
-            if (value.VariantType != Variant.Type.Nil)
-            {
-                to.SetShaderParameter(name, value);
-            }
-        }
     }
 
     private BaseMaterial3D.CullModeEnum CullFor(Surf s) => _cull switch
@@ -1092,8 +1158,6 @@ void fragment() {{
 
     // ---- smooth-normal rebuild -------------------------------------------------------------
 
-    private readonly Dictionary<Surf, ArrayMesh> _smoothed = new();
-
     /// <summary>Swaps in a copy of this surface's mesh with area-weighted vertex normals,
     /// welded by position — the "what if every polygon were smooth-shaded" comparison. Cached,
     /// so cycling back to it is instant.</summary>
@@ -1139,46 +1203,6 @@ void fragment() {{
             s.Instance.Mesh = smooth;
     }
 
-    private static bool _warnedOverrideGap;
-
-    /// <summary>Sets (or clears) this surface's override material.
-    ///
-    /// <para>Godot bounds-checks the <b>instance's</b> <c>surface_override_materials</c> array,
-    /// which is NOT the same number as the mesh's surface count: MeshInstance3D sizes that array
-    /// when the mesh is assigned, so a mesh whose surfaces were committed <i>afterwards</i> —
-    /// which is exactly what SceneBuilder does, committing into an already-assigned ArrayMesh —
-    /// can leave it short. Checking the mesh instead was the first cut's bug and it errors per
-    /// call (<c>p_surface = 0 is out of bounds (size() = 0)</c>). Re-assigning the mesh forces
-    /// the resize.</para>
-    ///
-    /// <para>It recovers rather than skips because this is a diagnostic lab: a silently
-    /// un-overridden surface means half an A/B, and a conclusion drawn from it would be
-    /// wrong. Clearing (mat null) on a missing slot is genuinely a no-op, so that returns
-    /// early and startup — where every surface is cleared — touches nothing.</para></summary>
-    private static void SetOverride(Surf s, Material? mat)
-    {
-        var mesh = s.Instance.Mesh;
-        if (mesh == null || s.Index >= mesh.GetSurfaceCount())
-            return;
-        if (mat == null && s.Instance.GetSurfaceOverrideMaterialCount() <= s.Index)
-            return; // no slot ⇒ nothing was ever set there ⇒ nothing to clear
-        if (s.Instance.GetSurfaceOverrideMaterialCount() <= s.Index)
-        {
-            s.Instance.Mesh = null;
-            s.Instance.Mesh = mesh;
-        }
-        if (s.Instance.GetSurfaceOverrideMaterialCount() > s.Index)
-        {
-            s.Instance.SetSurfaceOverrideMaterial(s.Index, mat);
-        }
-        else if (!_warnedOverrideGap)
-        {
-            _warnedOverrideGap = true;
-            GD.Print($"[mesh] '{s.Instance.Name}' surface {s.Index} has no override slot — "
-                     + "override not applied there (results for that surface are not A/B'd)");
-        }
-    }
-
     private void RestoreMesh(Surf s)
     {
         if (s.OriginalMesh != null && IsInstanceValid(s.Instance) && s.Instance.Mesh != s.OriginalMesh)
@@ -1208,14 +1232,6 @@ void fragment() {{
     }
 
     // ---- lighting -------------------------------------------------------------------------
-
-    private Vector3 _sunDir = new(-0.5f, -0.7f, 0.5f);
-    private float _sunEnergy = 1.6f, _ambientEnergy = 0.9f;
-    private bool _ambientOn = true;
-    // The scoped lab's own light. The session's sun and environment belong to the world, and a
-    // diagnostic that re-aims them changes the thing it is measuring everywhere else on screen —
-    // so in that mode the sliders drive this instead, created dark and only on first use.
-    private DirectionalLight3D? _labLight;
 
     private void ApplyLighting()
     {
@@ -1359,13 +1375,6 @@ void fragment() {{
     }
 
     // ---- UI -----------------------------------------------------------------------------------
-
-    private Button _normalsBtn = null!, _colorBtn = null!, _wireBtn = null!,
-        _cullBtn = null!, _sourceBtn = null!;
-    private CheckButton? _boxBtn, _ambientBtn, _engineWireBtn;
-    private CheckButton _headlightBtn = null!;
-    private Label? _lightNote;
-    private string _scopedNote = "";
 
     private void BuildUi()
     {
@@ -1566,12 +1575,18 @@ void fragment() {{
 
     private string Pct(int n) => _triCount > 0 ? $"{n * 100f / _triCount:0}%" : "—";
 
-    private static Label Small(string text)
+    /// <summary>One committed surface, flattened into plane-local space. Indices are always
+    /// materialised (SurfaceTool commits indexed, but an unindexed surface is legal).</summary>
+    private sealed class Surf
     {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", 11);
-        return l;
+        public required MeshInstance3D Instance;
+        public required int Index;
+        public required Vector3[] Verts;
+        public required Vector3[] Normals;
+        public required int[] Tris;
+        public required bool DoubleSided;
+        public required bool Fullbright;
+        public required Material? Original;
+        public Mesh? OriginalMesh;
     }
-
-    private static HSeparator Separator() => new();
 }

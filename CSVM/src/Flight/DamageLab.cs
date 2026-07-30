@@ -43,11 +43,6 @@ public sealed partial class DamageLab : Node
     private HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
     private bool _gaugesWanted = true; // the panel's HUD-gauges checkbox, remembered across H
 
-    /// <summary>Build the lab but keep it out of sight until H. Set for a plain --viewer
-    /// (no --damage), so the lab is always THERE to toggle while an unadorned viewer
-    /// screenshot stays byte-identical to one with no lab at all.</summary>
-    public bool StartHidden { get; init; }
-
     public DamageLab(PlaneStats stats, DamageVisuals visuals, Node3D plane,
         IReadOnlyList<(string Part, float Frac)>? preset = null, GaugeCluster? gauges = null)
     {
@@ -58,6 +53,11 @@ public sealed partial class DamageLab : Node
         _gauges = gauges;
         Name = "damage_lab";
     }
+
+    /// <summary>Build the lab but keep it out of sight until H. Set for a plain --viewer
+    /// (no --damage), so the lab is always THERE to toggle while an unadorned viewer
+    /// screenshot stays byte-identical to one with no lab at all.</summary>
+    public bool StartHidden { get; init; }
 
     public override void _Ready()
     {
@@ -86,17 +86,6 @@ public sealed partial class DamageLab : Node
             SetLabVisible(false);
     }
 
-    /// <summary>Shows or hides the whole lab — slider panel and HUD gauges together. H is
-    /// "is the damage lab here", not "is one of its two layers here"; the panel's own
-    /// checkbox still controls the gauges independently while the lab is up, and its state
-    /// is remembered across a hide/show.</summary>
-    private void SetLabVisible(bool on)
-    {
-        _ui.Visible = on;
-        if (_gaugeLayer != null)
-            _gaugeLayer.Visible = on && _gaugesWanted;
-    }
-
     /// <summary>Burns the assigned trails in place at the parked plane, on sim time — so a halted
     /// clock freezes the fires for a still capture.</summary>
     public override void _Process(double delta) =>
@@ -107,6 +96,34 @@ public sealed partial class DamageLab : Node
     {
         if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H })
             SetLabVisible(!_ui.Visible);
+    }
+
+    /// <summary>Threshold-line shorthand: pdpanel4 → p4 (the wired torn-skin flip),
+    /// leftwing_damage_yellow → yellow (the cockpit-indicator cycle).</summary>
+    private static string ShortAnim(string part, string anim)
+    {
+        if (anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
+            return "p" + anim["pdpanel".Length..];
+        var prefix = part + "_damage_";
+        return anim.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? anim[prefix.Length..] : anim;
+    }
+
+    private static Label Small(string text)
+    {
+        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        return label;
+    }
+
+    /// <summary>Shows or hides the whole lab — slider panel and HUD gauges together. H is
+    /// "is the damage lab here", not "is one of its two layers here"; the panel's own
+    /// checkbox still controls the gauges independently while the lab is up, and its state
+    /// is remembered across a hide/show.</summary>
+    private void SetLabVisible(bool on)
+    {
+        _ui.Visible = on;
+        if (_gaugeLayer != null)
+            _gaugeLayer.Visible = on && _gaugesWanted;
     }
 
     private void BuildUi()
@@ -175,23 +192,6 @@ public sealed partial class DamageLab : Node
         panel.AddChild(margin);
         _ui.AddChild(panel);
         AddChild(_ui);
-    }
-
-    /// <summary>Threshold-line shorthand: pdpanel4 → p4 (the wired torn-skin flip),
-    /// leftwing_damage_yellow → yellow (the cockpit-indicator cycle).</summary>
-    private static string ShortAnim(string part, string anim)
-    {
-        if (anim.StartsWith("pdpanel", StringComparison.OrdinalIgnoreCase))
-            return "p" + anim["pdpanel".Length..];
-        var prefix = part + "_damage_";
-        return anim.StartsWith(prefix, StringComparison.OrdinalIgnoreCase) ? anim[prefix.Length..] : anim;
-    }
-
-    private static Label Small(string text)
-    {
-        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        return label;
     }
 
     /// <summary>Re-derives the damage visuals from the sliders. The full rebuild

@@ -22,36 +22,25 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
-    private struct Proj
-    {
-        public bool Alive;
-        public Vector3 Pos;
-        public Vector3 Vel;      // m/s, world
-        public float DistLeft;   // m until it expires at RANGE
-        public float Accel;      // ACCELERATION along the velocity direction, m/s²
-        public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
-        public WeaponDef Weapon;
-        public Color Tint;
-        public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
-    }
+    /// <summary>Where a hit's damage goes (C23): given the struck collider and the weapon's
+    /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
+    /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
+    /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
+    public System.Func<Node?, float, bool>? DamageSink;
 
-    private struct Sprite
-    {
-        public Vector3 Pos;
-        public float Age;
-        public float Life;
-        public float Size;
-        public Color Tint;
-    }
+    /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
+    /// runtime (D32): the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
+    /// def rather than a gamez model. Null in views with no anim runtime. Gated to non-gun weapons —
+    /// the <c>gunhit</c> smoke has no stop event, so a shared per-round emitter would collapse onto one
+    /// jumping, ever-emitting puff (a documented guns follow-up); rockets/ordnance fire ≤1/s.</summary>
+    public System.Action<string, Vector3>? EffectSink;
 
-    // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
-    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point and shown briefly (D30).
-    private struct ImpactFx
-    {
-        public Node3D Model;
-        public float Age;
-        public float Life;
-    }
+    internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
+                                              // (shared: FlightController's reticle integration reads it too)
+    internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
+                                                // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
+                                                // both launch velocity and acceleration together so the whole
+                                                // profile stays proportional and the round still expires at RANGE.
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
@@ -72,19 +61,12 @@ public sealed partial class ProjectilePool : Node3D
     private const float ExplosionSize = 12f;  // m
     private const float ExplosionLife = 0.5f; // s
     private const float ExplosionSpread = 6f; // m — the cluster radius
-    internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
-                                              // (shared: FlightController's reticle integration reads it too)
-    internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
-                                                // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
-                                                // both launch velocity and acceleration together so the whole
-                                                // profile stays proportional and the round still expires at RANGE.
 
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
     private static readonly Color RocketTint = new(1.0f, 0.6f, 0.25f);  // orange exhaust
 
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
-    private int _projHigh;                     // highest slot ever used (bounds the scan)
     private readonly List<Sprite> _muzzle = new();
     private readonly List<Sprite> _impact = new();
 
@@ -101,7 +83,6 @@ public sealed partial class ProjectilePool : Node3D
     private readonly GameZ? _flyoutGamez;
     private readonly SceneBuilder? _flyoutScene;
     private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
-    private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
 
     // The named IMPACT effect models (D30): a per-surface IMPACT `ANIMATION` whose name is a chapter
     // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
@@ -111,18 +92,24 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
-    private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
 
-    private MultiMesh _tracerMm = null!;
-    private MultiMesh _muzzleMm = null!;
-    private MultiMesh _impactMm = null!;
     private readonly PhysicsRayQueryParameters3D _ray = new(); // reused each step (no per-round alloc)
-    private Camera3D? _listener;               // billboards align their streak to this camera
     private readonly List<AudioStreamPlayer> _sfxPool = new();
-    private int _sfxNext;
     // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
     // per draw: two draws fire per round.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
+    private readonly HashSet<string> _flyoutLogged = new();
+
+    private int _projHigh;                     // highest slot ever used (bounds the scan)
+    private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
+    private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
+    private MultiMesh _tracerMm = null!;
+    private MultiMesh _muzzleMm = null!;
+    private MultiMesh _impactMm = null!;
+    private Camera3D? _listener;               // billboards align their streak to this camera
+    private int _sfxNext;
+    private bool _flyoutPoseLogged;
+    private int _impactsLogged;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
@@ -139,19 +126,6 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>The camera a tracer streak orients its length toward (player 1's, in splitscreen).
     /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
     public Camera3D? Listener { get => _listener; set => _listener = value; }
-
-    /// <summary>Where a hit's damage goes (C23): given the struck collider and the weapon's
-    /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
-    /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
-    /// viewer, a chapter with no anim runtime), where impacts stay purely cosmetic.</summary>
-    public System.Func<Node?, float, bool>? DamageSink;
-
-    /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
-    /// runtime (D32): the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
-    /// def rather than a gamez model. Null in views with no anim runtime. Gated to non-gun weapons —
-    /// the <c>gunhit</c> smoke has no stop event, so a shared per-round emitter would collapse onto one
-    /// jumping, ever-emitting puff (a documented guns follow-up); rockets/ordnance fire ≤1/s.</summary>
-    public System.Action<string, Vector3>? EffectSink;
 
     public override void _Ready()
     {
@@ -170,40 +144,6 @@ public sealed partial class ProjectilePool : Node3D
             AddChild(p);
             _sfxPool.Add(p);
         }
-    }
-
-    private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi)
-    {
-        var quad = new QuadMesh { Size = Vector2.One };
-        var mat = new StandardMaterial3D
-        {
-            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-            AlbedoTexture = _textures.Find(texture),
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            BlendMode = additive ? BaseMaterial3D.BlendModeEnum.Add : BaseMaterial3D.BlendModeEnum.Mix,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
-            BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
-            BillboardKeepScale = true,
-            VertexColorUseAsAlbedo = true,
-            Uv1Scale = new Vector3(-1.0f, 1.0f, 1.0f),
-        };
-        quad.Material = mat;
-        var mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseColors = true,
-            Mesh = quad,
-            InstanceCount = cap,
-            VisibleInstanceCount = 0,
-        };
-        mmi = new MultiMeshInstance3D
-        {
-            Multimesh = mm,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
-        AddChild(mmi);
-        return mm;
     }
 
     /// <summary>Fires one round of <paramref name="weapon"/> from the world muzzle transform,
@@ -262,24 +202,6 @@ public sealed partial class ProjectilePool : Node3D
             _muzzle.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint });
     }
 
-    private Vector3 ApplySpread(Vector3 forward, float coneDeg)
-    {
-        if (coneDeg <= 0f)
-            return forward;
-        // A random direction inside the cone: a random azimuth around `forward`, and a polar angle
-        // in [0, cone] biased for a roughly uniform disc so the pattern fills the cone, not its rim.
-        float half = Mathf.DegToRad(coneDeg) * 0.5f;
-        float polar = half * Mathf.Sqrt(_rng.Randf());
-        float azimuth = _rng.Randf() * Mathf.Tau;
-        // Build a basis with `forward` as -Z, then tilt.
-        var basis = Basis.LookingAt(forward, Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up);
-        var tilted = basis * new Vector3(
-            Mathf.Sin(polar) * Mathf.Cos(azimuth),
-            Mathf.Sin(polar) * Mathf.Sin(azimuth),
-            -Mathf.Cos(polar));
-        return tilted.Normalized();
-    }
-
     /// <summary>Instances a weapon's <c>FLYOUT</c> <c>MODEL</c> body — its <c>.flt</c> prototype root
     /// in the chapter gamez (<c>he_rocket</c>, <c>ap_rocket</c>, <c>sonic</c>, …) — as a fresh,
     /// collision-exempt <see cref="Node3D"/>, returned <b>un-parented</b> for the caller to place. The
@@ -310,86 +232,6 @@ public sealed partial class ProjectilePool : Node3D
         if (inst != null && _flyoutLogged.Add(modelName))
             GD.Print($"flyout model '{modelName}' ({weapon.Id}) instanced: {CountMeshes(inst)} mesh(es)");
         return inst;
-    }
-
-    /// <summary>The in-flight rocket body: a <see cref="BuildFlyoutBody"/> instance parented under the
-    /// pool's own container (the caller poses it down the round's velocity each frame). Null falls back
-    /// to the exhaust streak.</summary>
-    private Node3D? BuildFlyoutModel(WeaponDef weapon)
-    {
-        var inst = BuildFlyoutBody(weapon);
-        if (inst != null)
-            _flyoutModels.AddChild(inst);
-        return inst;
-    }
-
-    /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point, when the
-    /// name resolves to a chapter-gamez node carrying geometry (the water splash <c>splash1.flt</c> /
-    /// <c>bsplsh.flt</c>). Reuses the flyout <see cref="GameZ"/>/<see cref="SceneBuilder"/>, is
-    /// collision-exempt, and sits upright at the point; the instance is tracked for a short life and
-    /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
-    /// name is a reader/control def or an unresolved binding (no such node), or the node built no
-    /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
-    private bool SpawnImpactModel(string animName, Vector3 point)
-    {
-        if (_flyoutScene == null || _flyoutGamez == null)
-            return false;
-        if (!_impactNodes.TryGetValue(animName, out var node))
-        {
-            node = _flyoutGamez.FindByName(animName);
-            _impactNodes[animName] = node;
-        }
-        if (node == null)
-            return false;
-        var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
-        if (inst == null)
-            return false;
-        int meshes = CountMeshes(inst);
-        if (meshes == 0)
-        {
-            // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render — drop it
-            // and keep the spark. Logged once so the data fact is visible, not silently swallowed.
-            if (_impactFxLogged.Add(animName))
-                GD.Print($"impact effect '{animName}' is a geometry-less node — spark stands in");
-            inst.QueueFree();
-            return false;
-        }
-        _impactFxModels.AddChild(inst);
-        inst.GlobalTransform = new Transform3D(Basis.Identity, point); // splash geometry stands upright at the hit
-        _impactFx.Add(new ImpactFx { Model = inst, Age = 0f, Life = ImpactModelLife });
-        if (_impactFxLogged.Add(animName))
-            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)");
-        return true;
-    }
-
-    private readonly HashSet<string> _flyoutLogged = new();
-    private bool _flyoutPoseLogged;
-
-    private static int CountMeshes(Node n)
-    {
-        int c = n is MeshInstance3D ? 1 : 0;
-        foreach (var child in n.GetChildren())
-            c += CountMeshes(child);
-        return c;
-    }
-
-    // The flyout body's world pose: its geometry is authored nose-along-(-Z) (uniform across all 15
-    // ROCKET models), so LookingAt(velDir) — which aims local -Z down the argument — points the nose
-    // along the round's flight direction. `pos` is the tail (the model origin sits at the exhaust end).
-    private static Transform3D FlyoutPose(Vector3 pos, Vector3 vel)
-    {
-        var dir = vel.LengthSquared() > 1e-6f ? vel.Normalized() : Vector3.Forward;
-        var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
-        return new Transform3D(Basis.LookingAt(dir, up), pos);
-    }
-
-    private static void KillModel(ref Proj p)
-    {
-        if (p.Model != null)
-        {
-            p.Model.QueueFree();
-            p.Model = null;
-        }
     }
 
     public override void _PhysicsProcess(double delta)
@@ -472,6 +314,56 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    public override void _Process(double delta)
+    {
+        RenderTracers();
+        RenderSprites(_muzzleMm, _muzzle);
+        RenderSprites(_impactMm, _impact);
+    }
+
+    /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
+    public void Clear()
+    {
+        for (int i = 0; i < _projHigh; i++)
+        {
+            KillModel(ref _proj[i]);
+            _proj[i].Alive = false;
+        }
+        _projHigh = 0;
+        _muzzle.Clear();
+        _impact.Clear();
+        foreach (var f in _impactFx)
+            f.Model.QueueFree();
+        _impactFx.Clear();
+    }
+
+    private static int CountMeshes(Node n)
+    {
+        int c = n is MeshInstance3D ? 1 : 0;
+        foreach (var child in n.GetChildren())
+            c += CountMeshes(child);
+        return c;
+    }
+
+    // The flyout body's world pose: its geometry is authored nose-along-(-Z) (uniform across all 15
+    // ROCKET models), so LookingAt(velDir) — which aims local -Z down the argument — points the nose
+    // along the round's flight direction. `pos` is the tail (the model origin sits at the exhaust end).
+    private static Transform3D FlyoutPose(Vector3 pos, Vector3 vel)
+    {
+        var dir = vel.LengthSquared() > 1e-6f ? vel.Normalized() : Vector3.Forward;
+        var up = Mathf.Abs(dir.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
+        return new Transform3D(Basis.LookingAt(dir, up), pos);
+    }
+
+    private static void KillModel(ref Proj p)
+    {
+        if (p.Model != null)
+        {
+            p.Model.QueueFree();
+            p.Model = null;
+        }
+    }
+
     private static void AgeSprites(List<Sprite> sprites, float dt)
     {
         for (int i = sprites.Count - 1; i >= 0; i--)
@@ -489,7 +381,138 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    private int _impactsLogged;
+    private static SurfaceClass ClassifySurface(Node? collider)
+    {
+        if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
+        {
+            return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
+            {
+                "water" => SurfaceClass.Water,
+                "buildings" => SurfaceClass.Buildings,
+                _ => SurfaceClass.Default,
+            };
+        }
+        return SurfaceClass.Default;
+    }
+
+    private static void RenderSprites(MultiMesh mm, List<Sprite> sprites)
+    {
+        int n = 0;
+        foreach (var s in sprites)
+        {
+            float k = 1f - s.Age / s.Life;            // shrink + fade over life
+            float size = s.Size * (0.6f + 0.4f * k);
+            var basis = new Basis(Vector3.Right * size, Vector3.Up * size, Vector3.Back * size);
+            mm.SetInstanceTransform(n, new Transform3D(basis, s.Pos));
+            var c = s.Tint;
+            c.A = k;
+            mm.SetInstanceColor(n, c);
+            n++;
+        }
+        mm.VisibleInstanceCount = n;
+    }
+
+    private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi)
+    {
+        var quad = new QuadMesh { Size = Vector2.One };
+        var mat = new StandardMaterial3D
+        {
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            AlbedoTexture = _textures.Find(texture),
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            BlendMode = additive ? BaseMaterial3D.BlendModeEnum.Add : BaseMaterial3D.BlendModeEnum.Mix,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            DepthDrawMode = BaseMaterial3D.DepthDrawModeEnum.Disabled,
+            BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
+            BillboardKeepScale = true,
+            VertexColorUseAsAlbedo = true,
+            Uv1Scale = new Vector3(-1.0f, 1.0f, 1.0f),
+        };
+        quad.Material = mat;
+        var mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseColors = true,
+            Mesh = quad,
+            InstanceCount = cap,
+            VisibleInstanceCount = 0,
+        };
+        mmi = new MultiMeshInstance3D
+        {
+            Multimesh = mm,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        AddChild(mmi);
+        return mm;
+    }
+
+    private Vector3 ApplySpread(Vector3 forward, float coneDeg)
+    {
+        if (coneDeg <= 0f)
+            return forward;
+        // A random direction inside the cone: a random azimuth around `forward`, and a polar angle
+        // in [0, cone] biased for a roughly uniform disc so the pattern fills the cone, not its rim.
+        float half = Mathf.DegToRad(coneDeg) * 0.5f;
+        float polar = half * Mathf.Sqrt(_rng.Randf());
+        float azimuth = _rng.Randf() * Mathf.Tau;
+        // Build a basis with `forward` as -Z, then tilt.
+        var basis = Basis.LookingAt(forward, Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up);
+        var tilted = basis * new Vector3(
+            Mathf.Sin(polar) * Mathf.Cos(azimuth),
+            Mathf.Sin(polar) * Mathf.Sin(azimuth),
+            -Mathf.Cos(polar));
+        return tilted.Normalized();
+    }
+
+    /// <summary>The in-flight rocket body: a <see cref="BuildFlyoutBody"/> instance parented under the
+    /// pool's own container (the caller poses it down the round's velocity each frame). Null falls back
+    /// to the exhaust streak.</summary>
+    private Node3D? BuildFlyoutModel(WeaponDef weapon)
+    {
+        var inst = BuildFlyoutBody(weapon);
+        if (inst != null)
+            _flyoutModels.AddChild(inst);
+        return inst;
+    }
+
+    /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point, when the
+    /// name resolves to a chapter-gamez node carrying geometry (the water splash <c>splash1.flt</c> /
+    /// <c>bsplsh.flt</c>). Reuses the flyout <see cref="GameZ"/>/<see cref="SceneBuilder"/>, is
+    /// collision-exempt, and sits upright at the point; the instance is tracked for a short life and
+    /// freed. Returns false — leaving the stand-in spark to show — when there is no world scene, the
+    /// name is a reader/control def or an unresolved binding (no such node), or the node built no
+    /// mesh (an empty puffer-host root such as <c>gunhit</c>).</summary>
+    private bool SpawnImpactModel(string animName, Vector3 point)
+    {
+        if (_flyoutScene == null || _flyoutGamez == null)
+            return false;
+        if (!_impactNodes.TryGetValue(animName, out var node))
+        {
+            node = _flyoutGamez.FindByName(animName);
+            _impactNodes[animName] = node;
+        }
+        if (node == null)
+            return false;
+        var inst = _flyoutScene.BuildSubtree(node, skip: null, collisionSkip: _ => true);
+        if (inst == null)
+            return false;
+        int meshes = CountMeshes(inst);
+        if (meshes == 0)
+        {
+            // A geometry-less host (e.g. the `gunhit` puffer root): nothing would render — drop it
+            // and keep the spark. Logged once so the data fact is visible, not silently swallowed.
+            if (_impactFxLogged.Add(animName))
+                GD.Print($"impact effect '{animName}' is a geometry-less node — spark stands in");
+            inst.QueueFree();
+            return false;
+        }
+        _impactFxModels.AddChild(inst);
+        inst.GlobalTransform = new Transform3D(Basis.Identity, point); // splash geometry stands upright at the hit
+        _impactFx.Add(new ImpactFx { Model = inst, Age = 0f, Life = ImpactModelLife });
+        if (_impactFxLogged.Add(animName))
+            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)");
+        return true;
+    }
 
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider)
     {
@@ -557,20 +580,6 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
-    private static SurfaceClass ClassifySurface(Node? collider)
-    {
-        if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
-        {
-            return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
-            {
-                "water" => SurfaceClass.Water,
-                "buildings" => SurfaceClass.Buildings,
-                _ => SurfaceClass.Default,
-            };
-        }
-        return SurfaceClass.Default;
-    }
-
     private void PlaySound(string sndName)
     {
         if (_sounds == null || _soundDefs == null || !_soundDefs.TryGetValue(sndName, out var def))
@@ -583,13 +592,6 @@ public sealed partial class ProjectilePool : Node3D
         player.Stream = stream;
         player.VolumeDb = Mathf.LinearToDb(Mathf.Max(0.002f, def.Volume * 0.2f));
         player.Play();
-    }
-
-    public override void _Process(double delta)
-    {
-        RenderTracers();
-        RenderSprites(_muzzleMm, _muzzle);
-        RenderSprites(_impactMm, _impact);
     }
 
     private void RenderTracers()
@@ -644,36 +646,34 @@ public sealed partial class ProjectilePool : Node3D
         _tracerMm.VisibleInstanceCount = n;
     }
 
-    private static void RenderSprites(MultiMesh mm, List<Sprite> sprites)
+    private struct Proj
     {
-        int n = 0;
-        foreach (var s in sprites)
-        {
-            float k = 1f - s.Age / s.Life;            // shrink + fade over life
-            float size = s.Size * (0.6f + 0.4f * k);
-            var basis = new Basis(Vector3.Right * size, Vector3.Up * size, Vector3.Back * size);
-            mm.SetInstanceTransform(n, new Transform3D(basis, s.Pos));
-            var c = s.Tint;
-            c.A = k;
-            mm.SetInstanceColor(n, c);
-            n++;
-        }
-        mm.VisibleInstanceCount = n;
+        public bool Alive;
+        public Vector3 Pos;
+        public Vector3 Vel;      // m/s, world
+        public float DistLeft;   // m until it expires at RANGE
+        public float Accel;      // ACCELERATION along the velocity direction, m/s²
+        public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
+        public WeaponDef Weapon;
+        public Color Tint;
+        public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
     }
 
-    /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
-    public void Clear()
+    private struct Sprite
     {
-        for (int i = 0; i < _projHigh; i++)
-        {
-            KillModel(ref _proj[i]);
-            _proj[i].Alive = false;
-        }
-        _projHigh = 0;
-        _muzzle.Clear();
-        _impact.Clear();
-        foreach (var f in _impactFx)
-            f.Model.QueueFree();
-        _impactFx.Clear();
+        public Vector3 Pos;
+        public float Age;
+        public float Life;
+        public float Size;
+        public Color Tint;
+    }
+
+    // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
+    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point and shown briefly (D30).
+    private struct ImpactFx
+    {
+        public Node3D Model;
+        public float Age;
+        public float Life;
     }
 }

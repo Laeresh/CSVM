@@ -15,11 +15,26 @@ namespace CSVM.Flight;
 /// </summary>
 public partial class FlightAudio : Node
 {
+    /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
+    /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
+    /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
+    public float MixGain = 1f;
+
+    private const float SilenceThreshold = 0.002f;
+    private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
+
+    // The prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
+    // user's reference video (Bloodhawk dive to ~1.27x fd_speed) bounds the original's whine at
+    // 0.06-0.14 of the engine's amplitude — the reader volume is evidently not a linear mix gain
+    // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
+    private const float WhineMixGain = 0.12f;
+
+    private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
+
     private PlaneStats _stats = null!;
     private AudioStreamPlayer? _engine, _whine, _rattle;
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
-    private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
     private AudioStreamPlayer? _groundExp;
     private float _groundExpVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
@@ -35,20 +50,6 @@ public partial class FlightAudio : Node
     private float _gunLoopVol = 1f;
     private AudioStreamPlayer? _emptyClip;
     private float _emptyClipVol = 1f;
-
-    private const float SilenceThreshold = 0.002f;
-    private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
-
-    // The prop_sound curve caps the whine at volume 0.5, but spectral analysis of the
-    // user's reference video (Bloodhawk dive to ~1.27x fd_speed) bounds the original's whine at
-    // 0.06-0.14 of the engine's amplitude — the reader volume is evidently not a linear mix gain
-    // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
-    private const float WhineMixGain = 0.12f;
-
-    /// <summary>Overall gain for this plane's own-ship mix. 1 for single player;
-    /// splitscreen sets 1/√N so N simultaneous engine stacks don't sum to a wall of noise
-    /// (equal-power, so 2P ≈ −3 dB each, 4P ≈ −6 dB). TUNE — pending a real 4P listen.</summary>
-    public float MixGain = 1f;
 
     public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats)
     {
@@ -90,43 +91,6 @@ public partial class FlightAudio : Node
         _groundExp = MakeOneShot(archive, defs, "snd_exp_ground_a", out _groundExpVol);
     }
 
-    private AudioStreamPlayer? MakeLoop(SoundArchive archive,
-        IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
-    {
-        baseVolume = 1f;
-        if (!defs.TryGetValue(sndName, out var def))
-        {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
-            return null;
-        }
-        var stream = archive.Find(def.WavName, def.Looped);
-        if (stream == null)
-            return null;
-        baseVolume = def.Volume * 0.2f; //Temporary fix for volume
-        var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
-        AddChild(player);
-        return player;
-    }
-
-    /// <summary>Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.</summary>
-    private AudioStreamPlayer? MakeOneShot(SoundArchive archive,
-        IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
-    {
-        baseVolume = 1f;
-        if (!defs.TryGetValue(sndName, out var def))
-        {
-            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
-            return null;
-        }
-        var stream = archive.Find(def.WavName, looped: false);
-        if (stream == null)
-            return null;
-        baseVolume = def.Volume * 0.2f; // same temporary volume scale as the loops
-        var player = new AudioStreamPlayer { Stream = stream };
-        AddChild(player);
-        return player;
-    }
-
     /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
     /// Rebuilds the player only when the sound changes (a different caliber group starts firing).</summary>
     public void StartGunLoop(string? sndName)
@@ -162,15 +126,6 @@ public partial class FlightAudio : Node
     public void PlayEmptyClip() => PlayOneShot(_emptyClip, _emptyClipVol * MixGain);
 
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
-
-    /// <summary>Spin the engine loop up from silence behind snd_propstart. Used for the
-    /// initial spawn (here) and every respawn (via the loop-restart hook in Update).</summary>
-    private void StartEngine()
-    {
-        _engineRamp = 0f;
-        _engine?.Play();
-        PlayOneShot(_propStart, _propStartVol);
-    }
 
     /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed.
     /// Not called while crashed, so the loops stay dead until respawn.</summary>
@@ -269,5 +224,51 @@ public partial class FlightAudio : Node
             player.Play();
         player.PitchScale = Mathf.Max(0.01f, pitch);
         player.VolumeDb = Mathf.LinearToDb(volume);
+    }
+
+    private AudioStreamPlayer? MakeLoop(SoundArchive archive,
+        IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
+    {
+        baseVolume = 1f;
+        if (!defs.TryGetValue(sndName, out var def))
+        {
+            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            return null;
+        }
+        var stream = archive.Find(def.WavName, def.Looped);
+        if (stream == null)
+            return null;
+        baseVolume = def.Volume * 0.2f; //Temporary fix for volume
+        var player = new AudioStreamPlayer { Stream = stream, VolumeDb = -60f };
+        AddChild(player);
+        return player;
+    }
+
+    /// <summary>Loads a non-looped one-shot (crash/prop start/stop) from a sounds.json def.</summary>
+    private AudioStreamPlayer? MakeOneShot(SoundArchive archive,
+        IReadOnlyDictionary<string, SoundDef> defs, string sndName, out float baseVolume)
+    {
+        baseVolume = 1f;
+        if (!defs.TryGetValue(sndName, out var def))
+        {
+            GD.PushWarning($"sound def not found in sounds.json: {sndName}");
+            return null;
+        }
+        var stream = archive.Find(def.WavName, looped: false);
+        if (stream == null)
+            return null;
+        baseVolume = def.Volume * 0.2f; // same temporary volume scale as the loops
+        var player = new AudioStreamPlayer { Stream = stream };
+        AddChild(player);
+        return player;
+    }
+
+    /// <summary>Spin the engine loop up from silence behind snd_propstart. Used for the
+    /// initial spawn (here) and every respawn (via the loop-restart hook in Update).</summary>
+    private void StartEngine()
+    {
+        _engineRamp = 0f;
+        _engine?.Play();
+        PlayOneShot(_propStart, _propStartVol);
     }
 }

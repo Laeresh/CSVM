@@ -14,12 +14,12 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class HudFontTest : Control
 {
-    private readonly HudFont _font;
-    private readonly string _text;
-
     private const float RefTextHeight = 24f; // atlas-cell height in px at the 1440p reference
     private const float RefMarginX = 48f;    // left inset at the reference
     private const float RefMarginY = 300f;   // top inset — clear of the flight text block
+
+    private readonly HudFont _font;
+    private readonly string _text;
 
     public HudFontTest(HudFont font, string text)
     {

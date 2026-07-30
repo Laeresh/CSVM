@@ -21,67 +21,12 @@ namespace CSVM.Session;
 /// streams, so P1..P4 must draw in ascending order or every livery and spawn changes.</summary>
 public sealed class FlightRigAssembler
 {
-    /// <summary>The session-wide flight data every rig reads — loaded once by
-    /// <c>GameSession.BuildFlightRigs</c> and shared, in contrast to the per-player nodes
-    /// <see cref="Assemble"/> builds. Set once at construction; never mutated per rig.</summary>
-    public sealed class Inputs
-    {
-        /// The aircraft models' gamez (planes.zbd, or the session gamez on the empty stage).
-        public GameZ PlanesGamez = null!;
-        /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
-        public Func<string, PlaneStats> StatsFor = null!;
-        /// How many rigs this session flies — drives the log tags, the verbose-once lines and the
-        /// single-player-only controller affordances (pause/halt).
-        public int RigCount;
-        /// Splitscreen own-ship mix scale (equal power across the panes).
-        public float MixGain = 1f;
-        /// Per-player pad binding: the join flow's, or the connected roster's.
-        public int[][]? PadAssignment;
-        /// One livery stream for the session, so P1..P4 draw distinct colours from it.
-        public RandomNumberGenerator PaintRng = null!;
-        /// The session's spawn list and the index P1 takes (each player wraps on from there).
-        public List<SpawnPoint>? SpawnList;
-        public int SpawnBase;
-        /// The weapons catalogue, its message strings and the stock loadouts.
-        public WeaponDefs WeaponDefs = null!;
-        public Messages WeaponMessages = null!;
-        public StockLoadouts StockLoadouts = null!;
-        /// The one shared projectile/effect pool every player's guns fire into.
-        public ProjectilePool Projectiles = null!;
-        /// The game's HUD bitmap font and the reticle pipper texture — null when absent, which
-        /// simply omits the readout/reticle.
-        public HudFont? HudFont;
-        public Texture2D? ReticleTex;
-        /// The mission's danger zones (--stunt), and the shared race when several pilots fly them.
-        public StuntMission? StuntZones;
-        public StuntRace? Race;
-
-        // The build's archives and world outputs (BuildState's, unchanged).
-        public TextureArchive Textures = null!;
-        public string ZrdrPath = "", MissionZrdrPath = "";
-        public GameZ Gamez = null!;
-        public SceneBuilder? WorldScene;
-        public AnimRuntime? WorldRuntime;
-        public AnimProgram? CrashProgram;
-        public SoundArchive? Sounds;
-        public Dictionary<string, SoundDef>? SoundDefs;
-        public bool DebugCollision;
-    }
-
     private readonly SessionSpec _spec;
     private readonly LiveryResolver _liveries;
     private readonly SpawnPicker _spawns;
     private readonly WorldEffectsFactory _worldEffects;
     private readonly Node3D _worldRoot;
     private readonly Inputs _in;
-
-    /// <summary>Mesh instances the assembled planes added, accumulated across the rigs — the
-    /// caller folds this into the build's count.</summary>
-    public int MeshInstances { get; private set; }
-
-    /// <summary>What the assembled rigs add to the build summary line (the stunt zone count).
-    /// Accumulated so the caller appends it in the same place the loop used to.</summary>
-    public string WhatSuffix { get; private set; } = "";
 
     public FlightRigAssembler(SessionSpec spec, LiveryResolver liveries, SpawnPicker spawns,
         WorldEffectsFactory worldEffects, Node3D worldRoot, Inputs inputs)
@@ -93,6 +38,14 @@ public sealed class FlightRigAssembler
         _worldRoot = worldRoot;
         _in = inputs;
     }
+
+    /// <summary>Mesh instances the assembled planes added, accumulated across the rigs — the
+    /// caller folds this into the build's count.</summary>
+    public int MeshInstances { get; private set; }
+
+    /// <summary>What the assembled rigs add to the build summary line (the stunt zone count).
+    /// Accumulated so the caller appends it in the same place the loop used to.</summary>
+    public string WhatSuffix { get; private set; } = "";
 
     /// <summary>Builds player <paramref name="pi"/>'s aircraft into <paramref name="rig"/> and
     /// adds it to the session world. Call once per rig in ascending player order (see the class
@@ -357,5 +310,52 @@ public sealed class FlightRigAssembler
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
                 _in.WorldScene, _in.Textures, _in.CrashProgram, verbose);
         }
+    }
+
+    /// <summary>The session-wide flight data every rig reads — loaded once by
+    /// <c>GameSession.BuildFlightRigs</c> and shared, in contrast to the per-player nodes
+    /// <see cref="Assemble"/> builds. Set once at construction; never mutated per rig.</summary>
+    public sealed class Inputs
+    {
+        /// The aircraft models' gamez (planes.zbd, or the session gamez on the empty stage).
+        public GameZ PlanesGamez = null!;
+        /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
+        public Func<string, PlaneStats> StatsFor = null!;
+        /// How many rigs this session flies — drives the log tags, the verbose-once lines and the
+        /// single-player-only controller affordances (pause/halt).
+        public int RigCount;
+        /// Splitscreen own-ship mix scale (equal power across the panes).
+        public float MixGain = 1f;
+        /// Per-player pad binding: the join flow's, or the connected roster's.
+        public int[][]? PadAssignment;
+        /// One livery stream for the session, so P1..P4 draw distinct colours from it.
+        public RandomNumberGenerator PaintRng = null!;
+        /// The session's spawn list and the index P1 takes (each player wraps on from there).
+        public List<SpawnPoint>? SpawnList;
+        public int SpawnBase;
+        /// The weapons catalogue, its message strings and the stock loadouts.
+        public WeaponDefs WeaponDefs = null!;
+        public Messages WeaponMessages = null!;
+        public StockLoadouts StockLoadouts = null!;
+        /// The one shared projectile/effect pool every player's guns fire into.
+        public ProjectilePool Projectiles = null!;
+        /// The game's HUD bitmap font and the reticle pipper texture — null when absent, which
+        /// simply omits the readout/reticle.
+        public HudFont? HudFont;
+        public Texture2D? ReticleTex;
+        /// The mission's danger zones (--stunt), and the shared race when several pilots fly them.
+        public StuntMission? StuntZones;
+        public StuntRace? Race;
+
+        // The build's archives and world outputs (BuildState's, unchanged).
+        public TextureArchive Textures = null!;
+        public string ZrdrPath = "", MissionZrdrPath = "";
+        public GameZ Gamez = null!;
+        public SceneBuilder? WorldScene;
+        public AnimRuntime? WorldRuntime;
+        public AnimProgram? CrashProgram;
+        public SoundArchive? Sounds;
+        public Dictionary<string, SoundDef>? SoundDefs;
+        public bool DebugCollision;
     }
 }

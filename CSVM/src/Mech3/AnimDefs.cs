@@ -45,6 +45,24 @@ public static class AnimDefs
         return defs;
     }
 
+    /// <summary>SNAKE_CASE → PascalCase, the reader↔compiled vocabulary bridge.</summary>
+    public static string PascalCase(string snake)
+    {
+        var sb = new StringBuilder(snake.Length);
+        bool upper = true;
+        foreach (char c in snake)
+        {
+            if (c == '_')
+            {
+                upper = true;
+                continue;
+            }
+            sb.Append(upper ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
+            upper = false;
+        }
+        return sb.ToString();
+    }
+
     // Yields every value list reached by following the given alternating-key chain; the
     // last key may repeat (ANIMATION_DEFINITION does), so all its occurrences are yielded.
     private static IEnumerable<List<object?>> Walk(List<object?> list, params string[] keys)
@@ -570,24 +588,6 @@ public static class AnimDefs
             ["delta"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             { ["x"] = n[3], ["y"] = n[4], ["z"] = n[5] },
         };
-    }
-
-    /// <summary>SNAKE_CASE → PascalCase, the reader↔compiled vocabulary bridge.</summary>
-    public static string PascalCase(string snake)
-    {
-        var sb = new StringBuilder(snake.Length);
-        bool upper = true;
-        foreach (char c in snake)
-        {
-            if (c == '_')
-            {
-                upper = true;
-                continue;
-            }
-            sb.Append(upper ? char.ToUpperInvariant(c) : char.ToLowerInvariant(c));
-            upper = false;
-        }
-        return sb.ToString();
     }
 
     // Alternating key/value walk that PRESERVES duplicate keys (ZrdrDict collapses them,

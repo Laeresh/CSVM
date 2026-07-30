@@ -14,12 +14,12 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class WingLightBlinker
 {
-    private readonly List<Node3D> _flares;
-    private double _t;
-
     // TUNE: the data turns the flares on for one frame; hold them on this long so the
     // blink is clearly visible without becoming a steady glow.
     private const double FlashDuration = 0.08;
+
+    private readonly List<Node3D> _flares;
+    private double _t;
 
     private WingLightBlinker(List<Node3D> flares) => _flares = flares;
 

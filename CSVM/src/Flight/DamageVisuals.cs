@@ -38,16 +38,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class DamageVisuals
 {
-    private readonly Dictionary<string, Node3D> _panels = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, List<Node3D>> _pairedHealthy = new(StringComparer.OrdinalIgnoreCase);
-    private readonly Dictionary<string, DestroyablePart> _parts = new(StringComparer.OrdinalIgnoreCase);
-    private readonly HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<(float Frac, string Anim)> _vehicleInjure;
-    private readonly Puffer? _smokeTrail, _fireTrail;
-    private readonly List<Puffer> _panelTrailPool;
-    private readonly List<(Node3D Panel, Puffer Trail)> _panelTrails = new();
-    private bool _smoking;
-
     private const float NoseOffset = 3.5f; // m ahead of center — the data emits the trail
                                            // at prop1 (the nose engine); TUNE per plane
 
@@ -61,6 +51,16 @@ public sealed class DamageVisuals
     // The autogyro's pdp2/pdp2_h sit ±0.28 m across the centerline (mirrored, NOT the
     // same spot): opposite X signs beyond this dead band reject a candidate pair.
     private const float MirrorMinX = 0.15f;
+
+    private readonly Dictionary<string, Node3D> _panels = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, List<Node3D>> _pairedHealthy = new(StringComparer.OrdinalIgnoreCase);
+    private readonly Dictionary<string, DestroyablePart> _parts = new(StringComparer.OrdinalIgnoreCase);
+    private readonly HashSet<string> _applied = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<(float Frac, string Anim)> _vehicleInjure;
+    private readonly Puffer? _smokeTrail, _fireTrail;
+    private readonly List<Puffer> _panelTrailPool;
+    private readonly List<(Node3D Panel, Puffer Trail)> _panelTrails = new();
+    private bool _smoking;
 
     /// <param name="panels">PlaneBuilder.DamagePanels — pdpN (hidden) + pdpN_h nodes.</param>
     /// <param name="planeRoot">the built model's root — pairing measures panel mesh
@@ -83,84 +83,6 @@ public sealed class DamageVisuals
         _smokeTrail = smokeTrail;
         _fireTrail = fireTrail;
         _panelTrailPool = panelTrails ?? new List<Puffer>();
-    }
-
-    /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
-    /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
-    /// same side of the centerline). Name-based pairing is wrong on three planes — see
-    /// the class comment.</summary>
-    private void PairHealthySkins(Node3D planeRoot)
-    {
-        var torn = new List<(string Name, Vector3 Center)>();
-        var healthy = new List<(string Name, Node3D Node, Vector3 Center)>();
-        foreach (var (name, node) in _panels)
-        {
-            if (!TryMeshCenter(node, planeRoot, out var c))
-                continue;
-            if (name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
-                healthy.Add((name, node, c));
-            else
-                torn.Add((name, c));
-        }
-        foreach (var (name, node, c) in healthy)
-        {
-            string? bestName = null;
-            Vector3 bestCenter = default;
-            float bestDist = float.MaxValue;
-            foreach (var (tornName, tornCenter) in torn)
-            {
-                float d = c.DistanceTo(tornCenter);
-                if (d < bestDist)
-                    (bestDist, bestName, bestCenter) = (d, tornName, tornCenter);
-            }
-            bool mirrored = bestName != null && c.X * bestCenter.X < 0f
-                && Mathf.Abs(c.X) > MirrorMinX && Mathf.Abs(bestCenter.X) > MirrorMinX;
-            if (bestName == null || bestDist > MaxPairDistance || mirrored)
-            {
-                GD.Print($"damage panels: {name} has no co-located torn panel " +
-                         $"(nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}) — never hidden");
-                continue;
-            }
-            if (!_pairedHealthy.TryGetValue(bestName, out var list))
-                _pairedHealthy[bestName] = list = new List<Node3D>();
-            list.Add(node);
-            if (!name.Equals(bestName + "_h", StringComparison.OrdinalIgnoreCase))
-                GD.Print($"damage panels: {name} is the healthy skin of {bestName} " +
-                         $"(names crossed in the model) — paired by position");
-        }
-    }
-
-    /// <summary>Merged mesh-AABB center of the panel's subtree, in the plane root's
-    /// frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
-    /// their placement baked into the mesh — mesh AABBs locate both.</summary>
-    private static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
-    {
-        var merged = default(Aabb);
-        bool any = false;
-        void Walk(Node node)
-        {
-            if (node is MeshInstance3D mi && mi.Mesh != null)
-            {
-                var box = RelativeTo(mi, root) * mi.GetAabb();
-                merged = any ? merged.Merge(box) : box;
-                any = true;
-            }
-            foreach (var child in node.GetChildren())
-                Walk(child);
-        }
-        Walk(panel);
-        center = merged.GetCenter();
-        return any;
-    }
-
-    /// <summary>Transform of <paramref name="node"/> relative to <paramref name="root"/>
-    /// by walking parents — works before the subtree enters the scene tree.</summary>
-    private static Transform3D RelativeTo(Node3D node, Node3D root)
-    {
-        var xf = Transform3D.Identity;
-        for (Node3D? n = node; n != null && n != root; n = n.GetParent() as Node3D)
-            xf = n.Transform * xf;
-        return xf;
     }
 
     public int PanelCount => _panels.Count;
@@ -249,5 +171,83 @@ public sealed class DamageVisuals
         foreach (var (_, trail) in _panelTrails)
             trail.Clear();
         _panelTrails.Clear();
+    }
+
+    /// <summary>Merged mesh-AABB center of the panel's subtree, in the plane root's
+    /// frame. The pdpN nodes carry transforms but the _h twins sit at the origin with
+    /// their placement baked into the mesh — mesh AABBs locate both.</summary>
+    private static bool TryMeshCenter(Node3D panel, Node3D root, out Vector3 center)
+    {
+        var merged = default(Aabb);
+        bool any = false;
+        void Walk(Node node)
+        {
+            if (node is MeshInstance3D mi && mi.Mesh != null)
+            {
+                var box = RelativeTo(mi, root) * mi.GetAabb();
+                merged = any ? merged.Merge(box) : box;
+                any = true;
+            }
+            foreach (var child in node.GetChildren())
+                Walk(child);
+        }
+        Walk(panel);
+        center = merged.GetCenter();
+        return any;
+    }
+
+    /// <summary>Transform of <paramref name="node"/> relative to <paramref name="root"/>
+    /// by walking parents — works before the subtree enters the scene tree.</summary>
+    private static Transform3D RelativeTo(Node3D node, Node3D root)
+    {
+        var xf = Transform3D.Identity;
+        for (Node3D? n = node; n != null && n != root; n = n.GetParent() as Node3D)
+            xf = n.Transform * xf;
+        return xf;
+    }
+
+    /// <summary>Pairs every healthy pdpN_h skin with the torn panel occupying the same
+    /// spot on the airframe (nearest mesh-AABB center within <see cref="MaxPairDistance"/>,
+    /// same side of the centerline). Name-based pairing is wrong on three planes — see
+    /// the class comment.</summary>
+    private void PairHealthySkins(Node3D planeRoot)
+    {
+        var torn = new List<(string Name, Vector3 Center)>();
+        var healthy = new List<(string Name, Node3D Node, Vector3 Center)>();
+        foreach (var (name, node) in _panels)
+        {
+            if (!TryMeshCenter(node, planeRoot, out var c))
+                continue;
+            if (name.EndsWith("_h", StringComparison.OrdinalIgnoreCase))
+                healthy.Add((name, node, c));
+            else
+                torn.Add((name, c));
+        }
+        foreach (var (name, node, c) in healthy)
+        {
+            string? bestName = null;
+            Vector3 bestCenter = default;
+            float bestDist = float.MaxValue;
+            foreach (var (tornName, tornCenter) in torn)
+            {
+                float d = c.DistanceTo(tornCenter);
+                if (d < bestDist)
+                    (bestDist, bestName, bestCenter) = (d, tornName, tornCenter);
+            }
+            bool mirrored = bestName != null && c.X * bestCenter.X < 0f
+                && Mathf.Abs(c.X) > MirrorMinX && Mathf.Abs(bestCenter.X) > MirrorMinX;
+            if (bestName == null || bestDist > MaxPairDistance || mirrored)
+            {
+                GD.Print($"damage panels: {name} has no co-located torn panel " +
+                         $"(nearest {bestName ?? "none"} {bestDist:0.0} m{(mirrored ? ", mirrored" : "")}) — never hidden");
+                continue;
+            }
+            if (!_pairedHealthy.TryGetValue(bestName, out var list))
+                _pairedHealthy[bestName] = list = new List<Node3D>();
+            list.Add(node);
+            if (!name.Equals(bestName + "_h", StringComparison.OrdinalIgnoreCase))
+                GD.Print($"damage panels: {name} is the healthy skin of {bestName} " +
+                         $"(names crossed in the model) — paired by position");
+        }
     }
 }

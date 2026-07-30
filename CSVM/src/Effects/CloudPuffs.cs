@@ -54,26 +54,6 @@ public sealed partial class CloudPuffs : Node3D
     private const float VertFull = 200f;       // full alpha within this |Δaltitude| of the camera …
     private const float VertFade = 560f;       // … fading to 0 by here
 
-    private struct Puff
-    {
-        public Vector3 Pos;     // world position
-        public Vector3 Vel;     // drift velocity, m/s (already includes the scaled wind)
-        public float Size;      // side length, m
-        public float BaseAlpha; // per-sprite opacity
-        public float Frame;     // 0 = cloud1, 1 = cloud2
-        public float Roll;      // billboard roll, rad
-    }
-
-    private Puff[] _puffs = Array.Empty<Puff>();
-    private MultiMesh _mm = null!;
-    private int _frameCount;
-    private float _layerLo, _layerHi;  // the puff layer's world-Y bounds (band ± the margins)
-    private Vector3 _wind;
-    private bool _seeded;
-    // Puff placement, size and frame choice. One stream per field (one per splitscreen rig), drawn
-    // off the master seed's cloud stream.
-    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Clouds);
-
     private const string ShaderCode = """
         shader_type spatial;
         render_mode blend_mix, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
@@ -122,6 +102,17 @@ public sealed partial class CloudPuffs : Node3D
         }
         """;
 
+    // Puff placement, size and frame choice. One stream per field (one per splitscreen rig), drawn
+    // off the master seed's cloud stream.
+    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Clouds);
+
+    private Puff[] _puffs = Array.Empty<Puff>();
+    private MultiMesh _mm = null!;
+    private int _frameCount;
+    private float _layerLo, _layerHi;  // the puff layer's world-Y bounds (band ± the margins)
+    private Vector3 _wind;
+    private bool _seeded;
+
     /// <summary>Builds the ambient field from the cloud1/cloud2 sprite textures. Null if
     /// neither texture is in the archive. <paramref name="wind"/> is the weather WIND static
     /// velocity; <paramref name="bandBottom"/>/<paramref name="bandTop"/> the CLOUD_COVER band
@@ -134,38 +125,6 @@ public sealed partial class CloudPuffs : Node3D
         var puffs = new CloudPuffs();
         puffs.Init(atlas, frames, wind, bandBottom, bandTop);
         return puffs;
-    }
-
-    private void Init(ImageTexture atlas, int frames, Vector3 wind, float bandBottom, float bandTop)
-    {
-        Name = "cloud_puffs";
-        _frameCount = frames;
-        _wind = wind * DriftScale;
-        _layerLo = bandBottom - BandBelow;
-        _layerHi = bandTop + BandAbove;
-        _puffs = new Puff[Count];
-
-        var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
-        mat.SetShaderParameter("atlas", atlas);
-        mat.SetShaderParameter("frame_count", (float)frames);
-
-        _mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseCustomData = true,
-            Mesh = new QuadMesh { Size = Vector2.One },
-            InstanceCount = Count,
-            VisibleInstanceCount = 0,
-        };
-        AddChild(new MultiMeshInstance3D
-        {
-            Multimesh = _mm,
-            MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // Instances span the whole shell around the (moving) camera, far from this node's
-            // origin — pad the culling box so the field is never wrongly frustum-culled.
-            ExtraCullMargin = Radius,
-        });
     }
 
     /// <summary>Advances the field one frame. <paramref name="cameraPos"/> is the flight
@@ -226,32 +185,6 @@ public sealed partial class CloudPuffs : Node3D
         _mm.VisibleInstanceCount = _puffs.Length;
     }
 
-    // A puff placed around the camera in X/Z, at a world-fixed altitude in the band layer.
-    // Initial seeding fills the whole disc (uniform by area); recycled puffs spawn at the
-    // fade-in edge (so they fade in, never pop) and favour the leading hemisphere ahead.
-    private Puff SpawnPuff(Vector3 cameraPos, Vector3 cameraForward, bool initial)
-    {
-        float fwdAngle = Mathf.Atan2(cameraForward.X, cameraForward.Z);
-        float az = initial ? Rand(-Mathf.Pi, Mathf.Pi) : fwdAngle + Rand(-2.1f, 2.1f); // ±120° of forward
-        float dist = initial
-            ? Mathf.Sqrt(Rand(0f, 1f)) * Radius             // uniform over the disc area
-            : Rand(Radius * (1f - FadeInFrac), Radius);     // recycle at the fade-in edge
-        return new Puff
-        {
-            Pos = new Vector3(
-                cameraPos.X + Mathf.Sin(az) * dist,
-                Rand(_layerLo, _layerHi),                   // world-fixed altitude within the layer
-                cameraPos.Z + Mathf.Cos(az) * dist),
-            Vel = new Vector3(Rand(-RandomDrift, RandomDrift), 0f, Rand(-RandomDrift, RandomDrift)) + _wind,
-            Size = Rand(SizeMin, SizeMax),
-            BaseAlpha = Rand(BaseAlphaMin, BaseAlphaMax),
-            Frame = _rng.Next(_frameCount),
-            Roll = Rand(0f, Mathf.Tau),
-        };
-    }
-
-    private float Rand(float a, float b) => a + (float)_rng.NextDouble() * (b - a);
-
     // A horizontal 2-frame atlas (cloud1 | cloud2), alpha kept (soft translucent blobs).
     private static ImageTexture? BuildAtlas(TextureArchive textures, out int frameCount)
     {
@@ -280,5 +213,73 @@ public sealed partial class CloudPuffs : Node3D
             atlas.BlitRect(f, new Rect2I(0, 0, fw, fh), new Vector2I(i * fw, 0));
         }
         return ImageTexture.CreateFromImage(atlas);
+    }
+
+    private void Init(ImageTexture atlas, int frames, Vector3 wind, float bandBottom, float bandTop)
+    {
+        Name = "cloud_puffs";
+        _frameCount = frames;
+        _wind = wind * DriftScale;
+        _layerLo = bandBottom - BandBelow;
+        _layerHi = bandTop + BandAbove;
+        _puffs = new Puff[Count];
+
+        var mat = new ShaderMaterial { Shader = new Shader { Code = ShaderCode } };
+        mat.SetShaderParameter("atlas", atlas);
+        mat.SetShaderParameter("frame_count", (float)frames);
+
+        _mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            Mesh = new QuadMesh { Size = Vector2.One },
+            InstanceCount = Count,
+            VisibleInstanceCount = 0,
+        };
+        AddChild(new MultiMeshInstance3D
+        {
+            Multimesh = _mm,
+            MaterialOverride = mat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // Instances span the whole shell around the (moving) camera, far from this node's
+            // origin — pad the culling box so the field is never wrongly frustum-culled.
+            ExtraCullMargin = Radius,
+        });
+    }
+
+    // A puff placed around the camera in X/Z, at a world-fixed altitude in the band layer.
+    // Initial seeding fills the whole disc (uniform by area); recycled puffs spawn at the
+    // fade-in edge (so they fade in, never pop) and favour the leading hemisphere ahead.
+    private Puff SpawnPuff(Vector3 cameraPos, Vector3 cameraForward, bool initial)
+    {
+        float fwdAngle = Mathf.Atan2(cameraForward.X, cameraForward.Z);
+        float az = initial ? Rand(-Mathf.Pi, Mathf.Pi) : fwdAngle + Rand(-2.1f, 2.1f); // ±120° of forward
+        float dist = initial
+            ? Mathf.Sqrt(Rand(0f, 1f)) * Radius             // uniform over the disc area
+            : Rand(Radius * (1f - FadeInFrac), Radius);     // recycle at the fade-in edge
+        return new Puff
+        {
+            Pos = new Vector3(
+                cameraPos.X + Mathf.Sin(az) * dist,
+                Rand(_layerLo, _layerHi),                   // world-fixed altitude within the layer
+                cameraPos.Z + Mathf.Cos(az) * dist),
+            Vel = new Vector3(Rand(-RandomDrift, RandomDrift), 0f, Rand(-RandomDrift, RandomDrift)) + _wind,
+            Size = Rand(SizeMin, SizeMax),
+            BaseAlpha = Rand(BaseAlphaMin, BaseAlphaMax),
+            Frame = _rng.Next(_frameCount),
+            Roll = Rand(0f, Mathf.Tau),
+        };
+    }
+
+    private float Rand(float a, float b) => a + (float)_rng.NextDouble() * (b - a);
+
+    private struct Puff
+    {
+        public Vector3 Pos;     // world position
+        public Vector3 Vel;     // drift velocity, m/s (already includes the scaled wind)
+        public float Size;      // side length, m
+        public float BaseAlpha; // per-sprite opacity
+        public float Frame;     // 0 = cloud1, 1 = cloud2
+        public float Roll;      // billboard roll, rad
     }
 }

@@ -79,6 +79,8 @@ public sealed class SoundArchive : IDisposable
         return stream;
     }
 
+    public void Dispose() => _zip?.Dispose();
+
     private byte[]? ReadBytes(string wavName)
     {
         if (_dir != null)
@@ -93,6 +95,4 @@ public sealed class SoundArchive : IDisposable
         s.CopyTo(ms);
         return ms.ToArray();
     }
-
-    public void Dispose() => _zip?.Dispose();
 }

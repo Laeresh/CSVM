@@ -14,8 +14,6 @@ public class LoadoutTests
     private static string ConfigPath =>
         Path.Combine(TestData.RepoRoot, "CSVM", "data", "stock_loadouts.json");
 
-    private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);
-
     [Theory]
     [InlineData(30, "slug", "wep_30")]
     [InlineData(30, "dumdum", "wep_31")]
@@ -106,4 +104,6 @@ public class LoadoutTests
             }
         }
     }
+
+    private static StockLoadouts Load() => StockLoadouts.Load(ConfigPath);
 }

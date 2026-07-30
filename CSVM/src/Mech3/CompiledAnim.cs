@@ -23,24 +23,57 @@ namespace CSVM.Mech3;
 /// Scripts are loaded lazily: a chapter archive holds ~50 and a mission's defs reference a
 /// handful, so parsing all of them (megabytes of frame JSON) at world build would be waste.
 /// </summary>
+/// <summary>A per-axis cubic <c>value + c1·t + c2·t² + c3·t³</c>, stored in the archive as a
+/// 16-byte little-endian float block (base64 in the JSON layer).</summary>
+public readonly struct SiCubic
+{
+    public readonly float Value, C1, C2, C3;
+
+    public SiCubic(float value, float c1, float c2, float c3)
+    {
+        Value = value; C1 = c1; C2 = c2; C3 = c3;
+    }
+
+    public static SiCubic FromBase64(string? b64)
+    {
+        if (string.IsNullOrEmpty(b64))
+            return default;
+        Span<byte> buf = stackalloc byte[16];
+        if (!Convert.TryFromBase64String(b64, buf, out int written) || written < 16)
+            return default;
+        return new SiCubic(
+            BitConverter.ToSingle(buf[..4]), BitConverter.ToSingle(buf[4..8]),
+            BitConverter.ToSingle(buf[8..12]), BitConverter.ToSingle(buf[12..16]));
+    }
+
+    /// <summary>Evaluates at <paramref name="t"/> seconds. Non-finite coefficients occur in
+    /// the shipped data (uninitialised spline memory), so a bad result degrades to the
+    /// constant term rather than propagating NaN into a transform.</summary>
+    public float Eval(float t)
+    {
+        float v = Value + C1 * t + C2 * t * t + C3 * t * t * t;
+        return float.IsFinite(v) ? v : (float.IsFinite(Value) ? Value : 0f);
+    }
+}
+
 public sealed class AnimArchive
 {
+    /// <summary>Every definition in the archive, in the container's own def order.</summary>
+    public readonly List<AnimDefinition> Defs = new();
+
     private readonly string _path;
     private readonly bool _isDir;
     private readonly List<string> _scriptNames = new();
     private readonly Dictionary<int, SiScript?> _scriptCache = new();
-
-    /// <summary>Every definition in the archive, in the container's own def order.</summary>
-    public readonly List<AnimDefinition> Defs = new();
-
-    /// <summary>Archive-relative source label used in log lines (e.g. "C1/cam_anim").</summary>
-    public string Label { get; private set; } = "";
 
     private AnimArchive(string path, bool isDir)
     {
         _path = path;
         _isDir = isDir;
     }
+
+    /// <summary>Archive-relative source label used in log lines (e.g. "C1/cam_anim").</summary>
+    public string Label { get; private set; } = "";
 
     /// <summary>Number of SI scripts in this archive's pool (referenced by index from
     /// <see cref="AnimDefinition.SiScriptIds"/>).</summary>
@@ -71,24 +104,6 @@ public sealed class AnimArchive
         return archive;
     }
 
-    private void ReadAll()
-    {
-        // metadata.json names every def and script in container order; si_script_ids index
-        // into script_names, and each name is the extraction's file stem.
-        var meta = ParseObject(ReadEntry("metadata.json")
-            ?? throw new FileNotFoundException($"metadata.json missing from '{_path}'"));
-        foreach (var n in meta.Strings("script_names"))
-            _scriptNames.Add(n);
-        foreach (var defName in meta.Strings("anim_def_names"))
-        {
-            if (ReadEntry(defName + ".json") is not { } bytes)
-                continue; // the zero-def placeholder and any name the extraction skipped
-            var def = AnimDefinition.Parse(ParseObject(bytes), defName);
-            def.Archive = this;
-            Defs.Add(def);
-        }
-    }
-
     /// <summary>The SI script at a pool index (from a def's <c>si_script_ids</c>), parsed on
     /// first use and cached. Out-of-range or unreadable → null.</summary>
     public SiScript? Script(int index)
@@ -110,6 +125,30 @@ public sealed class AnimArchive
         return _scriptCache[index] = script;
     }
 
+    private static AnimData ParseObject(byte[] bytes)
+    {
+        using var doc = JsonDocument.Parse(bytes);
+        return new AnimData(JsonConvert.ToDictionary(doc.RootElement));
+    }
+
+    private void ReadAll()
+    {
+        // metadata.json names every def and script in container order; si_script_ids index
+        // into script_names, and each name is the extraction's file stem.
+        var meta = ParseObject(ReadEntry("metadata.json")
+            ?? throw new FileNotFoundException($"metadata.json missing from '{_path}'"));
+        foreach (var n in meta.Strings("script_names"))
+            _scriptNames.Add(n);
+        foreach (var defName in meta.Strings("anim_def_names"))
+        {
+            if (ReadEntry(defName + ".json") is not { } bytes)
+                continue; // the zero-def placeholder and any name the extraction skipped
+            var def = AnimDefinition.Parse(ParseObject(bytes), defName);
+            def.Archive = this;
+            Defs.Add(def);
+        }
+    }
+
     private byte[]? ReadEntry(string name)
     {
         if (_isDir)
@@ -127,12 +166,6 @@ public sealed class AnimArchive
         s.CopyTo(ms);
         return ms.ToArray();
     }
-
-    private static AnimData ParseObject(byte[] bytes)
-    {
-        using var doc = JsonDocument.Parse(bytes);
-        return new AnimData(JsonConvert.ToDictionary(doc.RootElement));
-    }
 }
 
 /// <summary>
@@ -144,20 +177,7 @@ public sealed class AnimArchive
 /// </summary>
 public sealed class AnimDefinition
 {
-    public string Name = "";              // the world node(s) this def anchors to
-    public string? AnimName;              // ANIMATION_NAME — what startanims/CALL_ANIMATION use
-    public string? RootName;              // ANIMATION_ROOT_NAME — attach node inside each instance
-    public bool LocalNodesOnly;
-    public string Activation = "OnCall";  // OnCall / OnStartup / WeaponHit / WeaponOrCollideHit
-    public float Health;
-    public int[] SiScriptIds = Array.Empty<int>();
-    public AnimSequence? ResetState;
     public readonly List<AnimSequence> Sequences = new();
-    public string SourceFile = "";
-    /// <summary>The archive this def came from, and therefore the pool
-    /// <see cref="SiScriptIds"/> index into. Null for zrdr-sourced defs (no scripts exist
-    /// outside the compiled archives).</summary>
-    public AnimArchive? Archive;
 
     /// <summary>
     /// This definition's symbol table: the node name each of its events refers to → that
@@ -179,6 +199,20 @@ public sealed class AnimDefinition
     /// for every other event kind, but leaves condition node indices raw) — see
     /// <c>AnimRuntime.ConditionNode</c>.</summary>
     public readonly List<string> NodeList = new();
+
+    public string Name = "";              // the world node(s) this def anchors to
+    public string? AnimName;              // ANIMATION_NAME — what startanims/CALL_ANIMATION use
+    public string? RootName;              // ANIMATION_ROOT_NAME — attach node inside each instance
+    public bool LocalNodesOnly;
+    public string Activation = "OnCall";  // OnCall / OnStartup / WeaponHit / WeaponOrCollideHit
+    public float Health;
+    public int[] SiScriptIds = Array.Empty<int>();
+    public AnimSequence? ResetState;
+    public string SourceFile = "";
+    /// <summary>The archive this def came from, and therefore the pool
+    /// <see cref="SiScriptIds"/> index into. Null for zrdr-sourced defs (no scripts exist
+    /// outside the compiled archives).</summary>
+    public AnimArchive? Archive;
 
     public bool OnStartup => Activation.Equals("OnStartup", StringComparison.OrdinalIgnoreCase);
 
@@ -232,9 +266,10 @@ public sealed class AnimDefinition
 /// the sequence runs only when a CALL_SEQUENCE names it; "Initial" runs with the animation.</summary>
 public sealed class AnimSequence
 {
+    public readonly List<AnimEvent> Events = new();
+
     public string Name = "";
     public bool OnCallOnly;
-    public readonly List<AnimEvent> Events = new();
 
     public static AnimSequence Parse(AnimData d)
     {
@@ -305,6 +340,8 @@ public sealed class AnimEvent
 /// </summary>
 public sealed class SiScript
 {
+    public readonly List<SiFrame> Frames = new();
+
     public string ScriptName = "";
     public string ObjectName = "";
 
@@ -314,7 +351,6 @@ public sealed class SiScript
     /// `base + delta·dt` instead. Baked into the cubics at parse time — see
     /// <see cref="SiVectorChannel.Parse"/>.</summary>
     public bool SplineInterp = true;
-    public readonly List<SiFrame> Frames = new();
 
     /// <summary>Total script duration = the last frame's end time (0 when empty).</summary>
     public float Duration => Frames.Count > 0 ? Frames[^1].EndTime : 0f;
@@ -462,39 +498,6 @@ public sealed class SiRotateChannel
         float.IsFinite(q.X) && float.IsFinite(q.Y) && float.IsFinite(q.Z) && float.IsFinite(q.W);
 }
 
-/// <summary>A per-axis cubic <c>value + c1·t + c2·t² + c3·t³</c>, stored in the archive as a
-/// 16-byte little-endian float block (base64 in the JSON layer).</summary>
-public readonly struct SiCubic
-{
-    public readonly float Value, C1, C2, C3;
-
-    public SiCubic(float value, float c1, float c2, float c3)
-    {
-        Value = value; C1 = c1; C2 = c2; C3 = c3;
-    }
-
-    public static SiCubic FromBase64(string? b64)
-    {
-        if (string.IsNullOrEmpty(b64))
-            return default;
-        Span<byte> buf = stackalloc byte[16];
-        if (!Convert.TryFromBase64String(b64, buf, out int written) || written < 16)
-            return default;
-        return new SiCubic(
-            BitConverter.ToSingle(buf[..4]), BitConverter.ToSingle(buf[4..8]),
-            BitConverter.ToSingle(buf[8..12]), BitConverter.ToSingle(buf[12..16]));
-    }
-
-    /// <summary>Evaluates at <paramref name="t"/> seconds. Non-finite coefficients occur in
-    /// the shipped data (uninitialised spline memory), so a bad result degrades to the
-    /// constant term rather than propagating NaN into a transform.</summary>
-    public float Eval(float t)
-    {
-        float v = Value + C1 * t + C2 * t * t + C3 * t * t * t;
-        return float.IsFinite(v) ? v : (float.IsFinite(Value) ? Value : 0f);
-    }
-}
-
 /// <summary>
 /// A parsed JSON object as a property bag with typed accessors. The compiled-anim payloads
 /// are plain objects of scalars/objects/arrays, and the event vocabulary is wide (35 kinds)
@@ -507,6 +510,14 @@ public sealed class AnimData
     private readonly Dictionary<string, object?> _props;
 
     public AnimData(Dictionary<string, object?> props) => _props = props;
+
+    public static float? AsNum(object? v) => v switch
+    {
+        float f => f,
+        double d => (float)d,
+        int i => i,
+        _ => null,
+    };
 
     public object? Get(string key) => _props.TryGetValue(key, out var v) ? v : null;
     public bool Has(string key) => _props.ContainsKey(key) && _props[key] != null;
@@ -557,14 +568,6 @@ public sealed class AnimData
             return (k, v);
         return null;
     }
-
-    public static float? AsNum(object? v) => v switch
-    {
-        float f => f,
-        double d => (float)d,
-        int i => i,
-        _ => null,
-    };
 }
 
 /// <summary>JSON → plain object tree (strings / floats / bools / lists / dictionaries), so

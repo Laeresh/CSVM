@@ -25,6 +25,10 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed partial class WorldSounds : Node3D
 {
+    /// <summary>Emitters silenced because their host node's world pose is degenerate — a
+    /// pre-existing animation-runtime defect this path merely observes (see Tick).</summary>
+    public readonly HashSet<string> DegenerateHosts = new(StringComparer.OrdinalIgnoreCase);
+
     /// <summary>
     /// Resolves a sound definition's WAV into a stream. Supplied by the caller and valid only
     /// DURING the world build, exactly like <see cref="AnimRuntime.PufferFactory"/>: the session
@@ -46,28 +50,26 @@ public sealed partial class WorldSounds : Node3D
     /// </summary>
     public Func<SoundDef, bool, AudioStreamWav?>? Loader;
 
+    /// <summary>--debug-anim: log each emitter's host, distance and playing state once a second.
+    /// Audio cannot be screenshot-verified, so this is the headless equivalent — and it is what
+    /// distinguishes "silent because the mission deactivated its host" from "silent because the
+    /// host never resolved", which look identical from the outside.</summary>
+    public bool Debug;
+
+    private const float OneShotGrace = 0.5f; // s before a non-playing one-shot is swept
+
     private readonly Dictionary<string, SoundDef> _defs;
     private readonly IReadOnlyDictionary<string, SoundGroup> _groups;
     private readonly Dictionary<string, AudioStreamWav?> _streams = new(StringComparer.OrdinalIgnoreCase);
-
-    /// <summary>One live emitter: the player plus the world node whose pose it rides.</summary>
-    private sealed class Emitter
-    {
-        public string Name = "";
-        public AudioStreamPlayer3D Player = null!;
-        public Node3D? Host;      // the node this was attached to (OBJECT_ADD_CHILD / AT_NODE)
-        public Vector3 Offset;    // in the host's own frame
-        public bool Active;       // OBJECT_ACTIVE_STATE / the compiled event's active_state
-        public bool Looped;
-    }
-
     private readonly List<Emitter> _emitters = new();
 
     // Live one-shot players (PlayOneShot). Fire-and-forget, so nothing holds them but this list —
     // swept in Tick once they stop. The grace lets Play() take effect before a not-yet-playing one
     // is mistaken for finished. FlushOneShots frees them for a harness that pumps no frames.
     private readonly List<(AudioStreamPlayer3D Player, float Age)> _oneShots = new();
-    private const float OneShotGrace = 0.5f; // s before a non-playing one-shot is swept
+
+    private float _logClock;
+    private Func<Vector3>? _listener;
 
     public WorldSounds(Dictionary<string, SoundDef> defs,
         IReadOnlyDictionary<string, SoundGroup>? groups = null)
@@ -78,17 +80,6 @@ public sealed partial class WorldSounds : Node3D
 
     public int Count => _emitters.Count;
 
-    /// <summary>Clears every <see cref="SoundGroup"/>'s last-picked memory. That memory is mutable
-    /// state outside the RNG, so a re-seeded replay diverges on the first weighted pick without
-    /// this — the caller re-seeding its generator calls it in the same breath.</summary>
-    public void ResetGroupRecency()
-    {
-        foreach (var group in _groups.Values)
-        {
-            group.ResetRecency();
-        }
-    }
-
     public IEnumerable<string> Names
     {
         get
@@ -97,6 +88,17 @@ public sealed partial class WorldSounds : Node3D
             foreach (var e in _emitters)
                 if (seen.Add(e.Name))
                     yield return e.Name;
+        }
+    }
+
+    /// <summary>Clears every <see cref="SoundGroup"/>'s last-picked memory. That memory is mutable
+    /// state outside the RNG, so a re-seeded replay diverges on the first weighted pick without
+    /// this — the caller re-seeding its generator calls it in the same breath.</summary>
+    public void ResetGroupRecency()
+    {
+        foreach (var group in _groups.Values)
+        {
+            group.ResetRecency();
         }
     }
 
@@ -132,16 +134,6 @@ public sealed partial class WorldSounds : Node3D
             decoded += PrewarmOne(name);
         }
         return decoded;
-    }
-
-    private int PrewarmOne(string name)
-    {
-        if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
-        {
-            return 0;
-        }
-        _streams[name] = Loader!(def, false);   // quiet: a missing WAV here is reported at the point of use
-        return 1;
     }
 
     /// <summary>
@@ -277,28 +269,15 @@ public sealed partial class WorldSounds : Node3D
         _oneShots.Clear();
     }
 
+    /// <summary>Where the player is, for the debug log's distance column only.</summary>
+    public void SetListener(Func<Vector3> listener) => _listener = listener;
+
     /// <summary>
     /// Positions every live emitter from its host's current world pose and gates it on the host
     /// being visible in tree — the same rule the point lights use, and for the same reason: an
     /// emitter inside a subtree the mission deactivated must be silent, or a hidden destroyed
     /// variant keeps making noise through its healthy twin.
     /// </summary>
-    /// <summary>--debug-anim: log each emitter's host, distance and playing state once a second.
-    /// Audio cannot be screenshot-verified, so this is the headless equivalent — and it is what
-    /// distinguishes "silent because the mission deactivated its host" from "silent because the
-    /// host never resolved", which look identical from the outside.</summary>
-    public bool Debug;
-
-    /// <summary>Emitters silenced because their host node's world pose is degenerate — a
-    /// pre-existing animation-runtime defect this path merely observes (see Tick).</summary>
-    public readonly HashSet<string> DegenerateHosts = new(StringComparer.OrdinalIgnoreCase);
-
-    private float _logClock;
-    private Func<Vector3>? _listener;
-
-    /// <summary>Where the player is, for the debug log's distance column only.</summary>
-    public void SetListener(Func<Vector3> listener) => _listener = listener;
-
     public void Tick()
     {
         // Sweep finished one-shots. A stopped player past the start grace is done; free it.
@@ -365,6 +344,16 @@ public sealed partial class WorldSounds : Node3D
         LogOnce();
     }
 
+    private int PrewarmOne(string name)
+    {
+        if (_streams.ContainsKey(name) || !_defs.TryGetValue(name, out var def))
+        {
+            return 0;
+        }
+        _streams[name] = Loader!(def, false);   // quiet: a missing WAV here is reported at the point of use
+        return 1;
+    }
+
     private void LogOnce()
     {
         if (!Debug)
@@ -386,5 +375,16 @@ public sealed partial class WorldSounds : Node3D
                      + $"max {e.Player.MaxDistance:0} m "
                      + (e.Player.Playing ? "PLAYING" : e.Active ? "silent" : "off"));
         }
+    }
+
+    /// <summary>One live emitter: the player plus the world node whose pose it rides.</summary>
+    private sealed class Emitter
+    {
+        public string Name = "";
+        public AudioStreamPlayer3D Player = null!;
+        public Node3D? Host;      // the node this was attached to (OBJECT_ADD_CHILD / AT_NODE)
+        public Vector3 Offset;    // in the host's own frame
+        public bool Active;       // OBJECT_ACTIVE_STATE / the compiled event's active_state
+        public bool Looped;
     }
 }

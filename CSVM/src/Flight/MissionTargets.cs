@@ -25,6 +25,8 @@ public sealed class MissionTargets
 {
     private readonly Dictionary<string, MissionTarget> _byNode = new(StringComparer.OrdinalIgnoreCase);
 
+    public int Count => _byNode.Count;
+
     /// <summary>Loads targets.json from a mission's zrdr (zip or unpacked dir). Missing file
     /// → an empty set (a mission may have none); malformed entries are skipped.</summary>
     public static MissionTargets Load(string missionZrdrPath)
@@ -68,12 +70,10 @@ public sealed class MissionTargets
         return targets;
     }
 
-    private static string? Value(List<object?> pair) => pair.Count > 1 ? pair[1] as string : null;
-
-    public int Count => _byNode.Count;
-
     /// <summary>The display keys for a world node, or an all-null <see cref="MissionTarget"/>
     /// if the node has no targets.json entry.</summary>
     public MissionTarget For(string nodeName) =>
         _byNode.TryGetValue(nodeName, out var t) ? t : default;
+
+    private static string? Value(List<object?> pair) => pair.Count > 1 ? pair[1] as string : null;
 }

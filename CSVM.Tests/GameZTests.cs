@@ -13,8 +13,6 @@ public class GameZTests
 {
     private const float Tolerance = 1e-4f;
 
-    private static GameZ Load() => GameZ.Load(TestData.Fixture("gamez-plane"));
-
     [Fact]
     public void NodesKeepTheirFlatPositionNameAndChildren()
     {
@@ -63,6 +61,8 @@ public class GameZTests
         Assert.Equal(new Vector3(0f, 1f, 0f), markers.Origin);
         Assert.True(Approx(markers.Basis, Basis.Identity));
     }
+
+    private static GameZ Load() => GameZ.Load(TestData.Fixture("gamez-plane"));
 
     private static bool Approx(Basis a, Basis b) =>
         a.Column0.DistanceTo(b.Column0) < Tolerance

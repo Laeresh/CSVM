@@ -10,8 +10,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class MessagesTests
 {
-    private static Messages Load() => Messages.Load(TestData.Fixture("messages.json"));
-
     [Fact]
     public void EntriesAreIndexedByKeyCaseInsensitively()
     {
@@ -69,4 +67,6 @@ public class MessagesTests
         Assert.Equal("plain text 5%", Messages.Fill("plain text 5%"));
         Assert.Equal("", Messages.Fill(""));
     }
+
+    private static Messages Load() => Messages.Load(TestData.Fixture("messages.json"));
 }

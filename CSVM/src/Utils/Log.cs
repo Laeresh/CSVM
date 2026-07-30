@@ -29,14 +29,6 @@ namespace CSVM.Utils;
 /// </summary>
 public static class Log
 {
-    public enum Level
-    {
-        Error = 0,
-        Warn = 1,
-        Info = 2,
-        Debug = 3,
-    }
-
     /// <summary>The category vocabulary. A category is a subsystem an investigator would want to
     /// turn up on its own; <c>ui</c> covers the launchscreen and the labs, whose state dumps a
     /// user reads on purpose and should be able to silence without silencing the session spine
@@ -62,6 +54,14 @@ public static class Log
     private static Level _threshold = DefaultThreshold;
     private static StreamWriter? _sink;
     private static bool _preludeOverflowed;
+
+    public enum Level
+    {
+        Error = 0,
+        Warn = 1,
+        Info = 2,
+        Debug = 3,
+    }
 
     /// <summary>The open log file's absolute path, or null before <see cref="Open"/>.</summary>
     public static string? SinkPath { get; private set; }

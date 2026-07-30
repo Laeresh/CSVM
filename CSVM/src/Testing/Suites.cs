@@ -15,6 +15,13 @@ namespace CSVM.Testing;
 /// </summary>
 public static class Suites
 {
+    private const int PlayerAirframes = 11;
+    private const int WeaponDefCount = 48;
+
+    /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
+    /// silently demoting one to informational cannot read as a green run.</summary>
+    private const int FlightScenarios = 6;
+
     /// <summary>Destructible instances / distinct node groups per chapter, at each chapter's
     /// default mission. Instances exceed node groups where a reader wildcard def and its compiled
     /// per-instance twin bind the same nodes.</summary>
@@ -30,12 +37,14 @@ public static class Suites
         ("C5", 568, 292),
     };
 
-    private const int PlayerAirframes = 11;
-    private const int WeaponDefCount = 48;
-
-    /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
-    /// silently demoting one to informational cannot read as a green run.</summary>
-    private const int FlightScenarios = 6;
+    /// <summary>C1 textures spanning the three alpha classes the flatten must leave alone: opaque,
+    /// hard cutout, and the soft overlays the builder alpha-blends.</summary>
+    private static readonly string[] DropInSamples =
+    {
+        "lkzepskin", "grass1", "cloudlayer", "sky1", // no alpha channel
+        "firtree1", "bush1",                          // hard cutouts
+        "abld_shadow",                                // soft baked shadow overlay
+    };
 
     public static void Register(List<TestHarness.Suite> into)
     {
@@ -58,15 +67,6 @@ public static class Suites
         into.Add(new TestHarness.Suite("tex-dropin",
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
     }
-
-    /// <summary>C1 textures spanning the three alpha classes the flatten must leave alone: opaque,
-    /// hard cutout, and the soft overlays the builder alpha-blends.</summary>
-    private static readonly string[] DropInSamples =
-    {
-        "lkzepskin", "grass1", "cloudlayer", "sky1", // no alpha channel
-        "firtree1", "bush1",                          // hard cutouts
-        "abld_shadow",                                // soft baked shadow overlay
-    };
 
     // ---- pure data -----------------------------------------------------------------------------
 

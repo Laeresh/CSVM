@@ -49,11 +49,11 @@ public static class Pads
     /// before this existed, so no scripted-verification path changes.</para></summary>
     public static bool Focused = true;
 
+    private static readonly Godot.Collections.Array<int> NoPads = new();
+
     /// <summary>Whether pad <i>input</i> is currently suppressed — the gate <see cref="For"/>
     /// applies. Not a statement about which devices exist; see <see cref="Connected"/>.</summary>
     public static bool InputBlocked => Disabled || !Focused;
-
-    private static readonly Godot.Collections.Array<int> NoPads = new();
 
     /// <summary>The pads that <b>exist</b> — the roster, for binding players to devices and for
     /// noticing a disconnect. Empty when <see cref="Disabled"/>. Deliberately NOT gated on focus:

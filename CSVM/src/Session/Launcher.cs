@@ -24,6 +24,21 @@ namespace CSVM.Session;
 /// </summary>
 public partial class Launcher : Node3D
 {
+    /// <summary>Rendered frames per <c>--perf</c> report. A frame count rather than a wall second
+    /// because under the fixed clock one rendered frame is exactly one sim step, so a window is a
+    /// fixed amount of <i>simulation</i> and two runs of the same scenario yield the same number
+    /// of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
+    /// still one report a second, so an interactive run reads as it always did.</summary>
+    private const int PerfWindowFrames = 60;
+
+    /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
+    /// and everything (both audio paths) is on it by default.</summary>
+    private const int MasterBus = 0;
+
+    // What F11's placement print receives at the launchscreen, where no session (and no rigs)
+    // exists — the same empty list the pre-split root held after a teardown.
+    private static readonly List<PlayerRig> NoRigs = new();
+
     // Everything the command line settled, parsed and resolved once (see SessionSpec). _cli is what
     // the user typed; _spec is what the LIVE session was built from — the launchscreen's pick
     // patches it — so every consumer below reads _spec and nothing re-derives a launch setting.
@@ -65,26 +80,10 @@ public partial class Launcher : Node3D
     private LaunchMenu? _menu;     // the in-game launchscreen (shown on a no-content-arg launch)
     private bool _menuDriven;      // launched into the menu → Esc from flight returns here, not quit
 
-    // What F11's placement print receives at the launchscreen, where no session (and no rigs)
-    // exists — the same empty list the pre-split root held after a teardown.
-    private static readonly List<PlayerRig> NoRigs = new();
-
     private double _perfClock;
     private int _perfFrames;
     private double _perfProcess, _perfGpu, _perfCpuRender, _perfPhysics;
     private double _perfDraws, _perfPrims, _perfNodes, _perfMem;
-
-    /// <summary>Rendered frames per <c>--perf</c> report. A frame count rather than a wall second
-    /// because under the fixed clock one rendered frame is exactly one sim step, so a window is a
-    /// fixed amount of <i>simulation</i> and two runs of the same scenario yield the same number
-    /// of samples — which is what makes a paired A/B comparable. At the vsync cap it is also
-    /// still one report a second, so an interactive run reads as it always did.</summary>
-    private const int PerfWindowFrames = 60;
-
-    /// <summary>The session clock as this frame sees it: the suites' own under
-    /// <c>--run-tests</c>, the live session's (published as <see cref="GameClock.Current"/> by its
-    /// build, nulled by its teardown) otherwise, null at the launchscreen.</summary>
-    private GameClock? ClockNow => _clock ?? GameClock.Current;
 
     // Base (chapter-independent) paths + parse state, set once in _Ready; each session node
     // receives them via LauncherContext and recomputes the chapter-dependent gamez/texture/mission
@@ -103,6 +102,35 @@ public partial class Launcher : Node3D
     // Constructed once the base paths above are settled; every --dump-*/--run-tests/--*-test/
     // --destroy= probe wrapper delegates to it (see src/Testing/ProbeRunner.cs).
     private Testing.ProbeRunner _probeRunner = null!;
+
+    // ---- Focus mute --------------------------------------------------------------------------
+    //
+    // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
+    // AudioServer *master-bus* mute rather than a factor threaded through the audio code,
+    // because there are two entirely independent audio paths and only one of them has any
+    // gain plumbing at all:
+    //   - Flight.FlightAudio  — own-plane engine/whine/rattle loops (has MixGain) plus the
+    //     crash and prop one-shots, which deliberately bypass MixGain ("one-shots stay global").
+    //   - Mech3.WorldSounds   — the ambient SOUND_NODE 3D emitters, whose VolumeDb comes
+    //     straight from the sound def. No MixGain, no shared gate, nothing to multiply.
+    // A `MixGain = 0` mute would therefore leave the whole animated world audible, and would
+    // also have to be un-set to exactly the right per-player value on the way back.
+    //
+    // The bus mute has a second property we specifically want: it does not touch
+    // FlightAudio's state at all. The engine loop keeps Playing, `_engineRamp` stays at 1, and
+    // FlightAudio.Update keeps writing the throttle curve into VolumeDb every frame while
+    // muted — so on focus-in the loop is already at its correct level and does NOT re-ramp
+    // from the -60f a fresh AudioStreamPlayer is constructed with (FlightAudio.cs:79), which
+    // is what stopping/restarting the players would have caused.
+    //
+    // `--mute` is unrelated and cannot be reused for this: it is a load-time switch that
+    // simply never constructs FlightAudio/WorldSounds, so there is nothing to toggle.
+    private bool _focusMuted;
+
+    /// <summary>The session clock as this frame sees it: the suites' own under
+    /// <c>--run-tests</c>, the live session's (published as <see cref="GameClock.Current"/> by its
+    /// build, nulled by its teardown) otherwise, null at the launchscreen.</summary>
+    private GameClock? ClockNow => _clock ?? GameClock.Current;
 
     public override void _Ready()
     {
@@ -399,6 +427,80 @@ public partial class Launcher : Node3D
         LaunchSession();
     }
 
+    public override void _Notification(int what)
+    {
+        // The APPLICATION_* pair, not the WM_WINDOW_* pair: the application-level notifications
+        // are what a real focus change delivers here. Measured on Windows 11 / Godot 4.7 while
+        // implementing this: another app taking the foreground sends 1005
+        // (WM_WINDOW_FOCUS_OUT) then 2017 (APPLICATION_FOCUS_OUT), and coming back sends 2016
+        // then 1004. Note that *minimising* the window from another process delivers neither —
+        // only the mouse enter/exit pair — so a manual test must alt-tab, not minimise.
+        // Godot 4's constants are longs; _Notification hands us an int.
+        if (what == (int)NotificationApplicationFocusOut)
+        {
+            SetFocusMuted(true);
+        }
+        else if (what == (int)NotificationApplicationFocusIn)
+        {
+            SetFocusMuted(false);
+        }
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
+        {
+            // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
+            if (_menu is { Visible: true })
+                return;
+            // Esc out of a menu-launched flight tears the world down and returns to the
+            // launchscreen; a CLI-launched run just quits, as before.
+            if (_menuDriven && _session is { InSession: true })
+            {
+                ReturnToMenu();
+                return;
+            }
+            GetTree().Quit();
+            return;
+        }
+        // F12 anywhere (orbit view or free flight): grab the current frame to a file.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
+        {
+            Testing.CaptureDirector.SaveScreenshot(GetViewport());
+            return;
+        }
+        // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
+        // args, so a hand-framed orbit (or a spot found while flying) can be reproduced for a
+        // deterministic --screenshot run.
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
+        {
+            _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
+            return;
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        // The --run-tests clock is the only one this node owns; the session node advances its own
+        // at the very top of the frame (ProcessPriority -1000, one notch ahead of this).
+        if (_clock is { } clock)
+        {
+            clock.BeginFrame(delta);
+        }
+        // Publish the frame's instant to the shaders, so the animated surfaces (UV scroll,
+        // precipitation) and the CPU sim never disagree within a frame. Written unconditionally:
+        // with no session clock — the launchscreen, or the frame after a teardown — it keeps
+        // running on wall time so nothing on screen stalls behind the menu.
+        ShaderTime.Advance(ClockNow, delta);
+        // The frame-budget report stays on wall time: it is an instrument, and an instrument that
+        // freezes with the thing it measures reports nothing.
+        if (_spec.Perf)
+            ReportPerf(delta);
+
+        _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
+            _session?.Plane, _menu is { Visible: true });
+    }
+
     /// <summary>Instantiates this launch's session node from the current <see cref="_spec"/> and
     /// the persistent references, and runs its build. Returns the build's verdict; on false the
     /// partial session node is left for the caller (the menu flow returns to the launchscreen, a
@@ -524,53 +626,6 @@ public partial class Launcher : Node3D
         ShowLaunchMenu();
     }
 
-    public override void _Notification(int what)
-    {
-        // The APPLICATION_* pair, not the WM_WINDOW_* pair: the application-level notifications
-        // are what a real focus change delivers here. Measured on Windows 11 / Godot 4.7 while
-        // implementing this: another app taking the foreground sends 1005
-        // (WM_WINDOW_FOCUS_OUT) then 2017 (APPLICATION_FOCUS_OUT), and coming back sends 2016
-        // then 1004. Note that *minimising* the window from another process delivers neither —
-        // only the mouse enter/exit pair — so a manual test must alt-tab, not minimise.
-        // Godot 4's constants are longs; _Notification hands us an int.
-        if (what == (int)NotificationApplicationFocusOut)
-        {
-            SetFocusMuted(true);
-        }
-        else if (what == (int)NotificationApplicationFocusIn)
-        {
-            SetFocusMuted(false);
-        }
-    }
-
-    // ---- Focus mute --------------------------------------------------------------------------
-    //
-    // Alt-tabbing away silences the game; alt-tabbing back restores it. The mute is an
-    // AudioServer *master-bus* mute rather than a factor threaded through the audio code,
-    // because there are two entirely independent audio paths and only one of them has any
-    // gain plumbing at all:
-    //   - Flight.FlightAudio  — own-plane engine/whine/rattle loops (has MixGain) plus the
-    //     crash and prop one-shots, which deliberately bypass MixGain ("one-shots stay global").
-    //   - Mech3.WorldSounds   — the ambient SOUND_NODE 3D emitters, whose VolumeDb comes
-    //     straight from the sound def. No MixGain, no shared gate, nothing to multiply.
-    // A `MixGain = 0` mute would therefore leave the whole animated world audible, and would
-    // also have to be un-set to exactly the right per-player value on the way back.
-    //
-    // The bus mute has a second property we specifically want: it does not touch
-    // FlightAudio's state at all. The engine loop keeps Playing, `_engineRamp` stays at 1, and
-    // FlightAudio.Update keeps writing the throttle curve into VolumeDb every frame while
-    // muted — so on focus-in the loop is already at its correct level and does NOT re-ramp
-    // from the -60f a fresh AudioStreamPlayer is constructed with (FlightAudio.cs:79), which
-    // is what stopping/restarting the players would have caused.
-    //
-    // `--mute` is unrelated and cannot be reused for this: it is a load-time switch that
-    // simply never constructs FlightAudio/WorldSounds, so there is nothing to toggle.
-    private bool _focusMuted;
-
-    /// <summary>Master-bus index. This project ships no bus layout, so Master is the only bus
-    /// and everything (both audio paths) is on it by default.</summary>
-    private const int MasterBus = 0;
-
     /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
     /// the notification can arrive more than once — and it only ever clears a mute it set itself,
     /// so it cannot stomp on a mute from anywhere else.</summary>
@@ -592,61 +647,6 @@ public partial class Launcher : Node3D
         GD.Print(muted
             ? "focus: lost — audio muted, pad reads gated"
             : "focus: regained — audio restored, pad reads live");
-    }
-
-    public override void _UnhandledInput(InputEvent @event)
-    {
-        if (@event is InputEventKey { Pressed: true, Keycode: Key.Escape })
-        {
-            // While the launchscreen is up it owns Esc (back / quit from the Mode screen).
-            if (_menu is { Visible: true })
-                return;
-            // Esc out of a menu-launched flight tears the world down and returns to the
-            // launchscreen; a CLI-launched run just quits, as before.
-            if (_menuDriven && _session is { InSession: true })
-            {
-                ReturnToMenu();
-                return;
-            }
-            GetTree().Quit();
-            return;
-        }
-        // F12 anywhere (orbit view or free flight): grab the current frame to a file.
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F12 })
-        {
-            Testing.CaptureDirector.SaveScreenshot(GetViewport());
-            return;
-        }
-        // F11 anywhere: print the mode's subject placement as ready-to-paste --pos=/--direction=
-        // args, so a hand-framed orbit (or a spot found while flying) can be reproduced for a
-        // deterministic --screenshot run.
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F11 })
-        {
-            _captureDirector.PrintPlacement(_spec, _session?.Rigs ?? NoRigs, _camera, _orbit);
-            return;
-        }
-    }
-
-    public override void _Process(double delta)
-    {
-        // The --run-tests clock is the only one this node owns; the session node advances its own
-        // at the very top of the frame (ProcessPriority -1000, one notch ahead of this).
-        if (_clock is { } clock)
-        {
-            clock.BeginFrame(delta);
-        }
-        // Publish the frame's instant to the shaders, so the animated surfaces (UV scroll,
-        // precipitation) and the CPU sim never disagree within a frame. Written unconditionally:
-        // with no session clock — the launchscreen, or the frame after a teardown — it keeps
-        // running on wall time so nothing on screen stalls behind the menu.
-        ShaderTime.Advance(ClockNow, delta);
-        // The frame-budget report stays on wall time: it is an instrument, and an instrument that
-        // freezes with the thing it measures reports nothing.
-        if (_spec.Perf)
-            ReportPerf(delta);
-
-        _captureDirector.Tick(GetViewport(), GetTree(), _spec, ClockNow, _orbit, _camera,
-            _session?.Plane, _menu is { Visible: true });
     }
 
     /// <summary>

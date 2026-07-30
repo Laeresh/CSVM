@@ -272,37 +272,9 @@ public sealed class PufferState
 /// </summary>
 public sealed partial class Puffer : Node3D
 {
-    private struct Particle
-    {
-        public Vector3 Pos, Vel;
-        public float BaseSize, Age, Life;
-        public float Frame; // static-TEXTURES pool: the randomly picked atlas column
-    }
-
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
     // and out so particles don't pop at spawn/death. The flipbook itself already dims.
     private const float FadeIn = 0.12f, FadeOutStart = 0.6f;
-
-    private PufferState _state = null!;
-    private MultiMeshInstance3D _mmi = null!;
-    private MultiMesh _mm = null!;
-    private Particle[] _particles = Array.Empty<Particle>();
-    private int _liveCount;
-    // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
-    // puffer stream, so a run repeats and two emitters still scatter independently.
-    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
-
-    private bool _emitting;
-    private float _sinceStart;
-    private int _burstsSpawned, _burstsTotal;
-    private bool _active;
-
-    private bool _trailing;        // distance-interval trail mode (DISTANCE_INTERVAL states)
-    private Vector3 _trailPrev;    // last emit-line end, world space
-    private float _trailCarry;     // meters of motion carried into the next interval
-
-    private bool _sustaining;      // continuous TIME_INTERVAL mode (AnimRuntime's PUFFER_STATE)
-    private float _sustainCarry;   // seconds carried into the next emission interval
 
     private const int TrailPool = 640; // live-particle cap for trail emitters
     // A sustained emitter never stops, so its pool is sized to the steady-state population
@@ -362,6 +334,32 @@ public sealed partial class Puffer : Node3D
         }
         """;
 
+    // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
+    // puffer stream, so a run repeats and two emitters still scatter independently.
+    private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
+
+    private PufferState _state = null!;
+    private MultiMeshInstance3D _mmi = null!;
+    private MultiMesh _mm = null!;
+    private Particle[] _particles = Array.Empty<Particle>();
+    private int _liveCount;
+
+    private bool _emitting;
+    private float _sinceStart;
+    private int _burstsSpawned, _burstsTotal;
+    private bool _active;
+
+    private bool _trailing;        // distance-interval trail mode (DISTANCE_INTERVAL states)
+    private Vector3 _trailPrev;    // last emit-line end, world space
+    private float _trailCarry;     // meters of motion carried into the next interval
+
+    private bool _sustaining;      // continuous TIME_INTERVAL mode (AnimRuntime's PUFFER_STATE)
+    private float _sustainCarry;   // seconds carried into the next emission interval
+
+    /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
+    /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
+    public int LiveCount => _liveCount;
+
     /// <summary>Builds an emitter for <paramref name="state"/>, loading its flipbook (or
     /// static TEXTURES pool) frames from <paramref name="textures"/> into an atlas. Null
     /// if no frame texture is found. <paramref name="activeDuration"/> is how long a
@@ -407,69 +405,6 @@ public sealed partial class Puffer : Node3D
             parent.AddChild(puffer);
         return puffer;
     }
-
-    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
-        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
-    {
-        _state = state;
-        Name = "puffer_" + state.Name;
-        if (sustained)
-        {
-            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
-                                         / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
-            _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
-        }
-        else if (state.DistanceInterval > 0f)
-        {
-            _particles = new Particle[TrailPool];
-        }
-        else
-        {
-            // Emit at t = 0, TimeInterval, 2·TimeInterval, … while active.
-            _burstsTotal = Mathf.Max(1, Mathf.FloorToInt(activeDuration / Mathf.Max(state.TimeInterval, 1e-3f) + 1e-3f) + 1);
-            _particles = new Particle[state.Number * _burstsTotal];
-        }
-
-        // Auto keeps the COLORS-ramp rule (ramp ⇒ mix, else add); the explicit modes override
-        // it — the crash smokeball is MIX despite carrying no ramp, because its textures are
-        // near-black with a smoke-shaped alpha, which adds ~0 (invisible) but masks correctly.
-        string blendMode = blend switch
-        {
-            PufferBlend.Additive => "blend_add",
-            PufferBlend.Mix => "blend_mix",
-            _ => state.Colors.Count > 0 ? "blend_mix" : "blend_add",
-        };
-        var code = ShaderCode
-            .Replace("BLEND_MODE", blendMode)
-            .Replace("SOFT_EXPR", softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
-        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
-        mat.SetShaderParameter("atlas", atlas);
-        mat.SetShaderParameter("frame_count", (float)frameCount);
-
-        _mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseCustomData = true,
-            UseColors = true,
-            Mesh = new QuadMesh { Size = Vector2.One },
-            InstanceCount = _particles.Length,
-            VisibleInstanceCount = 0,
-        };
-        _mmi = new MultiMeshInstance3D
-        {
-            Multimesh = _mm,
-            MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // billboarding moves verts off the MultiMesh's computed AABB — pad culling
-            ExtraCullMargin = Mathf.Max(4f, state.SizeMax * state.GrowthFactor),
-        };
-        AddChild(_mmi);
-        Visible = false;
-    }
-
-    /// <summary>Live particle count — diagnostics only (the <c>--debug-anim</c> puffer census, which
-    /// is how a headless run confirms a crash's emitters are actually spawning).</summary>
-    public int LiveCount => _liveCount;
 
     /// <summary>Fire one burst at a fixed world position (decoupled from any moving parent).</summary>
     public void Burst(Vector3 worldPosition)
@@ -595,53 +530,6 @@ public sealed partial class Puffer : Node3D
     /// <summary>Stops sustained emission; live particles finish their lifetimes.</summary>
     public void SustainEnd() => _sustaining = false;
 
-    private void SpawnSustained(Vector3 worldPos, Basis worldBasis)
-    {
-        var min = _state.MinRandomVelocity;
-        var max = _state.MaxRandomVelocity;
-        // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
-        // is not. Rotating the local part is what keeps a banking/turning emitter correct.
-        var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
-        // AT_NODE's offset is likewise in the host's own frame — this is what spreads C1's
-        // three waterfall splash puffers (±11 m sideways) instead of stacking them on the
-        // shared anchor node's exact origin.
-        var origin = worldPos + worldBasis * _state.AtNodeOffset;
-        float d = _state.DeviationDistance;
-        for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
-        {
-            _particles[_liveCount++] = new Particle
-            {
-                Pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
-                Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-                BaseSize = Rand(_state.SizeMin, _state.SizeMax),
-                Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-                Age = 0f,
-                Frame = _state.TextureSequence.Count > 0 ? 0f
-                    : Mathf.Min(_state.Textures.Count - 1,
-                        Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
-            };
-        }
-    }
-
-    private void SpawnTrailPuff(Vector3 worldPos)
-    {
-        if (_liveCount >= _particles.Length)
-            return; // pool exhausted — oldest puffs finish before new ones spawn
-        var min = _state.MinRandomVelocity;
-        var max = _state.MaxRandomVelocity;
-        float d = _state.DeviationDistance;
-        _particles[_liveCount++] = new Particle
-        {
-            Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
-            Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-            BaseSize = Rand(_state.SizeMin, _state.SizeMax),
-            Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
-            Age = 0f,
-            Frame = _state.TextureSequence.Count > 0 ? 0f
-                : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
-        };
-    }
-
     public override void _Process(double delta)
     {
         if (!_active)
@@ -694,6 +582,145 @@ public sealed partial class Puffer : Node3D
         }
     }
 
+    private static float FadeFor(float lifeFrac) =>
+        lifeFrac < FadeIn ? lifeFrac / FadeIn
+        : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
+        : 1f;
+
+    private static ImageTexture? BuildAtlas(IReadOnlyList<string> names, TextureArchive textures)
+    {
+        if (names.Count == 0)
+            return null;
+        var frames = new Image[names.Count];
+        int fw = 0, fh = 0;
+        for (int i = 0; i < names.Count; i++)
+        {
+            var tex = textures.Find(names[i]);
+            if (tex == null)
+                return null;
+            var img = tex.GetImage();
+            img.Convert(Image.Format.Rgba8);
+            frames[i] = img;
+            fw = Mathf.Max(fw, img.GetWidth());
+            fh = Mathf.Max(fh, img.GetHeight());
+        }
+        var atlas = Image.CreateEmpty(fw * names.Count, fh, false, Image.Format.Rgba8);
+        for (int i = 0; i < frames.Length; i++)
+        {
+            var f = frames[i];
+            if (f.GetWidth() != fw || f.GetHeight() != fh)
+                f.Resize(fw, fh);
+            atlas.BlitRect(f, new Rect2I(0, 0, fw, fh), new Vector2I(i * fw, 0));
+        }
+        return ImageTexture.CreateFromImage(atlas);
+    }
+
+    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
+        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
+    {
+        _state = state;
+        Name = "puffer_" + state.Name;
+        if (sustained)
+        {
+            int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
+                                         / Mathf.Max(state.TimeInterval, 1e-3f)) + state.Number;
+            _particles = new Particle[Mathf.Clamp(steady, SustainPoolMin, SustainPoolMax)];
+        }
+        else if (state.DistanceInterval > 0f)
+        {
+            _particles = new Particle[TrailPool];
+        }
+        else
+        {
+            // Emit at t = 0, TimeInterval, 2·TimeInterval, … while active.
+            _burstsTotal = Mathf.Max(1, Mathf.FloorToInt(activeDuration / Mathf.Max(state.TimeInterval, 1e-3f) + 1e-3f) + 1);
+            _particles = new Particle[state.Number * _burstsTotal];
+        }
+
+        // Auto keeps the COLORS-ramp rule (ramp ⇒ mix, else add); the explicit modes override
+        // it — the crash smokeball is MIX despite carrying no ramp, because its textures are
+        // near-black with a smoke-shaped alpha, which adds ~0 (invisible) but masks correctly.
+        string blendMode = blend switch
+        {
+            PufferBlend.Additive => "blend_add",
+            PufferBlend.Mix => "blend_mix",
+            _ => state.Colors.Count > 0 ? "blend_mix" : "blend_add",
+        };
+        var code = ShaderCode
+            .Replace("BLEND_MODE", blendMode)
+            .Replace("SOFT_EXPR", softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
+        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
+        mat.SetShaderParameter("atlas", atlas);
+        mat.SetShaderParameter("frame_count", (float)frameCount);
+
+        _mm = new MultiMesh
+        {
+            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
+            UseCustomData = true,
+            UseColors = true,
+            Mesh = new QuadMesh { Size = Vector2.One },
+            InstanceCount = _particles.Length,
+            VisibleInstanceCount = 0,
+        };
+        _mmi = new MultiMeshInstance3D
+        {
+            Multimesh = _mm,
+            MaterialOverride = mat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            // billboarding moves verts off the MultiMesh's computed AABB — pad culling
+            ExtraCullMargin = Mathf.Max(4f, state.SizeMax * state.GrowthFactor),
+        };
+        AddChild(_mmi);
+        Visible = false;
+    }
+
+    private void SpawnSustained(Vector3 worldPos, Basis worldBasis)
+    {
+        var min = _state.MinRandomVelocity;
+        var max = _state.MaxRandomVelocity;
+        // LOCAL_VELOCITY is in the emitter node's frame (the smokestack's "up"); WORLD_VELOCITY
+        // is not. Rotating the local part is what keeps a banking/turning emitter correct.
+        var baseVel = worldBasis * _state.LocalVelocity + _state.WorldVelocity;
+        // AT_NODE's offset is likewise in the host's own frame — this is what spreads C1's
+        // three waterfall splash puffers (±11 m sideways) instead of stacking them on the
+        // shared anchor node's exact origin.
+        var origin = worldPos + worldBasis * _state.AtNodeOffset;
+        float d = _state.DeviationDistance;
+        for (int k = 0; k < _state.Number && _liveCount < _particles.Length; k++)
+        {
+            _particles[_liveCount++] = new Particle
+            {
+                Pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+                Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
+                BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+                Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
+                Age = 0f,
+                Frame = _state.TextureSequence.Count > 0 ? 0f
+                    : Mathf.Min(_state.Textures.Count - 1,
+                        Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+            };
+        }
+    }
+
+    private void SpawnTrailPuff(Vector3 worldPos)
+    {
+        if (_liveCount >= _particles.Length)
+            return; // pool exhausted — oldest puffs finish before new ones spawn
+        var min = _state.MinRandomVelocity;
+        var max = _state.MaxRandomVelocity;
+        float d = _state.DeviationDistance;
+        _particles[_liveCount++] = new Particle
+        {
+            Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
+            Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
+            BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+            Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
+            Age = 0f,
+            Frame = _state.TextureSequence.Count > 0 ? 0f
+                : Mathf.Min(_state.Textures.Count - 1, Mathf.FloorToInt((float)_rng.NextDouble() * _state.Textures.Count)),
+        };
+    }
+
     /// <summary>Interpolates the COLORS (lifeFrac, color) ramp.</summary>
     private Color RampColor(float lifeFrac)
     {
@@ -740,38 +767,12 @@ public sealed partial class Puffer : Node3D
         return frame;
     }
 
-    private static float FadeFor(float lifeFrac) =>
-        lifeFrac < FadeIn ? lifeFrac / FadeIn
-        : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
-        : 1f;
-
     private float Rand(float a, float b) => a + (float)_rng.NextDouble() * (b - a);
 
-    private static ImageTexture? BuildAtlas(IReadOnlyList<string> names, TextureArchive textures)
+    private struct Particle
     {
-        if (names.Count == 0)
-            return null;
-        var frames = new Image[names.Count];
-        int fw = 0, fh = 0;
-        for (int i = 0; i < names.Count; i++)
-        {
-            var tex = textures.Find(names[i]);
-            if (tex == null)
-                return null;
-            var img = tex.GetImage();
-            img.Convert(Image.Format.Rgba8);
-            frames[i] = img;
-            fw = Mathf.Max(fw, img.GetWidth());
-            fh = Mathf.Max(fh, img.GetHeight());
-        }
-        var atlas = Image.CreateEmpty(fw * names.Count, fh, false, Image.Format.Rgba8);
-        for (int i = 0; i < frames.Length; i++)
-        {
-            var f = frames[i];
-            if (f.GetWidth() != fw || f.GetHeight() != fh)
-                f.Resize(fw, fh);
-            atlas.BlitRect(f, new Rect2I(0, 0, fw, fh), new Vector2I(i * fw, 0));
-        }
-        return ImageTexture.CreateFromImage(atlas);
+        public Vector3 Pos, Vel;
+        public float BaseSize, Age, Life;
+        public float Frame; // static-TEXTURES pool: the randomly picked atlas column
     }
 }

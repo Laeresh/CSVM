@@ -21,6 +21,10 @@ public sealed partial class SpectatorCamera : Node
 {
     /// <summary>Base movement speed in m/s, before the boost/slow modifiers. TUNE.</summary>
     public const float DefaultSpeed = 180f;
+
+    /// <summary>Shows the live position/speed readout (on by default; off for screenshots).</summary>
+    public bool ShowReadout = true;
+
     private const float MinSpeed = 2f, MaxSpeed = 6000f;
     private const float BoostFactor = 6f, SlowFactor = 6f;
     private const float MouseLookRate = 0.0035f;   // radians per pixel of mouse motion. TUNE.
@@ -28,15 +32,36 @@ public sealed partial class SpectatorCamera : Node
     private const float PadLookRate = 2.4f;        // radians/s at full right-stick deflection. TUNE.
     private const float PadDeadzone = 0.18f;
     private const float PitchLimit = 1.5533f;      // ~89°, so the view never gimbals over the top
+    private const float OrbitMinDist = 3f, OrbitMaxDist = 8000f;
+    // Kept short of straight-above so the look-at (Basis.LookingAt) never gets parallel to world
+    // up, which is degenerate.
+    private const float OrbitPitchLimit = 1.396f; // ~80°
 
     private readonly Camera3D _camera;
+
     private float _yaw, _pitch;
     private float _speed = DefaultSpeed;
     private bool _looking;                          // right mouse button held
     private Label? _readout;
+    // Spherical offset of the eye from the target: distance, azimuth, elevation.
+    private float _orbitYaw, _orbitPitch, _orbitDist;
 
-    /// <summary>Shows the live position/speed readout (on by default; off for screenshots).</summary>
-    public bool ShowReadout = true;
+    public SpectatorCamera(Camera3D camera, Vector3 position, Vector3 lookAt)
+    {
+        _camera = camera;
+        _camera.Position = position;
+        var to = lookAt - position;
+        // Derive the starting yaw/pitch from the requested look direction so --pos/--direction
+        // (and the mission spawn default) frame exactly what they asked for. Only the DIRECTION
+        // survives — the distance to the point is discarded, which is why the host may hand this
+        // camera either a --lookat point or a --direction projected one unit ahead.
+        if (to.LengthSquared() > 1e-6f)
+        {
+            _yaw = Mathf.Atan2(-to.X, -to.Z);
+            _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
+        }
+        ApplyOrientation();
+    }
 
     /// <summary>The camera this drives — exposed so the anim lab can project mouse-pick rays
     /// through it (the lab reuses this camera as its freecam).</summary>
@@ -50,12 +75,10 @@ public sealed partial class SpectatorCamera : Node
     /// <see cref="FollowNode"/>; cleared the moment the user translates (WASD/QE / pad), so flying
     /// off ends the lock while the mouse keeps it. Read for the lab's status line.</summary>
     public Node3D? Follow { get; private set; }
-    // Spherical offset of the eye from the target: distance, azimuth, elevation.
-    private float _orbitYaw, _orbitPitch, _orbitDist;
-    private const float OrbitMinDist = 3f, OrbitMaxDist = 8000f;
-    // Kept short of straight-above so the look-at (Basis.LookingAt) never gets parallel to world
-    // up, which is degenerate.
-    private const float OrbitPitchLimit = 1.396f; // ~80°
+
+    // True while a text input owns keyboard focus (the picker's filter): the camera polls raw key
+    // state, which bypasses GUI focus, so without this typing WASD would fly the camera.
+    private bool KeyboardCaptured => GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit;
 
     /// <summary>Lock onto a node and orbit it, seeding the orbit from the camera's current offset
     /// (so <see cref="Frame"/> having just placed the eye means no jump). Null releases the lock.</summary>
@@ -84,23 +107,6 @@ public sealed partial class SpectatorCamera : Node
         var to = center - pos;
         _yaw = Mathf.Atan2(-to.X, -to.Z);
         _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
-        ApplyOrientation();
-    }
-
-    public SpectatorCamera(Camera3D camera, Vector3 position, Vector3 lookAt)
-    {
-        _camera = camera;
-        _camera.Position = position;
-        var to = lookAt - position;
-        // Derive the starting yaw/pitch from the requested look direction so --pos/--direction
-        // (and the mission spawn default) frame exactly what they asked for. Only the DIRECTION
-        // survives — the distance to the point is discarded, which is why the host may hand this
-        // camera either a --lookat point or a --direction projected one unit ahead.
-        if (to.LengthSquared() > 1e-6f)
-        {
-            _yaw = Mathf.Atan2(-to.X, -to.Z);
-            _pitch = Mathf.Clamp(Mathf.Asin(Mathf.Clamp(to.Normalized().Y, -1f, 1f)), -PitchLimit, PitchLimit);
-        }
         ApplyOrientation();
     }
 
@@ -192,6 +198,45 @@ public sealed partial class SpectatorCamera : Node
         UpdateReadout();
     }
 
+    // -1 when only `negative` is down, +1 when only `positive` is, 0 for neither or both.
+    private static float Axis(Key negative, Key positive) =>
+        (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
+
+    // Any-pad reads, matching the project's phantom-device policy (never pads[0]): take the
+    // largest-magnitude value across every connected pad, so idle/phantom devices read ~0.
+    // Through Pads.For(null) rather than Pads.Connected(): these are input *reads*, so they are
+    // gated on window focus as well as on --no-pads.
+    private static float PadAxis(JoyAxis axis)
+    {
+        float best = 0f;
+        foreach (int device in Pads.For(null))
+        {
+            float v = Input.GetJoyAxis(device, axis);
+            if (Mathf.Abs(v) > Mathf.Abs(best))
+                best = v;
+        }
+        return Mathf.Abs(best) < PadDeadzone ? 0f : best;
+    }
+
+    private static float PadTrigger(JoyAxis axis)
+    {
+        float best = 0f;
+        foreach (int device in Pads.For(null))
+            best = Mathf.Max(best, Input.GetJoyAxis(device, axis));
+        return best;
+    }
+
+    private static float PadButtonAxis()
+    {
+        bool up = false, down = false;
+        foreach (int device in Pads.For(null))
+        {
+            up |= Input.IsJoyButtonPressed(device, JoyButton.RightShoulder);
+            down |= Input.IsJoyButtonPressed(device, JoyButton.LeftShoulder);
+        }
+        return (up ? 1f : 0f) - (down ? 1f : 0f);
+    }
+
     private void UpdateReadout()
     {
         if (_readout == null)
@@ -242,10 +287,6 @@ public sealed partial class SpectatorCamera : Node
                || PadButtonAxis() != 0f;
     }
 
-    // True while a text input owns keyboard focus (the picker's filter): the camera polls raw key
-    // state, which bypasses GUI focus, so without this typing WASD would fly the camera.
-    private bool KeyboardCaptured => GetViewport().GuiGetFocusOwner() is LineEdit or TextEdit;
-
     private void Look(float dt)
     {
         // Keyboard fallback (IJKL) and the right stick both feed the same yaw/pitch as the
@@ -294,44 +335,5 @@ public sealed partial class SpectatorCamera : Node
         // Yaw about world up, then pitch about the camera's own X: no roll term ever enters,
         // so the horizon stays level.
         _camera.Basis = new Basis(Vector3.Up, _yaw) * new Basis(Vector3.Right, _pitch);
-    }
-
-    // -1 when only `negative` is down, +1 when only `positive` is, 0 for neither or both.
-    private static float Axis(Key negative, Key positive) =>
-        (Input.IsKeyPressed(positive) ? 1f : 0f) - (Input.IsKeyPressed(negative) ? 1f : 0f);
-
-    // Any-pad reads, matching the project's phantom-device policy (never pads[0]): take the
-    // largest-magnitude value across every connected pad, so idle/phantom devices read ~0.
-    // Through Pads.For(null) rather than Pads.Connected(): these are input *reads*, so they are
-    // gated on window focus as well as on --no-pads.
-    private static float PadAxis(JoyAxis axis)
-    {
-        float best = 0f;
-        foreach (int device in Pads.For(null))
-        {
-            float v = Input.GetJoyAxis(device, axis);
-            if (Mathf.Abs(v) > Mathf.Abs(best))
-                best = v;
-        }
-        return Mathf.Abs(best) < PadDeadzone ? 0f : best;
-    }
-
-    private static float PadTrigger(JoyAxis axis)
-    {
-        float best = 0f;
-        foreach (int device in Pads.For(null))
-            best = Mathf.Max(best, Input.GetJoyAxis(device, axis));
-        return best;
-    }
-
-    private static float PadButtonAxis()
-    {
-        bool up = false, down = false;
-        foreach (int device in Pads.For(null))
-        {
-            up |= Input.IsJoyButtonPressed(device, JoyButton.RightShoulder);
-            down |= Input.IsJoyButtonPressed(device, JoyButton.LeftShoulder);
-        }
-        return (up ? 1f : 0f) - (down ? 1f : 0f);
     }
 }

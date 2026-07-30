@@ -39,6 +39,26 @@ public sealed partial class SplitScreen : CanvasLayer
 
     private const int Gutter = 2;   // px between panes (TUNE)
 
+    // Per-player identity colours: the launchscreen's join strip and plane-select
+    // cursors, and later the race HUD/scoreboard rows, all key off these so a player
+    // recognises "their" colour from the menu through to the results. P1 keeps the launchscreen's
+    // existing gold focus colour so a single-player menu looks exactly as it did. TUNE.
+    private static readonly Color[] Colors4 =
+    {
+        new(1f, 0.86f, 0.38f),   // P1 gold
+        new(0.45f, 0.83f, 1f),   // P2 sky blue
+        new(0.55f, 0.95f, 0.55f),// P3 green
+        new(1f, 0.60f, 0.85f),   // P4 pink
+    };
+
+    private readonly List<SubViewport> _views = new();
+    private readonly List<SubViewportContainer> _panes = new();
+    private Control _root = null!;
+
+    /// <summary>One SubViewport per player, in player order. Add the player's camera (and its
+    /// HUD canvases) to it.</summary>
+    public IReadOnlyList<SubViewport> Views => _views;
+
     /// <summary>Where player <paramref name="index"/>'s pane sits in a <paramref name="size"/>
     /// area shared by <paramref name="players"/> players: 2P stacked top/bottom, 3–4P a 2×2 grid
     /// (3P's fourth quadrant unused). Static and public because the launchscreen's splitscreen
@@ -53,29 +73,9 @@ public sealed partial class SplitScreen : CanvasLayer
         return new Rect2(col * (paneW + Gutter), row * (paneH + Gutter), paneW, paneH);
     }
 
-    private readonly List<SubViewport> _views = new();
-    private readonly List<SubViewportContainer> _panes = new();
-    private Control _root = null!;
-
-    /// <summary>One SubViewport per player, in player order. Add the player's camera (and its
-    /// HUD canvases) to it.</summary>
-    public IReadOnlyList<SubViewport> Views => _views;
-
     /// <summary>The private visual layer of player <paramref name="index"/> — put that player's
     /// camera-anchored copies (skydome / cloud deck / cloud puffs) on it.</summary>
     public static uint PlayerVisualLayer(int index) => 1u << (PlayerLayerBit0 + index);
-
-    // Per-player identity colours: the launchscreen's join strip and plane-select
-    // cursors, and later the race HUD/scoreboard rows, all key off these so a player
-    // recognises "their" colour from the menu through to the results. P1 keeps the launchscreen's
-    // existing gold focus colour so a single-player menu looks exactly as it did. TUNE.
-    private static readonly Color[] Colors4 =
-    {
-        new(1f, 0.86f, 0.38f),   // P1 gold
-        new(0.45f, 0.83f, 1f),   // P2 sky blue
-        new(0.55f, 0.95f, 0.55f),// P3 green
-        new(1f, 0.60f, 0.85f),   // P4 pink
-    };
 
     /// <summary>Player <paramref name="index"/>'s identity colour (menu cursor, HUD tags).</summary>
     public static Color PlayerColor(int index) => Colors4[Mathf.PosMod(index, Colors4.Length)];

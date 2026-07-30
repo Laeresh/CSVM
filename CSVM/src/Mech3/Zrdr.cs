@@ -14,19 +14,6 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class Zrdr
 {
-    /// <summary>The names a requested reader file may be stored under. mech3ax v0.6.1
-    /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
-    /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
-    /// identical — all 222 readers verified semantically equal across the two — so only
-    /// the lookup needs to accept both.</summary>
-    private static IEnumerable<string> CandidateNames(string fileName)
-    {
-        yield return fileName;
-        var stem = Path.GetFileNameWithoutExtension(fileName);
-        if (fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
-            yield return stem + ".zrd.json";
-    }
-
     /// <summary>Loads one reader file (e.g. "vehicle.json") from a zrdr ZIP or a directory of JSON files.</summary>
     public static List<object?> LoadFile(string zrdrPath, string fileName)
     {
@@ -111,6 +98,19 @@ public static class Zrdr
         }
     }
 
+    /// <summary>The names a requested reader file may be stored under. mech3ax v0.6.1
+    /// replaced the source extension ("vehicle.zrd" → "vehicle.json"); the fork appends
+    /// instead ("vehicle.zrd.json"), keeping the original extension visible. Content is
+    /// identical — all 222 readers verified semantically equal across the two — so only
+    /// the lookup needs to accept both.</summary>
+    private static IEnumerable<string> CandidateNames(string fileName)
+    {
+        yield return fileName;
+        var stem = Path.GetFileNameWithoutExtension(fileName);
+        if (fileName.EndsWith(".json", StringComparison.OrdinalIgnoreCase))
+            yield return stem + ".zrd.json";
+    }
+
     private static object? Convert(JsonElement e) => e.ValueKind switch
     {
         JsonValueKind.Array => ConvertList(e),
@@ -137,6 +137,11 @@ public static class Zrdr
 public sealed class ZrdrDict
 {
     private readonly Dictionary<string, List<object?>> _props = new(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>Every key present, in no particular order (duplicates already collapsed). Lets a
+    /// typed reader assert it consumed every key its source file carries — see
+    /// <see cref="Flight.WeaponDefs"/>'s unhandled-key check.</summary>
+    public IReadOnlyCollection<string> Keys => _props.Keys;
 
     public static ZrdrDict FromAlternating(List<object?> list)
     {
@@ -166,11 +171,6 @@ public sealed class ZrdrDict
     }
 
     public bool Has(string key) => _props.ContainsKey(key);
-
-    /// <summary>Every key present, in no particular order (duplicates already collapsed). Lets a
-    /// typed reader assert it consumed every key its source file carries — see
-    /// <see cref="Flight.WeaponDefs"/>'s unhandled-key check.</summary>
-    public IReadOnlyCollection<string> Keys => _props.Keys;
 
     public List<object?>? List(string key) => _props.TryGetValue(key, out var v) ? v : null;
 

@@ -43,8 +43,14 @@ public sealed class AnimProgram
     /// and the last write wins.</summary>
     public readonly List<string> StartAnims = new();
 
+    /// <summary>Mission-scope reader defs the mission's compiled manifest does not list, so
+    /// were not instantiated (diagnostics — this is the C1/IA1 zeppelin + parked train).</summary>
+    public readonly List<string> MissionLibrarySkipped = new();
+
     private readonly Dictionary<string, List<AnimDefinition>> _byAnimName =
         new(StringComparer.OrdinalIgnoreCase);
+
+    private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
 
     public int CompiledCount { get; private set; }
     public int ReaderCount { get; private set; }
@@ -105,29 +111,19 @@ public sealed class AnimProgram
         return program;
     }
 
-    /// <summary>Mission-scope reader defs the mission's compiled manifest does not list, so
-    /// were not instantiated (diagnostics — this is the C1/IA1 zeppelin + parked train).</summary>
-    public readonly List<string> MissionLibrarySkipped = new();
-
-    /// <summary>Definition identity: (anchor name, animation name) — exactly how the compiled
-    /// extraction names its files, so a reader def and its compiled twin share a key.</summary>
-    private static string KeyOf(AnimDefinition def) => $"{def.Name}\0{def.AnimName}";
-
-    private readonly HashSet<string> _seen = new(StringComparer.OrdinalIgnoreCase);
-
-    private void Add(AnimDefinition def, bool compiled)
+    /// <summary>The chapter/mission compiled-archive paths for a session, preferring the
+    /// unpacked sibling directory ExtractAssets.ps1 -Unzip leaves next to each zip (loose
+    /// JSON: no decompression per def), exactly like every other loader in this project.</summary>
+    public static (string Chapter, string Mission) ArchivePaths(string repoRoot, string chapter, string mission)
     {
-        var key = KeyOf(def);
-        if (!_seen.Add(key))
-            return;
-        Defs.Add(def);
-        if (compiled) CompiledCount++; else ReaderCount++;
-        if (!string.IsNullOrEmpty(def.AnimName))
+        static string Prefer(string zipPath)
         {
-            if (!_byAnimName.TryGetValue(def.AnimName!, out var list))
-                _byAnimName[def.AnimName!] = list = new List<AnimDefinition>();
-            list.Add(def);
+            var dir = Path.Combine(Path.GetDirectoryName(zipPath) ?? "",
+                Path.GetFileNameWithoutExtension(zipPath));
+            return Directory.Exists(dir) ? dir : zipPath;
         }
+        return (Prefer(Path.Combine(repoRoot, "extracted", chapter, "cam_anim.zip")),
+                Prefer(Path.Combine(repoRoot, "extracted", chapter, mission, "mis_anim.zip")));
     }
 
     /// <summary>Definitions an ANIMATION_NAME refers to (startanims entries, CALL_ANIMATION
@@ -203,6 +199,35 @@ public sealed class AnimProgram
     /// </summary>
     public IEnumerable<string> OneShotSoundNames() => SoundNamesOfKind("Sound");
 
+    /// <summary>The SI script a def's OBJECT_MOTION_SI_SCRIPT slot refers to. The event
+    /// carries an index into the def's own <c>si_script_ids</c>, which in turn indexes its
+    /// archive's script pool — so both hops happen here.</summary>
+    public SiScript? ScriptFor(AnimDefinition def, int slot)
+    {
+        if (def.Archive == null || slot < 0 || slot >= def.SiScriptIds.Length)
+            return null;
+        return def.Archive.Script(def.SiScriptIds[slot]);
+    }
+
+    /// <summary>Definition identity: (anchor name, animation name) — exactly how the compiled
+    /// extraction names its files, so a reader def and its compiled twin share a key.</summary>
+    private static string KeyOf(AnimDefinition def) => $"{def.Name}\0{def.AnimName}";
+
+    private void Add(AnimDefinition def, bool compiled)
+    {
+        var key = KeyOf(def);
+        if (!_seen.Add(key))
+            return;
+        Defs.Add(def);
+        if (compiled) CompiledCount++; else ReaderCount++;
+        if (!string.IsNullOrEmpty(def.AnimName))
+        {
+            if (!_byAnimName.TryGetValue(def.AnimName!, out var list))
+                _byAnimName[def.AnimName!] = list = new List<AnimDefinition>();
+            list.Add(def);
+        }
+    }
+
     private IEnumerable<string> SoundNamesOfKind(string kind)
     {
         var seen = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
@@ -242,16 +267,6 @@ public sealed class AnimProgram
         }
     }
 
-    /// <summary>The SI script a def's OBJECT_MOTION_SI_SCRIPT slot refers to. The event
-    /// carries an index into the def's own <c>si_script_ids</c>, which in turn indexes its
-    /// archive's script pool — so both hops happen here.</summary>
-    public SiScript? ScriptFor(AnimDefinition def, int slot)
-    {
-        if (def.Archive == null || slot < 0 || slot >= def.SiScriptIds.Length)
-            return null;
-        return def.Archive.Script(def.SiScriptIds[slot]);
-    }
-
     // startanims.json: [["NEW_GAME_START", [[name], [name], …], "LOAD_GAME_START", …]]
     private void LoadStartAnims(string missionZrdr)
     {
@@ -270,20 +285,5 @@ public sealed class AnimProgram
         {
             // startanims.json is optional (not every mission folder has one)
         }
-    }
-
-    /// <summary>The chapter/mission compiled-archive paths for a session, preferring the
-    /// unpacked sibling directory ExtractAssets.ps1 -Unzip leaves next to each zip (loose
-    /// JSON: no decompression per def), exactly like every other loader in this project.</summary>
-    public static (string Chapter, string Mission) ArchivePaths(string repoRoot, string chapter, string mission)
-    {
-        static string Prefer(string zipPath)
-        {
-            var dir = Path.Combine(Path.GetDirectoryName(zipPath) ?? "",
-                Path.GetFileNameWithoutExtension(zipPath));
-            return Directory.Exists(dir) ? dir : zipPath;
-        }
-        return (Prefer(Path.Combine(repoRoot, "extracted", chapter, "cam_anim.zip")),
-                Prefer(Path.Combine(repoRoot, "extracted", chapter, mission, "mis_anim.zip")));
     }
 }

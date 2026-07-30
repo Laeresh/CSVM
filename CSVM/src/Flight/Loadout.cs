@@ -24,19 +24,16 @@ public sealed class StockLoadouts
 
     private readonly Dictionary<string, LoadoutDef> _byDef = new(StringComparer.OrdinalIgnoreCase);
 
-    public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
+    /// <summary>The committed config's default location (res://), independent of <c>--data-root</c>:
+    /// it is engine config, not extracted game data.</summary>
+    public static string DefaultPath => ProjectSettings.GlobalizePath("res://data/stock_loadouts.json");
 
-    /// <summary>The def's stock loadout, or null when the plane isn't in the file.</summary>
-    public LoadoutDef? For(string defName) => _byDef.TryGetValue(defName, out var d) ? d : null;
+    public IReadOnlyDictionary<string, LoadoutDef> All => _byDef;
 
     /// <summary>A gun's stock weapon id: caliber N + ammo k → <c>wep_{N+k}</c> (the wep_30..73
     /// player matrix, each caliber's four ammo types consecutive). Stock ammo <c>slug</c> → <c>wep_N</c>.</summary>
     public static string GunWeaponId(int caliber, string ammo) =>
         $"wep_{caliber + (AmmoIndex.TryGetValue(ammo, out var k) ? k : 0)}";
-
-    /// <summary>The committed config's default location (res://), independent of <c>--data-root</c>:
-    /// it is engine config, not extracted game data.</summary>
-    public static string DefaultPath => ProjectSettings.GlobalizePath("res://data/stock_loadouts.json");
 
     /// <summary>Loads the stock-loadout file (defaults to <see cref="DefaultPath"/>).</summary>
     public static StockLoadouts Load(string? path = null)
@@ -96,6 +93,9 @@ public sealed class StockLoadouts
         return loadouts;
     }
 
+    /// <summary>The def's stock loadout, or null when the plane isn't in the file.</summary>
+    public LoadoutDef? For(string defName) => _byDef.TryGetValue(defName, out var d) ? d : null;
+
     private static string Str(JsonElement e, string key) =>
         e.TryGetProperty(key, out var v) && v.ValueKind == JsonValueKind.String ? v.GetString() ?? "" : "";
 
@@ -144,16 +144,16 @@ public sealed class HardpointSpec
 /// </summary>
 public sealed class Loadout
 {
-    public LoadoutDef Def { get; }
-    public IReadOnlyList<GunGroup> Guns { get; }
-    public IReadOnlyList<Hardpoint> Hardpoints { get; }
-
     private Loadout(LoadoutDef def, List<GunGroup> guns, List<Hardpoint> hardpoints)
     {
         Def = def;
         Guns = guns;
         Hardpoints = hardpoints;
     }
+
+    public LoadoutDef Def { get; }
+    public IReadOnlyList<GunGroup> Guns { get; }
+    public IReadOnlyList<Hardpoint> Hardpoints { get; }
 
     /// <summary>The gun groups the player can actually fire (turret slots excluded — inert in M3).</summary>
     public IEnumerable<GunGroup> FirableGuns

@@ -38,6 +38,22 @@ public sealed class GameClock
     /// a session still ticks.</summary>
     public static GameClock? Current;
 
+    public RunMode Mode = RunMode.Realtime;
+
+    /// <summary>Sim frozen in place: no steps advance until <see cref="StepOnce"/> queues one.
+    /// Orthogonal to the mode — every mode can halt.</summary>
+    public bool Halted;
+
+    /// <summary>Time-scale multiplier (the animation lab's 0.1×–4× transport). 1 = real speed.</summary>
+    public float Scale = 1f;
+
+    // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
+    // slow frames honest without turning a debugger breakpoint stall into fast-forward.
+    private const float MaxAccum = 0.25f;
+
+    private float _accum;
+    private bool _stepPending;
+
     public enum RunMode
     {
         /// <summary>One step per rendered frame, at the wall delta.</summary>
@@ -49,19 +65,6 @@ public sealed class GameClock
         /// <summary>Exactly one fixed step per rendered frame; wall time ignored.</summary>
         FixedStep,
     }
-
-    // A hitch must not unwind as a burst of catch-up steps: a quarter second (15 steps) keeps
-    // slow frames honest without turning a debugger breakpoint stall into fast-forward.
-    private const float MaxAccum = 0.25f;
-
-    public RunMode Mode = RunMode.Realtime;
-
-    /// <summary>Sim frozen in place: no steps advance until <see cref="StepOnce"/> queues one.
-    /// Orthogonal to the mode — every mode can halt.</summary>
-    public bool Halted;
-
-    /// <summary>Time-scale multiplier (the animation lab's 0.1×–4× transport). 1 = real speed.</summary>
-    public float Scale = 1f;
 
     /// <summary>Sim steps advanced since the session started.</summary>
     public long Frame { get; private set; }
@@ -82,9 +85,6 @@ public sealed class GameClock
     /// <summary>True when <see cref="PhysicsDt"/> returns 0 for everyone, i.e. the session must
     /// drive the physics-stepped consumers itself, <see cref="Steps"/> times, in tree order.</summary>
     public bool ParentDriven => Halted || Mode != RunMode.Realtime;
-
-    private float _accum;
-    private bool _stepPending;
 
     /// <summary>Queue exactly one step through a halt (the <c>.</c> transport key).</summary>
     public void StepOnce() => _stepPending = true;

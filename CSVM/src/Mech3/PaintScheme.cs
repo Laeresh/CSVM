@@ -27,13 +27,6 @@ public sealed class PaintScheme
     /// archive upper-case (<c>HUGHES</c>, <c>FORTUNE</c>); <see cref="FolderName"/> bridges them.</summary>
     public string Pattern = "";
 
-    /// <summary>The archive folder this pattern's masks live in. vehicle.json's
-    /// <c>player_fortune</c> is the archive's <c>FORTUNE</c>; every other name maps by
-    /// upper-casing.</summary>
-    public string FolderName => string.Equals(Pattern, "player_fortune", StringComparison.OrdinalIgnoreCase)
-        ? "FORTUNE"
-        : Pattern.ToUpperInvariant();
-
     /// <summary>Paint slot 1–3, applied to the skin's first/second/third keyed region
     /// (see <see cref="PlanePainter"/>). Slot 1 is the body.</summary>
     public Color Color1 = new(0.58f, 0.64f, 0.76f);
@@ -48,16 +41,34 @@ public sealed class PaintScheme
     public int TailDecal = -1;
     public int WingDecal = -1;
 
-    public Color ColorFor(int slot) => slot switch { 0 => Color1, 1 => Color2, _ => Color3 };
+    // player_fortune ships a pattern name and NO colours (they come from wherever the engine
+    // keeps its pattern defaults — still not located), so the catalog entry has to supply
+    // them. Red from the paint UI's own swatch and a saved .pln at 0x68; black + white for
+    // slots 2/3 read off the reference top view in
+    // OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png, where the Bloodhawk's outer wing
+    // panels are BLACK and the swoosh dividing them WHITE. That is the same shape every
+    // shipped scheme has (identity colour, dark trim, light trim) — `hughes` is
+    // yellow/black/white — and rendering all three combinations against the reference singled
+    // this one out: white/white loses the black wing entirely, black in slot 3 puts it on the
+    // swoosh instead of the panel.
+    // Corroborated independently once "Shade" was explained (it is the colour's BRIGHTNESS,
+    // so the stored RGB is Colour x Shade): that same screenshot's dropdowns read red/red,
+    // white/BLACK, white/white — slot 2 being white at black brightness IS black. Two
+    // unrelated routes, same triple. See paint.md.
+    private static readonly Color FortuneRed = FromBytes(223, 0, 41);
+    private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
+    private static readonly Color FortuneFlash = FromBytes(255, 255, 255);
+
+    /// <summary>The archive folder this pattern's masks live in. vehicle.json's
+    /// <c>player_fortune</c> is the archive's <c>FORTUNE</c>; every other name maps by
+    /// upper-casing.</summary>
+    public string FolderName => string.Equals(Pattern, "player_fortune", StringComparison.OrdinalIgnoreCase)
+        ? "FORTUNE"
+        : Pattern.ToUpperInvariant();
 
     /// <summary>Display label for HUD/menu use — the pattern name if the scheme came from
     /// the shipped catalog, else a colour summary.</summary>
     public string Label => string.IsNullOrEmpty(Pattern) ? "custom" : Pattern;
-
-    public override string ToString() =>
-        $"{Label} [{Fmt(Color1)} {Fmt(Color2)} {Fmt(Color3)}] decals {NoseDecal}/{TailDecal}/{WingDecal}";
-
-    private static string Fmt(Color c) => $"{(int)Math.Round(c.R * 255)},{(int)Math.Round(c.G * 255)},{(int)Math.Round(c.B * 255)}";
 
     /// <summary>The 12 named schemes shipped in vehicle.json, deduplicated by pattern name
     /// (the <c>_2</c>/<c>_3</c>/<c>_5</c> per-chapter roster duplicates repeat their base
@@ -104,41 +115,6 @@ public sealed class PaintScheme
         return list;
     }
 
-    // player_fortune ships a pattern name and NO colours (they come from wherever the engine
-    // keeps its pattern defaults — still not located), so the catalog entry has to supply
-    // them. Red from the paint UI's own swatch and a saved .pln at 0x68; black + white for
-    // slots 2/3 read off the reference top view in
-    // OriginalScreenshots/CustomPlane Paint1 Bloodhawk.png, where the Bloodhawk's outer wing
-    // panels are BLACK and the swoosh dividing them WHITE. That is the same shape every
-    // shipped scheme has (identity colour, dark trim, light trim) — `hughes` is
-    // yellow/black/white — and rendering all three combinations against the reference singled
-    // this one out: white/white loses the black wing entirely, black in slot 3 puts it on the
-    // swoosh instead of the panel.
-    // Corroborated independently once "Shade" was explained (it is the colour's BRIGHTNESS,
-    // so the stored RGB is Colour x Shade): that same screenshot's dropdowns read red/red,
-    // white/BLACK, white/white — slot 2 being white at black brightness IS black. Two
-    // unrelated routes, same triple. See paint.md.
-    private static readonly Color FortuneRed = FromBytes(223, 0, 41);
-    private static readonly Color FortuneTrim = FromBytes(0, 0, 0);
-    private static readonly Color FortuneFlash = FromBytes(255, 255, 255);
-
-    private static Color ReadColor(ZrdrDict d, string key, Color fallback)
-    {
-        var l = d.List(key);
-        if (l == null || l.Count < 3)
-            return fallback;
-        return FromBytes(Byte(l[0]), Byte(l[1]), Byte(l[2]));
-    }
-
-    private static int Byte(object? o) => o switch
-    {
-        long v => (int)v,
-        int v => v,
-        double v => (int)Math.Round(v),
-        float v => (int)Math.Round(v),
-        _ => 0,
-    };
-
     /// <summary>Integer 0–255 triple → Color. The stored values are DX7-era sRGB, the same
     /// space the fullbright skin shader samples in, so no linearization here.</summary>
     public static Color FromBytes(int r, int g, int b) =>
@@ -175,6 +151,30 @@ public sealed class PaintScheme
             WingDecal = rng.RandiRange(0, 20),
         };
     }
+
+    public Color ColorFor(int slot) => slot switch { 0 => Color1, 1 => Color2, _ => Color3 };
+
+    public override string ToString() =>
+        $"{Label} [{Fmt(Color1)} {Fmt(Color2)} {Fmt(Color3)}] decals {NoseDecal}/{TailDecal}/{WingDecal}";
+
+    private static string Fmt(Color c) => $"{(int)Math.Round(c.R * 255)},{(int)Math.Round(c.G * 255)},{(int)Math.Round(c.B * 255)}";
+
+    private static Color ReadColor(ZrdrDict d, string key, Color fallback)
+    {
+        var l = d.List(key);
+        if (l == null || l.Count < 3)
+            return fallback;
+        return FromBytes(Byte(l[0]), Byte(l[1]), Byte(l[2]));
+    }
+
+    private static int Byte(object? o) => o switch
+    {
+        long v => (int)v,
+        int v => v,
+        double v => (int)Math.Round(v),
+        float v => (int)Math.Round(v),
+        _ => 0,
+    };
 
     // Slot 1: half the time an actual shipped squadron colour, half a fresh hue held to the
     // saturation/value band those colours occupy (measured over the twelve: s 0.15–1.0,

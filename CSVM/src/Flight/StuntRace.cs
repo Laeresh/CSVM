@@ -31,6 +31,7 @@ public sealed class Racer
     /// <summary>The player's identity colour + short tag, shared with the launchscreen's join
     /// strip and plane select so a player recognises "their" colour from menu to results.</summary>
     public Color Color => UI.SplitScreen.PlayerColor(Index);
+
     public string Tag => UI.SplitScreen.PlayerTag(Index);
 }
 
@@ -53,6 +54,9 @@ public sealed class StuntRace
 {
     private readonly List<Racer> _racers = new();
 
+    /// <summary>Fired once when the last player finishes (the results board wakes on it).</summary>
+    public event Action? RaceCompleted;
+
     /// <summary>The racers in player order (index 0 = player 1).</summary>
     public IReadOnlyList<Racer> Racers => _racers;
 
@@ -62,8 +66,15 @@ public sealed class StuntRace
     /// <summary>True once every player is in — the shared results board's cue.</summary>
     public bool AllFinished => _racers.Count > 0 && FinishedCount >= _racers.Count;
 
-    /// <summary>Fired once when the last player finishes (the results board wakes on it).</summary>
-    public event Action? RaceCompleted;
+    /// <summary>"1st" / "2nd" / "3rd" / "4th" — placings, shared by the marker HUD's finish banner
+    /// and the results board.</summary>
+    public static string Ordinal(int rank) => rank switch
+    {
+        1 => "1st",
+        2 => "2nd",
+        3 => "3rd",
+        _ => $"{rank}th",
+    };
 
     /// <summary>Enters a player, hooking their run's completion so it stamps a placing. Call in
     /// player order at session build; the mission is theirs alone
@@ -84,22 +95,6 @@ public sealed class StuntRace
             if (r.Index == index)
                 return r;
         return null;
-    }
-
-    private void OnFinished(Racer racer)
-    {
-        if (racer.Finished)
-            return; // a rematch re-subscribes nothing, but never double-count a stray event
-        FinishedCount++;
-        racer.Rank = FinishedCount;
-        racer.FinishTime = racer.Mission.Elapsed;
-        GD.Print($"stunt race: {racer.Tag} finished {Ordinal(racer.Rank)} " +
-                 $"in {StuntMission.FormatTime(racer.FinishTime)} ({racer.PlaneDisplay})");
-        if (AllFinished)
-        {
-            GD.Print("stunt race: RACE COMPLETE");
-            RaceCompleted?.Invoke();
-        }
     }
 
     /// <summary>Rematch (R on the results board): every player's zones, clock and placing cleared,
@@ -134,13 +129,19 @@ public sealed class StuntRace
         return ordered;
     }
 
-    /// <summary>"1st" / "2nd" / "3rd" / "4th" — placings, shared by the marker HUD's finish banner
-    /// and the results board.</summary>
-    public static string Ordinal(int rank) => rank switch
+    private void OnFinished(Racer racer)
     {
-        1 => "1st",
-        2 => "2nd",
-        3 => "3rd",
-        _ => $"{rank}th",
-    };
+        if (racer.Finished)
+            return; // a rematch re-subscribes nothing, but never double-count a stray event
+        FinishedCount++;
+        racer.Rank = FinishedCount;
+        racer.FinishTime = racer.Mission.Elapsed;
+        GD.Print($"stunt race: {racer.Tag} finished {Ordinal(racer.Rank)} " +
+                 $"in {StuntMission.FormatTime(racer.FinishTime)} ({racer.PlaneDisplay})");
+        if (AllFinished)
+        {
+            GD.Print("stunt race: RACE COMPLETE");
+            RaceCompleted?.Invoke();
+        }
+    }
 }

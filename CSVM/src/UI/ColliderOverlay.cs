@@ -49,6 +49,10 @@ public sealed partial class ColliderOverlay : Node
     // immediate, cheap enough that it is a list walk, not a tree walk.
     private const double SyncInterval = 0.15;
 
+    // How many names a flip line prints before it says how many more there were. The COUNTS above
+    // are never elided — a truncated name list must not read as a smaller change.
+    private const int MaxNames = 12;
+
     private static readonly Color WorldColor = new(0.35f, 0.65f, 1f);
     private static readonly Color WaterColor = new(0.2f, 1f, 0.9f);
     private static readonly Color BuildingColor = new(1f, 0.55f, 0.15f);
@@ -56,25 +60,19 @@ public sealed partial class ColliderOverlay : Node
     private static readonly Color PlaneColor = new(1f, 0.9f, 0.25f);
     private static readonly Color OtherColor = new(1f, 0.3f, 1f);
 
+    private static StandardMaterial3D? _lineMaterial;
+
     private readonly Node3D _world;
     private readonly bool _collisionBuilt;
     private readonly List<Entry> _entries = new();
     private readonly List<MeshInstance3D> _unswitched = new();
+
     private bool _built, _shown, _debugDone;
     private double _sinceSync;
     private int _lastOn = -1, _lastOff = -1;
     private CanvasLayer? _hudLayer;
     private Label? _hud;
     private string _summary = "";
-
-    /// <summary>One node-backed shape and the wireframe drawn for it. The wireframe's visibility
-    /// tracks the shape's own <c>Disabled</c> flag, which is what the destructible swap moves.</summary>
-    private sealed class Entry
-    {
-        public required CollisionShape3D Shape;
-        public required MeshInstance3D Draw;
-        public required bool WasEnabled;
-    }
 
     public ColliderOverlay(Node3D world, bool collisionBuilt)
     {
@@ -164,103 +162,6 @@ public sealed partial class ColliderOverlay : Node
         // wreck's on, and the signed sum of that reads as death ADDING collision.
         Log.Info("world", $"collider overlay {(_shown ? "on" : "off")} — {_summary} · switched on {_lastOn} · switched off {_lastOff}");
     }
-
-    // ---- building ------------------------------------------------------------------------------
-
-    private void Build()
-    {
-        _built = true;
-        int lines = 0, boxed = 0, unknown = 0;
-        var perClass = new Dictionary<string, int>();
-
-        void Walk(Node n)
-        {
-            if (n is Node3D marked && marked.HasMeta(SelectionService.OverlayMeta))
-            {
-                return; // our own drawings
-            }
-            if (n is CollisionShape3D { Shape: { } shape } cs && HasGeometry(shape))
-            {
-                string cls = ClassOf(cs);
-                var mesh = new ImmediateMesh();
-                bool asBox = EmitShape(mesh, shape, Transform3D.Identity, ColorFor(cls), ref lines);
-                if (asBox)
-                {
-                    boxed++;
-                }
-                var draw = MakeDraw(mesh, cs, $"col_wire_{cls}");
-                _entries.Add(new Entry { Shape = cs, Draw = draw, WasEnabled = !cs.Disabled });
-                perClass[cls] = perClass.GetValueOrDefault(cls) + 1;
-            }
-            else if (n is StaticBody3D body && body.GetChildCount() == 0)
-            {
-                // The clutter region bodies: shapes attached to the body RID, no child nodes.
-                int drawn = EmitBodyShapes(body, ref lines, ref boxed);
-                if (drawn > 0)
-                {
-                    perClass["clutter"] = perClass.GetValueOrDefault("clutter") + drawn;
-                }
-                else if (PhysicsServer3D.BodyGetShapeCount(body.GetRid()) > 0)
-                {
-                    unknown++;
-                }
-            }
-            foreach (var child in n.GetChildren())
-            {
-                Walk(child);
-            }
-        }
-        Walk(_world);
-
-        foreach (var (root, collider) in Planes)
-        {
-            var mesh = new ImmediateMesh();
-            mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
-            foreach (var part in collider.Parts)
-            {
-                EmitBox(mesh, part.Local, part.Shape.Size, PlaneColor);
-                lines += 12;
-            }
-            mesh.SurfaceEnd();
-            // The airframe boxes are cast per frame by the flight code rather than being switched
-            // on and off, so they follow the overlay itself.
-            _unswitched.Add(MakeDraw(mesh, root, "col_wire_plane"));
-            perClass["plane"] = perClass.GetValueOrDefault("plane") + collider.Parts.Count;
-        }
-
-        var parts = new List<string>();
-        foreach (var (cls, count) in perClass)
-        {
-            parts.Add($"{cls} {count}");
-        }
-        parts.Sort(StringComparer.Ordinal);
-        _summary = $"colliders: {string.Join(" · ", parts)} · {lines} lines"
-                   + (boxed > 0 ? $" · {boxed} drawn as bounding boxes (over {MaxShapeTris} tris or past the line budget)" : "");
-        if (unknown > 0)
-        {
-            Log.Warn("world", $"collider overlay: {unknown} body(ies) carry server-side shapes this overlay cannot read back — they are NOT drawn");
-        }
-        Log.Info("world", $"collider overlay built: {_summary}");
-    }
-
-    private MeshInstance3D MakeDraw(ImmediateMesh mesh, Node3D parent, string name)
-    {
-        var draw = new MeshInstance3D
-        {
-            Name = name,
-            Mesh = mesh,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            MaterialOverride = LineMaterial(),
-            Visible = false,
-        };
-        // Marked as a drawing so the shared selection neither picks it nor folds it into the box it
-        // measures for the object it is parented onto.
-        draw.SetMeta(SelectionService.OverlayMeta, true);
-        parent.AddChild(draw);
-        return draw;
-    }
-
-    private static StandardMaterial3D? _lineMaterial;
 
     private static StandardMaterial3D LineMaterial() => _lineMaterial ??= new StandardMaterial3D
     {
@@ -454,6 +355,129 @@ public sealed partial class ColliderOverlay : Node
         };
     }
 
+    /// <summary>The game-file name of the object a collider belongs to: the nearest ancestor
+    /// carrying a <c>cs_name</c>, which is what a destructible is called in the data. A collider's
+    /// own node is SceneBuilder's unnamed <c>col</c> body, which names nothing.</summary>
+    private static string OwnerName(Node3D shape)
+    {
+        for (Node? n = shape; n != null; n = n.GetParent())
+        {
+            if (n is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta))
+            {
+                return SelectionService.NameOf(n3d);
+            }
+        }
+        return shape.Name.ToString();
+    }
+
+    private static string Names(List<string> names)
+    {
+        if (names.Count == 0)
+        {
+            return "(none)";
+        }
+        if (names.Count <= MaxNames)
+        {
+            return $"{names.Count}: {string.Join(", ", names)}";
+        }
+        return $"{names.Count}: {string.Join(", ", names.GetRange(0, MaxNames))}, … +{names.Count - MaxNames} more";
+    }
+
+    // ---- building ------------------------------------------------------------------------------
+
+    private void Build()
+    {
+        _built = true;
+        int lines = 0, boxed = 0, unknown = 0;
+        var perClass = new Dictionary<string, int>();
+
+        void Walk(Node n)
+        {
+            if (n is Node3D marked && marked.HasMeta(SelectionService.OverlayMeta))
+            {
+                return; // our own drawings
+            }
+            if (n is CollisionShape3D { Shape: { } shape } cs && HasGeometry(shape))
+            {
+                string cls = ClassOf(cs);
+                var mesh = new ImmediateMesh();
+                bool asBox = EmitShape(mesh, shape, Transform3D.Identity, ColorFor(cls), ref lines);
+                if (asBox)
+                {
+                    boxed++;
+                }
+                var draw = MakeDraw(mesh, cs, $"col_wire_{cls}");
+                _entries.Add(new Entry { Shape = cs, Draw = draw, WasEnabled = !cs.Disabled });
+                perClass[cls] = perClass.GetValueOrDefault(cls) + 1;
+            }
+            else if (n is StaticBody3D body && body.GetChildCount() == 0)
+            {
+                // The clutter region bodies: shapes attached to the body RID, no child nodes.
+                int drawn = EmitBodyShapes(body, ref lines, ref boxed);
+                if (drawn > 0)
+                {
+                    perClass["clutter"] = perClass.GetValueOrDefault("clutter") + drawn;
+                }
+                else if (PhysicsServer3D.BodyGetShapeCount(body.GetRid()) > 0)
+                {
+                    unknown++;
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(_world);
+
+        foreach (var (root, collider) in Planes)
+        {
+            var mesh = new ImmediateMesh();
+            mesh.SurfaceBegin(Mesh.PrimitiveType.Lines);
+            foreach (var part in collider.Parts)
+            {
+                EmitBox(mesh, part.Local, part.Shape.Size, PlaneColor);
+                lines += 12;
+            }
+            mesh.SurfaceEnd();
+            // The airframe boxes are cast per frame by the flight code rather than being switched
+            // on and off, so they follow the overlay itself.
+            _unswitched.Add(MakeDraw(mesh, root, "col_wire_plane"));
+            perClass["plane"] = perClass.GetValueOrDefault("plane") + collider.Parts.Count;
+        }
+
+        var parts = new List<string>();
+        foreach (var (cls, count) in perClass)
+        {
+            parts.Add($"{cls} {count}");
+        }
+        parts.Sort(StringComparer.Ordinal);
+        _summary = $"colliders: {string.Join(" · ", parts)} · {lines} lines"
+                   + (boxed > 0 ? $" · {boxed} drawn as bounding boxes (over {MaxShapeTris} tris or past the line budget)" : "");
+        if (unknown > 0)
+        {
+            Log.Warn("world", $"collider overlay: {unknown} body(ies) carry server-side shapes this overlay cannot read back — they are NOT drawn");
+        }
+        Log.Info("world", $"collider overlay built: {_summary}");
+    }
+
+    private MeshInstance3D MakeDraw(ImmediateMesh mesh, Node3D parent, string name)
+    {
+        var draw = new MeshInstance3D
+        {
+            Name = name,
+            Mesh = mesh,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = LineMaterial(),
+            Visible = false,
+        };
+        // Marked as a drawing so the shared selection neither picks it nor folds it into the box it
+        // measures for the object it is parented onto.
+        draw.SetMeta(SelectionService.OverlayMeta, true);
+        parent.AddChild(draw);
+        return draw;
+    }
+
     /// <summary>Reads a body's shapes back off the physics server — the clutter case, whose shared
     /// shapes have no scene node. ⚠ Server getters only: a <c>ShapeOwner*</c> call here would make
     /// Godot rebuild the body from its (nonexistent) shape nodes and empty it.</summary>
@@ -562,38 +586,6 @@ public sealed partial class ColliderOverlay : Node
         }
     }
 
-    /// <summary>The game-file name of the object a collider belongs to: the nearest ancestor
-    /// carrying a <c>cs_name</c>, which is what a destructible is called in the data. A collider's
-    /// own node is SceneBuilder's unnamed <c>col</c> body, which names nothing.</summary>
-    private static string OwnerName(Node3D shape)
-    {
-        for (Node? n = shape; n != null; n = n.GetParent())
-        {
-            if (n is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta))
-            {
-                return SelectionService.NameOf(n3d);
-            }
-        }
-        return shape.Name.ToString();
-    }
-
-    // How many names a flip line prints before it says how many more there were. The COUNTS above
-    // are never elided — a truncated name list must not read as a smaller change.
-    private const int MaxNames = 12;
-
-    private static string Names(List<string> names)
-    {
-        if (names.Count == 0)
-        {
-            return "(none)";
-        }
-        if (names.Count <= MaxNames)
-        {
-            return $"{names.Count}: {string.Join(", ", names)}";
-        }
-        return $"{names.Count}: {string.Join(", ", names.GetRange(0, MaxNames))}, … +{names.Count - MaxNames} more";
-    }
-
     // ---- notice --------------------------------------------------------------------------------
 
     private void ShowNotice(string text)
@@ -624,5 +616,14 @@ public sealed partial class ColliderOverlay : Node
         {
             _hudLayer.Visible = false;
         }
+    }
+
+    /// <summary>One node-backed shape and the wireframe drawn for it. The wireframe's visibility
+    /// tracks the shape's own <c>Disabled</c> flag, which is what the destructible swap moves.</summary>
+    private sealed class Entry
+    {
+        public required CollisionShape3D Shape;
+        public required MeshInstance3D Draw;
+        public required bool WasEnabled;
     }
 }

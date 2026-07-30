@@ -33,30 +33,6 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class AnimTimeline : Control
 {
-    // One authored event, its statically-computed fire time within its sequence.
-    private readonly record struct Block(int EventIndex, float Time, float Duration, bool Control);
-
-    // One sequence's lane: its authored blocks (empty for a lane discovered only from a fired
-    // mark — a CALL_SEQUENCE'd on-call sequence) and the actual dispatch times stamped onto it.
-    private sealed class Lane
-    {
-        public string Name = "";
-        public bool OnCallOnly;
-        public readonly List<Block> Blocks = new();
-        public readonly List<(int EventIndex, float Time)> Fired = new();
-    }
-
-    // A CALL_ANIMATION child instance: its own lanes, offset on the axis by the playhead time it
-    // began. Kept after it finishes (its ticks are the record); only dimmed.
-    private sealed class ChildGroup
-    {
-        public AnimDefinition Def = null!;
-        public Node3D? Anchor;
-        public float StartTime;
-        public bool Finished;
-        public readonly List<Lane> Lanes = new();
-    }
-
     // Beyond this many ticks a looping lane drops its oldest, so a train left running for
     // minutes cannot grow the list without bound. Short one-shot defs never reach it.
     private const int MaxFiredPerLane = 600;
@@ -70,14 +46,31 @@ public sealed partial class AnimTimeline : Control
     private const float LaneH = 20f;
     private const float Indent = 14f;      // a child group's lane indent
 
+    // ---- drawing colours -----------------------------------------------------------------------
+
+    private static readonly Color Bg = new(0.05f, 0.06f, 0.08f, 0.85f);
+    private static readonly Color GridCol = new(1f, 1f, 1f, 0.09f);
+    private static readonly Color AxisText = new(0.6f, 0.7f, 0.85f);
+    private static readonly Color LaneSep = new(1f, 1f, 1f, 0.05f);
+    private static readonly Color LabelCol = new(0.72f, 0.83f, 1f);
+    private static readonly Color LabelDim = new(0.55f, 0.62f, 0.75f);
+    private static readonly Color AuthTimed = new(0.32f, 0.5f, 0.82f, 0.55f);
+    private static readonly Color AuthTimedEdge = new(0.5f, 0.7f, 1f, 0.9f);
+    private static readonly Color AuthInstant = new(0.5f, 0.7f, 1f, 0.95f);
+    private static readonly Color ControlCol = new(0.6f, 0.6f, 0.68f, 0.6f);
+    private static readonly Color FiredCol = new(1f, 0.78f, 0.25f);
+    private static readonly Color ConnectorCol = new(1f, 0.78f, 0.25f, 0.5f);
+    private static readonly Color Playhead = new(0.95f, 0.98f, 1f, 0.95f);
+    private static readonly Color ChildHdr = new(0.7f, 0.9f, 0.72f);
+
+    private readonly List<Lane> _lanes = new();
+    private readonly List<ChildGroup> _children = new();
+
     private AnimProgram? _program;
     private AnimDefinition? _def;
     private string _anchorLabel = "";
     private bool _primaryFinished;
-    private readonly List<Lane> _lanes = new();
-    private readonly List<ChildGroup> _children = new();
     private float _playhead;
-
     private Font _font = null!;
     private int _fontSize;
 
@@ -188,17 +181,54 @@ public sealed partial class AnimTimeline : Control
         QueueRedraw();
     }
 
-    private ChildGroup? FindChild(AnimDefinition def, Node3D? anchor)
+    public override void _Draw()
     {
-        for (int i = _children.Count - 1; i >= 0; i--)
+        var size = Size;
+        DrawRect(new Rect2(Vector2.Zero, size), Bg);
+        Text(new Vector2(Pad, LegendY), Legend(), AxisText, _fontSize);
+        if (_def == null || _lanes.Count == 0)
         {
-            if (ReferenceEquals(_children[i].Def, def) && ReferenceEquals(_children[i].Anchor, anchor))
+            string hint = _def == null
+                ? "no def playing — pick one (P) or --play-anim=<name>"
+                : $"{_def.AnimName} has no Initial sequences (all on-call)";
+            Text(new Vector2(Pad, HeaderH + 18), hint, LabelDim, _fontSize);
+            return;
+        }
+
+        float trackX = LabelW;
+        float trackW = Mathf.Max(40f, size.X - LabelW - Pad);
+        float tMax = ComputeTMax();
+
+        DrawAxis(trackX, trackW, tMax, size.Y);
+
+        float y = HeaderH + 4f;
+        foreach (var lane in _lanes)
+        {
+            DrawLane(lane, ref y, trackX, trackW, tMax, 0f, indented: false, dim: false);
+        }
+        foreach (var group in _children)
+        {
+            string tag = group.Def.AnimName ?? group.Def.Name;
+            Text(new Vector2(Pad + Indent, y + 13), $"↳ {tag}{(group.Finished ? " ✓" : "")}",
+                group.Finished ? LabelDim : ChildHdr, _fontSize);
+            // A tick at the child's start offset, so where the call landed on the axis is visible.
+            float sx = TimeToX(group.StartTime, trackX, trackW, tMax);
+            DrawLine(new Vector2(sx, y + 2), new Vector2(sx, y + LaneH - 2), ChildHdr with { A = 0.5f }, 1f);
+            y += LaneH;
+            foreach (var lane in group.Lanes)
             {
-                return _children[i];
+                DrawLane(lane, ref y, trackX, trackW, tMax, group.StartTime, indented: true, dim: group.Finished);
             }
         }
-        return null;
+
+        // The playhead over every lane. Clamped to the axis: once a one-shot def finishes, the
+        // clock keeps running but the marks stop, so pinning it at the right edge keeps the
+        // authored-vs-fired comparison readable rather than compressing it to nothing.
+        float px = TimeToX(_playhead, trackX, trackW, tMax);
+        DrawLine(new Vector2(px, HeaderH), new Vector2(px, y), Playhead, 1.5f);
     }
+
+    // ---- authored schedule (the independent half of the instrument) --------------------------
 
     private static void StampFired(List<Lane> lanes, string seq, int eventIndex, float time, bool allowDiscover)
     {
@@ -219,7 +249,53 @@ public sealed partial class AnimTimeline : Control
         }
     }
 
-    // ---- authored schedule (the independent half of the instrument) --------------------------
+    private static bool IsControlFlow(string kind) =>
+        kind is "Loop" or "If" or "Elseif" or "Else" or "Endif";
+
+    // ---- drawing -----------------------------------------------------------------------------
+
+    private static float? AuthoredTimeOf(Lane lane, int eventIndex)
+    {
+        foreach (var b in lane.Blocks)
+        {
+            if (b.EventIndex == eventIndex)
+            {
+                return b.Time;
+            }
+        }
+        return null;
+    }
+
+    private static float TimeToX(float t, float trackX, float trackW, float tMax) =>
+        trackX + Mathf.Clamp(t / tMax, 0f, 1f) * trackW;
+
+    // A round axis step (1/2/5 × 10^n) near tMax/5.
+    private static float NiceStep(float target)
+    {
+        if (target <= 0f)
+        {
+            return 1f;
+        }
+        double exp = Math.Floor(Math.Log10(target));
+        double f = target / Math.Pow(10, exp);
+        double nf = f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10;
+        return (float)(nf * Math.Pow(10, exp));
+    }
+
+    private static string Truncate(string s, int max) =>
+        s.Length <= max ? s : s[..(max - 1)] + "…";
+
+    private ChildGroup? FindChild(AnimDefinition def, Node3D? anchor)
+    {
+        for (int i = _children.Count - 1; i >= 0; i--)
+        {
+            if (ReferenceEquals(_children[i].Def, def) && ReferenceEquals(_children[i].Anchor, anchor))
+            {
+                return _children[i];
+            }
+        }
+        return null;
+    }
 
     /// <summary>
     /// Lays a sequence's events out at their authored fire times, following the <b>documented</b>
@@ -266,73 +342,6 @@ public sealed partial class AnimTimeline : Control
             default:
                 return 0f;
         }
-    }
-
-    private static bool IsControlFlow(string kind) =>
-        kind is "Loop" or "If" or "Elseif" or "Else" or "Endif";
-
-    // ---- drawing -----------------------------------------------------------------------------
-
-    private static readonly Color Bg = new(0.05f, 0.06f, 0.08f, 0.85f);
-    private static readonly Color GridCol = new(1f, 1f, 1f, 0.09f);
-    private static readonly Color AxisText = new(0.6f, 0.7f, 0.85f);
-    private static readonly Color LaneSep = new(1f, 1f, 1f, 0.05f);
-    private static readonly Color LabelCol = new(0.72f, 0.83f, 1f);
-    private static readonly Color LabelDim = new(0.55f, 0.62f, 0.75f);
-    private static readonly Color AuthTimed = new(0.32f, 0.5f, 0.82f, 0.55f);
-    private static readonly Color AuthTimedEdge = new(0.5f, 0.7f, 1f, 0.9f);
-    private static readonly Color AuthInstant = new(0.5f, 0.7f, 1f, 0.95f);
-    private static readonly Color ControlCol = new(0.6f, 0.6f, 0.68f, 0.6f);
-    private static readonly Color FiredCol = new(1f, 0.78f, 0.25f);
-    private static readonly Color ConnectorCol = new(1f, 0.78f, 0.25f, 0.5f);
-    private static readonly Color Playhead = new(0.95f, 0.98f, 1f, 0.95f);
-    private static readonly Color ChildHdr = new(0.7f, 0.9f, 0.72f);
-
-    public override void _Draw()
-    {
-        var size = Size;
-        DrawRect(new Rect2(Vector2.Zero, size), Bg);
-        Text(new Vector2(Pad, LegendY), Legend(), AxisText, _fontSize);
-        if (_def == null || _lanes.Count == 0)
-        {
-            string hint = _def == null
-                ? "no def playing — pick one (P) or --play-anim=<name>"
-                : $"{_def.AnimName} has no Initial sequences (all on-call)";
-            Text(new Vector2(Pad, HeaderH + 18), hint, LabelDim, _fontSize);
-            return;
-        }
-
-        float trackX = LabelW;
-        float trackW = Mathf.Max(40f, size.X - LabelW - Pad);
-        float tMax = ComputeTMax();
-
-        DrawAxis(trackX, trackW, tMax, size.Y);
-
-        float y = HeaderH + 4f;
-        foreach (var lane in _lanes)
-        {
-            DrawLane(lane, ref y, trackX, trackW, tMax, 0f, indented: false, dim: false);
-        }
-        foreach (var group in _children)
-        {
-            string tag = group.Def.AnimName ?? group.Def.Name;
-            Text(new Vector2(Pad + Indent, y + 13), $"↳ {tag}{(group.Finished ? " ✓" : "")}",
-                group.Finished ? LabelDim : ChildHdr, _fontSize);
-            // A tick at the child's start offset, so where the call landed on the axis is visible.
-            float sx = TimeToX(group.StartTime, trackX, trackW, tMax);
-            DrawLine(new Vector2(sx, y + 2), new Vector2(sx, y + LaneH - 2), ChildHdr with { A = 0.5f }, 1f);
-            y += LaneH;
-            foreach (var lane in group.Lanes)
-            {
-                DrawLane(lane, ref y, trackX, trackW, tMax, group.StartTime, indented: true, dim: group.Finished);
-            }
-        }
-
-        // The playhead over every lane. Clamped to the axis: once a one-shot def finishes, the
-        // clock keeps running but the marks stop, so pinning it at the right edge keeps the
-        // authored-vs-fired comparison readable rather than compressing it to nothing.
-        float px = TimeToX(_playhead, trackX, trackW, tMax);
-        DrawLine(new Vector2(px, HeaderH), new Vector2(px, y), Playhead, 1.5f);
     }
 
     private string Legend()
@@ -404,18 +413,6 @@ public sealed partial class AnimTimeline : Control
         y += LaneH;
     }
 
-    private static float? AuthoredTimeOf(Lane lane, int eventIndex)
-    {
-        foreach (var b in lane.Blocks)
-        {
-            if (b.EventIndex == eventIndex)
-            {
-                return b.Time;
-            }
-        }
-        return null;
-    }
-
     private float ComputeTMax()
     {
         float m = MinSpan;
@@ -441,25 +438,30 @@ public sealed partial class AnimTimeline : Control
         return m * 1.05f;
     }
 
-    private static float TimeToX(float t, float trackX, float trackW, float tMax) =>
-        trackX + Mathf.Clamp(t / tMax, 0f, 1f) * trackW;
-
-    // A round axis step (1/2/5 × 10^n) near tMax/5.
-    private static float NiceStep(float target)
-    {
-        if (target <= 0f)
-        {
-            return 1f;
-        }
-        double exp = Math.Floor(Math.Log10(target));
-        double f = target / Math.Pow(10, exp);
-        double nf = f < 1.5 ? 1 : f < 3 ? 2 : f < 7 ? 5 : 10;
-        return (float)(nf * Math.Pow(10, exp));
-    }
-
-    private static string Truncate(string s, int max) =>
-        s.Length <= max ? s : s[..(max - 1)] + "…";
-
     private void Text(Vector2 pos, string s, Color col, int size) =>
         DrawString(_font, pos, s, HorizontalAlignment.Left, -1, size, col);
+
+    // One authored event, its statically-computed fire time within its sequence.
+    private readonly record struct Block(int EventIndex, float Time, float Duration, bool Control);
+
+    // One sequence's lane: its authored blocks (empty for a lane discovered only from a fired
+    // mark — a CALL_SEQUENCE'd on-call sequence) and the actual dispatch times stamped onto it.
+    private sealed class Lane
+    {
+        public readonly List<Block> Blocks = new();
+        public readonly List<(int EventIndex, float Time)> Fired = new();
+        public string Name = "";
+        public bool OnCallOnly;
+    }
+
+    // A CALL_ANIMATION child instance: its own lanes, offset on the axis by the playhead time it
+    // began. Kept after it finishes (its ticks are the record); only dimmed.
+    private sealed class ChildGroup
+    {
+        public readonly List<Lane> Lanes = new();
+        public AnimDefinition Def = null!;
+        public Node3D? Anchor;
+        public float StartTime;
+        public bool Finished;
+    }
 }

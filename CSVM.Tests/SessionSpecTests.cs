@@ -20,8 +20,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class SessionSpecTests
 {
-    private static SessionSpec S(params string[] args) => SessionSpec.Parse(args);
-
     // ---- Mode arbitration ----------------------------------------------------------------------
 
     [Fact]
@@ -641,4 +639,6 @@ public class SessionSpecTests
         Assert.True(s.DebugAnim);
         Assert.Empty(s.LogSpecs);
     }
+
+    private static SessionSpec S(params string[] args) => SessionSpec.Parse(args);
 }

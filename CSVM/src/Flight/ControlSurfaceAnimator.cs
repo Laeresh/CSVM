@@ -24,23 +24,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class ControlSurfaceAnimator
 {
-    private readonly struct Surface
-    {
-        public readonly Node3D Node;
-        public readonly Basis BaseBasis;  // build-time local basis; deflection composes on top
-        public readonly Vector3 Axis;     // hinge axis in the node's local frame
-        public readonly int Channel;      // 0 pitch, 1 roll, 2 yaw
-        public readonly float SignedMaxRad; // input [-1,1] → hinge angle, all sign factors baked in
-        public Surface(Node3D node, Vector3 axis, int channel, float signedMaxRad)
-        {
-            Node = node;
-            BaseBasis = node.Basis;
-            Axis = axis;
-            Channel = channel;
-            SignedMaxRad = signedMaxRad;
-        }
-    }
-
     private const float MaxAileronDeg = 20f;  // TUNE: full-stick deflection
     private const float MaxElevatorDeg = 20f; // TUNE
     private const float MaxRudderDeg = 20f;   // TUNE
@@ -53,9 +36,9 @@ public sealed class ControlSurfaceAnimator
     private readonly List<Surface> _surfaces;
     private Vector3 _defl; // slewed deflection (pitch, roll, yaw), each in [-1,1]
 
-    public int Count => _surfaces.Count;
-
     private ControlSurfaceAnimator(List<Surface> surfaces) => _surfaces = surfaces;
+
+    public int Count => _surfaces.Count;
 
     /// <summary>Walks the built plane tree and collects every control-surface node;
     /// null if the model has none (the autogyro has only its two ailerons — absence
@@ -66,6 +49,24 @@ public sealed class ControlSurfaceAnimator
         foreach (var child in planeRoot.GetChildren())
             Collect(child, Transform3D.Identity, surfaces);
         return surfaces.Count > 0 ? new ControlSurfaceAnimator(surfaces) : null;
+    }
+
+    /// <summary>Slews the deflection toward this frame's stick input and poses every
+    /// surface. Skip while crashed/paused (the pose then just holds).</summary>
+    public void Advance(double delta, FlightInput input)
+    {
+        float step = SlewPerSec * (float)delta;
+        _defl.X = Mathf.MoveToward(_defl.X, Mathf.Clamp(input.Pitch, -1f, 1f), step);
+        _defl.Y = Mathf.MoveToward(_defl.Y, Mathf.Clamp(input.Roll, -1f, 1f), step);
+        _defl.Z = Mathf.MoveToward(_defl.Z, Mathf.Clamp(input.Yaw, -1f, 1f), step);
+        Apply();
+    }
+
+    /// <summary>Snap every surface back to neutral (respawn).</summary>
+    public void Reset()
+    {
+        _defl = Vector3.Zero;
+        Apply();
     }
 
     private static void Collect(Node node, Transform3D parentAcc, List<Surface> surfaces)
@@ -113,27 +114,26 @@ public sealed class ControlSurfaceAnimator
             Collect(child, acc, surfaces);
     }
 
-    /// <summary>Slews the deflection toward this frame's stick input and poses every
-    /// surface. Skip while crashed/paused (the pose then just holds).</summary>
-    public void Advance(double delta, FlightInput input)
-    {
-        float step = SlewPerSec * (float)delta;
-        _defl.X = Mathf.MoveToward(_defl.X, Mathf.Clamp(input.Pitch, -1f, 1f), step);
-        _defl.Y = Mathf.MoveToward(_defl.Y, Mathf.Clamp(input.Roll, -1f, 1f), step);
-        _defl.Z = Mathf.MoveToward(_defl.Z, Mathf.Clamp(input.Yaw, -1f, 1f), step);
-        Apply();
-    }
-
-    /// <summary>Snap every surface back to neutral (respawn).</summary>
-    public void Reset()
-    {
-        _defl = Vector3.Zero;
-        Apply();
-    }
-
     private void Apply()
     {
         foreach (var s in _surfaces)
             s.Node.Basis = s.BaseBasis * new Basis(s.Axis, _defl[s.Channel] * s.SignedMaxRad);
+    }
+
+    private readonly struct Surface
+    {
+        public readonly Node3D Node;
+        public readonly Basis BaseBasis;  // build-time local basis; deflection composes on top
+        public readonly Vector3 Axis;     // hinge axis in the node's local frame
+        public readonly int Channel;      // 0 pitch, 1 roll, 2 yaw
+        public readonly float SignedMaxRad; // input [-1,1] → hinge angle, all sign factors baked in
+        public Surface(Node3D node, Vector3 axis, int channel, float signedMaxRad)
+        {
+            Node = node;
+            BaseBasis = node.Basis;
+            Axis = axis;
+            Channel = channel;
+            SignedMaxRad = signedMaxRad;
+        }
     }
 }

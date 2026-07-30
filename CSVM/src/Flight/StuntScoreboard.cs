@@ -17,15 +17,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class StuntScoreboard : Control
 {
-    private StuntMission _mission = null!;
-    private ScoreStore _store = null!;
-    private string _scoreKey = "";
-    private string _planeDisplay = "";
-    private string _context = "";
-
-    private CenterContainer _center = null!;
-    private PanelContainer? _panel;
-
     // Base metrics at 720p (the default window); scaled up on taller viewports so the board reads
     // at 1080p/1440p/4K without ballooning. All TUNE.
     private const int TitleFont = 26;
@@ -44,6 +35,15 @@ public sealed partial class StuntScoreboard : Control
     private static readonly Color BestColor = new(0.60f, 0.75f, 0.95f);
     private static readonly Color NewBestColor = new(1f, 0.82f, 0.28f);
     private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
+
+    private StuntMission _mission = null!;
+    private ScoreStore _store = null!;
+    private string _scoreKey = "";
+    private string _planeDisplay = "";
+    private string _context = "";
+
+    private CenterContainer _center = null!;
+    private PanelContainer? _panel;
 
     /// <summary>Builds the (hidden) overlay and subscribes to the run's completion. Add it to the
     /// HUD canvas last so it draws over the marker/dials; feed nothing per-frame — it wakes itself
@@ -86,6 +86,42 @@ public sealed partial class StuntScoreboard : Control
         // A restart (StuntMission.Reset) clears AllComplete — retire the board until the next run.
         if (Visible && !_mission.AllComplete)
             Visible = false;
+    }
+
+    private static Label Label(string text, int fontSize, Color color)
+    {
+        var l = new Label { Text = text };
+        l.AddThemeFontSizeOverride("font_size", fontSize);
+        l.AddThemeColorOverride("font_color", color);
+        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
+        l.AddThemeConstantOverride("shadow_offset_x", 1);
+        l.AddThemeConstantOverride("shadow_offset_y", 1);
+        return l;
+    }
+
+    /// <summary>Wraps a label in a CenterContainer so it centres in the VBox's full width.</summary>
+    private static CenterContainer Centered(Control c)
+    {
+        var cc = new CenterContainer();
+        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        cc.AddChild(c);
+        return cc;
+    }
+
+    private static void AddCell(GridContainer grid, string text, int fontSize, Color color,
+        HorizontalAlignment align, int minWidth)
+    {
+        var l = Label(text, fontSize, color);
+        l.HorizontalAlignment = align;
+        l.CustomMinimumSize = new Vector2(minWidth, 0);
+        grid.AddChild(l);
+    }
+
+    private static HSeparator Separator(float s)
+    {
+        var sep = new HSeparator();
+        sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
+        return sep;
     }
 
     private void OnRunCompleted()
@@ -199,41 +235,5 @@ public sealed partial class StuntScoreboard : Control
 
         body.AddChild(Separator(s));
         body.AddChild(Centered(Label("R — New Run        Esc — Quit", (int)(FooterFont * s), FooterColor)));
-    }
-
-    private static Label Label(string text, int fontSize, Color color)
-    {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", color);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
-        l.AddThemeConstantOverride("shadow_offset_x", 1);
-        l.AddThemeConstantOverride("shadow_offset_y", 1);
-        return l;
-    }
-
-    /// <summary>Wraps a label in a CenterContainer so it centres in the VBox's full width.</summary>
-    private static CenterContainer Centered(Control c)
-    {
-        var cc = new CenterContainer();
-        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        cc.AddChild(c);
-        return cc;
-    }
-
-    private static void AddCell(GridContainer grid, string text, int fontSize, Color color,
-        HorizontalAlignment align, int minWidth)
-    {
-        var l = Label(text, fontSize, color);
-        l.HorizontalAlignment = align;
-        l.CustomMinimumSize = new Vector2(minWidth, 0);
-        grid.AddChild(l);
-    }
-
-    private static HSeparator Separator(float s)
-    {
-        var sep = new HSeparator();
-        sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
-        return sep;
     }
 }

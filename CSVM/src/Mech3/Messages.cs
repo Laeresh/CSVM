@@ -18,6 +18,8 @@ public sealed class Messages
 {
     private readonly Dictionary<string, string> _byKey = new(StringComparer.OrdinalIgnoreCase);
 
+    public int Count => _byKey.Count;
+
     /// <summary>Loads the message table from a messages.json file. Missing file → an empty
     /// table (every lookup then falls back to the raw key), never throws — display strings
     /// are cosmetic and a mission must still load without them.</summary>
@@ -35,20 +37,6 @@ public sealed class Messages
                     msgs._byKey[key] = value;
         return msgs;
     }
-
-    public int Count => _byKey.Count;
-
-    /// <summary>The display string for a <c>MSG_*</c> key, or the key itself if it is unknown
-    /// (so an unresolved reference is visible in the HUD/log rather than blank). A null or
-    /// empty key returns "".</summary>
-    public string Get(string? key) =>
-        string.IsNullOrEmpty(key) ? ""
-        : _byKey.TryGetValue(key, out var v) ? v
-        : key;
-
-    /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
-    /// <c>Fill(Get(key), args)</c>.</summary>
-    public string Format(string? key, params string?[] args) => Fill(Get(key), args);
 
     /// <summary>Substitutes a message template's positional placeholders. <c>%1</c>…<c>%9</c> take
     /// <paramref name="args"/> in order (a missing arg renders empty); a bang-delimited type spec
@@ -93,4 +81,16 @@ public sealed class Messages
         }
         return sb.ToString();
     }
+
+    /// <summary>The display string for a <c>MSG_*</c> key, or the key itself if it is unknown
+    /// (so an unresolved reference is visible in the HUD/log rather than blank). A null or
+    /// empty key returns "".</summary>
+    public string Get(string? key) =>
+        string.IsNullOrEmpty(key) ? ""
+        : _byKey.TryGetValue(key, out var v) ? v
+        : key;
+
+    /// <summary>Resolves <paramref name="key"/> and fills its placeholders in one call —
+    /// <c>Fill(Get(key), args)</c>.</summary>
+    public string Format(string? key, params string?[] args) => Fill(Get(key), args);
 }

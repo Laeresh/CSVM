@@ -12,16 +12,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class AnimDefsTests
 {
-    private static List<AnimDefinition> Load() => AnimDefs.LoadArchive(TestData.Fixture("zrdr"));
-
-    private static AnimDefinition Def(string name) => Load().Find(d => d.Name == name)!;
-
-    private static AnimSequence Sequence(AnimDefinition def, string name) =>
-        def.Sequences.Find(s => s.Name == name)!;
-
-    private static AnimEvent Event(AnimSequence sequence, string kind) =>
-        sequence.Events.Find(e => e.Kind == kind)!;
-
     [Theory]
     [InlineData("OBJECT_ACTIVE_STATE", "ObjectActiveState")]
     [InlineData("OBJECT_MOTION_SI_SCRIPT", "ObjectMotionSiScript")]
@@ -191,6 +181,16 @@ public class AnimDefsTests
         var motion = Event(Sequence(Def("probe_tower"), "probe_spin"), "ObjectMotion").Data;
         Assert.NotNull(motion.List("raw"));
     }
+
+    private static List<AnimDefinition> Load() => AnimDefs.LoadArchive(TestData.Fixture("zrdr"));
+
+    private static AnimDefinition Def(string name) => Load().Find(d => d.Name == name)!;
+
+    private static AnimSequence Sequence(AnimDefinition def, string name) =>
+        def.Sequences.Find(s => s.Name == name)!;
+
+    private static AnimEvent Event(AnimSequence sequence, string kind) =>
+        sequence.Events.Find(e => e.Kind == kind)!;
 
     private static string[] TextureNames(AnimData puffer)
     {

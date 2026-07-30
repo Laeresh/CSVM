@@ -37,10 +37,6 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class MissionSetup
 {
-    /// <summary>One parsed statement. <see cref="Target"/> is the <c>FindNode</c> selection in
-    /// force, <see cref="Sub"/> the <c>FindSubNode</c> narrowing under it (null when none).</summary>
-    public readonly record struct Op(string Verb, string? Target, string? Sub, string[] Args);
-
     private readonly List<Op> _ops = new();
     private readonly Dictionary<string, int> _unapplied = new(StringComparer.Ordinal);
     private readonly List<string> _unresolved = new();
@@ -74,42 +70,6 @@ public sealed class MissionSetup
             return setup;
         }
         return null;
-    }
-
-    // The script is a flat command list with a stateful selector: FindNode picks a node by
-    // name, FindSubNode narrows to a descendant, and the following verb acts on that selection.
-    // Quit ends the script (it is always the last line, in C4's and C5's scripts).
-    private void Parse(JsonElement lines)
-    {
-        string? target = null, sub = null;
-        foreach (var line in lines.EnumerateArray())
-        {
-            var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
-            if (parts.Length == 0)
-                continue;
-            switch (parts[0])
-            {
-                case "FindNode":
-                    target = parts.Length > 1 ? parts[1] : null;
-                    sub = null;
-                    break;
-                // FindSubNodeNode is the same selector spelled differently (2 uses, C3).
-                case "FindSubNode":
-                case "FindSubNodeNode":
-                    sub = parts.Length > 1 ? parts[1] : null;
-                    break;
-                case "Quit":
-                    return;
-                // DeleteTree names its own target rather than using the selection.
-                case "DeleteTree":
-                    if (parts.Length > 1)
-                        _ops.Add(new Op("DeleteTree", parts[1], null, Array.Empty<string>()));
-                    break;
-                default:
-                    _ops.Add(new Op(parts[0], target, sub, parts[1..]));
-                    break;
-            }
-        }
     }
 
     /// <summary>
@@ -162,16 +122,6 @@ public sealed class MissionSetup
         }
         return map;
     }
-
-    // A script name matches a gamez node name case-insensitively, with the model-file suffix
-    // optional on either side — the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
-    // the node 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
-    private static bool NameMatches(string nodeName, string scriptName) =>
-        nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
-        || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
-
-    private static string Strip(string s) =>
-        s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
 
     /// <summary>
     /// Applies the script to a built world. <paramref name="resolve"/> maps a gamez name (plus an
@@ -261,4 +211,54 @@ public sealed class MissionSetup
                  + string.Join(", ", _unapplied.OrderByDescending(k => k.Value).Select(k => $"{k.Key}×{k.Value}"));
         return s;
     }
+
+    // A script name matches a gamez node name case-insensitively, with the model-file suffix
+    // optional on either side — the same rule AnimRuntime's node lookup uses ('ap_radiotwr' for
+    // the node 'ap_radiotwr.flt'), and interp.md records the scripts using both spellings.
+    private static bool NameMatches(string nodeName, string scriptName) =>
+        nodeName.Equals(scriptName, StringComparison.OrdinalIgnoreCase)
+        || Strip(nodeName).Equals(Strip(scriptName), StringComparison.OrdinalIgnoreCase);
+
+    private static string Strip(string s) =>
+        s.EndsWith(".flt", StringComparison.OrdinalIgnoreCase) ? s[..^4] : s;
+
+    // The script is a flat command list with a stateful selector: FindNode picks a node by
+    // name, FindSubNode narrows to a descendant, and the following verb acts on that selection.
+    // Quit ends the script (it is always the last line, in C4's and C5's scripts).
+    private void Parse(JsonElement lines)
+    {
+        string? target = null, sub = null;
+        foreach (var line in lines.EnumerateArray())
+        {
+            var parts = (line.GetString() ?? "").Split(' ', StringSplitOptions.RemoveEmptyEntries);
+            if (parts.Length == 0)
+                continue;
+            switch (parts[0])
+            {
+                case "FindNode":
+                    target = parts.Length > 1 ? parts[1] : null;
+                    sub = null;
+                    break;
+                // FindSubNodeNode is the same selector spelled differently (2 uses, C3).
+                case "FindSubNode":
+                case "FindSubNodeNode":
+                    sub = parts.Length > 1 ? parts[1] : null;
+                    break;
+                case "Quit":
+                    return;
+                // DeleteTree names its own target rather than using the selection.
+                case "DeleteTree":
+                    if (parts.Length > 1)
+                        _ops.Add(new Op("DeleteTree", parts[1], null, Array.Empty<string>()));
+                    break;
+                default:
+                    _ops.Add(new Op(parts[0], target, sub, parts[1..]));
+                    break;
+            }
+        }
+    }
+
+    /// <summary>One parsed statement. <see cref="Target"/> is the <c>FindNode</c> selection in
+    /// force, <see cref="Sub"/> the <c>FindSubNode</c> narrowing under it (null when none).</summary>
+    public readonly record struct Op(string Verb, string? Target, string? Sub, string[] Args);
 }

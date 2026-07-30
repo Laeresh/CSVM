@@ -19,17 +19,6 @@ namespace CSVM.Tests;
 /// </summary>
 public static class TestData
 {
-    /// <summary>The repo checkout this assembly was built from.</summary>
-    public static string RepoRoot { get; }
-
-    /// <summary>The extraction tree (the folder holding <c>zrdr.zip</c>, <c>C1</c>, …), or null
-    /// when no install is reachable.</summary>
-    public static string? ExtractedRoot { get; }
-
-    /// <summary>The folder <c>extracted/</c> sits in — the "data root" the engine's
-    /// <see cref="CSVM.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
-    public static string? DataRoot { get; }
-
     /// <summary>Printed by every skipped data test so an absent install never reads as a pass.</summary>
     public const string NoDataReason =
         "no extracted game data: set CSVM_DATA_ROOT to a checkout holding extracted/ (or to the extraction tree itself)";
@@ -40,6 +29,17 @@ public static class TestData
         ExtractedRoot = FindExtracted();
         DataRoot = ExtractedRoot == null ? null : Directory.GetParent(ExtractedRoot)?.FullName;
     }
+
+    /// <summary>The repo checkout this assembly was built from.</summary>
+    public static string RepoRoot { get; }
+
+    /// <summary>The extraction tree (the folder holding <c>zrdr.zip</c>, <c>C1</c>, …), or null
+    /// when no install is reachable.</summary>
+    public static string? ExtractedRoot { get; }
+
+    /// <summary>The folder <c>extracted/</c> sits in — the "data root" the engine's
+    /// <see cref="CSVM.SessionPaths"/> takes. Null when <see cref="ExtractedRoot"/> is.</summary>
+    public static string? DataRoot { get; }
 
     /// <summary>Path of a committed fixture, e.g. <c>Fixture("zrdr")</c>.</summary>
     public static string Fixture(params string[] parts)

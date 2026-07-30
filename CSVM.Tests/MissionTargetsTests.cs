@@ -10,8 +10,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class MissionTargetsTests
 {
-    private static MissionTargets Load() => MissionTargets.Load(TestData.Fixture("zrdr"));
-
     [Fact]
     public void OneEntryLabelsEveryNodeItLists()
     {
@@ -54,4 +52,6 @@ public class MissionTargetsTests
     {
         Assert.Equal(0, MissionTargets.Load(TestData.TempDir()).Count);
     }
+
+    private static MissionTargets Load() => MissionTargets.Load(TestData.Fixture("zrdr"));
 }

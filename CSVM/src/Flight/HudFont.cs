@@ -39,9 +39,6 @@ public sealed class HudFont
     private readonly (int X, int W)[] _glyphs;  // by code − FirstCode; W == 0 means "no glyph"
     private readonly int _top;                  // first inked atlas row (0 for this atlas)
 
-    /// <summary>Glyph cell height in atlas pixels (the inked row span, 5 for this atlas).</summary>
-    public int PixelHeight { get; }
-
     private HudFont(Texture2D normal, Texture2D bright, (int X, int W)[] glyphs, int top, int height)
     {
         _normal = normal;
@@ -50,6 +47,9 @@ public sealed class HudFont
         _top = top;
         PixelHeight = height;
     }
+
+    /// <summary>Glyph cell height in atlas pixels (the inked row span, 5 for this atlas).</summary>
+    public int PixelHeight { get; }
 
     /// <summary>Loads the font from an extracted <c>rimage</c> directory. Null (with one log line)
     /// when the normal atlas is absent — HUD text is cosmetic and must never take a build down. The
@@ -114,16 +114,6 @@ public sealed class HudFont
                 x += (SpaceAdvance + Tracking) * scale; // space and any unrepresented code
             }
         }
-    }
-
-    private int Advance(char ch)
-    {
-        int idx = ch - FirstCode;
-        if (idx >= 0 && idx < CodeCount && _glyphs[idx].W > 0)
-        {
-            return _glyphs[idx].W + Tracking;
-        }
-        return SpaceAdvance + Tracking;
     }
 
     /// <summary>Loads one atlas: keys the black background to transparent, and (when
@@ -198,5 +188,15 @@ public sealed class HudFont
 
         var tex = ImageTexture.CreateFromImage(img);
         return tex;
+    }
+
+    private int Advance(char ch)
+    {
+        int idx = ch - FirstCode;
+        if (idx >= 0 && idx < CodeCount && _glyphs[idx].W > 0)
+        {
+            return _glyphs[idx].W + Tracking;
+        }
+        return SpaceAdvance + Tracking;
     }
 }

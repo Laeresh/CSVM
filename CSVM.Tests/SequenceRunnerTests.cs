@@ -19,97 +19,9 @@ namespace CSVM.Tests;
 /// </summary>
 public class SequenceRunnerTests
 {
-    // ---- the fake host: the interpreter's 3-point view, scripted and recording ----
-
-    /// <summary>An <see cref="ISequenceHost"/> that records every real dispatch, returns a scripted
-    /// duration per event kind, and answers conditions from a tag→verdict table. Control-flow kinds
-    /// return <c>false</c> from <see cref="Dispatch"/> — returning true would silently bypass the
-    /// LOOP/IF branch logic and every test would pass while testing nothing.</summary>
-    private sealed class RecordingHost : ISequenceHost
-    {
-        private static readonly HashSet<string> ControlFlow =
-            new(StringComparer.Ordinal) { "Loop", "If", "Elseif", "Else", "Endif" };
-
-        public readonly List<string> Fired = new();
-        public readonly Dictionary<string, float> Durations = new(StringComparer.Ordinal);
-        public readonly Dictionary<string, bool> Conditions = new(StringComparer.Ordinal);
-        public readonly List<EventDispatch> Dispatched = new();
-
-        public bool Dispatch(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool instant, out float duration)
-        {
-            duration = 0f;
-            if (ControlFlow.Contains(ev.Kind))
-                return false;
-            Durations.TryGetValue(ev.Kind, out duration);
-            Fired.Add(ev.Data.Str("name") ?? ev.Kind);
-            return true;
-        }
-
-        public bool EvaluateCondition(AnimData? condition, AnimDefinition def, Node3D? anchor)
-        {
-            var tag = condition?.Str("tag");
-            return tag != null && Conditions.TryGetValue(tag, out var v) && v;
-        }
-
-        public Action<EventDispatch>? OnEventDispatched { get; set; }
-    }
-
     // ---- fixture builders (hand-authored shapes; invented values) ----
 
     private static readonly AnimDefinition Dummy = new();
-
-    private static AnimInstance Instance(params AnimSequence[] seqs)
-    {
-        var inst = new AnimInstance(Dummy, null);
-        foreach (var s in seqs)
-            inst.Runners.Add(new SequenceRunner(s));
-        return inst;
-    }
-
-    private static AnimSequence Seq(params AnimEvent[] events)
-    {
-        var s = new AnimSequence { Name = "test" };
-        s.Events.AddRange(events);
-        return s;
-    }
-
-    /// <summary>An instantaneous OBJECT_ACTIVE_STATE swap named <paramref name="name"/> (the SWAP the
-    /// bowl sign flickers with).</summary>
-    private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "ObjectActiveState", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
-
-    /// <summary>A timed motion whose run time the host reports (its Kind keys
-    /// <see cref="RecordingHost.Durations"/>).</summary>
-    private static AnimEvent Timed(string name, string? offset = null, float time = 0f) =>
-        new() { Kind = "ObjectMotion", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
-
-    private static AnimEvent Loop(int count, string? offset = null, float time = 0f) =>
-        new() { Kind = "Loop", StartOffset = offset, StartTime = time,
-                Data = new AnimData(new Dictionary<string, object?> { ["Count"] = count }) };
-
-    private static AnimEvent Branch(string kind, string tag) =>
-        new() { Kind = kind,
-                Data = new AnimData(new Dictionary<string, object?>
-                    { ["condition"] = new Dictionary<string, object?> { ["tag"] = tag } }) };
-
-    private static AnimEvent Ctrl(string kind) => new() { Kind = kind };
-
-    /// <summary>Drives the instance in fixed <paramref name="dt"/> steps and returns, per step, the
-    /// names dispatched during that step — so a test can assert both order and which step each fire
-    /// landed on (the timing evidence).</summary>
-    private static List<List<string>> RunSteps(AnimInstance inst, RecordingHost host, float dt, int steps)
-    {
-        var timeline = new List<List<string>>();
-        for (int i = 0; i < steps; i++)
-        {
-            int before = host.Fired.Count;
-            inst.Advance(host, dt);
-            timeline.Add(host.Fired.GetRange(before, host.Fired.Count - before));
-        }
-        return timeline;
-    }
 
     // 0.25 / 0.5 offsets and dt are exact in binary float, so a fire lands on a definite step.
 
@@ -335,5 +247,93 @@ public class SequenceRunnerTests
         Assert.Equal(new[] { "carA", "carB" }, host.Fired);
         Assert.Empty(inst.Runners);
         Assert.True(inst.Finished);
+    }
+
+    private static AnimInstance Instance(params AnimSequence[] seqs)
+    {
+        var inst = new AnimInstance(Dummy, null);
+        foreach (var s in seqs)
+            inst.Runners.Add(new SequenceRunner(s));
+        return inst;
+    }
+
+    private static AnimSequence Seq(params AnimEvent[] events)
+    {
+        var s = new AnimSequence { Name = "test" };
+        s.Events.AddRange(events);
+        return s;
+    }
+
+    /// <summary>An instantaneous OBJECT_ACTIVE_STATE swap named <paramref name="name"/> (the SWAP the
+    /// bowl sign flickers with).</summary>
+    private static AnimEvent Swap(string name, string? offset = null, float time = 0f) =>
+        new() { Kind = "ObjectActiveState", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    /// <summary>A timed motion whose run time the host reports (its Kind keys
+    /// <see cref="RecordingHost.Durations"/>).</summary>
+    private static AnimEvent Timed(string name, string? offset = null, float time = 0f) =>
+        new() { Kind = "ObjectMotion", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    private static AnimEvent Loop(int count, string? offset = null, float time = 0f) =>
+        new() { Kind = "Loop", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["Count"] = count }) };
+
+    private static AnimEvent Branch(string kind, string tag) =>
+        new() { Kind = kind,
+                Data = new AnimData(new Dictionary<string, object?>
+                    { ["condition"] = new Dictionary<string, object?> { ["tag"] = tag } }) };
+
+    private static AnimEvent Ctrl(string kind) => new() { Kind = kind };
+
+    /// <summary>Drives the instance in fixed <paramref name="dt"/> steps and returns, per step, the
+    /// names dispatched during that step — so a test can assert both order and which step each fire
+    /// landed on (the timing evidence).</summary>
+    private static List<List<string>> RunSteps(AnimInstance inst, RecordingHost host, float dt, int steps)
+    {
+        var timeline = new List<List<string>>();
+        for (int i = 0; i < steps; i++)
+        {
+            int before = host.Fired.Count;
+            inst.Advance(host, dt);
+            timeline.Add(host.Fired.GetRange(before, host.Fired.Count - before));
+        }
+        return timeline;
+    }
+
+    // ---- the fake host: the interpreter's 3-point view, scripted and recording ----
+
+    /// <summary>An <see cref="ISequenceHost"/> that records every real dispatch, returns a scripted
+    /// duration per event kind, and answers conditions from a tag→verdict table. Control-flow kinds
+    /// return <c>false</c> from <see cref="Dispatch"/> — returning true would silently bypass the
+    /// LOOP/IF branch logic and every test would pass while testing nothing.</summary>
+    private sealed class RecordingHost : ISequenceHost
+    {
+        public readonly List<string> Fired = new();
+        public readonly Dictionary<string, float> Durations = new(StringComparer.Ordinal);
+        public readonly Dictionary<string, bool> Conditions = new(StringComparer.Ordinal);
+        public readonly List<EventDispatch> Dispatched = new();
+
+        private static readonly HashSet<string> ControlFlow =
+            new(StringComparer.Ordinal) { "Loop", "If", "Elseif", "Else", "Endif" };
+
+        public Action<EventDispatch>? OnEventDispatched { get; set; }
+
+        public bool Dispatch(AnimEvent ev, AnimDefinition def, Node3D? anchor, bool instant, out float duration)
+        {
+            duration = 0f;
+            if (ControlFlow.Contains(ev.Kind))
+                return false;
+            Durations.TryGetValue(ev.Kind, out duration);
+            Fired.Add(ev.Data.Str("name") ?? ev.Kind);
+            return true;
+        }
+
+        public bool EvaluateCondition(AnimData? condition, AnimDefinition def, Node3D? anchor)
+        {
+            var tag = condition?.Str("tag");
+            return tag != null && Conditions.TryGetValue(tag, out var v) && v;
+        }
     }
 }

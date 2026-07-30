@@ -13,24 +13,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class TextureArchiveTests
 {
-    private static string DecalDir()
-    {
-        var dir = TestData.TempDir();
-        foreach (var name in new[]
-                 {
-                     "00probe_zero.png",
-                     "07probe_mark.png",
-                     "21probe_star.png",
-                     "21probe_star_1.png",   // the half-size LOD twin, not the decal
-                     "213probe_notadecal.png",
-                     "probe_plain.png",
-                 })
-        {
-            File.WriteAllBytes(Path.Combine(dir, name), System.Array.Empty<byte>());
-        }
-        return dir;
-    }
-
     [Fact]
     public void DecalIndexFindsTheZeroPaddedTwoDigitName()
     {
@@ -122,6 +104,24 @@ public class TextureArchiveTests
             seen.Add(Hex(TextureDropIn.ColorForName($"probe_texture_{i}")));
         }
         Assert.True(seen.Count >= 985, $"only {seen.Count} distinct colours for 1000 names");
+    }
+
+    private static string DecalDir()
+    {
+        var dir = TestData.TempDir();
+        foreach (var name in new[]
+                 {
+                     "00probe_zero.png",
+                     "07probe_mark.png",
+                     "21probe_star.png",
+                     "21probe_star_1.png",   // the half-size LOD twin, not the decal
+                     "213probe_notadecal.png",
+                     "probe_plain.png",
+                 })
+        {
+            File.WriteAllBytes(Path.Combine(dir, name), System.Array.Empty<byte>());
+        }
+        return dir;
     }
 
     private static string Hex(Godot.Color c) => $"{c.R8:x2}{c.G8:x2}{c.B8:x2}";

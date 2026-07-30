@@ -227,61 +227,6 @@ public partial class FlightController : Node3D
     /// wins over this while it is down.</summary>
     public int PinnedView;
 
-    private FlightModel _model = null!;
-    private Camera3D _camera = null!;
-    private Label _hud = null!;
-    private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
-    private Vector3 _spawnPos;
-    private Basis _spawnAttitude;
-    private float _throttle;
-    private double _sinceTelemetry;
-    private bool _crashed;                       // frozen at the impact point, waiting for respawn
-    private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
-    private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
-    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
-    private float _holdElapsed;                  // sim time into the HoldSegments sequence
-    private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
-    private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
-    private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
-    private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
-    private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
-    private ImmediateMesh? _probe;               // debug collision-probe line
-    private float _damageCooldown;               // s left before the next HP subtraction
-    private float _damageFlash;                  // s left on the HUD impact line
-    private string _damageFlashText = "";
-    private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
-    private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
-    private bool _gunLoopOn;                     // the firing loop sound is currently playing
-    private float _rocketCooldown;               // s until the next rocket may launch (FIRE_RATE gate, one at a time)
-    private int _nextPylon;                      // which hardpoint sources the next rocket (cycles across pylons)
-    private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
-    private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
-    private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
-    private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
-    private bool _gunSelPrev;                    // edge detection for the gun-selector button
-    private int _rocketSel;                      // hardpoint selector: index into _ordnanceTypes (which ordnance fires)
-    private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector button
-    private string[] _ordnanceTypes = Array.Empty<string>(); // distinct hardpoint weapon ids, in pylon order
-
-    // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
-    // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
-    // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
-    private GaugeCluster.WeaponGauge? _gunGaugeState;
-    private GaugeCluster.WeaponGauge? _missileGaugeState;
-    private readonly List<float> _gunGaugeSlots = new();
-    private readonly List<float> _missileGaugeSlots = new();
-
-    /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
-    /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
-    /// the empty-clip warning has already sounded since it last had ammo.</summary>
-    private sealed class GunState
-    {
-        public float Accum;
-        public int NextMuzzle;
-        public bool Warned;
-        public bool LoggedFirst;   // verification breadcrumb: the group logs its first live round once
-    }
-
     private const float ThrottleRate = 0.5f;    // full sweep in 2 s
     private const float SpawnThrottle = 0.5f;   // the original always spawns at half throttle (confirmed in-game, all planes)
     private const float SpawnSpeed = 53.6f;     // m/s ≈ 120 mph. PLACEHOLDER: the original's spawn speed is
@@ -323,11 +268,16 @@ public partial class FlightController : Node3D
     private const float EmbedPushOut = 0.3f;     // m per un-embed attempt after a graze
     private const int EmbedTries = 3;            // attempts before giving up ⇒ explode, never tunnel
     private const int HudFontSize = 22;         // text HUD, full-screen (shrunk per splitscreen pane)
-    private static readonly Vector2 HudMargin = new(16, 10);
+
     private const float PropIdleSpin = 0.4f;    // blur discs still turn at zero throttle (windmilling)
     private const float OrbitRateDeg = 70f;     // paused orbit-camera slew (deg/s)
     private const float OrbitZoomRate = 1.6f;   // paused orbit-camera dolly (1/s, exponential)
     private const float OrbitMinDist = 4f, OrbitMaxDist = 150f;
+
+    private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
+
+    private static readonly Vector2 HudMargin = new(16, 10);
+
     // Fixed views sit the same distance from the plane as the chase camera's rigid offset, so a
     // snap changes the angle and nothing else. TUNE: the distance, the 45° elevations and the
     // instant snap are all recalled from the original rather than measured out of it.
@@ -352,7 +302,51 @@ public partial class FlightController : Node3D
         (Key.Kp9, 9, new Vector3(Diag, Diag, 0f), Vector3.Up),
     };
 
-    private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
+
+    private readonly List<float> _gunGaugeSlots = new();
+    private readonly List<float> _missileGaugeSlots = new();
+
+    private FlightModel _model = null!;
+    private Camera3D _camera = null!;
+    private Label _hud = null!;
+    private float _hudPaneFactor = 1f;            // last applied splitscreen shrink (1 = single player)
+    private Vector3 _spawnPos;
+    private Basis _spawnAttitude;
+    private float _throttle;
+    private double _sinceTelemetry;
+    private bool _crashed;                       // frozen at the impact point, waiting for respawn
+    private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
+    private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
+    private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
+    private float _holdElapsed;                  // sim time into the HoldSegments sequence
+    private bool _pausePrev;                     // previous frame's pause-key state (edge detection)
+    private bool _haltPrev;                      // previous frame's clock-halt state (orbit seeding)
+    private bool _cyclePrev;                     // previous frame's stunt cycle-target key state (edge detection)
+    private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
+    private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
+    private ImmediateMesh? _probe;               // debug collision-probe line
+    private float _damageCooldown;               // s left before the next HP subtraction
+    private float _damageFlash;                  // s left on the HUD impact line
+    private string _damageFlashText = "";
+    private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
+    private bool _firePrev;                      // previous frame's fire button (immediate first shot on press)
+    private bool _gunLoopOn;                     // the firing loop sound is currently playing
+    private float _rocketCooldown;               // s until the next rocket may launch (FIRE_RATE gate, one at a time)
+    private int _nextPylon;                      // which hardpoint sources the next rocket (cycles across pylons)
+    private bool _rocketFirePrev;                // previous frame's rocket button (one rocket per discrete pull)
+    private bool _rocketDryWarned;               // the all-pylons-empty cue has already sounded
+    private int _rocketsLaunched;                // verification breadcrumb: the first few launches log their pylon
+    private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
+    private bool _gunSelPrev;                    // edge detection for the gun-selector button
+    private int _rocketSel;                      // hardpoint selector: index into _ordnanceTypes (which ordnance fires)
+    private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector button
+    private string[] _ordnanceTypes = Array.Empty<string>(); // distinct hardpoint weapon ids, in pylon order
+
+    // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
+    // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
+    // allocation. Null until _Ready binds them, and only for a system the plane actually carries.
+    private GaugeCluster.WeaponGauge? _gunGaugeState;
+    private GaugeCluster.WeaponGauge? _missileGaugeState;
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -451,6 +445,423 @@ public partial class FlightController : Node3D
                 }
             }
         }
+    }
+
+    /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
+    /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
+    /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
+    public void Respawn()
+    {
+        _crashed = false;
+        _holdElapsed = 0f; // scripted hold sequences restart from the spawn
+        _lastInput = default;
+        WingLights?.Reset(); // flares off; the cycle restarts from this spawn
+        Surfaces?.Reset();   // control surfaces back to neutral
+        Damage?.Reset();     // every part back to full HP
+        Gauges?.Reset();     // damage-dial blink timers cleared
+        Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
+        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
+        if (CrashRuntime != null)
+        {
+            // data-driven crash: hard-stop the played def (instances, motions, the fire +
+            // every other puffer), re-hide the wreck + effect templates (their RESET_STATE), re-home
+            // the flung pieces (no reset event re-poses them), and restore the plane model's built
+            // visibility — the def hid healthy/markers and only the RESET_STATE's dontmove comes back,
+            // so without this respawn leaves just the propeller.
+            CrashRuntime.ResetToBaseState();
+            if (CrashRestPoses != null)
+                foreach (var (node, rest) in CrashRestPoses)
+                {
+                    node.Transform = rest;
+                }
+            if (CrashPlaneVisibility != null)
+                foreach (var (node, vis) in CrashPlaneVisibility)
+                {
+                    node.Visible = vis;
+                }
+        }
+        _damageCooldown = 0f;
+        _damageFlash = 0f;
+        if (PlaneModel != null)
+            PlaneModel.Visible = true;
+        _throttle = SpawnThrottle;
+        _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
+        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+        if (_camera != null && IsInsideTree())
+            SnapCamera();
+    }
+
+    public override void _PhysicsProcess(double delta)
+    {
+        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
+        if (dt <= 0f)
+        {
+            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
+        }
+        SimStep(dt);
+    }
+
+    /// <summary>One flight step: input, the flight model, collision, weapons and the stunt clock.
+    /// Public because a non-realtime clock has the session call this instead of Godot's physics
+    /// tick — the halt (P / gamepad Start) simply stops the calls.</summary>
+    public void SimStep(float dt)
+    {
+        // Advance the stunt clock every physics frame — including through the crash freeze so the
+        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
+        // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
+        Stunt?.Tick(dt);
+
+        // Debug: force-complete the run so the results board renders for a deterministic
+        // screenshot. In a race the players finish STAGGERED by index (and their totals padded by
+        // it), so the shot exercises the real one-pilot-finishes-while-the-others-fly path — the
+        // placings, the waiting banner, then the shared board — instead of four identical totals
+        // landing on frame one.
+        if (DebugCompleteStunt && Stunt is { AllComplete: false }
+            && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
+            Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
+
+        // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
+        // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
+        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone.
+        // In a race this player is simply parked at the finish while the rest
+        // of the field flies on, and R only means "rematch" — restarting everybody — once the
+        // last pilot is in. Checked before the crash branch so completing the final zone always
+        // restarts cleanly.
+        if (Stunt is { AllComplete: true })
+        {
+            // Unattended scripted runs rematch on a timer, the same rule as the crash branch's
+            // auto-respawn below — so a --hold race soak-test keeps racing instead of parking on
+            // the board forever. Player 1 alone runs the timer; the rematch restarts everybody.
+            bool autoRematch = HoldSegments != null && Race is { AllFinished: true } && PlayerIndex == 0
+                && (_autoRestartIn -= dt) <= 0f;
+            if (RespawnPressed() || autoRematch)
+            {
+                if (Race == null)
+                    RestartStuntRun();
+                else if (Race.AllFinished)
+                    RestartRace?.Invoke();
+            }
+            return;
+        }
+        _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
+
+        if (_crashed)
+        {
+            // The wreck + effects run on the crash AnimRuntime, which advances itself in its own
+            // _Process through this crash freeze (motions, the played def, every puffer) — but not
+            // through a clock halt, which stops that runtime with everything else, so P during a
+            // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
+            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs respawn
+            // on a timer instead
+            if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
+                Respawn();
+            return;
+        }
+
+        var prev = _model.Position;          // committed position from last frame
+        var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
+        _lastInput = input;
+        _damageCooldown -= dt;
+        _model.Step(input, dt);
+
+        // Crash when the frame's flight path runs into solid world geometry (terrain,
+        // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
+        // the frame's motion so a wingtip or tail fin collides, not just the center
+        // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
+        // fallback keeps the old nose margin on the ray — with real boxes it would fire
+        // ~6 m before the fuselage box reaches the wall.
+        var to = _model.Position;
+        var step = to - prev;
+        float len = step.Length();
+        float margin = Collider == null ? CollisionMargin : 0f;
+        var probeEnd = len > 1e-4f ? to + step / len * margin : to;
+        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
+            out var normal, out float stopFrac, out var hitBody);
+        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
+        {
+            hit = true;
+            part = "center";
+            normal = len > 1e-4f ? -step / len : Vector3.Up;
+            stopFrac = 1f;
+        }
+        if (_probe != null)
+            DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
+        // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
+        // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
+        // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
+        // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
+        if (hit && CollideDamageSink != null)
+        {
+            var cv = _model.VelocityDir * _model.Speed;
+            float cvn = Mathf.Abs(cv.Dot(normal));
+            if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+            {
+                hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+            }
+        }
+        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
+        {
+            Crash(impact, hitName, part);
+            return;
+        }
+
+        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+
+        // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
+        // into the shared projectile pool.
+        CycleWeaponSelectors();
+        UpdateGuns(dt);
+        UpdateRockets(dt);
+        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
+
+        // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
+        Stunt?.Update(_model.Position);
+
+        // height over ground for the altimeter's LOW ALT warning: one ray straight
+        // down per physics frame (world + map-edge extension colliders)
+        if (Gauges != null)
+            Gauges.AglMeters = HitWorld(_model.Position,
+                _model.Position + Vector3.Down * 1000f, out var ground, out _, out _)
+                ? _model.Position.Y - ground.Y
+                : float.MaxValue;
+
+        if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
+            Respawn();
+
+        _sinceTelemetry += dt;
+        if (_sinceTelemetry >= 1.0)
+        {
+            _sinceTelemetry = 0;
+            var p = _model.Position;
+            // path = climb/dive angle of the flight path; nose = the attitude's pitch;
+            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the lift factor
+            GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
+                     $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
+                     $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
+                     $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
+                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
+                     (Gauges != null && Gauges.AglMeters < float.MaxValue
+                         ? $" agl={Gauges.AglMeters:0}" : ""));
+        }
+    }
+
+    public override void _Process(double delta)
+    {
+        var clock = GameClock.Current;
+        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole simulation
+        // in place (physics, input, collision, audio, props) so successive screenshots frame the
+        // plane from the same spot. Polled here rather than in the sim step because a halted sim
+        // takes no steps and could never resume itself. Checked even while crashed.
+        bool pausePressed = PauseTogglePressed();
+        if (pausePressed && !_pausePrev && clock != null)
+        {
+            clock.Halted = !clock.Halted;
+        }
+        _pausePrev = pausePressed;
+        bool halted = clock?.Halted ?? false;
+        if (halted != _haltPrev)
+        {
+            _haltPrev = halted;
+            if (halted)
+            {
+                SeedOrbit();   // start the orbit where the chase camera left off (no jump)
+            }
+            // The engine/whine/rattle loops hold their sample position through the freeze; the
+            // one-shots already in flight are left to play out.
+            Audio?.SetPaused(halted);
+        }
+        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
+        float simDt = clock?.FrameDt ?? (float)delta;
+        if (halted)
+        {
+            // The orbit camera runs on wall time through a halt on purpose: the point of the
+            // freeze is to fly the camera around a stopped world.
+            UpdateOrbitCamera((float)delta);
+        }
+        else
+        {
+            int view = ActiveView();
+            if (view >= 0)
+            {
+                ApplyFixedView(view);
+            }
+            else
+            {
+                // The chase camera trails the plane by exponential smoothing, so its pose is a
+                // function of the dt it is fed. On wall time that makes a scripted flight capture
+                // frame-rate dependent even when the simulation underneath it is pinned — the pose
+                // has to come off the same clock as the plane it follows.
+                UpdateChaseCamera(simDt);
+            }
+            LogView(view);
+        }
+
+        float mph = _model.Speed * 2.23694f;
+        float ft = _model.Position.Y * 3.28084f;
+        // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
+        var nose = -_model.Attitude.Z;
+        float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
+        if (Compass != null)
+            Compass.HeadingDeg = headingDeg;
+        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) and
+        // feed it this frame's pose so it can project the zone and compute the clock bearing.
+        if (Stunt != null)
+        {
+            bool cycle = CycleTargetPressed();
+            if (cycle && !_cyclePrev)
+                Stunt.CycleTarget();
+            _cyclePrev = cycle;
+        }
+        if (Marker != null)
+        {
+            Marker.PlanePos = _model.Position;
+            Marker.HeadingDeg = headingDeg;
+        }
+        if (Gauges != null)
+        {
+            Gauges.SpeedMph = mph;
+            Gauges.AltitudeFt = ft;
+            Gauges.Stalled = !_crashed && !halted && _model.isStalled();
+        }
+        // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
+        // loadout, so this runs whenever there is one, independent of the dial cluster.
+        UpdateWeaponGauges();
+        // Points the E37 gun reticle at the selected group's ballistic impact point (if built).
+        UpdateReticle();
+        // Splitscreen: the text block shrinks with the pane, like every other HUD element
+        // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
+        // (16,10) is untouched there; re-applied only when the factor actually changes.
+        float paneFactor = HudMetrics.PaneFactor(_hud);
+        if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
+        {
+            _hudPaneFactor = paneFactor;
+            _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
+            _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
+        }
+        // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
+        // line still ran into the top-centre compass tape in a 4P quarter pane — break the
+        // throttle onto its own line there. Full screen keeps the original one-liner.
+        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
+        string throttle = $"THR {_model.Throttle * 100,3:0}%";
+        _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
+        if (_model.isStalled())
+            _hud.Text += "\n⚠ STALLED - SPEED UP";
+        if (!halted && !_crashed && _damageFlash > 0f)
+        {
+            _damageFlash -= (float)delta;
+            _hud.Text += $"\n{_damageFlashText}";
+        }
+        if (Damage?.Summary() is { Length: > 0 } dmgSummary)
+            _hud.Text += $"\nDMG {dmgSummary}";
+        // The weapon ammo readout is now the E35 gauges + the E36 WeaponReadout (drawn in the game's
+        // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
+        // Stunt run status now lives in the marker HUD; keep the compact text line only
+        // as a fallback if the marker somehow wasn't built.
+        if (Stunt != null && Marker == null)
+            _hud.Text += $"\n{Stunt.StatusLine()}";
+        if (halted)
+        {
+            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
+        }
+        else if (_crashed)
+        {
+            _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
+        }
+        else
+        {
+            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+        }
+
+        // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
+        // and speed up with throttle. Frozen while crashed or paused (a still disc reads
+        // the same at any angle, and freezing it keeps screenshots deterministic).
+        Props?.Advance(simDt, _crashed || halted ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
+
+        // Blink the wingtip flares on the data's 1.5 s cycle, and track the stick with
+        // the control surfaces. Frozen while paused (so a screenshot catches a fixed
+        // state — the paused orbit camera can inspect the held deflection) and while
+        // crashed (the airframe is hidden anyway).
+        if (!_crashed && !halted)
+        {
+            WingLights?.Advance(simDt);
+            Surfaces?.Advance(simDt, _lastInput);
+            Visuals?.Update(_model.Position, _model.Attitude); // smoke/fire trail emission
+        }
+    }
+
+    /// <summary>The rocket name the E36 readout shows: the resolved <c>MSG_WEAP_*</c> display name
+    /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
+    /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
+    private static string RocketReadoutName(WeaponDef w) =>
+        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
+            ? w.DisplayName
+            : w.Name;
+
+    /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/> along
+    /// <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's velocity) sits
+    /// after travelling <paramref name="distance"/> m of path — the SAME
+    /// <c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c> integration <see cref="ProjectilePool"/>
+    /// steps each round with, so the reticle and the rounds agree. Player guns carry no
+    /// <c>ACCELERATION</c>/<c>GRAVITY</c>, so for them this is a straight line; the loop stays
+    /// faithful for any weapon that does. The march is capped at the weapon's <c>RANGE</c> (a round
+    /// never converges past where it expires) and a hard iteration bound.</summary>
+    private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
+        Vector3 inheritVel, float distance)
+    {
+        var vel = forward * (weapon.Velocity ?? 500f) + inheritVel;
+        float accel = weapon.Acceleration ?? 0f;
+        float grav = (weapon.Gravity ?? 0f) * ProjectilePool.WorldGravity;
+        float cap = Mathf.Min(distance, weapon.Range ?? distance);
+        const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
+        var pos = origin;
+        float travelled = 0f;
+        for (int i = 0; i < 4096 && travelled < cap; i++)
+        {
+            if (accel != 0f)
+            {
+                vel += vel.Normalized() * (accel * dt);
+            }
+            if (grav != 0f)
+            {
+                vel += Vector3.Down * (grav * dt);
+            }
+            var stepv = vel * dt;
+            float step = stepv.Length();
+            if (step < 1e-6f)
+            {
+                break; // a degenerate near-zero speed must never spin the loop
+            }
+            if (travelled + step > cap)
+            {
+                pos += stepv * ((cap - travelled) / step); // don't overshoot the convergence range
+                break;
+            }
+            pos += stepv;
+            travelled += step;
+        }
+        return pos;
+    }
+
+    /// <summary>Which crash variant the original would play for the surface just hit. Every
+    /// reachable crash today is a collision with terrain or a city block — a hard non-water
+    /// surface, which is the <c>_dirt</c> (ground) variant; buildings are dirt too, since the
+    /// only alternative to a hard-surface impact is the <c>_default</c> (air) variant, and
+    /// that fires when the plane is destroyed with NO impact at all (shot down mid-flight),
+    /// which has no trigger until weapons (M3). Water needs a sea-surface signal the collision
+    /// system does not yet expose. So this is Ground for now — the seam is real, the other two
+    /// arms wait on their triggers.</summary>
+    private static CrashSurface ClassifySurface(string hitName) =>
+        CrashSurface.Ground;
+
+    /// <summary>Deadzone + squared response for fine control around center.</summary>
+    private static float StickCurve(float v)
+    {
+        const float deadzone = 0.15f;
+        float a = Mathf.Abs(v);
+        if (a < deadzone)
+            return 0f;
+        float t = Mathf.Min(1f, (a - deadzone) / (1f - deadzone));
+        return Mathf.Sign(v) * t * t;
     }
 
     /// <summary>Space / gamepad B — the gun trigger (caller drives the fire-rate clock);
@@ -573,14 +984,6 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>The rocket name the E36 readout shows: the resolved <c>MSG_WEAP_*</c> display name
-    /// (e.g. "High-explosive rocket") when it resolved, else the short internal handle ("BOOM") — a
-    /// raw, unresolved <c>MSG_*</c> key falls back to the handle rather than being shown verbatim.</summary>
-    private static string RocketReadoutName(WeaponDef w) =>
-        !string.IsNullOrEmpty(w.DisplayName) && !w.DisplayName.StartsWith("MSG_", StringComparison.Ordinal)
-            ? w.DisplayName
-            : w.Name;
-
     /// <summary>The pylon the next rocket would launch from (the arrow target on the missile gauge):
     /// the first armed pylon of <paramref name="type"/> scanning from <see cref="_nextPylon"/> and
     /// wrapping — a read-only mirror of <see cref="NextArmedHardpoint"/> that does NOT advance the
@@ -663,51 +1066,6 @@ public partial class FlightController : Node3D
         Reticle.ImpactPoint = BallisticImpactPoint(sel.Weapon, origin, forward, inheritVel,
             GunConvergenceDist);
         Reticle.Active = true;
-    }
-
-    /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/> along
-    /// <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's velocity) sits
-    /// after travelling <paramref name="distance"/> m of path — the SAME
-    /// <c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c> integration <see cref="ProjectilePool"/>
-    /// steps each round with, so the reticle and the rounds agree. Player guns carry no
-    /// <c>ACCELERATION</c>/<c>GRAVITY</c>, so for them this is a straight line; the loop stays
-    /// faithful for any weapon that does. The march is capped at the weapon's <c>RANGE</c> (a round
-    /// never converges past where it expires) and a hard iteration bound.</summary>
-    private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
-        Vector3 inheritVel, float distance)
-    {
-        var vel = forward * (weapon.Velocity ?? 500f) + inheritVel;
-        float accel = weapon.Acceleration ?? 0f;
-        float grav = (weapon.Gravity ?? 0f) * ProjectilePool.WorldGravity;
-        float cap = Mathf.Min(distance, weapon.Range ?? distance);
-        const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
-        var pos = origin;
-        float travelled = 0f;
-        for (int i = 0; i < 4096 && travelled < cap; i++)
-        {
-            if (accel != 0f)
-            {
-                vel += vel.Normalized() * (accel * dt);
-            }
-            if (grav != 0f)
-            {
-                vel += Vector3.Down * (grav * dt);
-            }
-            var stepv = vel * dt;
-            float step = stepv.Length();
-            if (step < 1e-6f)
-            {
-                break; // a degenerate near-zero speed must never spin the loop
-            }
-            if (travelled + step > cap)
-            {
-                pos += stepv * ((cap - travelled) / step); // don't overshoot the convergence range
-                break;
-            }
-            pos += stepv;
-            travelled += step;
-        }
-        return pos;
     }
 
     /// <summary>Advances every gun group's fire clock: while the trigger is held, each group spawns
@@ -905,50 +1263,6 @@ public partial class FlightController : Node3D
         Projectiles?.Clear();
     }
 
-    /// <summary>Back to the spawn pose at half throttle with a healthy, repaired airframe: the
-    /// crash respawn (R), and the session's per-plane reset for a race rematch. Leaves the
-    /// stunt run alone — a mid-run crash deliberately keeps its zones and clock.</summary>
-    public void Respawn()
-    {
-        _crashed = false;
-        _holdElapsed = 0f; // scripted hold sequences restart from the spawn
-        _lastInput = default;
-        WingLights?.Reset(); // flares off; the cycle restarts from this spawn
-        Surfaces?.Reset();   // control surfaces back to neutral
-        Damage?.Reset();     // every part back to full HP
-        Gauges?.Reset();     // damage-dial blink timers cleared
-        Visuals?.Reset();    // torn panels off, healthy twins back, smoke trail cleared
-        RefillWeapons();     // full ammo, dry warnings re-armed, any live tracers cleared
-        if (CrashRuntime != null)
-        {
-            // data-driven crash: hard-stop the played def (instances, motions, the fire +
-            // every other puffer), re-hide the wreck + effect templates (their RESET_STATE), re-home
-            // the flung pieces (no reset event re-poses them), and restore the plane model's built
-            // visibility — the def hid healthy/markers and only the RESET_STATE's dontmove comes back,
-            // so without this respawn leaves just the propeller.
-            CrashRuntime.ResetToBaseState();
-            if (CrashRestPoses != null)
-                foreach (var (node, rest) in CrashRestPoses)
-                {
-                    node.Transform = rest;
-                }
-            if (CrashPlaneVisibility != null)
-                foreach (var (node, vis) in CrashPlaneVisibility)
-                {
-                    node.Visible = vis;
-                }
-        }
-        _damageCooldown = 0f;
-        _damageFlash = 0f;
-        if (PlaneModel != null)
-            PlaneModel.Visible = true;
-        _throttle = SpawnThrottle;
-        _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
-        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
-        if (_camera != null && IsInsideTree())
-            SnapCamera();
-    }
-
     /// <summary>Full stunt restart from the results scoreboard (R): fresh clock + every
     /// zone incomplete, then the normal respawn (spawn pose / throttle / cleared damage). The
     /// scoreboard hides itself once AllComplete clears; the marker HUD replays its intro line.</summary>
@@ -1010,17 +1324,6 @@ public partial class FlightController : Node3D
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
 
-    /// <summary>Which crash variant the original would play for the surface just hit. Every
-    /// reachable crash today is a collision with terrain or a city block — a hard non-water
-    /// surface, which is the <c>_dirt</c> (ground) variant; buildings are dirt too, since the
-    /// only alternative to a hard-surface impact is the <c>_default</c> (air) variant, and
-    /// that fires when the plane is destroyed with NO impact at all (shot down mid-flight),
-    /// which has no trigger until weapons (M3). Water needs a sea-surface signal the collision
-    /// system does not yet expose. So this is Ground for now — the seam is real, the other two
-    /// arms wait on their triggers.</summary>
-    private static CrashSurface ClassifySurface(string hitName) =>
-        CrashSurface.Ground;
-
     /// <summary>True when the button is down on one of THIS player's gamepads. With
     /// <see cref="PadDevices"/> null (single player) that is every connected pad — never `pads[0]`:
     /// phantom joypad devices (wireless dongles enumerating with the pad asleep, non-pad HID like
@@ -1067,160 +1370,6 @@ public partial class FlightController : Node3D
     /// Gamepad Y would clash with the respawn button, so X (a free face button) instead.</summary>
     private bool CycleTargetPressed() =>
         KeyDown(Key.Tab) || PadPressed(JoyButton.X);
-
-    public override void _PhysicsProcess(double delta)
-    {
-        float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;
-        if (dt <= 0f)
-        {
-            return;   // the session drives SimStep itself this frame (see GameClock.PhysicsDt)
-        }
-        SimStep(dt);
-    }
-
-    /// <summary>One flight step: input, the flight model, collision, weapons and the stunt clock.
-    /// Public because a non-realtime clock has the session call this instead of Godot's physics
-    /// tick — the halt (P / gamepad Start) simply stops the calls.</summary>
-    public void SimStep(float dt)
-    {
-        // Advance the stunt clock every physics frame — including through the crash freeze so the
-        // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
-        // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
-        Stunt?.Tick(dt);
-
-        // Debug: force-complete the run so the results board renders for a deterministic
-        // screenshot. In a race the players finish STAGGERED by index (and their totals padded by
-        // it), so the shot exercises the real one-pilot-finishes-while-the-others-fly path — the
-        // placings, the waiting banner, then the shared board — instead of four identical totals
-        // landing on frame one.
-        if (DebugCompleteStunt && Stunt is { AllComplete: false }
-            && (Race == null || Stunt.Elapsed >= PlayerIndex * DebugFinishStagger))
-            Stunt.DebugCompleteAll(Race != null ? PlayerIndex * 2f : 0f);
-
-        // Run complete: the flight sim freezes in place (the chase camera in _Process still holds
-        // on the plane). Solo, the scoreboard is up and R (gamepad Y/A) starts a fresh run — the
-        // deliberate opposite of a mid-run respawn, clearing the clock + every completed zone.
-        // In a race this player is simply parked at the finish while the rest
-        // of the field flies on, and R only means "rematch" — restarting everybody — once the
-        // last pilot is in. Checked before the crash branch so completing the final zone always
-        // restarts cleanly.
-        if (Stunt is { AllComplete: true })
-        {
-            // Unattended scripted runs rematch on a timer, the same rule as the crash branch's
-            // auto-respawn below — so a --hold race soak-test keeps racing instead of parking on
-            // the board forever. Player 1 alone runs the timer; the rematch restarts everybody.
-            bool autoRematch = HoldSegments != null && Race is { AllFinished: true } && PlayerIndex == 0
-                && (_autoRestartIn -= dt) <= 0f;
-            if (RespawnPressed() || autoRematch)
-            {
-                if (Race == null)
-                    RestartStuntRun();
-                else if (Race.AllFinished)
-                    RestartRace?.Invoke();
-            }
-            return;
-        }
-        _autoRestartIn = AutoRespawnDelay; // re-armed while the run is live
-
-        if (_crashed)
-        {
-            // The wreck + effects run on the crash AnimRuntime, which advances itself in its own
-            // _Process through this crash freeze (motions, the played def, every puffer) — but not
-            // through a clock halt, which stops that runtime with everything else, so P during a
-            // crash catches the wreck mid-break-up. The airframe stays frozen at the impact point
-            // until the pilot respawns (R / gamepad Y or A); unattended HoldSegments runs respawn
-            // on a timer instead
-            if (RespawnPressed() || (HoldSegments != null && (_autoRespawnIn -= dt) <= 0f))
-                Respawn();
-            return;
-        }
-
-        var prev = _model.Position;          // committed position from last frame
-        var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
-        _lastInput = input;
-        _damageCooldown -= dt;
-        _model.Step(input, dt);
-
-        // Crash when the frame's flight path runs into solid world geometry (terrain,
-        // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
-        // the frame's motion so a wingtip or tail fin collides, not just the center
-        // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
-        // fallback keeps the old nose margin on the ray — with real boxes it would fire
-        // ~6 m before the fuselage box reaches the wall.
-        var to = _model.Position;
-        var step = to - prev;
-        float len = step.Length();
-        float margin = Collider == null ? CollisionMargin : 0f;
-        var probeEnd = len > 1e-4f ? to + step / len * margin : to;
-        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
-            out var normal, out float stopFrac, out var hitBody);
-        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
-        {
-            hit = true;
-            part = "center";
-            normal = len > 1e-4f ? -step / len : Vector3.Up;
-            stopFrac = 1f;
-        }
-        if (_probe != null)
-            DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
-        // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
-        // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
-        // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
-        // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
-        if (hit && CollideDamageSink != null)
-        {
-            var cv = _model.VelocityDir * _model.Speed;
-            float cvn = Mathf.Abs(cv.Dot(normal));
-            if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
-            {
-                hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
-            }
-        }
-        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
-        {
-            Crash(impact, hitName, part);
-            return;
-        }
-
-        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
-
-        // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
-        // into the shared projectile pool.
-        CycleWeaponSelectors();
-        UpdateGuns(dt);
-        UpdateRockets(dt);
-        Ordnance?.Update();   // hide a pylon's mounted rocket the moment it fired its last (D44)
-
-        // Stunt run: flew-through-a-danger-zone test against this frame's committed position.
-        Stunt?.Update(_model.Position);
-
-        // height over ground for the altimeter's LOW ALT warning: one ray straight
-        // down per physics frame (world + map-edge extension colliders)
-        if (Gauges != null)
-            Gauges.AglMeters = HitWorld(_model.Position,
-                _model.Position + Vector3.Down * 1000f, out var ground, out _, out _)
-                ? _model.Position.Y - ground.Y
-                : float.MaxValue;
-
-        if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
-            Respawn();
-
-        _sinceTelemetry += dt;
-        if (_sinceTelemetry >= 1.0)
-        {
-            _sinceTelemetry = 0;
-            var p = _model.Position;
-            // path = climb/dive angle of the flight path; nose = the attitude's pitch;
-            // wv = wing verticality |up·Y| (1 level/inverted, 0 knife-edge) — the lift factor
-            GD.Print($"flight: pos=({p.X:0},{p.Y:0},{p.Z:0}) spd={_model.Speed:0.0} m/s " +
-                     $"thr={_model.Throttle:0.00} rates=({_model.BodyRates.X:0.00},{_model.BodyRates.Y:0.00},{_model.BodyRates.Z:0.00}) " +
-                     $"path={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(_model.VelocityDir.Y, -1f, 1f))):0}° " +
-                     $"nose={Mathf.RadToDeg(Mathf.Asin(Mathf.Clamp(-_model.Attitude.Z.Y, -1f, 1f))):0}° " +
-                     $"wv={Mathf.Abs(_model.Attitude.Y.Dot(Vector3.Up)):0.00}" +
-                     (Gauges != null && Gauges.AglMeters < float.MaxValue
-                         ? $" agl={Gauges.AglMeters:0}" : ""));
-        }
-    }
 
     /// <summary>Advance the scripted hold sequence by this frame and return the active
     /// segment's input. Segments run for their duration in order; the last one (or a
@@ -1485,161 +1634,6 @@ public partial class FlightController : Node3D
         }
     }
 
-    /// <summary>Deadzone + squared response for fine control around center.</summary>
-    private static float StickCurve(float v)
-    {
-        const float deadzone = 0.15f;
-        float a = Mathf.Abs(v);
-        if (a < deadzone)
-            return 0f;
-        float t = Mathf.Min(1f, (a - deadzone) / (1f - deadzone));
-        return Mathf.Sign(v) * t * t;
-    }
-
-    public override void _Process(double delta)
-    {
-        var clock = GameClock.Current;
-        // Debug screenshot freeze: toggle with P / gamepad Start, then hold the whole simulation
-        // in place (physics, input, collision, audio, props) so successive screenshots frame the
-        // plane from the same spot. Polled here rather than in the sim step because a halted sim
-        // takes no steps and could never resume itself. Checked even while crashed.
-        bool pausePressed = PauseTogglePressed();
-        if (pausePressed && !_pausePrev && clock != null)
-        {
-            clock.Halted = !clock.Halted;
-        }
-        _pausePrev = pausePressed;
-        bool halted = clock?.Halted ?? false;
-        if (halted != _haltPrev)
-        {
-            _haltPrev = halted;
-            if (halted)
-            {
-                SeedOrbit();   // start the orbit where the chase camera left off (no jump)
-            }
-            // The engine/whine/rattle loops hold their sample position through the freeze; the
-            // one-shots already in flight are left to play out.
-            Audio?.SetPaused(halted);
-        }
-        // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
-        float simDt = clock?.FrameDt ?? (float)delta;
-        if (halted)
-        {
-            // The orbit camera runs on wall time through a halt on purpose: the point of the
-            // freeze is to fly the camera around a stopped world.
-            UpdateOrbitCamera((float)delta);
-        }
-        else
-        {
-            int view = ActiveView();
-            if (view >= 0)
-            {
-                ApplyFixedView(view);
-            }
-            else
-            {
-                // The chase camera trails the plane by exponential smoothing, so its pose is a
-                // function of the dt it is fed. On wall time that makes a scripted flight capture
-                // frame-rate dependent even when the simulation underneath it is pinned — the pose
-                // has to come off the same clock as the plane it follows.
-                UpdateChaseCamera(simDt);
-            }
-            LogView(view);
-        }
-
-        float mph = _model.Speed * 2.23694f;
-        float ft = _model.Position.Y * 3.28084f;
-        // heading of the nose: 0 = north (−Z), 90 = east (+X) — shared by the compass and the marker
-        var nose = -_model.Attitude.Z;
-        float headingDeg = Mathf.PosMod(Mathf.RadToDeg(Mathf.Atan2(nose.X, -nose.Z)), 360f);
-        if (Compass != null)
-            Compass.HeadingDeg = headingDeg;
-        // Stunt objective marker: cycle the displayed target (Tab / gamepad X, edge-detected) and
-        // feed it this frame's pose so it can project the zone and compute the clock bearing.
-        if (Stunt != null)
-        {
-            bool cycle = CycleTargetPressed();
-            if (cycle && !_cyclePrev)
-                Stunt.CycleTarget();
-            _cyclePrev = cycle;
-        }
-        if (Marker != null)
-        {
-            Marker.PlanePos = _model.Position;
-            Marker.HeadingDeg = headingDeg;
-        }
-        if (Gauges != null)
-        {
-            Gauges.SpeedMph = mph;
-            Gauges.AltitudeFt = ft;
-            Gauges.Stalled = !_crashed && !halted && _model.isStalled();
-        }
-        // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
-        // loadout, so this runs whenever there is one, independent of the dial cluster.
-        UpdateWeaponGauges();
-        // Points the E37 gun reticle at the selected group's ballistic impact point (if built).
-        UpdateReticle();
-        // Splitscreen: the text block shrinks with the pane, like every other HUD element
-        // (HudMetrics). PaneFactor is exactly 1 in single player, so the original 22 px at
-        // (16,10) is untouched there; re-applied only when the factor actually changes.
-        float paneFactor = HudMetrics.PaneFactor(_hud);
-        if (!Mathf.IsEqualApprox(paneFactor, _hudPaneFactor))
-        {
-            _hudPaneFactor = paneFactor;
-            _hud.AddThemeFontSizeOverride("font_size", Mathf.Max(8, Mathf.RoundToInt(HudFontSize * paneFactor)));
-            _hud.Position = new Vector2(HudMargin.X * paneFactor, HudMargin.Y * paneFactor);
-        }
-        // A splitscreen pane is proportionally WIDER than it is tall, so a height-scaled single
-        // line still ran into the top-centre compass tape in a 4P quarter pane — break the
-        // throttle onto its own line there. Full screen keeps the original one-liner.
-        string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
-        string throttle = $"THR {_model.Throttle * 100,3:0}%";
-        _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-        if (_model.isStalled())
-            _hud.Text += "\n⚠ STALLED - SPEED UP";
-        if (!halted && !_crashed && _damageFlash > 0f)
-        {
-            _damageFlash -= (float)delta;
-            _hud.Text += $"\n{_damageFlashText}";
-        }
-        if (Damage?.Summary() is { Length: > 0 } dmgSummary)
-            _hud.Text += $"\nDMG {dmgSummary}";
-        // The weapon ammo readout is now the E35 gauges + the E36 WeaponReadout (drawn in the game's
-        // own HUD font from MSG_HUD_GUNGAUGE/MSG_HUD_MISSLES), not this text block.
-        // Stunt run status now lives in the marker HUD; keep the compact text line only
-        // as a fallback if the marker somehow wasn't built.
-        if (Stunt != null && Marker == null)
-            _hud.Text += $"\n{Stunt.StatusLine()}";
-        if (halted)
-        {
-            _hud.Text += "\n⏸ PAUSED — orbit: WASD/arrows · zoom: Shift/Ctrl · P (gamepad Start) resume · . step one frame";
-        }
-        else if (_crashed)
-        {
-            _hud.Text += "\n⚠ CRASHED — PRESS R (GAMEPAD Y/A) TO RESPAWN";
-        }
-        else
-        {
-            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
-        }
-
-        // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)
-        // and speed up with throttle. Frozen while crashed or paused (a still disc reads
-        // the same at any angle, and freezing it keeps screenshots deterministic).
-        Props?.Advance(simDt, _crashed || halted ? 0f : PropIdleSpin + (1f - PropIdleSpin) * _model.Throttle);
-
-        // Blink the wingtip flares on the data's 1.5 s cycle, and track the stick with
-        // the control surfaces. Frozen while paused (so a screenshot catches a fixed
-        // state — the paused orbit camera can inspect the held deflection) and while
-        // crashed (the airframe is hidden anyway).
-        if (!_crashed && !halted)
-        {
-            WingLights?.Advance(simDt);
-            Surfaces?.Advance(simDt, _lastInput);
-            Visuals?.Update(_model.Position, _model.Attitude); // smoke/fire trail emission
-        }
-    }
-
     /// <summary>Which fixed view the camera should hold this frame, as an index into
     /// <see cref="Views"/>, or −1 for the chase camera. A held numpad key beats the scripted
     /// <see cref="PinnedView"/> so a pinned run can still be explored at the controls; with several
@@ -1789,4 +1783,16 @@ public partial class FlightController : Node3D
         _camera.Position = DesiredCamPos(out var camUp);
         _camera.LookAt(_model.Position - _model.Attitude.Z * CamLookAhead, camUp);
     }
+
+    /// <summary>Per gun group's live firing state: the fire-rate accumulator, which muzzle fires
+    /// next (rounds alternate left/right so the group's total rate equals FIRE_RATE), and whether
+    /// the empty-clip warning has already sounded since it last had ammo.</summary>
+    private sealed class GunState
+    {
+        public float Accum;
+        public int NextMuzzle;
+        public bool Warned;
+        public bool LoggedFirst;   // verification breadcrumb: the group logs its first live round once
+    }
+
 }

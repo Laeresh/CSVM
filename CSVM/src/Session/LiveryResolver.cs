@@ -24,6 +24,11 @@ public sealed class LiveryResolver
         _rofPath = rofPath;
     }
 
+    /// <summary>The original's per-pattern paint region masks, scanned once per session from
+    /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
+    /// run — aircraft then build unpainted rather than failing.</summary>
+    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
+
     /// <summary>The 12 named schemes shipped in vehicle.json, loaded once per session.
     /// Empty on a read failure — paint is cosmetic and must never block a build.</summary>
     public List<PaintScheme> PaintCatalog(string zrdrPath)
@@ -44,11 +49,6 @@ public sealed class LiveryResolver
         return _paintCatalog;
     }
 
-    /// <summary>The original's per-pattern paint region masks, scanned once per session from
-    /// the extracted UI archive. Empty (and a one-line note) when ExtractRof.ps1 has not been
-    /// run — aircraft then build unpainted rather than failing.</summary>
-    public PatternLibrary Patterns => _patternLibrary ??= PatternLibrary.Load(_rofPath);
-
     /// <summary>The patterns this aircraft has masks for — the list the original's paint UI
     /// offers for that plane. Empty when the model carries no skin prefix to key on.</summary>
     public List<string> PatternsForPlane(GameZ planesGamez, string planeNode)
@@ -56,14 +56,6 @@ public sealed class LiveryResolver
         var root = planesGamez.FindByName(planeNode);
         var prefix = root != null ? PlanePainter.PrefixFor(planesGamez, root) : null;
         return prefix != null ? Patterns.PatternsFor(prefix) : new List<string>();
-    }
-
-    private static bool ContainsPattern(IReadOnlyList<string> list, string name)
-    {
-        foreach (var p in list)
-            if (string.Equals(p, name, StringComparison.OrdinalIgnoreCase))
-                return true;
-        return false;
     }
 
     /// <summary>The livery player <paramref name="index"/> flies, or null to build the
@@ -139,4 +131,12 @@ public sealed class LiveryResolver
     {
         Seed = _spec.PaintSeedExplicit ? _spec.PaintSeed : Rng.SeedFor(Rng.Paint),
     };
+
+    private static bool ContainsPattern(IReadOnlyList<string> list, string name)
+    {
+        foreach (var p in list)
+            if (string.Equals(p, name, StringComparison.OrdinalIgnoreCase))
+                return true;
+        return false;
+    }
 }

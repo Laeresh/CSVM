@@ -22,8 +22,6 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class PropParts
 {
-    public enum Kind { None, Static, Nitro, PropMain, PropGhost, RotorMain, RotorGhost }
-
     private const float PropMainDegPerSec = -220f; // propN   : XYZ_ROTATION [0,0,-220]
     private const float PropGhostDegPerSec = 60f;  // propNb  : XYZ_ROTATION [0,0, 60]
     private const float RotorMainDegPerSec = 165f; // rotor1  : XYZ_ROTATION [0,165,0]
@@ -35,6 +33,8 @@ public static class PropParts
     private static readonly Regex PropMainRe = new("^prop[0-9]+$", RegexOptions.IgnoreCase);
     private static readonly Regex RotorGhostRe = new("^rotor[0-9]+b$", RegexOptions.IgnoreCase);
     private static readonly Regex RotorMainRe = new("^rotor[0-9]+$", RegexOptions.IgnoreCase);
+
+    public enum Kind { None, Static, Nitro, PropMain, PropGhost, RotorMain, RotorGhost }
 
     public static Kind Classify(string name)
     {

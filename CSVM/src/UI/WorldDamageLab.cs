@@ -100,6 +100,38 @@ public sealed partial class WorldDamageLab : Node
     /// without H — and without <c>--debug-damage</c> — renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
 
+    /// <summary>Parses <c>--debug-damage[=script]</c>: a comma-separated, <b>ordered</b> list of
+    /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
+    /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>. Unknown steps are reported and
+    /// dropped rather than silently changing what the run does.</summary>
+    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
+    {
+        var kept = new List<string>();
+        foreach (string step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (step.Equals("open", StringComparison.OrdinalIgnoreCase)
+                || step.Equals("kill", StringComparison.OrdinalIgnoreCase)
+                || step.Equals("reset", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("node=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("pool=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("hp=", StringComparison.OrdinalIgnoreCase)
+                || step.StartsWith("tick=", StringComparison.OrdinalIgnoreCase))
+            {
+                kept.Add(step);
+                continue;
+            }
+            // See NodeLab.ParseDebugSpec: a supplied list takes the rejects as data instead of
+            // logging them, so the spec can normalise a value engine-free.
+            if (rejected != null)
+            {
+                rejected.Add(step);
+                continue;
+            }
+            Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open — ignoring it");
+        }
+        return string.Join(",", kept);
+    }
+
     public override void _Ready()
     {
         _selection.Changed += OnSelectionChanged;
@@ -175,6 +207,25 @@ public sealed partial class WorldDamageLab : Node
         Log.Info("ui", $"damagelab {(_open ? "open" : "closed")}");
     }
 
+    private static Label Small(string text)
+    {
+        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        return label;
+    }
+
+    private static string Label(DestructibleRegistry.Instance inst)
+    {
+        var def = inst.Def;
+        return def.AnimName is { Length: > 0 } anim
+               && !anim.Equals(def.Name, StringComparison.OrdinalIgnoreCase)
+            ? $"{anim}@{def.Name}"
+            : def.Name.Length > 0 ? def.Name : "(unnamed)";
+    }
+
+    private static string Source(DestructibleRegistry.Instance inst) =>
+        inst.Def.Archive != null ? "compiled" : "reader";
+
     private void BuildUi()
     {
         _layer = new CanvasLayer { Layer = 3 };
@@ -236,13 +287,6 @@ public sealed partial class WorldDamageLab : Node
             pressed();
         };
         return b;
-    }
-
-    private static Label Small(string text)
-    {
-        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f), AutowrapMode = TextServer.AutowrapMode.WordSmart };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        return label;
     }
 
     // ---- selection --------------------------------------------------------------------------
@@ -413,18 +457,6 @@ public sealed partial class WorldDamageLab : Node
                            + (_collisionBuilt ? "" : "\ncolliders NOT BUILT IN THIS MODE — a kill's collider census would read zero here and lie");
         }
     }
-
-    private static string Label(DestructibleRegistry.Instance inst)
-    {
-        var def = inst.Def;
-        return def.AnimName is { Length: > 0 } anim
-               && !anim.Equals(def.Name, StringComparison.OrdinalIgnoreCase)
-            ? $"{anim}@{def.Name}"
-            : def.Name.Length > 0 ? def.Name : "(unnamed)";
-    }
-
-    private static string Source(DestructibleRegistry.Instance inst) =>
-        inst.Def.Archive != null ? "compiled" : "reader";
 
     // ---- driving ----------------------------------------------------------------------------
 
@@ -603,14 +635,6 @@ public sealed partial class WorldDamageLab : Node
         Log.Info("ui", $"damagelab effects runtime={(effects != null ? "built" : "unavailable")} — damage-stage and death effects {(effects != null ? "render here" : "will start but draw nothing in this mode")}");
     }
 
-    private sealed class PoolRow
-    {
-        public DestructibleRegistry.Instance Inst = null!;
-        public bool Drivable;
-        public HSlider? Slider;
-        public Label? Readout;
-    }
-
     // ---- scripted script --------------------------------------------------------------------
 
     private void RunDebugScript()
@@ -717,35 +741,11 @@ public sealed partial class WorldDamageLab : Node
         }
     }
 
-    /// <summary>Parses <c>--debug-damage[=script]</c>: a comma-separated, <b>ordered</b> list of
-    /// <c>node=&lt;cs_name&gt;</c>, <c>pool=&lt;n&gt;</c>, <c>hp=&lt;value&gt;</c>, <c>kill</c>,
-    /// <c>reset</c>, <c>tick=&lt;seconds&gt;</c> and <c>open</c>. Unknown steps are reported and
-    /// dropped rather than silently changing what the run does.</summary>
-    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
+    private sealed class PoolRow
     {
-        var kept = new List<string>();
-        foreach (string step in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (step.Equals("open", StringComparison.OrdinalIgnoreCase)
-                || step.Equals("kill", StringComparison.OrdinalIgnoreCase)
-                || step.Equals("reset", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("node=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("pool=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("hp=", StringComparison.OrdinalIgnoreCase)
-                || step.StartsWith("tick=", StringComparison.OrdinalIgnoreCase))
-            {
-                kept.Add(step);
-                continue;
-            }
-            // See NodeLab.ParseDebugSpec: a supplied list takes the rejects as data instead of
-            // logging them, so the spec can normalise a value engine-free.
-            if (rejected != null)
-            {
-                rejected.Add(step);
-                continue;
-            }
-            Log.Warn("ui", $"--debug-damage step '{step}' is not node=/pool=/hp=/kill/reset/tick=/open — ignoring it");
-        }
-        return string.Join(",", kept);
+        public DestructibleRegistry.Instance Inst = null!;
+        public bool Drivable;
+        public HSlider? Slider;
+        public Label? Readout;
     }
 }

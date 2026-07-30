@@ -11,11 +11,6 @@ namespace CSVM.Tests;
 /// </summary>
 public class SessionSpecMenuTests
 {
-    private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
-
-    private static SessionSpec Menu(SessionSpec cli, string chapter, bool stunt, params string[] planes)
-        => SessionSpec.FromMenu(cli, chapter, planes, stunt);
-
     [Fact]
     public void AMenuLaunchIsAlwaysFlightOverAChapterWorld()
     {
@@ -158,4 +153,9 @@ public class SessionSpecMenuTests
         }
         Assert.Equal(UI.SplitScreen.MaxPlayers, SessionSpec.FromMenu(Cli(), "C1", many, stunt: false).Players);
     }
+
+    private static SessionSpec Cli(params string[] args) => SessionSpec.Parse(args);
+
+    private static SessionSpec Menu(SessionSpec cli, string chapter, bool stunt, params string[] planes)
+        => SessionSpec.FromMenu(cli, chapter, planes, stunt);
 }

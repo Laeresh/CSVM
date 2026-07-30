@@ -63,9 +63,6 @@ public sealed partial class MapEdgeExtender : Node3D
     // every pane from one window). Empty until the first Update.
     private readonly List<(int, int)> _centerCells = new();
 
-    /// <summary>Extension cells currently instantiated (diagnostics).</summary>
-    public int LiveCellCount => _live.Count;
-
     private MapEdgeExtender(GameZ gamez, SceneBuilder scene, GameZNode world,
         IReadOnlyList<ClutterBuilder.KindExport>? clutter)
     {
@@ -81,23 +78,8 @@ public sealed partial class MapEdgeExtender : Node3D
         Name = "map_edge";
     }
 
-    /// <summary>Builds the extender for a world, or null when the world carries no usable
-    /// area/partition grid. <paramref name="clutter"/> (the chapter's built ClutterBuilder,
-    /// if any) lets the extension grow the same trees the map grows — the original shows
-    /// clutter on the continued terrain (see the class doc video evidence).</summary>
-    internal static MapEdgeExtender? Create(GameZ gamez, SceneBuilder scene, GameZNode world,
-        ClutterBuilder? clutter)
-    {
-        if (!world.HasArea || world.PartitionCols <= 0 || world.PartitionRows <= 0
-            || world.AreaRight <= world.AreaLeft || world.AreaBottom <= world.AreaTop)
-            return null;
-        var ext = new MapEdgeExtender(gamez, scene, world, clutter?.ExportedKinds);
-        ext.ScanTiles(world);
-        if (ext._tiles.Count == 0)
-            return null;
-        ext.BinClutter();
-        return ext;
-    }
+    /// <summary>Extension cells currently instantiated (diagnostics).</summary>
+    public int LiveCellCount => _live.Count;
 
     /// <summary>Single-focus convenience overload (the single-player flight camera).</summary>
     public void Update(Vector3 focus) => Update(new[] { focus });
@@ -152,11 +134,23 @@ public sealed partial class MapEdgeExtender : Node3D
             }
     }
 
-    // The partition-grid cell a world position falls in (may be outside the map — that is the
-    // whole point; negative/oversize indices address extension cells).
-    private (int, int) CellOf(Vector3 p) => (
-        Mathf.FloorToInt((p.X - _x0) / _tileX),
-        Mathf.FloorToInt((p.Z - _z0) / _tileZ));
+    /// <summary>Builds the extender for a world, or null when the world carries no usable
+    /// area/partition grid. <paramref name="clutter"/> (the chapter's built ClutterBuilder,
+    /// if any) lets the extension grow the same trees the map grows — the original shows
+    /// clutter on the continued terrain (see the class doc video evidence).</summary>
+    internal static MapEdgeExtender? Create(GameZ gamez, SceneBuilder scene, GameZNode world,
+        ClutterBuilder? clutter)
+    {
+        if (!world.HasArea || world.PartitionCols <= 0 || world.PartitionRows <= 0
+            || world.AreaRight <= world.AreaLeft || world.AreaBottom <= world.AreaTop)
+            return null;
+        var ext = new MapEdgeExtender(gamez, scene, world, clutter?.ExportedKinds);
+        ext.ScanTiles(world);
+        if (ext._tiles.Count == 0)
+            return null;
+        ext.BinClutter();
+        return ext;
+    }
 
     // ---------------------------------------------------------------- mirror mapping
 
@@ -187,6 +181,12 @@ public sealed partial class MapEdgeExtender : Node3D
             Basis.FromScale(new Vector3(fx ? -1 : 1, 1, fz ? -1 : 1)),
             new Vector3(ox, 0, oz));
     }
+
+    // The partition-grid cell a world position falls in (may be outside the map — that is the
+    // whole point; negative/oversize indices address extension cells).
+    private (int, int) CellOf(Vector3 p) => (
+        Mathf.FloorToInt((p.X - _x0) / _tileX),
+        Mathf.FloorToInt((p.Z - _z0) / _tileZ));
 
     // ---------------------------------------------------------------- cell building
 

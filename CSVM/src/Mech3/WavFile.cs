@@ -14,6 +14,13 @@ public sealed class WavFile
     public short[] Samples = Array.Empty<short>(); // interleaved PCM16
     public int Channels;
     public int SampleRate;
+
+    private static readonly int[] AdaptTable =
+    {
+        230, 230, 230, 230, 307, 409, 512, 614,
+        768, 614, 512, 409, 307, 230, 230, 230,
+    };
+
     public int Frames => Channels == 0 ? 0 : Samples.Length / Channels;
 
     public static WavFile Parse(byte[] bytes)
@@ -87,12 +94,6 @@ public sealed class WavFile
         }
         return wav;
     }
-
-    private static readonly int[] AdaptTable =
-    {
-        230, 230, 230, 230, 307, 409, 512, 614,
-        768, 614, 512, 409, 307, 230, 230, 230,
-    };
 
     private static short[] DecodeMsAdpcm(byte[] d, int offset, int length, int channels,
         int blockAlign, int samplesPerBlock, short[] coef1, short[] coef2, int factSamples)

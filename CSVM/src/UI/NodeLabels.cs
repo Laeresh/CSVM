@@ -30,23 +30,37 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class NodeLabels : Node
 {
-    public enum Mode { Off, Meshes, All }
-
     // Selection cadence. Positions are world-static and Label3D billboards itself, so
     // recomputing a few times a second is indistinguishable from per-frame. TUNE.
     private const double RefreshInterval = 0.35;
+
+    // Minimum on-screen separation between two labels. Wider than tall because a name is a
+    // wide, short box — a square grid either overlaps horizontally or throws away far too
+    // many rows. Both TUNE.
+    private const float GapX = 108f;
+    private const float GapY = 26f;
 
     private readonly Node3D _root;
     private readonly Camera3D _camera;
     private readonly List<Label3D> _pool = new();
     private readonly List<(Node3D Node, string Name, bool Deprio, Vector3 Anchor)> _candidates = new();
     private readonly List<(float Rank, Vector3 Pos, string Name)> _picked = new();
+    private readonly HashSet<long> _occupied = new();
 
     private Node3D? _holder;
     private CanvasLayer? _hudLayer;
     private Label? _hud;
     private Mode _mode = Mode.Off;
     private double _sinceRefresh = 1e9;
+
+    public NodeLabels(Node3D root, Camera3D camera)
+    {
+        _root = root;
+        _camera = camera;
+        Name = "node_labels";
+    }
+
+    public enum Mode { Off, Meshes, All }
 
     /// <summary>How far from the camera a node may be and still get a label. This is a
     /// performance bound, not the readability one — screen-space de-cluttering is what keeps
@@ -69,12 +83,14 @@ public sealed partial class NodeLabels : Node
     /// <summary>--debug-names[=meshes|all]: start switched on, for scripted screenshots.</summary>
     public Mode InitialMode { get; init; } = Mode.Off;
 
-    public NodeLabels(Node3D root, Camera3D camera)
+    /// <summary>Parses the --debug-names value. Absent value = Meshes, the useful default
+    /// (All includes every empty group node and is mostly noise on a first look).</summary>
+    public static Mode ParseMode(string value) => value.Trim().ToLowerInvariant() switch
     {
-        _root = root;
-        _camera = camera;
-        Name = "node_labels";
-    }
+        "all" => Mode.All,
+        "off" => Mode.Off,
+        _ => Mode.Meshes,
+    };
 
     public override void _Ready()
     {
@@ -92,6 +108,53 @@ public sealed partial class NodeLabels : Node
                 _ => Mode.Off,
             });
     }
+
+    public override void _Process(double delta)
+    {
+        if (_mode == Mode.Off)
+            return;
+        _sinceRefresh += delta;
+        if (_sinceRefresh < RefreshInterval)
+            return;
+        _sinceRefresh = 0;
+        Rescan();
+        Refresh();
+    }
+
+    private static bool HasMesh(Node3D n)
+    {
+        foreach (var c in n.GetChildren())
+            if (c is MeshInstance3D)
+                return true;
+        return false;
+    }
+
+    /// <summary>Where on the node to hang its label, in node-local space: the centre of its
+    /// mesh geometry rather than the node origin.
+    ///
+    /// <para>This matters twice over. A gamez node's origin is frequently nowhere near the
+    /// thing it draws, so an origin-anchored name floats off in space — useless when the whole
+    /// job is reading the name of an object you are looking at. And a great many world nodes
+    /// share an origin (group/pivot nodes sitting at the world origin), so origin anchoring
+    /// collapsed them all into one screen cell and the de-clutter threw nearly all of them
+    /// away: C1 in flight showed 6 labels out of 183 candidates.</para>
+    ///
+    /// <para>Computed once per scan in LOCAL space and transformed per refresh, so it follows
+    /// a node that moves (aircraft parts) without being recomputed.</para></summary>
+    private static Vector3 LocalAnchor(Node3D n)
+    {
+        var sum = Vector3.Zero;
+        int count = 0;
+        foreach (var c in n.GetChildren())
+            if (c is MeshInstance3D { Mesh: not null } mi)
+            {
+                sum += mi.Transform * mi.GetAabb().GetCenter();
+                count++;
+            }
+        return count > 0 ? sum / count : Vector3.Zero;
+    }
+
+    private static long CellKey(int x, int y) => ((long)x << 32) ^ (uint)y;
 
     private void SetMode(Mode mode)
     {
@@ -139,18 +202,6 @@ public sealed partial class NodeLabels : Node
         return h;
     }
 
-    public override void _Process(double delta)
-    {
-        if (_mode == Mode.Off)
-            return;
-        _sinceRefresh += delta;
-        if (_sinceRefresh < RefreshInterval)
-            return;
-        _sinceRefresh = 0;
-        Rescan();
-        Refresh();
-    }
-
     /// <summary>Re-walks the tree for labellable nodes. Redone periodically because the flight
     /// scene is not static — MapEdgeExtender adds and removes border tiles on cell crossings,
     /// and a one-shot walk would label ghosts and miss new ground.</summary>
@@ -185,39 +236,6 @@ public sealed partial class NodeLabels : Node
             if (ReferenceEquals(d, node))
                 return true;
         return false;
-    }
-
-    private static bool HasMesh(Node3D n)
-    {
-        foreach (var c in n.GetChildren())
-            if (c is MeshInstance3D)
-                return true;
-        return false;
-    }
-
-    /// <summary>Where on the node to hang its label, in node-local space: the centre of its
-    /// mesh geometry rather than the node origin.
-    ///
-    /// <para>This matters twice over. A gamez node's origin is frequently nowhere near the
-    /// thing it draws, so an origin-anchored name floats off in space — useless when the whole
-    /// job is reading the name of an object you are looking at. And a great many world nodes
-    /// share an origin (group/pivot nodes sitting at the world origin), so origin anchoring
-    /// collapsed them all into one screen cell and the de-clutter threw nearly all of them
-    /// away: C1 in flight showed 6 labels out of 183 candidates.</para>
-    ///
-    /// <para>Computed once per scan in LOCAL space and transformed per refresh, so it follows
-    /// a node that moves (aircraft parts) without being recomputed.</para></summary>
-    private static Vector3 LocalAnchor(Node3D n)
-    {
-        var sum = Vector3.Zero;
-        int count = 0;
-        foreach (var c in n.GetChildren())
-            if (c is MeshInstance3D { Mesh: not null } mi)
-            {
-                sum += mi.Transform * mi.GetAabb().GetCenter();
-                count++;
-            }
-        return count > 0 ? sum / count : Vector3.Zero;
     }
 
     private void Refresh()
@@ -274,14 +292,6 @@ public sealed partial class NodeLabels : Node
                         + $" within {Radius:0} m";
     }
 
-    // Minimum on-screen separation between two labels. Wider than tall because a name is a
-    // wide, short box — a square grid either overlaps horizontally or throws away far too
-    // many rows. Both TUNE.
-    private const float GapX = 108f;
-    private const float GapY = 26f;
-
-    private readonly HashSet<long> _occupied = new();
-
     /// <summary>Reserves this label's screen cell, or reports the spot as already taken.
     /// Checking the 3×3 neighbourhood is what guarantees a real minimum gap; testing only the
     /// own cell would happily place two labels a pixel apart across a cell boundary.</summary>
@@ -295,8 +305,6 @@ public sealed partial class NodeLabels : Node
         _occupied.Add(CellKey(cx, cy));
         return true;
     }
-
-    private static long CellKey(int x, int y) => ((long)x << 32) ^ (uint)y;
 
     private Label3D LabelAt(int i)
     {
@@ -325,13 +333,4 @@ public sealed partial class NodeLabels : Node
         }
         return _pool[i];
     }
-
-    /// <summary>Parses the --debug-names value. Absent value = Meshes, the useful default
-    /// (All includes every empty group node and is mostly noise on a first look).</summary>
-    public static Mode ParseMode(string value) => value.Trim().ToLowerInvariant() switch
-    {
-        "all" => Mode.All,
-        "off" => Mode.Off,
-        _ => Mode.Meshes,
-    };
 }

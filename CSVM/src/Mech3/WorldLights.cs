@@ -51,25 +51,11 @@ public sealed class WorldLights : IDisposable
     private readonly byte[] _buffer = new byte[MaxActive * FloatsPerLight * sizeof(float)];
     private ImageTexture? _texture;
     private int _lastCount = -1;
+    private int _loggedSubmitted = -1;
 
     /// <summary>Highest simultaneous count seen — reported so the MaxActive bound can be
     /// checked against real data rather than assumed.</summary>
     public int PeakCount { get; private set; }
-
-    private readonly struct Entry
-    {
-        public readonly Vector3 Pos;
-        public readonly Color Color;
-        public readonly float Min, Max;
-        public Entry(Vector3 pos, Color color, float min, float max)
-        {
-            Pos = pos; Color = color; Min = min; Max = max;
-        }
-
-        /// <summary>The same light dimmed by the distance fade — the colour is the intensity,
-        /// so scaling it is how a light leaves the set without popping.</summary>
-        public Entry Faded(float f) => new(Pos, Color * f, Min, Max);
-    }
 
     /// <summary>Lights active this frame before the fade and budget are applied (diagnostics).</summary>
     public int LiveCount { get; private set; }
@@ -167,14 +153,6 @@ public sealed class WorldLights : IDisposable
         _lastCount = n;
     }
 
-    // Angular size of the light's pool, scaled by its (already fade-applied) intensity — the
-    // cheapest honest proxy for "how much of this frame does it change".
-    private static float Significance(Entry e, Vector3 cameraPos) =>
-        e.Max / Mathf.Max(e.Pos.DistanceTo(cameraPos), 1f)
-        * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
-
-    private int _loggedSubmitted = -1;
-
     /// <summary>--debug-anim: report the submitted/live counts when they change. This is how a
     /// headless run shows whether the <see cref="MaxActive"/> bound is actually binding (i.e.
     /// whether any light near the camera is being dropped) rather than assuming it isn't.</summary>
@@ -187,9 +165,6 @@ public sealed class WorldLights : IDisposable
                  + (_pending.Count > MaxActive ? $" (budget {MaxActive}; the rest are past the distance fade)" : ""));
     }
 
-    private void Write(int offset, float value) =>
-        BitConverter.TryWriteBytes(_buffer.AsSpan(offset, sizeof(float)), value);
-
     /// <summary>Drops the world's lights — called when a session is torn down, so the next
     /// world does not inherit the previous one's spill for a frame.</summary>
     public void Dispose()
@@ -198,5 +173,29 @@ public sealed class WorldLights : IDisposable
         RenderingServer.GlobalShaderParameterSet(CountParam, 0);
         _lastCount = 0;
         _texture = null;
+    }
+
+    // Angular size of the light's pool, scaled by its (already fade-applied) intensity — the
+    // cheapest honest proxy for "how much of this frame does it change".
+    private static float Significance(Entry e, Vector3 cameraPos) =>
+        e.Max / Mathf.Max(e.Pos.DistanceTo(cameraPos), 1f)
+        * Mathf.Max(e.Color.R, Mathf.Max(e.Color.G, e.Color.B));
+
+    private void Write(int offset, float value) =>
+        BitConverter.TryWriteBytes(_buffer.AsSpan(offset, sizeof(float)), value);
+
+    private readonly struct Entry
+    {
+        public readonly Vector3 Pos;
+        public readonly Color Color;
+        public readonly float Min, Max;
+        public Entry(Vector3 pos, Color color, float min, float max)
+        {
+            Pos = pos; Color = color; Min = min; Max = max;
+        }
+
+        /// <summary>The same light dimmed by the distance fade — the colour is the intensity,
+        /// so scaling it is how a light leaves the set without popping.</summary>
+        public Entry Faded(float f) => new(Pos, Color * f, Min, Max);
     }
 }

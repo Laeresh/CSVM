@@ -17,13 +17,6 @@ public class ZrdrTests
 {
     private static string FixtureDir => TestData.Fixture("zrdr");
 
-    private static ZrdrDict ProbeBlock()
-    {
-        var root = Zrdr.LoadFile(FixtureDir, "shapes.json");
-        var outer = ZrdrDict.FromAlternating(Assert.IsType<List<object?>>(root[0]));
-        return Assert.IsType<ZrdrDict>(outer.Dict("PROBE_BLOCK"));
-    }
-
     [Fact]
     public void EveryNumberArrivesAsFloat()
     {
@@ -164,5 +157,12 @@ public class ZrdrTests
             ballistics.Add(name);
         }
         Assert.Equal(new[] { "weapons.json" }, ballistics);
+    }
+
+    private static ZrdrDict ProbeBlock()
+    {
+        var root = Zrdr.LoadFile(FixtureDir, "shapes.json");
+        var outer = ZrdrDict.FromAlternating(Assert.IsType<List<object?>>(root[0]));
+        return Assert.IsType<ZrdrDict>(outer.Dict("PROBE_BLOCK"));
     }
 }

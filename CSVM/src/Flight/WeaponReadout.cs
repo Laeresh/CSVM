@@ -25,15 +25,15 @@ public sealed partial class WeaponReadout : Control
     public string? MissileName;    // %1 of the missile line (the rocket display name)
     public int MissileAmmo;        // %2 of the missile line (the next pylon's rounds, per-pylon)
 
-    private HudFont _font = null!;
-    private string _gunTemplate = "";
-    private string _missileTemplate = "";
-
     private const string GunKey = "MSG_HUD_GUNGAUGE";
     private const string MissileKey = "MSG_HUD_MISSLES"; // the message table's own (mis)spelling
     private const float RefCellHeight = 22f;   // glyph-cell height in px at the 1440p reference (TUNE)
     private const float RefBottomMargin = 64f; // gap from the pane bottom to the lower line (TUNE)
     private const float RefLineGap = 4f;       // extra atlas px between the two stacked lines
+
+    private HudFont _font = null!;
+    private string _gunTemplate = "";
+    private string _missileTemplate = "";
 
     /// <summary>Builds the readout over the loaded font + message table, resolving both templates
     /// once (a missing key stays visible as the raw key, per <see cref="Messages.Get"/>).</summary>

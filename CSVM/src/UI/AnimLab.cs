@@ -51,6 +51,15 @@ public sealed partial class AnimLab : Node
     /// replay the same dice.</summary>
     public const ulong DefaultSeed = Rng.DefaultSeed;
 
+    /// <summary>Show the interactive UI — status line, transport, picker and timeline. On by
+    /// default; off for a scripted <c>--screenshot</c> (kept byte-identical) unless
+    /// <c>--debug-anim-ui</c> forces it on. When off, the runtime hooks are never attached.</summary>
+    public bool ShowUi = true;
+
+    // The stage's distance in front of the camera. A large-fireball/smokeball cluster is several
+    // metres across; this frames it without clipping the near plane. TUNE.
+    private const float StageAnchorDist = 55f;
+
     /// <summary>The transport time scales, slowest to fastest (buttons + the current-speed
     /// readout use these). 1× is the real-time default; below it is slow-mo, above it is
     /// fast-forward for skimming a long loop.</summary>
@@ -71,6 +80,8 @@ public sealed partial class AnimLab : Node
     // their disposal — every other mode closes them when the build scope ends.
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
+    // ItemList row → index into _program.Defs (the filtered view).
+    private readonly List<int> _rows = new();
 
     private Label? _status;
     private AnimTimeline? _timeline;
@@ -78,8 +89,6 @@ public sealed partial class AnimLab : Node
     private ItemList? _list;
     private Control? _pickerPanel;
     private Button? _pauseBtn;
-    // ItemList row → index into _program.Defs (the filtered view).
-    private readonly List<int> _rows = new();
 
     private bool _launched;      // first-frame housekeeping (the --play-anim auto-play) done
     private int _steps;          // sim steps since Play/Restart (status readout)
@@ -97,15 +106,8 @@ public sealed partial class AnimLab : Node
     private bool _anchorCaptured;
     private bool _trackChildren;           // CALL_ANIMATION children tracked (off once ambient runs)
 
-    /// <summary>Show the interactive UI — status line, transport, picker and timeline. On by
-    /// default; off for a scripted <c>--screenshot</c> (kept byte-identical) unless
-    /// <c>--debug-anim-ui</c> forces it on. When off, the runtime hooks are never attached.</summary>
-    public bool ShowUi = true;
-
-    /// <summary>The session's shared selection. The lab's camera follows its current rung; the
-    /// binding is independent of <see cref="ShowUi"/>, so a scripted <c>--debug-select</c> run
-    /// still tracks what it picked.</summary>
-    public SelectionService? Selection { get; init; }
+    // The stage's snapshot transform, reused across a Restart.
+    private Transform3D _stageAnchorXform = Transform3D.Identity;
 
     public AnimLab(AnimRuntime runtime, AnimProgram program, SpectatorCamera cam,
         Node3D stageAnchor, TextureArchive textures, SoundArchive? sounds,
@@ -122,9 +124,16 @@ public sealed partial class AnimLab : Node
         _autoFrame = autoFrame;
     }
 
+    /// <summary>The session's shared selection. The lab's camera follows its current rung; the
+    /// binding is independent of <see cref="ShowUi"/>, so a scripted <c>--debug-select</c> run
+    /// still tracks what it picked.</summary>
+    public SelectionService? Selection { get; init; }
+
     /// <summary>The session clock the transport drives. The lab never owns it — the session picks
     /// the mode (accumulator when interactive, one fixed step per frame when scripted).</summary>
     private static GameClock? Clock => GameClock.Current;
+
+    private float PlayheadTime => _playhead;
 
     public override void _Ready()
     {
@@ -182,19 +191,6 @@ public sealed partial class AnimLab : Node
         UpdateStatus();
     }
 
-    private float PlayheadTime => _playhead;
-
-    private void Step(float dt)
-    {
-        // The playhead is advanced BEFORE Advance so that during the runtime's dispatch hooks it
-        // equals the runner's clock — incremented at the top of Advance — and a fired mark lands
-        // at the time it actually fired. The t=0 events fired by AnimRuntime.Play use dt=0 and see
-        // a zero playhead, so they stamp at t=0, matching.
-        _steps++;
-        _playhead += dt;
-        _runtime.Advance(dt);
-    }
-
     // ---- transport --------------------------------------------------------------------------
 
     public override void _UnhandledInput(InputEvent @event)
@@ -225,6 +221,39 @@ public sealed partial class AnimLab : Node
                 return;
         }
         GetViewport().SetInputAsHandled();
+    }
+
+    /// <summary>Plays one def by ANIMATION_NAME the way a startanim starts (RESET_STATE, then
+    /// Start per anchor — <see cref="AnimRuntime.Play"/>), from a re-pinned RNG and a zeroed
+    /// playhead. The picker's overload focuses the timeline on the exact def picked; this entry
+    /// (also <c>--play-anim</c>) focuses on the first def carrying the name.</summary>
+    public void Play(string name) => Play(name, _program.ByAnimName(name).FirstOrDefault());
+
+    private static bool SameAnimName(AnimDefinition a, AnimDefinition b) =>
+        !string.IsNullOrEmpty(a.AnimName)
+        && string.Equals(a.AnimName, b.AnimName, StringComparison.OrdinalIgnoreCase);
+
+    private static string NodeName(Node3D n) =>
+        n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
+
+    private static string AnchorLabel(Node3D? anchor) => anchor == null ? "(global)" : NodeName(anchor);
+
+    private static Label Small(string text)
+    {
+        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        return label;
+    }
+
+    private void Step(float dt)
+    {
+        // The playhead is advanced BEFORE Advance so that during the runtime's dispatch hooks it
+        // equals the runner's clock — incremented at the top of Advance — and a fired mark lands
+        // at the time it actually fired. The t=0 events fired by AnimRuntime.Play use dt=0 and see
+        // a zero playhead, so they stamp at t=0, matching.
+        _steps++;
+        _playhead += dt;
+        _runtime.Advance(dt);
     }
 
     private void TogglePause()
@@ -283,12 +312,6 @@ public sealed partial class AnimLab : Node
         }
     }
 
-    /// <summary>Plays one def by ANIMATION_NAME the way a startanim starts (RESET_STATE, then
-    /// Start per anchor — <see cref="AnimRuntime.Play"/>), from a re-pinned RNG and a zeroed
-    /// playhead. The picker's overload focuses the timeline on the exact def picked; this entry
-    /// (also <c>--play-anim</c>) focuses on the first def carrying the name.</summary>
-    public void Play(string name) => Play(name, _program.ByAnimName(name).FirstOrDefault());
-
     private void Play(string name, AnimDefinition? focus, bool freshAnchor = true)
     {
         if (_defName != null)
@@ -344,13 +367,6 @@ public sealed partial class AnimLab : Node
             }
         }
     }
-
-    // The stage's distance in front of the camera. A large-fireball/smokeball cluster is several
-    // metres across; this frames it without clipping the near plane. TUNE.
-    private const float StageAnchorDist = 55f;
-
-    // The stage's snapshot transform, reused across a Restart.
-    private Transform3D _stageAnchorXform = Transform3D.Identity;
 
     /// <summary>Repositions the effect/crash stage a fixed offset in front of the camera on a
     /// <paramref name="fresh"/> Play (so the effect sits where you are looking), and leaves it put on
@@ -491,15 +507,6 @@ public sealed partial class AnimLab : Node
             _timeline?.MarkChildFinished(def, anchor);
         }
     }
-
-    private static bool SameAnimName(AnimDefinition a, AnimDefinition b) =>
-        !string.IsNullOrEmpty(a.AnimName)
-        && string.Equals(a.AnimName, b.AnimName, StringComparison.OrdinalIgnoreCase);
-
-    private static string NodeName(Node3D n) =>
-        n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
-
-    private static string AnchorLabel(Node3D? anchor) => anchor == null ? "(global)" : NodeName(anchor);
 
     /// <summary>Frames the camera on the played def and follows its anchor (or first resolved
     /// target node — <see cref="AnimRuntime.FrameTarget"/>), so a moving def (the train) stays in
@@ -733,12 +740,5 @@ public sealed partial class AnimLab : Node
         var b = new Button { Text = text, FocusMode = Control.FocusModeEnum.None };
         b.Pressed += () => { GetViewport().GuiReleaseFocus(); pressed(); };
         return b;
-    }
-
-    private static Label Small(string text)
-    {
-        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        return label;
     }
 }

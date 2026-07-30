@@ -39,6 +39,123 @@ public sealed class ProbeRunner
         _planesGamezPath = planesGamezPath;
     }
 
+    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
+    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
+    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
+    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
+    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
+    public static void ApplyRocketOverride(Loadout loadout, WeaponDefs weapons, string wepId, bool verbose)
+    {
+        if (weapons.Get(wepId) is not { } weapon)
+        {
+            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id — hardpoints keep their stock ordnance");
+            return;
+        }
+        int per = weapon.ClusterSize ?? 0;
+        foreach (var hp in loadout.Hardpoints)
+        {
+            hp.Weapon = weapon;
+            hp.Capacity = per;
+            hp.Ammo = per;
+        }
+        if (verbose)
+        {
+            GD.Print($"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), " +
+                     $"flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
+        }
+    }
+
+    /// <summary>--destroy=&lt;name&gt; (F42): kill every destructible whose def name, animation name or
+    /// anchor <c>cs_name</c> contains <paramref name="name"/> (case-insensitive), so a --screenshot
+    /// captures the destruction with nobody at the controls. Reuses the weapon-hit path exactly
+    /// (<see cref="Mech3.AnimRuntime.DamageAt"/> — the healthy→destroyed swap, debris and effects the
+    /// same as a rocket kill); it just spends more than the object's HP. Resolves each match to its
+    /// authoritative instance and dedupes by anchor, so a wildcard def that binds one physical object
+    /// through several pools is killed once. Returns how many distinct objects were destroyed.</summary>
+    public static int TriggerDestroy(Mech3.AnimRuntime runtime, string name, out Aabb bounds)
+    {
+        bounds = default;
+        static string AnchorName(Node3D n) =>
+            n.HasMeta(Mech3.AnimRuntime.NameMeta) ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
+                                                  : n.Name.ToString();
+
+        // Distinct physical objects to kill, keyed by authoritative anchor so a def bound through
+        // both its reader wildcard and its compiled twin counts once.
+        var targets = new Dictionary<ulong, Mech3.DestructibleRegistry.Instance>();
+        foreach (var inst in runtime.Destructibles.All)
+        {
+            bool match =
+                inst.Def.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
+                || (inst.Def.AnimName?.Contains(name, StringComparison.OrdinalIgnoreCase) ?? false)
+                || AnchorName(inst.Anchor).Contains(name, StringComparison.OrdinalIgnoreCase);
+            if (!match)
+            {
+                continue;
+            }
+            var target = runtime.Destructibles.Resolve(inst.Anchor) ?? inst;
+            targets[target.Anchor.GetInstanceId()] = target;
+        }
+
+        if (targets.Count == 0)
+        {
+            // No match: list a sample of what IS destructible here so the tester can correct the name
+            // without a separate --damage-test run (that report is still the full list).
+            var sample = new List<string>();
+            var seen = new HashSet<string>();
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (seen.Add(inst.Def.Name))
+                {
+                    sample.Add(inst.Def.Name);
+                }
+                if (sample.Count >= 20)
+                {
+                    break;
+                }
+            }
+            GD.Print($"--destroy='{name}': no destructible matched. "
+                     + $"{runtime.Destructibles.DistinctAnchors} object(s) present; some def names: "
+                     + string.Join(", ", sample) + " (--damage-test lists them all)");
+            return 0;
+        }
+
+        // A cap so naming a common wildcard (many towers/panels) can't start hundreds of death
+        // sequences in one frame; the framed object is what the screenshot needs. Loud when it bites.
+        const int cap = 64;
+        int killed = 0;
+        bool haveBounds = false;
+        foreach (var target in targets.Values)
+        {
+            if (killed >= cap)
+            {
+                GD.Print($"--destroy='{name}': capped at {cap} of {targets.Count} matches "
+                         + "(name a more specific def/node to kill fewer)");
+                break;
+            }
+            if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
+            {
+                continue;
+            }
+            // The first killed object's world-space bounds, captured before the kill: the caller
+            // auto-frames the freecam on it (the anchor's own origin is often far from its geometry).
+            // MeshInstance-based, so it merges the healthy + destroyed variants either way.
+            if (!haveBounds)
+            {
+                bounds = UI.OrbitCamera.MergedAabb(target.Anchor);
+                haveBounds = true;
+            }
+            // Spend more than the whole health pool so a single call kills it outright (DamageAt runs
+            // the death sequence at zero). Feeding the anchor node is exactly how --damage-hd drives it.
+            runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
+            killed++;
+        }
+        var c = bounds.GetCenter();
+        string at = haveBounds ? $" near ({c.X:0}, {c.Y:0}, {c.Z:0})" : "";
+        GD.Print($"--destroy='{name}': destroyed {killed} object(s){at} "
+                 + $"({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
+        return killed;
+    }
+
     /// <summary>--dump-markers[=plane]: print each player airframe's firepoint / pylon / target
     /// rig — name, plane-frame position, gun-pair grouping and shared mounts — to stdout and
     /// <c>./.scratch/markers_dump.txt</c>, then quit (see <see cref="Mech3.MarkerRig"/>). This is
@@ -163,32 +280,6 @@ public sealed class ProbeRunner
         return true;
     }
 
-    /// <summary>Applies the <c>--rocket=&lt;wep_id&gt;</c> testing override: replaces every hardpoint's
-    /// ordnance with the named weapon, resetting each pylon's capacity/ammo to that weapon's
-    /// <c>CLUSTER_SIZE</c>. A no-op (with a warning) if the id is unknown. Must run before the pylon
-    /// models are mounted and the controller's ordnance-type list is built. All 11 stock loadouts
-    /// carry HE (wep_06), so this is the only way to exercise a different pylon model.</summary>
-    public static void ApplyRocketOverride(Loadout loadout, WeaponDefs weapons, string wepId, bool verbose)
-    {
-        if (weapons.Get(wepId) is not { } weapon)
-        {
-            GD.PushWarning($"--rocket='{wepId}' is not a known weapon id — hardpoints keep their stock ordnance");
-            return;
-        }
-        int per = weapon.ClusterSize ?? 0;
-        foreach (var hp in loadout.Hardpoints)
-        {
-            hp.Weapon = weapon;
-            hp.Capacity = per;
-            hp.Ammo = per;
-        }
-        if (verbose)
-        {
-            GD.Print($"--rocket: hardpoints -> {weapon.Id} ({weapon.Name}), " +
-                     $"flyout model '{weapon.Flyout?.Model ?? "-"}', {per}/pylon");
-        }
-    }
-
     /// <summary>--dump-loadout[=plane]: for each plane in <c>stock_loadouts.json</c>, build its
     /// model and bind the stock loadout (<see cref="Flight.Loadout"/>, B12), reporting the resolved
     /// gun groups (mount, weapon, per-group ammo, muzzle nodes) and hardpoints — or the loud error
@@ -281,96 +372,5 @@ public sealed class ProbeRunner
             GD.Print($"damage-test: {r.CollidableMeshes} collidable meshes → ./.scratch/world_colliders.txt");
         }
         GD.Print($"{r.Summary} → ./.scratch/damage_test.txt");
-    }
-
-    /// <summary>--destroy=&lt;name&gt; (F42): kill every destructible whose def name, animation name or
-    /// anchor <c>cs_name</c> contains <paramref name="name"/> (case-insensitive), so a --screenshot
-    /// captures the destruction with nobody at the controls. Reuses the weapon-hit path exactly
-    /// (<see cref="Mech3.AnimRuntime.DamageAt"/> — the healthy→destroyed swap, debris and effects the
-    /// same as a rocket kill); it just spends more than the object's HP. Resolves each match to its
-    /// authoritative instance and dedupes by anchor, so a wildcard def that binds one physical object
-    /// through several pools is killed once. Returns how many distinct objects were destroyed.</summary>
-    public static int TriggerDestroy(Mech3.AnimRuntime runtime, string name, out Aabb bounds)
-    {
-        bounds = default;
-        static string AnchorName(Node3D n) =>
-            n.HasMeta(Mech3.AnimRuntime.NameMeta) ? n.GetMeta(Mech3.AnimRuntime.NameMeta).AsString()
-                                                  : n.Name.ToString();
-
-        // Distinct physical objects to kill, keyed by authoritative anchor so a def bound through
-        // both its reader wildcard and its compiled twin counts once.
-        var targets = new Dictionary<ulong, Mech3.DestructibleRegistry.Instance>();
-        foreach (var inst in runtime.Destructibles.All)
-        {
-            bool match =
-                inst.Def.Name.Contains(name, StringComparison.OrdinalIgnoreCase)
-                || (inst.Def.AnimName?.Contains(name, StringComparison.OrdinalIgnoreCase) ?? false)
-                || AnchorName(inst.Anchor).Contains(name, StringComparison.OrdinalIgnoreCase);
-            if (!match)
-            {
-                continue;
-            }
-            var target = runtime.Destructibles.Resolve(inst.Anchor) ?? inst;
-            targets[target.Anchor.GetInstanceId()] = target;
-        }
-
-        if (targets.Count == 0)
-        {
-            // No match: list a sample of what IS destructible here so the tester can correct the name
-            // without a separate --damage-test run (that report is still the full list).
-            var sample = new List<string>();
-            var seen = new HashSet<string>();
-            foreach (var inst in runtime.Destructibles.All)
-            {
-                if (seen.Add(inst.Def.Name))
-                {
-                    sample.Add(inst.Def.Name);
-                }
-                if (sample.Count >= 20)
-                {
-                    break;
-                }
-            }
-            GD.Print($"--destroy='{name}': no destructible matched. "
-                     + $"{runtime.Destructibles.DistinctAnchors} object(s) present; some def names: "
-                     + string.Join(", ", sample) + " (--damage-test lists them all)");
-            return 0;
-        }
-
-        // A cap so naming a common wildcard (many towers/panels) can't start hundreds of death
-        // sequences in one frame; the framed object is what the screenshot needs. Loud when it bites.
-        const int cap = 64;
-        int killed = 0;
-        bool haveBounds = false;
-        foreach (var target in targets.Values)
-        {
-            if (killed >= cap)
-            {
-                GD.Print($"--destroy='{name}': capped at {cap} of {targets.Count} matches "
-                         + "(name a more specific def/node to kill fewer)");
-                break;
-            }
-            if (target.Status == Mech3.DestructibleRegistry.State.Destroyed)
-            {
-                continue;
-            }
-            // The first killed object's world-space bounds, captured before the kill: the caller
-            // auto-frames the freecam on it (the anchor's own origin is often far from its geometry).
-            // MeshInstance-based, so it merges the healthy + destroyed variants either way.
-            if (!haveBounds)
-            {
-                bounds = UI.OrbitCamera.MergedAabb(target.Anchor);
-                haveBounds = true;
-            }
-            // Spend more than the whole health pool so a single call kills it outright (DamageAt runs
-            // the death sequence at zero). Feeding the anchor node is exactly how --damage-hd drives it.
-            runtime.DamageAt(target.Anchor, target.MaxHealth + 1f);
-            killed++;
-        }
-        var c = bounds.GetCenter();
-        string at = haveBounds ? $" near ({c.X:0}, {c.Y:0}, {c.Z:0})" : "";
-        GD.Print($"--destroy='{name}': destroyed {killed} object(s){at} "
-                 + $"({string.Join(", ", targets.Values.Take(killed).Select(t => t.Def.Name).Distinct())})");
-        return killed;
     }
 }

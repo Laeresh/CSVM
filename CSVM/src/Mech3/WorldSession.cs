@@ -42,56 +42,7 @@ namespace CSVM.Mech3;
 /// </summary>
 public sealed class WorldSession
 {
-    /// <summary>Build settings that vary by mode; the loaded archives are passed to
-    /// <see cref="Build"/> separately.</summary>
-    public sealed class Options
-    {
-        public required string DataRoot { get; init; }
-        public required string Chapter { get; init; }
-        public required string Mission { get; init; }
-        public required string ZrdrPath { get; init; }
-        public required string InterpPath { get; init; }
-        public required string MissionZrdrPath { get; init; }
-
-        /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
-        /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session
-        /// root (<c>_worldRoot</c>), a sibling of <see cref="Root"/>, not <see cref="Root"/>
-        /// itself.</summary>
-        public required Node3D EffectsParent { get; init; }
-
-        /// <summary>Where PLAYER_RANGE conditions and the sound listener measure from. Resolved
-        /// per call because no camera exists yet at build time; player 1's camera is the honest
-        /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
-        public required Func<Vector3> PlayerPosition { get; init; }
-
-        /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
-        public bool Collision { get; init; }
-
-        public bool DebugAnim { get; init; }
-        public int AnimLod { get; init; } = AnimRuntime.HighLod;
-        public bool DebugDzPaths { get; init; }
-
-        /// <summary>Keep the caller's archives open past the build: skip nulling the
-        /// <c>PufferFactory</c> and sound <c>Loader</c> after the bootstrap, so puffers/decals can
-        /// be built interactively later (the lab). Default false = the viewer/flight contract.</summary>
-        public bool KeepArchivesOpen { get; init; }
-
-        /// <summary>Whether the bootstrap runs the ambient-playback passes (ON_STARTUP defs +
-        /// startanims). True — the default — in every game/viewer/flight session; the animation
-        /// lab sets false for its quiet stage and runs them on demand through
-        /// <see cref="AnimRuntime.StartAmbient"/>.</summary>
-        public bool AutoStart { get; init; } = true;
-
-        /// <summary>Pins the runtime's RNG for a reproducible run (see
-        /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>
-        public int? RuntimeSeed { get; init; }
-
-        /// <summary>The <c>--node=</c> stage: build ONLY this gamez subtree instead of the whole
-        /// world. Null — the default — is the full chapter build. The caller resolves the name
-        /// (<see cref="WorldBuilder.MatchNodes"/>) so a miss can report its candidates and quit
-        /// before anything is built.</summary>
-        public GameZNode? NodeSubtree { get; init; }
-    }
+    private WorldSession() { }
 
     /// <summary>The built world subtree (the viewer's <c>_plane</c> in world mode): the
     /// <c>world1</c> node with the texture cycler, clutter, any debug dzpaths, and the
@@ -121,8 +72,6 @@ public sealed class WorldSession
     /// <summary>The session's LIGHT_STATE point lights. The caller owns it (disposes it on
     /// teardown) so a rebuild drops the previous world's lights.</summary>
     public WorldLights Lights { get; private set; } = null!;
-
-    private WorldSession() { }
 
     /// <summary>Build the world named <c>world1</c> and bind its animation program. The archives
     /// are the caller's <c>using</c> locals — see the disposal-lifetime contract on the class.</summary>
@@ -323,5 +272,56 @@ public sealed class WorldSession
         root.AddChild(animRuntime);
 
         return s;
+    }
+
+    /// <summary>Build settings that vary by mode; the loaded archives are passed to
+    /// <see cref="Build"/> separately.</summary>
+    public sealed class Options
+    {
+        public required string DataRoot { get; init; }
+        public required string Chapter { get; init; }
+        public required string Mission { get; init; }
+        public required string ZrdrPath { get; init; }
+        public required string InterpPath { get; init; }
+        public required string MissionZrdrPath { get; init; }
+
+        /// <summary>Parent for the effect siblings the bootstrap builds — the world's ambient
+        /// SOUND_NODE emitters and every PUFFER_STATE emitter. In the viewer this is the session
+        /// root (<c>_worldRoot</c>), a sibling of <see cref="Root"/>, not <see cref="Root"/>
+        /// itself.</summary>
+        public required Node3D EffectsParent { get; init; }
+
+        /// <summary>Where PLAYER_RANGE conditions and the sound listener measure from. Resolved
+        /// per call because no camera exists yet at build time; player 1's camera is the honest
+        /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
+        public required Func<Vector3> PlayerPosition { get; init; }
+
+        /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
+        public bool Collision { get; init; }
+
+        public bool DebugAnim { get; init; }
+        public int AnimLod { get; init; } = AnimRuntime.HighLod;
+        public bool DebugDzPaths { get; init; }
+
+        /// <summary>Keep the caller's archives open past the build: skip nulling the
+        /// <c>PufferFactory</c> and sound <c>Loader</c> after the bootstrap, so puffers/decals can
+        /// be built interactively later (the lab). Default false = the viewer/flight contract.</summary>
+        public bool KeepArchivesOpen { get; init; }
+
+        /// <summary>Whether the bootstrap runs the ambient-playback passes (ON_STARTUP defs +
+        /// startanims). True — the default — in every game/viewer/flight session; the animation
+        /// lab sets false for its quiet stage and runs them on demand through
+        /// <see cref="AnimRuntime.StartAmbient"/>.</summary>
+        public bool AutoStart { get; init; } = true;
+
+        /// <summary>Pins the runtime's RNG for a reproducible run (see
+        /// <see cref="AnimRuntime.Seed"/>). Null — the default — leaves it unseeded: the game.</summary>
+        public int? RuntimeSeed { get; init; }
+
+        /// <summary>The <c>--node=</c> stage: build ONLY this gamez subtree instead of the whole
+        /// world. Null — the default — is the full chapter build. The caller resolves the name
+        /// (<see cref="WorldBuilder.MatchNodes"/>) so a miss can report its candidates and quit
+        /// before anything is built.</summary>
+        public GameZNode? NodeSubtree { get; init; }
     }
 }

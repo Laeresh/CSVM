@@ -26,14 +26,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class CompassTape : Control
 {
-    /// <summary>Current heading in degrees, 0 = north (−Z), 90 = east (+X); set
-    /// each frame by the flight controller.</summary>
-    public float HeadingDeg { get; set; }
-
-    private Texture2D _ticks = null!;
-    private Texture2D _labels = null!;
-    private LabelLayer _labelLayer = null!;
-
     // Screen metrics from the 1440p reference screenshot, scaled by viewport height.
     private const float RefBarWidth = 263f, RefBarHeight = 40f, RefTopMargin = 35f;
     private const float RefDrumRadius = 127.6f; // fit of every tall tick: x = c − R·sin(Δ)
@@ -48,6 +40,7 @@ public sealed partial class CompassTape : Control
     // the bar height and the minors at 42% — full-height mapping leaves them stubby
     // (measured 30 px / 17 px vs 24 px / 12 px in a 39 px bar).
     private const float TileOverscan = 1.25f;
+
     private static readonly Vector2 TileSrcSize = new(64, 16);
 
     // compasstxt atlas: "NE SE SW NW" pairs at x 1–25 / 27–51 / 52–83 / 84–115.
@@ -62,6 +55,14 @@ public sealed partial class CompassTape : Control
         new(64, 0, 20, 32), // W (from SW)
         new(84, 0, 32, 32), // NW
     };
+
+    private Texture2D _ticks = null!;
+    private Texture2D _labels = null!;
+    private LabelLayer _labelLayer = null!;
+
+    /// <summary>Current heading in degrees, 0 = north (−Z), 90 = east (+X); set
+    /// each frame by the flight controller.</summary>
+    public float HeadingDeg { get; set; }
 
     /// <summary>Null when the chapter's texture archive lacks the two HUD textures
     /// (the archive itself logs the miss).</summary>
@@ -102,12 +103,6 @@ public sealed partial class CompassTape : Control
         _labelLayer.QueueRedraw();
     }
 
-    /// <summary>Screen x of a mark Δ° off the current heading — the drum projection;
-    /// increasing headings run leftward (whiskey card).</summary>
-    private float DrumX(float deltaDeg) =>
-        Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
-                    * Mathf.Sin(Mathf.DegToRad(deltaDeg));
-
     public override void _Draw()
     {
         float s = HudMetrics.Scale(this);
@@ -139,6 +134,12 @@ public sealed partial class CompassTape : Control
         DrawTextureRectRegion(_ticks, new Rect2(0, tileY, 2f * s, tileH), rimSrc, rim);
         DrawTextureRectRegion(_ticks, new Rect2(w - 2f * s, tileY, 2f * s, tileH), rimSrc, rim);
     }
+
+    /// <summary>Screen x of a mark Δ° off the current heading — the drum projection;
+    /// increasing headings run leftward (whiskey card).</summary>
+    private float DrumX(float deltaDeg) =>
+        Size.X / 2f - RefDrumRadius * HudMetrics.Scale(this)
+                    * Mathf.Sin(Mathf.DegToRad(deltaDeg));
 
     /// <summary>Octant labels every 45°, centred on their drum position but NOT
     /// drum-compressed (the original billboards them upright), fading with the same

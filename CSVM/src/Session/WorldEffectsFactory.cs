@@ -18,12 +18,6 @@ namespace CSVM.Session;
 /// (<c>ReturnToMenu</c> nulls both).</summary>
 public sealed class WorldEffectsFactory
 {
-    // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
-    // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
-    // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
-    private static readonly string[] EffectTemplateRoots =
-        { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
-
     // The impact/destruction effect ANIMATION names the world-effects runtime (D32) is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
     // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance; the gun
@@ -46,6 +40,17 @@ public sealed class WorldEffectsFactory
         "big_splash",
     };
 
+    // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
+    // world-effects runtime bounds every PlayEffectAt instance to this many seconds (past the 30 s
+    // fire, so it completes), then tears its puffers down.
+    private const float EffectRuntimeTtl = 32f;
+
+    // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
+    // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
+    // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
+    private static readonly string[] EffectTemplateRoots =
+        { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
+
     // The gamez template roots those effects' puffers ride — staged (hidden) under the world-effects
     // stage so a PlayEffectAt relocates one onto the hit/death point. Union of the anim defs'
     // anchor roots; all present in every chapter's gamez (checked). The stage is hidden, so the
@@ -67,11 +72,6 @@ public sealed class WorldEffectsFactory
     // plan's Layer-2 work.
     private static readonly string[] CrashAnchorNodes =
         { "healthy", "destroyed", "dontmove", "markers", "piece1", "piece2", "piece3", "piece4", "shadow", "cockpit1" };
-
-    // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
-    // world-effects runtime bounds every PlayEffectAt instance to this many seconds (past the 30 s
-    // fire, so it completes), then tears its puffers down.
-    private const float EffectRuntimeTtl = 32f;
 
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
@@ -105,6 +105,21 @@ public sealed class WorldEffectsFactory
             }
         }
         return n;
+    }
+
+    /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
+    /// def's local anchor set (see the field remark).</summary>
+    public static Node3D BuildCrashAnchorSet()
+    {
+        var set = new Node3D { Name = "player" };
+        set.SetMeta(AnimRuntime.NameMeta, "player");
+        foreach (var name in CrashAnchorNodes)
+        {
+            var node = new Node3D { Name = name };
+            node.SetMeta(AnimRuntime.NameMeta, name);
+            set.AddChild(node);
+        }
+        return set;
     }
 
     /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
@@ -279,20 +294,5 @@ public sealed class WorldEffectsFactory
             {
                 CollectVisibility(c, into);
             }
-    }
-
-    /// <summary>Builds the meshless <see cref="CrashAnchorNodes"/> under a 'player' root — the crash
-    /// def's local anchor set (see the field remark).</summary>
-    public static Node3D BuildCrashAnchorSet()
-    {
-        var set = new Node3D { Name = "player" };
-        set.SetMeta(AnimRuntime.NameMeta, "player");
-        foreach (var name in CrashAnchorNodes)
-        {
-            var node = new Node3D { Name = name };
-            node.SetMeta(AnimRuntime.NameMeta, name);
-            set.AddChild(node);
-        }
-        return set;
     }
 }

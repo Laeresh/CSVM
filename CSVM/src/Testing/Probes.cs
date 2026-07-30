@@ -24,88 +24,15 @@ namespace CSVM.Testing;
 /// </summary>
 public static class Probes
 {
-    /// <summary>Airframe marker rig: how many of the known player airframes have a rig in
-    /// planes.zbd, and which were asked for but not found.</summary>
-    public sealed class MarkersResult
-    {
-        public string Text = "";
-        public string Summary = "";
-        public string? Error;
-        public int Requested;
-        public int Done;
-        public readonly List<string> Missing = new();
-        public bool Ok => Error == null && Requested > 0 && Done == Requested;
-    }
-
-    /// <summary>weapons.json read through the typed reader: entry count and any key the reader
-    /// does not map.</summary>
-    public sealed class WeaponsResult
-    {
-        public string Text = "";
-        public string Summary = "";
-        public string? Error;
-        public int Shown;
-        public int Total;
-        public int UnhandledTotal;
-        public string? EmptyClipSound;
-        public bool Ok => Error == null && Shown > 0 && UnhandledTotal == 0;
-    }
-
-    /// <summary>Stock loadouts bound to their built models: how many bound and every binding
-    /// failure's message (a marker that does not resolve, an unknown weapon id).</summary>
-    public sealed class LoadoutResult
-    {
-        public string Text = "";
-        public string Summary = "";
-        public string? Error;
-        public int Bound;
-        public int Failed;
-        public readonly List<string> Failures = new();
-        public bool Ok => Error == null && Bound > 0 && Failed == 0;
-    }
-
-    /// <summary>One destructible def's sweep — the checks that used to be <c>✓</c>/<c>✗</c> glyphs
-    /// inside the report line, as fields.</summary>
-    public sealed class DamageRow
-    {
-        public string Def = "";
-        public float MaxHealth;
-        public string Source = "";
-        public string Activation = "";
-        public bool Resolved;          // a deep descendant resolves back to this instance
-        public bool Destroyed;
-        public int Hits;
-        public int StagesFired;
-        public int CollidersOff;
-        public int CollidersOn;
-        public int Debris;
-        public int Sounds;
-        public bool? ResetHealthy;     // null when the mode never reset (continuous sweep)
-        public bool? RekillMatched;
-        public bool? CollideAccepted;
-        public string Line = "";
-    }
-
-    /// <summary>The destructible sweep as a whole: the swept rows plus the uncapped registry
-    /// totals (the swept list is capped — a census must read these, not count rows).</summary>
-    public sealed class DamageResult
-    {
-        public string Text = "";
-        public string Summary = "";
-        public string CollidersText = "";
-        public int CollidableMeshes;
-        public int TotalInstances;
-        public int DistinctAnchors;
-        public bool Capped;
-        public readonly List<DamageRow> Rows = new();
-        public bool Ok => Rows.Count > 0 && Rows.All(r => r.Resolved);
-    }
-
     /// <summary>How many defs one sweep reports on. A wildcard NAME binds many identical towers,
     /// so one representative per def is enough; the cap keeps a destructible-heavy chapter a
     /// readable report. <b>It caps the swept rows, never the registry totals</b> — a census reads
     /// <see cref="DamageResult.TotalInstances"/>.</summary>
     public const int SweepCap = 16;
+
+    private const float Mph = 0.44704f;         // m/s per mph
+    private const float Ft = 0.3048f;           // m per foot
+    private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
 
     // ---- markers -----------------------------------------------------------------------------
 
@@ -716,50 +643,6 @@ public static class Probes
 
     // ---- flight envelope ---------------------------------------------------------------------
 
-    private const float Mph = 0.44704f;         // m/s per mph
-    private const float Ft = 0.3048f;           // m per foot
-    private const float EnvDt = 1f / 60f;       // the sim step --det pins every session to
-
-    /// <summary>One flight scenario: what the model does, and what the original did.
-    ///
-    /// <para><see cref="Measured"/> is the original's own value, decoded from cockpit-gauge video
-    /// (see <c>analysis/video-flight-calibration/</c>) — a golden number, not a guess. A row with no
-    /// <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is reported but not
-    /// asserted: either nothing was measured to compare against, or the comparison is a known open
-    /// gap that must not gate a build until it is scoped.</para></summary>
-    public sealed class FlightRow
-    {
-        public string Name = "";
-        public string What = "";
-        public string Unit = "";
-        public double Model;
-        public double? Measured;
-        public double Tolerance;
-        public bool Informational;
-        public string Detail = "";
-
-        public bool Asserted => !Informational && Measured != null;
-        public bool Ok => !Asserted || Math.Abs(Model - Measured!.Value) <= Tolerance;
-
-        /// <summary>Signed miss against the original, as a percentage — the shape that tells a
-        /// scale error (constant %) from drift (sign-random).</summary>
-        public double? ErrorPct =>
-            Measured is { } msd && msd != 0 ? (Model - msd) / msd * 100.0 : null;
-    }
-
-    /// <summary>The flown envelope of one airframe against the original's measured values.</summary>
-    public sealed class FlightEnvelopeResult
-    {
-        public string Text = "";
-        public string Summary = "";
-        public string? Error;
-        public readonly List<FlightRow> Rows = new();
-
-        public int Asserted => Rows.Count(r => r.Asserted);
-        public int Failed => Rows.Count(r => !r.Ok);
-        public bool Ok => Error == null && Asserted > 0 && Failed == 0;
-    }
-
     /// <summary>Steps a throwaway <see cref="FlightModel"/> through the manoeuvres the original was
     /// measured flying, and reports both numbers side by side.
     ///
@@ -1009,5 +892,122 @@ public static class Probes
         if (f.ModelAnimation != null) { parts.Add($"anim:{f.ModelAnimation}"); }
         if (f.Sound != null) { parts.Add($"snd:{f.Sound}"); }
         return "{" + string.Join("/", parts) + "}";
+    }
+
+    /// <summary>Airframe marker rig: how many of the known player airframes have a rig in
+    /// planes.zbd, and which were asked for but not found.</summary>
+    public sealed class MarkersResult
+    {
+        public readonly List<string> Missing = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public int Requested;
+        public int Done;
+        public bool Ok => Error == null && Requested > 0 && Done == Requested;
+    }
+
+    /// <summary>weapons.json read through the typed reader: entry count and any key the reader
+    /// does not map.</summary>
+    public sealed class WeaponsResult
+    {
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public int Shown;
+        public int Total;
+        public int UnhandledTotal;
+        public string? EmptyClipSound;
+        public bool Ok => Error == null && Shown > 0 && UnhandledTotal == 0;
+    }
+
+    /// <summary>Stock loadouts bound to their built models: how many bound and every binding
+    /// failure's message (a marker that does not resolve, an unknown weapon id).</summary>
+    public sealed class LoadoutResult
+    {
+        public readonly List<string> Failures = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        public int Bound;
+        public int Failed;
+        public bool Ok => Error == null && Bound > 0 && Failed == 0;
+    }
+
+    /// <summary>One destructible def's sweep — the checks that used to be <c>✓</c>/<c>✗</c> glyphs
+    /// inside the report line, as fields.</summary>
+    public sealed class DamageRow
+    {
+        public string Def = "";
+        public float MaxHealth;
+        public string Source = "";
+        public string Activation = "";
+        public bool Resolved;          // a deep descendant resolves back to this instance
+        public bool Destroyed;
+        public int Hits;
+        public int StagesFired;
+        public int CollidersOff;
+        public int CollidersOn;
+        public int Debris;
+        public int Sounds;
+        public bool? ResetHealthy;     // null when the mode never reset (continuous sweep)
+        public bool? RekillMatched;
+        public bool? CollideAccepted;
+        public string Line = "";
+    }
+
+    /// <summary>The destructible sweep as a whole: the swept rows plus the uncapped registry
+    /// totals (the swept list is capped — a census must read these, not count rows).</summary>
+    public sealed class DamageResult
+    {
+        public readonly List<DamageRow> Rows = new();
+        public string Text = "";
+        public string Summary = "";
+        public string CollidersText = "";
+        public int CollidableMeshes;
+        public int TotalInstances;
+        public int DistinctAnchors;
+        public bool Capped;
+        public bool Ok => Rows.Count > 0 && Rows.All(r => r.Resolved);
+    }
+
+    /// <summary>One flight scenario: what the model does, and what the original did.
+    ///
+    /// <para><see cref="Measured"/> is the original's own value, decoded from cockpit-gauge video
+    /// (see <c>analysis/video-flight-calibration/</c>) — a golden number, not a guess. A row with no
+    /// <see cref="Measured"/> value, or one flagged <see cref="Informational"/>, is reported but not
+    /// asserted: either nothing was measured to compare against, or the comparison is a known open
+    /// gap that must not gate a build until it is scoped.</para></summary>
+    public sealed class FlightRow
+    {
+        public string Name = "";
+        public string What = "";
+        public string Unit = "";
+        public double Model;
+        public double? Measured;
+        public double Tolerance;
+        public bool Informational;
+        public string Detail = "";
+
+        public bool Asserted => !Informational && Measured != null;
+        public bool Ok => !Asserted || Math.Abs(Model - Measured!.Value) <= Tolerance;
+
+        /// <summary>Signed miss against the original, as a percentage — the shape that tells a
+        /// scale error (constant %) from drift (sign-random).</summary>
+        public double? ErrorPct =>
+            Measured is { } msd && msd != 0 ? (Model - msd) / msd * 100.0 : null;
+    }
+
+    /// <summary>The flown envelope of one airframe against the original's measured values.</summary>
+    public sealed class FlightEnvelopeResult
+    {
+        public readonly List<FlightRow> Rows = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+
+        public int Asserted => Rows.Count(r => r.Asserted);
+        public int Failed => Rows.Count(r => !r.Ok);
+        public bool Ok => Error == null && Asserted > 0 && Failed == 0;
     }
 }

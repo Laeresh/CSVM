@@ -3,77 +3,6 @@ using System.Collections.Generic;
 
 namespace CSVM.Mech3;
 
-/// <summary>One sound definition from sounds.json (name → WAV + playback flags).</summary>
-public sealed class SoundDef
-{
-    public string Name = "";
-    public string WavName = "";
-    public bool Looped;          // LOOPED flag: plays as a forward loop
-    public bool Is3D;            // 3D flag: positional
-    public bool Frequency;       // FREQUENCY flag: the engine pitch-shifts this sound
-    public float RangeMin = 130f, RangeMax = 1020f; // RANGE [full-volume dist, audible dist], m
-    public float Volume = 1f;    // VOLUME base gain
-}
-
-/// <summary>
-/// One <c>SOUND_GROUPS</c> entry: a set of member sounds an event picks one of at random when it
-/// names the group instead of a plain <c>snd_*</c> definition. The combat/destruction one-shots go
-/// through these — <c>air_mixed_exp_sg</c>, <c>ground_mixed_exp_sg</c>, <c>plane_destroy_sg</c>,
-/// <c>bullet_hit_sg</c>, <c>bullet_warning_sg</c>, <c>window_hit_sg</c>.
-///
-/// <para><c>DYNAMIC_WEIGHTS</c> groups carry a recency factor (0.5 everywhere it appears): the
-/// member returned last has its weight scaled by it on the next pick, so the same clip is less
-/// likely to repeat back-to-back — that is what the bare <c>0.5</c> after the token decodes to.
-/// Explicit-<c>WEIGHT</c> groups (<c>snd_plane_die</c>/<c>snd_plane_dmg</c>, whose <c>snd_nothing</c>
-/// carries 0.7 — a 70% chance of silence) give each member its own weight and no recency decay.</para>
-/// </summary>
-public sealed class SoundGroup
-{
-    public string Name = "";
-    public float RecencyFactor = 1f;   // DYNAMIC_WEIGHTS scalar on the last-picked member; 1 = none
-    public readonly List<(string Name, float Weight)> Members = new();
-    private int _last = -1;             // index Pick last returned (the recency memory)
-
-    /// <summary>Picks a member by weight through the caller's RNG (the runtime's seedable
-    /// <c>_rng</c>, so a lab replay is deterministic), scaling the last pick down by
-    /// <see cref="RecencyFactor"/>. Null only when the group is empty.</summary>
-    public string? Pick(Random rng)
-    {
-        if (Members.Count == 0)
-        {
-            return null;
-        }
-        if (Members.Count == 1)
-        {
-            return Members[0].Name;
-        }
-        float Weight(int i) => Members[i].Weight * (i == _last ? RecencyFactor : 1f);
-        float total = 0f;
-        for (int i = 0; i < Members.Count; i++)
-        {
-            total += Weight(i);
-        }
-        double roll = rng.NextDouble() * total;
-        int chosen = Members.Count - 1;
-        for (int i = 0; i < Members.Count; i++)
-        {
-            roll -= Weight(i);
-            if (roll <= 0.0)
-            {
-                chosen = i;
-                break;
-            }
-        }
-        _last = chosen;
-        return Members[chosen].Name;
-    }
-
-    /// <summary>Forgets which member was picked last. The recency memory lives outside the RNG, so
-    /// re-seeding a runtime alone would not replay a pick sequence — whoever re-seeds calls this
-    /// too (<see cref="AnimRuntime.Reseed"/> via <c>WorldSounds</c>).</summary>
-    public void ResetRecency() => _last = -1;
-}
-
 /// <summary>
 /// Parser for the zrdr sounds.json reader file: the SETS block maps snd_* names to
 /// WAV files with playback flags. Entry shape: [snd_name, wav, FLAG..., KEY, [vals], ...]
@@ -194,4 +123,75 @@ public static class SoundDefs
         }
         return groups;
     }
+}
+
+/// <summary>One sound definition from sounds.json (name → WAV + playback flags).</summary>
+public sealed class SoundDef
+{
+    public string Name = "";
+    public string WavName = "";
+    public bool Looped;          // LOOPED flag: plays as a forward loop
+    public bool Is3D;            // 3D flag: positional
+    public bool Frequency;       // FREQUENCY flag: the engine pitch-shifts this sound
+    public float RangeMin = 130f, RangeMax = 1020f; // RANGE [full-volume dist, audible dist], m
+    public float Volume = 1f;    // VOLUME base gain
+}
+
+/// <summary>
+/// One <c>SOUND_GROUPS</c> entry: a set of member sounds an event picks one of at random when it
+/// names the group instead of a plain <c>snd_*</c> definition. The combat/destruction one-shots go
+/// through these — <c>air_mixed_exp_sg</c>, <c>ground_mixed_exp_sg</c>, <c>plane_destroy_sg</c>,
+/// <c>bullet_hit_sg</c>, <c>bullet_warning_sg</c>, <c>window_hit_sg</c>.
+///
+/// <para><c>DYNAMIC_WEIGHTS</c> groups carry a recency factor (0.5 everywhere it appears): the
+/// member returned last has its weight scaled by it on the next pick, so the same clip is less
+/// likely to repeat back-to-back — that is what the bare <c>0.5</c> after the token decodes to.
+/// Explicit-<c>WEIGHT</c> groups (<c>snd_plane_die</c>/<c>snd_plane_dmg</c>, whose <c>snd_nothing</c>
+/// carries 0.7 — a 70% chance of silence) give each member its own weight and no recency decay.</para>
+/// </summary>
+public sealed class SoundGroup
+{
+    public readonly List<(string Name, float Weight)> Members = new();
+    public string Name = "";
+    public float RecencyFactor = 1f;   // DYNAMIC_WEIGHTS scalar on the last-picked member; 1 = none
+    private int _last = -1;             // index Pick last returned (the recency memory)
+
+    /// <summary>Picks a member by weight through the caller's RNG (the runtime's seedable
+    /// <c>_rng</c>, so a lab replay is deterministic), scaling the last pick down by
+    /// <see cref="RecencyFactor"/>. Null only when the group is empty.</summary>
+    public string? Pick(Random rng)
+    {
+        if (Members.Count == 0)
+        {
+            return null;
+        }
+        if (Members.Count == 1)
+        {
+            return Members[0].Name;
+        }
+        float Weight(int i) => Members[i].Weight * (i == _last ? RecencyFactor : 1f);
+        float total = 0f;
+        for (int i = 0; i < Members.Count; i++)
+        {
+            total += Weight(i);
+        }
+        double roll = rng.NextDouble() * total;
+        int chosen = Members.Count - 1;
+        for (int i = 0; i < Members.Count; i++)
+        {
+            roll -= Weight(i);
+            if (roll <= 0.0)
+            {
+                chosen = i;
+                break;
+            }
+        }
+        _last = chosen;
+        return Members[chosen].Name;
+    }
+
+    /// <summary>Forgets which member was picked last. The recency memory lives outside the RNG, so
+    /// re-seeding a runtime alone would not replay a pick sequence — whoever re-seeds calls this
+    /// too (<see cref="AnimRuntime.Reseed"/> via <c>WorldSounds</c>).</summary>
+    public void ResetRecency() => _last = -1;
 }

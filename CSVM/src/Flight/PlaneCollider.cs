@@ -41,23 +41,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class PlaneCollider
 {
-    public readonly record struct Part(string Name, BoxShape3D Shape, Transform3D Local);
-
-    private readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C)
-    {
-        public Vector3 Centroid => (A + B + C) / 3f;
-    }
-
-    /// <summary>The airframe boxes; Local places each box's center in the
-    /// FlightController's frame (the plane model's parent).</summary>
-    public IReadOnlyList<Part> Parts { get; }
-
-    /// <summary>One-line description of the boxes for the load log.</summary>
-    public string Summary => string.Join(", ",
-        Parts.Select(p => $"{p.Name} {p.Shape.Size.X:0.0}×{p.Shape.Size.Y:0.0}×{p.Shape.Size.Z:0.0} m"));
-
-    private PlaneCollider(List<Part> parts) => Parts = parts;
-
     private const float WingBandFrac = 0.35f;        // |x| beyond this × half-span = wing verts
                                                      // (not lower — see the canard note below)
     private const float TailStartFrac = 0.7f;        // z beyond this × length (nose −Z → tail +Z) = tail verts
@@ -75,6 +58,16 @@ public sealed class PlaneCollider
     // uncovered. Lowering the band far enough to catch it would pull the long inboard
     // wing-root chord into the full-span wing slab, giving the wingtips ~2.4 m of
     // phantom chord — false crashes are worse than a rare missed canard graze.
+
+    private PlaneCollider(List<Part> parts) => Parts = parts;
+
+    /// <summary>The airframe boxes; Local places each box's center in the
+    /// FlightController's frame (the plane model's parent).</summary>
+    public IReadOnlyList<Part> Parts { get; }
+
+    /// <summary>One-line description of the boxes for the load log.</summary>
+    public string Summary => string.Join(", ",
+        Parts.Select(p => $"{p.Name} {p.Shape.Size.X:0.0}×{p.Shape.Size.Y:0.0}×{p.Shape.Size.Z:0.0} m"));
 
     /// <summary>Derives the collision boxes from the built plane model; null if it
     /// has no usable geometry.</summary>
@@ -433,5 +426,12 @@ public sealed class PlaneCollider
             else
                 Collect(child, xf, tris);
         }
+    }
+
+    public readonly record struct Part(string Name, BoxShape3D Shape, Transform3D Local);
+
+    private readonly record struct Tri(Vector3 A, Vector3 B, Vector3 C)
+    {
+        public Vector3 Centroid => (A + B + C) / 3f;
     }
 }

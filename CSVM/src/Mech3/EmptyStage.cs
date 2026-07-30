@@ -40,6 +40,8 @@ public sealed class EmptyStage
     private const int TextureSize = 256;      // one grid square
     private const float GroundThickness = 400f;
 
+    private EmptyStage() { }
+
     /// <summary>The stage subtree — the caller adds it to the session root exactly as it adds a
     /// built world.</summary>
     public Node3D Root { get; private set; } = null!;
@@ -47,8 +49,6 @@ public sealed class EmptyStage
     public int MeshInstanceCount { get; private set; }
 
     public int ColliderCount { get; private set; }
-
-    private EmptyStage() { }
 
     /// <param name="collision">Attach the ground collider (true in flight, so weapons and the
     /// airframe have something to hit; false for a plane-less look at the stage).</param>

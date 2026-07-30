@@ -32,25 +32,10 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class WeatherState
 {
-    /// <summary>Distance fog for one day/night zone: haze toward <see cref="FogColor"/> between
-    /// <see cref="FogNear"/> and <see cref="FogFar"/> metres of **horizontal** view distance —
-    /// the original's fog volume is a vertical cylinder around the camera, not a sphere
-    /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
-    /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
-    /// sky overhead stays clear. C1/IA1 corroborates: zone1's 970→1047 is exactly cloud-band
-    /// bottom → whiteout-band centre (fog hands over to the whiteout while climbing into the
-    /// overcast); zone2's 4000→5000 sits above the 2500 m flight ceiling (night fog at every
-    /// flyable altitude). <see cref="ClipFar"/> is the original's hard far clip (informational —
-    /// our far plane is much larger; the fog is what hides distant terrain, matching the
-    /// original's short view distance).</summary>
-    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);
-
-    private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
-    private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
-
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
-    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
+    private const float SunIncidence = 0.46f;
+    private const float MinWorldLight = 0.15f;
 
     // The original lights the baked-vertex world by the mission's SUNLIGHT (weather.json's
     // per-zone SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE·(N·L_sun)); we render the world fullbright,
@@ -61,23 +46,23 @@ public sealed class WeatherState
     // deck 210→169 and terrain →~57). It then self-scales the scene from the data: C1B night
     // (0.15,0.6)→0.42, C1C day (0.6,2.0)→clamp 1.0. MinWorldLight floors it off pure black.
     // (This is the data-driven half; the gamma-space modulate is the other half.)
-    private const float SunIncidence = 0.46f;
-    private const float MinWorldLight = 0.15f;
+    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
 
-    private static float WorldLightFactor(ZrdrDict zone)
-    {
-        float diffuse = zone.List("SUNLIGHT_DIFFUSE") is { Count: >= 1 } sd && sd[0] is float dv ? dv : 1f;
-        float ambient = zone.List("SUNLIGHT_AMBIENT") is { Count: >= 1 } sa && sa[0] is float av ? av : 0f;
-        return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
-    }
+    private readonly Dictionary<string, ZoneFog> _zones = new(StringComparer.OrdinalIgnoreCase);
+    private readonly List<string> _zoneNames = new(); // file order — ResolveZone's fallback order
+
+    public enum PrecipKind { Rain, Snow }
 
     /// <summary>The whiteout cloud band, metres of altitude. <see cref="CloudBottom"/>/<see
     /// cref="CloudTop"/> are where sight is clear; the fully-opaque core is <see
     /// cref="CloudThickness"/> deep and centred on the band's midpoint (see
     /// <see cref="WhiteoutAmount"/>).</summary>
     public float CloudTop { get; private set; }
+
     public float CloudBottom { get; private set; }
+
     public float CloudThickness { get; private set; }
+
     public bool HasCloudBand => CloudTop > CloudBottom;
 
     /// <summary>The cloud deck's face tints from CLOUD_COVER's <c>TOP_COLOR</c>/<c>BOTTOM_COLOR</c>,
@@ -85,35 +70,16 @@ public sealed class WeatherState
     /// <see cref="ParseColor"/>). Null when absent (C1/IA1 has neither). Decoded now for the
     /// night-brightness deck-tint calibration; unused this milestone.</summary>
     public Color? CloudTopColor { get; private set; }
+
     public Color? CloudBottomColor { get; private set; }
 
     /// <summary>Steady wind (m/s) plus the random-gust bounds — the drift source for the
     /// future ambient cloud puffs (parsed now so the loader is complete; unused this milestone).</summary>
     public Vector3 WindStatic { get; private set; }
+
     public float WindRandomMaxSpeed { get; private set; }
+
     public float WindRandomAccel { get; private set; }
-
-    public enum PrecipKind { Rain, Snow }
-
-    /// <summary>The mission's precipitation, from the bare-scalar block at the end of
-    /// weather.json (after <c>SHADOW_ANGLES</c>). Only some missions carry one — C4 (SNOW),
-    /// C1C/C2B (RAIN); C1/C5 IA1 have none. Consumed by <see cref="Effects.Precipitation"/>.
-    /// <list type="bullet">
-    /// <item><see cref="Color"/> — the particle tint (integer-RGB in the data, e.g.
-    /// <c>[128,128,128]</c> → mid-gray; normalized by <see cref="ParseColor"/>).</item>
-    /// <item><see cref="WindDir"/> (degrees) / <see cref="WindVel"/> — the precipitation's own
-    /// horizontal drift (separate from the cloud <c>WIND</c> block above).</item>
-    /// <item><see cref="Gravity"/> — the fall-rate multiplier in the data's own units (SNOW 1,
-    /// RAIN 3 — rain falls faster); mapped to a metres/second fall speed by the renderer's TUNE
-    /// scale.</item>
-    /// <item><see cref="Particles"/> — a density hint (RAIN carries <c>PARTICLES 100</c>; SNOW
-    /// omits it → 0, the renderer substitutes a default).</item>
-    /// <item><see cref="AlphaGradient"/> — the <c>[0.5, 0.0]</c> pair; <c>.X</c> is the peak
-    /// opacity (the field is quite translucent).</item>
-    /// </list></summary>
-    public readonly record struct PrecipData(
-        PrecipKind Kind, Color Color, float WindDir, float WindVel,
-        float Gravity, int Particles, Vector2 AlphaGradient);
 
     /// <summary>The mission's precipitation, or null when the weather.json has no TYPE block.</summary>
     public PrecipData? Precip { get; private set; }
@@ -122,49 +88,6 @@ public sealed class WeatherState
     /// order ("zone1", "zone2" — or "zone1", "zone3" in C5). The <c>SW_*</c> software-renderer
     /// twins are excluded. Empty only if the file carries no <c>ZONE*</c> block at all.</summary>
     public IReadOnlyList<string> ZoneNames => _zoneNames;
-
-    /// <summary>The zone to actually render, given the one the caller asked for: the request
-    /// itself when this mission defines it, otherwise the first zone the file defines (and the
-    /// request unchanged when the file defines none, so the caller still gets <see cref="NoFog"/>).
-    ///
-    /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
-    /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
-    /// The default stays <c>zone2</c> (a user decision): which zone a mission actually
-    /// flies is in no reader file, so it is settled per chapter by A/B against the original.
-    ///
-    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest.</b> The fallback already
-    /// lands there, so this is not a special case — but it is no longer an accident either, and
-    /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
-    /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
-    /// user flew C5/IA1 in the original and can see across the city, which its 50–250 m fog and
-    /// 300 m clip would make impossible. C1–C4 all define <c>zone2</c> and resolve to themselves;
-    /// their A/B is still open (C1 has conflicting script evidence).
-    /// See docs/formats/weather.md.</para></summary>
-    public string ResolveZone(string requested) =>
-        _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
-
-    /// <summary>Fog for a zone ("zone1"/"zone2"/"zone3"); a no-op fog if the zone is absent.
-    /// Callers should pass a <see cref="ResolveZone"/> result rather than a raw request.</summary>
-    public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
-
-    /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
-    /// cloud band (user-observed in-game). Clear sight (0) at BOTTOM and TOP, ramping
-    /// linearly to a fully-opaque core (1 — the plane is no longer visible) that is THICKNESS
-    /// deep and centred on the band's midpoint. THICKNESS is the depth of that opaque core, not
-    /// an edge transition — so C1/IA1 (970–1124, ±30) is clear at 970/1124 and total in
-    /// 1032–1062, with linear ramps between.</summary>
-    public float WhiteoutAmount(float altitude)
-    {
-        if (!HasCloudBand || altitude <= CloudBottom || altitude >= CloudTop)
-            return 0f;
-        float mid = (CloudTop + CloudBottom) * 0.5f;
-        float coreHalf = CloudThickness * 0.5f;       // half-depth of the opaque core, centred on mid
-        float dist = MathF.Abs(altitude - mid);
-        if (dist <= coreHalf)
-            return 1f;
-        float ramp = (CloudTop - CloudBottom) * 0.5f - coreHalf; // core edge → band edge
-        return ramp > 1e-3f ? Mathf.Clamp(1f - (dist - coreHalf) / ramp, 0f, 1f) : 1f;
-    }
 
     /// <summary>Loads the flown mission's weather.json (a zrdr zip or unpacked dir). Null if
     /// the file is absent (some folders are multiplayer-only, etc.).</summary>
@@ -222,27 +145,54 @@ public sealed class WeatherState
         return w;
     }
 
-    // The precipitation block (TYPE SNOW|RAIN, COLOR, WIND_DIR, WIND_VEL, GRAVITY, [PARTICLES],
-    // ALPHA_GRADIENT) sits at the END of the root dict, after SHADOW_ANGLES, as bare-scalar
-    // top-level siblings — so it's walked raw from `inner` (like CLOUD_COVER/WIND), not via the
-    // dict (which drops a key's value when it's a bare scalar rather than a list). The keys are
-    // unique at inner's top level (FOG_COLOR/SUNLIGHT_* live inside the nested zone sub-lists,
-    // which the flat walkers never descend into), so each first-match is the right one.
-    private void ParsePrecip(List<object?> inner)
+    /// <summary>The zone to actually render, given the one the caller asked for: the request
+    /// itself when this mission defines it, otherwise the first zone the file defines (and the
+    /// request unchanged when the file defines none, so the caller still gets <see cref="NoFog"/>).
+    ///
+    /// <para>This is what makes the <c>zone2</c> default safe on C5, which ships zone1+zone3 and
+    /// would otherwise fall through to <see cref="NoFog"/> — no fog and no sunlight model at all.
+    /// The default stays <c>zone2</c> (a user decision): which zone a mission actually
+    /// flies is in no reader file, so it is settled per chapter by A/B against the original.
+    ///
+    /// <para><b>C5 = <c>zone1</c>, confirmed by playtest.</b> The fallback already
+    /// lands there, so this is not a special case — but it is no longer an accident either, and
+    /// it is stable: all 8 C5 missions list <c>ZONE1</c> before <c>ZONE3</c>, so every one of
+    /// them resolves to <c>zone1</c>. Do not "fix" the fallback into picking <c>zone3</c>; the
+    /// user flew C5/IA1 in the original and can see across the city, which its 50–250 m fog and
+    /// 300 m clip would make impossible. C1–C4 all define <c>zone2</c> and resolve to themselves;
+    /// their A/B is still open (C1 has conflicting script evidence).
+    /// See docs/formats/weather.md.</para></summary>
+    public string ResolveZone(string requested) =>
+        _zones.ContainsKey(requested) || _zoneNames.Count == 0 ? requested : _zoneNames[0];
+
+    /// <summary>Fog for a zone ("zone1"/"zone2"/"zone3"); a no-op fog if the zone is absent.
+    /// Callers should pass a <see cref="ResolveZone"/> result rather than a raw request.</summary>
+    public ZoneFog Fog(string zone) => _zones.TryGetValue(zone, out var z) ? z : NoFog;
+
+    /// <summary>Whiteout opacity 0..1 at a given altitude: a symmetric trapezoid across the
+    /// cloud band (user-observed in-game). Clear sight (0) at BOTTOM and TOP, ramping
+    /// linearly to a fully-opaque core (1 — the plane is no longer visible) that is THICKNESS
+    /// deep and centred on the band's midpoint. THICKNESS is the depth of that opaque core, not
+    /// an edge transition — so C1/IA1 (970–1124, ±30) is clear at 970/1124 and total in
+    /// 1032–1062, with linear ramps between.</summary>
+    public float WhiteoutAmount(float altitude)
     {
-        string? type = StringAfter(inner, "TYPE");
-        PrecipKind kind;
-        if (string.Equals(type, "RAIN", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Rain;
-        else if (string.Equals(type, "SNOW", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Snow;
-        else return; // no TYPE (most missions) or an unknown type → no precipitation
-        Precip = new PrecipData(
-            kind,
-            ParseColor(ListAfter(inner, "COLOR")) ?? new Color(0.5f, 0.5f, 0.5f),
-            WindDir: ScalarAfter(inner, "WIND_DIR"),
-            WindVel: ScalarAfter(inner, "WIND_VEL"),
-            Gravity: ScalarAfter(inner, "GRAVITY"),
-            Particles: (int)ScalarAfter(inner, "PARTICLES"), // absent (SNOW) → 0
-            AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
+        if (!HasCloudBand || altitude <= CloudBottom || altitude >= CloudTop)
+            return 0f;
+        float mid = (CloudTop + CloudBottom) * 0.5f;
+        float coreHalf = CloudThickness * 0.5f;       // half-depth of the opaque core, centred on mid
+        float dist = MathF.Abs(altitude - mid);
+        if (dist <= coreHalf)
+            return 1f;
+        float ramp = (CloudTop - CloudBottom) * 0.5f - coreHalf; // core edge → band edge
+        return ramp > 1e-3f ? Mathf.Clamp(1f - (dist - coreHalf) / ramp, 0f, 1f) : 1f;
+    }
+
+    private static float WorldLightFactor(ZrdrDict zone)
+    {
+        float diffuse = zone.List("SUNLIGHT_DIFFUSE") is { Count: >= 1 } sd && sd[0] is float dv ? dv : 1f;
+        float ambient = zone.List("SUNLIGHT_AMBIENT") is { Count: >= 1 } sa && sa[0] is float av ? av : 0f;
+        return Mathf.Clamp(ambient + diffuse * SunIncidence, MinWorldLight, 1f);
     }
 
     // The file's own per-zone block names, in FILE ORDER — "ZONE1", "ZONE2" in C1–C4;
@@ -334,4 +284,60 @@ public sealed class WeatherState
         float scale = r > 1f || g > 1f || b > 1f ? 1f / 255f : 1f;
         return new Color(r * scale, g * scale, b * scale);
     }
+
+    // The precipitation block (TYPE SNOW|RAIN, COLOR, WIND_DIR, WIND_VEL, GRAVITY, [PARTICLES],
+    // ALPHA_GRADIENT) sits at the END of the root dict, after SHADOW_ANGLES, as bare-scalar
+    // top-level siblings — so it's walked raw from `inner` (like CLOUD_COVER/WIND), not via the
+    // dict (which drops a key's value when it's a bare scalar rather than a list). The keys are
+    // unique at inner's top level (FOG_COLOR/SUNLIGHT_* live inside the nested zone sub-lists,
+    // which the flat walkers never descend into), so each first-match is the right one.
+    private void ParsePrecip(List<object?> inner)
+    {
+        string? type = StringAfter(inner, "TYPE");
+        PrecipKind kind;
+        if (string.Equals(type, "RAIN", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Rain;
+        else if (string.Equals(type, "SNOW", StringComparison.OrdinalIgnoreCase)) kind = PrecipKind.Snow;
+        else return; // no TYPE (most missions) or an unknown type → no precipitation
+        Precip = new PrecipData(
+            kind,
+            ParseColor(ListAfter(inner, "COLOR")) ?? new Color(0.5f, 0.5f, 0.5f),
+            WindDir: ScalarAfter(inner, "WIND_DIR"),
+            WindVel: ScalarAfter(inner, "WIND_VEL"),
+            Gravity: ScalarAfter(inner, "GRAVITY"),
+            Particles: (int)ScalarAfter(inner, "PARTICLES"), // absent (SNOW) → 0
+            AlphaGradient: Vec2After(inner, "ALPHA_GRADIENT"));
+    }
+
+    /// <summary>Distance fog for one day/night zone: haze toward <see cref="FogColor"/> between
+    /// <see cref="FogNear"/> and <see cref="FogFar"/> metres of **horizontal** view distance —
+    /// the original's fog volume is a vertical cylinder around the camera, not a sphere
+    /// (user-diagnosed) — scaled by an altitude fade from <c>FOG_ALTITUDE</c>: full
+    /// fog below <see cref="FogLow"/>, none above <see cref="FogHigh"/>, so the cloud deck /
+    /// sky overhead stays clear. C1/IA1 corroborates: zone1's 970→1047 is exactly cloud-band
+    /// bottom → whiteout-band centre (fog hands over to the whiteout while climbing into the
+    /// overcast); zone2's 4000→5000 sits above the 2500 m flight ceiling (night fog at every
+    /// flyable altitude). <see cref="ClipFar"/> is the original's hard far clip (informational —
+    /// our far plane is much larger; the fog is what hides distant terrain, matching the
+    /// original's short view distance).</summary>
+    public readonly record struct ZoneFog(Color FogColor, float FogNear, float FogFar, float FogLow, float FogHigh, float ClipFar, float WorldLight);
+
+    /// <summary>The mission's precipitation, from the bare-scalar block at the end of
+    /// weather.json (after <c>SHADOW_ANGLES</c>). Only some missions carry one — C4 (SNOW),
+    /// C1C/C2B (RAIN); C1/C5 IA1 have none. Consumed by <see cref="Effects.Precipitation"/>.
+    /// <list type="bullet">
+    /// <item><see cref="Color"/> — the particle tint (integer-RGB in the data, e.g.
+    /// <c>[128,128,128]</c> → mid-gray; normalized by <see cref="ParseColor"/>).</item>
+    /// <item><see cref="WindDir"/> (degrees) / <see cref="WindVel"/> — the precipitation's own
+    /// horizontal drift (separate from the cloud <c>WIND</c> block above).</item>
+    /// <item><see cref="Gravity"/> — the fall-rate multiplier in the data's own units (SNOW 1,
+    /// RAIN 3 — rain falls faster); mapped to a metres/second fall speed by the renderer's TUNE
+    /// scale.</item>
+    /// <item><see cref="Particles"/> — a density hint (RAIN carries <c>PARTICLES 100</c>; SNOW
+    /// omits it → 0, the renderer substitutes a default).</item>
+    /// <item><see cref="AlphaGradient"/> — the <c>[0.5, 0.0]</c> pair; <c>.X</c> is the peak
+    /// opacity (the field is quite translucent).</item>
+    /// </list></summary>
+    public readonly record struct PrecipData(
+        PrecipKind Kind, Color Color, float WindDir, float WindVel,
+        float Gravity, int Particles, Vector2 AlphaGradient);
 }

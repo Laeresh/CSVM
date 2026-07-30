@@ -31,13 +31,6 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class MarkerOverlay : Node3D
 {
-    // Gizmo colours by role. Shared-mount firepoints get their own colour precisely because a
-    // co-located pair is the thing the overlay exists to make visible.
-    private static readonly Color FirepointColor = new(1.0f, 0.55f, 0.15f); // warm orange
-    private static readonly Color SharedColor = new(1.0f, 0.30f, 0.85f);    // magenta — two groups, one mount
-    private static readonly Color PylonColor = new(0.30f, 0.80f, 1.0f);     // cyan
-    private static readonly Color TargetColor = new(0.45f, 1.0f, 0.45f);    // green
-
     // A co-located pair sits at the exact same point, so its labels would print on top of each
     // other; nudge each up the airframe's own up-axis by this much per stack position so they
     // land in different screen cells and the de-clutter keeps both. Metres.
@@ -53,9 +46,17 @@ public sealed partial class MarkerOverlay : Node3D
     // camera can fit changes — recompute a few times a second rather than per frame.
     private const double RefreshInterval = 0.2;
 
+    // Gizmo colours by role. Shared-mount firepoints get their own colour precisely because a
+    // co-located pair is the thing the overlay exists to make visible.
+    private static readonly Color FirepointColor = new(1.0f, 0.55f, 0.15f); // warm orange
+    private static readonly Color SharedColor = new(1.0f, 0.30f, 0.85f);    // magenta — two groups, one mount
+    private static readonly Color PylonColor = new(0.30f, 0.80f, 1.0f);     // cyan
+    private static readonly Color TargetColor = new(0.45f, 1.0f, 0.45f);    // green
+
     private readonly Node3D _plane;
     private readonly List<(Label3D Label, Vector3 World, bool Priority)> _labels = new();
     private readonly HashSet<long> _occupied = new();
+
     private Node3D? _holder;
     private CanvasLayer? _hudLayer;
     private Label? _hud;
@@ -64,15 +65,15 @@ public sealed partial class MarkerOverlay : Node3D
     private int _firepoints, _pylons, _shared;
     private bool _hasTarget;
 
-    /// <summary>Start hidden (plain <c>--viewer</c>, waits for K) or shown at launch
-    /// (<c>--markers</c>, so a scripted screenshot captures it).</summary>
-    public bool StartHidden { get; init; } = true;
-
     public MarkerOverlay(Node3D plane)
     {
         _plane = plane;
         Name = "marker_overlay";
     }
+
+    /// <summary>Start hidden (plain <c>--viewer</c>, waits for K) or shown at launch
+    /// (<c>--markers</c>, so a scripted screenshot captures it).</summary>
+    public bool StartHidden { get; init; } = true;
 
     public override void _Ready()
     {
@@ -89,6 +90,60 @@ public sealed partial class MarkerOverlay : Node3D
             SetShown(!_visible);
         }
     }
+
+    public override void _Process(double delta)
+    {
+        if (!_visible || _labels.Count == 0)
+        {
+            return;
+        }
+        _sinceRefresh += delta;
+        if (_sinceRefresh < RefreshInterval)
+        {
+            return;
+        }
+        _sinceRefresh = 0;
+        Relayout();
+    }
+
+    private static long CellKey(int x, int y) => ((long)x << 32) ^ (uint)y;
+
+    // A small unshaded sphere drawn on top of the airframe (no depth test) so a muzzle point
+    // buried in the cowling is still visible.
+    private static MeshInstance3D Gizmo(Vector3 world, Color color)
+    {
+        var mi = new MeshInstance3D
+        {
+            Mesh = new SphereMesh { Radius = GizmoRadius, Height = GizmoRadius * 2f, RadialSegments = 8, Rings = 4 },
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            MaterialOverride = new StandardMaterial3D
+            {
+                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                AlbedoColor = color,
+                NoDepthTest = true,
+                RenderPriority = 18,
+            },
+        };
+        mi.Position = world;
+        return mi;
+    }
+
+    // A billboarded, constant-on-screen-size name in the marker's colour, drawn through geometry.
+    private static Label3D MarkerLabel(string text, Vector3 world, Color color) => new()
+    {
+        Text = text,
+        Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
+        FixedSize = true,
+        PixelSize = 0.00055f,
+        FontSize = 44,
+        OutlineSize = 14,
+        NoDepthTest = true,
+        Modulate = color,
+        OutlineModulate = new Color(0f, 0f, 0f, 0.85f),
+        RenderPriority = 20,
+        OutlineRenderPriority = 19,
+        Position = world,
+    };
 
     private void SetShown(bool shown)
     {
@@ -180,21 +235,6 @@ public sealed partial class MarkerOverlay : Node3D
         AddChild(_hudLayer);
     }
 
-    public override void _Process(double delta)
-    {
-        if (!_visible || _labels.Count == 0)
-        {
-            return;
-        }
-        _sinceRefresh += delta;
-        if (_sinceRefresh < RefreshInterval)
-        {
-            return;
-        }
-        _sinceRefresh = 0;
-        Relayout();
-    }
-
     /// <summary>Nearest-first screen-cell de-clutter over the fixed marker set: firepoints claim
     /// cells before pylons, then within each band the camera-nearest wins. A label loses to
     /// something more important or closer, exactly like <see cref="NodeLabels"/>.</summary>
@@ -260,8 +300,6 @@ public sealed partial class MarkerOverlay : Node3D
         return true;
     }
 
-    private static long CellKey(int x, int y) => ((long)x << 32) ^ (uint)y;
-
     private void Collect(Node node, List<Node3D> nodes, List<MarkerRig.MarkerKind> kinds,
         List<Vector3> localPos, Transform3D toPlane)
     {
@@ -277,41 +315,4 @@ public sealed partial class MarkerOverlay : Node3D
             Collect(child, nodes, kinds, localPos, toPlane);
         }
     }
-
-    // A small unshaded sphere drawn on top of the airframe (no depth test) so a muzzle point
-    // buried in the cowling is still visible.
-    private static MeshInstance3D Gizmo(Vector3 world, Color color)
-    {
-        var mi = new MeshInstance3D
-        {
-            Mesh = new SphereMesh { Radius = GizmoRadius, Height = GizmoRadius * 2f, RadialSegments = 8, Rings = 4 },
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            MaterialOverride = new StandardMaterial3D
-            {
-                ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                AlbedoColor = color,
-                NoDepthTest = true,
-                RenderPriority = 18,
-            },
-        };
-        mi.Position = world;
-        return mi;
-    }
-
-    // A billboarded, constant-on-screen-size name in the marker's colour, drawn through geometry.
-    private static Label3D MarkerLabel(string text, Vector3 world, Color color) => new()
-    {
-        Text = text,
-        Billboard = BaseMaterial3D.BillboardModeEnum.Enabled,
-        FixedSize = true,
-        PixelSize = 0.00055f,
-        FontSize = 44,
-        OutlineSize = 14,
-        NoDepthTest = true,
-        Modulate = color,
-        OutlineModulate = new Color(0f, 0f, 0f, 0.85f),
-        RenderPriority = 20,
-        OutlineRenderPriority = 19,
-        Position = world,
-    };
 }

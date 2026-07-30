@@ -15,13 +15,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class PlaneDamage
 {
-    public sealed class PartState
-    {
-        public required DestroyablePart Def { get; init; }
-        public float Hp;
-        public float Fraction => Def.MaxHp > 0f ? Hp / Def.MaxHp : 0f;
-    }
-
     private readonly Dictionary<string, PartState> _parts = new(System.StringComparer.OrdinalIgnoreCase);
 
     public PlaneDamage(IEnumerable<DestroyablePart> defs)
@@ -31,12 +24,6 @@ public sealed class PlaneDamage
     }
 
     public IReadOnlyDictionary<string, PartState> Parts => _parts;
-
-    public void Reset()
-    {
-        foreach (var p in _parts.Values)
-            p.Hp = p.Def.MaxHp;
-    }
 
     /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
     /// backstop ray's "center") + the impact point in the PLANE's local frame to
@@ -48,6 +35,12 @@ public sealed class PlaneDamage
         "tail" => "tail",
         _ => localImpact.Z < 0f ? "nose" : "tail", // fuselage / center backstop
     };
+
+    public void Reset()
+    {
+        foreach (var p in _parts.Values)
+            p.Hp = p.Def.MaxHp;
+    }
 
     /// <summary>Subtracts damage from a part; returns its state after (null if the
     /// data defines no such part — then nothing was tracked).</summary>
@@ -66,5 +59,12 @@ public sealed class PlaneDamage
         return hurt.Count == 0
             ? ""
             : string.Join(" · ", hurt.Select(p => $"{p.Def.Name} {p.Fraction * 100f:0}%"));
+    }
+
+    public sealed class PartState
+    {
+        public float Hp;
+        public required DestroyablePart Def { get; init; }
+        public float Fraction => Def.MaxHp > 0f ? Hp / Def.MaxHp : 0f;
     }
 }

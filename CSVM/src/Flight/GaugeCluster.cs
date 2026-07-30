@@ -41,19 +41,6 @@ public sealed partial class GaugeCluster : Control
     /// Flight binds PlaneDamage, the damage lab binds its sliders. Null = all green.</summary>
     public Func<string, float>? PartFraction;
 
-    /// <summary>Live state for one weapon gauge (gun or rocket), pushed by the FlightController each
-    /// frame. Positions map 1:1 onto the gauge's belt indicators: <see cref="Slots"/>[i] drives
-    /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty), the arrow points at
-    /// <see cref="Selected"/>, <see cref="Count"/> fills the 4-digit readout and <see cref="Type"/>
-    /// the 6-char name. Left null (the default) hides that gauge — the static viewer has no loadout.</summary>
-    public sealed class WeaponGauge
-    {
-        public int Count;                                       // rounds shown in 4char_ammo (0..9999)
-        public string Type = "";                                // 6char_type name (weapon NAME, upper-cased)
-        public int Selected;                                    // 0-based belt position the arrow points at
-        public IReadOnlyList<float> Slots = Array.Empty<float>(); // per-indicator ammo fraction 0..1
-    }
-
     /// <summary>The gun gauge's per-frame state (selected gun group). Null hides it (no loadout).</summary>
     public WeaponGauge? GunGauge;
     /// <summary>The missile gauge's per-frame state (selected ordnance type). Null hides it.</summary>
@@ -75,15 +62,12 @@ public sealed partial class GaugeCluster : Control
     // scans of the bezel rings, scaled by viewport height like CompassTape. All three
     // dials share one size (R 85); x anchors from the left edge except the speedometer
     // (from the right, mirroring the altimeter's margin).
-    private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
     private const float AltRadius = 85f;
     private const float SpdCenterFromRight = 420f, SpdCenterY = 1108.5f, SpdRadius = 85f;
-    private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
     private const float DmgRadius = 85f;
     // The two weapon gauges (measured off OriginalScreenshots/HUD.png): the ROCKETS dial sits one
     // dial-pitch (190.5 px, the alt→damage spacing) above the altimeter, the GUNS dial the same
     // above the speedometer. Same radius as the other dials.
-    private static readonly Vector2 MissileCenter = new(425.5f, 918f);
     private const float MissileRadius = 85f;
     private const float GunCenterFromRight = 420f, GunCenterY = 918f, GunRadius = 85f;
     // A belt indicator's colour by remaining fraction: green healthy, yellow low, red empty. The
@@ -91,53 +75,46 @@ public sealed partial class GaugeCluster : Control
     // AND a gun group only warns near empty. TUNE.
     private const float IndicatorLowFrac = 0.34f;
 
-    /// <summary>One flat gauge polygon extracted from the mesh: dial-local points
-    /// (x right, y up, radius 1), normalized UVs, source texture, draw priority.</summary>
-    private sealed class GaugePoly
-    {
-        public Vector2[] Points = Array.Empty<Vector2>();
-        public Vector2[] Uvs = Array.Empty<Vector2>();
-        public Texture2D? Tex;
-        public int Priority;
-        public string TexName = "";
-    }
+    // The needle texture's shaft is a flat full-width slab (32×128, no alpha; the hub
+    // box with its two black discs fills the tail rows), but the original renders a
+    // slim pointer that tapers to a point at the tip (reference: the HUD screenshot
+    // zooms). That shape is made engine-side — it is in neither the texture colors
+    // nor the mesh/UVs — so the remake shapes it at load: shaft texels get an alpha
+    // mask tapering linearly from the widest point near the hub to a point at the
+    // tip; the hub rows stay fully opaque (an earlier black color-key erased the hub
+    // discs — never key this texture). Profile constants are TUNE (eyeballed against
+    // the user's zoomed original altimeter).
+    private const float NeedleHubStartFrac = 76f / 128f; // shaft rows above, hub box below
+    private const float NeedleMaxHalfFrac = 0.65f;       // widest half-width / texture half-width
+    private const float NeedleTaperEndFrac = 0.9f;       // taper spans this much of the shaft
 
-    private sealed class DamageZone
+    private static readonly Vector2 AltCenter = new(425.5f, 1108.5f);
+    private static readonly Vector2 DmgCenter = new(426.5f, 1299f);
+    private static readonly Vector2 MissileCenter = new(425.5f, 918f);
+    private static readonly Dictionary<string, Texture2D?> ShapedNeedles = new(StringComparer.OrdinalIgnoreCase);
+
+    // flat indicator tints when a colour-variant png is missing from the archive
+    private static readonly Color[] IndicatorFlat =
     {
-        public string Part = "";               // "nose" / "tail" / "leftwing" / "rightwing"
-        public List<GaugePoly> Border = new(); // the bezel-edge bar ("hilite")
-        public List<GaugePoly> Fill = new();   // the part-shaped hatch overlay
-        public float YellowAt = DefaultYellowAt, OrangeAt = DefaultOrangeAt, RedAt = DefaultRedAt;
-        public float BlinkLeft;                // s of post-hit blinking remaining
-    }
+        new(0.2f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f), new(0.9f, 0.15f, 0.15f),
+    };
+
+    // flat zone tints when a color-variant png is missing from the archive
+    private static readonly Color[] ZoneFlat =
+    {
+        new(0.25f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f),
+        new(0.95f, 0.55f, 0.05f), new(0.9f, 0.1f, 0.1f),
+    };
 
     private readonly List<GaugePoly> _altFace = new();
     private readonly List<GaugePoly> _altWarn = new();  // lowalt_on (blinks)
-    private GaugePoly? _altHundreds, _altThousands;
     private readonly List<GaugePoly> _spdFace = new();
     private readonly List<GaugePoly> _spdWarn = new();  // stallwarning_on (blinks)
-    private GaugePoly? _spdNeedle;
     private readonly List<GaugePoly> _dmgFace = new();
     private readonly List<DamageZone> _zones = new();
     // color-variant textures for the zone swap (0 green / 1 yellow / 2 orange / 3 red)
     private readonly Texture2D?[] _hilite = new Texture2D?[4];
     private readonly Texture2D?[] _hatch = new Texture2D?[4];
-
-    /// <summary>One weapon gauge's extracted geometry (gungauge or missilegauge). All flat, dial-local
-    /// like the other dials. The digit / type quads are ordered left→right; each indicator's polys sit
-    /// at its parsed index (ggindicator3 → <see cref="Indicators"/>[3]); the arrow rotates about the
-    /// centre to point at a belt position.</summary>
-    private sealed class GaugeGeom
-    {
-        public readonly List<GaugePoly> Face = new();          // the labelled dial face (gungauge/missilegauge.tif + ring)
-        public readonly List<GaugePoly> Digits = new();        // 4char_ammo quads, left→right
-        public readonly List<GaugePoly> TypeChars = new();     // 6char_type quads, left→right
-        public readonly List<List<GaugePoly>> Indicators = new(); // belt lights by index (0 = top, CCW)
-        public GaugePoly? Arrow;                               // gg/mgarrow, rest points up (belt position 0)
-        public int Positions;                                  // belt positions (4 gun / 8 missile) → arrow step
-        public bool HasGeometry => Face.Count > 0 || Digits.Count > 0;
-    }
-
     private readonly GaugeGeom _gunGaugeGeom = new();
     private readonly GaugeGeom _missileGaugeGeom = new();
     // Glyph atlas for the digit/type cycles: char → texture (zero..nine, A..Z; space/unknown = null).
@@ -146,7 +123,12 @@ public sealed partial class GaugeCluster : Control
     private readonly Texture2D?[] _indHilite = new Texture2D?[3];
     private readonly Texture2D?[] _indLight = new Texture2D?[3];
 
+    private GaugePoly? _altHundreds, _altThousands;
+    private GaugePoly? _spdNeedle;
     private double _time;
+
+    private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
+    private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
 
     /// <summary>Builds the cluster from the plane's 'gauges' subtree in planes.zbd and
     /// the chapter texture archive. Null when the subtree or its dial textures are
@@ -230,6 +212,77 @@ public sealed partial class GaugeCluster : Control
                 z.BlinkLeft = DamageBlinkTime;
     }
 
+    public override void _Process(double delta)
+    {
+        _time += delta;
+        foreach (var z in _zones)
+            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
+        QueueRedraw();
+    }
+
+    public override void _Draw()
+    {
+        var vp = GetViewportRect().Size;
+        float s = HudMetrics.Scale(this);
+
+        // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
+        var altC = new Vector2(AltCenter.X * s, FromBottom(AltCenter.Y, s, vp.Y));
+        float altR = AltRadius * s;
+        foreach (var p in _altFace)
+            DrawGaugePoly(p, altC, altR);
+        if (AglMeters < LowAltAglM && WarnPhaseOn)
+            foreach (var p in _altWarn)
+                DrawGaugePoly(p, altC, altR);
+        float ft = Mathf.Max(0f, AltitudeFt);
+        if (_altThousands != null)
+            DrawGaugePoly(_altThousands, altC, altR, ft % 10000f / 10000f * 360f);
+        if (_altHundreds != null)
+            DrawGaugePoly(_altHundreds, altC, altR, ft % 1000f / 1000f * 360f);
+
+        // speedometer: ~0.72°/mph (the face's 100-mph labels sit ~71.5° apart)
+        var spdC = new Vector2(vp.X - SpdCenterFromRight * s, FromBottom(SpdCenterY, s, vp.Y));
+        float spdR = SpdRadius * s;
+        foreach (var p in _spdFace)
+            DrawGaugePoly(p, spdC, spdR);
+        if (Stalled && WarnPhaseOn)
+            foreach (var p in _spdWarn)
+                DrawGaugePoly(p, spdC, spdR);
+        if (_spdNeedle != null)
+            DrawGaugePoly(_spdNeedle, spdC, spdR, Mathf.Max(0f, SpeedMph) * 0.72f);
+
+        // damage display: face silhouette, then each zone's border bar + hatch fill
+        // in its color; a freshly hit zone blinks (fill + border) for a few seconds
+        var dmgC = new Vector2(DmgCenter.X * s, FromBottom(DmgCenter.Y, s, vp.Y));
+        float dmgR = DmgRadius * s;
+        foreach (var p in _dmgFace)
+            DrawGaugePoly(p, dmgC, dmgR);
+        foreach (var z in _zones)
+        {
+            if (z.BlinkLeft > 0f && !DamagePhaseOn)
+                continue; // blink-off phase hides the whole zone (fill + outline)
+            float frac = PartFraction?.Invoke(z.Part) ?? 1f;
+            int color = frac > z.YellowAt ? 0 : frac > z.OrangeAt ? 1 : frac > z.RedAt ? 2 : 3;
+            foreach (var p in z.Border)
+                DrawGaugePoly(p, dmgC, dmgR, 0f, _hilite[color], ZoneFlat[color]);
+            foreach (var p in z.Fill)
+                DrawGaugePoly(p, dmgC, dmgR, 0f, _hatch[color], ZoneFlat[color]);
+        }
+
+        // The two weapon gauges: the ROCKETS dial above the altimeter, the GUNS dial above the
+        // speedometer (mirrored from the right edge). Each renders only when the FlightController is
+        // feeding it — hidden in the static viewer, which carries no loadout.
+        if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
+        {
+            var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
+            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s);
+        }
+        if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
+        {
+            var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
+            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s);
+        }
+    }
+
     // ---- extraction ----
 
     private static GameZNode? FindDescendant(GameZ gz, GameZNode from, string name)
@@ -282,6 +335,96 @@ public sealed partial class GaugeCluster : Control
             });
         }
         return result;
+    }
+
+    private static float CenterX(GaugePoly p)
+    {
+        float sum = 0f;
+        foreach (var pt in p.Points)
+        {
+            sum += pt.X;
+        }
+        return p.Points.Length > 0 ? sum / p.Points.Length : 0f;
+    }
+
+    /// <summary>The trailing integer of a name like "ggindicator3" (→ 3); 0 if it ends in no digits.</summary>
+    private static int TrailingInt(string name)
+    {
+        int i = name.Length;
+        while (i > 0 && char.IsDigit(name[i - 1]))
+        {
+            i--;
+        }
+        return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
+    }
+
+    private static Texture2D? FindGaugeTexture(TextureArchive textures, string texName)
+    {
+        var baseName = System.IO.Path.GetFileNameWithoutExtension(texName);
+        bool isNeedle = baseName.Equals("needle", StringComparison.OrdinalIgnoreCase);
+        if (isNeedle && ShapedNeedles.TryGetValue(baseName, out var cached))
+            return cached;
+        var tex = textures.Find(texName);
+        if (!isNeedle || tex == null)
+            return tex;
+
+        var img = tex.GetImage();
+        img.Convert(Image.Format.Rgba8);
+        int w = img.GetWidth(), h = img.GetHeight();
+        int hubStart = (int)(h * NeedleHubStartFrac);
+        float cx = (w - 1) / 2f;
+        float maxHalf = w / 2f * NeedleMaxHalfFrac;
+        for (int y = 0; y < hubStart; y++)
+        {
+            float hw = maxHalf * Mathf.Min(1f, y / (hubStart * NeedleTaperEndFrac));
+            var slab = img.GetPixel(w / 4, y); // a mid-slab texel left of the notch
+            for (int x = 0; x < w; x++)
+            {
+                var c = img.GetPixel(x, y);
+                // the texture's darker center notch would survive the taper as a
+                // split "tweezer" tip — the original tip is solid, so fill the notch
+                // with the shaft color (invisible at game scale anyway)
+                if (Mathf.Abs(x - cx) <= 3f && c.R < slab.R - 0.05f)
+                    c = slab;
+                float a = Mathf.Clamp(hw - Mathf.Abs(x - cx) + 0.5f, 0f, 1f);
+                img.SetPixel(x, y, new Color(c.R, c.G, c.B, c.A * a));
+            }
+        }
+        img.GenerateMipmaps();
+        var shaped = ImageTexture.CreateFromImage(img);
+        ShapedNeedles[baseName] = shaped;
+        return shaped;
+    }
+
+    /// <summary>The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
+    /// they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
+    /// Measuring from the bottom is identical to <c>refY · s</c> whenever s is the plain
+    /// height ratio (single player), and is what keeps them on screen when a splitscreen pane
+    /// draws them at a damped, larger-than-proportional scale (see <see cref="HudMetrics"/>).</summary>
+    private static float FromBottom(float refY, float s, float viewportH) =>
+        viewportH - (HudMetrics.ReferenceHeight - refY) * s;
+
+    // green > low > empty, indexing the 3 indicator colour variants.
+    private static int IndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
+
+    /// <summary>A count right-aligned into <paramref name="width"/> digit cells, space-padded
+    /// (clamped 0..9999, the 4-cell readout's range).</summary>
+    private static string FormatCount(int count, int width)
+    {
+        string s = Mathf.Clamp(count, 0, 9999).ToString();
+        if (s.Length > width)
+            s = s[^width..];
+        return s.PadLeft(width);
+    }
+
+    /// <summary>A weapon name upper-cased, left-aligned and padded/truncated to the type readout's
+    /// <paramref name="width"/> cells (the atlas is uppercase-only).</summary>
+    private static string FormatType(string type, int width)
+    {
+        string s = type.ToUpperInvariant();
+        if (s.Length > width)
+            s = s[..width];
+        return s.PadRight(width);
     }
 
     /// <summary>An altimeter/speedometer node: face polys from any unnamed child mesh
@@ -447,164 +590,6 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    private static float CenterX(GaugePoly p)
-    {
-        float sum = 0f;
-        foreach (var pt in p.Points)
-        {
-            sum += pt.X;
-        }
-        return p.Points.Length > 0 ? sum / p.Points.Length : 0f;
-    }
-
-    /// <summary>The trailing integer of a name like "ggindicator3" (→ 3); 0 if it ends in no digits.</summary>
-    private static int TrailingInt(string name)
-    {
-        int i = name.Length;
-        while (i > 0 && char.IsDigit(name[i - 1]))
-        {
-            i--;
-        }
-        return i < name.Length && int.TryParse(name[i..], out var n) ? n : 0;
-    }
-
-    // The needle texture's shaft is a flat full-width slab (32×128, no alpha; the hub
-    // box with its two black discs fills the tail rows), but the original renders a
-    // slim pointer that tapers to a point at the tip (reference: the HUD screenshot
-    // zooms). That shape is made engine-side — it is in neither the texture colors
-    // nor the mesh/UVs — so the remake shapes it at load: shaft texels get an alpha
-    // mask tapering linearly from the widest point near the hub to a point at the
-    // tip; the hub rows stay fully opaque (an earlier black color-key erased the hub
-    // discs — never key this texture). Profile constants are TUNE (eyeballed against
-    // the user's zoomed original altimeter).
-    private const float NeedleHubStartFrac = 76f / 128f; // shaft rows above, hub box below
-    private const float NeedleMaxHalfFrac = 0.65f;       // widest half-width / texture half-width
-    private const float NeedleTaperEndFrac = 0.9f;       // taper spans this much of the shaft
-
-    private static readonly Dictionary<string, Texture2D?> ShapedNeedles = new(StringComparer.OrdinalIgnoreCase);
-
-    private static Texture2D? FindGaugeTexture(TextureArchive textures, string texName)
-    {
-        var baseName = System.IO.Path.GetFileNameWithoutExtension(texName);
-        bool isNeedle = baseName.Equals("needle", StringComparison.OrdinalIgnoreCase);
-        if (isNeedle && ShapedNeedles.TryGetValue(baseName, out var cached))
-            return cached;
-        var tex = textures.Find(texName);
-        if (!isNeedle || tex == null)
-            return tex;
-
-        var img = tex.GetImage();
-        img.Convert(Image.Format.Rgba8);
-        int w = img.GetWidth(), h = img.GetHeight();
-        int hubStart = (int)(h * NeedleHubStartFrac);
-        float cx = (w - 1) / 2f;
-        float maxHalf = w / 2f * NeedleMaxHalfFrac;
-        for (int y = 0; y < hubStart; y++)
-        {
-            float hw = maxHalf * Mathf.Min(1f, y / (hubStart * NeedleTaperEndFrac));
-            var slab = img.GetPixel(w / 4, y); // a mid-slab texel left of the notch
-            for (int x = 0; x < w; x++)
-            {
-                var c = img.GetPixel(x, y);
-                // the texture's darker center notch would survive the taper as a
-                // split "tweezer" tip — the original tip is solid, so fill the notch
-                // with the shaft color (invisible at game scale anyway)
-                if (Mathf.Abs(x - cx) <= 3f && c.R < slab.R - 0.05f)
-                    c = slab;
-                float a = Mathf.Clamp(hw - Mathf.Abs(x - cx) + 0.5f, 0f, 1f);
-                img.SetPixel(x, y, new Color(c.R, c.G, c.B, c.A * a));
-            }
-        }
-        img.GenerateMipmaps();
-        var shaped = ImageTexture.CreateFromImage(img);
-        ShapedNeedles[baseName] = shaped;
-        return shaped;
-    }
-
-    // ---- drawing ----
-
-    public override void _Process(double delta)
-    {
-        _time += delta;
-        foreach (var z in _zones)
-            z.BlinkLeft = Mathf.Max(0f, z.BlinkLeft - (float)delta);
-        QueueRedraw();
-    }
-
-    private bool WarnPhaseOn => Mathf.PosMod((float)_time, WarnBlinkPeriod) < WarnBlinkPeriod * 0.5f;
-    private bool DamagePhaseOn => Mathf.PosMod((float)_time, DamageBlinkPeriod) < DamageBlinkPeriod * 0.5f;
-
-    /// <summary>The dials are measured off HUD.png as absolute 1440p-reference y coordinates, but
-    /// they are really anchored to the BOTTOM of the screen (they sit 331 / 141 px up from it).
-    /// Measuring from the bottom is identical to <c>refY · s</c> whenever s is the plain
-    /// height ratio (single player), and is what keeps them on screen when a splitscreen pane
-    /// draws them at a damped, larger-than-proportional scale (see <see cref="HudMetrics"/>).</summary>
-    private static float FromBottom(float refY, float s, float viewportH) =>
-        viewportH - (HudMetrics.ReferenceHeight - refY) * s;
-
-    public override void _Draw()
-    {
-        var vp = GetViewportRect().Size;
-        float s = HudMetrics.Scale(this);
-
-        // altimeter: long needle 360°/1,000 ft, short 360°/10,000 ft, 0 at the top
-        var altC = new Vector2(AltCenter.X * s, FromBottom(AltCenter.Y, s, vp.Y));
-        float altR = AltRadius * s;
-        foreach (var p in _altFace)
-            DrawGaugePoly(p, altC, altR);
-        if (AglMeters < LowAltAglM && WarnPhaseOn)
-            foreach (var p in _altWarn)
-                DrawGaugePoly(p, altC, altR);
-        float ft = Mathf.Max(0f, AltitudeFt);
-        if (_altThousands != null)
-            DrawGaugePoly(_altThousands, altC, altR, ft % 10000f / 10000f * 360f);
-        if (_altHundreds != null)
-            DrawGaugePoly(_altHundreds, altC, altR, ft % 1000f / 1000f * 360f);
-
-        // speedometer: ~0.72°/mph (the face's 100-mph labels sit ~71.5° apart)
-        var spdC = new Vector2(vp.X - SpdCenterFromRight * s, FromBottom(SpdCenterY, s, vp.Y));
-        float spdR = SpdRadius * s;
-        foreach (var p in _spdFace)
-            DrawGaugePoly(p, spdC, spdR);
-        if (Stalled && WarnPhaseOn)
-            foreach (var p in _spdWarn)
-                DrawGaugePoly(p, spdC, spdR);
-        if (_spdNeedle != null)
-            DrawGaugePoly(_spdNeedle, spdC, spdR, Mathf.Max(0f, SpeedMph) * 0.72f);
-
-        // damage display: face silhouette, then each zone's border bar + hatch fill
-        // in its color; a freshly hit zone blinks (fill + border) for a few seconds
-        var dmgC = new Vector2(DmgCenter.X * s, FromBottom(DmgCenter.Y, s, vp.Y));
-        float dmgR = DmgRadius * s;
-        foreach (var p in _dmgFace)
-            DrawGaugePoly(p, dmgC, dmgR);
-        foreach (var z in _zones)
-        {
-            if (z.BlinkLeft > 0f && !DamagePhaseOn)
-                continue; // blink-off phase hides the whole zone (fill + outline)
-            float frac = PartFraction?.Invoke(z.Part) ?? 1f;
-            int color = frac > z.YellowAt ? 0 : frac > z.OrangeAt ? 1 : frac > z.RedAt ? 2 : 3;
-            foreach (var p in z.Border)
-                DrawGaugePoly(p, dmgC, dmgR, 0f, _hilite[color], ZoneFlat[color]);
-            foreach (var p in z.Fill)
-                DrawGaugePoly(p, dmgC, dmgR, 0f, _hatch[color], ZoneFlat[color]);
-        }
-
-        // The two weapon gauges: the ROCKETS dial above the altimeter, the GUNS dial above the
-        // speedometer (mirrored from the right edge). Each renders only when the FlightController is
-        // feeding it — hidden in the static viewer, which carries no loadout.
-        if (MissileGauge is { } mg && _missileGaugeGeom.HasGeometry)
-        {
-            var c = new Vector2(MissileCenter.X * s, FromBottom(MissileCenter.Y, s, vp.Y));
-            DrawWeaponGauge(_missileGaugeGeom, mg, c, MissileRadius * s);
-        }
-        if (GunGauge is { } gg && _gunGaugeGeom.HasGeometry)
-        {
-            var c = new Vector2(vp.X - GunCenterFromRight * s, FromBottom(GunCenterY, s, vp.Y));
-            DrawWeaponGauge(_gunGaugeGeom, gg, c, GunRadius * s);
-        }
-    }
-
     /// <summary>Draws one weapon gauge: the labelled face, the belt lights for the slots the plane
     /// actually has (each green/yellow/red by remaining fraction — the "step"), the right-aligned
     /// digit count, the left-aligned type name, then the pointer rotated to the selected belt slot.</summary>
@@ -640,42 +625,6 @@ public sealed partial class GaugeCluster : Control
         }
     }
 
-    // green > low > empty, indexing the 3 indicator colour variants.
-    private static int IndicatorColor(float frac) => frac <= 0f ? 2 : frac <= IndicatorLowFrac ? 1 : 0;
-
-    // flat indicator tints when a colour-variant png is missing from the archive
-    private static readonly Color[] IndicatorFlat =
-    {
-        new(0.2f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f), new(0.9f, 0.15f, 0.15f),
-    };
-
-    /// <summary>A count right-aligned into <paramref name="width"/> digit cells, space-padded
-    /// (clamped 0..9999, the 4-cell readout's range).</summary>
-    private static string FormatCount(int count, int width)
-    {
-        string s = Mathf.Clamp(count, 0, 9999).ToString();
-        if (s.Length > width)
-            s = s[^width..];
-        return s.PadLeft(width);
-    }
-
-    /// <summary>A weapon name upper-cased, left-aligned and padded/truncated to the type readout's
-    /// <paramref name="width"/> cells (the atlas is uppercase-only).</summary>
-    private static string FormatType(string type, int width)
-    {
-        string s = type.ToUpperInvariant();
-        if (s.Length > width)
-            s = s[..width];
-        return s.PadRight(width);
-    }
-
-    // flat zone tints when a color-variant png is missing from the archive
-    private static readonly Color[] ZoneFlat =
-    {
-        new(0.25f, 0.9f, 0.2f), new(0.95f, 0.9f, 0.1f),
-        new(0.95f, 0.55f, 0.05f), new(0.9f, 0.1f, 0.1f),
-    };
-
     /// <summary>Draws one extracted poly at a dial's screen center/radius, rotated
     /// clockwise by rotDeg about the dial center (needles). Dial-local y-up flips to
     /// screen y-down; an override texture substitutes the zone color variants (with
@@ -705,5 +654,53 @@ public sealed partial class GaugeCluster : Control
             DrawPolygon(pts, colors, p.Uvs, tex);
         else
             DrawPolygon(pts, colors);
+    }
+
+    /// <summary>Live state for one weapon gauge (gun or rocket), pushed by the FlightController each
+    /// frame. Positions map 1:1 onto the gauge's belt indicators: <see cref="Slots"/>[i] drives
+    /// <c>ggindicator</c>/<c>mgindicator</c> i (green &gt; low &gt; empty), the arrow points at
+    /// <see cref="Selected"/>, <see cref="Count"/> fills the 4-digit readout and <see cref="Type"/>
+    /// the 6-char name. Left null (the default) hides that gauge — the static viewer has no loadout.</summary>
+    public sealed class WeaponGauge
+    {
+        public int Count;                                       // rounds shown in 4char_ammo (0..9999)
+        public string Type = "";                                // 6char_type name (weapon NAME, upper-cased)
+        public int Selected;                                    // 0-based belt position the arrow points at
+        public IReadOnlyList<float> Slots = Array.Empty<float>(); // per-indicator ammo fraction 0..1
+    }
+
+    /// <summary>One flat gauge polygon extracted from the mesh: dial-local points
+    /// (x right, y up, radius 1), normalized UVs, source texture, draw priority.</summary>
+    private sealed class GaugePoly
+    {
+        public Vector2[] Points = Array.Empty<Vector2>();
+        public Vector2[] Uvs = Array.Empty<Vector2>();
+        public Texture2D? Tex;
+        public int Priority;
+        public string TexName = "";
+    }
+
+    private sealed class DamageZone
+    {
+        public string Part = "";               // "nose" / "tail" / "leftwing" / "rightwing"
+        public List<GaugePoly> Border = new(); // the bezel-edge bar ("hilite")
+        public List<GaugePoly> Fill = new();   // the part-shaped hatch overlay
+        public float YellowAt = DefaultYellowAt, OrangeAt = DefaultOrangeAt, RedAt = DefaultRedAt;
+        public float BlinkLeft;                // s of post-hit blinking remaining
+    }
+
+    /// <summary>One weapon gauge's extracted geometry (gungauge or missilegauge). All flat, dial-local
+    /// like the other dials. The digit / type quads are ordered left→right; each indicator's polys sit
+    /// at its parsed index (ggindicator3 → <see cref="Indicators"/>[3]); the arrow rotates about the
+    /// centre to point at a belt position.</summary>
+    private sealed class GaugeGeom
+    {
+        public readonly List<GaugePoly> Face = new();          // the labelled dial face (gungauge/missilegauge.tif + ring)
+        public readonly List<GaugePoly> Digits = new();        // 4char_ammo quads, left→right
+        public readonly List<GaugePoly> TypeChars = new();     // 6char_type quads, left→right
+        public readonly List<List<GaugePoly>> Indicators = new(); // belt lights by index (0 = top, CCW)
+        public GaugePoly? Arrow;                               // gg/mgarrow, rest points up (belt position 0)
+        public int Positions;                                  // belt positions (4 gun / 8 missile) → arrow step
+        public bool HasGeometry => Face.Count > 0 || Digits.Count > 0;
     }
 }

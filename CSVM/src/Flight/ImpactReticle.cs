@@ -20,17 +20,17 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class ImpactReticle : Control
 {
+    private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)
+
+    private Texture2D _texture = null!;
+    private Camera3D _camera = null!;
+
     /// <summary>The world-space ballistic impact point to mark (set each frame by the controller).</summary>
     public Vector3 ImpactPoint { get; set; }
 
     /// <summary>Whether to draw this frame. False hides the pipper — no firable gun, crashed, or no
     /// valid firing solution. Set by <see cref="FlightController"/>.</summary>
     public bool Active { get; set; }
-
-    private Texture2D _texture = null!;
-    private Camera3D _camera = null!;
-
-    private const float RefSize = 40f; // pipper draw size in px at the 1440p reference (TUNE)
 
     /// <summary>Loads a single PNG from the extracted <c>rimage</c> UI set as a texture (the reticle
     /// pipper); null (with one log line) when the file is absent. These images carry their own alpha,

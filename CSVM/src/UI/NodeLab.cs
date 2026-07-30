@@ -58,6 +58,9 @@ public sealed partial class NodeLab : Node
     private readonly AnimProgram? _program;
     private readonly SceneBuilder? _scene;
     private readonly bool _collisionBuilt;
+    private readonly Dictionary<ulong, Node3D> _itemNode = new();
+    private readonly Dictionary<ulong, TreeItem> _nodeItem = new();
+    private readonly HashSet<ulong> _stubs = new();
 
     private CanvasLayer? _layer;
     private Tree? _tree;
@@ -74,9 +77,6 @@ public sealed partial class NodeLab : Node
     private int _debugFrames = -1;
 
     private TreeItem? _rootItem;
-    private readonly Dictionary<ulong, Node3D> _itemNode = new();
-    private readonly Dictionary<ulong, TreeItem> _nodeItem = new();
-    private readonly HashSet<ulong> _stubs = new();
 
     private List<(string Name, Node3D Node)>? _nameIndex;
     private Dictionary<ulong, List<AnimDefinition>>? _defsByAnchor;
@@ -111,6 +111,38 @@ public sealed partial class NodeLab : Node
     /// <summary>Whether the panel is showing. Nothing is built until it first opens, so a capture
     /// without N — and without <c>--debug-nodelab</c> — renders as if this file did not exist.</summary>
     public bool IsOpen => _open;
+
+    /// <summary>Parses <c>--debug-nodelab[=spec]</c>: a comma-separated list of <c>deps</c>,
+    /// <c>dest</c>, <c>open</c> and <c>node=&lt;cs_name&gt;</c>. Unknown tokens are reported and
+    /// dropped rather than silently disabling the dump the run was launched for.</summary>
+    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
+    {
+        var kept = new List<string>();
+        foreach (string token in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (token.Equals("all", StringComparison.OrdinalIgnoreCase))
+            {
+                continue;
+            }
+            if (token.Equals("deps", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("dest", StringComparison.OrdinalIgnoreCase)
+                || token.Equals("open", StringComparison.OrdinalIgnoreCase)
+                || token.StartsWith("node=", StringComparison.OrdinalIgnoreCase))
+            {
+                kept.Add(token);
+                continue;
+            }
+            // A caller that supplies the list wants the tokens back as data, not in the log — that
+            // is what lets the spec normalise a value without a Godot runtime to print into.
+            if (rejected != null)
+            {
+                rejected.Add(token);
+                continue;
+            }
+            Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name> — ignoring it");
+        }
+        return string.Join(",", kept);
+    }
 
     public override void _Ready()
     {
@@ -189,6 +221,277 @@ public sealed partial class NodeLab : Node
             UpdateStatus();
         }
         Log.Info("ui", $"nodelab {(_open ? "open" : "closed")}");
+    }
+
+    // ---- actions ------------------------------------------------------------------------------
+
+    /// <summary>Puts the camera on the selection's measured subtree box and locks the orbit onto
+    /// it, so a search hit half a map away is one double-click.</summary>
+    public void FrameSelection()
+    {
+        if (_selection.Current is not { } node || !IsInstanceValid(node))
+        {
+            Log.Info("ui", $"nodelab frame — nothing is selected");
+            return;
+        }
+        if (CameraSource?.Invoke() is not { } cam)
+        {
+            Log.Warn("ui", $"nodelab frame — this session has no free camera to move");
+            return;
+        }
+        var box = _selection.CurrentBox;
+        if (box.Size.LengthSquared() < 1e-4f)
+        {
+            // A meshless pivot rung: orbit a nominal box around it rather than the world origin.
+            box = new Aabb(node.GlobalPosition - Vector3.One * 10f, Vector3.One * 20f);
+        }
+        cam.Frame(box);
+        cam.FollowNode(node);
+        var c = box.GetCenter();
+        Log.Info("ui", $"nodelab frame node={SelectionService.NameOf(node)} centre=({c.X:0.0},{c.Y:0.0},{c.Z:0.0}) size=({box.Size.X:0.0},{box.Size.Y:0.0},{box.Size.Z:0.0})");
+    }
+
+    /// <summary>Flips the selected subtree's <c>Visible</c> — nothing is torn down, so it is
+    /// reversible, and an animation that re-shows the node afterwards is the data working, not a
+    /// bug. The panel reports live <c>Visible</c> so that reads as what it is.</summary>
+    public void ToggleHide()
+    {
+        if (_selection.Current is not { } node || !IsInstanceValid(node))
+        {
+            Log.Info("ui", $"nodelab hide — nothing is selected");
+            return;
+        }
+        node.Visible = !node.Visible;
+        Log.Info("ui", $"nodelab {(node.Visible ? "show" : "hide")} node={SelectionService.NameOf(node)} visible={node.Visible} in_tree={node.IsVisibleInTree()}");
+        UpdateStatus();
+        RefreshDeps();
+    }
+
+    /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
+    /// and the scripted dump logs, so the two can never disagree. Null node yields the
+    /// nothing-selected notice.</summary>
+    public List<string> DependencyLines(Node3D? node)
+    {
+        var lines = new List<string>();
+        if (node == null || !IsInstanceValid(node))
+        {
+            lines.Add("nothing selected");
+            return lines;
+        }
+        var box = SelectionService.SubtreeWorldAabb(node);
+        var c = box.GetCenter();
+        lines.Add(Log.Format($"node cs_name={SelectionService.NameOf(node)} godot={node.Name} visible={node.Visible} in_tree={node.IsVisibleInTree()}"));
+        lines.Add(Log.Format($"box centre=({c.X:0.0},{c.Y:0.0},{c.Z:0.0}) size=({box.Size.X:0.0},{box.Size.Y:0.0},{box.Size.Z:0.0})"));
+        AddAnimLines(node, lines);
+        AddDestructibleLines(node, lines);
+        AddGeometryLines(node, lines);
+        AddColliderLines(node, lines);
+        return lines;
+    }
+
+    /// <summary>Selects a node by <c>cs_name</c> — the tree panel's own entry, and the only way to
+    /// reach anything the click pick refuses (terrain is over the pick's size cap). An exact match
+    /// wins; failing that the first substring match, with the full candidate list logged so an
+    /// ambiguous name is visible rather than silently resolved.</summary>
+    public bool SelectByName(string name)
+    {
+        EnsureNameIndex();
+        var matches = _nameIndex!
+            .Where(e => IsInstanceValid(e.Node)
+                        && e.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
+            .ToList();
+        var exact = matches.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
+        var pick = exact.Node != null ? exact : matches.FirstOrDefault();
+        if (pick.Node == null)
+        {
+            Log.Warn("ui", $"nodelab select name='{name}' matched nothing in this world");
+            return false;
+        }
+        Log.Info("ui", $"nodelab select name='{name}' → '{pick.Name}' matches={matches.Count} exact={(exact.Node != null)} candidates=[{string.Join(" ", matches.Take(MaxListed).Select(m => m.Name))}]");
+        _selection.Select(pick.Node);
+        return true;
+    }
+
+    // ---- static helpers -------------------------------------------------------------------
+
+    private static Label Small(string text)
+    {
+        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        return label;
+    }
+
+    private static string RowText(Node3D node)
+    {
+        string name = SelectionService.NameOf(node);
+        return node.Visible ? name : name + "  (hidden)";
+    }
+
+    /// <summary>The nearest <c>cs_name</c>-bearing descendants of a node — the exact inverse of
+    /// the selection ladder's ancestor walk, so the tree's parent/child relation and the
+    /// breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
+    /// through, never shown.</summary>
+    private static void CollectNamed(Node parent, List<Node3D> into)
+    {
+        foreach (var child in parent.GetChildren())
+        {
+            if (child is Node3D named && named.HasMeta(AnimRuntime.NameMeta))
+            {
+                into.Add(named);
+            }
+            else
+            {
+                CollectNamed(child, into);
+            }
+        }
+    }
+
+    private static bool HasNamed(Node parent)
+    {
+        foreach (var child in parent.GetChildren())
+        {
+            if (child is Node3D named && named.HasMeta(AnimRuntime.NameMeta))
+            {
+                return true;
+            }
+            if (HasNamed(child))
+            {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    // A full-width message row: the text spans every column and carries itself as its tooltip, so
+    // nothing loud is lost to a column boundary.
+    private static void Banner(TreeItem item, string text, Color color)
+    {
+        item.SetText(0, text);
+        item.SetCustomColor(0, color);
+        item.SetExpandRight(0, true);
+        item.SetTooltipText(0, text);
+        item.SetSelectable(0, false);
+    }
+
+    // Which of a definition's event kinds the runtime's dispatch table acts on. Reported per
+    // definition rather than as a global tally, because the question a coverage column answers is
+    // "would THIS object's destruction play out".
+    private static (string Text, bool Ok) EventCoverage(AnimDefinition def)
+    {
+        var missing = new Dictionary<string, int>(StringComparer.Ordinal);
+        var partial = new Dictionary<string, int>(StringComparer.Ordinal);
+        int total = 0;
+        void Scan(AnimSequence seq)
+        {
+            foreach (var ev in seq.Events)
+            {
+                total++;
+                if (AnimRuntime.PartialEventKinds.Contains(ev.Kind))
+                {
+                    partial[ev.Kind] = partial.TryGetValue(ev.Kind, out int p) ? p + 1 : 1;
+                }
+                else if (!AnimRuntime.HandledEventKinds.Contains(ev.Kind))
+                {
+                    missing[ev.Kind] = missing.TryGetValue(ev.Kind, out int m) ? m + 1 : 1;
+                }
+            }
+        }
+        foreach (var seq in def.Sequences)
+        {
+            Scan(seq);
+        }
+        if (def.ResetState is { } reset)
+        {
+            Scan(reset);
+        }
+        if (missing.Count == 0 && partial.Count == 0)
+        {
+            return ($"{total} ok", true);
+        }
+        var parts = new List<string>();
+        foreach (var kv in missing.OrderByDescending(kv => kv.Value))
+        {
+            parts.Add($"{kv.Key}×{kv.Value}");
+        }
+        foreach (var kv in partial.OrderByDescending(kv => kv.Value))
+        {
+            parts.Add($"{kv.Key}×{kv.Value}(partial)");
+        }
+        return (string.Join(", ", parts), missing.Count == 0);
+    }
+
+    private static string DefLabel(AnimDefinition def) =>
+        def.AnimName is { Length: > 0 } anim && !anim.Equals(def.Name, StringComparison.OrdinalIgnoreCase)
+            ? $"{anim}@{def.Name}"
+            : def.Name.Length > 0 ? def.Name : "(unnamed)";
+
+    private static string DefLine(AnimDefinition def, string relation)
+    {
+        var seqs = def.Sequences.Select(s => s.Name.Length > 0 ? s.Name : "(unnamed)");
+        return Log.Format($"anim def={DefLabel(def)} rel={relation} activation={def.Activation} health={def.Health:0.#} source={(def.Archive != null ? "compiled" : "reader")} seqs=[{string.Join(" ", seqs)}]");
+    }
+
+    // The descending ANIM_HEALTH tests a DAMAGE_SEQUENCE branches on — how many progressive stages
+    // the object can escalate through.
+    private static int CountThresholds(AnimSequence damage) =>
+        damage.Events.Count(e => e.Kind is "If" or "Elseif");
+
+    // Every node name a definition refers to. A compiled def carries its own symbol table, which is
+    // exact; a reader def is scanned for the two spellings mech3ax uses for a node reference, and
+    // `name` is taken only from the OBJECT_* kinds, where it is a node rather than a sound, a
+    // puffer, a light or another animation.
+    private static IEnumerable<string> TargetNames(AnimDefinition def)
+    {
+        foreach (string name in def.NodeRefs.Keys)
+        {
+            yield return name;
+        }
+        foreach (var seq in def.Sequences)
+        {
+            foreach (string name in NamesIn(seq))
+            {
+                yield return name;
+            }
+        }
+        if (def.ResetState is { } reset)
+        {
+            foreach (string name in NamesIn(reset))
+            {
+                yield return name;
+            }
+        }
+        if (def.Name.Length > 0)
+        {
+            yield return def.Name;
+        }
+
+        static IEnumerable<string> NamesIn(AnimSequence seq)
+        {
+            foreach (var ev in seq.Events)
+            {
+                if (ev.Data.Str("node") is { } node)
+                {
+                    yield return node;
+                }
+                if (ev.Kind.StartsWith("Object", StringComparison.Ordinal)
+                    && ev.Data.Str("name") is { } named)
+                {
+                    yield return named;
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> NameKeys(Node3D node)
+    {
+        string name = SelectionService.NameOf(node);
+        yield return name;
+        // Definitions name a node without its model-file suffix as often as with it, exactly as
+        // the runtime's own matcher allows.
+        if (name.EndsWith(".flt", StringComparison.OrdinalIgnoreCase))
+        {
+            yield return name[..^4];
+        }
     }
 
     private void BuildUi()
@@ -288,13 +591,6 @@ public sealed partial class NodeLab : Node
         return b;
     }
 
-    private static Label Small(string text)
-    {
-        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        return label;
-    }
-
     private void UpdateStatus()
     {
         if (_status == null)
@@ -383,50 +679,6 @@ public sealed partial class NodeLab : Node
     {
         OnItemSelected();
         FrameSelection();
-    }
-
-    // ---- actions ------------------------------------------------------------------------------
-
-    /// <summary>Puts the camera on the selection's measured subtree box and locks the orbit onto
-    /// it, so a search hit half a map away is one double-click.</summary>
-    public void FrameSelection()
-    {
-        if (_selection.Current is not { } node || !IsInstanceValid(node))
-        {
-            Log.Info("ui", $"nodelab frame — nothing is selected");
-            return;
-        }
-        if (CameraSource?.Invoke() is not { } cam)
-        {
-            Log.Warn("ui", $"nodelab frame — this session has no free camera to move");
-            return;
-        }
-        var box = _selection.CurrentBox;
-        if (box.Size.LengthSquared() < 1e-4f)
-        {
-            // A meshless pivot rung: orbit a nominal box around it rather than the world origin.
-            box = new Aabb(node.GlobalPosition - Vector3.One * 10f, Vector3.One * 20f);
-        }
-        cam.Frame(box);
-        cam.FollowNode(node);
-        var c = box.GetCenter();
-        Log.Info("ui", $"nodelab frame node={SelectionService.NameOf(node)} centre=({c.X:0.0},{c.Y:0.0},{c.Z:0.0}) size=({box.Size.X:0.0},{box.Size.Y:0.0},{box.Size.Z:0.0})");
-    }
-
-    /// <summary>Flips the selected subtree's <c>Visible</c> — nothing is torn down, so it is
-    /// reversible, and an animation that re-shows the node afterwards is the data working, not a
-    /// bug. The panel reports live <c>Visible</c> so that reads as what it is.</summary>
-    public void ToggleHide()
-    {
-        if (_selection.Current is not { } node || !IsInstanceValid(node))
-        {
-            Log.Info("ui", $"nodelab hide — nothing is selected");
-            return;
-        }
-        node.Visible = !node.Visible;
-        Log.Info("ui", $"nodelab {(node.Visible ? "show" : "hide")} node={SelectionService.NameOf(node)} visible={node.Visible} in_tree={node.IsVisibleInTree()}");
-        UpdateStatus();
-        RefreshDeps();
     }
 
     // ---- tree ---------------------------------------------------------------------------------
@@ -623,47 +875,6 @@ public sealed partial class NodeLab : Node
         _nodeItem[node.GetInstanceId()] = item;
     }
 
-    private static string RowText(Node3D node)
-    {
-        string name = SelectionService.NameOf(node);
-        return node.Visible ? name : name + "  (hidden)";
-    }
-
-    /// <summary>The nearest <c>cs_name</c>-bearing descendants of a node — the exact inverse of
-    /// the selection ladder's ancestor walk, so the tree's parent/child relation and the
-    /// breadcrumb's rungs are the same relation. SceneBuilder's unnamed wrappers are stepped
-    /// through, never shown.</summary>
-    private static void CollectNamed(Node parent, List<Node3D> into)
-    {
-        foreach (var child in parent.GetChildren())
-        {
-            if (child is Node3D named && named.HasMeta(AnimRuntime.NameMeta))
-            {
-                into.Add(named);
-            }
-            else
-            {
-                CollectNamed(child, into);
-            }
-        }
-    }
-
-    private static bool HasNamed(Node parent)
-    {
-        foreach (var child in parent.GetChildren())
-        {
-            if (child is Node3D named && named.HasMeta(AnimRuntime.NameMeta))
-            {
-                return true;
-            }
-            if (HasNamed(child))
-            {
-                return true;
-            }
-        }
-        return false;
-    }
-
     // Every named node in the world, flattened once. The world tree is not added to after the
     // build (the anim runtime's own find cache rests on the same fact), so one pass serves every
     // keystroke; freed nodes are skipped at query time rather than invalidating the index.
@@ -770,32 +981,6 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    // A full-width message row: the text spans every column and carries itself as its tooltip, so
-    // nothing loud is lost to a column boundary.
-    private static void Banner(TreeItem item, string text, Color color)
-    {
-        item.SetText(0, text);
-        item.SetCustomColor(0, color);
-        item.SetExpandRight(0, true);
-        item.SetTooltipText(0, text);
-        item.SetSelectable(0, false);
-    }
-
-    /// <summary>One destructible definition's row: how many world node groups it actually bound,
-    /// whether its <c>ANIMATION_ROOT_NAME</c> resolves inside each of them, and whether its
-    /// sequences use only event kinds the runtime acts on.</summary>
-    private sealed class DestRow
-    {
-        public AnimDefinition Def = null!;
-        public string Label = "";
-        public string RootColumn = "";
-        public string EventColumn = "";
-        public string HpColumn = "";
-        public bool RootOk = true;
-        public bool EventsOk = true;
-        public List<DestructibleRegistry.Instance> Instances = new();
-    }
-
     private List<DestRow> DestructibleRows()
     {
         var rows = new List<DestRow>();
@@ -890,58 +1075,6 @@ public sealed partial class NodeLab : Node
         return ok ? $"{n} node(s)" : "NONE";
     }
 
-    // Which of a definition's event kinds the runtime's dispatch table acts on. Reported per
-    // definition rather than as a global tally, because the question a coverage column answers is
-    // "would THIS object's destruction play out".
-    private static (string Text, bool Ok) EventCoverage(AnimDefinition def)
-    {
-        var missing = new Dictionary<string, int>(StringComparer.Ordinal);
-        var partial = new Dictionary<string, int>(StringComparer.Ordinal);
-        int total = 0;
-        void Scan(AnimSequence seq)
-        {
-            foreach (var ev in seq.Events)
-            {
-                total++;
-                if (AnimRuntime.PartialEventKinds.Contains(ev.Kind))
-                {
-                    partial[ev.Kind] = partial.TryGetValue(ev.Kind, out int p) ? p + 1 : 1;
-                }
-                else if (!AnimRuntime.HandledEventKinds.Contains(ev.Kind))
-                {
-                    missing[ev.Kind] = missing.TryGetValue(ev.Kind, out int m) ? m + 1 : 1;
-                }
-            }
-        }
-        foreach (var seq in def.Sequences)
-        {
-            Scan(seq);
-        }
-        if (def.ResetState is { } reset)
-        {
-            Scan(reset);
-        }
-        if (missing.Count == 0 && partial.Count == 0)
-        {
-            return ($"{total} ok", true);
-        }
-        var parts = new List<string>();
-        foreach (var kv in missing.OrderByDescending(kv => kv.Value))
-        {
-            parts.Add($"{kv.Key}×{kv.Value}");
-        }
-        foreach (var kv in partial.OrderByDescending(kv => kv.Value))
-        {
-            parts.Add($"{kv.Key}×{kv.Value}(partial)");
-        }
-        return (string.Join(", ", parts), missing.Count == 0);
-    }
-
-    private static string DefLabel(AnimDefinition def) =>
-        def.AnimName is { Length: > 0 } anim && !anim.Equals(def.Name, StringComparison.OrdinalIgnoreCase)
-            ? $"{anim}@{def.Name}"
-            : def.Name.Length > 0 ? def.Name : "(unnamed)";
-
     // ---- dependency readout -------------------------------------------------------------------
 
     private void RefreshDeps()
@@ -961,28 +1094,6 @@ public sealed partial class NodeLab : Node
             sb.AppendLine(loud ? "[/color]" : "");
         }
         _deps.Text = sb.ToString();
-    }
-
-    /// <summary>The dependency readout for one node as plain lines — the same text the panel shows
-    /// and the scripted dump logs, so the two can never disagree. Null node yields the
-    /// nothing-selected notice.</summary>
-    public List<string> DependencyLines(Node3D? node)
-    {
-        var lines = new List<string>();
-        if (node == null || !IsInstanceValid(node))
-        {
-            lines.Add("nothing selected");
-            return lines;
-        }
-        var box = SelectionService.SubtreeWorldAabb(node);
-        var c = box.GetCenter();
-        lines.Add(Log.Format($"node cs_name={SelectionService.NameOf(node)} godot={node.Name} visible={node.Visible} in_tree={node.IsVisibleInTree()}"));
-        lines.Add(Log.Format($"box centre=({c.X:0.0},{c.Y:0.0},{c.Z:0.0}) size=({box.Size.X:0.0},{box.Size.Y:0.0},{box.Size.Z:0.0})"));
-        AddAnimLines(node, lines);
-        AddDestructibleLines(node, lines);
-        AddGeometryLines(node, lines);
-        AddColliderLines(node, lines);
-        return lines;
     }
 
     private void AddAnimLines(Node3D node, List<string> lines)
@@ -1032,12 +1143,6 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    private static string DefLine(AnimDefinition def, string relation)
-    {
-        var seqs = def.Sequences.Select(s => s.Name.Length > 0 ? s.Name : "(unnamed)");
-        return Log.Format($"anim def={DefLabel(def)} rel={relation} activation={def.Activation} health={def.Health:0.#} source={(def.Archive != null ? "compiled" : "reader")} seqs=[{string.Join(" ", seqs)}]");
-    }
-
     private void AddDestructibleLines(Node3D node, List<string> lines)
     {
         if (_runtime == null)
@@ -1067,11 +1172,6 @@ public sealed partial class NodeLab : Node
             lines.Add(Log.Format($"destructible event coverage def={DefLabel(inst.Def)} {(ok ? "" : "UNRESOLVED kinds ")}{coverage}"));
         }
     }
-
-    // The descending ANIM_HEALTH tests a DAMAGE_SEQUENCE branches on — how many progressive stages
-    // the object can escalate through.
-    private static int CountThresholds(AnimSequence damage) =>
-        damage.Events.Count(e => e.Kind is "If" or "Elseif");
 
     private void AddGeometryLines(Node3D node, List<string> lines)
     {
@@ -1203,64 +1303,6 @@ public sealed partial class NodeLab : Node
         Log.Debug("ui", $"nodelab anim index defs={_program.Defs.Count} anchored_nodes={_defsByAnchor.Count} named_targets={_defsByTarget.Count} ms={watch.Elapsed.TotalMilliseconds:0.0}");
     }
 
-    // Every node name a definition refers to. A compiled def carries its own symbol table, which is
-    // exact; a reader def is scanned for the two spellings mech3ax uses for a node reference, and
-    // `name` is taken only from the OBJECT_* kinds, where it is a node rather than a sound, a
-    // puffer, a light or another animation.
-    private static IEnumerable<string> TargetNames(AnimDefinition def)
-    {
-        foreach (string name in def.NodeRefs.Keys)
-        {
-            yield return name;
-        }
-        foreach (var seq in def.Sequences)
-        {
-            foreach (string name in NamesIn(seq))
-            {
-                yield return name;
-            }
-        }
-        if (def.ResetState is { } reset)
-        {
-            foreach (string name in NamesIn(reset))
-            {
-                yield return name;
-            }
-        }
-        if (def.Name.Length > 0)
-        {
-            yield return def.Name;
-        }
-
-        static IEnumerable<string> NamesIn(AnimSequence seq)
-        {
-            foreach (var ev in seq.Events)
-            {
-                if (ev.Data.Str("node") is { } node)
-                {
-                    yield return node;
-                }
-                if (ev.Kind.StartsWith("Object", StringComparison.Ordinal)
-                    && ev.Data.Str("name") is { } named)
-                {
-                    yield return named;
-                }
-            }
-        }
-    }
-
-    private static IEnumerable<string> NameKeys(Node3D node)
-    {
-        string name = SelectionService.NameOf(node);
-        yield return name;
-        // Definitions name a node without its model-file suffix as often as with it, exactly as
-        // the runtime's own matcher allows.
-        if (name.EndsWith(".flt", StringComparison.OrdinalIgnoreCase))
-        {
-            yield return name[..^4];
-        }
-    }
-
     private void EnsureTextureNames()
     {
         if (_textureOfMaterial != null)
@@ -1374,58 +1416,18 @@ public sealed partial class NodeLab : Node
         }
     }
 
-    /// <summary>Selects a node by <c>cs_name</c> — the tree panel's own entry, and the only way to
-    /// reach anything the click pick refuses (terrain is over the pick's size cap). An exact match
-    /// wins; failing that the first substring match, with the full candidate list logged so an
-    /// ambiguous name is visible rather than silently resolved.</summary>
-    public bool SelectByName(string name)
+    /// <summary>One destructible definition's row: how many world node groups it actually bound,
+    /// whether its <c>ANIMATION_ROOT_NAME</c> resolves inside each of them, and whether its
+    /// sequences use only event kinds the runtime acts on.</summary>
+    private sealed class DestRow
     {
-        EnsureNameIndex();
-        var matches = _nameIndex!
-            .Where(e => IsInstanceValid(e.Node)
-                        && e.Name.IndexOf(name, StringComparison.OrdinalIgnoreCase) >= 0)
-            .ToList();
-        var exact = matches.FirstOrDefault(e => e.Name.Equals(name, StringComparison.OrdinalIgnoreCase));
-        var pick = exact.Node != null ? exact : matches.FirstOrDefault();
-        if (pick.Node == null)
-        {
-            Log.Warn("ui", $"nodelab select name='{name}' matched nothing in this world");
-            return false;
-        }
-        Log.Info("ui", $"nodelab select name='{name}' → '{pick.Name}' matches={matches.Count} exact={(exact.Node != null)} candidates=[{string.Join(" ", matches.Take(MaxListed).Select(m => m.Name))}]");
-        _selection.Select(pick.Node);
-        return true;
-    }
-
-    /// <summary>Parses <c>--debug-nodelab[=spec]</c>: a comma-separated list of <c>deps</c>,
-    /// <c>dest</c>, <c>open</c> and <c>node=&lt;cs_name&gt;</c>. Unknown tokens are reported and
-    /// dropped rather than silently disabling the dump the run was launched for.</summary>
-    public static string ParseDebugSpec(string spec, List<string>? rejected = null)
-    {
-        var kept = new List<string>();
-        foreach (string token in spec.Split(',', StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
-        {
-            if (token.Equals("all", StringComparison.OrdinalIgnoreCase))
-            {
-                continue;
-            }
-            if (token.Equals("deps", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("dest", StringComparison.OrdinalIgnoreCase)
-                || token.Equals("open", StringComparison.OrdinalIgnoreCase)
-                || token.StartsWith("node=", StringComparison.OrdinalIgnoreCase))
-            {
-                kept.Add(token);
-                continue;
-            }
-            // A caller that supplies the list wants the tokens back as data, not in the log — that
-            // is what lets the spec normalise a value without a Godot runtime to print into.
-            if (rejected != null)
-            {
-                rejected.Add(token);
-                continue;
-            }
-            Log.Warn("ui", $"--debug-nodelab token '{token}' is not deps/dest/open/all/node=<cs_name> — ignoring it");
-        }
-        return string.Join(",", kept);
+        public AnimDefinition Def = null!;
+        public string Label = "";
+        public string RootColumn = "";
+        public string EventColumn = "";
+        public string HpColumn = "";
+        public bool RootOk = true;
+        public bool EventsOk = true;
+        public List<DestructibleRegistry.Instance> Instances = new();
     }
 }

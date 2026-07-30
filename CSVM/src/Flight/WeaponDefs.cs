@@ -52,6 +52,8 @@ public sealed class TanglerData
 /// </summary>
 public sealed class WeaponDef
 {
+    public readonly Dictionary<SurfaceClass, WeaponEffect> Impact = new();
+
     public string Id = "";            // "wep_00"
     public string DescKey = "";       // "MSG_WEAP_30CAL_SLUG"
     public string DisplayName = "";   // DescKey resolved through Messages (or the key if unresolved)
@@ -113,7 +115,6 @@ public sealed class WeaponDef
     public string? LoopedSoundName;   // looped firing sound (guns)
     public WeaponEffect? Fire;
     public WeaponFlyout? Flyout;
-    public readonly Dictionary<SurfaceClass, WeaponEffect> Impact = new();
 
     /// <summary>Keys present on this entry that the reader does not map — empty for every entry
     /// in this install (asserted by the B11 verify). A non-empty list means the data grew a key
@@ -178,15 +179,6 @@ public sealed class WeaponDefs
     /// <summary>Every def, in file order.</summary>
     public IReadOnlyList<WeaponDef> All => _all;
 
-    public WeaponDef? Get(string id) => _byId.TryGetValue(id, out var d) ? d : null;
-
-    public bool TryGet(string id, out WeaponDef def)
-    {
-        var d = Get(id);
-        def = d!;
-        return d != null;
-    }
-
     /// <summary>Loads and types every <c>BALLISTICS</c> entry. <paramref name="messages"/> resolves
     /// each <c>DESC</c> key to a display name; null leaves <see cref="WeaponDef.DisplayName"/> the
     /// raw key (visible, not blank).</summary>
@@ -211,6 +203,15 @@ public sealed class WeaponDefs
             defs._all.Add(def);
         }
         return defs;
+    }
+
+    public WeaponDef? Get(string id) => _byId.TryGetValue(id, out var d) ? d : null;
+
+    public bool TryGet(string id, out WeaponDef def)
+    {
+        var d = Get(id);
+        def = d!;
+        return d != null;
     }
 
     private static WeaponDef Parse(string id, ZrdrDict d, Messages? messages)

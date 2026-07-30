@@ -55,6 +55,54 @@ public sealed class WeatherRig
     /// built whenever a chapter world loads — not only when this rig itself gets built.</summary>
     public void SetDeckCenter(Vector3 center) => _deckCenter = center;
 
+    /// <summary>Everything anchored to *a* camera, once per rig — one in single player, one per
+    /// pane in splitscreen (each on that player's own visual layer): re-centers the skydome,
+    /// fades the cloud-band whiteout, re-anchors the cloud deck, and advances the ambient puffs.
+    /// Moved verbatim off <c>GameSession._Process</c>.</summary>
+    public void Tick(IReadOnlyList<PlayerRig> rigs, float dt)
+    {
+        foreach (var rig in rigs)
+        {
+            var camPos = rig.Camera.Position;
+
+            // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
+            // backdrop, like the original): the moon then stays at its designed 28° elevation
+            // against the dark dome cap — whose color its painted background matches — instead
+            // of sliding down into the bright horizon band as the plane climbs.
+            // (One-frame lag vs the flight camera is invisible at 22 km.)
+            if (rig.Horizon != null)
+                rig.Horizon.Position = camPos;
+
+            // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
+            if (rig.Whiteout != null && _weather != null)
+            {
+                var c = rig.Whiteout.Color;
+                // --no-fog covers the whiteout too: flying into the cloud band would otherwise
+                // still white the pane out, which reads as "fog is not actually off".
+                c.A = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
+                rig.Whiteout.Color = c;
+            }
+
+            // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
+            // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
+            // once above) and pass through it exactly where the whiteout is fully opaque, so the
+            // ceiling→floor transition is hidden.
+            if (rig.Deck != null && _weather is { HasCloudBand: true })
+            {
+                float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
+                rig.Deck.Position = new Vector3(
+                    camPos.X - _deckCenter.X,
+                    mid - _deckCenter.Y,
+                    camPos.Z - _deckCenter.Z);
+            }
+
+            // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
+            // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
+            // so fresh puffs spawn ahead and the plane flies into them.
+            rig.Puffs?.Update(dt, camPos, -rig.Camera.GlobalTransform.Basis.Z);
+        }
+    }
+
     /// <summary>Resolves <see cref="_activeZone"/>: the zone the fog AND the skydome are both
     /// built from. Called before the domes, because the zone names are per chapter — C5 ships
     /// zone1+zone3, so the `zone2` default has to fall back or C5 renders with no fog and no dome
@@ -173,53 +221,5 @@ public sealed class WeatherRig
         _precip = Precipitation.Create(_weather.Precip, _weather.CloudBottom, _weather.CloudTop);
         if (_precip != null)
             _worldRoot.AddChild(_precip);
-    }
-
-    /// <summary>Everything anchored to *a* camera, once per rig — one in single player, one per
-    /// pane in splitscreen (each on that player's own visual layer): re-centers the skydome,
-    /// fades the cloud-band whiteout, re-anchors the cloud deck, and advances the ambient puffs.
-    /// Moved verbatim off <c>GameSession._Process</c>.</summary>
-    public void Tick(IReadOnlyList<PlayerRig> rigs, float dt)
-    {
-        foreach (var rig in rigs)
-        {
-            var camPos = rig.Camera.Position;
-
-            // Keep the skydome centered on the camera in ALL axes (a pure zero-parallax
-            // backdrop, like the original): the moon then stays at its designed 28° elevation
-            // against the dark dome cap — whose color its painted background matches — instead
-            // of sliding down into the bright horizon band as the plane climbs.
-            // (One-frame lag vs the flight camera is invisible at 22 km.)
-            if (rig.Horizon != null)
-                rig.Horizon.Position = camPos;
-
-            // Cloud-band whiteout: fade the overlay in as the camera altitude enters the band.
-            if (rig.Whiteout != null && _weather != null)
-            {
-                var c = rig.Whiteout.Color;
-                // --no-fog covers the whiteout too: flying into the cloud band would otherwise
-                // still white the pane out, which reads as "fog is not actually off".
-                c.A = _spec.NoFog ? 0f : _weather.WhiteoutAmount(camPos.Y);
-                rig.Whiteout.Color = c;
-            }
-
-            // Cloud deck follows the player: centered on the camera x/z and pinned to a fixed
-            // altitude at the whiteout-band centre. You climb toward it as a fixed ceiling (floor
-            // once above) and pass through it exactly where the whiteout is fully opaque, so the
-            // ceiling→floor transition is hidden.
-            if (rig.Deck != null && _weather is { HasCloudBand: true })
-            {
-                float mid = (_weather.CloudTop + _weather.CloudBottom) * 0.5f;
-                rig.Deck.Position = new Vector3(
-                    camPos.X - _deckCenter.X,
-                    mid - _deckCenter.Y,
-                    camPos.Z - _deckCenter.Z);
-            }
-
-            // Ambient cloud puffs: keep the drifting field around the plane (world-anchored,
-            // recycled at the shell edge — see CloudPuffs). Forward is the camera's -Z look dir,
-            // so fresh puffs spawn ahead and the plane flies into them.
-            rig.Puffs?.Update(dt, camPos, -rig.Camera.GlobalTransform.Basis.Z);
-        }
     }
 }

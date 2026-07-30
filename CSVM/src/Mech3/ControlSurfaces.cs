@@ -23,8 +23,6 @@ namespace CSVM.Mech3;
 /// </summary>
 public static class ControlSurfaces
 {
-    public enum Kind { None, AileronLeft, AileronRight, Elevator, Rudder }
-
     // Mesh-node names across the fleet: l/r_aileron1..3, l/r_elevator1/2 (a bare
     // l_elevator exists only on the never-built anim_bloodhawk — digits optional to
     // be safe), l/r_rudder1/2 and l/r_rudder_rotate (Fury). Digits are REQUIRED on
@@ -35,6 +33,8 @@ public static class ControlSurfaces
     private static readonly Regex AileronRe = new("^([lr])_aileron[0-9]+$", RegexOptions.IgnoreCase);
     private static readonly Regex ElevatorRe = new("^[lr]_elevator[0-9]*$", RegexOptions.IgnoreCase);
     private static readonly Regex RudderRe = new("^[lr]_rudder([0-9]+|_rotate)$", RegexOptions.IgnoreCase);
+
+    public enum Kind { None, AileronLeft, AileronRight, Elevator, Rudder }
 
     public static Kind Classify(string name)
     {

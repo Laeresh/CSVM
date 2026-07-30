@@ -44,11 +44,6 @@ namespace CSVM.Utils;
 /// </summary>
 public sealed class StartupProfile
 {
-    /// <summary>The session currently being timed, or null when nothing is. The in-engine test
-    /// harness builds worlds through the very same code and deliberately leaves this null, so its
-    /// eight census worlds do not accumulate into one nonsense line.</summary>
-    public static StartupProfile? Current { get; set; }
-
     private readonly List<string> _order = new();
     private readonly Dictionary<string, double> _phases = new(StringComparer.Ordinal);
     private readonly long _buildStart = Stopwatch.GetTimestamp();
@@ -69,6 +64,11 @@ public sealed class StartupProfile
         _mode = mode;
         _bootMs = bootMs;
     }
+
+    /// <summary>The session currently being timed, or null when nothing is. The in-engine test
+    /// harness builds worlds through the very same code and deliberately leaves this null, so its
+    /// eight census worlds do not accumulate into one nonsense line.</summary>
+    public static StartupProfile? Current { get; set; }
 
     /// <summary>What this session built, as one ready-formatted <c>key=value</c> fragment
     /// (<c>chapter=C1</c>, <c>plane=player_bhawk</c>) — the line's scenario identity.</summary>

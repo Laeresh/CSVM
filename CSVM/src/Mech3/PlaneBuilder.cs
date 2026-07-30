@@ -39,23 +39,6 @@ public sealed class PlaneBuilder
     private string? _skinPrefix;
     private StandardMaterial3D? _flareMaterial;
 
-    /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
-    /// aircraft's skin prefix — null when built unpainted.</summary>
-    public PlanePainter? Painter => _painter;
-
-    public int MeshInstanceCount => _scene.MeshInstanceCount;
-
-    /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned as
-    /// additive billboards. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
-    /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
-    public IReadOnlyList<Node3D> WingFlares => _wingFlares;
-
-    /// <summary>Flight and damage-lab builds: the exterior damage-state
-    /// panels — the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
-    /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
-    /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
-    public IReadOnlyList<Node3D> DamagePanels => _damagePanels;
-
     /// <param name="spinningProps">Free-flight build: hide the static propeller disc and
     /// keep the spinning blur layers (a PropAnimator drives them). Default (exterior view)
     /// keeps the static disc and hides the blur layers. Implies damage panels.</param>
@@ -86,33 +69,26 @@ public sealed class PlaneBuilder
         _withDamagePanels = spinningProps || damagePanels;
     }
 
-    private static bool IsPropBlurTexture(string tex) =>
-        tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
+    /// <summary>The paint applied to this build, once <see cref="Build"/> has resolved the
+    /// aircraft's skin prefix — null when built unpainted.</summary>
+    public PlanePainter? Painter => _painter;
 
-    // Damage-state panels pdp1..8 (exterior) / pcdpN (cockpit) start INACTIVE in the
-    // original: its player_destruct_reset "plane_reset" anim deactivates them and
-    // re-activates the healthy pdpN_h panels, which are real airframe sections (the
-    // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
-    // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
-    // In flight builds the exterior pdpN panels are BUILT hidden instead of skipped,
-    // so DamageVisuals can flip them at the injure_anims HP thresholds.
-    private static bool IsDamagePanel(string name, out bool cockpit)
-    {
-        cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
-        int start = cockpit ? 4
-            : name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase) ? 3 : -1;
-        if (start < 0 || start == name.Length)
-            return false;
-        for (int i = start; i < name.Length; i++)
-            if (!char.IsDigit(name[i]))
-                return false;
-        return true;
-    }
+    public int MeshInstanceCount => _scene.MeshInstanceCount;
 
-    /// <summary>pdpN_h — the healthy twin of an exterior damage panel.</summary>
-    private static bool IsHealthyPanel(string name) =>
-        name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
-        && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
+    /// <summary>The wingtip flare nodes, built hidden (reset state) and re-skinned as
+    /// additive billboards. A <see cref="Flight.WingLightBlinker"/> flashes them in flight;
+    /// the static viewer leaves them off. Populated by <see cref="Build"/>.</summary>
+    public IReadOnlyList<Node3D> WingFlares => _wingFlares;
+
+    /// <summary>Flight and damage-lab builds: the exterior damage-state
+    /// panels — the torn-skin pdpN nodes, built HIDDEN (their reset state), plus their
+    /// healthy pdpN_h twins, built visible. A <see cref="Flight.DamageVisuals"/> flips
+    /// them as part HP crosses the vehicle def's injure_anims thresholds.</summary>
+    public IReadOnlyList<Node3D> DamagePanels => _damagePanels;
+
+    /// <summary>The aircraft's skin-texture prefix, known once <see cref="Build"/> has run.
+    /// Null when the model carries no decal-placeholder material to read it from.</summary>
+    public string? SkinPrefix => _skinPrefix;
 
     /// <summary>Builds the subtree rooted at the named node (e.g. "player_bhawk").</summary>
     public Node3D Build(string rootName)
@@ -163,6 +139,48 @@ public sealed class PlaneBuilder
         return built;
     }
 
+    /// <summary>Re-liveries the already-built aircraft in place: a fresh painter, then every
+    /// textured material re-resolved through it. The viewer's livery lab drives this from its
+    /// sliders — repainting ~8 small skins is a few ms, where rebuilding the model for each
+    /// slider pixel would not be interactive. Null paints nothing (back to the shipped skins).
+    /// No-op before <see cref="Build"/>, which is what discovers the skin prefix.</summary>
+    public void Repaint(PaintScheme? scheme)
+    {
+        _scheme = scheme;
+        _painter = scheme != null && _skinPrefix != null
+            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
+            : null;
+        _scene.Repaint();
+    }
+
+    private static bool IsPropBlurTexture(string tex) =>
+        tex.Contains("blur", StringComparison.OrdinalIgnoreCase);
+
+    // Damage-state panels pdp1..8 (exterior) / pcdpN (cockpit) start INACTIVE in the
+    // original: its player_destruct_reset "plane_reset" anim deactivates them and
+    // re-activates the healthy pdpN_h panels, which are real airframe sections (the
+    // Bloodhawk's wingtips, the Kestrel's outer wing thirds) — pdpN_h must render or
+    // the plane is missing those parts. Suffixed names (pdp2_h, pdp2i) don't match.
+    // In flight builds the exterior pdpN panels are BUILT hidden instead of skipped,
+    // so DamageVisuals can flip them at the injure_anims HP thresholds.
+    private static bool IsDamagePanel(string name, out bool cockpit)
+    {
+        cockpit = name.StartsWith("pcdp", StringComparison.OrdinalIgnoreCase);
+        int start = cockpit ? 4
+            : name.StartsWith("pdp", StringComparison.OrdinalIgnoreCase) ? 3 : -1;
+        if (start < 0 || start == name.Length)
+            return false;
+        for (int i = start; i < name.Length; i++)
+            if (!char.IsDigit(name[i]))
+                return false;
+        return true;
+    }
+
+    /// <summary>pdpN_h — the healthy twin of an exterior damage panel.</summary>
+    private static bool IsHealthyPanel(string name) =>
+        name.EndsWith("_h", StringComparison.OrdinalIgnoreCase)
+        && IsDamagePanel(name[..^2], out bool cockpit) && !cockpit;
+
     // The painter can only be built once the aircraft's root is known — its skin prefix is
     // read off the model's own material names. Built on the first Build/BuildDestroyed call
     // and reused, so both share one painted-texture cache.
@@ -182,24 +200,6 @@ public sealed class PlaneBuilder
                 ? $" — pattern '{_scheme.FolderName}' ships no {_skinPrefix} skins, decals only"
                 : ""));
     }
-
-    /// <summary>Re-liveries the already-built aircraft in place: a fresh painter, then every
-    /// textured material re-resolved through it. The viewer's livery lab drives this from its
-    /// sliders — repainting ~8 small skins is a few ms, where rebuilding the model for each
-    /// slider pixel would not be interactive. Null paints nothing (back to the shipped skins).
-    /// No-op before <see cref="Build"/>, which is what discovers the skin prefix.</summary>
-    public void Repaint(PaintScheme? scheme)
-    {
-        _scheme = scheme;
-        _painter = scheme != null && _skinPrefix != null
-            ? new PlanePainter(_textures, _patterns, scheme, _skinPrefix)
-            : null;
-        _scene.Repaint();
-    }
-
-    /// <summary>The aircraft's skin-texture prefix, known once <see cref="Build"/> has run.
-    /// Null when the model carries no decal-placeholder material to read it from.</summary>
-    public string? SkinPrefix => _skinPrefix;
 
     /// <summary>Finds the wingtip flare nodes in the built tree, hides them (reset state:
     /// the original starts them off and flashes them via wing_light.json's blink anim), and

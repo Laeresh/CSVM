@@ -63,10 +63,13 @@ public enum SessionProbe
 /// </summary>
 public sealed record SessionSpec
 {
-    /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
-    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, or
-    /// empty for the ones that are bare console lines today (<c>GD.Print</c>).</summary>
-    public readonly record struct Note(string Category, string Message);
+    private List<Note> _notes = new();
+
+    // What the command line asked for. Private, because a vote is not an outcome: several flags
+    // vote for the same mode (--markers/--damage/--weapon-* for the viewer, --damage-test/
+    // --effects-test for the freecam, --play-anim=/--debug-anim-ui for the anim lab), and the
+    // arbitration below is the only thing entitled to turn them into one.
+    private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _damageLabArg, _detArg;
 
     private SessionSpec()
     {
@@ -75,19 +78,11 @@ public sealed record SessionSpec
     /// <summary>The user args this spec was parsed from, verbatim and in order.</summary>
     public IReadOnlyList<string> Args { get; private set; } = Array.Empty<string>();
 
-    private List<Note> _notes = new();
-
     /// <summary>Every complaint parse and resolution raised, in order. Nothing is logged here — the
     /// caller emits these, which is what keeps the type engine-free.</summary>
     public IReadOnlyList<Note> Warnings => _notes;
 
     // ---- The mode: raw votes in, one arbitrated answer out -------------------------------------
-
-    // What the command line asked for. Private, because a vote is not an outcome: several flags
-    // vote for the same mode (--markers/--damage/--weapon-* for the viewer, --damage-test/
-    // --effects-test for the freecam, --play-anim=/--debug-anim-ui for the anim lab), and the
-    // arbitration below is the only thing entitled to turn them into one.
-    private bool _flyArg, _viewerArg, _freecamArg, _animLabArg, _stuntArg, _damageLabArg, _detArg;
 
     /// <summary>A content-selecting arg was given, so the launchscreen is bypassed.</summary>
     public bool HasContentArg { get; private set; }
@@ -589,6 +584,110 @@ public sealed record SessionSpec
         };
     }
 
+    /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list — one plane per
+    /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
+    public static IReadOnlyList<string> ParsePlanes(string value)
+    {
+        var names = new List<string>();
+        foreach (var name in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            names.Add(name.Trim());
+        }
+        return names;
+    }
+
+    /// <summary>Parse an "x,y,z" triple, invariant culture.</summary>
+    public static Vector3 ParseVec3(string s)
+    {
+        var parts = s.Split(',');
+        return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
+    }
+
+    /// <summary>The numpad view digit for <c>--view=</c>. 5 has no perspective of its own (the
+    /// middle of the pad is the chase camera), and anything outside 1–9 is a typo — both give 0,
+    /// the chase camera, which the caller reports.</summary>
+    public static int ParseView(string s)
+    {
+        if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
+            && n >= 1 && n <= 9 && n != 5)
+        {
+            return n;
+        }
+        return 0;
+    }
+
+    /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (the last
+    /// one covers any remaining players, so the old single-sequence form still drives everyone),
+    /// ';' separates that sequence's segments, each "pitch,roll,yaw,throttle" with an optional
+    /// "@seconds" duration. The last segment (or one without a duration) holds forever.</summary>
+    public static (FlightInput, float)[][] ParseHold(string s)
+    {
+        var players = new List<(FlightInput, float)[]>();
+        foreach (var perPlayer in s.Split('|', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var segments = new List<(FlightInput, float)>();
+            foreach (var seg in perPlayer.Split(';', StringSplitOptions.RemoveEmptyEntries))
+            {
+                var at = seg.Split('@');
+                var p = at[0].Split(',');
+                segments.Add((new FlightInput { Pitch = Flt(p[0]), Roll = Flt(p[1]), Yaw = Flt(p[2]), Throttle = Flt(p[3]) },
+                              at.Length > 1 ? Flt(at[1]) : 0f));
+            }
+            players.Add(segments.ToArray());
+        }
+        return players.ToArray();
+    }
+
+    /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark
+    /// trim / light trim); a missing slot repeats the last one given.</summary>
+    public static Color[] ParsePaintColors(string spec)
+    {
+        var parts = spec.Split('/', StringSplitOptions.RemoveEmptyEntries);
+        var outc = new Color[3];
+        for (int i = 0; i < 3; i++)
+        {
+            var v = ParseVec3(parts[Math.Min(i, parts.Length - 1)]);
+            outc[i] = PaintScheme.FromBytes((int)v.X, (int)v.Y, (int)v.Z);
+        }
+        return outc;
+    }
+
+    /// <summary>Parse <c>--paint-decal=</c>: up to three comma-separated indices (nose / tail /
+    /// wing); a missing slot repeats the last one given.</summary>
+    public static int[] ParsePaintDecals(string spec)
+    {
+        var parts = spec.Split(',', StringSplitOptions.TrimEntries);
+        var outd = new int[3];
+        for (int i = 0; i < 3; i++)
+        {
+            outd[i] = int.Parse(parts[Math.Min(i, parts.Length - 1)]);
+        }
+        return outd;
+    }
+
+    /// <summary>Parse <c>--damage=</c> presets: "nose:0.25,leftwing:40" — part:fraction pairs,
+    /// values &gt; 1 read as percent. Malformed pairs are skipped, and appended to
+    /// <paramref name="rejected"/> when one is supplied, so the caller can report them.</summary>
+    public static List<(string Part, float Fraction)> ParseDamagePreset(string s, List<string>? rejected = null)
+    {
+        var list = new List<(string, float)>();
+        foreach (var item in s.Split(',', StringSplitOptions.RemoveEmptyEntries))
+        {
+            var kv = item.Split(':');
+            if (kv.Length == 2 && float.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
+            {
+                list.Add((kv[0].Trim(), Mathf.Clamp(v > 1f ? v / 100f : v, 0f, 1f)));
+            }
+            else
+            {
+                rejected?.Add(item);
+            }
+        }
+        return list;
+    }
+
+    private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+
     /// <summary>Turns the parsed votes into the one answer each: the mode, its modifiers, the world
     /// selection, the player count, the <c>--det</c> bundle's pinned values and the placement
     /// routing. Runs once, from <see cref="Parse"/>, on a spec that has not escaped yet.
@@ -831,107 +930,8 @@ public sealed record SessionSpec
     /// <summary>A complaint that is a bare console line today, with no log category.</summary>
     private void Print(string message) => _notes.Add(new Note("", message));
 
-    /// <summary>Parse <c>--plane=</c>: one node name, or a comma-separated list — one plane per
-    /// player for splitscreen (the launchscreen's simultaneous pick produces the same list).</summary>
-    public static IReadOnlyList<string> ParsePlanes(string value)
-    {
-        var names = new List<string>();
-        foreach (var name in value.Split(',', StringSplitOptions.RemoveEmptyEntries))
-        {
-            names.Add(name.Trim());
-        }
-        return names;
-    }
-
-    /// <summary>Parse an "x,y,z" triple, invariant culture.</summary>
-    public static Vector3 ParseVec3(string s)
-    {
-        var parts = s.Split(',');
-        return new Vector3(Flt(parts[0]), Flt(parts[1]), Flt(parts[2]));
-    }
-
-    /// <summary>The numpad view digit for <c>--view=</c>. 5 has no perspective of its own (the
-    /// middle of the pad is the chase camera), and anything outside 1–9 is a typo — both give 0,
-    /// the chase camera, which the caller reports.</summary>
-    public static int ParseView(string s)
-    {
-        if (int.TryParse(s, NumberStyles.Integer, CultureInfo.InvariantCulture, out int n)
-            && n >= 1 && n <= 9 && n != 5)
-        {
-            return n;
-        }
-        return 0;
-    }
-
-    /// <summary>Parse the scripted hold argument: '|' separates one sequence per player (the last
-    /// one covers any remaining players, so the old single-sequence form still drives everyone),
-    /// ';' separates that sequence's segments, each "pitch,roll,yaw,throttle" with an optional
-    /// "@seconds" duration. The last segment (or one without a duration) holds forever.</summary>
-    public static (FlightInput, float)[][] ParseHold(string s)
-    {
-        var players = new List<(FlightInput, float)[]>();
-        foreach (var perPlayer in s.Split('|', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var segments = new List<(FlightInput, float)>();
-            foreach (var seg in perPlayer.Split(';', StringSplitOptions.RemoveEmptyEntries))
-            {
-                var at = seg.Split('@');
-                var p = at[0].Split(',');
-                segments.Add((new FlightInput { Pitch = Flt(p[0]), Roll = Flt(p[1]), Yaw = Flt(p[2]), Throttle = Flt(p[3]) },
-                              at.Length > 1 ? Flt(at[1]) : 0f));
-            }
-            players.Add(segments.ToArray());
-        }
-        return players.ToArray();
-    }
-
-    /// <summary>Parse <c>--paint-color=</c>: up to three '/'-separated byte triples (body / dark
-    /// trim / light trim); a missing slot repeats the last one given.</summary>
-    public static Color[] ParsePaintColors(string spec)
-    {
-        var parts = spec.Split('/', StringSplitOptions.RemoveEmptyEntries);
-        var outc = new Color[3];
-        for (int i = 0; i < 3; i++)
-        {
-            var v = ParseVec3(parts[Math.Min(i, parts.Length - 1)]);
-            outc[i] = PaintScheme.FromBytes((int)v.X, (int)v.Y, (int)v.Z);
-        }
-        return outc;
-    }
-
-    /// <summary>Parse <c>--paint-decal=</c>: up to three comma-separated indices (nose / tail /
-    /// wing); a missing slot repeats the last one given.</summary>
-    public static int[] ParsePaintDecals(string spec)
-    {
-        var parts = spec.Split(',', StringSplitOptions.TrimEntries);
-        var outd = new int[3];
-        for (int i = 0; i < 3; i++)
-        {
-            outd[i] = int.Parse(parts[Math.Min(i, parts.Length - 1)]);
-        }
-        return outd;
-    }
-
-    /// <summary>Parse <c>--damage=</c> presets: "nose:0.25,leftwing:40" — part:fraction pairs,
-    /// values &gt; 1 read as percent. Malformed pairs are skipped, and appended to
-    /// <paramref name="rejected"/> when one is supplied, so the caller can report them.</summary>
-    public static List<(string Part, float Fraction)> ParseDamagePreset(string s, List<string>? rejected = null)
-    {
-        var list = new List<(string, float)>();
-        foreach (var item in s.Split(',', StringSplitOptions.RemoveEmptyEntries))
-        {
-            var kv = item.Split(':');
-            if (kv.Length == 2 && float.TryParse(kv[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float v))
-            {
-                list.Add((kv[0].Trim(), Mathf.Clamp(v > 1f ? v / 100f : v, 0f, 1f)));
-            }
-            else
-            {
-                rejected?.Add(item);
-            }
-        }
-        return list;
-    }
-
-    private static float Flt(string s) => float.Parse(s, CultureInfo.InvariantCulture);
+    /// <summary>A parse- or resolve-time complaint, held rather than logged so the spec stays
+    /// engine-free. <paramref name="Category"/> is the <c>Log</c> category to emit it under, or
+    /// empty for the ones that are bare console lines today (<c>GD.Print</c>).</summary>
+    public readonly record struct Note(string Category, string Message);
 }

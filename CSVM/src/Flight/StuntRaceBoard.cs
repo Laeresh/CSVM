@@ -20,13 +20,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class StuntRaceBoard : Control
 {
-    private StuntRace _race = null!;
-    private string _context = "";
-    private string _exitHint = "";
-
-    private CenterContainer _center = null!;
-    private PanelContainer? _panel;
-
     // Base metrics at 720p (scaled by window height). All TUNE — mirrors StuntScoreboard so the
     // solo and race boards read as the same screen.
     private const int TitleFont = 26;
@@ -40,6 +33,13 @@ public sealed partial class StuntRaceBoard : Control
     private static readonly Color HeaderColor = new(0.50f, 0.62f, 0.80f);
     private static readonly Color RowColor = new(0.86f, 0.89f, 0.94f);
     private static readonly Color FooterColor = new(0.68f, 0.74f, 0.82f);
+
+    private StuntRace _race = null!;
+    private string _context = "";
+    private string _exitHint = "";
+
+    private CenterContainer _center = null!;
+    private PanelContainer? _panel;
 
     /// <summary>Builds the (hidden) board and subscribes to the race's completion. Add it to a
     /// CanvasLayer above the splitscreen panes; it wakes itself on
@@ -79,6 +79,41 @@ public sealed partial class StuntRaceBoard : Control
         // A rematch clears the placings — retire the board until the next race ends.
         if (Visible && !_race.AllFinished)
             Visible = false;
+    }
+
+    private static Label Label(string text, int fontSize, Color color)
+    {
+        var l = new Label { Text = text };
+        l.AddThemeFontSizeOverride("font_size", fontSize);
+        l.AddThemeColorOverride("font_color", color);
+        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
+        l.AddThemeConstantOverride("shadow_offset_x", 1);
+        l.AddThemeConstantOverride("shadow_offset_y", 1);
+        return l;
+    }
+
+    private static CenterContainer Centered(Control c)
+    {
+        var cc = new CenterContainer();
+        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
+        cc.AddChild(c);
+        return cc;
+    }
+
+    private static void AddCell(GridContainer grid, string text, int fontSize, Color color,
+        HorizontalAlignment align, int minWidth)
+    {
+        var l = Label(text, fontSize, color);
+        l.HorizontalAlignment = align;
+        l.CustomMinimumSize = new Vector2(minWidth, 0);
+        grid.AddChild(l);
+    }
+
+    private static HSeparator Separator(float s)
+    {
+        var sep = new HSeparator();
+        sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
+        return sep;
     }
 
     private void OnRaceCompleted()
@@ -169,40 +204,5 @@ public sealed partial class StuntRaceBoard : Control
 
         body.AddChild(Separator(s));
         body.AddChild(Centered(Label($"R — Rematch        {_exitHint}", (int)(FooterFont * s), FooterColor)));
-    }
-
-    private static Label Label(string text, int fontSize, Color color)
-    {
-        var l = new Label { Text = text };
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", color);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
-        l.AddThemeConstantOverride("shadow_offset_x", 1);
-        l.AddThemeConstantOverride("shadow_offset_y", 1);
-        return l;
-    }
-
-    private static CenterContainer Centered(Control c)
-    {
-        var cc = new CenterContainer();
-        cc.SizeFlagsHorizontal = SizeFlags.ExpandFill;
-        cc.AddChild(c);
-        return cc;
-    }
-
-    private static void AddCell(GridContainer grid, string text, int fontSize, Color color,
-        HorizontalAlignment align, int minWidth)
-    {
-        var l = Label(text, fontSize, color);
-        l.HorizontalAlignment = align;
-        l.CustomMinimumSize = new Vector2(minWidth, 0);
-        grid.AddChild(l);
-    }
-
-    private static HSeparator Separator(float s)
-    {
-        var sep = new HSeparator();
-        sep.AddThemeConstantOverride("separation", Mathf.RoundToInt(8f * s));
-        return sep;
     }
 }

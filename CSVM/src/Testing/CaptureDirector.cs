@@ -33,6 +33,39 @@ public sealed class CaptureDirector
     /// (HUD/panel visibility, exit-on-build-failure) reads this instead of the raw field.</summary>
     public bool Pending => _pendingShot != null;
 
+    /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
+    /// culture, trimmed to 3 decimals).</summary>
+    public static string Vec3Arg(Vector3 v) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
+
+    /// <summary>Same, for a direction — normalized, and finer, since a unit vector's components
+    /// are small enough that 3 decimals would quantise the aim to ~0.03°.</summary>
+    public static string DirArg(Vector3 v) =>
+        string.Format(System.Globalization.CultureInfo.InvariantCulture,
+            "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
+
+    /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
+    /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
+    /// orbit viewer and free flight; the full viewport is captured, HUD overlay included.</summary>
+    public static void SaveScreenshot(Viewport viewport)
+    {
+        var projectDir = ProjectSettings.GlobalizePath("res://");
+        var dir = Path.GetFullPath(Path.Combine(projectDir, "..", "Screenshots"));
+        Directory.CreateDirectory(dir);
+        var path = Path.Combine(dir, $"crimsonskies_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
+        var img = viewport.GetTexture().GetImage();
+        var err = img.SavePng(path);
+        if (err == Error.Ok)
+        {
+            GD.Print($"screenshot saved: {path}");
+        }
+        else
+        {
+            GD.PrintErr($"screenshot failed ({err}): {path}");
+        }
+    }
+
     /// <summary>The capture block at the tail of `_Process`. Nothing built yet: only shoot once a
     /// session's plane exists — unless the launchscreen is up (--menu --screenshot captures the
     /// menu itself for layout verification).</summary>
@@ -83,41 +116,6 @@ public sealed class CaptureDirector
         }
     }
 
-    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
-    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
-    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
-    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
-    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
-    /// frame (and the plane's own motion already surfaces the fight).</summary>
-    private void ApplyShotJitter(OrbitCamera orbit, Camera3D camera, SessionSpec spec)
-    {
-        if (_shotBaseXform is not { } baseX)
-        {
-            baseX = camera.GlobalTransform;
-            _shotBaseXform = baseX;
-            _shotPivot = orbit.OrbitCenter;   // the point the orbit camera aims at
-        }
-        // Golden-angle spread so consecutive frames differ maximally.
-        float mag = Mathf.DegToRad(spec.JitterDeg);
-        float phase = _shotIndex * 2.399963f;
-        var rot = new Basis(Vector3.Up, mag * Mathf.Cos(phase))
-                * new Basis(baseX.Basis.X.Normalized(), mag * Mathf.Sin(phase));
-        // Rigidly rotate the whole camera about the pivot: rotating both the eye offset and
-        // the basis by the same rotation preserves the aim exactly, so framing is kept.
-        var origin = _shotPivot + rot * (baseX.Origin - _shotPivot);
-        camera.GlobalTransform = new Transform3D(rot * baseX.Basis, origin);
-    }
-
-    /// <summary>Insert a zero-padded frame index before the extension:
-    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
-    private static string IndexedShotPath(string path, int index)
-    {
-        var dir = Path.GetDirectoryName(path) ?? "";
-        var stem = Path.GetFileNameWithoutExtension(path);
-        var ext = Path.GetExtension(path);
-        return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
-    }
-
     /// <summary>Print the mode's SUBJECT placement as ready-to-paste arguments (F11, any mode) —
     /// the same pair that placed it, so a pose found by hand reproduces in a deterministic
     /// --screenshot run. In flight that subject is the PLANE (player 1's position and nose), not
@@ -141,36 +139,38 @@ public sealed class CaptureDirector
         Log.Info("core", $"placement: --pos={Vec3Arg(pos)} --lookat={Vec3Arg(orbit.OrbitCenter)}");
     }
 
-    /// <summary>Format a vector as the "x,y,z" argument value ParseVec3 reads back (invariant
-    /// culture, trimmed to 3 decimals).</summary>
-    public static string Vec3Arg(Vector3 v) =>
-        string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.###},{1:0.###},{2:0.###}", v.X, v.Y, v.Z);
-
-    /// <summary>Same, for a direction — normalized, and finer, since a unit vector's components
-    /// are small enough that 3 decimals would quantise the aim to ~0.03°.</summary>
-    public static string DirArg(Vector3 v) =>
-        string.Format(System.Globalization.CultureInfo.InvariantCulture,
-            "{0:0.#####},{1:0.#####},{2:0.#####}", v.X, v.Y, v.Z);
-
-    /// <summary>Save the current frame to a timestamped PNG under the repo's Screenshots/
-    /// folder (git-ignored — rendered frames are game-derived). Bound to F12 in both the
-    /// orbit viewer and free flight; the full viewport is captured, HUD overlay included.</summary>
-    public static void SaveScreenshot(Viewport viewport)
+    /// <summary>Insert a zero-padded frame index before the extension:
+    /// foo.png -> foo_00.png. Used for --shots=N burst capture.</summary>
+    private static string IndexedShotPath(string path, int index)
     {
-        var projectDir = ProjectSettings.GlobalizePath("res://");
-        var dir = Path.GetFullPath(Path.Combine(projectDir, "..", "Screenshots"));
-        Directory.CreateDirectory(dir);
-        var path = Path.Combine(dir, $"crimsonskies_{System.DateTime.Now:yyyy-MM-dd_HH-mm-ss-fff}.png");
-        var img = viewport.GetTexture().GetImage();
-        var err = img.SavePng(path);
-        if (err == Error.Ok)
+        var dir = Path.GetDirectoryName(path) ?? "";
+        var stem = Path.GetFileNameWithoutExtension(path);
+        var ext = Path.GetExtension(path);
+        return Path.Combine(dir, $"{stem}_{index:D2}{ext}");
+    }
+
+    /// <summary>Rotate the burst camera a hair around the framed point each --shots frame so
+    /// coplanar surfaces re-decide the depth test and z-fighting flicker surfaces across the
+    /// sequence (a dead-still camera can render bit-identical frames). The eye micro-orbits
+    /// the pivot — depths change, but the camera keeps looking at the pivot so the subject
+    /// stays centred. Static mode only: in --fly the FlightController owns the camera each
+    /// frame (and the plane's own motion already surfaces the fight).</summary>
+    private void ApplyShotJitter(OrbitCamera orbit, Camera3D camera, SessionSpec spec)
+    {
+        if (_shotBaseXform is not { } baseX)
         {
-            GD.Print($"screenshot saved: {path}");
+            baseX = camera.GlobalTransform;
+            _shotBaseXform = baseX;
+            _shotPivot = orbit.OrbitCenter;   // the point the orbit camera aims at
         }
-        else
-        {
-            GD.PrintErr($"screenshot failed ({err}): {path}");
-        }
+        // Golden-angle spread so consecutive frames differ maximally.
+        float mag = Mathf.DegToRad(spec.JitterDeg);
+        float phase = _shotIndex * 2.399963f;
+        var rot = new Basis(Vector3.Up, mag * Mathf.Cos(phase))
+                * new Basis(baseX.Basis.X.Normalized(), mag * Mathf.Sin(phase));
+        // Rigidly rotate the whole camera about the pivot: rotating both the eye offset and
+        // the basis by the same rotation preserves the aim exactly, so framing is kept.
+        var origin = _shotPivot + rot * (baseX.Origin - _shotPivot);
+        camera.GlobalTransform = new Transform3D(rot * baseX.Basis, origin);
     }
 }

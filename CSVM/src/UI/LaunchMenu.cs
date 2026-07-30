@@ -47,11 +47,6 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class LaunchMenu : CanvasLayer
 {
-    /// <summary>One player's confirmed selection: the plane node to build and the gamepad(s) that
-    /// fly it. A joined player has exactly one; player 1 (who also has the keyboard) carries every
-    /// pad nobody claimed, so a lone controller still flies it and phantom devices stay harmless.</summary>
-    public readonly record struct PlayerChoice(string PlaneNode, int[] Pads);
-
     /// <summary>Fired when every joined player has locked a plane: (chapter code, one choice per
     /// player in player order, stunt mode). The host hides the menu and builds the session.</summary>
     public Action<string, IReadOnlyList<PlayerChoice>, bool>? Launch;
@@ -59,18 +54,19 @@ public sealed partial class LaunchMenu : CanvasLayer
     /// <summary>Fired when the player backs out of the Mode screen — the host quits.</summary>
     public Action? Quit;
 
-    private enum Screen { Mode, Chapter, Plane }
-
-    private readonly record struct Choice(string Label, string Detail);
-
-    /// <summary>One joined player: their device binding, their cursor in the plane list, and
-    /// whether they have locked their pick.</summary>
-    private sealed class Slot
-    {
-        public readonly MenuInput Input = new();
-        public int PlaneIndex;
-        public bool Locked;
-    }
+    // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
+    private const int TitleFont = 40;
+    private const int HeadingFont = 20;
+    private const int CrumbFont = 15;
+    private const int RowFont = 22;
+    private const int DetailFont = 16;
+    private const int FooterFont = 15;
+    private const int ErrorFont = 15;
+    // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
+    // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
+    // Reference values at 720p (TUNE).
+    private const float StripHeightFrac = 0.12f;
+    private const int PanePad = 10;
 
     // The two flight modes. Index 1 (Stunt Flying) sets stunt mode.
     private static readonly Choice[] Modes =
@@ -115,20 +111,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         ("Warhawk", "player_warhawk"),
     };
 
-    // Base metrics at 720p, scaled up on taller viewports (like StuntScoreboard). All TUNE.
-    private const int TitleFont = 40;
-    private const int HeadingFont = 20;
-    private const int CrumbFont = 15;
-    private const int RowFont = 22;
-    private const int DetailFont = 16;
-    private const int FooterFont = 15;
-    private const int ErrorFont = 15;
-    // Splitscreen plane select (several players): the bottom strip that keeps the breadcrumb +
-    // join hint out of the panes, as a fraction of viewport height, and the pane's inner padding.
-    // Reference values at 720p (TUNE).
-    private const float StripHeightFrac = 0.12f;
-    private const int PanePad = 10;
-
     private static readonly Color TitleColor = new(0.96f, 0.80f, 0.35f);
     private static readonly Color CrumbColor = new(0.55f, 0.68f, 0.86f);
     private static readonly Color HeadingColor = new(0.80f, 0.88f, 0.98f);
@@ -138,31 +120,39 @@ public sealed partial class LaunchMenu : CanvasLayer
     private static readonly Color FooterColor = new(0.52f, 0.60f, 0.70f);
     private static readonly Color ErrorColor = new(1f, 0.55f, 0.45f);
 
-    private string _zrdrPath = "";
     private readonly Dictionary<string, PlaneStats?> _stats = new();
-
-    private Screen _screen = Screen.Mode;
-    private int _modeIndex, _chapterIndex;
-    private bool _stunt;
-    private string _error = "";
-
     // The joined players, player 1 first. Never empty once ShowMenu has run.
     private readonly List<Slot> _slots = new();
-    // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
-    // player 1 is on the keyboard and every connected pad is still free to join).
-    private int _p1Pad = -1;
     // Previous-frame Start state of every connected pad, for edge-detecting the join gesture on
     // pads that have no player (and therefore no MenuInput) yet.
     private readonly Dictionary<int, bool> _joinPrev = new();
 
+    private string _zrdrPath = "";
+    private Screen _screen = Screen.Mode;
+    private int _modeIndex, _chapterIndex;
+    private bool _stunt;
+    private string _error = "";
+    // The pad player 1 claimed by driving the Mode/Chapter screens with it (−1 = none yet, i.e.
+    // player 1 is on the keyboard and every connected pad is still free to join).
+    private int _p1Pad = -1;
     // The join strip as last drawn — _Process redraws when the live roster changes (hotplug).
     private string _stripText = "";
-
     private VBoxContainer _body = null!;
     private CenterContainer _center = null!;
     // The splitscreen plane-select root (one panel per player + a shared bottom strip). Shown
     // instead of _center on the Plane screen once more than one player has joined.
     private Control _paneRoot = null!;
+
+    private enum Screen { Mode, Chapter, Plane }
+
+    /// <summary>The single-player cursor position on the current screen (the plane screen reads
+    /// player 1's cursor).</summary>
+    private int CurrentIndex => _screen switch
+    {
+        Screen.Mode => _modeIndex,
+        Screen.Chapter => _chapterIndex,
+        _ => _slots[0].PlaneIndex,
+    };
 
     /// <summary>Builds the (hidden) launchscreen. <paramref name="zrdrPath"/> is the shared zrdr
     /// extraction the plane stats come from. Add it to the tree, wire <see cref="Launch"/> /
@@ -275,6 +265,24 @@ public sealed partial class LaunchMenu : CanvasLayer
     }
 
     // --- players / devices ---
+
+    private static int Wrap(int index, int count) => ((index % count) + count) % count;
+
+    private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
+
+    private static Label Label(string text, int fontSize, Color color, HorizontalAlignment align)
+    {
+        var l = new Label { Text = text, HorizontalAlignment = align };
+        l.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
+        l.AddThemeFontSizeOverride("font_size", fontSize);
+        l.AddThemeColorOverride("font_color", color);
+        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
+        l.AddThemeConstantOverride("shadow_offset_x", 1);
+        l.AddThemeConstantOverride("shadow_offset_y", 1);
+        return l;
+    }
+
+    private static Control Spacer(int height) => new() { CustomMinimumSize = new Vector2(0, height) };
 
     /// <summary>Whether a pad already belongs to a player: one of players 2–4, or the pad player 1
     /// claimed on the Mode/Chapter screens (<see cref="_p1Pad"/>). Before that claim, player 1's
@@ -521,8 +529,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         Launch?.Invoke(Chapters[_chapterIndex].Code, choices, _stunt);
     }
 
-    private static int Wrap(int index, int count) => ((index % count) + count) % count;
-
     // --- rendering ---
 
     private void Rebuild()
@@ -713,15 +719,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         _ => Planes.Length,
     };
 
-    /// <summary>The single-player cursor position on the current screen (the plane screen reads
-    /// player 1's cursor).</summary>
-    private int CurrentIndex => _screen switch
-    {
-        Screen.Mode => _modeIndex,
-        Screen.Chapter => _chapterIndex,
-        _ => _slots[0].PlaneIndex,
-    };
-
     /// <summary>One centred list row with a ▶ cursor — the item-4 layout, used by every screen
     /// the centred body draws. A multi-player aircraft screen never comes through here: it splits
     /// into per-player panes instead (<see cref="RebuildPanes"/>).</summary>
@@ -829,8 +826,6 @@ public sealed partial class LaunchMenu : CanvasLayer
         return s == null ? "stats n/a" : $"{Mph(s)} mph";
     }
 
-    private static int Mph(PlaneStats s) => Mathf.RoundToInt(s.FdSpeed * 2.23694f);
-
     private PlaneStats? StatsFor(string node)
     {
         if (!_stats.TryGetValue(node, out var s))
@@ -842,17 +837,19 @@ public sealed partial class LaunchMenu : CanvasLayer
         return s;
     }
 
-    private static Label Label(string text, int fontSize, Color color, HorizontalAlignment align)
-    {
-        var l = new Label { Text = text, HorizontalAlignment = align };
-        l.SizeFlagsHorizontal = Control.SizeFlags.ExpandFill;
-        l.AddThemeFontSizeOverride("font_size", fontSize);
-        l.AddThemeColorOverride("font_color", color);
-        l.AddThemeColorOverride("font_shadow_color", new Color(0f, 0f, 0f, 0.7f));
-        l.AddThemeConstantOverride("shadow_offset_x", 1);
-        l.AddThemeConstantOverride("shadow_offset_y", 1);
-        return l;
-    }
+    /// <summary>One player's confirmed selection: the plane node to build and the gamepad(s) that
+    /// fly it. A joined player has exactly one; player 1 (who also has the keyboard) carries every
+    /// pad nobody claimed, so a lone controller still flies it and phantom devices stay harmless.</summary>
+    public readonly record struct PlayerChoice(string PlaneNode, int[] Pads);
 
-    private static Control Spacer(int height) => new() { CustomMinimumSize = new Vector2(0, height) };
+    private readonly record struct Choice(string Label, string Detail);
+
+    /// <summary>One joined player: their device binding, their cursor in the plane list, and
+    /// whether they have locked their pick.</summary>
+    private sealed class Slot
+    {
+        public readonly MenuInput Input = new();
+        public int PlaneIndex;
+        public bool Locked;
+    }
 }

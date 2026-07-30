@@ -51,6 +51,10 @@ public sealed partial class SelectionService : Node
     // MEASURED box is what CurrentBox and the log report — only the drawing is grown.
     private const float MinHighlightEdge = 2f;
 
+    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided —
+    // a truncated list that drops the rung under test is worse than a long one.
+    private const int MaxCrumbs = 9;
+
     // The breadcrumb's text conventions follow NodeLabels: the same amber as a floating node name,
     // because this is the same question ("what is that thing called").
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
@@ -70,6 +74,12 @@ public sealed partial class SelectionService : Node
         _camera = camera;
         Name = "selection";
     }
+
+    /// <summary>Fires whenever the selection changes. The flag is true for a fresh pick and false
+    /// for a ladder walk, which is the difference between "show me this" and "same object, wider
+    /// scope" — the anim lab re-frames the camera on the first and only re-follows on the
+    /// second.</summary>
+    public event Action<SelectionService, bool>? Changed;
 
     /// <summary><c>--debug-select=x,y[,up]</c>: a synthetic click at a screen position on the first
     /// frame, optionally followed by that many <see cref="StepUp"/>s — the scripted stand-in for
@@ -94,16 +104,74 @@ public sealed partial class SelectionService : Node
     /// no drawing descendants.</summary>
     public Aabb CurrentBox { get; private set; }
 
-    /// <summary>Fires whenever the selection changes. The flag is true for a fresh pick and false
-    /// for a ladder walk, which is the difference between "show me this" and "same object, wider
-    /// scope" — the anim lab re-frames the camera on the first and only re-follows on the
-    /// second.</summary>
-    public event Action<SelectionService, bool>? Changed;
-
     /// <summary>The game-file name of a built node — the <c>cs_name</c> meta, never
     /// <c>Node.Name</c>, which Godot sanitises and auto-renames.</summary>
     public static string NameOf(Node3D n) =>
         n.HasMeta(AnimRuntime.NameMeta) ? n.GetMeta(AnimRuntime.NameMeta).AsString() : n.Name.ToString();
+
+    // ---- geometry -----------------------------------------------------------------------------
+
+    /// <summary>World-frame union of a subtree's own mesh AABBs. Measured from the subtree itself
+    /// rather than from a shared merge helper, and empty meshes are skipped, so nothing another
+    /// system parked elsewhere in the scene can enter the box. Meshless subtree ⇒ a zero-size box
+    /// at the node's own position. Public because every inspect tool wants this measurement and
+    /// none of them may take the merge-over-the-live-tree shortcut.</summary>
+    public static Aabb SubtreeWorldAabb(Node3D root)
+    {
+        Aabb merged = default;
+        bool any = false;
+        void Walk(Node n)
+        {
+            if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
+            {
+                return; // a tool's drawing parked on this object is not part of its extent
+            }
+            if (n is MeshInstance3D { Mesh: { } mesh } mi)
+            {
+                var local = mesh.GetAabb();
+                if (local.Size.LengthSquared() > 1e-9f)
+                {
+                    var box = mi.GlobalTransform * local;
+                    merged = any ? merged.Merge(box) : box;
+                    any = true;
+                }
+            }
+            foreach (var child in n.GetChildren())
+            {
+                Walk(child);
+            }
+        }
+        Walk(root);
+        return any ? merged : new Aabb(root.GlobalPosition, Vector3.Zero);
+    }
+
+    /// <summary>Parses <c>--debug-select[=x,y[,up]]</c>. An empty value means the middle of the
+    /// viewport with no ladder walk; a malformed one is reported and ignored rather than throwing
+    /// the session away.</summary>
+    public static (Vector2? Screen, int Up)? ParseDebugPick(string spec)
+    {
+        string text = spec.Trim();
+        if (text.Length == 0)
+        {
+            return (null, 0);
+        }
+        var parts = text.Split(',', StringSplitOptions.TrimEntries);
+        if (parts.Length is < 2 or > 3
+            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
+            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
+        {
+            Log.Warn("ui", $"--debug-select='{spec}' is not x,y[,up] — ignoring it");
+            return null;
+        }
+        int up = 0;
+        if (parts.Length == 3
+            && !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out up))
+        {
+            Log.Warn("ui", $"--debug-select='{spec}' has a non-integer rung count — ignoring the walk");
+            up = 0;
+        }
+        return (new Vector2(x, y), up);
+    }
 
     public override void _UnhandledInput(InputEvent @event)
     {
@@ -285,53 +353,6 @@ public sealed partial class SelectionService : Node
         Changed?.Invoke(this, false);
     }
 
-    private void Apply(bool fresh)
-    {
-        var node = _ladder[Level];
-        CurrentBox = SubtreeWorldAabb(node);
-        EnsureBuilt();
-        DrawHighlight(node, CurrentBox);
-        UpdateHud();
-        LogLevel(fresh);
-        Changed?.Invoke(this, fresh);
-    }
-
-    // ---- geometry -----------------------------------------------------------------------------
-
-    /// <summary>World-frame union of a subtree's own mesh AABBs. Measured from the subtree itself
-    /// rather than from a shared merge helper, and empty meshes are skipped, so nothing another
-    /// system parked elsewhere in the scene can enter the box. Meshless subtree ⇒ a zero-size box
-    /// at the node's own position. Public because every inspect tool wants this measurement and
-    /// none of them may take the merge-over-the-live-tree shortcut.</summary>
-    public static Aabb SubtreeWorldAabb(Node3D root)
-    {
-        Aabb merged = default;
-        bool any = false;
-        void Walk(Node n)
-        {
-            if (n is Node3D overlay && overlay.HasMeta(OverlayMeta))
-            {
-                return; // a tool's drawing parked on this object is not part of its extent
-            }
-            if (n is MeshInstance3D { Mesh: { } mesh } mi)
-            {
-                var local = mesh.GetAabb();
-                if (local.Size.LengthSquared() > 1e-9f)
-                {
-                    var box = mi.GlobalTransform * local;
-                    merged = any ? merged.Merge(box) : box;
-                    any = true;
-                }
-            }
-            foreach (var child in n.GetChildren())
-            {
-                Walk(child);
-            }
-        }
-        Walk(root);
-        return any ? merged : new Aabb(root.GlobalPosition, Vector3.Zero);
-    }
-
     // Slab test. Returns the near intersection parameter (>= 0) of the ray o + t·d with the box.
     private static bool RayAabb(Vector3 o, Vector3 d, Aabb box, out float tHit)
     {
@@ -363,6 +384,17 @@ public sealed partial class SelectionService : Node
         }
         tHit = tmin;
         return tmax >= 0f;
+    }
+
+    private void Apply(bool fresh)
+    {
+        var node = _ladder[Level];
+        CurrentBox = SubtreeWorldAabb(node);
+        EnsureBuilt();
+        DrawHighlight(node, CurrentBox);
+        UpdateHud();
+        LogLevel(fresh);
+        Changed?.Invoke(this, fresh);
     }
 
     // ---- overlay ------------------------------------------------------------------------------
@@ -464,10 +496,6 @@ public sealed partial class SelectionService : Node
         _highlight.Visible = true;
     }
 
-    // How many rungs the breadcrumb prints before it elides the middle. The LOG is never elided —
-    // a truncated list that drops the rung under test is worse than a long one.
-    private const int MaxCrumbs = 9;
-
     private void UpdateHud()
     {
         if (_hud == null)
@@ -547,33 +575,5 @@ public sealed partial class SelectionService : Node
         {
             StepUp(request.Up);
         }
-    }
-
-    /// <summary>Parses <c>--debug-select[=x,y[,up]]</c>. An empty value means the middle of the
-    /// viewport with no ladder walk; a malformed one is reported and ignored rather than throwing
-    /// the session away.</summary>
-    public static (Vector2? Screen, int Up)? ParseDebugPick(string spec)
-    {
-        string text = spec.Trim();
-        if (text.Length == 0)
-        {
-            return (null, 0);
-        }
-        var parts = text.Split(',', StringSplitOptions.TrimEntries);
-        if (parts.Length is < 2 or > 3
-            || !float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float x)
-            || !float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float y))
-        {
-            Log.Warn("ui", $"--debug-select='{spec}' is not x,y[,up] — ignoring it");
-            return null;
-        }
-        int up = 0;
-        if (parts.Length == 3
-            && !int.TryParse(parts[2], NumberStyles.Integer, CultureInfo.InvariantCulture, out up))
-        {
-            Log.Warn("ui", $"--debug-select='{spec}' has a non-integer rung count — ignoring the walk");
-            up = 0;
-        }
-        return (new Vector2(x, y), up);
     }
 }

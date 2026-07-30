@@ -13,6 +13,12 @@ namespace CSVM.Mech3;
 /// </summary>
 public interface ISequenceHost
 {
+    /// <summary>The debugger's fired-mark hook. A get-only nullable delegate, so the runner's
+    /// <c>OnEventDispatched?.Invoke(...)</c> null-conditional short-circuits the whole invocation —
+    /// including the <see cref="EventDispatch"/> construction — when no debugger is attached. This
+    /// is the documented zero-cost contract on the hot dispatch path.</summary>
+    Action<EventDispatch>? OnEventDispatched { get; }
+
     /// <summary>Executes one event; returns its duration via <paramref name="duration"/> (0 for an
     /// instantaneous state change, the run time for a timed motion/SI script). Returns false only
     /// for control-flow events the runner must interpret itself.</summary>
@@ -21,12 +27,6 @@ public interface ISequenceHost
     /// <summary>Evaluates one IF/ELSEIF condition; an unparseable or unknown condition returns
     /// false (the safe skip-the-branch direction).</summary>
     bool EvaluateCondition(AnimData? condition, AnimDefinition def, Node3D? anchor);
-
-    /// <summary>The debugger's fired-mark hook. A get-only nullable delegate, so the runner's
-    /// <c>OnEventDispatched?.Invoke(...)</c> null-conditional short-circuits the whole invocation —
-    /// including the <see cref="EventDispatch"/> construction — when no debugger is attached. This
-    /// is the documented zero-cost contract on the hot dispatch path.</summary>
-    Action<EventDispatch>? OnEventDispatched { get; }
 }
 
 /// <summary>One runtime event dispatch, reported to <see cref="ISequenceHost.OnEventDispatched"/>.
@@ -82,6 +82,10 @@ public sealed class AnimInstance
 public sealed class SequenceRunner
 {
     private readonly AnimSequence _seq;
+    // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
+    // reached with the flag set is the *fall-through* off the end of a taken branch and
+    // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
+    private readonly List<bool> _branchTaken = new();
     private int _pc;              // next event index
     private float _clock;         // seconds since this sequence started
     private float _due;           // when the next event fires
@@ -93,10 +97,6 @@ public sealed class SequenceRunner
     // Did the current loop iteration schedule any time? Decides whether reaching the
     // LOOP starts the next iteration at once or yields to the next frame.
     private bool _iterScheduledTime;
-    // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
-    // reached with the flag set is the *fall-through* off the end of a taken branch and
-    // must skip to the ENDIF; reached with it clear, it is the next candidate to test.
-    private readonly List<bool> _branchTaken = new();
 
     public SequenceRunner(AnimSequence seq)
     {
@@ -107,6 +107,15 @@ public sealed class SequenceRunner
     }
 
     public bool Done => _done;
+
+    /// <summary>Has some branch of the innermost open IF chain already run? A malformed
+    /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
+    /// data degrades to running the branch instead of faulting.</summary>
+    private bool Taken
+    {
+        get => _branchTaken.Count > 0 && _branchTaken[^1];
+        set { if (_branchTaken.Count > 0) _branchTaken[^1] = value; }
+    }
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {
@@ -291,15 +300,6 @@ public sealed class SequenceRunner
         {
             _iterScheduledTime = true;
         }
-    }
-
-    /// <summary>Has some branch of the innermost open IF chain already run? A malformed
-    /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
-    /// data degrades to running the branch instead of faulting.</summary>
-    private bool Taken
-    {
-        get => _branchTaken.Count > 0 && _branchTaken[^1];
-        set { if (_branchTaken.Count > 0) _branchTaken[^1] = value; }
     }
 
     // The next ELSEIF/ELSE/ENDIF of this chain (nesting-aware) — where a FAILED condition

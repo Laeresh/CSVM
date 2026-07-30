@@ -61,8 +61,6 @@ public sealed partial class Precipitation : Node3D
     private const float SnowSwayAmp = 0.6f;  // snow horizontal flutter amplitude (m)
     private const float SnowSwayFreq = 1.3f; // … and frequency (rad/s)
 
-    private MultiMesh _mm = null!;
-
     // Self-animating: fall/wind drift over csky_time, wrapped into a box centred on the camera.
     // The final world position ignores the instance transform entirely (POSITION is set
     // directly), so the instances can stay at the node origin — only the custom AABB below keeps
@@ -140,6 +138,8 @@ public sealed partial class Precipitation : Node3D
         }
         """;
 
+    private MultiMesh _mm = null!;
+
     /// <summary>Builds the field for a mission's precipitation, or null if there is none.
     /// <paramref name="cloudBottom"/>/<paramref name="cloudTop"/> are the <c>CLOUD_COVER</c>
     /// band (metres): the precipitation only shows *below* it (it falls from the cloud base —
@@ -152,6 +152,39 @@ public sealed partial class Precipitation : Node3D
         var field = new Precipitation();
         field.Init(p, cloudBottom, cloudTop);
         return field;
+    }
+
+    // A soft round dot (white RGB, radial-falloff alpha): the snow flake.
+    private static ImageTexture MakeFlakeTexture()
+    {
+        const int n = 16;
+        var img = Image.CreateEmpty(n, n, false, Image.Format.Rgba8);
+        for (int y = 0; y < n; y++)
+            for (int x = 0; x < n; x++)
+            {
+                float dx = (x + 0.5f) / n - 0.5f, dy = (y + 0.5f) / n - 0.5f;
+                float r = Mathf.Sqrt(dx * dx + dy * dy) * 2f; // 0 centre → 1 at the edge
+                float a = 1f - Mathf.SmoothStep(0.15f, 0.95f, r);
+                img.SetPixel(x, y, new Color(1f, 1f, 1f, a));
+            }
+        return ImageTexture.CreateFromImage(img);
+    }
+
+    // A soft vertical streak (thin bright line, fading at both ends): the rain drop. Symmetric
+    // top/bottom so the axial billboard's orientation doesn't matter.
+    private static ImageTexture MakeStreakTexture()
+    {
+        const int w = 8, h = 32;
+        var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                float dx = ((x + 0.5f) / w - 0.5f) / 0.22f;      // thin gaussian across the width
+                float across = Mathf.Exp(-dx * dx);
+                float along = Mathf.Sin(Mathf.Pi * (y + 0.5f) / h); // fade to 0 at both ends
+                img.SetPixel(x, y, new Color(1f, 1f, 1f, across * along));
+            }
+        return ImageTexture.CreateFromImage(img);
     }
 
     private void Init(WeatherState.PrecipData p, float cloudBottom, float cloudTop)
@@ -224,38 +257,5 @@ public sealed partial class Precipitation : Node3D
         GD.Print($"precipitation: {p.Kind.ToString().ToLowerInvariant()} — {count} particles, " +
                  $"fall {fallSpeed:0.0} m/s, tint {p.Color.R * 255:0}/{p.Color.G * 255:0}/{p.Color.B * 255:0}, " +
                  $"alpha {peakAlpha:0.00}");
-    }
-
-    // A soft round dot (white RGB, radial-falloff alpha): the snow flake.
-    private static ImageTexture MakeFlakeTexture()
-    {
-        const int n = 16;
-        var img = Image.CreateEmpty(n, n, false, Image.Format.Rgba8);
-        for (int y = 0; y < n; y++)
-            for (int x = 0; x < n; x++)
-            {
-                float dx = (x + 0.5f) / n - 0.5f, dy = (y + 0.5f) / n - 0.5f;
-                float r = Mathf.Sqrt(dx * dx + dy * dy) * 2f; // 0 centre → 1 at the edge
-                float a = 1f - Mathf.SmoothStep(0.15f, 0.95f, r);
-                img.SetPixel(x, y, new Color(1f, 1f, 1f, a));
-            }
-        return ImageTexture.CreateFromImage(img);
-    }
-
-    // A soft vertical streak (thin bright line, fading at both ends): the rain drop. Symmetric
-    // top/bottom so the axial billboard's orientation doesn't matter.
-    private static ImageTexture MakeStreakTexture()
-    {
-        const int w = 8, h = 32;
-        var img = Image.CreateEmpty(w, h, false, Image.Format.Rgba8);
-        for (int y = 0; y < h; y++)
-            for (int x = 0; x < w; x++)
-            {
-                float dx = ((x + 0.5f) / w - 0.5f) / 0.22f;      // thin gaussian across the width
-                float across = Mathf.Exp(-dx * dx);
-                float along = Mathf.Sin(Mathf.Pi * (y + 0.5f) / h); // fade to 0 at both ends
-                img.SetPixel(x, y, new Color(1f, 1f, 1f, across * along));
-            }
-        return ImageTexture.CreateFromImage(img);
     }
 }

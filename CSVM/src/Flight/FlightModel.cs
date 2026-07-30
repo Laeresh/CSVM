@@ -37,10 +37,6 @@ public sealed class FlightModel
     public float Speed;                           // m/s along VelocityDir
     public float Throttle;
 
-    public PlaneStats Stats { get; }
-
-    private readonly float _maxThrustAccel;       // m/s² at full throttle
-
     // m/s² per engine-power unit per tonne. NOT a free TUNE — the original's own level
     // acceleration pins it: full throttle 150 → 290 mph in 3.76 sim s (decoded from cockpit-gauge
     // video) needs A = 60 m/s² on the Bloodhawk, which at 0.62 engine power and 1.9 t is 60·1.9/0.62.
@@ -109,12 +105,16 @@ public sealed class FlightModel
     private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
     private const float RollTune = 2.12f;         // TUNE: pinned
 
+    private readonly float _maxThrustAccel;       // m/s² at full throttle
+
     public FlightModel(PlaneStats stats)
     {
         Stats = stats;
         _maxThrustAccel = stats.EnginePower * Config.GetFloat("flightModel.thrustConst", ThrustConst)
                           / (stats.VehWeight / 1000f);
     }
+
+    public PlaneStats Stats { get; }
 
     public void Reset(Vector3 position, Basis attitude, float speed, float throttle)
     {

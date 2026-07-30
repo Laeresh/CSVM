@@ -34,6 +34,13 @@ public partial class GameSession : Node3D
     /// a census.
     private const int NodeSuggestCap = 20;
 
+    /// <summary>Smallest orbit radius a synthesized pivot may sit at, so an aim ray that passes
+    /// behind the subject still leaves something to orbit rather than spinning about the eye.</summary>
+    private const float MinOrbitRadius = 1f;
+
+    private static readonly string[] InstanceShaderParams =
+        { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
+
     // Everything this launch settled, parsed and resolved once (see SessionSpec) — the command
     // line verbatim, or the launchscreen's pick (SessionSpec.FromMenu). Every consumer below reads
     // it and nothing re-derives a launch setting; the pristine command line stays on the Launcher.
@@ -41,6 +48,50 @@ public partial class GameSession : Node3D
     // Per-player pad binding chosen in the launchscreen's join flow (null = derive from the
     // connected roster in AssignPads, which is what every CLI launch does).
     private readonly int[][]? _menuPads;
+    // The --screenshot=/--shots=/--frames= state machine (PLAN-planeviewer-split A2) — see
+    // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
+    // Ticks it); held here for the Pending reads that gate display choices during the build.
+    private readonly Testing.CaptureDirector _captureDirector;
+    // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
+    // Launcher once per process (pinned runs take the spec's value; everything else draws from
+    // the clock) and re-applied here at each session build.
+    private readonly ulong _masterSeed;
+    // One rig per rendered view: its camera plus the camera-anchored copies only it
+    // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
+    // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
+    private readonly List<PlayerRig> _rigs = new();
+    // scratch: rig camera positions for the edge extender
+    private readonly List<Vector3> _focusPoints = new();
+    // The persistent rendering nodes, owned by the Launcher and kept across sessions; this node
+    // only configures them. The mesh lab steers the sun and ambient, which is why both ride the
+    // context rather than staying local to the Launcher's lighting setup.
+    private readonly Camera3D _camera;
+    private readonly DirectionalLight3D _sun;
+    private readonly Godot.Environment? _env;
+    // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
+    // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
+    private readonly OrbitCamera _orbit;
+    // launched into the menu → Esc from flight returns there, not quit
+    private readonly bool _menuDriven;
+    // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
+    // the context; StartSession reads them each build and recomputes the chapter-dependent
+    // gamez/texture/mission paths from _spec.Chapter.
+    private readonly string _repoRoot;
+    // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
+    // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
+    // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
+    private readonly string _dataRoot;
+    private readonly string _planesGamezPath;
+    private readonly string _zrdrPath;
+    private readonly string _soundsPath;
+    private readonly string _interpPath;
+    private readonly string _messagesPath;
+    // the extracted UI archive (paint patterns)
+    private readonly string _rofPath;
+    // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
+    // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
+    private readonly Testing.ProbeRunner _probeRunner;
+
     // Resolves each player's livery and spawn point against _spec (PLAN-planeviewer-split A3);
     // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
     private LiveryResolver _liveryResolver = null!;
@@ -64,15 +115,6 @@ public partial class GameSession : Node3D
     // session (same lifetime as _worldEffectsFactory); null before the first weathered build and
     // nulled by ReturnToMenu so _Process's null guard covers the frame before the deferred free.
     private WeatherRig? _weatherRig;
-    // The --screenshot=/--shots=/--frames= state machine (PLAN-planeviewer-split A2) — see
-    // src/Testing/CaptureDirector.cs's entry. Process-scoped and owned by the Launcher (which
-    // Ticks it); held here for the Pending reads that gate display choices during the build.
-    private readonly Testing.CaptureDirector _captureDirector;
-    // The master seed every subsystem generator derives from (see Utils.Rng), resolved by the
-    // Launcher once per process (pinned runs take the spec's value; everything else draws from
-    // the clock) and re-applied here at each session build.
-    private readonly ulong _masterSeed;
-
     private Node3D? _plane;
     // The session's simulation clock (see GameClock). Also published as GameClock.Current, which
     // is how the sim consumers scattered through the tree reach it; dropped by ReturnToMenu.
@@ -83,34 +125,13 @@ public partial class GameSession : Node3D
     private UI.WeaponLab? _weaponLabNode;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
-    // One rig per rendered view: its camera plus the camera-anchored copies only it
-    // sees (skydome / cloud deck / cloud puffs / whiteout). Exactly one entry in single player,
-    // wrapping the main-viewport _camera below — so the 1P render path is unchanged.
-    private readonly List<PlayerRig> _rigs = new();
-    // scratch: rig camera positions for the edge extender
-    private readonly List<Vector3> _focusPoints = new();
     // the splitscreen pane rig (null in single player)
     private UI.SplitScreen? _split;
-    // The persistent rendering nodes, owned by the Launcher and kept across sessions; this node
-    // only configures them. The mesh lab steers the sun and ambient, which is why both ride the
-    // context rather than staying local to the Launcher's lighting setup.
-    private readonly Camera3D _camera;
-    private readonly DirectionalLight3D _sun;
-    private readonly Godot.Environment? _env;
-    // The static inspection view's orbit camera (LMB orbit, wheel zoom, AABB framing); the
-    // Launcher creates it once and seeds --yaw=/--pitch= into its initial angles.
-    private readonly OrbitCamera _orbit;
 
     // Session lifecycle (the launchscreen's in-process world rebuild): everything a
     // session builds hangs under _worldRoot, so Esc-to-menu can free it and a new session node
     // build again. The camera, lights and global shader params live on the Launcher and persist.
     private Node3D? _worldRoot;
-    // launched into the menu → Esc from flight returns there, not quit
-    private readonly bool _menuDriven;
-
-    /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
-    /// launchscreen only once a world is actually up).</summary>
-    public bool InSession { get; private set; }
     // the session's LIGHT_STATE point lights (see WorldLights)
     private WorldLights? _worldLights;
     // The session-owned texture archive, kept open past the build scope so the data-driven crash can
@@ -122,33 +143,10 @@ public partial class GameSession : Node3D
     // See WorldBuilder.HideUnplacedEntities / RestorePlacedEntities.
     private WorldBuilder? _unplacedWatch;
     private double _unplacedRecheck;
-    // Base (chapter-independent) paths, settled by the Launcher once per process and handed in via
-    // the context; StartSession reads them each build and recomputes the chapter-dependent
-    // gamez/texture/mission paths from _spec.Chapter.
-    private readonly string _repoRoot;
     // This session's startup timing — the always-on [perf] startup line. One per StartSession,
     // published as StartupProfile.Current so the shared build code can record into it, and cleared
     // when the line is emitted.
     private StartupProfile? _startup;
-    // Where extracted/ lives. Defaults to _repoRoot; overridden by --data-root= or CSVM_DATA_ROOT
-    // so a git worktree can run the game — /extracted/, /CrimsonSkiesGame/ and /tools/ are
-    // git-ignored, so a worktree checkout has none of them and cannot otherwise build or verify.
-    private readonly string _dataRoot;
-    private readonly string _planesGamezPath;
-    private readonly string _zrdrPath;
-    private readonly string _soundsPath;
-    private readonly string _interpPath;
-    private readonly string _messagesPath;
-    // the extracted UI archive (paint patterns)
-    private readonly string _rofPath;
-    // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
-    // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
-    private readonly Testing.ProbeRunner _probeRunner;
-
-    /// <summary>Whether this session builds the world's colliders — the one definition every
-    /// consumer reads, resolved on the spec so the labs and the C overlay cannot spell it
-    /// differently from what <see cref="Mech3.WorldSession"/> actually built.</summary>
-    private bool BuildsCollision => _spec.BuildsCollision;
 
     /// <summary>Constructs the session node for one launch. <paramref name="spec"/> is what this
     /// session is built from (the command line verbatim, or the launchscreen's pick);
@@ -182,6 +180,10 @@ public partial class GameSession : Node3D
         _menuPads = ctx.MenuPads;
     }
 
+    /// <summary>Whether the build completed — the Launcher's Esc routing reads it (return to the
+    /// launchscreen only once a world is actually up).</summary>
+    public bool InSession { get; private set; }
+
     /// <summary>The session's per-player rigs — the Launcher's F11 placement print reads them.</summary>
     internal List<PlayerRig> Rigs => _rigs;
 
@@ -189,43 +191,15 @@ public partial class GameSession : Node3D
     /// capture tick reads it, because CaptureDirector only shoots once a plane exists.</summary>
     internal Node3D? Plane => _plane;
 
-    /// <summary>Per-build state threaded through StartSession's phase methods — the archives,
-    /// world-build outputs and running counts that used to be locals shared across one flat try
-    /// block (PLAN-planeviewer-split C9). Local to a single StartSession call; nothing here is
-    /// cached across a rebuild.</summary>
-    private sealed class BuildState
-    {
-        public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",
-            MessagesPath = "", PlanesGamezPath = "";
-        public bool Mute, DebugCollision;
-        public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
+    /// <summary>Whether this session builds the world's colliders — the one definition every
+    /// consumer reads, resolved on the spec so the labs and the C overlay cannot spell it
+    /// differently from what <see cref="Mech3.WorldSession"/> actually built.</summary>
+    private bool BuildsCollision => _spec.BuildsCollision;
 
-        public GameZ Gamez = null!;
-        public TextureArchive Textures = null!;
-        public bool HaveSounds;
-        public SoundArchive? Sounds;
-        public Dictionary<string, SoundDef>? SoundDefs;
-        public Dictionary<string, SoundGroup>? SoundGroups;
-        // The archives that outlive this build scope in the anim lab (the lab node owns their
-        // disposal); a failed build closes them from StartSession's catch instead.
-        public TextureArchive? LabTextures;
-        public SoundArchive? LabSounds;
-        public UI.AnimLab? AnimLabNode;
-
-        public GameZNode? NodeSubtree;
-        // The --node= subtree's world-frame box, measured at build time and kept for the framing
-        // step at the very end — see FrameCamera on why the live-tree merge is the wrong instrument.
-        public Aabb? NodeAabb;
-
-        public int MeshInstances;
-        public int Colliders;
-        public string What = "";
-
-        public Node3D? CloudDeck;
-        public AnimProgram? CrashProgram;
-        public SceneBuilder? WorldScene;
-        public AnimRuntime? WorldRuntime;
-    }
+    /// <summary>Whether P / <c>.</c> may halt this session. Splitscreen flight says no: the freeze
+    /// halts the shared world, so it is not one player's to press (the same rule
+    /// <see cref="FlightController.AllowPause"/> applies to the in-flight binding).</summary>
+    private bool HaltAllowed => !_spec.Fly || _rigs.Count == 1;
 
     /// <summary>Builds one flight/view session from the spec (mode, chapter, plane, spawn, …)
     /// into a fresh <see cref="_worldRoot"/> so Esc-to-menu can tear it all down and a new session
@@ -353,6 +327,137 @@ public partial class GameSession : Node3D
         _startup?.EndBuild();
         InSession = true;
         return true;
+    }
+
+    public override void _Notification(int what)
+    {
+        // The focus mute lives on the Launcher (it is process state, not session state). What is
+        // left here is the session's teardown: every duty that QueueFree does NOT cover on its own.
+        // Return-to-menu is now a bare QueueFree (Launcher.ReturnToMenu) — the whole session subtree
+        // (world, plane, HUD, rigs, effects) hangs under _worldRoot, a child of this node, so it
+        // frees atomically with us and needs no manual null-out. Only the non-child duties run here.
+        if (what == (int)NotificationExitTree)
+        {
+            // A run that quits inside the session build (the headless probes) never renders a
+            // frame, so this is the only place its startup breakdown can still be reported.
+            // Idempotent: a session that did render has already emitted and this does nothing.
+            _startup?.Emit();
+            // The published clock is a static pointer, not a child: null it so any node that
+            // outlives this teardown falls back to its raw frame delta (GameClock.Current == null).
+            // A later session sets it again in StartSession; the menu-relaunch happens in a frame
+            // after this node has exited, so the two never race.
+            GameClock.Current = null;
+            // Clears csky_light_count so the next world does not inherit this one's light spill;
+            // idempotent, and null-guarded (a failed build never set it).
+            _worldLights?.Dispose();
+            _worldLights = null;
+            // The session-owned texture archive, kept open past its build scope so the data-driven
+            // crash could bake puffers lazily. Not a node, so QueueFree cannot reach it; dispose it
+            // here. Null-guarded — a failed build disposed and nulled it already, so no double free.
+            _sessionTextures?.Dispose();
+            _sessionTextures = null;
+            // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
+            // the panes rendered, and the launchscreen and the next session expect it current.
+            _camera.Current = true;
+        }
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        // P halts the sim, . steps it one frame — in freecam, the static viewer and the
+        // launchscreen. Flight polls P itself (FlightController, so gamepad Start keeps working)
+        // and the animation lab owns its own transport, so neither is handled here.
+        if (!_spec.AnimLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
+            && _clock != null && HaltAllowed)
+        {
+            if (clockKey.Keycode == Key.P && !_spec.Fly)
+            {
+                _clock.Halted = !_clock.Halted;
+                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame)" : "clock: running");
+                return;
+            }
+            if (clockKey.Keycode == Key.Period)
+            {
+                _clock.Halted = true;
+                _clock.StepOnce();
+                return;
+            }
+        }
+        // Esc (menu-or-quit routing) and the F11/F12 capture keys are the Launcher's: they are
+        // meaningful at the launchscreen too, where no session node exists.
+        if (_spec.Fly || _spec.Freecam || _spec.AnimLab)
+            return; // the FlightController / SpectatorCamera owns the camera; no orbit controls
+        _orbit.HandleInput(@event);
+    }
+
+    public override void _Process(double delta)
+    {
+        // First thing in the frame (ProcessPriority): decide how much sim time this rendered frame
+        // is worth, then — when the clock is not realtime — step the physics-driven consumers
+        // ourselves, in the tree order Godot's physics tick would have used.
+        if (_clock is { } clock)
+        {
+            clock.BeginFrame(delta);
+            if (clock.ParentDriven)
+            {
+                DriveSimSteps(clock);
+            }
+        }
+        // The startup line goes out on the frame that proves the first one was drawn.
+        _startup?.Frame();
+        // The shader clock (ShaderTime.Advance), the --perf report and the capture pipeline tick
+        // on the Launcher, one priority notch behind this node — the same point in the frame they
+        // ran at when both lived on one root, and alive at the launchscreen where this node is not.
+        //
+        // The poll below stays on wall time: it is an instrument, and an instrument that freezes
+        // with the thing it measures reports nothing.
+        // Entities switched off as unplaced (see WorldBuilder.HideUnplacedEntities) that have
+        // since been moved off the world origin are put back: a motion starting is the proof
+        // that a definition owns them. Polled rather than deferred once, because an OnCall
+        // definition can start its motion at any time. Goes quiet for good once the list drains.
+        if (_unplacedWatch != null)
+        {
+            _unplacedRecheck += delta;
+            if (_unplacedRecheck >= 1.0)
+            {
+                _unplacedRecheck = 0.0;
+                if (_unplacedWatch.RestorePlacedEntities() is { Count: > 0 } restored)
+                {
+                    GD.Print($"world: {restored.Count} entit(y/ies) moved off the origin after all, "
+                             + "restored: " + string.Join(", ", restored));
+                }
+            }
+        }
+        // Everything below is anchored to *a* camera, so it runs once per rig — one in single
+        // player, one per pane in splitscreen (each on that player's own visual layer). See
+        // src/Session/WeatherRig.cs's Tick (PLAN-planeviewer-split A5).
+        _weatherRig?.Tick(_rigs, _clock?.FrameDt ?? (float)delta);
+
+        // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
+        // serves every pane (the union of the rings around each player), so two players at
+        // opposite edges both get continued terrain. Cheap no-op until one of them crosses a cell
+        // boundary (1024 m), then ~a window row rebuilds.
+        if (_edgeExtender != null)
+        {
+            _focusPoints.Clear();
+            foreach (var rig in _rigs)
+                _focusPoints.Add(rig.Camera.Position);
+            _edgeExtender.Update(_focusPoints);
+        }
+    }
+
+    private static void CopyInstanceShaderParams(Node source, Node copy)
+    {
+        if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
+            foreach (var name in InstanceShaderParams)
+            {
+                var value = from.GetInstanceShaderParameter(name);
+                if (value.VariantType != Variant.Type.Nil)
+                    to.SetInstanceShaderParameter(name, value);
+            }
+        int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
+        for (int i = 0; i < n; i++)
+            CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
     }
 
     /// <summary>Loads the session's core archives — gamez, textures, sounds, sound defs/groups —
@@ -1375,23 +1480,6 @@ public partial class GameSession : Node3D
         }
     }
 
-    private static readonly string[] InstanceShaderParams =
-        { "node_bias", "csky_fog_on", "csky_light_fade", Mech3.SceneBuilder.OpacityParam };
-
-    private static void CopyInstanceShaderParams(Node source, Node copy)
-    {
-        if (source is GeometryInstance3D from && copy is GeometryInstance3D to)
-            foreach (var name in InstanceShaderParams)
-            {
-                var value = from.GetInstanceShaderParameter(name);
-                if (value.VariantType != Variant.Type.Nil)
-                    to.SetInstanceShaderParameter(name, value);
-            }
-        int n = Math.Min(source.GetChildCount(), copy.GetChildCount());
-        for (int i = 0; i < n; i++)
-            CopyInstanceShaderParams(source.GetChild(i), copy.GetChild(i));
-    }
-
     /// <summary>Rematch from the shared race board (R): every player's zones, clock and
     /// placing cleared, then every plane back to its own spawn — same chapter, aircraft and spawn
     /// points. The board retires itself once the placings are gone. The session owns the planes, so
@@ -1403,10 +1491,6 @@ public partial class GameSession : Node3D
         foreach (var rig in _rigs)
             rig.Controller?.Respawn();
     }
-
-    /// <summary>Smallest orbit radius a synthesized pivot may sit at, so an aim ray that passes
-    /// behind the subject still leaves something to orbit rather than spinning about the eye.</summary>
-    private const float MinOrbitRadius = 1f;
 
     /// <summary>Frames the parked plane in the orbit view. <c>--lookat</c> is a true pivot and is
     /// used verbatim; <c>--direction</c> names only an aim, so a pivot is synthesized on the aim
@@ -1441,39 +1525,6 @@ public partial class GameSession : Node3D
         _orbit.Frame(aabb, _spec.CamPos, pivot);
     }
 
-    public override void _Notification(int what)
-    {
-        // The focus mute lives on the Launcher (it is process state, not session state). What is
-        // left here is the session's teardown: every duty that QueueFree does NOT cover on its own.
-        // Return-to-menu is now a bare QueueFree (Launcher.ReturnToMenu) — the whole session subtree
-        // (world, plane, HUD, rigs, effects) hangs under _worldRoot, a child of this node, so it
-        // frees atomically with us and needs no manual null-out. Only the non-child duties run here.
-        if (what == (int)NotificationExitTree)
-        {
-            // A run that quits inside the session build (the headless probes) never renders a
-            // frame, so this is the only place its startup breakdown can still be reported.
-            // Idempotent: a session that did render has already emitted and this does nothing.
-            _startup?.Emit();
-            // The published clock is a static pointer, not a child: null it so any node that
-            // outlives this teardown falls back to its raw frame delta (GameClock.Current == null).
-            // A later session sets it again in StartSession; the menu-relaunch happens in a frame
-            // after this node has exited, so the two never race.
-            GameClock.Current = null;
-            // Clears csky_light_count so the next world does not inherit this one's light spill;
-            // idempotent, and null-guarded (a failed build never set it).
-            _worldLights?.Dispose();
-            _worldLights = null;
-            // The session-owned texture archive, kept open past its build scope so the data-driven
-            // crash could bake puffers lazily. Not a node, so QueueFree cannot reach it; dispose it
-            // here. Null-guarded — a failed build disposed and nulled it already, so no double free.
-            _sessionTextures?.Dispose();
-            _sessionTextures = null;
-            // Restore the persistent (Launcher-owned) main camera: splitscreen stood it down while
-            // the panes rendered, and the launchscreen and the next session expect it current.
-            _camera.Current = true;
-        }
-    }
-
     /// <summary>Steps the consumers whose sim normally rides Godot's physics tick. They return
     /// early from <c>_PhysicsProcess</c> whenever the clock is not realtime (GameClock.PhysicsDt
     /// hands them 0), because a fixed or halted sim cannot be paced by a tick it does not own.
@@ -1498,93 +1549,41 @@ public partial class GameSession : Node3D
         }
     }
 
-    /// <summary>Whether P / <c>.</c> may halt this session. Splitscreen flight says no: the freeze
-    /// halts the shared world, so it is not one player's to press (the same rule
-    /// <see cref="FlightController.AllowPause"/> applies to the in-flight binding).</summary>
-    private bool HaltAllowed => !_spec.Fly || _rigs.Count == 1;
-
-    public override void _UnhandledInput(InputEvent @event)
+    /// <summary>Per-build state threaded through StartSession's phase methods — the archives,
+    /// world-build outputs and running counts that used to be locals shared across one flat try
+    /// block (PLAN-planeviewer-split C9). Local to a single StartSession call; nothing here is
+    /// cached across a rebuild.</summary>
+    private sealed class BuildState
     {
-        // P halts the sim, . steps it one frame — in freecam, the static viewer and the
-        // launchscreen. Flight polls P itself (FlightController, so gamepad Start keeps working)
-        // and the animation lab owns its own transport, so neither is handled here.
-        if (!_spec.AnimLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
-            && _clock != null && HaltAllowed)
-        {
-            if (clockKey.Keycode == Key.P && !_spec.Fly)
-            {
-                _clock.Halted = !_clock.Halted;
-                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame)" : "clock: running");
-                return;
-            }
-            if (clockKey.Keycode == Key.Period)
-            {
-                _clock.Halted = true;
-                _clock.StepOnce();
-                return;
-            }
-        }
-        // Esc (menu-or-quit routing) and the F11/F12 capture keys are the Launcher's: they are
-        // meaningful at the launchscreen too, where no session node exists.
-        if (_spec.Fly || _spec.Freecam || _spec.AnimLab)
-            return; // the FlightController / SpectatorCamera owns the camera; no orbit controls
-        _orbit.HandleInput(@event);
+        public string DataRoot = "", ZrdrPath = "", SoundsPath = "", InterpPath = "",
+            MessagesPath = "", PlanesGamezPath = "";
+        public bool Mute, DebugCollision;
+        public string TexturesPath = "", GamezPath = "", MissionZrdrPath = "";
+
+        public GameZ Gamez = null!;
+        public TextureArchive Textures = null!;
+        public bool HaveSounds;
+        public SoundArchive? Sounds;
+        public Dictionary<string, SoundDef>? SoundDefs;
+        public Dictionary<string, SoundGroup>? SoundGroups;
+        // The archives that outlive this build scope in the anim lab (the lab node owns their
+        // disposal); a failed build closes them from StartSession's catch instead.
+        public TextureArchive? LabTextures;
+        public SoundArchive? LabSounds;
+        public UI.AnimLab? AnimLabNode;
+
+        public GameZNode? NodeSubtree;
+        // The --node= subtree's world-frame box, measured at build time and kept for the framing
+        // step at the very end — see FrameCamera on why the live-tree merge is the wrong instrument.
+        public Aabb? NodeAabb;
+
+        public int MeshInstances;
+        public int Colliders;
+        public string What = "";
+
+        public Node3D? CloudDeck;
+        public AnimProgram? CrashProgram;
+        public SceneBuilder? WorldScene;
+        public AnimRuntime? WorldRuntime;
     }
-
-    public override void _Process(double delta)
-    {
-        // First thing in the frame (ProcessPriority): decide how much sim time this rendered frame
-        // is worth, then — when the clock is not realtime — step the physics-driven consumers
-        // ourselves, in the tree order Godot's physics tick would have used.
-        if (_clock is { } clock)
-        {
-            clock.BeginFrame(delta);
-            if (clock.ParentDriven)
-            {
-                DriveSimSteps(clock);
-            }
-        }
-        // The startup line goes out on the frame that proves the first one was drawn.
-        _startup?.Frame();
-        // The shader clock (ShaderTime.Advance), the --perf report and the capture pipeline tick
-        // on the Launcher, one priority notch behind this node — the same point in the frame they
-        // ran at when both lived on one root, and alive at the launchscreen where this node is not.
-        //
-        // The poll below stays on wall time: it is an instrument, and an instrument that freezes
-        // with the thing it measures reports nothing.
-        // Entities switched off as unplaced (see WorldBuilder.HideUnplacedEntities) that have
-        // since been moved off the world origin are put back: a motion starting is the proof
-        // that a definition owns them. Polled rather than deferred once, because an OnCall
-        // definition can start its motion at any time. Goes quiet for good once the list drains.
-        if (_unplacedWatch != null)
-        {
-            _unplacedRecheck += delta;
-            if (_unplacedRecheck >= 1.0)
-            {
-                _unplacedRecheck = 0.0;
-                if (_unplacedWatch.RestorePlacedEntities() is { Count: > 0 } restored)
-                {
-                    GD.Print($"world: {restored.Count} entit(y/ies) moved off the origin after all, "
-                             + "restored: " + string.Join(", ", restored));
-                }
-            }
-        }
-        // Everything below is anchored to *a* camera, so it runs once per rig — one in single
-        // player, one per pane in splitscreen (each on that player's own visual layer). See
-        // src/Session/WeatherRig.cs's Tick (PLAN-planeviewer-split A5).
-        _weatherRig?.Tick(_rigs, _clock?.FrameDt ?? (float)delta);
-
-        // Map-edge continuation: re-center the mirrored-tile window on the cameras. One window
-        // serves every pane (the union of the rings around each player), so two players at
-        // opposite edges both get continued terrain. Cheap no-op until one of them crosses a cell
-        // boundary (1024 m), then ~a window row rebuilds.
-        if (_edgeExtender != null)
-        {
-            _focusPoints.Clear();
-            foreach (var rig in _rigs)
-                _focusPoints.Add(rig.Camera.Position);
-            _edgeExtender.Update(_focusPoints);
-        }
-    }
-
 }

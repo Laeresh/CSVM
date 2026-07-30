@@ -24,12 +24,6 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class MarkerHud : Control
 {
-    /// <summary>The plane's world position this frame (target distance + clock bearing).</summary>
-    public Vector3 PlanePos { get; set; }
-
-    /// <summary>The plane nose heading, 0 = north (−Z), 90 = east (+X) — for the clock bearing.</summary>
-    public float HeadingDeg { get; set; }
-
     /// <summary>The splitscreen race this pilot is flying in, or null in a solo run.
     /// Set, the all-zones-cleared banner becomes their placing + finish time and says who they are
     /// still waiting on; the shared ranked board (<see cref="StuntRaceBoard"/>) takes over from
@@ -39,11 +33,6 @@ public sealed partial class MarkerHud : Control
     /// <summary>Which player's pane this HUD draws in (0-based) — picks their row out of
     /// <see cref="Race"/>.</summary>
     public int PlayerIndex;
-
-    private StuntMission _mission = null!;
-    private Camera3D _camera = null!;
-    private float _flash;         // s left on the zone-cleared flash
-    private string _flashText = "";
 
     // 1440p reference metrics (scaled by viewport height).
     private const int RefMarkerFont = 15;   // the marker's small text block
@@ -62,6 +51,17 @@ public sealed partial class MarkerHud : Control
     private static readonly Color HudGreen = new(0.60f, 1f, 0.70f); // completion feedback
     private static readonly Color Shadow = new(0f, 0f, 0f, 0.75f);
 
+    private StuntMission _mission = null!;
+    private Camera3D _camera = null!;
+    private float _flash;         // s left on the zone-cleared flash
+    private string _flashText = "";
+
+    /// <summary>The plane's world position this frame (target distance + clock bearing).</summary>
+    public Vector3 PlanePos { get; set; }
+
+    /// <summary>The plane nose heading, 0 = north (−Z), 90 = east (+X) — for the clock bearing.</summary>
+    public float HeadingDeg { get; set; }
+
     /// <summary>Binds the run + camera; subscribes to the completion flash. Add to the HUD canvas
     /// and feed <see cref="PlanePos"/>/<see cref="HeadingDeg"/> each frame (FlightController).</summary>
     public static MarkerHud Build(StuntMission mission, Camera3D camera)
@@ -78,12 +78,6 @@ public sealed partial class MarkerHud : Control
     }
 
     public override void _ExitTree() => _mission.ZoneCompleted -= OnZoneCompleted;
-
-    private void OnZoneCompleted(StuntZone z)
-    {
-        _flash = FlashDuration;
-        _flashText = z.Description.Length > 0 ? $"{z.Description} — CLEARED" : "DANGER ZONE CLEARED";
-    }
 
     public override void _Process(double delta)
     {
@@ -176,6 +170,28 @@ public sealed partial class MarkerHud : Control
         }
     }
 
+    /// <summary>"Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
+    /// the next line), degrading gracefully if a part is absent.</summary>
+    private static string MarkerHead(StuntZone z) =>
+        z.Category.Length > 0 && z.Help.Length > 0 ? $"{z.Category} [{z.Help}] -"
+        : z.Help.Length > 0 ? $"[{z.Help}] -"
+        : z.Category.Length > 0 ? $"{z.Category} -"
+        : "";
+
+    /// <summary>Distance in the HUD's imperial units (feet under a mile, miles above — matching the
+    /// altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).</summary>
+    private static string FormatDistance(float meters)
+    {
+        float ft = meters * 3.28084f;
+        return ft < 5280f ? $"{ft:0} FT" : $"{ft / 5280f:0.00} MI";
+    }
+
+    private void OnZoneCompleted(StuntZone z)
+    {
+        _flash = FlashDuration;
+        _flashText = z.Description.Length > 0 ? $"{z.Description} — CLEARED" : "DANGER ZONE CLEARED";
+    }
+
     /// <summary>The banner shown in this player's pane once they have cleared every zone. Solo: the
     /// run is simply over (the results board is coming up in the same pane). In a race:
     /// their placing + finish time, held while the rest of the field still flies — the shared
@@ -197,14 +213,6 @@ public sealed partial class MarkerHud : Control
         return lines.ToArray();
     }
 
-    /// <summary>"Danger Zone [Fly Through] -" — the category/action prefix (the description goes on
-    /// the next line), degrading gracefully if a part is absent.</summary>
-    private static string MarkerHead(StuntZone z) =>
-        z.Category.Length > 0 && z.Help.Length > 0 ? $"{z.Category} [{z.Help}] -"
-        : z.Help.Length > 0 ? $"[{z.Help}] -"
-        : z.Category.Length > 0 ? $"{z.Category} -"
-        : "";
-
     /// <summary>Relative bearing of the zone from the plane's heading in clock hours (12 = ahead,
     /// 3 = right, 6 = behind, 9 = left) — the original's "N o'clock" suffix.</summary>
     private int ClockHour(StuntZone z)
@@ -214,14 +222,6 @@ public sealed partial class MarkerHud : Control
         float rel = Mathf.PosMod(bearing - HeadingDeg, 360f);
         int h = Mathf.RoundToInt(rel / 30f) % 12;
         return h == 0 ? 12 : h;
-    }
-
-    /// <summary>Distance in the HUD's imperial units (feet under a mile, miles above — matching the
-    /// altimeter/speedometer; TUNE — the original's marker-distance unit is unverified).</summary>
-    private static string FormatDistance(float meters)
-    {
-        float ft = meters * 3.28084f;
-        return ft < 5280f ? $"{ft:0} FT" : $"{ft / 5280f:0.00} MI";
     }
 
     /// <summary>Screen-edge point along <paramref name="dir"/> from centre, inset by the margin.</summary>

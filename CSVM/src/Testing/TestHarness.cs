@@ -21,251 +21,6 @@ public enum SuiteStatus
     Skip,
 }
 
-/// <summary>Thrown by <see cref="TestContext.RequireData"/> to end a suite as SKIP.</summary>
-public sealed class SuiteSkippedException : Exception
-{
-    public SuiteSkippedException(string why) : base(why) { }
-}
-
-/// <summary>One built chapter world, held for the suites that need one. The archives are closed
-/// as soon as the build is done (<see cref="WorldSession"/>'s disposal-lifetime contract), so what
-/// survives here is the scene subtree and its bound runtime.</summary>
-public sealed class TestWorld
-{
-    public required string Chapter { get; init; }
-    public required bool Collision { get; init; }
-    public required WorldSession Session { get; init; }
-    public required Node3D Stage { get; init; }
-
-    public AnimRuntime Runtime => Session.Runtime;
-
-    internal void Destroy()
-    {
-        Session.Lights?.Dispose();
-        // Free, not QueueFree: the harness runs to completion inside one _Ready call, so a queued
-        // free would only happen after every suite had already built its own world.
-        Stage.Free();
-    }
-}
-
-/// <summary>
-/// What a suite is handed: the resolved data paths, the assertion verbs, a scene-tree host, and
-/// the chapter-world builder. Every assertion and note goes through the <c>test</c> category of
-/// <see cref="Log"/>, so the full-detail file sink records the whole run whatever the console
-/// filter is.
-/// </summary>
-public sealed class TestContext
-{
-    public required string RepoRoot { get; init; }
-    public required string DataRoot { get; init; }
-    public required string Chapter { get; init; }
-    public required string Mission { get; init; }
-    public required string ZrdrPath { get; init; }
-    public required string MessagesPath { get; init; }
-    public required string PlanesGamezPath { get; init; }
-    public required string InterpPath { get; init; }
-    public required string SoundsPath { get; init; }
-    public required string PlaneName { get; init; }
-    public required bool Mute { get; init; }
-
-    /// <summary><c>--loadout=&lt;def&gt;</c>: bind every plane to that def instead of its own. A
-    /// cross-binding control — passing a def whose markers the airframe does not carry is how the
-    /// <c>loadout-bind</c> suite is shown able to fail on real bad input rather than a planted
-    /// assertion.</summary>
-    public string? LoadoutOverride { get; init; }
-
-    /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
-    /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
-    public required Node3D Host { get; init; }
-
-    /// <summary>The session camera. PLAYER_RANGE conditions and the sound listener measure from it,
-    /// exactly as an interactive session's do.</summary>
-    public required Camera3D Camera { get; init; }
-
-    /// <summary>The scratch directory every artifact this run writes must stay inside.</summary>
-    public string ScratchDir => Path.Combine(RepoRoot, ".scratch");
-
-    internal readonly List<string> Failures = new();
-    internal readonly List<string> Notes = new();
-    internal readonly Dictionary<string, long> Counts = new();
-
-    private readonly Dictionary<string, TestWorld> _worlds = new();
-
-    /// <summary>Records a check. A false verdict fails the suite but does not stop it — the rest of
-    /// the checks still run, so one report names every broken thing rather than the first.</summary>
-    public void Check(bool ok, FormattableString what)
-    {
-        string text = Log.Format(what);
-        if (ok)
-        {
-            Log.Debug("test", $"ok {text}");
-            return;
-        }
-        Failures.Add(text);
-        Log.Error("test", $"FAIL {text}");
-    }
-
-    /// <summary>A check on a count, phrased so the failure line carries both numbers.</summary>
-    public void Same(long expected, long actual, FormattableString what)
-    {
-        Counts[Log.Format(what)] = actual;
-        Check(expected == actual, $"{Log.Format(what)} expected={expected} actual={actual}");
-    }
-
-    /// <summary>Something worth having in the report that is not a verdict — a measured count, a
-    /// caveat about what this run could not see.</summary>
-    public void Note(FormattableString what)
-    {
-        string text = Log.Format(what);
-        Notes.Add(text);
-        Log.Info("test", $"note {text}");
-    }
-
-    /// <summary>Ends the suite as SKIP when an input the suite needs is not on disk. Skipped is
-    /// reported distinctly from passed, so an empty data root cannot read as a green run.</summary>
-    public void RequireData(string path, FormattableString what)
-    {
-        if (!File.Exists(path) && !Directory.Exists(path))
-        {
-            throw new SuiteSkippedException($"{Log.Format(what)} not found: {path}");
-        }
-    }
-
-    /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
-    /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
-    /// <c>.scratch/</c> — the only place a suite may write.</summary>
-    public void WriteArtifact(string fileName, string text)
-    {
-        Directory.CreateDirectory(ScratchDir);
-        string path = Path.Combine(ScratchDir, fileName);
-        File.WriteAllText(path, text);
-        Log.Info("test", $"artifact file={path}");
-    }
-
-    /// <summary>Builds (or reuses) a chapter world and runs <paramref name="body"/> against it. The
-    /// run's own chapter is cached because several suites want it; any other chapter is freed as
-    /// soon as the body returns, so a per-chapter census does not hold eight worlds at once.
-    ///
-    /// <para>The world subtree is in the scene tree with <see cref="AnimRuntime.ManualAdvance"/>
-    /// set, which is the pair a suite ticking the clock needs: an out-of-tree global-transform read
-    /// returns identity, and <c>_Process</c> must not also drive the runtime.</para></summary>
-    public void WithWorld(string chapter, bool collision, Action<TestWorld> body)
-    {
-        if (_worlds.TryGetValue(chapter, out var cached))
-        {
-            if (!collision || cached.Collision)
-            {
-                body(cached);
-                return;
-            }
-            _worlds.Remove(chapter);
-            cached.Destroy();
-        }
-        var world = BuildWorld(chapter, collision);
-        if (chapter == Chapter)
-        {
-            _worlds[chapter] = world;
-            body(world);
-            return;
-        }
-        try
-        {
-            body(world);
-        }
-        finally
-        {
-            world.Destroy();
-        }
-    }
-
-    internal void ReleaseWorlds()
-    {
-        foreach (var w in _worlds.Values)
-        {
-            w.Destroy();
-        }
-        _worlds.Clear();
-    }
-
-    private TestWorld BuildWorld(string chapter, bool collision)
-    {
-        string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
-        string texturesPath = SessionPaths.ChapterTextures(DataRoot, chapter);
-        RequireData(gamezPath, $"chapter {chapter} gamez");
-        RequireData(texturesPath, $"chapter {chapter} textures");
-
-        var stage = new Node3D { Name = $"TestWorld_{chapter}" };
-        Host.AddChild(stage);
-        var gamez = GameZ.Load(gamezPath);
-        // The archives are this scope's: WorldSession clears the puffer factory and the sound
-        // loader after its bootstrap precisely so they can close here.
-        using var textures = new TextureArchive(texturesPath);
-        bool haveSounds = !Mute && (File.Exists(SoundsPath) || Directory.Exists(SoundsPath));
-        using var sounds = haveSounds ? new SoundArchive(SoundsPath) : null;
-        var soundDefs = haveSounds ? SoundDefs.Load(ZrdrPath) : null;
-        var soundGroups = haveSounds ? SoundDefs.LoadGroups(ZrdrPath) : null;
-
-        var session = WorldSession.Build(
-            new WorldSession.Options
-            {
-                DataRoot = DataRoot,
-                Chapter = chapter,
-                Mission = Mission,
-                ZrdrPath = ZrdrPath,
-                InterpPath = InterpPath,
-                MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, Mission),
-                EffectsParent = stage,
-                PlayerPosition = () => Camera.GlobalPosition,
-                Collision = collision,
-                RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
-            },
-            gamez, textures, sounds, soundDefs, soundGroups);
-        stage.AddChild(session.Root);
-        session.Runtime.ManualAdvance = true;
-        return new TestWorld
-        {
-            Chapter = chapter,
-            Collision = collision,
-            Session = session,
-            Stage = stage,
-        };
-    }
-}
-
-/// <summary>One suite's verdict, as it reaches the table and the JSON report.</summary>
-public sealed class SuiteResult
-{
-    public required string Name { get; init; }
-    public required SuiteStatus Status { get; init; }
-    public required double Seconds { get; init; }
-    public string Detail { get; init; } = "";
-    public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
-    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
-    public IReadOnlyDictionary<string, long> Counts { get; init; } = new Dictionary<string, long>();
-}
-
-/// <summary>A native engine error the run is known to emit and that no suite here caused. Each
-/// carries a cap, so the same message appearing MORE often than measured still fails — an
-/// allowlist that swallowed an unbounded count would hide the next regression in the shape of an
-/// old one.</summary>
-public sealed record ErrorAllowance(string Pattern, int Max, string Why);
-
-/// <summary>The result of screening a run's engine log for error lines.</summary>
-public sealed class StderrScreen
-{
-    public int Total { get; init; }
-    public int Allowed { get; init; }
-    public IReadOnlyList<string> Unexpected { get; init; } = Array.Empty<string>();
-    public IReadOnlyList<string> OverCap { get; init; } = Array.Empty<string>();
-
-    /// <summary>How often each allowlisted pattern actually fired. Reported even when the screen
-    /// passes: an allowlist entry whose count is invisible is exactly how a new error hides inside
-    /// an old one's shape.</summary>
-    public IReadOnlyDictionary<string, int> AllowedCounts { get; init; } = new Dictionary<string, int>();
-
-    public bool Ok => Unexpected.Count == 0 && OverCap.Count == 0;
-}
-
 /// <summary>
 /// The in-engine test harness behind <c>--run-tests[=filter]</c>: a registry of assertion suites,
 /// a PASS/FAIL/SKIP table, a <c>.scratch/test-report.json</c>, and a nonzero exit code when
@@ -285,8 +40,6 @@ public sealed class StderrScreen
 /// </summary>
 public static class TestHarness
 {
-    public sealed record Suite(string Name, string What, Action<TestContext> Body);
-
     /// <summary>The engine errors this project currently emits that are not the harness's to fix.
     /// Every entry names the open item that owns it; when that item lands, the entry is deleted and
     /// the cap does the rest.</summary>
@@ -644,4 +397,252 @@ public static class TestHarness
         }
         return sb.Append('"').ToString();
     }
+
+    public sealed record Suite(string Name, string What, Action<TestContext> Body);
 }
+
+/// <summary>Thrown by <see cref="TestContext.RequireData"/> to end a suite as SKIP.</summary>
+public sealed class SuiteSkippedException : Exception
+{
+    public SuiteSkippedException(string why) : base(why) { }
+}
+
+/// <summary>One built chapter world, held for the suites that need one. The archives are closed
+/// as soon as the build is done (<see cref="WorldSession"/>'s disposal-lifetime contract), so what
+/// survives here is the scene subtree and its bound runtime.</summary>
+public sealed class TestWorld
+{
+    public required string Chapter { get; init; }
+    public required bool Collision { get; init; }
+    public required WorldSession Session { get; init; }
+    public required Node3D Stage { get; init; }
+
+    public AnimRuntime Runtime => Session.Runtime;
+
+    internal void Destroy()
+    {
+        Session.Lights?.Dispose();
+        // Free, not QueueFree: the harness runs to completion inside one _Ready call, so a queued
+        // free would only happen after every suite had already built its own world.
+        Stage.Free();
+    }
+}
+
+/// <summary>
+/// What a suite is handed: the resolved data paths, the assertion verbs, a scene-tree host, and
+/// the chapter-world builder. Every assertion and note goes through the <c>test</c> category of
+/// <see cref="Log"/>, so the full-detail file sink records the whole run whatever the console
+/// filter is.
+/// </summary>
+public sealed class TestContext
+{
+    internal readonly List<string> Failures = new();
+    internal readonly List<string> Notes = new();
+    internal readonly Dictionary<string, long> Counts = new();
+
+    private readonly Dictionary<string, TestWorld> _worlds = new();
+
+    public required string RepoRoot { get; init; }
+    public required string DataRoot { get; init; }
+    public required string Chapter { get; init; }
+    public required string Mission { get; init; }
+    public required string ZrdrPath { get; init; }
+    public required string MessagesPath { get; init; }
+    public required string PlanesGamezPath { get; init; }
+    public required string InterpPath { get; init; }
+    public required string SoundsPath { get; init; }
+    public required string PlaneName { get; init; }
+    public required bool Mute { get; init; }
+
+    /// <summary><c>--loadout=&lt;def&gt;</c>: bind every plane to that def instead of its own. A
+    /// cross-binding control — passing a def whose markers the airframe does not carry is how the
+    /// <c>loadout-bind</c> suite is shown able to fail on real bad input rather than a planted
+    /// assertion.</summary>
+    public string? LoadoutOverride { get; init; }
+
+    /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
+    /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
+    public required Node3D Host { get; init; }
+
+    /// <summary>The session camera. PLAYER_RANGE conditions and the sound listener measure from it,
+    /// exactly as an interactive session's do.</summary>
+    public required Camera3D Camera { get; init; }
+
+    /// <summary>The scratch directory every artifact this run writes must stay inside.</summary>
+    public string ScratchDir => Path.Combine(RepoRoot, ".scratch");
+
+    /// <summary>Records a check. A false verdict fails the suite but does not stop it — the rest of
+    /// the checks still run, so one report names every broken thing rather than the first.</summary>
+    public void Check(bool ok, FormattableString what)
+    {
+        string text = Log.Format(what);
+        if (ok)
+        {
+            Log.Debug("test", $"ok {text}");
+            return;
+        }
+        Failures.Add(text);
+        Log.Error("test", $"FAIL {text}");
+    }
+
+    /// <summary>A check on a count, phrased so the failure line carries both numbers.</summary>
+    public void Same(long expected, long actual, FormattableString what)
+    {
+        Counts[Log.Format(what)] = actual;
+        Check(expected == actual, $"{Log.Format(what)} expected={expected} actual={actual}");
+    }
+
+    /// <summary>Something worth having in the report that is not a verdict — a measured count, a
+    /// caveat about what this run could not see.</summary>
+    public void Note(FormattableString what)
+    {
+        string text = Log.Format(what);
+        Notes.Add(text);
+        Log.Info("test", $"note {text}");
+    }
+
+    /// <summary>Ends the suite as SKIP when an input the suite needs is not on disk. Skipped is
+    /// reported distinctly from passed, so an empty data root cannot read as a green run.</summary>
+    public void RequireData(string path, FormattableString what)
+    {
+        if (!File.Exists(path) && !Directory.Exists(path))
+        {
+            throw new SuiteSkippedException($"{Log.Format(what)} not found: {path}");
+        }
+    }
+
+    /// <summary>Leaves a suite's full report in the scratch folder, so a failure is diagnosable
+    /// without re-running the equivalent <c>--dump-*</c> tool by hand. Absolute path, inside
+    /// <c>.scratch/</c> — the only place a suite may write.</summary>
+    public void WriteArtifact(string fileName, string text)
+    {
+        Directory.CreateDirectory(ScratchDir);
+        string path = Path.Combine(ScratchDir, fileName);
+        File.WriteAllText(path, text);
+        Log.Info("test", $"artifact file={path}");
+    }
+
+    /// <summary>Builds (or reuses) a chapter world and runs <paramref name="body"/> against it. The
+    /// run's own chapter is cached because several suites want it; any other chapter is freed as
+    /// soon as the body returns, so a per-chapter census does not hold eight worlds at once.
+    ///
+    /// <para>The world subtree is in the scene tree with <see cref="AnimRuntime.ManualAdvance"/>
+    /// set, which is the pair a suite ticking the clock needs: an out-of-tree global-transform read
+    /// returns identity, and <c>_Process</c> must not also drive the runtime.</para></summary>
+    public void WithWorld(string chapter, bool collision, Action<TestWorld> body)
+    {
+        if (_worlds.TryGetValue(chapter, out var cached))
+        {
+            if (!collision || cached.Collision)
+            {
+                body(cached);
+                return;
+            }
+            _worlds.Remove(chapter);
+            cached.Destroy();
+        }
+        var world = BuildWorld(chapter, collision);
+        if (chapter == Chapter)
+        {
+            _worlds[chapter] = world;
+            body(world);
+            return;
+        }
+        try
+        {
+            body(world);
+        }
+        finally
+        {
+            world.Destroy();
+        }
+    }
+
+    internal void ReleaseWorlds()
+    {
+        foreach (var w in _worlds.Values)
+        {
+            w.Destroy();
+        }
+        _worlds.Clear();
+    }
+
+    private TestWorld BuildWorld(string chapter, bool collision)
+    {
+        string gamezPath = SessionPaths.ChapterGamez(DataRoot, chapter);
+        string texturesPath = SessionPaths.ChapterTextures(DataRoot, chapter);
+        RequireData(gamezPath, $"chapter {chapter} gamez");
+        RequireData(texturesPath, $"chapter {chapter} textures");
+
+        var stage = new Node3D { Name = $"TestWorld_{chapter}" };
+        Host.AddChild(stage);
+        var gamez = GameZ.Load(gamezPath);
+        // The archives are this scope's: WorldSession clears the puffer factory and the sound
+        // loader after its bootstrap precisely so they can close here.
+        using var textures = new TextureArchive(texturesPath);
+        bool haveSounds = !Mute && (File.Exists(SoundsPath) || Directory.Exists(SoundsPath));
+        using var sounds = haveSounds ? new SoundArchive(SoundsPath) : null;
+        var soundDefs = haveSounds ? SoundDefs.Load(ZrdrPath) : null;
+        var soundGroups = haveSounds ? SoundDefs.LoadGroups(ZrdrPath) : null;
+
+        var session = WorldSession.Build(
+            new WorldSession.Options
+            {
+                DataRoot = DataRoot,
+                Chapter = chapter,
+                Mission = Mission,
+                ZrdrPath = ZrdrPath,
+                InterpPath = InterpPath,
+                MissionZrdrPath = SessionPaths.MissionZrdr(DataRoot, chapter, Mission),
+                EffectsParent = stage,
+                PlayerPosition = () => Camera.GlobalPosition,
+                Collision = collision,
+                RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
+            },
+            gamez, textures, sounds, soundDefs, soundGroups);
+        stage.AddChild(session.Root);
+        session.Runtime.ManualAdvance = true;
+        return new TestWorld
+        {
+            Chapter = chapter,
+            Collision = collision,
+            Session = session,
+            Stage = stage,
+        };
+    }
+}
+
+/// <summary>One suite's verdict, as it reaches the table and the JSON report.</summary>
+public sealed class SuiteResult
+{
+    public required string Name { get; init; }
+    public required SuiteStatus Status { get; init; }
+    public required double Seconds { get; init; }
+    public string Detail { get; init; } = "";
+    public IReadOnlyList<string> Failures { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> Notes { get; init; } = Array.Empty<string>();
+    public IReadOnlyDictionary<string, long> Counts { get; init; } = new Dictionary<string, long>();
+}
+
+/// <summary>A native engine error the run is known to emit and that no suite here caused. Each
+/// carries a cap, so the same message appearing MORE often than measured still fails — an
+/// allowlist that swallowed an unbounded count would hide the next regression in the shape of an
+/// old one.</summary>
+public sealed record ErrorAllowance(string Pattern, int Max, string Why);
+
+/// <summary>The result of screening a run's engine log for error lines.</summary>
+public sealed class StderrScreen
+{
+    public int Total { get; init; }
+    public int Allowed { get; init; }
+    public IReadOnlyList<string> Unexpected { get; init; } = Array.Empty<string>();
+    public IReadOnlyList<string> OverCap { get; init; } = Array.Empty<string>();
+
+    /// <summary>How often each allowlisted pattern actually fired. Reported even when the screen
+    /// passes: an allowlist entry whose count is invisible is exactly how a new error hides inside
+    /// an old one's shape.</summary>
+    public IReadOnlyDictionary<string, int> AllowedCounts { get; init; } = new Dictionary<string, int>();
+
+    public bool Ok => Unexpected.Count == 0 && OverCap.Count == 0;
+}
+

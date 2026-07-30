@@ -36,23 +36,6 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class WeaponLab : Node3D
 {
-    /// <summary>A place on the parked plane a weapon fires from: a named gun group / a pylon / the
-    /// synthetic "all" volley. <see cref="Nodes"/> are the live muzzle <see cref="Node3D"/>s;
-    /// <see cref="Cli"/> is the <c>--weapon-mount=</c> token (<c>all</c>, <c>g1</c>, <c>pylon1</c>).</summary>
-    private readonly struct Mount
-    {
-        public readonly string Label;
-        public readonly string Cli;
-        public readonly IReadOnlyList<Node3D> Nodes;
-
-        public Mount(string label, string cli, IReadOnlyList<Node3D> nodes)
-        {
-            Label = label;
-            Cli = cli;
-            Nodes = nodes;
-        }
-    }
-
     private const int Guns = 0;
     private const int Hardpoints = 1;
 
@@ -76,10 +59,6 @@ public sealed partial class WeaponLab : Node3D
     private readonly List<Mount> _pylonMounts = new();
 
     private ProjectilePool _pool = null!;
-
-    /// <summary>The lab's own projectile pool, a child of this node — so a session driving the
-    /// sim explicitly can step it right after this node, keeping the tree order.</summary>
-    public ProjectilePool Pool => _pool;
 
     private StaticBody3D _target = null!;
     private MeshInstance3D _targetMesh = null!;
@@ -114,20 +93,6 @@ public sealed partial class WeaponLab : Node3D
     private CheckButton _targetToggle = null!;
     private bool _suppress; // set while rewriting widgets from a state change
 
-    /// <summary><c>--weapon-lab</c>: open the panel at launch (hidden by default so an unadorned
-    /// <c>--viewer</c> screenshot is byte-identical).</summary>
-    public bool DebugShow { get; init; }
-
-    /// <summary><c>--weapon-lab=&lt;wep_id&gt;</c>: the weapon selected at launch (sets the bank).</summary>
-    public string? InitialWeapon { get; init; }
-
-    /// <summary><c>--weapon-mount=&lt;name&gt;</c>: the mount selected at launch.</summary>
-    public string? InitialMount { get; init; }
-
-    /// <summary><c>--weapon-fire</c>: start auto-firing (engages the lab even with the panel hidden,
-    /// so <c>--weapon-fire --screenshot</c> captures tracers/impact without the overlay).</summary>
-    public bool AutoFireAtStart { get; init; }
-
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout,
         TextureArchive textures, Camera3D camera, string planeModel)
     {
@@ -147,6 +112,28 @@ public sealed partial class WeaponLab : Node3D
         BuildScene();
     }
 
+    /// <summary>The lab's own projectile pool, a child of this node — so a session driving the
+    /// sim explicitly can step it right after this node, keeping the tree order.</summary>
+    public ProjectilePool Pool => _pool;
+
+    /// <summary><c>--weapon-lab</c>: open the panel at launch (hidden by default so an unadorned
+    /// <c>--viewer</c> screenshot is byte-identical).</summary>
+    public bool DebugShow { get; init; }
+
+    /// <summary><c>--weapon-lab=&lt;wep_id&gt;</c>: the weapon selected at launch (sets the bank).</summary>
+    public string? InitialWeapon { get; init; }
+
+    /// <summary><c>--weapon-mount=&lt;name&gt;</c>: the mount selected at launch.</summary>
+    public string? InitialMount { get; init; }
+
+    /// <summary><c>--weapon-fire</c>: start auto-firing (engages the lab even with the panel hidden,
+    /// so <c>--weapon-fire --screenshot</c> captures tracers/impact without the overlay).</summary>
+    public bool AutoFireAtStart { get; init; }
+
+    private List<WeaponDef> BankWeapons => _bank == Guns ? _gunWeapons : _rocketWeapons;
+    private List<Mount> BankMounts => _bank == Guns ? _gunMounts : _pylonMounts;
+    private WeaponDef? SelectedWeapon => _weaponIndex < BankWeapons.Count ? BankWeapons[_weaponIndex] : null;
+
     public override void _Ready()
     {
         _pool.Listener = _camera;
@@ -158,231 +145,6 @@ public sealed partial class WeaponLab : Node3D
         PlaceTarget();
         SyncState();
     }
-
-    // ---- weapon + mount resolution -----------------------------------------------------------
-
-    private List<WeaponDef> BankWeapons => _bank == Guns ? _gunWeapons : _rocketWeapons;
-    private List<Mount> BankMounts => _bank == Guns ? _gunMounts : _pylonMounts;
-    private WeaponDef? SelectedWeapon => _weaponIndex < BankWeapons.Count ? BankWeapons[_weaponIndex] : null;
-
-    /// <summary>Builds the two mount banks from the plane's stock loadout: the named gun groups
-    /// (their resolved muzzle firepoints) for guns, the pylons for hardpoints — each with an "all"
-    /// volley first. Falls back to the raw firepoint/pylon markers when no loadout is bound.</summary>
-    private void BuildMounts(Loadout? loadout)
-    {
-        if (loadout != null && loadout.Guns.Count > 0)
-        {
-            var allGuns = new List<Node3D>();
-            foreach (var g in loadout.Guns)
-            {
-                allGuns.AddRange(g.Muzzles);
-            }
-            if (allGuns.Count > 0)
-            {
-                _gunMounts.Add(new Mount("all gun groups", "all", allGuns));
-            }
-            foreach (var g in loadout.Guns)
-            {
-                string label = g.IsTurret ? $"{g.Mount} (turret)" : g.Mount;
-                _gunMounts.Add(new Mount(label, $"g{g.Slot}", g.Muzzles));
-            }
-        }
-        if (loadout != null && loadout.Hardpoints.Count > 0)
-        {
-            var allPylons = new List<Node3D>();
-            foreach (var h in loadout.Hardpoints)
-            {
-                allPylons.Add(h.Pylon);
-            }
-            _pylonMounts.Add(new Mount($"all pylons ({allPylons.Count})", "all", allPylons));
-            foreach (var h in loadout.Hardpoints)
-            {
-                _pylonMounts.Add(new Mount($"pylon{h.Index}", $"pylon{h.Index}", new[] { h.Pylon }));
-            }
-        }
-        // No loadout (or a plane the table omits): fall back to the raw marker rig so W still works.
-        if (_gunMounts.Count == 0 || _pylonMounts.Count == 0)
-        {
-            CollectRawMarkers(_plane, out var fps, out var pylons);
-            if (_gunMounts.Count == 0 && fps.Count > 0)
-            {
-                var all = new List<Node3D>();
-                foreach (var (_, node) in fps)
-                {
-                    all.Add(node);
-                }
-                _gunMounts.Add(new Mount($"all firepoints ({all.Count})", "all", all));
-                foreach (var (ord, node) in fps)
-                {
-                    _gunMounts.Add(new Mount($"firepoint{ord}", $"firepoint{ord}", new[] { node }));
-                }
-            }
-            if (_pylonMounts.Count == 0 && pylons.Count > 0)
-            {
-                var all = new List<Node3D>();
-                foreach (var (_, node) in pylons)
-                {
-                    all.Add(node);
-                }
-                _pylonMounts.Add(new Mount($"all pylons ({all.Count})", "all", all));
-                foreach (var (ord, node) in pylons)
-                {
-                    _pylonMounts.Add(new Mount($"pylon{ord}", $"pylon{ord}", new[] { node }));
-                }
-            }
-        }
-    }
-
-    /// <summary>The raw firepoint/pylon marker nodes, each with its ordinal, sorted — the
-    /// no-loadout fallback for a plane the stock table omits.</summary>
-    private static void CollectRawMarkers(Node3D plane,
-        out List<(int Ord, Node3D Node)> firepoints, out List<(int Ord, Node3D Node)> pylons)
-    {
-        var fp = new List<(int, Node3D)>();
-        var py = new List<(int, Node3D)>();
-        void Walk(Node node)
-        {
-            foreach (var child in node.GetChildren())
-            {
-                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
-                    && MarkerRig.Classify(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), out var kind, out int ord))
-                {
-                    if (kind == MarkerRig.MarkerKind.Firepoint)
-                    {
-                        fp.Add((ord, n3d));
-                    }
-                    else if (kind == MarkerRig.MarkerKind.Pylon)
-                    {
-                        py.Add((ord, n3d));
-                    }
-                }
-                Walk(child);
-            }
-        }
-        Walk(plane);
-        fp.Sort(static (a, b) => a.Item1.CompareTo(b.Item1));
-        py.Sort(static (a, b) => a.Item1.CompareTo(b.Item1));
-        firepoints = fp;
-        pylons = py;
-    }
-
-    private void ResolveInitialSelection()
-    {
-        if (InitialWeapon != null)
-        {
-            int gi = IndexOfWeapon(_gunWeapons, InitialWeapon);
-            int ri = IndexOfWeapon(_rocketWeapons, InitialWeapon);
-            if (gi >= 0)
-            {
-                _bank = Guns;
-                _weaponIndex = gi;
-            }
-            else if (ri >= 0)
-            {
-                _bank = Hardpoints;
-                _weaponIndex = ri;
-            }
-            else
-            {
-                GD.Print($"weapon lab: --weapon-lab names unknown weapon '{InitialWeapon}'");
-            }
-        }
-        if (InitialMount != null)
-        {
-            var mounts = BankMounts;
-            for (int i = 0; i < mounts.Count; i++)
-            {
-                if (string.Equals(mounts[i].Cli, InitialMount, StringComparison.OrdinalIgnoreCase))
-                {
-                    _mountIndex = i;
-                    break;
-                }
-            }
-        }
-    }
-
-    private static int IndexOfWeapon(List<WeaponDef> list, string id)
-    {
-        for (int i = 0; i < list.Count; i++)
-        {
-            if (string.Equals(list[i].Id, id, StringComparison.OrdinalIgnoreCase))
-            {
-                return i;
-            }
-        }
-        return -1;
-    }
-
-    // ---- scene (pool + target) ---------------------------------------------------------------
-
-    private void BuildScene()
-    {
-        // No world scene: rockets fly streak-only, gun impacts show the spark, hardpoint impacts show
-        // the pool's explosion stand-in (no real puffer runtime), and there is no DamageSink.
-        _pool = new ProjectilePool(_textures, null, null);
-        AddChild(_pool);
-
-        var shape = new BoxShape3D { Size = new Vector3(TargetSize, TargetSize, 0.5f) };
-        _target = new StaticBody3D { Name = "weapon_target", Visible = false };
-        _target.AddChild(new CollisionShape3D { Shape = shape });
-        _targetMat = new StandardMaterial3D
-        {
-            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-            AlbedoColor = SurfaceColor(_surfaceIndex),
-        };
-        _targetMesh = new MeshInstance3D
-        {
-            Mesh = new BoxMesh { Size = new Vector3(TargetSize, TargetSize, 0.5f) },
-            MaterialOverride = _targetMat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-        };
-        _target.AddChild(_targetMesh);
-        AddChild(_target);
-        ApplySurfaceTag();
-    }
-
-    /// <summary>Parks the target wall <see cref="_targetDist"/> metres ahead of the plane's nose
-    /// (plane frame is nose −Z), broad face square to the fire direction. Requires the lab to be in
-    /// the tree (reads the plane's global transform).</summary>
-    private void PlaceTarget()
-    {
-        if (!IsInsideTree())
-        {
-            return;
-        }
-        var xf = _plane.GlobalTransform;
-        var forward = -xf.Basis.Z.Normalized();
-        var up = Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
-        var pos = xf.Origin + forward * _targetDist;
-        // LookingAt aims local −Z along the argument; −forward points the box's local +Z back down
-        // the fire direction, so its broad face is square to the incoming rounds.
-        _target.GlobalTransform = new Transform3D(Basis.LookingAt(-forward, up), pos);
-    }
-
-    private void ApplySurfaceTag()
-    {
-        string surface = SurfaceNames[_surfaceIndex];
-        if (surface == "default")
-        {
-            if (_target.HasMeta(SceneBuilder.SurfaceMeta))
-            {
-                _target.RemoveMeta(SceneBuilder.SurfaceMeta);
-            }
-        }
-        else
-        {
-            _target.SetMeta(SceneBuilder.SurfaceMeta, surface);
-        }
-        _targetMat.AlbedoColor = SurfaceColor(_surfaceIndex);
-    }
-
-    private static Color SurfaceColor(int index) => index switch
-    {
-        1 => new Color(0.3f, 0.55f, 0.85f, 0.4f),  // water
-        2 => new Color(0.6f, 0.5f, 0.4f, 0.5f),    // buildings
-        _ => new Color(0.6f, 0.6f, 0.62f, 0.4f),   // default
-    };
 
     // ---- firing ------------------------------------------------------------------------------
 
@@ -422,32 +184,6 @@ public sealed partial class WeaponLab : Node3D
             _fireAccum -= interval;
             FireVolley();
         }
-    }
-
-    /// <summary>Fires one round of the selected weapon from each muzzle of the selected mount, from a
-    /// standstill (no inherited velocity — the plane is parked).</summary>
-    private void FireVolley()
-    {
-        if (SelectedWeapon is not { } w || BankMounts.Count == 0)
-        {
-            return;
-        }
-        foreach (var n in BankMounts[_mountIndex].Nodes)
-        {
-            _pool.Spawn(w, n.GlobalTransform, Vector3.Zero);
-        }
-    }
-
-    /// <summary>The self-test's verdict: the report text plus the counts a suite asserts on.
-    /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
-    /// no mount on this plane never fires and nothing else would notice.</summary>
-    public sealed class SelfTestResult
-    {
-        public required string Report { get; init; }
-        public required int Total { get; init; }
-        public required int Ok { get; init; }
-        public required int Errors { get; init; }
-        public required int Skipped { get; init; }
     }
 
     /// <summary>Mounts and fires every one of the 48 weapons once — each from a mount of its own
@@ -524,53 +260,61 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    // ---- panel + state -----------------------------------------------------------------------
+    // ---- weapon + mount resolution -----------------------------------------------------------
 
-    private void SetPanel(bool on)
+    /// <summary>The raw firepoint/pylon marker nodes, each with its ordinal, sorted — the
+    /// no-loadout fallback for a plane the stock table omits.</summary>
+    private static void CollectRawMarkers(Node3D plane,
+        out List<(int Ord, Node3D Node)> firepoints, out List<(int Ord, Node3D Node)> pylons)
     {
-        _panel = on;
-        _engaged = on;
-        if (!on)
+        var fp = new List<(int, Node3D)>();
+        var py = new List<(int, Node3D)>();
+        void Walk(Node node)
         {
-            _spaceHeld = false;
-            _pool.Clear(); // no tracers hang in the air once the lab is put away
+            foreach (var child in node.GetChildren())
+            {
+                if (child is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta)
+                    && MarkerRig.Classify(n3d.GetMeta(AnimRuntime.NameMeta).AsString(), out var kind, out int ord))
+                {
+                    if (kind == MarkerRig.MarkerKind.Firepoint)
+                    {
+                        fp.Add((ord, n3d));
+                    }
+                    else if (kind == MarkerRig.MarkerKind.Pylon)
+                    {
+                        py.Add((ord, n3d));
+                    }
+                }
+                Walk(child);
+            }
         }
-        SyncState();
+        Walk(plane);
+        fp.Sort(static (a, b) => a.Item1.CompareTo(b.Item1));
+        py.Sort(static (a, b) => a.Item1.CompareTo(b.Item1));
+        firepoints = fp;
+        pylons = py;
     }
 
-    /// <summary>Pushes the current state onto the visuals + widgets: panel visibility, target
-    /// visibility, and every readout/toggle.</summary>
-    private void SyncState()
+    private static int IndexOfWeapon(List<WeaponDef> list, string id)
     {
-        _suppress = true;
-        _ui.Visible = _panel;
-        _target.Visible = _engaged && _showTarget;
-
-        _bankLabel.Text = _bank == Guns
-            ? $"bank: GUNS  ({_gunWeapons.Count})"
-            : $"bank: HARDPOINTS  ({_rocketWeapons.Count})";
-        if (SelectedWeapon is { } w)
+        for (int i = 0; i < list.Count; i++)
         {
-            string kind = w.IsRocket ? "ROCKET" : w.IsGun ? "GUN" : "SPECIAL";
-            _weaponLabel.Text = $"{w.Id}  {w.Name}  [{kind}]   [{_weaponIndex + 1}/{BankWeapons.Count}]";
-            _weaponDetail.Text = WeaponSummary(w);
+            if (string.Equals(list[i].Id, id, StringComparison.OrdinalIgnoreCase))
+            {
+                return i;
+            }
         }
-        else
-        {
-            _weaponLabel.Text = "(no weapon)";
-            _weaponDetail.Text = "";
-        }
-        var mounts = BankMounts;
-        _mountLabel.Text = mounts.Count > 0
-            ? $"{mounts[_mountIndex].Label}   [{_mountIndex + 1}/{mounts.Count}]"
-            : (_bank == Guns ? "(no gun groups)" : "(no pylons)");
-        _surfaceLabel.Text = $"target surface: {SurfaceNames[_surfaceIndex]}";
-        _targetLabel.Text = $"target {(_showTarget ? "on" : "off")} @ {_targetDist:0} m";
-        _autoFireToggle.ButtonPressed = _autoFire;
-        _targetToggle.ButtonPressed = _showTarget;
-        _cliLabel.Text = CliArgs();
-        _suppress = false;
+        return -1;
     }
+
+    // ---- scene (pool + target) ---------------------------------------------------------------
+
+    private static Color SurfaceColor(int index) => index switch
+    {
+        1 => new Color(0.3f, 0.55f, 0.85f, 0.4f),  // water
+        2 => new Color(0.6f, 0.5f, 0.4f, 0.5f),    // buildings
+        _ => new Color(0.6f, 0.6f, 0.62f, 0.4f),   // default
+    };
 
     // Decimals are formatted invariantly (a dot, never a locale comma), like the dump tools.
     private static string F(float v) => v.ToString("0.#", CultureInfo.InvariantCulture);
@@ -619,6 +363,253 @@ public sealed partial class WeaponLab : Node3D
             }
         }
         return string.Join(" · ", parts);
+    }
+
+    // ---- ui -----------------------------------------------------------------------------------
+
+    private static Button StepButton(string text, Action pressed)
+    {
+        var b = new Button { Text = text, CustomMinimumSize = new Vector2(28, 0) };
+        b.Pressed += pressed;
+        return b;
+    }
+
+    private static HSeparator Separator() => new();
+
+    private static Label Small(string text)
+    {
+        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
+        label.AddThemeFontSizeOverride("font_size", 11);
+        return label;
+    }
+
+    private static string Trim(string s, int n) => s.Length <= n ? s : s[..n];
+
+    /// <summary>Builds the two mount banks from the plane's stock loadout: the named gun groups
+    /// (their resolved muzzle firepoints) for guns, the pylons for hardpoints — each with an "all"
+    /// volley first. Falls back to the raw firepoint/pylon markers when no loadout is bound.</summary>
+    private void BuildMounts(Loadout? loadout)
+    {
+        if (loadout != null && loadout.Guns.Count > 0)
+        {
+            var allGuns = new List<Node3D>();
+            foreach (var g in loadout.Guns)
+            {
+                allGuns.AddRange(g.Muzzles);
+            }
+            if (allGuns.Count > 0)
+            {
+                _gunMounts.Add(new Mount("all gun groups", "all", allGuns));
+            }
+            foreach (var g in loadout.Guns)
+            {
+                string label = g.IsTurret ? $"{g.Mount} (turret)" : g.Mount;
+                _gunMounts.Add(new Mount(label, $"g{g.Slot}", g.Muzzles));
+            }
+        }
+        if (loadout != null && loadout.Hardpoints.Count > 0)
+        {
+            var allPylons = new List<Node3D>();
+            foreach (var h in loadout.Hardpoints)
+            {
+                allPylons.Add(h.Pylon);
+            }
+            _pylonMounts.Add(new Mount($"all pylons ({allPylons.Count})", "all", allPylons));
+            foreach (var h in loadout.Hardpoints)
+            {
+                _pylonMounts.Add(new Mount($"pylon{h.Index}", $"pylon{h.Index}", new[] { h.Pylon }));
+            }
+        }
+        // No loadout (or a plane the table omits): fall back to the raw marker rig so W still works.
+        if (_gunMounts.Count == 0 || _pylonMounts.Count == 0)
+        {
+            CollectRawMarkers(_plane, out var fps, out var pylons);
+            if (_gunMounts.Count == 0 && fps.Count > 0)
+            {
+                var all = new List<Node3D>();
+                foreach (var (_, node) in fps)
+                {
+                    all.Add(node);
+                }
+                _gunMounts.Add(new Mount($"all firepoints ({all.Count})", "all", all));
+                foreach (var (ord, node) in fps)
+                {
+                    _gunMounts.Add(new Mount($"firepoint{ord}", $"firepoint{ord}", new[] { node }));
+                }
+            }
+            if (_pylonMounts.Count == 0 && pylons.Count > 0)
+            {
+                var all = new List<Node3D>();
+                foreach (var (_, node) in pylons)
+                {
+                    all.Add(node);
+                }
+                _pylonMounts.Add(new Mount($"all pylons ({all.Count})", "all", all));
+                foreach (var (ord, node) in pylons)
+                {
+                    _pylonMounts.Add(new Mount($"pylon{ord}", $"pylon{ord}", new[] { node }));
+                }
+            }
+        }
+    }
+
+    private void ResolveInitialSelection()
+    {
+        if (InitialWeapon != null)
+        {
+            int gi = IndexOfWeapon(_gunWeapons, InitialWeapon);
+            int ri = IndexOfWeapon(_rocketWeapons, InitialWeapon);
+            if (gi >= 0)
+            {
+                _bank = Guns;
+                _weaponIndex = gi;
+            }
+            else if (ri >= 0)
+            {
+                _bank = Hardpoints;
+                _weaponIndex = ri;
+            }
+            else
+            {
+                GD.Print($"weapon lab: --weapon-lab names unknown weapon '{InitialWeapon}'");
+            }
+        }
+        if (InitialMount != null)
+        {
+            var mounts = BankMounts;
+            for (int i = 0; i < mounts.Count; i++)
+            {
+                if (string.Equals(mounts[i].Cli, InitialMount, StringComparison.OrdinalIgnoreCase))
+                {
+                    _mountIndex = i;
+                    break;
+                }
+            }
+        }
+    }
+
+    private void BuildScene()
+    {
+        // No world scene: rockets fly streak-only, gun impacts show the spark, hardpoint impacts show
+        // the pool's explosion stand-in (no real puffer runtime), and there is no DamageSink.
+        _pool = new ProjectilePool(_textures, null, null);
+        AddChild(_pool);
+
+        var shape = new BoxShape3D { Size = new Vector3(TargetSize, TargetSize, 0.5f) };
+        _target = new StaticBody3D { Name = "weapon_target", Visible = false };
+        _target.AddChild(new CollisionShape3D { Shape = shape });
+        _targetMat = new StandardMaterial3D
+        {
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+            AlbedoColor = SurfaceColor(_surfaceIndex),
+        };
+        _targetMesh = new MeshInstance3D
+        {
+            Mesh = new BoxMesh { Size = new Vector3(TargetSize, TargetSize, 0.5f) },
+            MaterialOverride = _targetMat,
+            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+        };
+        _target.AddChild(_targetMesh);
+        AddChild(_target);
+        ApplySurfaceTag();
+    }
+
+    /// <summary>Parks the target wall <see cref="_targetDist"/> metres ahead of the plane's nose
+    /// (plane frame is nose −Z), broad face square to the fire direction. Requires the lab to be in
+    /// the tree (reads the plane's global transform).</summary>
+    private void PlaceTarget()
+    {
+        if (!IsInsideTree())
+        {
+            return;
+        }
+        var xf = _plane.GlobalTransform;
+        var forward = -xf.Basis.Z.Normalized();
+        var up = Mathf.Abs(forward.Dot(Vector3.Up)) > 0.99f ? Vector3.Right : Vector3.Up;
+        var pos = xf.Origin + forward * _targetDist;
+        // LookingAt aims local −Z along the argument; −forward points the box's local +Z back down
+        // the fire direction, so its broad face is square to the incoming rounds.
+        _target.GlobalTransform = new Transform3D(Basis.LookingAt(-forward, up), pos);
+    }
+
+    private void ApplySurfaceTag()
+    {
+        string surface = SurfaceNames[_surfaceIndex];
+        if (surface == "default")
+        {
+            if (_target.HasMeta(SceneBuilder.SurfaceMeta))
+            {
+                _target.RemoveMeta(SceneBuilder.SurfaceMeta);
+            }
+        }
+        else
+        {
+            _target.SetMeta(SceneBuilder.SurfaceMeta, surface);
+        }
+        _targetMat.AlbedoColor = SurfaceColor(_surfaceIndex);
+    }
+
+    /// <summary>Fires one round of the selected weapon from each muzzle of the selected mount, from a
+    /// standstill (no inherited velocity — the plane is parked).</summary>
+    private void FireVolley()
+    {
+        if (SelectedWeapon is not { } w || BankMounts.Count == 0)
+        {
+            return;
+        }
+        foreach (var n in BankMounts[_mountIndex].Nodes)
+        {
+            _pool.Spawn(w, n.GlobalTransform, Vector3.Zero);
+        }
+    }
+
+    // ---- panel + state -----------------------------------------------------------------------
+
+    private void SetPanel(bool on)
+    {
+        _panel = on;
+        _engaged = on;
+        if (!on)
+        {
+            _spaceHeld = false;
+            _pool.Clear(); // no tracers hang in the air once the lab is put away
+        }
+        SyncState();
+    }
+
+    /// <summary>Pushes the current state onto the visuals + widgets: panel visibility, target
+    /// visibility, and every readout/toggle.</summary>
+    private void SyncState()
+    {
+        _suppress = true;
+        _ui.Visible = _panel;
+        _target.Visible = _engaged && _showTarget;
+
+        _bankLabel.Text = _bank == Guns
+            ? $"bank: GUNS  ({_gunWeapons.Count})"
+            : $"bank: HARDPOINTS  ({_rocketWeapons.Count})";
+        if (SelectedWeapon is { } w)
+        {
+            string kind = w.IsRocket ? "ROCKET" : w.IsGun ? "GUN" : "SPECIAL";
+            _weaponLabel.Text = $"{w.Id}  {w.Name}  [{kind}]   [{_weaponIndex + 1}/{BankWeapons.Count}]";
+            _weaponDetail.Text = WeaponSummary(w);
+        }
+        else
+        {
+            _weaponLabel.Text = "(no weapon)";
+            _weaponDetail.Text = "";
+        }
+        var mounts = BankMounts;
+        _mountLabel.Text = mounts.Count > 0
+            ? $"{mounts[_mountIndex].Label}   [{_mountIndex + 1}/{mounts.Count}]"
+            : (_bank == Guns ? "(no gun groups)" : "(no pylons)");
+        _surfaceLabel.Text = $"target surface: {SurfaceNames[_surfaceIndex]}";
+        _targetLabel.Text = $"target {(_showTarget ? "on" : "off")} @ {_targetDist:0} m";
+        _autoFireToggle.ButtonPressed = _autoFire;
+        _targetToggle.ButtonPressed = _showTarget;
+        _cliLabel.Text = CliArgs();
+        _suppress = false;
     }
 
     /// <summary>The arguments that reproduce this selection — the lab's output. The bank is implied
@@ -695,8 +686,6 @@ public sealed partial class WeaponLab : Node3D
         _fireAccum = 0f;
         _wasFiring = false;
     }
-
-    // ---- ui ----------------------------------------------------------------------------------
 
     private void BuildUi()
     {
@@ -841,21 +830,32 @@ public sealed partial class WeaponLab : Node3D
         AddChild(_ui);
     }
 
-    private static Button StepButton(string text, Action pressed)
+    /// <summary>A place on the parked plane a weapon fires from: a named gun group / a pylon / the
+    /// synthetic "all" volley. <see cref="Nodes"/> are the live muzzle <see cref="Node3D"/>s;
+    /// <see cref="Cli"/> is the <c>--weapon-mount=</c> token (<c>all</c>, <c>g1</c>, <c>pylon1</c>).</summary>
+    private readonly struct Mount
     {
-        var b = new Button { Text = text, CustomMinimumSize = new Vector2(28, 0) };
-        b.Pressed += pressed;
-        return b;
+        public readonly string Label;
+        public readonly string Cli;
+        public readonly IReadOnlyList<Node3D> Nodes;
+
+        public Mount(string label, string cli, IReadOnlyList<Node3D> nodes)
+        {
+            Label = label;
+            Cli = cli;
+            Nodes = nodes;
+        }
     }
 
-    private static HSeparator Separator() => new();
-
-    private static Label Small(string text)
+    /// <summary>The self-test's verdict: the report text plus the counts a suite asserts on.
+    /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
+    /// no mount on this plane never fires and nothing else would notice.</summary>
+    public sealed class SelfTestResult
     {
-        var label = new Label { Text = text, Modulate = new Color(1, 1, 1, 0.65f) };
-        label.AddThemeFontSizeOverride("font_size", 11);
-        return label;
+        public required string Report { get; init; }
+        public required int Total { get; init; }
+        public required int Ok { get; init; }
+        public required int Errors { get; init; }
+        public required int Skipped { get; init; }
     }
-
-    private static string Trim(string s, int n) => s.Length <= n ? s : s[..n];
 }
