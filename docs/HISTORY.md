@@ -7908,3 +7908,18 @@ earlier numbering — resolve by content.)
 Verified: 122 IDs defined and every cross-reference in the repo resolves against them (two
 scripted sweeps: no `rule N` left in living files, no cited ID undefined), and `.\RunTests.ps1`
 PASS — 293 units, 9/9 suites, 11/11 goldens hash-identical, exit 0.
+
+**PLAN-planeviewer-split A1 landed (2026-07-30): probe/dump wrappers → `src/Testing/ProbeRunner.cs`.**
+`DumpMarkers`/`DumpWeapons`/`DumpFlight`/`DumpLoadout`/`RunTestSuites`/`RunEffectsTest`/
+`RunDamageTest`/`TriggerDestroy`/`ApplyRocketOverride`/`WriteScratch` moved off `PlaneViewer` verbatim
+into a new `ProbeRunner` class, constructed once in `_Ready` (`_probeRunner`) after the base paths
+settle; every call site is a one-line delegation. Each method takes the caller's current
+`SessionSpec` as a parameter rather than storing one, since a menu launch can swap `_spec` between
+calls. The two methods entangled with node state (`RunTestSuites`, `RunEffectsTest`) take the
+camera/host node/effect-name table as parameters instead of holding a back-reference to
+`PlaneViewer` — `RunTestSuites` now returns the exit code and hands back the `GameClock` it created
+via `out` so `PlaneViewer` still owns `_clock` and the `GetTree().Quit()` call. Pure move, no
+behavior reorder. Verified: `.\RunTests.ps1` PASS — 293 units, 9/9 suites, 11/11 goldens
+hash-identical; plus a manual `--dump-flight` run (clean 6/6-scenario envelope report) and a manual
+`--freecam --chapter=C1 --damage-test` run (16 defs swept of 267 instances across 196 groups, 2412
+colliders) — both match the in-suite runs' report shape byte-for-byte.

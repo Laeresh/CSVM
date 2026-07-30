@@ -141,6 +141,7 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/Suites.cs` — the nine registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
+- `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers PlaneViewer quits into.
 
 ### Session root and tests
 
@@ -1400,6 +1401,10 @@ for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in 
 ## src/PlaneViewer.cs
 Main.tscn root: registers shader globals + lighting + the persistent camera once in `_Ready`, then
 launchscreen or `StartSession()` — menu and CLI share one session-build path.
+⚠ **The `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers moved to
+  `Testing.ProbeRunner`** (PLAN-planeviewer-split A1); `_probeRunner` is constructed in `_Ready`
+  once the base paths settle and every remaining call site is a one-line delegation passing the
+  current `_spec` — see `src/Testing/ProbeRunner.cs`'s entry for the split's shape.
 ⚠ **It parses no args and resolves nothing.** `SessionSpec.Parse` answers the command line; this
   node holds `_cli` (what was typed) and `_spec` (what the live session was built from — a menu
   launch replaces it with `SessionSpec.FromMenu(_cli, …)`, derived from `_cli` and never from the
@@ -1623,7 +1628,7 @@ once and returns both halves: the report text the flag prints and writes, and a 
   recorded flying; its targets are the Bloodhawk's only, since it is the only airframe on video.
   A row with `Informational` set is measured but deliberately not asserted (an open question) —
   never promote one to a verdict without the measurement that closes it.
-⚠ **One source of truth.** The flags in `PlaneViewer` are thin wrappers over these; a check added
+⚠ **One source of truth.** The flags in `ProbeRunner` are thin wrappers over these; a check added
   to a probe reaches both the report and the suite. Never re-implement a check in a suite.
 ⚠ **A verdict is a field, never a glyph.** The `✓`/`✗` in a report line is formatting; the boolean
   it came from is on `DamageRow`. Parsing a report back to automate it is the thing this replaced.
@@ -1681,6 +1686,23 @@ line and compares against `analysis/goldens/manifest.json`.
   travels on the same line precisely so that case is readable rather than mysterious (GOLD-1).
 ⚠ The comparison lives in PowerShell, not here: the suites in `TestHarness` run inside one `_Ready`
   call and never yield a frame, so no in-engine suite can photograph anything.
+
+## src/Testing/ProbeRunner.cs
+The `--dump-markers`/`--dump-weapons`/`--dump-flight`/`--dump-loadout`/`--run-tests`/
+`--effects-test`/`--damage-test`/`--destroy=` probe wrappers (PLAN-planeviewer-split A1),
+constructed once in `PlaneViewer._Ready` after the base paths settle and held as `_probeRunner`.
+Each method reads a `SessionSpec` passed **per call**, not stored — a menu launch can replace the
+caller's spec between calls, so a cached one would silently answer with a stale launch's flags.
+⚠ **No back-reference to the host node.** `RunTestSuites` takes the parent `Node` (to host its
+  throwaway `TestHost` world) and the `Camera3D` as parameters and returns the exit code plus the
+  fixed-step `GameClock` it created via `out` — the caller assigns its own `_clock` field and
+  calls `GetTree().Quit(code)` itself. `RunEffectsTest` likewise takes the camera and the caller's
+  `EffectAnimNames` table (still on `PlaneViewer` as of A1 — moves to `WorldEffectsFactory` in A4).
+⚠ `ApplyRocketOverride` and `TriggerDestroy` are static (no instance state) — call them as
+  `Testing.ProbeRunner.X(...)`, not through `_probeRunner`.
+⚠ `WriteScratch` is the one shared write path to `.scratch/<report>.txt`; `PlaneViewer`'s
+  `--weapon-test` report (not itself a moved wrapper) also writes through `_probeRunner.WriteScratch`
+  rather than duplicating the helper.
 
 ## src/Utils/Config.cs
 Dev-facing tuning-override layer: static `Config` parses an optional sparse `res://config.json`;

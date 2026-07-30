@@ -67,7 +67,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — leaf extractions from the living PlaneViewer
 
-1. ☐ Probe/dump wrappers → `src/Testing/ProbeRunner`
+1. ☑ Probe/dump wrappers → `src/Testing/ProbeRunner`
 2. ☐ Screenshot pipeline → `src/Testing/CaptureDirector`
 3. ☐ Livery, spawn, and pure helpers → `src/Session/LiveryResolver` + `SpawnPicker` + homes
 4. ☐ Effect/crash stage factories + name tables → `src/Session/WorldEffectsFactory`
@@ -100,7 +100,7 @@ Shared shape for every Wave A item: move the code into the new class, leave Plan
 byte-identical, commit via `/commit-next`. Line numbers below are from the 3597-line file as of
 f57a2ac and drift as items land — re-locate by method name, not line.
 
-## A1 ☐ Probe/dump wrappers → `src/Testing/ProbeRunner`
+## A1 ☑ Probe/dump wrappers → `src/Testing/ProbeRunner`
 
 **Goal.** `DumpMarkers`, `DumpWeapons`, `DumpFlight`, `DumpLoadout`, `ApplyRocketOverride`,
 `RunTestSuites`, `RunEffectsTest`, `RunDamageTest`, `TriggerDestroy`, `WriteScratch` live in
