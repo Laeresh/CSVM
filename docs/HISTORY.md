@@ -8342,5 +8342,5 @@ branches collapse the pair so a frozen sim can't wobble between stale poses. Aft
 frames**, mean step 1.06 m with 0.4 mm mean frame-to-frame variation, same pacing; probe seen red
 before the fix on the identical command. `RunTests.ps1` fully green, all 13 goldens hash-identical —
 the `--det` path is unchanged by construction. No automated seam holds wall-clock render pacing (the
-suites all run parent-driven), so the lock is DET-10 plus the probe recipe above, not a test; feel
-confirmation owed at the controls.
+suites all run parent-driven), so the lock is DET-10 plus the probe recipe above, not a test.
+**User playtest passed (2026-07-30): "shimmer is gone."**
