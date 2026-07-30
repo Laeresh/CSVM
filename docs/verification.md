@@ -108,6 +108,11 @@ cite these IDs.
   case is a conclusion from half an A/B.
 - **DIAG-16** — **To verify one effect, isolate it and remove whatever clears it early.**
   The 1.5 s auto-respawn kept clearing crash smoke that develops at ~2–3 s.
+- **DIAG-17** — **"Never reached" and "reached but invisible" look identical in play — pick the
+  instrument that holds the state, not the one that has to arrive at it.** The plane's low-HP
+  smoke never appeared in flight, which fits both a threshold no graze survives long enough to
+  cross and an emitter parented so it draws nothing; only the damage lab, holding HP inside the
+  band, separates them.
 
 ## SHOT — screenshots & pixel evidence
 

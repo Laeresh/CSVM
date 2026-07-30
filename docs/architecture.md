@@ -425,7 +425,9 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + report
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
 startanims, a safety net), then dispatch-table event playback; unhandled event kinds are counted,
-never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
+never fatal. `RunAmbientPasses` fires every ON_STARTUP def unconditionally — a def's
+`EXECUTION_BY_RANGE` proximity gate is never parsed (`AnimDefinition.Parse`), so proximity-gated
+defs run at world build regardless of where the player is. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`, fed by `ProjectilePool.DamageSink` and
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
 template stage). Second instances serve per-player crash rigs and the world-effects closure, built
@@ -561,6 +563,9 @@ volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `D
 records (name, max HP, `critical`/`engine` flags, `got_hit_anim`, per-part `injure_anims`), and
 the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
 ⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
+⚠ Only `engine_sound` is parsed — vehicle.json also ships `cockpit_engine_sound` and
+  `damaged_engine_sound` per plane, so cockpit/damage audio has real parsing to add, not wired-but-
+  unused data waiting.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -584,7 +589,9 @@ Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (p
 free flight); `Update` completes zones within `DzRadius` (15 m, TUNE), fires events, advances
 the target; clock/scoring via `Elapsed`/`CompletedAt`/`CompletionOrder`/`InCompletionOrder`;
 `ForAnotherPlayer()` clones an independent run so the archives parse once per session.
-⚠ Drive off the dzones LIST, never the gamez `dzN` nodes — numbering is non-contiguous (missions.md).
+⚠ Ordinals lie here, twice: drive off the dzones LIST, never the gamez `dzN` nodes (numbering is
+  non-contiguous, missions.md); and inside a `dzpathN` mesh tell the route from the gate pair by
+  MATERIAL, not polygon index — the route is polygon 0 in only 2 of C4's 15 zones.
 ⚠ `GeometryAnchor` covers zones naming world GEOMETRY (C2's `sghangar`, ~8 km off via
   `WorldTransformOf`): anchor = union centre of the subtree's `door`-named leaf pair.
 ⚠ Deliberately NOT reset on respawn (a mid-run crash keeps zones + clock); `Reset()` is the opposite.
@@ -725,8 +732,10 @@ Synthetic ambient cloud field: ONE alpha-blended MultiMesh of cloud1/cloud2 bill
 cylindrical shell around the camera — Y anchored to the CLOUD_COVER band, X/Z following the
 plane, passed puffs recycling to the leading edge, WIND-driven drift, alpha fading at the shell
 edge and by vertical distance. Feel constants all TUNE (`BaseAlpha` kept low — overlaps saturate).
-⚠ Synthetic by design: the world's own ~600 cloud sprites cluster near the airfield and no zrdr
-  defines an ambient emitter — don't try to source this from world data.
+⚠ Synthetic by design only for DENSITY: the world's own ~600 cloud sprites cluster near the airfield
+  and no zrdr defines an ambient emitter or a puff count/opacity. The vertical EXTENT is not
+  synthetic — `weather.json`'s CLOUD_COVER band is the truth, and the hand-picked `BandBelow`/
+  `BandAbove`/`VertFull`/`VertFade` margins currently span most of the flight envelope instead.
 ⚠ The shader keeps `fog_disabled` yet carries the custom `csky_fog_*` cylindrical fog term —
   that render mode only disables Godot's BUILT-IN fog; ours is custom.
 ⚠ `_rng` is a per-field stream off `Rng.Clouds` (one field per splitscreen rig, each independent).
@@ -823,7 +832,9 @@ PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(
 FlightModel, Loadout + ProjectilePool (guns/rockets), `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt (inverted flight renders upside
-  down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose.
+  down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
+  distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones
+  (per-plane) that nothing reads — check there before adding or retuning any camera constant.
 ⚠ The reticle march (`BallisticImpactPoint`) shares `ProjectilePool.WorldGravity` with real
   rounds — same gravity source or reticle and rounds silently disagree.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
@@ -838,6 +849,9 @@ feeds the HUD DMG line.
 ⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage
   never degrades performance; but the shipped data still sets the flag, so retail may have walked
   that back (docs/formats/vehicle.md).
+⚠ There is no armour pool anywhere in the collision path: Apply is a flat subtract on one Hp, and
+  FlightController.Crash never calls in at all (a crash is a boolean destroy). Do not assume armour
+  is spent first on a graze or a crash — it is not modelled.
 
 ## src/Flight/DamageVisuals.cs
 Visible damage driven purely by data thresholds: as a part's HP fraction crosses an injure_anims
@@ -848,6 +862,9 @@ burns the trails in place at StaticBurnSpeed for the parked damage lab.
   numbering is crossed on three models — docs/formats/gamez.md) and never by node origin (the
   placement is baked into mesh space); unpaired _h skins are never hidden.
 ⚠ player_fuelleak and the *_damage_green/yellow/red cockpit cycle stay unwired (no cockpit).
+⚠ These smoke/fire puffers are built directly via Puffer.MakePuffer — NOT through the world-effects
+  runtime's fixed name set. Fixing the world-destructible puffer gap does not touch this path, or
+  vice versa; diagnose them separately.
 
 ## src/Flight/DamageLab.cs
 The --viewer damage lab (H toggles): one HP slider per destroyable part with threshold readouts,
@@ -866,8 +883,8 @@ cos(Δ) fade (rendering model: docs/formats/hud.md). Metrics are probe-fitted Re
 HudMetrics.Scale; Build returns null if a texture is missing; _Process re-anchors on resize.
 ⚠ The filtering split is deliberate: ticks point-sampled without mips on the tape Control (mips
   crush the tile vertically), labels bilinear on a child LabelLayer — do not unify them.
-⚠ TileOverscan/RimGain and the nearest-tick look are TUNE pending user A/B; north = −Z is
-  FlightController's one-line assumption (open question in hud.md).
+⚠ TileOverscan/RimGain and the nearest-tick look are TUNE pending user A/B. North = −Z is confirmed
+  against the original — do not reopen or re-flip it.
 
 ## src/Flight/GaugeCluster.cs
 The original's cockpit dials as a screen-space HUD: altimeter, speedometer, damage display, plus
@@ -878,7 +895,9 @@ panes keep them on screen.
 ⚠ The gauge textures lie — compare pixel values, never appearances: never color-key needle.tif (a
   black key erases the hub's two black discs), and the faces hold dark UNLIT copies of the STALL /
   LOW ALT windows (~58,0,0 unlit vs 180+,0,0 lit); bitten twice.
-⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total.
+⚠ The weapon-gauge 4-digit readout is per-GROUP for guns, per-PYLON for rockets — NOT a total; the
+  belt-indicator yellow tier is likewise GUN-ONLY (hardpoint/pylon indicators go green→red, never
+  yellow — confirmed against the original).
 ⚠ The gungauge/missilegauge face is on a generic child (`g815`/`g819`) on ALL planes (no Bloodhawk
   special case, unlike the damage dial) — "any unrecognised child = face" is the extraction rule.
 

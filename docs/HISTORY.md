@@ -8244,3 +8244,81 @@ the effects/crash second instances build unbound via `ForEffects`/`ForCrashRig`,
 staying a plain inline `new AnimRuntime`. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine
 suites, all 13 golden hashes byte-identical. Plan moved to `docs/plans/` with a `COMPLETE` banner,
 row added to `plans.md`.
+
+**Playtest pass 3 — the whole checklist flown, triaged into backlog (2026-07-30).** The user ran
+every owed item in `playtest.md` and returned verdicts; nine sections were triaged against the
+extracted resources (deliberately *not* against the design doc, which the file's own header records
+as exhausted for these questions). Twelve items closed outright, ~20 new `BL-` entries were filed,
+and `playtest.md` was rewritten to hold only what is actionable today plus one consolidated
+17-item owed-captures list.
+
+*Closed.* **Milestone 2.5 is signable** — splitscreen join/un-join, the plane-pick lock race,
+per-pad plane ownership, Esc-to-menu, the results board and rematch all passed on two controllers,
+and the open design question is answered: a finished pilot **stays frozen** at the finish. The
+per-pane audio mix is fine by ear (no explicit `AudioListener3D` needed) and the pad-read-on-focus
+gate is kept, not vetoed. The 4.6× `ThrustConst` calibration was confirmed at the controls and
+broke nothing at the higher routine speeds; control surfaces, fog + `fogRangeFactor`, the near-white
+whiteout, post-inverted-normal aircraft brightness, ambient world sounds (waterfall, train,
+`snd_police`, C1/M04 `snd_zepengine` — the "host pose degenerate" regression is absent), the marker
+HUD/scoreboard (provisionally, pending the menu hub) and north = −Z all pass. The crossed `pdpN_h`
+question resolved without a bug: the crossed `_h` names are real on three models, but neither engine
+pairs torn to healthy *by name*, so the quirk is inert in both.
+
+*Three design-doc claims overturned by direct observation*, all in its HUD/damage material, which is
+now recorded as unreliable as a class: the low-altitude warning does **not** beep; the ammo gauge's
+yellow tier is a real ammo tier present on **gun belts only**, not a heat/jam axis (so `BL-024`
+inverted from "remove yellow" to "remove it from hardpoint indicators only"); and the damage gauge
+has **no blue full-health tier** — the shipped green/yellow/orange/red is correct.
+
+*The findings that changed sizing.* `extracted/zrdr/camparam.zrd.json` is a complete camera-tuning
+reader — chase distance, catch-up rates, third-person height/pitch, back/death/crash/flyby geometry,
+and per-plane distance overrides for seven aircraft (Bloodhawk 18.5 against our hand-picked 16.62)
+— and **nothing reads it**, so `CamRotSmooth` and the numpad views' radius are guesses standing in
+for shipped data (`BL-149`). The numpad camera layout, recorded as "settled", is **wrong** (8/2
+swapped, 7 and 0 both underside-forward, 1/3 rearward, 0 bound at all) and the original eases
+linearly between views, supports mid-ease interrupts and key combinations, and trims distance with
++/− — a rebuild, not a retune (`BL-150`, superseding `BL-116`). Graze pushback is not a mechanic to
+invent: `player.json`'s `crash` block ships `bounce_factor 0.6` and `SurviveHit` has no restitution
+term along the contact normal at all (`BL-172`). Armour is modelled **nowhere** in the collision
+path — `Crash()` never consults `PlaneDamage`, so a hard hit is a pure boolean destroy — extending
+`BL-085` from guns to grazes and crashes alike. `CloudPuffs.cs`'s band constants seed visible puffs
+across camera altitudes 290–1964 m, effectively the whole flight envelope, against `weather.json`'s
+own 154 m band with a 30 m opaque core — which is exactly the "puffs at all height levels" symptom.
+
+*The C3 spiderweb, solved.* The premise reversed as suspected — the original shows the web solid and
+visible at start, fading only on fly-through — but the cause is neither a conflicting animation (there
+is exactly one def install-wide) nor a wrong fade. The def carries `EXECUTION_BY_RANGE` (`max 2500` =
+a 50 m radius under the documented squared-metres convention) and **`AnimDefinition.Parse` never reads
+that field**, so `RunAmbientPasses` fires it at world build for every spawn — all of which sit
+350 m–3.1 km away. `fix/opacity-fade-collider` is correct and stays; only the trigger timing is wrong
+(`BL-183`). Eight defs install-wide use `ByRange`, six of them `OnStartup`; the other seven are
+looping ambient (a hotel sign, a refinery fire, vehicle starts, police lights at 300–700 m) where
+firing early costs a culling optimisation rather than correctness — `spiderweb_gone` is the only
+one-shot destructive state change, which is why it was the only visible bug.
+
+*Two corrections to existing records, each of which would have cost a debugging session.* Every
+`dzpathN` mesh does carry two gate polygons plus a route line — data-confirmed across all 15 C4 zones
+— but `StuntMission.cs`'s comment and `BL-125` both say the route is polygon 0, which holds for
+**2 of 15**; the reliable discriminator is material class, not index, so an index-keyed gate
+implementation would have been wrong in 13 zones. And the player plane's missing low-HP smoke/fire
+is **not** the world-effects fixed-name-set bug (`BL-046`) — `DamageVisuals` never touches that
+registry — leaving two competing live hypotheses recorded in `BL-174`.
+
+**`RunGame.ps1`/`RunDev.ps1` switched from the Godot console wrapper to the plain `.exe` (2026-07-30).**
+User report: launching hung/failed with `CreateProcess failed, error 193` (`ERROR_BAD_EXE_FORMAT`).
+Verified this is an upstream Godot bug in `Godot_v4.7-stable_mono_win64_console.exe` itself, not a
+corrupt download: its SHA-256 matches the official 4.7-stable release byte-for-byte, and it fails to
+`CreateProcess` its own paired GUI `.exe` specifically when the full path both contains a space and
+has enough nesting depth — reproduced by copying the exact pair to `Z:\Crimson Skies Test\tools\...`
+(fails) vs. `Z:\CrimsonSkiesTest\tools\...` (works) vs. a shallow one-level dir with a space (works).
+`RunTests.ps1` already launches the plain `.exe` directly and gets console output fine (handle
+inheritance doesn't depend on subsystem type), so the two interactive launch scripts now do the same.
+Verified via `--stage=empty --screenshot=` smoke test: clean boot, full flight/world/HUD init log,
+screenshot saved, exit 0. **Why now, not always:** this path shape is unchanged since `RunDev.ps1`
+first shipped, so the wrapper bug was latent, not new. Windows Update history shows preview/cumulative
+update **KB5101684** (build 26200.8973) installed 2026-07-29 14:52, with the machine's only reboot
+since at 16:25 that day — hours before the game stopped launching. The OS update is the actual
+trigger; the console wrapper's `CreateProcess` bug is the mechanism it exposed. If a future Windows
+update reverts whatever changed, the `_console.exe` wrapper may start working again on this path —
+this switch to the plain `.exe` isn't a permanent Godot-side regression fix, just the durable
+workaround.
