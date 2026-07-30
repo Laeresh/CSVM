@@ -7,7 +7,7 @@ You are closing out one item of the active plan and teeing up the next. This ski
 
 If an item id was passed as an argument (e.g. `B19`), treat that as the explicit choice for the "next item" in step 2.
 
-## 1. Commit the current changes
+## 1. Commit the current changes (if there are some)
 
 First find the **active plan**: CLAUDE.md's "Current status / next step" section names it (none is active as of 2026-07-25 — every plan sits in `docs/plans/`). Everything below refers to that file.
 
