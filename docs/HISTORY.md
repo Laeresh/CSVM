@@ -8228,3 +8228,12 @@ bakes the four invariant construction flags (`AutoStart=false`, `PlaceCalledTemp
 `Bind`/`AddChild` sequencing untouched. Pure construction-site extraction, no flag/seed/behaviour
 change. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine suites, all 13 golden hashes
 byte-identical (including the A1 effects tripwire and the A2 crash tripwire, neither of which moved).
+
+**AnimRuntime role factory: `ForCrashRig` extracted (2026-07-30, PLAN-animruntime-role-factories
+B12).** `AnimRuntime.ForCrashRig(seed, pufferParent, pufferFactory, debugMotions)` bakes the same
+four invariant flags as `ForEffects` but takes neither `EffectTtl` nor `PlayerPosition` (the crash
+def needs neither); `WorldEffectsFactory.BuildFlightCrashRuntime` now calls it instead of an inline
+object initializer, keeping the wreck-build/rest-pose/`Bind` scaffolding around it untouched. Pure
+construction-site extraction, no flag/seed/behaviour change. Verified `.\RunTests.ps1` PASS: 303
+units, 10/10 engine suites, all 13 golden hashes byte-identical (including the A2 crash tripwire).
+Both role factories now land; only B13 (delete dead `Apply`, doc updates) remains.

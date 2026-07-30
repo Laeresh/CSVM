@@ -230,23 +230,14 @@ public sealed class WorldEffectsFactory
         // left it drawn-but-unrendered (every particle correctly positioned, IsVisibleInTree true, yet
         // nothing on screen — measured). Parenting at world level, exactly like the world runtime's
         // own PufferFactory, renders it. Each crash runtime still makes its own emitter instances at
-        // its own crash site, so splitscreen crashes stay independent.
-        var crashRuntime = new AnimRuntime
-        {
-            AutoStart = false,
-            DebugMotions = _spec.DebugAnim,
-            PufferParent = _worldRoot,
-            PufferFactory = st => Puffer.Create(st, textures, sustained: true),
-            PlaceCalledTemplates = true,
-            NameResolveFallback = true,
-            // The crash def's only SOUND (snd_exp_ground_a) is already played by FlightAudio via
-            // Crash() -> OnGroundExplosion(); this runtime has no audio session, so dispatching it
-            // here would only emit the "silent for the session" warning. Render effects, not sound.
-            SoundHandledElsewhere = true,
-            // Wreckage scatter and the crash def's RANDOM_WEIGHT verdicts. One seed per player off
-            // the crash stream, so splitscreen crashes differ from each other but repeat run to run.
-            Seed = Rng.NewIntSeed(Rng.Crash),
-        };
+        // its own crash site, so splitscreen crashes stay independent. The crash def's only SOUND
+        // (snd_exp_ground_a) is already played by FlightAudio via Crash() -> OnGroundExplosion(); this
+        // runtime has no audio session, so dispatching it here would only emit the "silent for the
+        // session" warning — render effects, not sound. The seed drives wreckage scatter and the
+        // crash def's RANDOM_WEIGHT verdicts: one draw per player off the advancing crash stream, so
+        // splitscreen crashes differ from each other but repeat run to run.
+        var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash), _worldRoot,
+            st => Puffer.Create(st, textures, sustained: true), _spec.DebugAnim);
         // Bind only the crash def's transitive CALL_ANIMATION closure (Subset), not the whole world
         // program: the full 800+ defs include ~150 generic-named world defs that would mis-anchor
         // onto this plane's parts and run their reset states on the aircraft.

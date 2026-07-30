@@ -456,6 +456,29 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         };
     }
 
+    /// <summary>Configures (but does not bind) the per-player crash rig's construction ritual —
+    /// the same four invariant flags as <see cref="ForEffects"/>, but with no <c>EffectTtl</c> or
+    /// <c>PlayerPosition</c> (the crash def has no PUFFER_STATE that needs either). The caller still
+    /// calls <see cref="Bind"/> + adds the returned node to the tree. <paramref name="pufferParent"/>
+    /// must be the world root, never the per-player crash root (the crash lesson: a PUFFER_STATE
+    /// emitter goes TopLevel the moment it emits, so parenting it under the controller subtree leaves
+    /// it drawn-but-unrendered).</summary>
+    public static AnimRuntime ForCrashRig(int seed, Node3D pufferParent,
+        Func<Effects.PufferState, Effects.Puffer?> pufferFactory, bool debugMotions)
+    {
+        return new AnimRuntime
+        {
+            AutoStart = false,
+            PlaceCalledTemplates = true,
+            NameResolveFallback = true,
+            SoundHandledElsewhere = true,
+            DebugMotions = debugMotions,
+            PufferParent = pufferParent,
+            PufferFactory = pufferFactory,
+            Seed = seed,
+        };
+    }
+
     /// <summary>The world nodes a definition anchors to, for the inspect tools â€” the runtime's own
     /// answer, so a readout shows what the bootstrap actually bound rather than a re-derivation.
     /// A null entry is a global (anchorless) instance. Read-only: the list is the cached one.</summary>

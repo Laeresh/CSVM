@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — Extract the factories (behaviour-preserving; Wave A is its tripwire)
 
 11. ☑ `AnimRuntime.ForEffects(...)` + rewire `BuildWorldEffectsRuntime`
-12. ☐ `AnimRuntime.ForCrashRig(...)` + rewire `BuildFlightCrashRuntime`
+12. ☑ `AnimRuntime.ForCrashRig(...)` + rewire `BuildFlightCrashRuntime`
 13. ☐ Delete dead `AnimRuntime.Apply`; update `docs/architecture.md` + `docs/HISTORY.md`
 
 ## Dependency and parallelism notes
@@ -224,7 +224,7 @@ default must not invite anything else; document it at the param (Trap #5). Do no
 `EffectRuntimeTtl` into `AnimRuntime` (Decision 3). Returning unbound is deliberate — do **not** call
 `Bind` inside the factory (Decision 4).
 
-## B12 ☐ `AnimRuntime.ForCrashRig(...)` + rewire `BuildFlightCrashRuntime`
+## B12 ☑ `AnimRuntime.ForCrashRig(...)` + rewire `BuildFlightCrashRuntime`
 
 **Goal.** The crash rig constructs through a named factory sharing B11's invariant block; its call
 site shrinks to `seed, pufferParent, pufferFactory, debugMotions`, behaviour identical.
