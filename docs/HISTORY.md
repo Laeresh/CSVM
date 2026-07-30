@@ -8322,3 +8322,25 @@ trigger; the console wrapper's `CreateProcess` bug is the mechanism it exposed. 
 update reverts whatever changed, the `_console.exe` wrapper may start working again on this path —
 this switch to the plain `.exe` isn't a permanent Godot-side regression fix, just the durable
 workaround.
+
+## 2026-07-30 — Live-flight plane stutter: render interpolation on the realtime clock
+
+**Symptom (user, at the controls): the plane alone jitters in flight, worse the faster it flies —
+never in screenshots, never paused, never in a held numpad view.** Measured mechanism: the sim
+advances on Godot's fixed 60 Hz physics tick while this machine renders at ~120 fps, so the plane's
+transform froze on **50.2% of rendered frames** (per-rendered-frame pose probe, `--stage=empty
+--no-det --hold`, 300 frames, median frame 8.3 ms) while the exponentially-smoothed chase camera
+moved on 100% — the plane oscillates ±(speed × 8.3 ms) along its path against a smooth world, which
+is exactly the reported speed-proportional forward/back shimmer. Invisible under `--det` because
+FixedStep runs one sim step per rendered frame (now DET-10). Long-standing cadence split, not a
+recent code regression — `_PhysicsProcess` sim and `_Process` camera predate every recent commit.
+
+Fix in `FlightController`: `SimStep` records the last two sim poses; `_Process` draws the plane at
+`Engine.GetPhysicsInterpolationFraction()` between them (`_renderPose`), realtime clock only; the
+rigid numpad views ride `_renderPose` so they stay bolted to the drawn plane; crash/stunt-freeze
+branches collapse the pair so a frozen sim can't wobble between stale poses. After: **0% stalled
+frames**, mean step 1.06 m with 0.4 mm mean frame-to-frame variation, same pacing; probe seen red
+before the fix on the identical command. `RunTests.ps1` fully green, all 13 goldens hash-identical —
+the `--det` path is unchanged by construction. No automated seam holds wall-clock render pacing (the
+suites all run parent-driven), so the lock is DET-10 plus the probe recipe above, not a test; feel
+confirmation owed at the controls.

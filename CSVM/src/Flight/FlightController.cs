@@ -348,6 +348,16 @@ public partial class FlightController : Node3D
     private GaugeCluster.WeaponGauge? _gunGaugeState;
     private GaugeCluster.WeaponGauge? _missileGaugeState;
 
+    // The sim advances on the 60 Hz physics tick while rendering runs at the display rate, so
+    // drawing the raw sim pose stutters the plane against the smoothly-moving chase camera at
+    // any render rate above 60 fps, in proportion to speed. SimStep records the last two sim
+    // poses; _Process draws between them at the physics interpolation fraction. Realtime clock
+    // only — a parent-driven (fixed-dt) clock draws the exact sim pose, keeping scripted
+    // captures byte-identical.
+    private Transform3D _simPrev = Transform3D.Identity;
+    private Transform3D _simCurr = Transform3D.Identity;
+    private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
+
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
         _model = model;
@@ -486,7 +496,8 @@ public partial class FlightController : Node3D
             PlaneModel.Visible = true;
         _throttle = SpawnThrottle;
         _model.Reset(_spawnPos, _spawnAttitude, SpawnSpeed, _throttle);
-        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+        _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
+        GlobalTransform = _simCurr;
         if (_camera != null && IsInsideTree())
             SnapCamera();
     }
@@ -539,6 +550,7 @@ public partial class FlightController : Node3D
         // restarts cleanly.
         if (Stunt is { AllComplete: true })
         {
+            _simPrev = _simCurr;   // hold the finish pose — no stale pair left to interpolate
             // Unattended scripted runs rematch on a timer, the same rule as the crash branch's
             // auto-respawn below — so a --hold race soak-test keeps racing instead of parking on
             // the board forever. Player 1 alone runs the timer; the rematch restarts everybody.
@@ -615,7 +627,9 @@ public partial class FlightController : Node3D
             return;
         }
 
-        GlobalTransform = new Transform3D(_model.Attitude, _model.Position);
+        _simPrev = _simCurr;
+        _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
+        GlobalTransform = _simCurr;
 
         // Weapons: cycle the two selectors (edge-detected), then advance the fire clocks and spawn
         // into the shared projectile pool.
@@ -690,6 +704,15 @@ public partial class FlightController : Node3D
         }
         else
         {
+            // Draw the plane between its last two sim poses (see the _simPrev/_simCurr fields).
+            // Skipped while crashed (the sim pair is stale; the wreck owns the visuals) and on a
+            // parent-driven clock, which steps the sim once per rendered frame anyway.
+            if ((clock == null || !clock.ParentDriven) && !_crashed)
+            {
+                _renderPose = _simPrev.InterpolateWith(_simCurr, (float)Engine.GetPhysicsInterpolationFraction());
+                GlobalTransform = _renderPose;
+            }
+
             int view = ActiveView();
             if (view >= 0)
             {
@@ -1685,8 +1708,11 @@ public partial class FlightController : Node3D
     private void ApplyFixedView(int view)
     {
         var (_, _, dir, up) = Views[view];
-        _camera.Position = _model.Position + _model.Attitude * (dir * ViewDist);
-        _camera.Basis = _model.Attitude * Basis.LookingAt(-dir, up);
+        // Rigid views ride the DRAWN pose, not the raw sim pose — the two differ on the realtime
+        // clock (render interpolation), and mixing them would jitter the plane inside a view
+        // whose whole point is to be bolted to it. Identical on a parent-driven clock.
+        _camera.Position = _renderPose.Origin + _renderPose.Basis * (dir * ViewDist);
+        _camera.Basis = _renderPose.Basis * Basis.LookingAt(-dir, up);
     }
 
     /// <summary>One line per frame a fixed view is held, plus one on the frame it is released —

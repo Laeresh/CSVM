@@ -228,6 +228,11 @@ cite these IDs.
   baseline — it only reproduces on the machine and the minute that made it.** Report *that*
   a seed came from the clock, not which number came out; render paths against
   `{data}`/`{repo}` tokens; prove it by capturing twice and comparing hashes.
+- **DET-10** — **A `--det` capture cannot show a realtime-cadence artifact — the fixed clock
+  steps the sim once per rendered frame, so a 60 Hz-tick-vs-render-rate mismatch exists only
+  under `--no-det`; measure it with a per-rendered-frame pose log, never a screenshot.** The
+  live-flight plane stutter froze the plane's pose on 50.2% of rendered frames at ~120 fps
+  while every `--det` flight capture stayed byte-identical.
 
 ## PERF — performance
 

@@ -835,6 +835,9 @@ FlightModel, Loadout + ProjectilePool (guns/rockets), `CollideDamageSink` →
   down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
   distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones
   (per-plane) that nothing reads — check there before adding or retuning any camera constant.
+  On the realtime clock the DRAWN pose is `_renderPose` — interpolated between the last two sim
+  poses, because the 60 Hz sim stutters against >60 fps rendering (DET-10) — and anything bolted
+  to the plane (the rigid numpad views) must read it, never the raw sim pose.
 ⚠ The reticle march (`BallisticImpactPoint`) shares `ProjectilePool.WorldGravity` with real
   rounds — same gravity source or reticle and rounds silently disagree.
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
