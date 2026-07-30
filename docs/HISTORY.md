@@ -8521,3 +8521,29 @@ and running `--fly --stage=empty --no-det --screenshot=...` changed the read val
 `0.5` at the `Update` call site; the override was deleted from `config.json` afterward per the `--det`
 trap (verification DET-8) so it can't leak into a deterministic capture. Full `.\RunTests.ps1`:
 312 units, 12/12 engine suites, 13/13 goldens hash-identical — default-path behaviour unchanged.
+
+## 2026-07-30 — M3 Wave D D31 `BL-031`: `docs/cli.md` flag-count drift closed
+
+Cross-checked every `arg ==`/`arg.StartsWith` branch in `SessionSpec.Parse` (`grep -oE` over the two
+patterns, deduped) against `docs/cli.md`'s flag index and `## Flags` bullets: the parser currently
+accepts **94** distinct flags (the plan's evidence, "89 documented vs 92 parsed", was itself already
+stale by the time this item was picked up — the counts had moved since it was written). Three flags
+had **no index entry at all**:
+`--debug-colliders` (open the collider overlay without forcing the build — distinct from
+`--debug-collision`, which draws the flown plane's own probe), `--jitter=<deg>` (was described only
+inside the `--shots` bullet), and `--sky-zone=<zone>` (was described only inside the
+`--spawn-at`/`--spawn-dir` bullet). Each now gets its own index entry and its own `## Flags` bullet,
+split out of the bullet it had been squatting in. Two flags were indexed but had no bullet of their
+own — `--direction` (inside `--pos`'s) and `--spawn-dir` (inside `--spawn-at`'s) — resolved as a
+**written exception**, not a split: each pair is one placement mechanism, and splitting would
+duplicate the per-mode routing table or separate a deprecation `WARN` from the sibling it depends on.
+The exception is recorded in `cli.md`'s flag-index section, alongside a note reconciling the file's
+three pre-existing two-bullet families (`--det`, `--debug-nodelab`, `--debug-damage`) against the
+same count. CLAUDE.md's "day-to-day 28 of 89" is now "28 of 94", stated to mean both the parser count
+and the cli.md index count, kept equal by construction.
+
+Verified: `grep -oE` over the parser's two match forms gives 94 unique flags; `docs/cli.md`'s flag
+index (summing every category line) totals 94; its `## Flags` bullets total 95 lines, which reconciles
+to 94 flags once the 2 shared-bullet flags and the 3 doubled-bullet flags are netted out. No behaviour
+changed (doc-only) — confirmed by a full `.\RunTests.ps1`: 312 units, 12/12 engine suites, 13/13
+goldens hash-identical.

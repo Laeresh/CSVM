@@ -323,24 +323,6 @@ work is below.
   B7's extraction and the B8 `git mv`, so re-numbering it now is pure churn. Fix when M4 is picked
   up and the doc gets rewritten anyway.
 
-- `BL-031` **`docs/cli.md` documents 89 flags; the parser accepts 92.** Found 2026-07-30 by the flag-count
-  check the SessionSpec plan's last item required, not by anything routine — nothing counts these
-  two against each other, so the drift was silent and is presumably years-agnostic rather than new.
-  - **Undocumented entirely** (no index entry, no bullet): `--debug-colliders` (the scripted C
-    press *without* forcing the collider build — the control that proves the overlay reports "this
-    mode built no collision" instead of drawing nothing), `--jitter=<deg>` (burst camera dither;
-    described inside the `--det` bullet but never given its own), and `--sky-zone=<zone>`.
-  - **Indexed with no bullet of their own:** `--direction` and `--spawn-dir`, presumably covered
-    inside their placement-pair partners' bullets. `cli.md` states the rule "every flag below has
-    exactly one bullet under `## Flags`, and that bullet is the description of record", so either
-    they get bullets or the rule gets an exception written down.
-  - ⚠ **Traps.** CLAUDE.md's "day-to-day 28 of **89**" tracks the cli.md *index*, not the parser —
-    the number was silently wrong at 90 from the moment `--dump-session` was added without bumping
-    it, and only became right again when that flag was deleted. Decide which of the two counts the
-    number is supposed to mean before "fixing" it. Writing the three missing bullets is authoring,
-    not tidying: each is the description of record and needs reading the code, not the flag name.
-
-
 - `BL-032` **Burning-object fires (`fire1`/`fire2` templates + `EFFECTS` flipbooks)** — **POSTPONED
   2026-07-21 by user decision: minor detail, and the trigger is not findable.** Fully decoded,
   so nothing needs re-deriving; what is missing is *when* to start a fire, not how. Blocked on

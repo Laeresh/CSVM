@@ -77,7 +77,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — doc drift
 
-31. ☐ `BL-031` `docs/cli.md` documents 89 flags, the parser accepts 92
+31. ☑ `BL-031` `docs/cli.md` documents 89 flags, the parser accepts 92
 32. ☐ `BL-140` `weapon-effects.md` "confirmed in C1" overclaims meshless `gunshell`/`muzzle_burst`
 
 ## Dependency and parallelism notes
@@ -355,7 +355,7 @@ git-ignored `CSVM/config.json` silently overrules interactive runs while `--det`
 
 # Wave D — doc drift
 
-## D31 ☐ `BL-031` `docs/cli.md`: 89 documented flags vs 92 parsed
+## D31 ☑ `BL-031` `docs/cli.md`: 89 documented flags vs 92 parsed
 
 **Goal.** Every parser-accepted flag has exactly one description-of-record bullet in `docs/cli.md`
 (or the file's own rule gets a written exception), and CLAUDE.md's "day-to-day 28 of N" number has a
