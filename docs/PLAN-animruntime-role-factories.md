@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — Pin the two uncovered paths (baseline BEFORE touching construction)
 
 1. ☑ Effects-runtime tripwire — a `--det` flight golden that renders ≥1 `ForEffects` puffer
-2. ☐ Crash-runtime tripwire — minimal `--crash[=frame]` flag + a `--det` crash golden
+2. ☑ Crash-runtime tripwire — minimal `--crash[=frame]` flag + a `--det` crash golden
 
 ### Wave B — Extract the factories (behaviour-preserving; Wave A is its tripwire)
 
@@ -151,7 +151,7 @@ by anchor — name a specific def so exactly one object dies and the frame is st
 `RANDOM_WEIGHT`-heavy effect whose puffer is a coin-flip even under `--det` unless you've confirmed
 seed 1 lands it on-screen.
 
-## A2 ☐ Crash-runtime tripwire
+## A2 ☑ Crash-runtime tripwire
 
 **Goal.** `.\RunTests.ps1` contains one deterministic check whose value depends on the crash rig
 (`ForCrashRig`) constructing and playing `player_crash_dirt` — the only path with *zero* headless

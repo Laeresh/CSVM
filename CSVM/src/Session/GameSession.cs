@@ -96,6 +96,8 @@ public partial class GameSession : Node3D
     // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
     private LiveryResolver _liveryResolver = null!;
     private SpawnPicker _spawnPicker = null!;
+    // --crash[=frame]: fires once, the frame the sim clock first reaches _spec.CrashFrame.
+    private bool _crashFired;
     private SpectatorCamera? _spectator;
     // The session's shared world selection (--freecam/--anim-lab): the clicked leaf plus its
     // cs_name ancestor ladder, which every inspect tool reads instead of picking for itself.
@@ -1533,6 +1535,14 @@ public partial class GameSession : Node3D
     /// exactly as it did.</summary>
     private void DriveSimSteps(GameClock clock)
     {
+        // --crash[=frame]: force every player's crash rig at a fixed sim frame — the only
+        // headless trigger for FlightController.Crash(), which a live collision otherwise gates.
+        if (_spec.CrashFrame is int crashFrame && !_crashFired && clock.Frame >= crashFrame)
+        {
+            _crashFired = true;
+            foreach (var rig in _rigs)
+                rig.Controller?.DebugForceCrash();
+        }
         for (int i = 0; i < clock.Steps; i++)
         {
             float dt = clock.Dt;

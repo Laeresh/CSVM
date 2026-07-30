@@ -8202,3 +8202,20 @@ the captured frame (120) visibly shows the fire puffer. Confirmed able-to-fail: 
 `Rng.Effects` subsystem string moved the hash (`5efeefaa0…` → `64c0cdd3…`), reverting restored it
 bit-for-bit. Verified `.\RunTests.ps1` PASS: 303 units, 10/10 engine suites, 12/12 golden hashes
 (11 prior unchanged + the new shot). A1 done; A2 (crash-runtime tripwire) is next, then Wave B.
+
+**2026-07-30, PLAN-animruntime-role-factories A2: crash-runtime tripwire.** The per-player crash
+rig (`ForCrashRig`-to-be, built by `WorldEffectsFactory.BuildFlightCrashRuntime`) had zero headless
+coverage — `FlightController.Crash()` is reachable only by a live collision, and nothing analogous
+to `--destroy` existed for it. Added a minimal `--crash[=frame]` flight flag (Decision 8):
+`FlightController.DebugForceCrash()` (public, beside `Respawn()`) calls the existing private
+`Crash()` with nominal impact/hit values (`ClassifySurface` always resolves `Ground` today, so they
+don't matter), guarded by `_crashed` so a second call is a no-op; `GameSession.DriveSimSteps` fires
+it once, on every rig, the first sim frame `_spec.CrashFrame` is reached (default 5). Added the
+`docs/cli.md` bullet. Added `c1-crash` to `analysis/goldens/manifest.json`: `--chapter=C1
+--plane=player_bhawk --crash=5 --hold=0,0,0,0.6 --det --mute` captured at frame 20, showing the
+wreck silhouette, fireball and debris streaks from the played `player_crash_dirt` def. Confirmed
+frame-sensitive (frame 21's hash differs from frame 20's — the wreck is still animating) and
+able-to-fail: perturbing the crash rig's `Rng.NewIntSeed(Rng.Crash)` draw (`+ 1`) moved the hash
+(`a660598…` → `083ad0b…`), reverting restored it bit-for-bit. Verified `.\RunTests.ps1` PASS: 303
+units, 10/10 engine suites, 13/13 golden hashes (12 prior unchanged + the new shot). Wave A is now
+complete; both role factories (B11/B12) have a tripwire to verify against.

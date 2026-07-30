@@ -491,6 +491,16 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
+    /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
+    /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal
+    /// (<see cref="ClassifySurface"/> always resolves <see cref="CrashSurface.Ground"/> today); a
+    /// no-op once already crashed.</summary>
+    public void DebugForceCrash()
+    {
+        if (!_crashed)
+            Crash(_model.Position, "debug-crash", "test");
+    }
+
     public override void _PhysicsProcess(double delta)
     {
         float dt = GameClock.Current?.PhysicsDt(delta) ?? (float)delta;

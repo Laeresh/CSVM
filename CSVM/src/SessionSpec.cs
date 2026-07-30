@@ -63,6 +63,10 @@ public enum SessionProbe
 /// </summary>
 public sealed record SessionSpec
 {
+    /// <summary>The sim frame a bare <c>--crash</c> (no <c>=frame</c>) fires at — early enough that
+    /// the default <c>--frames=</c> screenshot lands mid-break-up rather than pre-impact.</summary>
+    private const int DefaultCrashFrame = 5;
+
     private List<Note> _notes = new();
 
     // What the command line asked for. Private, because a vote is not an outcome: several flags
@@ -172,6 +176,11 @@ public sealed record SessionSpec
     public bool NoFog { get; private set; }
     public int AnimLod { get; private set; } = AnimRuntime.HighLod;
     public string? DestroyName { get; private set; }
+    /// <summary><c>--crash[=frame]</c>: the fixed sim frame (<see cref="Utils.GameClock.Frame"/>)
+    /// at which every player's <see cref="Flight.FlightController.DebugForceCrash"/> fires — the
+    /// only headless trigger for the per-player crash rig (no live collision analog exists).
+    /// Null when the flag was absent.</summary>
+    public int? CrashFrame { get; private set; }
 
     // ---- The aircraft -------------------------------------------------------------------------
 
@@ -486,6 +495,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--damage-hd=")) { s.DamageHd = Flt(arg["--damage-hd=".Length..]); }
             else if (arg == "--effects-test") { s.EffectsTest = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--destroy=")) { s.DestroyName = arg["--destroy=".Length..]; }
+            else if (arg == "--crash") { s.CrashFrame = DefaultCrashFrame; }
+            else if (arg.StartsWith("--crash=")) { s.CrashFrame = int.Parse(arg["--crash=".Length..]); }
             else if (arg.StartsWith("--loadout=")) { s.LoadoutOverride = arg["--loadout=".Length..]; }
             else if (arg == "--infinite-ammo") { s.InfiniteAmmo = true; }
             else if (arg == "--fire") { s.AutoFire = true; }
