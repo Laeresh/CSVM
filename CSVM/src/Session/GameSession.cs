@@ -279,9 +279,14 @@ public partial class GameSession : Node3D
         // them without re-deriving anything.
         var state = new BuildState
         {
-            DataRoot = _dataRoot, ZrdrPath = _zrdrPath, SoundsPath = _soundsPath,
-            InterpPath = _interpPath, MessagesPath = _messagesPath, PlanesGamezPath = _planesGamezPath,
-            Mute = _spec.Mute, DebugCollision = _spec.DebugCollision,
+            DataRoot = _dataRoot,
+            ZrdrPath = _zrdrPath,
+            SoundsPath = _soundsPath,
+            InterpPath = _interpPath,
+            MessagesPath = _messagesPath,
+            PlanesGamezPath = _planesGamezPath,
+            Mute = _spec.Mute,
+            DebugCollision = _spec.DebugCollision,
         };
         state.TexturesPath = _spec.Textures ?? SessionPaths.ChapterTextures(_dataRoot, _spec.Chapter);
         state.GamezPath = _spec.Gamez
@@ -847,97 +852,98 @@ public partial class GameSession : Node3D
     /// already issued its quit).</summary>
     private bool AttachPlaneAndLabs(BuildState state)
     {
-            _worldRoot!.AddChild(_plane);
-            // The shared selection joins after the world does: its pick walk and its highlight box
-            // both read GlobalTransform, which on a detached subtree is identity + error spam.
-            if (_selection != null)
+        _worldRoot!.AddChild(_plane);
+        // The shared selection joins after the world does: its pick walk and its highlight box
+        // both read GlobalTransform, which on a detached subtree is identity + error spam.
+        if (_selection != null)
+        {
+            _worldRoot!.AddChild(_selection);
+        }
+        // The node lab joins after the selection, so its first _Process (which carries the
+        // scripted dump) runs once the selection's own scripted pick has settled.
+        if (_nodeLab != null)
+        {
+            _worldRoot!.AddChild(_nodeLab);
+        }
+        // The damage lab joins after the node lab, so a scripted script can select through the
+        // node lab's name index on the frame it runs.
+        if (_worldDamageLab != null)
+        {
+            _worldRoot!.AddChild(_worldDamageLab);
+        }
+        // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
+        // cull-mode and normal-source overrides. Like the other two labs it is built in every
+        // --viewer session and starts hidden (M), so an unadorned viewer screenshot is
+        // unchanged; --debug-mesh opens it and presets modes. Built AFTER the plane joins the
+        // tree: it reads geometry back through GlobalTransform, which on a detached node
+        // returns identity and logs an error per call rather than walking the subtree.
+        if (_spec.Viewer && _plane != null)
+            _worldRoot!.AddChild(new UI.MeshLab(_plane, PlaneCollider.Build(_plane),
+                _sun, _env, _camera)
+            { DebugSpec = _spec.DebugMesh });
+        // Marker overlay (--viewer --plane, key K): the firepoint / pylon / target gizmos on the
+        // parked aircraft (item A3). Only on the parked plane — a chapter world has no marker rig
+        // — and after the plane joins the tree, since it reads each marker's GlobalPosition. Built
+        // hidden unless --markers opened it, so an unadorned viewer screenshot is unchanged.
+        if (_spec.Viewer && !_spec.WorldMode && _plane != null)
+        {
+            _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
+            state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
+        }
+        // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
+        // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
+        // stand-in target wall. Parked plane only (a chapter world has no aircraft marker rig)
+        // and after the plane joins the tree — it reads each marker's GlobalTransform. Built in
+        // every parked --viewer session so W always toggles it, hidden unless --weapon-lab opened it,
+        // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
+        if (_spec.Viewer && !_spec.WorldMode && _plane != null)
+        {
+            long mark = StartupProfile.Mark();
+            var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
+            StartupProfile.Record("zrdr", mark);
+            // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
+            // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
+            // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
+            Loadout? labLoadout = null;
+            foreach (var ldef in StockLoadouts.Load().All.Values)
             {
-                _worldRoot!.AddChild(_selection);
-            }
-            // The node lab joins after the selection, so its first _Process (which carries the
-            // scripted dump) runs once the selection's own scripted pick has settled.
-            if (_nodeLab != null)
-            {
-                _worldRoot!.AddChild(_nodeLab);
-            }
-            // The damage lab joins after the node lab, so a scripted script can select through the
-            // node lab's name index on the frame it runs.
-            if (_worldDamageLab != null)
-            {
-                _worldRoot!.AddChild(_worldDamageLab);
-            }
-            // Mesh lab (--viewer): normals / wireframe+seams / zone boxes / lighting, plus live
-            // cull-mode and normal-source overrides. Like the other two labs it is built in every
-            // --viewer session and starts hidden (M), so an unadorned viewer screenshot is
-            // unchanged; --debug-mesh opens it and presets modes. Built AFTER the plane joins the
-            // tree: it reads geometry back through GlobalTransform, which on a detached node
-            // returns identity and logs an error per call rather than walking the subtree.
-            if (_spec.Viewer && _plane != null)
-                _worldRoot!.AddChild(new UI.MeshLab(_plane, PlaneCollider.Build(_plane),
-                    _sun, _env, _camera) { DebugSpec = _spec.DebugMesh });
-            // Marker overlay (--viewer --plane, key K): the firepoint / pylon / target gizmos on the
-            // parked aircraft (item A3). Only on the parked plane — a chapter world has no marker rig
-            // — and after the plane joins the tree, since it reads each marker's GlobalPosition. Built
-            // hidden unless --markers opened it, so an unadorned viewer screenshot is unchanged.
-            if (_spec.Viewer && !_spec.WorldMode && _plane != null)
-            {
-                _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
-                state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
-            }
-            // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
-            // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
-            // stand-in target wall. Parked plane only (a chapter world has no aircraft marker rig)
-            // and after the plane joins the tree — it reads each marker's GlobalTransform. Built in
-            // every parked --viewer session so W always toggles it, hidden unless --weapon-lab opened it,
-            // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
-            if (_spec.Viewer && !_spec.WorldMode && _plane != null)
-            {
-                long mark = StartupProfile.Mark();
-                var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
-                StartupProfile.Record("zrdr", mark);
-                // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
-                // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
-                // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
-                Loadout? labLoadout = null;
-                foreach (var ldef in StockLoadouts.Load().All.Values)
+                if (ldef.Model == _spec.PlaneName)
                 {
-                    if (ldef.Model == _spec.PlaneName)
+                    try
                     {
-                        try
-                        {
-                            labLoadout = Loadout.Bind(ldef, _plane, labWeapons);
-                        }
-                        catch (Exception e)
-                        {
-                            GD.PushWarning($"weapon lab: could not bind loadout {ldef.Def} — {e.Message}");
-                        }
-                        break;
+                        labLoadout = Loadout.Bind(ldef, _plane, labWeapons);
                     }
+                    catch (Exception e)
+                    {
+                        GD.PushWarning($"weapon lab: could not bind loadout {ldef.Def} — {e.Message}");
+                    }
+                    break;
                 }
-                var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName)
-                {
-                    DebugShow = _spec.WeaponLab,
-                    InitialWeapon = _spec.WeaponSelect,
-                    InitialMount = _spec.WeaponMount,
-                    AutoFireAtStart = _spec.WeaponFire,
-                };
-                _worldRoot!.AddChild(weaponLab);
-                _weaponLabNode = weaponLab;
-                // --weapon-test: mount and fire every one of the 48 weapons once and report any that
-                // throw, then quit (windowless under --headless). The report is
-                // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
-                // world tick is required.
-                if (_spec.WeaponTest)
-                {
-                    string report = weaponLab.RunSelfTest();
-                    GD.Print(report);
-                    _probeRunner.WriteScratch("weapon_test.txt", report);
-                    GetTree().Quit();
-                    return false;
-                }
-                state.What += _spec.WeaponLab ? " + weapon lab" : " + weapon lab (W)";
             }
-            return true;
+            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName)
+            {
+                DebugShow = _spec.WeaponLab,
+                InitialWeapon = _spec.WeaponSelect,
+                InitialMount = _spec.WeaponMount,
+                AutoFireAtStart = _spec.WeaponFire,
+            };
+            _worldRoot!.AddChild(weaponLab);
+            _weaponLabNode = weaponLab;
+            // --weapon-test: mount and fire every one of the 48 weapons once and report any that
+            // throw, then quit (windowless under --headless). The report is
+            // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
+            // world tick is required.
+            if (_spec.WeaponTest)
+            {
+                string report = weaponLab.RunSelfTest();
+                GD.Print(report);
+                _probeRunner.WriteScratch("weapon_test.txt", report);
+                GetTree().Quit();
+                return false;
+            }
+            state.What += _spec.WeaponLab ? " + weapon lab" : " + weapon lab (W)";
+        }
+        return true;
     }
 
     /// <summary>The deck is now in the tree at its original position; remember its centre so
@@ -998,184 +1004,184 @@ public partial class GameSession : Node3D
     /// method into its own FlightRigAssembler.</summary>
     private void BuildFlightRigs(BuildState state)
     {
-                // Session-wide flight data, loaded once and shared by every player: the aircraft
-                // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
-                // and the per-plane state below are per player.
-                long mark = StartupProfile.Mark();
-                // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
-                // so there is nothing to load a second time.
-                var planesGamez = _spec.EmptyStage ? state.Gamez : GameZ.Load(state.PlanesGamezPath);
-                StartupProfile.Record("gamez", mark);
-                // Stats are per plane, not per player (splitscreen players can pick
-                // different aircraft) — load each distinct one once, logging it as it appears.
-                var statsCache = new Dictionary<string, PlaneStats>();
-                PlaneStats StatsFor(string plane)
-                {
-                    if (statsCache.TryGetValue(plane, out var cached))
-                        return cached;
-                    var loaded = PlaneStats.Load(state.ZrdrPath, plane);
-                    statsCache[plane] = loaded;
-                    GD.Print($"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s " +
-                             $"weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} " +
-                             $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
-                    return loaded;
-                }
-                // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
-                float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
-                // The launchscreen's join flow binds the pads; a CLI launch derives them
-                // from the connected roster instead.
-                var padAssignment = _menuPads ?? Pads.AssignPads(_rigs.Count);
-                if (_menuPads != null)
-                    Pads.LogPads(_menuPads);
-                // One livery RNG for the session, so P1..P4 draw distinct colours from one
-                // stream and --paint-seed reproduces the whole field.
-                var paintRng = _liveryResolver.NewPaintRng();
-                // One spawn list for the session; each player takes the next index (wrapping).
-                // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
-                // --pos/default override placed over the grid origin.
-                var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
-                int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
+        // Session-wide flight data, loaded once and shared by every player: the aircraft
+        // models' gamez, the plane's stats, the sound defs/archive. Only the built nodes
+        // and the per-plane state below are per player.
+        long mark = StartupProfile.Mark();
+        // On the empty stage the session gamez IS planes.zbd (there is no chapter world),
+        // so there is nothing to load a second time.
+        var planesGamez = _spec.EmptyStage ? state.Gamez : GameZ.Load(state.PlanesGamezPath);
+        StartupProfile.Record("gamez", mark);
+        // Stats are per plane, not per player (splitscreen players can pick
+        // different aircraft) — load each distinct one once, logging it as it appears.
+        var statsCache = new Dictionary<string, PlaneStats>();
+        PlaneStats StatsFor(string plane)
+        {
+            if (statsCache.TryGetValue(plane, out var cached))
+                return cached;
+            var loaded = PlaneStats.Load(state.ZrdrPath, plane);
+            statsCache[plane] = loaded;
+            GD.Print($"flight stats [{loaded.DefName}]: fd_speed={loaded.FdSpeed} m/s " +
+                     $"weight={loaded.VehWeight} engine={loaded.EnginePower:0.00} " +
+                     $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
+            return loaded;
+        }
+        // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
+        float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
+        // The launchscreen's join flow binds the pads; a CLI launch derives them
+        // from the connected roster instead.
+        var padAssignment = _menuPads ?? Pads.AssignPads(_rigs.Count);
+        if (_menuPads != null)
+            Pads.LogPads(_menuPads);
+        // One livery RNG for the session, so P1..P4 draw distinct colours from one
+        // stream and --paint-seed reproduces the whole field.
+        var paintRng = _liveryResolver.NewPaintRng();
+        // One spawn list for the session; each player takes the next index (wrapping).
+        // The empty stage has no mission, so nothing to read: ChooseSpawn takes the
+        // --pos/default override placed over the grid origin.
+        var spawnList = _spec.EmptyStage ? null : SpawnPoints.LoadIa(state.MissionZrdrPath, _spec.Scenario);
+        int spawnBase = _spawnPicker.ChooseSpawnBase(spawnList);
 
-                // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
-                // once, and ONE shared projectile/effect pool every player's guns fire into
-                // (projectiles live in the shared world, so every splitscreen pane sees them). The
-                // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
-                // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
-                // (`he_rocket` …) from the chapter's own prototype roots (B14).
-                mark = StartupProfile.Mark();
-                var weaponMessages = Messages.Load(state.MessagesPath);
-                var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
-                var stockLoadouts = StockLoadouts.Load();
-                StartupProfile.Record("zrdr", mark);
-                var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
-                    flyoutGamez: state.Gamez, flyoutScene: state.WorldScene)
-                {
-                    Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
-                    // Route weapon hits to the world's destructibles (C23): the pool's raycast
-                    // reports the struck collider, the runtime resolves it to a destructible and
-                    // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
-                    DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
-                };
-                _worldRoot!.AddChild(projectiles);
-                _projectiles = projectiles;
+        // Weapons (M3 wave B): the typed weapons.json catalogue + the stock loadouts, loaded
+        // once, and ONE shared projectile/effect pool every player's guns fire into
+        // (projectiles live in the shared world, so every splitscreen pane sees them). The
+        // pool reuses the session texture/sound archives (tracer/muzzle textures, impact sounds)
+        // and the world gamez + its SceneBuilder, so rockets instance their FLYOUT MODEL body
+        // (`he_rocket` …) from the chapter's own prototype roots (B14).
+        mark = StartupProfile.Mark();
+        var weaponMessages = Messages.Load(state.MessagesPath);
+        var weaponDefs = WeaponDefs.Load(state.ZrdrPath, weaponMessages);
+        var stockLoadouts = StockLoadouts.Load();
+        StartupProfile.Record("zrdr", mark);
+        var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
+            flyoutGamez: state.Gamez, flyoutScene: state.WorldScene)
+        {
+            Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
+            // Route weapon hits to the world's destructibles (C23): the pool's raycast
+            // reports the struck collider, the runtime resolves it to a destructible and
+            // spends the weapon's HEALTH_DAMAGE. Null runtime ⇒ impacts stay cosmetic.
+            DamageSink = state.WorldRuntime != null ? state.WorldRuntime.DamageAt : null,
+        };
+        _worldRoot!.AddChild(projectiles);
+        _projectiles = projectiles;
 
-                // The world-effects runtime (D32): one per session, rendering the impact/destruction
-                // puffer effects the world runtime cannot (its factory is gone after the build). A
-                // rocket impact plays its named effect here; the world runtime routes a death's
-                // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
-                // the templates, so it is built only when the world was.
-                if (state.WorldScene != null)
-                {
-                    var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
-                    projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
-                    if (state.WorldRuntime != null)
-                        state.WorldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
-                }
+        // The world-effects runtime (D32): one per session, rendering the impact/destruction
+        // puffer effects the world runtime cannot (its factory is gone after the build). A
+        // rocket impact plays its named effect here; the world runtime routes a death's
+        // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
+        // the templates, so it is built only when the world was.
+        if (state.WorldScene != null)
+        {
+            var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
+            projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
+            if (state.WorldRuntime != null)
+                state.WorldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+        }
 
-                // Stunt run: the mission's danger-zone objectives from ia.json
-                // dzones, positions resolved against this chapter world's gamez, display strings
-                // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
-                // every player then races an independent copy of the same zone list, so the
-                // archives are read once no matter how many pilots are in.
-                StuntMission? stuntZones = null;
-                StuntRace? race = null;
-                if (_spec.Stunt && _spec.EmptyStage)
-                {
-                    GD.Print("--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
-                }
-                else if (_spec.Stunt)
-                {
-                    stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, Messages.Load(state.MessagesPath));
-                    if (stuntZones == null)
-                        // Expected for the chapters whose IA1 has no dzones (C1C, C2B) — a data
-                        // fact, not a fault, so a plain line (log hygiene: no stack traces).
-                        GD.Print($"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
-                    else if (_rigs.Count > 1)
-                        race = new StuntRace(); // splitscreen: a race, ranked on the shared board
-                }
+        // Stunt run: the mission's danger-zone objectives from ia.json
+        // dzones, positions resolved against this chapter world's gamez, display strings
+        // from targets.json → messages.json. --stunt only. Parsed ONCE for the session —
+        // every player then races an independent copy of the same zone list, so the
+        // archives are read once no matter how many pilots are in.
+        StuntMission? stuntZones = null;
+        StuntRace? race = null;
+        if (_spec.Stunt && _spec.EmptyStage)
+        {
+            GD.Print("--stunt has no danger zones on the empty stage (no mission, no world) — flying free");
+        }
+        else if (_spec.Stunt)
+        {
+            stuntZones = StuntMission.Load(state.Gamez, state.MissionZrdrPath, Messages.Load(state.MessagesPath));
+            if (stuntZones == null)
+                // Expected for the chapters whose IA1 has no dzones (C1C, C2B) — a data
+                // fact, not a fault, so a plain line (log hygiene: no stack traces).
+                GD.Print($"--stunt: no danger zones for {_spec.Chapter}/{_spec.Mission} — flying free");
+            else if (_rigs.Count > 1)
+                race = new StuntRace(); // splitscreen: a race, ranked on the shared board
+        }
 
-                // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
-                // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
-                // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
-                // simply not built.
-                HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
+        // The game's own HUD bitmap font (extracted/rimage/5pointhud*.png), loaded once and
+        // shared across panes — the E36 weapon readout and the --hud-font-test proof overlay
+        // both draw with it. Null (one log line) if the rimage atlas is absent; both are then
+        // simply not built.
+        HudFont? hudFont = HudFont.Load(Path.Combine(_dataRoot, "extracted", "rimage"));
 
-                // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
-                // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
-                // simply omits the reticle.
-                Texture2D? reticleTex = ImpactReticle.LoadTexture(
-                    Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
+        // The gun aiming reticle's pipper (E37): the game's own impact_point.png, loaded once
+        // and shared across panes (it carries its own alpha — no colour-keying). Null (no file)
+        // simply omits the reticle.
+        Texture2D? reticleTex = ImpactReticle.LoadTexture(
+            Path.Combine(_dataRoot, "extracted", "rimage"), "impact_point.png");
 
-                // Per-player rigs: one FlightRigAssembler over the session data above, run in
-                // ascending player order — the paint rng and the spawn index wrap are shared
-                // streams, so the draw order is load-bearing (PLAN-planeviewer-split C10; see
-                // src/Session/FlightRigAssembler.cs).
-                var assembler = new FlightRigAssembler(_spec, _liveryResolver, _spawnPicker,
-                    _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
-                    {
-                        PlanesGamez = planesGamez,
-                        StatsFor = StatsFor,
-                        RigCount = _rigs.Count,
-                        MixGain = mixGain,
-                        PadAssignment = padAssignment,
-                        PaintRng = paintRng,
-                        SpawnList = spawnList,
-                        SpawnBase = spawnBase,
-                        WeaponDefs = weaponDefs,
-                        WeaponMessages = weaponMessages,
-                        StockLoadouts = stockLoadouts,
-                        Projectiles = projectiles,
-                        HudFont = hudFont,
-                        ReticleTex = reticleTex,
-                        StuntZones = stuntZones,
-                        Race = race,
-                        Textures = state.Textures,
-                        ZrdrPath = state.ZrdrPath,
-                        MissionZrdrPath = state.MissionZrdrPath,
-                        Gamez = state.Gamez,
-                        WorldScene = state.WorldScene,
-                        WorldRuntime = state.WorldRuntime,
-                        CrashProgram = state.CrashProgram,
-                        Sounds = state.Sounds,
-                        SoundDefs = state.SoundDefs,
-                        DebugCollision = state.DebugCollision,
-                    });
-                for (int pi = 0; pi < _rigs.Count; pi++)
-                {
-                    assembler.Assemble(pi, _rigs[pi]);
-                }
-                state.MeshInstances += assembler.MeshInstances;
-                state.What += assembler.WhatSuffix;
+        // Per-player rigs: one FlightRigAssembler over the session data above, run in
+        // ascending player order — the paint rng and the spawn index wrap are shared
+        // streams, so the draw order is load-bearing (PLAN-planeviewer-split C10; see
+        // src/Session/FlightRigAssembler.cs).
+        var assembler = new FlightRigAssembler(_spec, _liveryResolver, _spawnPicker,
+            _worldEffectsFactory, _worldRoot!, new FlightRigAssembler.Inputs
+            {
+                PlanesGamez = planesGamez,
+                StatsFor = StatsFor,
+                RigCount = _rigs.Count,
+                MixGain = mixGain,
+                PadAssignment = padAssignment,
+                PaintRng = paintRng,
+                SpawnList = spawnList,
+                SpawnBase = spawnBase,
+                WeaponDefs = weaponDefs,
+                WeaponMessages = weaponMessages,
+                StockLoadouts = stockLoadouts,
+                Projectiles = projectiles,
+                HudFont = hudFont,
+                ReticleTex = reticleTex,
+                StuntZones = stuntZones,
+                Race = race,
+                Textures = state.Textures,
+                ZrdrPath = state.ZrdrPath,
+                MissionZrdrPath = state.MissionZrdrPath,
+                Gamez = state.Gamez,
+                WorldScene = state.WorldScene,
+                WorldRuntime = state.WorldRuntime,
+                CrashProgram = state.CrashProgram,
+                Sounds = state.Sounds,
+                SoundDefs = state.SoundDefs,
+                DebugCollision = state.DebugCollision,
+            });
+        for (int pi = 0; pi < _rigs.Count; pi++)
+        {
+            assembler.Assemble(pi, _rigs[pi]);
+        }
+        state.MeshInstances += assembler.MeshInstances;
+        state.What += assembler.WhatSuffix;
 
-                // The race's shared results board: one ranked row per player, over the
-                // WHOLE window rather than inside a pane — the race ends for everybody at once — so
-                // it goes on its own CanvasLayer above the splitscreen panes. Any player's R there
-                // is a rematch, which restarts every plane, so it routes back through the session.
-                if (race != null)
-                {
-                    var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
-                        exitsToMenu: _menuDriven);
-                    var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
-                    boardLayer.AddChild(board);
-                    _worldRoot!.AddChild(boardLayer);
-                    foreach (var rig in _rigs)
-                        if (rig.Controller != null)
-                            rig.Controller.RestartRace = () => RestartRace(race);
-                    GD.Print($"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, " +
-                             "own progress + clock each, shared ranked board");
-                }
+        // The race's shared results board: one ranked row per player, over the
+        // WHOLE window rather than inside a pane — the race ends for everybody at once — so
+        // it goes on its own CanvasLayer above the splitscreen panes. Any player's R there
+        // is a rematch, which restarts every plane, so it routes back through the session.
+        if (race != null)
+        {
+            var board = StuntRaceBoard.Build(race, $"{_spec.Chapter}   ·   {PlaneRoster.Humanize(_spec.Scenario)}",
+                exitsToMenu: _menuDriven);
+            var boardLayer = new CanvasLayer { Name = "race_board", Layer = 10 };
+            boardLayer.AddChild(board);
+            _worldRoot!.AddChild(boardLayer);
+            foreach (var rig in _rigs)
+                if (rig.Controller != null)
+                    rig.Controller.RestartRace = () => RestartRace(race);
+            GD.Print($"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, " +
+                     "own progress + clock each, shared ranked board");
+        }
 
-                if (_rigs.Count > 1)
-                {
-                    var flown = new List<string>(_rigs.Count);
-                    for (int pi = 0; pi < _rigs.Count; pi++)
-                        flown.Add($"P{pi + 1} '{PlaneRoster.PlaneFor(_spec, pi)}'");
-                    state.What += $" + splitscreen {string.Join(", ", flown)}";
-                }
-                else
-                {
-                    state.What += $" + '{_spec.PlaneName}' flying";
-                }
+        if (_rigs.Count > 1)
+        {
+            var flown = new List<string>(_rigs.Count);
+            for (int pi = 0; pi < _rigs.Count; pi++)
+                flown.Add($"P{pi + 1} '{PlaneRoster.PlaneFor(_spec, pi)}'");
+            state.What += $" + splitscreen {string.Join(", ", flown)}";
+        }
+        else
+        {
+            state.What += $" + '{_spec.PlaneName}' flying";
+        }
     }
 
     /// <summary>--destroy=&lt;name&gt;: kill a named destructible at session build so a

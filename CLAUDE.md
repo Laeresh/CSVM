@@ -59,7 +59,6 @@ previews, debug dumps, golden-test captures, etc. — always write them into
 
 
 ## Coding conventions
-- Never write braceless control-flow bodies. Always wrap the body of if, else if, else, for, foreach, while, and do in braces, even for a single statement — this prevents dangling-else and merge-conflict bugs. TODO replace this with `dotnet format CSVM.csproj`
 - Comments state what and why, briefly — never provenance (dates, plan/milestone/item references), never history, never instructions to a reviewer. If a comment's only content is where a change came from, it should not exist.
 ## Repo layout
 

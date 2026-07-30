@@ -50,7 +50,7 @@ public sealed class WeatherState
 
     // A no-op fog (nothing fades) for missions/zones without a FOG_RANGES: near/far so far out
     // that smoothstep is 0 across the whole world. WorldLight 1 = fullbright (no darkening).
-    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f,1e8f,1e9f, 1e9f, 1f);
+    private static readonly ZoneFog NoFog = new(new Color(0.69f, 0.69f, 0.69f), 1e8f, 1e9f, 1e8f, 1e9f, 1e9f, 1f);
 
     // The original lights the baked-vertex world by the mission's SUNLIGHT (weather.json's
     // per-zone SUNLIGHT_AMBIENT + SUNLIGHT_DIFFUSE·(N·L_sun)); we render the world fullbright,
@@ -212,7 +212,7 @@ public sealed class WeatherState
                         ? (l, h)
                         : (NoFog.FogNear, NoFog.FogFar);
                 float clip = z.List("CLIP_RANGES") is { Count: >= 2 } cr && cr[1] is float c ? c : NoFog.ClipFar;
-                w._zones[zone] = new ZoneFog(color, near, far,low, high, clip, WorldLightFactor(z));
+                w._zones[zone] = new ZoneFog(color, near, far, low, high, clip, WorldLightFactor(z));
                 var zf = w._zones[zone];
                 // The fields, not the record: a composite ToString() renders its own floats in
                 // the current culture, so it would escape Log's invariant formatting outright.

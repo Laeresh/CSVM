@@ -56,7 +56,7 @@ public sealed partial class ProjectilePool : Node3D
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
     private const float TracerLength = 3f;   // streak length behind the round, m
-    private const float TracerWidth = 0.0782f*2;   // m
+    private const float TracerWidth = 0.0782f * 2;   // m
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
                                                   // NO FLYOUT model (a chapter missing the prototype)
     private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
@@ -174,7 +174,7 @@ public sealed partial class ProjectilePool : Node3D
 
     private MultiMesh AddMultiMesh(string texture, int cap, bool additive, bool billboard, out MultiMeshInstance3D mmi)
     {
-        var quad = new QuadMesh { Size =Vector2.One };
+        var quad = new QuadMesh { Size = Vector2.One };
         var mat = new StandardMaterial3D
         {
             ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
@@ -186,7 +186,7 @@ public sealed partial class ProjectilePool : Node3D
             BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
             BillboardKeepScale = true,
             VertexColorUseAsAlbedo = true,
-            Uv1Scale=new Vector3(-1.0f,1.0f,1.0f),
+            Uv1Scale = new Vector3(-1.0f, 1.0f, 1.0f),
         };
         quad.Material = mat;
         var mm = new MultiMesh

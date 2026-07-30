@@ -1283,18 +1283,20 @@ void fragment() {{
             {
                 case "": break;
                 case "normals": _density = value == "corners" ? NormalDensity.PerCorner : NormalDensity.PerFace; break;
-                case "color": _colorMode = value switch
-                {
-                    "direction" => NormalColorMode.Direction,
-                    "winding" => NormalColorMode.Winding,
-                    _ => NormalColorMode.Provenance,
-                }; break;
-                case "wire": _wire = value switch
-                {
-                    "seams" => WireMode.EdgesAndSeams,
-                    "seamsonly" => WireMode.SeamsOnly,
-                    _ => WireMode.Edges,
-                }; break;
+                case "color":
+                    _colorMode = value switch
+                    {
+                        "direction" => NormalColorMode.Direction,
+                        "winding" => NormalColorMode.Winding,
+                        _ => NormalColorMode.Provenance,
+                    }; break;
+                case "wire":
+                    _wire = value switch
+                    {
+                        "seams" => WireMode.EdgesAndSeams,
+                        "seamsonly" => WireMode.SeamsOnly,
+                        _ => WireMode.Edges,
+                    }; break;
                 case "boxes": _boxes = true; break;
                 case "force": _forceOverride = true; break;
                 case "restore":
@@ -1305,20 +1307,22 @@ void fragment() {{
                     break;
                 case "headlight": _headlight = true; break;
                 case "enginewire": _engineWireframe = true; break;
-                case "cull": _cull = value switch
-                {
-                    "double" => CullOverride.AllDoubleSided,
-                    "single" => CullOverride.AllSingleSided,
-                    "inverted" => CullOverride.Inverted,
-                    _ => CullOverride.AsData,
-                }; break;
-                case "source": _normals = value switch
-                {
-                    "flat" => NormalSource.AllFlat,
-                    "smooth" => NormalSource.AllSmooth,
-                    "negated" => NormalSource.Negated,
-                    _ => NormalSource.AsData,
-                }; break;
+                case "cull":
+                    _cull = value switch
+                    {
+                        "double" => CullOverride.AllDoubleSided,
+                        "single" => CullOverride.AllSingleSided,
+                        "inverted" => CullOverride.Inverted,
+                        _ => CullOverride.AsData,
+                    }; break;
+                case "source":
+                    _normals = value switch
+                    {
+                        "flat" => NormalSource.AllFlat,
+                        "smooth" => NormalSource.AllSmooth,
+                        "negated" => NormalSource.Negated,
+                        _ => NormalSource.AsData,
+                    }; break;
                 case "ambient": _ambientOn = value != "off"; break;
                 case "cycle":
                     // cycle=N — step the normal-source cycler N times at launch, the headless
@@ -1344,7 +1348,8 @@ void fragment() {{
                     else
                         GD.Print($"[mesh] --debug-mesh: bad dir '{value}' (want dir=x/y/z)");
                     break;
-                case "sun": if (float.TryParse(value, System.Globalization.NumberStyles.Float,
+                case "sun":
+                    if (float.TryParse(value, System.Globalization.NumberStyles.Float,
                     System.Globalization.CultureInfo.InvariantCulture, out float e)) _sunEnergy = e; break;
                 default: GD.Print($"[mesh] --debug-mesh: unknown token '{raw.Trim()}'"); break;
             }

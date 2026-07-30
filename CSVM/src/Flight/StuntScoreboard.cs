@@ -129,8 +129,10 @@ public sealed partial class StuntScoreboard : Control
         {
             BgColor = new Color(0.05f, 0.07f, 0.11f, 0.94f),
             BorderColor = new Color(0.34f, 0.48f, 0.72f),
-            ContentMarginLeft = 34f * s, ContentMarginRight = 34f * s,
-            ContentMarginTop = 24f * s, ContentMarginBottom = 22f * s,
+            ContentMarginLeft = 34f * s,
+            ContentMarginRight = 34f * s,
+            ContentMarginTop = 24f * s,
+            ContentMarginBottom = 22f * s,
         };
         style.SetBorderWidthAll(Mathf.RoundToInt(2f * s));
         style.SetCornerRadiusAll(Mathf.RoundToInt(6f * s));

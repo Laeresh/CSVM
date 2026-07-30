@@ -798,9 +798,14 @@ public static class Probes
         {
             r.Rows.Add(new FlightRow
             {
-                Name = name, What = what, Unit = unit, Model = model,
-                Measured = bhawk ? measured : null, Tolerance = tol,
-                Detail = detail, Informational = info,
+                Name = name,
+                What = what,
+                Unit = unit,
+                Model = model,
+                Measured = bhawk ? measured : null,
+                Tolerance = tol,
+                Detail = detail,
+                Informational = info,
             });
         }
 

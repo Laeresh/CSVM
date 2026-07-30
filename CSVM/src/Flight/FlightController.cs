@@ -1595,7 +1595,7 @@ public partial class FlightController : Node3D
         string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
         string throttle = $"THR {_model.Throttle * 100,3:0}%";
         _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-        if(_model.isStalled())
+        if (_model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
         if (!halted && !_crashed && _damageFlash > 0f)
         {

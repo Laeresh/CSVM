@@ -168,39 +168,39 @@ public sealed class PlanePainter
         // vs 0.25, pea_wing 0.40 vs 0.15); the cases that disagree are vertically symmetric
         // regions that score the same either way.
         for (int y = 0; y < h; y++)
-        for (int x = 0; x < w; x++)
-        {
-            int i = y * w + x;              // destination texel (top-down)
-            int j = (h - 1 - y) * w + x;    // source texel (bottom-up)
-            float w1 = bm.Slot1[j], w2 = bm.Slot2[j], w3 = bm.Slot3[j];
-            // paint colour at this texel, 0..255 per channel
-            float pr = (w1 * r1 + w2 * r2 + w3 * r3) * (1f / 255f);
-            float pg = (w1 * g1 + w2 * g2 + w3 * g3) * (1f / 255f);
-            float pb = (w1 * b1 + w2 * b2 + w3 * b3) * (1f / 255f);
-            // modulated by the shading map (panel lines, rivets, baked shading)
-            int s = j * 3;
-            float outR = bm.Shading[s] * pr * (1f / 255f);
-            float outG = bm.Shading[s + 1] * pg * (1f / 255f);
-            float outB = bm.Shading[s + 2] * pb * (1f / 255f);
-
-            if (bm.HasOverlay)
+            for (int x = 0; x < w; x++)
             {
-                int o = j * 4;
-                float a = bm.Overlay![o + 3] * (1f / 255f);
-                if (a > 0f)
-                {
-                    outR = outR * (1f - a) + bm.Overlay[o] * a;
-                    outG = outG * (1f - a) + bm.Overlay[o + 1] * a;
-                    outB = outB * (1f - a) + bm.Overlay[o + 2] * a;
-                }
-            }
+                int i = y * w + x;              // destination texel (top-down)
+                int j = (h - 1 - y) * w + x;    // source texel (bottom-up)
+                float w1 = bm.Slot1[j], w2 = bm.Slot2[j], w3 = bm.Slot3[j];
+                // paint colour at this texel, 0..255 per channel
+                float pr = (w1 * r1 + w2 * r2 + w3 * r3) * (1f / 255f);
+                float pg = (w1 * g1 + w2 * g2 + w3 * g3) * (1f / 255f);
+                float pb = (w1 * b1 + w2 * b2 + w3 * b3) * (1f / 255f);
+                // modulated by the shading map (panel lines, rivets, baked shading)
+                int s = j * 3;
+                float outR = bm.Shading[s] * pr * (1f / 255f);
+                float outG = bm.Shading[s + 1] * pg * (1f / 255f);
+                float outB = bm.Shading[s + 2] * pb * (1f / 255f);
 
-            int d = i * 4;
-            data[d] = (byte)Mathf.Clamp((int)(outR + 0.5f), 0, 255);
-            data[d + 1] = (byte)Mathf.Clamp((int)(outG + 0.5f), 0, 255);
-            data[d + 2] = (byte)Mathf.Clamp((int)(outB + 0.5f), 0, 255);
-            data[d + 3] = 255;
-        }
+                if (bm.HasOverlay)
+                {
+                    int o = j * 4;
+                    float a = bm.Overlay![o + 3] * (1f / 255f);
+                    if (a > 0f)
+                    {
+                        outR = outR * (1f - a) + bm.Overlay[o] * a;
+                        outG = outG * (1f - a) + bm.Overlay[o + 1] * a;
+                        outB = outB * (1f - a) + bm.Overlay[o + 2] * a;
+                    }
+                }
+
+                int d = i * 4;
+                data[d] = (byte)Mathf.Clamp((int)(outR + 0.5f), 0, 255);
+                data[d + 1] = (byte)Mathf.Clamp((int)(outG + 0.5f), 0, 255);
+                data[d + 2] = (byte)Mathf.Clamp((int)(outB + 0.5f), 0, 255);
+                data[d + 3] = 255;
+            }
 
         // The ZBD skin's alpha, where it has one and the grids agree: SceneBuilder already
         // chose blend-vs-scissor from that texture's alpha class, so the substitute has to

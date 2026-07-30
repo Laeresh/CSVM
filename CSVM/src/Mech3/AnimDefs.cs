@@ -317,7 +317,7 @@ public static class AnimDefs
         }
         if (Num(fields, "TIME_INTERVAL") is { } ti)
             data["interval_garbage"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                { ["interval_value"] = ti };
+            { ["interval_value"] = ti };
         if (Vec(fields, "LOCAL_VELOCITY") is { } lv) data["local_velocity"] = lv;
         if (Vec(fields, "WORLD_VELOCITY") is { } wv) data["world_velocity"] = wv;
         if (Vec(fields, "MIN_RANDOM_VELOCITY") is { } minv) data["min_random_velocity"] = minv;
@@ -395,7 +395,7 @@ public static class AnimDefs
             data["translate"] = new Dictionary<string, object?>(StringComparer.Ordinal)
             {
                 ["AtNode"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                    { ["name"] = atName, ["pos"] = pos },
+                { ["name"] = atName, ["pos"] = pos },
             };
         }
         if (RangeObj(fields, "RANGE") is { } range) data["range"] = range;
@@ -411,7 +411,7 @@ public static class AnimDefs
             || AnimData.AsNum(v[2]) is not { } b)
             return null;
         return new Dictionary<string, object?>(StringComparer.Ordinal)
-            { ["r"] = r, ["g"] = g, ["b"] = b };
+        { ["r"] = r, ["g"] = g, ["b"] = b };
     }
 
     /// <summary>
@@ -449,10 +449,10 @@ public static class AnimDefs
             return Union("NodeActive", First(fields, "NODE_ACTIVE"));
         if (fields.TryGetValue("NODE_NEAR_GROUND", out var nng) && nng is { Count: >= 2 })
             return Union("NodeUndercover", new Dictionary<string, object?>(StringComparer.Ordinal)
-                { ["node"] = nng[0], ["distance"] = AnimData.AsNum(nng[1]) ?? 0f });
+            { ["node"] = nng[0], ["distance"] = AnimData.AsNum(nng[1]) ?? 0f });
         if (fields.TryGetValue("NODE_BELOW_ALT", out var nba) && nba is { Count: >= 2 })
             return Union("NodeBelowAlt", new Dictionary<string, object?>(StringComparer.Ordinal)
-                { ["node"] = nba[0], ["altitude"] = AnimData.AsNum(nba[1]) ?? 0f });
+            { ["node"] = nba[0], ["altitude"] = AnimData.AsNum(nba[1]) ?? 0f });
         return null;
     }
 
@@ -545,7 +545,7 @@ public static class AnimDefs
             || AnimData.AsNum(v[2]) is not { } z)
             return null;
         return new Dictionary<string, object?>(StringComparer.Ordinal)
-            { ["x"] = x, ["y"] = y, ["z"] = z };
+        { ["x"] = x, ["y"] = y, ["z"] = z };
     }
 
     // OBJECT_MOTION's XYZ_ROTATION: six numbers, [initial xyz, delta xyz], degrees/second in
@@ -566,9 +566,9 @@ public static class AnimDefs
         return new Dictionary<string, object?>(StringComparer.Ordinal)
         {
             ["initial"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                { ["x"] = n[0], ["y"] = n[1], ["z"] = n[2] },
+            { ["x"] = n[0], ["y"] = n[1], ["z"] = n[2] },
             ["delta"] = new Dictionary<string, object?>(StringComparer.Ordinal)
-                { ["x"] = n[3], ["y"] = n[4], ["z"] = n[5] },
+            { ["x"] = n[3], ["y"] = n[4], ["z"] = n[5] },
         };
     }
 

@@ -16,7 +16,10 @@ public sealed class StockLoadouts
     // ammo name -> the offset into a caliber's four consecutive wep ids (slug X0 .. magnesium X3).
     private static readonly Dictionary<string, int> AmmoIndex = new(StringComparer.OrdinalIgnoreCase)
     {
-        ["slug"] = 0, ["dumdum"] = 1, ["ap"] = 2, ["magnesium"] = 3,
+        ["slug"] = 0,
+        ["dumdum"] = 1,
+        ["ap"] = 2,
+        ["magnesium"] = 3,
     };
 
     private readonly Dictionary<string, LoadoutDef> _byDef = new(StringComparer.OrdinalIgnoreCase);

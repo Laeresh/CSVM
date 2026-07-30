@@ -1012,185 +1012,185 @@ public sealed partial class AnimRuntime : Node
                 return true;
 
             case "ObjectMotionFromTo":
-            {
-                float runTime = ev.Data.Num("run_time") ?? 0f;
-                foreach (var t in Targets(ev, def, anchor))
                 {
-                    var tween = FromToMotion.Create(this, t, ev.Data, runTime);
-                    if (tween == null)
-                        continue;
-                    if (instant || runTime <= 0f)
-                        tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
-                    else
-                        AddMotion(tween, def, anchor);
-                    _opsApplied++;
-                }
-                duration = instant ? 0f : runTime;
-                return true;
-            }
-
-            case "ObjectOpacityState":
-            {
-                // OBJECT_OPACITY_STATE is translucency, not visibility. `state` is whether
-                // translucency is ENABLED and `opacity` the alpha while it is — settled by the
-                // data, where state=false pairs with opacity=1.0 in all 136 compiled uses and
-                // never with 0, so `false` means "render normally", not "disappear". (Hiding is
-                // OBJECT_ACTIVE_STATE's job and the data uses it right alongside this.)
-                if (ev.Data.Get("state") is not bool on)
-                {
-                    Count("ObjectOpacityState(no state)");
-                    return true;
-                }
-                float alpha = on ? ev.Data.Num("opacity") ?? 1f : 1f;
-                foreach (var t in Targets(ev, def, anchor))
-                {
-                    SetSubtreeOpacity(t, alpha);
-                    _opsApplied++;
-                }
-                return true;
-            }
-
-            case "ObjectOpacityFromTo":
-            {
-                // A timed translucency fade — the single biggest un-handled event kind (9,917
-                // events install-wide, all trigger-gated OnCall/WeaponHit, so none fire at
-                // bootstrap). Unlike OBJECT_OPACITY_STATE, the endpoint `state` flag does NOT
-                // invert the value: (state=false, opacity=0) fades to invisible and
-                // (state=false, opacity=1) fades to opaque — surveyed across all 9,917 events
-                // (the two dominant combos), so this is a literal lerp of the two opacity
-                // numbers through SetSubtreeOpacity. `opacity_delta` is null in 100% of them
-                // (the relative form, like FromToMotion's dead *_delta channels); report it if
-                // one ever appears rather than silently ignoring it.
-                float runTime = ev.Data.Num("run_time") ?? 0f;
-                var from = ev.Data.Obj("opacity_from");
-                var to = ev.Data.Obj("opacity_to");
-                if (from == null || to == null)
-                {
-                    Count("ObjectOpacityFromTo(no endpoints)");
-                    return true;
-                }
-                if (ev.Data.Has("opacity_delta"))
-                    Count("ObjectOpacityFromTo(delta)");
-                float o0 = from.Num("opacity") ?? 1f;
-                float o1 = to.Num("opacity") ?? 1f;
-                foreach (var t in Targets(ev, def, anchor))
-                {
-                    var fade = new OpacityFade(this, t, o0, o1, runTime);
-                    if (instant || runTime <= 0f)
-                        fade.Seek(runTime); // RESET_STATE / zero-length: land on the end opacity
-                    else
-                        AddMotion(fade, def, anchor);
-                    _opsApplied++;
-                }
-                duration = instant ? 0f : runTime;
-                return true;
-            }
-
-            case "ObjectMotion":
-            {
-                // OBJECT_MOTION is the original's rigid-body descriptor, and it spans two very
-                // different jobs. Rotation-only events (XYZ_ROTATION alone) are steady spins —
-                // zeppelin nacelle props (`spin`/`counterspin`, ∓40°/30°/s counter-rotating) and
-                // rotating signage — and every one of the 590 OnStartup events install-wide is
-                // exactly that shape, so the lightweight SpinMotion path below stays byte-for-byte
-                // what the ambient world boots with. The rest pair motion with
-                // GRAVITY/TRANSLATION/SCALE/FORWARD_ROTATION: ballistic debris and dust thrown by
-                // a kill or a CRASH — reachable only from OnCall/WeaponHit (2,900+ events, zero at
-                // bootstrap), which is why the MotionRuntime path here cannot regress the world.
-                bool hasBallistic = ev.Data.Has("translation") || ev.Data.Has("translation_range")
-                                    || ev.Data.Has("scale") || ev.Data.Has("forward_rotation");
-                if (hasBallistic)
-                {
-                    // The full rigid-body simulation: a ballistic translate/launch, a scale ramp
-                    // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
-                    // See MotionRuntime for the semantics and the TUNE caveats.
-                    float ballTime = ev.Data.Num("run_time") ?? 0f;
+                    float runTime = ev.Data.Num("run_time") ?? 0f;
                     foreach (var t in Targets(ev, def, anchor))
                     {
-                        var motion = MotionRuntime.Create(this, t, ev.Data, ballTime);
-                        if (motion == null)
+                        var tween = FromToMotion.Create(this, t, ev.Data, runTime);
+                        if (tween == null)
                             continue;
-                        if (instant || ballTime <= 0f)
-                        {
-                            motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
-                        }
+                        if (instant || runTime <= 0f)
+                            tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
                         else
-                        {
-                            AddMotion(motion, def, anchor);
-                            BallisticMotionsLaunched++;
-                        }
+                            AddMotion(tween, def, anchor);
                         _opsApplied++;
                     }
-                    // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up
-                    // — it needs do_intersections + a ground ray; the pieces read fine tumbling to
-                    // rest without it. Report it so --debug-anim shows it is deferred, not missed.
-                    if (ev.Data.Has("bounce_sequence"))
-                        Count("ObjectMotion(bounce_sequence deferred)");
-                    duration = instant ? 0f : ballTime;
-                    return true;
-                }
-                // No motion channel: either a steady spin (below) or a bare GRAVITY/BOUNCE stub
-                // with nothing to drive (meaningless without translation — reported, not acted on).
-                if (ev.Data.Obj("xyz_rotation") is not { } spin)
-                {
-                    bool bareBallistic = ev.Data.Has("gravity") || ev.Data.Has("bounce_sequence");
-                    Count(bareBallistic ? "ObjectMotion(ballistic)" : ev.Kind);
+                    duration = instant ? 0f : runTime;
                     return true;
                 }
 
-                var rate = spin.Vec3("initial");
-                // `delta` is a second rate triple whose meaning the data does not settle: it
-                // reads as acceleration on a blown-up chassis and as a decelerating ramp on
-                // `chuteman_sway`, and could equally be a random spread. 589 of the 590
-                // reachable events leave it zero, so it is reported, not guessed — the same
-                // call Object3DRotate's ambiguous angle unit got in MissionSetup.
-                if (!spin.Vec3("delta").IsZeroApprox())
-                    Count("ObjectMotion(rotation delta)");
-                if (rate.IsZeroApprox())
-                    return true;
-
-                float spinFor = ev.Data.Num("run_time") ?? 0f;
-                foreach (var t in Targets(ev, def, anchor))
+            case "ObjectOpacityState":
                 {
-                    // Re-assertion is idempotent. These sit inside `Loop{-1}` sequences, so an
-                    // already-turning prop would otherwise be rebuilt every frame — each rebuild
-                    // re-reading rest from the current pose and restarting the clock at 0, which
-                    // advances one frame's worth of angle and then throws it away. The prop would
-                    // sit almost still while looking, in the logs, perfectly driven.
-                    if (_motions.Any(m => m.Target == t && m is SpinMotion s && s.Matches(rate, spinFor)))
-                        continue;
-                    var motion = new SpinMotion(t, rate, spinFor);
-                    if (instant)
-                        motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
-                    else
-                        AddMotion(motion, def, anchor);
-                    _opsApplied++;
+                    // OBJECT_OPACITY_STATE is translucency, not visibility. `state` is whether
+                    // translucency is ENABLED and `opacity` the alpha while it is — settled by the
+                    // data, where state=false pairs with opacity=1.0 in all 136 compiled uses and
+                    // never with 0, so `false` means "render normally", not "disappear". (Hiding is
+                    // OBJECT_ACTIVE_STATE's job and the data uses it right alongside this.)
+                    if (ev.Data.Get("state") is not bool on)
+                    {
+                        Count("ObjectOpacityState(no state)");
+                        return true;
+                    }
+                    float alpha = on ? ev.Data.Num("opacity") ?? 1f : 1f;
+                    foreach (var t in Targets(ev, def, anchor))
+                    {
+                        SetSubtreeOpacity(t, alpha);
+                        _opsApplied++;
+                    }
+                    return true;
                 }
-                duration = instant ? 0f : spinFor;
-                return true;
-            }
+
+            case "ObjectOpacityFromTo":
+                {
+                    // A timed translucency fade — the single biggest un-handled event kind (9,917
+                    // events install-wide, all trigger-gated OnCall/WeaponHit, so none fire at
+                    // bootstrap). Unlike OBJECT_OPACITY_STATE, the endpoint `state` flag does NOT
+                    // invert the value: (state=false, opacity=0) fades to invisible and
+                    // (state=false, opacity=1) fades to opaque — surveyed across all 9,917 events
+                    // (the two dominant combos), so this is a literal lerp of the two opacity
+                    // numbers through SetSubtreeOpacity. `opacity_delta` is null in 100% of them
+                    // (the relative form, like FromToMotion's dead *_delta channels); report it if
+                    // one ever appears rather than silently ignoring it.
+                    float runTime = ev.Data.Num("run_time") ?? 0f;
+                    var from = ev.Data.Obj("opacity_from");
+                    var to = ev.Data.Obj("opacity_to");
+                    if (from == null || to == null)
+                    {
+                        Count("ObjectOpacityFromTo(no endpoints)");
+                        return true;
+                    }
+                    if (ev.Data.Has("opacity_delta"))
+                        Count("ObjectOpacityFromTo(delta)");
+                    float o0 = from.Num("opacity") ?? 1f;
+                    float o1 = to.Num("opacity") ?? 1f;
+                    foreach (var t in Targets(ev, def, anchor))
+                    {
+                        var fade = new OpacityFade(this, t, o0, o1, runTime);
+                        if (instant || runTime <= 0f)
+                            fade.Seek(runTime); // RESET_STATE / zero-length: land on the end opacity
+                        else
+                            AddMotion(fade, def, anchor);
+                        _opsApplied++;
+                    }
+                    duration = instant ? 0f : runTime;
+                    return true;
+                }
+
+            case "ObjectMotion":
+                {
+                    // OBJECT_MOTION is the original's rigid-body descriptor, and it spans two very
+                    // different jobs. Rotation-only events (XYZ_ROTATION alone) are steady spins —
+                    // zeppelin nacelle props (`spin`/`counterspin`, ∓40°/30°/s counter-rotating) and
+                    // rotating signage — and every one of the 590 OnStartup events install-wide is
+                    // exactly that shape, so the lightweight SpinMotion path below stays byte-for-byte
+                    // what the ambient world boots with. The rest pair motion with
+                    // GRAVITY/TRANSLATION/SCALE/FORWARD_ROTATION: ballistic debris and dust thrown by
+                    // a kill or a CRASH — reachable only from OnCall/WeaponHit (2,900+ events, zero at
+                    // bootstrap), which is why the MotionRuntime path here cannot regress the world.
+                    bool hasBallistic = ev.Data.Has("translation") || ev.Data.Has("translation_range")
+                                        || ev.Data.Has("scale") || ev.Data.Has("forward_rotation");
+                    if (hasBallistic)
+                    {
+                        // The full rigid-body simulation: a ballistic translate/launch, a scale ramp
+                        // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
+                        // See MotionRuntime for the semantics and the TUNE caveats.
+                        float ballTime = ev.Data.Num("run_time") ?? 0f;
+                        foreach (var t in Targets(ev, def, anchor))
+                        {
+                            var motion = MotionRuntime.Create(this, t, ev.Data, ballTime);
+                            if (motion == null)
+                                continue;
+                            if (instant || ballTime <= 0f)
+                            {
+                                motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
+                            }
+                            else
+                            {
+                                AddMotion(motion, def, anchor);
+                                BallisticMotionsLaunched++;
+                            }
+                            _opsApplied++;
+                        }
+                        // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up
+                        // — it needs do_intersections + a ground ray; the pieces read fine tumbling to
+                        // rest without it. Report it so --debug-anim shows it is deferred, not missed.
+                        if (ev.Data.Has("bounce_sequence"))
+                            Count("ObjectMotion(bounce_sequence deferred)");
+                        duration = instant ? 0f : ballTime;
+                        return true;
+                    }
+                    // No motion channel: either a steady spin (below) or a bare GRAVITY/BOUNCE stub
+                    // with nothing to drive (meaningless without translation — reported, not acted on).
+                    if (ev.Data.Obj("xyz_rotation") is not { } spin)
+                    {
+                        bool bareBallistic = ev.Data.Has("gravity") || ev.Data.Has("bounce_sequence");
+                        Count(bareBallistic ? "ObjectMotion(ballistic)" : ev.Kind);
+                        return true;
+                    }
+
+                    var rate = spin.Vec3("initial");
+                    // `delta` is a second rate triple whose meaning the data does not settle: it
+                    // reads as acceleration on a blown-up chassis and as a decelerating ramp on
+                    // `chuteman_sway`, and could equally be a random spread. 589 of the 590
+                    // reachable events leave it zero, so it is reported, not guessed — the same
+                    // call Object3DRotate's ambiguous angle unit got in MissionSetup.
+                    if (!spin.Vec3("delta").IsZeroApprox())
+                        Count("ObjectMotion(rotation delta)");
+                    if (rate.IsZeroApprox())
+                        return true;
+
+                    float spinFor = ev.Data.Num("run_time") ?? 0f;
+                    foreach (var t in Targets(ev, def, anchor))
+                    {
+                        // Re-assertion is idempotent. These sit inside `Loop{-1}` sequences, so an
+                        // already-turning prop would otherwise be rebuilt every frame — each rebuild
+                        // re-reading rest from the current pose and restarting the clock at 0, which
+                        // advances one frame's worth of angle and then throws it away. The prop would
+                        // sit almost still while looking, in the logs, perfectly driven.
+                        if (_motions.Any(m => m.Target == t && m is SpinMotion s && s.Matches(rate, spinFor)))
+                            continue;
+                        var motion = new SpinMotion(t, rate, spinFor);
+                        if (instant)
+                            motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
+                        else
+                            AddMotion(motion, def, anchor);
+                        _opsApplied++;
+                    }
+                    duration = instant ? 0f : spinFor;
+                    return true;
+                }
 
             case "ObjectMotionSiScript":
-            {
-                int slot = (int)(ev.Data.Num("index") ?? 0f);
-                var script = _program.ScriptFor(def, slot);
-                if (script == null)
                 {
-                    Count("ObjectMotionSiScript(no script)");
+                    int slot = (int)(ev.Data.Num("index") ?? 0f);
+                    var script = _program.ScriptFor(def, slot);
+                    if (script == null)
+                    {
+                        Count("ObjectMotionSiScript(no script)");
+                        return true;
+                    }
+                    foreach (var t in Targets(ev, def, anchor))
+                    {
+                        var playback = new ScriptPlayback(this, t, script);
+                        if (instant)
+                            playback.Seek(0f); // pose at the script's first frame
+                        else
+                            AddMotion(playback, def, anchor);
+                        _opsApplied++;
+                        duration = Mathf.Max(duration, script.Duration);
+                    }
                     return true;
                 }
-                foreach (var t in Targets(ev, def, anchor))
-                {
-                    var playback = new ScriptPlayback(this, t, script);
-                    if (instant)
-                        playback.Seek(0f); // pose at the script's first frame
-                    else
-                        AddMotion(playback, def, anchor);
-                    _opsApplied++;
-                    duration = Mathf.Max(duration, script.Duration);
-                }
-                return true;
-            }
 
             // Control flow is the runner's business, not the table's.
             case "Loop":
