@@ -1011,7 +1011,8 @@ The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mes
 cursor, PgUp/PgDn walk its `cs_name` ancestor ladder, a breadcrumb HUD line + wireframe box show
 the current rung. `Current`/`Ladder`/`Level`/`CurrentBox` + the `Changed` event are the state the
 other inspect tools read; `Select(node)` is the programmatic entry; `--debug-select=x,y[,up]`
-replays a click for scripted runs.
+replays a click for scripted runs. `ExtraRoots` walks props parked beside the world content rather
+than under it (the anim lab's `--plane=` prop), each also capping its own ancestor ladder (BL-043).
 ⚠ The pick is a manual ray-vs-AABB scan, NOT a physics raycast — neither mode builds collision
   (WORLD-9); every later inspect tool inherits this mechanism.
 ⚠ Rungs are the `cs_name` meta, never `Node.Name` (WORLD-8) — C1's second `box_car.flt` is `godot=@Node3D@5`.
@@ -1034,7 +1035,9 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
 The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node
 Frame / Hide-Show, a dependency readout for `SelectionService.Current` (anim defs, destructible
 pool + DAMAGE_SEQUENCE, geometry/textures, colliders) and a destructibles view with F41's coverage
-columns. `--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin. A row's text/colour
+columns, plus `ExtraRoots` top-level branches for props beside the world content (the anim lab's
+`--plane=` prop, so its parts show in the tree, search and `SelectByName` — BL-043).
+`--debug-nodelab[=deps,dest,open,node=<cs_name>]` is the scripted twin. A row's text/colour
 follow live `Node3D.Visible`, re-read on the panel's 4 Hz status cadence rather than latched off the
 hide button, so a def re-showing a hidden node reads visible again on its own (BL-044).
 ⚠ **Tree children are the nearest `cs_name` descendants** — the exact inverse of the selection

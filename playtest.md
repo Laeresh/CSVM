@@ -131,6 +131,12 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
 
+- `PT-05` **Mesh-lab lighting on the parked plane in `--anim-lab`** (`BL-043` fix landed). The plane
+  is now reachable through the selection (click it, or the node lab). *Look for:* select the plane,
+  press **M**, and confirm the light sliders shade the aircraft, not the world — the interactive
+  slider path is the only place the scoped light renders (a scripted capture attaches the lab but
+  defers lighting). `./RunGame.ps1 --anim-lab --chapter=C1 --plane=player_bhawk`.
+
 ---
 
 ## Everything else

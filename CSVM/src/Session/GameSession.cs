@@ -62,6 +62,10 @@ public partial class GameSession : Node3D
     private readonly List<PlayerRig> _rigs = new();
     // scratch: rig camera positions for the edge extender
     private readonly List<Vector3> _focusPoints = new();
+    // Pickable subtrees that live beside the world content rather than under it — the anim lab's
+    // parked --plane= prop. Shared by reference with _selection and _nodeLab, which walk it in
+    // addition to the world root; populated during the world build after those tools are created.
+    private readonly List<Node3D> _selectionExtraRoots = new();
     // The persistent rendering nodes, owned by the Launcher and kept across sessions; this node
     // only configures them. The mesh lab steers the sun and ambient, which is why both ride the
     // context rather than staying local to the Launcher's lighting setup.
@@ -674,12 +678,14 @@ public partial class GameSession : Node3D
             _selection = new UI.SelectionService(_plane, _camera)
             {
                 DebugPick = _spec.DebugSelect != null ? UI.SelectionService.ParseDebugPick(_spec.DebugSelect) : null,
+                ExtraRoots = _selectionExtraRoots,
             };
             // The node lab reads that selection. Its camera is resolved through a
             // delegate: the freecam is created further down, after this point.
             _nodeLab = new UI.NodeLab(_plane, _selection, session.Runtime, session.Program,
                 session.Builder.Scene, BuildsCollision)
             {
+                ExtraRoots = _selectionExtraRoots,
                 CameraSource = () => _spectator,
                 DebugSpec = _spec.DebugNodeLab,
                 // The anim lab's timeline strip and transport panel own the bottom of the
@@ -844,6 +850,11 @@ public partial class GameSession : Node3D
                 parked.LookAtFromPosition(spawnPos, spawnLook, Vector3.Up);
             }
             state.What += $" + parked '{_spec.PlaneName}'";
+            // The parked prop hangs beside the world content (not under it — it joins the tree
+            // before the world root does, so its LookAtFromPosition needs an in-tree parent),
+            // which puts it outside the selection/node-lab walk rooted at the world content.
+            // Register it as an extra pick root so a click and the node lab's tree both reach it.
+            _selectionExtraRoots.Add(parked);
         }
 
         var animLab = new UI.AnimLab(session.Runtime, session.Program, labCam,

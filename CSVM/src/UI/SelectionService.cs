@@ -87,6 +87,12 @@ public sealed partial class SelectionService : Node
     /// the middle of the viewport.</summary>
     public (Vector2? Screen, int Up)? DebugPick { get; init; }
 
+    /// <summary>Extra pickable subtrees walked in addition to the world content root — props parked
+    /// beside it rather than under it (the anim lab's <c>--plane=</c> stage prop). Read live at pick
+    /// time, so the owner may populate it after construction. Each also caps its own ancestor ladder,
+    /// so a pick inside it walks up to that root and no further.</summary>
+    public IReadOnlyList<Node3D> ExtraRoots { get; init; } = Array.Empty<Node3D>();
+
     /// <summary>The ladder, leaf first: the struck mesh's <c>cs_name</c>-bearing ancestors up to
     /// (not including) the world content root. Empty when nothing is selected.</summary>
     public IReadOnlyList<Node3D> Ladder => _ladder;
@@ -281,6 +287,13 @@ public sealed partial class SelectionService : Node
             }
         }
         Walk(_world);
+        foreach (var root in ExtraRoots)
+        {
+            if (IsInstanceValid(root))
+            {
+                Walk(root);
+            }
+        }
         if (best == null)
         {
             Log.Info("ui", $"select miss screen=({screenPos.X:0},{screenPos.Y:0}) tested={tested} skipped_oversize={oversize} (map-scale meshes are never pickable)");
@@ -302,6 +315,13 @@ public sealed partial class SelectionService : Node
             if (n is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta))
             {
                 _ladder.Add(n3d);
+            }
+            // An extra pick root is a ladder boundary too: it is a placed prop, not a rung under
+            // the world content, so the walk includes it and stops rather than climbing out into
+            // the session container above it.
+            if (IsExtraRoot(n))
+            {
+                break;
             }
             n = n.GetParent();
         }
@@ -384,6 +404,18 @@ public sealed partial class SelectionService : Node
         }
         tHit = tmin;
         return tmax >= 0f;
+    }
+
+    private bool IsExtraRoot(Node n)
+    {
+        foreach (var root in ExtraRoots)
+        {
+            if (ReferenceEquals(root, n))
+            {
+                return true;
+            }
+        }
+        return false;
     }
 
     private void Apply(bool fresh)

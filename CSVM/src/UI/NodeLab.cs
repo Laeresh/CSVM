@@ -95,6 +95,12 @@ public sealed partial class NodeLab : Node
         Name = "node_lab";
     }
 
+    /// <summary>Extra subtrees to list alongside the world content — props parked beside it rather
+    /// than under it (the anim lab's <c>--plane=</c> stage prop), which the tree, the search index
+    /// and <see cref="SelectByName"/> would otherwise miss. Shares the selection's list by
+    /// reference, populated after construction; read when the tree/index are first built.</summary>
+    public IReadOnlyList<Node3D> ExtraRoots { get; init; } = Array.Empty<Node3D>();
+
     /// <summary>Resolves the session camera at the moment it is needed. The freecam is created
     /// after this lab is, so the reference cannot be captured at construction.</summary>
     public Func<SpectatorCamera?>? CameraSource { get; init; }
@@ -760,6 +766,19 @@ public sealed partial class NodeLab : Node
         _rootItem.SetCustomColor(0, Amber);
         Bind(_rootItem, _world);
         int children = Populate(_rootItem, _world);
+        // Props parked beside the world content (the anim lab's --plane=): each is its own named
+        // top-level branch under "world", so a click-less tester can still reach the plane's parts.
+        foreach (var extra in ExtraRoots)
+        {
+            if (!IsInstanceValid(extra) || !extra.HasMeta(AnimRuntime.NameMeta))
+            {
+                continue;
+            }
+            var item = tree.CreateItem(_rootItem);
+            item.SetText(0, RowText(extra));
+            Bind(item, extra);
+            children += Populate(item, extra) + 1;
+        }
         _rootItem.Collapsed = false;
         Log.Debug("ui", $"nodelab tree root named_children={children} rows={Math.Min(children, MaxBranchItems)} cap={MaxBranchItems}");
         RevealSelection();
@@ -938,6 +957,13 @@ public sealed partial class NodeLab : Node
             }
         }
         Walk(_world);
+        foreach (var extra in ExtraRoots)
+        {
+            if (IsInstanceValid(extra))
+            {
+                Walk(extra);
+            }
+        }
         _nameIndex.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
         Log.Debug("ui", $"nodelab name index nodes={_nameIndex.Count}");
     }

@@ -544,15 +544,6 @@ unscheduled.
   and the plane's own boxes alike — three separate code paths, so check all three, not just the one
   that was fixed. `./RunGame.ps1 --freecam --chapter=C2 --collision=show`.
 
-- `BL-043` **The player plane cannot be selected in `--anim-lab`, so the mesh lab's lighting controls
-  cannot be tested on it.** D33's light steering works on world geometry; the parked plane in the
-  lab is not reachable through the selection, so that half went unexercised at the controls.
-  ⚠ Traps: D31's picking skips meshes above a 350 m world-AABB diagonal and only walks the world
-  content root — check which of the two excludes the lab's plane before adding a special case. The
-  node lab's `Select` is the existing path for anything a click cannot reach.
-  *Playtest after fix:* select the plane in `--anim-lab`, press **M**, and confirm the light sliders
-  shade the aircraft rather than the world. `./RunGame.ps1 --anim-lab --chapter=C1 --plane=player_bhawk`.
-
 - `BL-044` **The node lab's hide action does not change the tree row it applies to.** The world node toggles
   correctly and the button's own text flips Show/Hide, but the row's text and colour stay as they
   were, so a hidden subtree is invisible in the tree itself. Animated visibility changes do come

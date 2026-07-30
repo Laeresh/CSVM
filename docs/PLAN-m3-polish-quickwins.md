@@ -68,7 +68,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 11. ☐ `BL-040` `!is_inside_tree()` error on every sound-enabled world bind
 12. ☑ `BL-049` `--headless` + `--screenshot` NREs forever instead of failing loudly
 13. ☑ `BL-044` Node lab: hidden subtree's tree row doesn't reflect live `Visible` state
-14. ☐ `BL-043` Player plane unreachable by selection in `--anim-lab`
+14. ☑ `BL-043` Player plane unreachable by selection in `--anim-lab`
 
 ### Wave C — mechanically-wrong weapon/audio plumbing
 
@@ -246,7 +246,18 @@ re-shows the node and assert the row flips back without user input.
 button state harder. The `agyrobus` framing struggle mentioned in the same entry is separate and
 minor; don't scope-creep into it.
 
-## B14 ☐ `BL-043` Player plane unselectable in `--anim-lab`
+## B14 ☑ `BL-043` Player plane unselectable in `--anim-lab`
+
+**Landed 2026-07-30.** Discrimination (temp log) confirmed cause #2: the parked `--plane=` prop hangs
+on `_worldRoot` as a sibling of the world-content root, so the selection/node-lab walk rooted at the
+content never visits it; its 15.9 m diagonal is far under the 350 m cap, so cause #1 never fires.
+Fix extends the walk rather than special-casing: a shared `_selectionExtraRoots` list feeds
+`SelectionService.ExtraRoots` (walked after the world root; each caps its own ancestor ladder) and
+`NodeLab.ExtraRoots` (top-level branch + name index). Verified: a scripted click lands on
+`player_bhawk` (ladder stops at the plane root, rung 6/6); node-lab `SelectByName` selects it; the
+mesh lab binds all 49 of its surfaces. Freecam unaffected (empty list = byte-identical path); full
+suite + 13 goldens green.
+
 
 **Goal.** Clicking (or the node lab's `Select` path) can select the parked player plane in
 `--anim-lab`, so the mesh lab's light sliders can act on it.

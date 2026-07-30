@@ -8426,3 +8426,24 @@ can't tell a hung child from a clean one); normal windowed `--screenshot` still 
 suites, 13/13 goldens hash-identical, none moved).
 
 **Node lab hide/show tracks live `Visible` — M3 wave B B13 `BL-044` (2026-07-30):** the node lab's tree row rendered whatever the Hide/Show button last did, not the node's actual `Visible` — so a `RESET_STATE` def re-showing a node the user had hidden left the row reading "(hidden)" forever. `NodeLab.RefreshTreeVisibility` now re-reads every bound row's live `Visible` on the panel's existing 4 Hz status cadence (`UpdateStatus`), so the row tracks the node regardless of who changed it; the search view's rows were also missing the "(hidden)" suffix the browse tree already had, now unified via the shared `RowText` helper. New in-engine suite `nodelab-visibility` (Suites.cs): hides a node through the lab, asserts the row reads hidden, then calls the real `AnimRuntime.ResetDestructible` (a genuine def, no button press) and asserts the row flips back on its own — confirmed to fail without the fix, confirmed the suite's chosen chapter (`C2`, not the shared `ctx.Chapter`) avoids order-dependent contamination from `damage-hd`'s re-killed sweep instances. Full `.\RunTests.ps1` green (312 unit tests, 12/12 engine suites, 13/13 goldens hash-identical).
+
+**Player plane selectable in `--anim-lab` — M3 wave B B14 `BL-043` (2026-07-30):** the parked
+`--plane=` prop was unreachable through the shared selection, so the mesh lab's light sliders could
+never act on it. Two candidate causes were named (the 350 m `MaxPickDiag` cap; the walk covering only
+the world-content root); a temporary discrimination log settled it — the prop hangs on `_worldRoot`
+as a *sibling* of the content root (`SelectionService`/`NodeLab` walk only the content root), and its
+15.9 m diagonal is far under 350 m, so the cap never fires. Cause: walk coverage, not oversize. Fixed
+by extending the walk, not special-casing the plane: a `_selectionExtraRoots` list (populated in
+`BuildAnimLabStage`, shared by reference) feeds `SelectionService.ExtraRoots` — walked after the world
+root in `PickAt`, each also capping its own `cs_name` ancestor ladder so a pick climbs to the prop's
+own root and no further — and `NodeLab.ExtraRoots` — a top-level tree branch plus name-index coverage,
+so search and `SelectByName` reach the parts too. The prop stays on `_worldRoot` deliberately: it
+joins the tree before the content root does, so its `LookAtFromPosition` needs an already-in-tree
+parent. Verified: a scripted centre-click lands on `player_bhawk` (ladder rungs g443→…→player_bhawk,
+stopping at the plane root, 6/6); `--debug-nodelab=node=player_bhawk` selects it (exact match); the
+mesh lab binds all 49 of the plane's surfaces (`mesh lab on 'player_bhawk': 49 shaded`). The scoped
+light's own A/B pixel diff is not scriptable — `MeshLab.AttachScoped` applies geometry overrides but
+defers lighting to the interactive slider path (`applyLighting:false`), a pre-existing harness limit,
+so the binding log is the acceptance evidence and the at-the-controls light check moves to `PT-05`.
+Freecam is untouched (its `ExtraRoots` stays empty → byte-identical pick path, 0 errors). Full
+`.\RunTests.ps1` green (312 unit tests, 12/12 engine suites, 13/13 goldens hash-identical, none moved).
