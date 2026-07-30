@@ -48,6 +48,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/WorldLights.cs` — packs the world's `LIGHT_STATE` point lights into the `csky_light_data` texture the fullbright world shader reads.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
+- `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
@@ -425,7 +426,10 @@ startanims, a safety net), then dispatch-table event playback; unhandled event k
 never fatal. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`, fed by `ProjectilePool.DamageSink` and
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
-template stage). Second instances serve per-player crash rigs and the world-effects closure.
+template stage). Second instances serve per-player crash rigs and the world-effects closure. The
+sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs`; this class
+satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
+`EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -436,6 +440,22 @@ template stage). Second instances serve per-player crash rigs and the world-effe
 ⚠ `MaxRootLift`'s 16-match cap assumes WHOLE-WORLD node counts — a partial `--node=` build drops
   under the cap and anchors phantom defs, so it must set `SuppressRootLift` (measured on C1's
   `ap_radiotwr`: 95 lifted defs / 91 phantom instances vs 1 / 2 with the lift refused).
+
+## src/Mech3/SequenceRunner.cs
+The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.
+`SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
+authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
+`AnimInstance` holds a definition's concurrent runners and removes them as they finish. Both are
+public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
+real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
+interpreter never dereferences them.
+⚠ Behaviour-preserving move only — the `_loopsLeft == -2` sentinel, the `goto case "Elseif"` and the
+  256-fires-per-frame guard all LOOK refactorable and are all load-bearing (each a shipped, measured
+  bug: the bowl sign's 38% blank frames, frozen traffic loops, the double-polling waterfall). The
+  comments carry the measured evidence; do not trim them.
+⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
+  at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
+  documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
 
 ## src/Mech3/DestructibleRegistry.cs
 Live, mutable per-instance HP for the world's destructibles — any `AnimDefinition` with

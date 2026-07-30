@@ -8136,3 +8136,19 @@ stripped PLAN-planeviewer-split provenance mentions. One code comment added at
 comment; the other flagged sites already carried one). Verified: awk section census shows max 3
 `⚠` everywhere; every deleted dated/measured fact confirmed already recorded in this file;
 `.\RunTests.ps1` PASS.
+
+**SequenceRunner extracted behind `ISequenceHost` (2026-07-30, PLAN-sequencerunner-seam A1):** the
+sequence interpreter — `SequenceRunner`, `AnimInstance`, the `EventDispatch` record, and the
+`EventDisplayName` helper — moved verbatim out of `AnimRuntime.cs` into the new engine-free
+`src/Mech3/SequenceRunner.cs`, joined by the new 3-member `ISequenceHost` seam (`Dispatch`,
+`EvaluateCondition`, get-only `OnEventDispatched`). `AnimRuntime` now satisfies the seam by *explicit*
+interface implementation, so `Dispatch`/`EvaluateCondition` stay off its own public surface; the
+interpreter's two `Advance` signatures took `ISequenceHost` in place of the concrete `AnimRuntime`.
+The types are now public so `CSVM.Tests` can drive them (A2's charter). Pure behaviour-preserving
+move: every narrative comment (bowl-sign 38% blank frames, the Loop-Count-0 install survey, the
+double-poll waterfall) moved untouched, and the `_loopsLeft == -2` sentinel / `goto case "Elseif"` /
+256-fire guard were left exactly as they were. `AnimLab`'s one `AnimRuntime.EventDispatch` reference
+became the top-level `EventDispatch`. Verified `.\RunTests.ps1 -Perf` PASS: 293 units, 9/9 engine
+suites, **11/11 golden hashes identical** (the move is invisible), perf recorded with stable draw
+counts (PERF-10 — believe the counts). The extraction is protected only by the goldens until A2's
+tests land.

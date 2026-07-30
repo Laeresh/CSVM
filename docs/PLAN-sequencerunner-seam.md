@@ -72,7 +72,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the seam and its charter
 
-1. ☐ Extract `SequenceRunner.cs`: the four types move, `AnimRuntime` implements `ISequenceHost` explicitly
+1. ☑ Extract `SequenceRunner.cs`: the four types move, `AnimRuntime` implements `ISequenceHost` explicitly
 2. ☐ The headless charter: `RecordingHost` fake + the ten documented behaviours as named xUnit tests
 
 ## Dependency and parallelism notes
@@ -84,7 +84,7 @@ Linear: A1 blocks A2 (the types are private until A1 makes them public). Both it
 
 # Wave A — the seam and its charter
 
-## A1 ☐ Extract `SequenceRunner.cs`: the four types move, `AnimRuntime` implements `ISequenceHost` explicitly
+## A1 ☑ Extract `SequenceRunner.cs`: the four types move, `AnimRuntime` implements `ISequenceHost` explicitly
 
 **Goal.** `CSVM/src/Mech3/SequenceRunner.cs` holds public `ISequenceHost`, `EventDispatch`,
 `AnimInstance`, `SequenceRunner`; `AnimRuntime` satisfies the seam via explicit interface

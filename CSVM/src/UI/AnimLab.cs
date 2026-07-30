@@ -431,7 +431,7 @@ public sealed partial class AnimLab : Node
 
     // ---- runtime → picker/timeline hooks -----------------------------------------------------
 
-    private void OnDispatch(AnimRuntime.EventDispatch e)
+    private void OnDispatch(EventDispatch e)
     {
         if (_timelineDef == null)
         {
