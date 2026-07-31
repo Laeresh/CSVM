@@ -3,7 +3,9 @@ name: commit-next
 description: Commit the current plan-item's changes, then print a ready-to-paste prompt for the next open checklist item and copy it to the clipboard. Use when finishing a plan item and moving to the next (the commit → /clear → continue loop).
 ---
 
-You are closing out one item of the active plan and teeing up the next. This skill runs while you still have the context of the task you just finished — use it. Do the three steps in order, then stop.
+You are closing out one item of the active plan and teeing up the next. This skill runs while you still have the context of the task you just finished — use it. Do the steps in order, then stop.
+
+⚠ **Output rule: text written between tool calls is not shown in chat.** Run *all* tool calls first (git, plan reads, the clipboard write), and deliver every piece of user-facing output — commit hash, recommendation, the prompt block, the closing line — in **one final message after the last tool call**. Never print the block and then call `Set-Clipboard` after it; that hides the block.
 
 If an item id was passed as an argument (e.g. `B19`), treat that as the explicit choice for the "next item" in step 2.
 
@@ -25,7 +27,7 @@ Then commit ALL current changes as one commit:
 - End the message with this trailer on its own line:
   `Co-Authored-By: Claude <noreply@anthropic.com>`
 - Commit to the current branch (**main**). Do NOT create a branch. Do NOT push.
-- Print the resulting commit hash and subject line.
+- Note the resulting commit hash and subject line for the final message (don't print them yet — see the output rule above).
 
 ## 2. Find the next open item
 
@@ -49,9 +51,9 @@ Weigh the just-finished item against the next one:
 
 State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.** When the plan names a model for the next item, append it: **Next item wants `<model>` (this session: `<model>`).**
 
-## 4. Print the ready-to-paste next-task prompt
+## 4. Compose the ready-to-paste next-task prompt, copy it, THEN print everything
 
-Emit **one triple-backtick code block and nothing else inside it** — a self-contained prompt for the next item that stands on its own after a `/clear` or `/compact`. Assume the reader has CLAUDE.md loaded but zero memory of this session, so it must name the item and point at where the detail lives. Emit the block even if copied after. Use this shape (fill in the `<...>`):
+Compose a self-contained prompt for the next item that stands on its own after a `/clear` or `/compact`. Assume the reader has CLAUDE.md loaded but zero memory of this session, so it must name the item and point at where the detail lives. Use this shape (fill in the `<...>`):
 
 ~~~
 Implement item <ID> — <one-line title> — from <active plan path> (the M3 weapons plan).
@@ -61,7 +63,7 @@ Before writing code: read that item's full "### <ID>" detail in the plan and the
 Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh CLAUDE.md "Current status". Commit only when I ask (with /commit-next).
 ~~~
 
-Then copy that exact prompt text into the clipboard with the PowerShell tool, using a single-quoted here-string (closing `'@` at column 0):
+First copy that exact prompt text into the clipboard with the PowerShell tool, using a single-quoted here-string (closing `'@` at column 0):
 
 ~~~
 Set-Clipboard -Value @'
@@ -69,7 +71,7 @@ Set-Clipboard -Value @'
 '@
 ~~~
 
-After the code block, add a single closing line matched to your step-3 recommendation, noting the prompt is already in the clipboard. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
+**Then — with no further tool calls — emit the single final message** containing, in order: the commit hash + subject from step 1 (or "nothing to commit"), the step-3 recommendation line, the prompt inside **one triple-backtick code block and nothing else inside it**, and a single closing line matched to your step-3 recommendation, noting the prompt is already in the clipboard. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
 - **continue** → *Recommended: continue — no clear needed. Say the word and I'll start `<ID>` in this context. (The block above is already in your clipboard if you'd rather clear anyway.)*
 - **`/compact`** → *Recommended: run `/compact`, then paste the block above (already in your clipboard) to start `<ID>`.*
 - **`/clear`** → *Recommended: `/clear` (and `/model <model>` per the plan, if it differs), then paste — the block above is already in your clipboard.*
