@@ -9087,3 +9087,25 @@ sweep: zero errors, gamez-node/mesh-instance counts unchanged (rendering untouch
 up everywhere (expected coverage gain). `RunTests.ps1` fully green (312 units, 12/12 suites, 13/13
 goldens hash-identical — collision never touches a rendered pixel). Owed: the user's
 at-the-controls re-test (`PT-14`).
+
+## 2026-07-31 — Wave A A4 `BL-205`: collider overlay gets a colour→surface-class legend
+
+User request (PT-05): the **C** overlay's wireframe colours had no on-screen key, so reading them
+meant memorising `ColliderOverlay`'s palette. Added `BuildLegendText`, one coloured word per class
+(water/buildings/clutter/plane/world/other) built from `ColorFor` alone — the same function the
+wireframes themselves colour through — so a future palette change can only ever move both together.
+Rendered as a `RichTextLabel` (BBCode colour spans) under the existing summary `Label`, both
+children of the overlay's own `CanvasLayer`; a new `showLegend` parameter on `ShowNotice` keeps it
+hidden for the "no collision built in this mode" notice (WORLD-9's empty-overlay trap generalises to
+an empty legend: a legend for wireframes that were never drawn reads the same false way). The full
+fixed palette shows regardless of which classes exist in the current scene — a map legend, not a
+filtered one.
+
+Verified with pixels: `--freecam`/`--fly`, C1, `--collision=show` — legend present under the
+summary, each word's colour matching its class's drawn wireframe (`water` cyan, `buildings` orange,
+`clutter` green, `plane` yellow, `world` blue, `other` magenta); `--debug-colliders` alone (no
+`--collision`, so nothing was built) shows the existing warning with the legend absent, confirming
+the gate. `RunTests.ps1` fully green (312 units, 12/12 suites, 13/13 goldens hash-identical — the
+overlay is opt-in and untouched by a default capture). No owed playtest: the Verify step (toggle C,
+read the legend, colours agree) is fully checkable from a screenshot, unlike A1/A3's perceptual
+bugs.

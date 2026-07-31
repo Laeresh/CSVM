@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 1. ☑ `BL-199` Damage-stage smoke/fire is actually visible, and sputters (landed 2026-07-31; cockpit re-test = `PT-13`)
 2. ☐ `BL-203` Gun-impact visuals read on every surface class (building/dirt/water; folds `BL-186`)
 3. ☑ `BL-204` C2 blue-water areas classify as water (landed 2026-07-31; cockpit re-test = `PT-14`)
-4. ☐ `BL-205` Collider overlay: colour→surface-class legend
+4. ☑ `BL-205` Collider overlay: colour→surface-class legend (landed 2026-07-31)
 
 ### Wave B — destructible behaviour
 
@@ -215,7 +215,7 @@ built.
 census is the gate. (b) The `soil` field is a dead end. (c) The overlay draws true since `BL-198`
 — trust it as the instrument.
 
-## A4 ☐ `BL-205` Collider overlay: colour→surface-class legend
+## A4 ☑ `BL-205` Collider overlay: colour→surface-class legend
 
 **Goal.** With the **C** overlay up, a small on-screen legend maps wireframe colour → surface
 class, so the overlay is readable without memorising the palette.

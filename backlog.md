@@ -189,11 +189,6 @@ its symptom and traps.
   water a visible splash — all readable at normal flight speed without frame-stepping.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
 
-- `BL-205` **The collider overlay needs a colour→surface-class legend.** User request (PT-05): when
-  the **C** overlay is up, show a small list mapping wireframe colour to surface class, so the
-  overlay can be read without memorising the palette. `ColliderOverlay`-side UI only.
-  *Playtest after fix:* toggle **C** in flight/freecam and read the legend.
-
 **Destructible behaviour (PT-06/07/08).**
 
 - `BL-206` **The C3 spiderweb kills the plane; in the original it never damages the plane at all.**

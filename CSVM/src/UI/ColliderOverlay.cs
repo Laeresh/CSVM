@@ -63,6 +63,12 @@ public sealed partial class ColliderOverlay : Node
     private static readonly Color PlaneColor = new(1f, 0.9f, 0.25f);
     private static readonly Color OtherColor = new(1f, 0.3f, 1f);
 
+    // The legend's own class list — the full fixed palette, always shown regardless of what
+    // actually drew this session (BL-205): a map legend describes the key, not just what is
+    // currently on screen. Colour still comes from ColorFor alone, so a palette change here
+    // cannot desync the legend from the wireframes.
+    private static readonly string[] LegendClasses = { "water", "buildings", "clutter", "plane", "world", "other" };
+
     private static StandardMaterial3D? _lineMaterial;
 
     private readonly Node3D _world;
@@ -75,6 +81,7 @@ public sealed partial class ColliderOverlay : Node
     private int _lastOn = -1, _lastOff = -1;
     private CanvasLayer? _hudLayer;
     private Label? _hud;
+    private RichTextLabel? _legend;
     private string _summary = "";
 
     public ColliderOverlay(Node3D world, bool collisionBuilt)
@@ -158,7 +165,7 @@ public sealed partial class ColliderOverlay : Node
         if (_shown)
         {
             SyncEnabled(report: false);
-            ShowNotice(_summary);
+            ShowNotice(_summary, showLegend: true);
         }
         else
         {
@@ -213,6 +220,18 @@ public sealed partial class ColliderOverlay : Node
         "world" => WorldColor,
         _ => OtherColor,
     };
+
+    // One coloured word per class, straight from ColorFor — the legend's only listing of class
+    // names, so a palette change (a new ColorFor case) is the only edit that can move it.
+    private static string BuildLegendText()
+    {
+        var parts = new List<string>(LegendClasses.Length);
+        foreach (var cls in LegendClasses)
+        {
+            parts.Add($"[color=#{ColorFor(cls).ToHtml(false)}]{cls}[/color]");
+        }
+        return string.Join("   ", parts);
+    }
 
     // ---- shape emission ------------------------------------------------------------------------
 
@@ -600,7 +619,10 @@ public sealed partial class ColliderOverlay : Node
 
     // ---- notice --------------------------------------------------------------------------------
 
-    private void ShowNotice(string text)
+    // showLegend is false for the "no collision built" notice (BL-205's own trap: a legend for
+    // wireframes that were never drawn is the same false "nothing is collidable" read the overlay
+    // exists to avoid) and true only for the summary shown once wireframes are actually up.
+    private void ShowNotice(string text, bool showLegend = false)
     {
         if (_hudLayer == null)
         {
@@ -615,10 +637,25 @@ public sealed partial class ColliderOverlay : Node
             };
             _hud.AddThemeFontSizeOverride("font_size", 13);
             root.AddChild(_hud);
+            _legend = new RichTextLabel
+            {
+                // Below the (up to two-line) summary label above it.
+                Position = new Vector2(12, 160),
+                Size = new Vector2(900, 24),
+                BbcodeEnabled = true,
+                FitContent = true,
+                ScrollActive = false,
+                MouseFilter = Control.MouseFilterEnum.Ignore,
+                Text = BuildLegendText(),
+            };
+            _legend.AddThemeFontSizeOverride("normal_font_size", 13);
+            _legend.AddThemeStyleboxOverride("normal", new StyleBoxEmpty());
+            root.AddChild(_legend);
             _hudLayer.AddChild(root);
             AddChild(_hudLayer);
         }
         _hud!.Text = text;
+        _legend!.Visible = showLegend;
         _hudLayer.Visible = true;
     }
 
