@@ -135,9 +135,9 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   (census + scripted impact runs: water → splash, `nycity` → building hit, the wooden dock → plain
   ricochet), but nobody has *flown* it. *Look for:* gunfire into a C2 building gives a ricochet,
   not a splash; gunfire into water gives the splash; no building sounds wet.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. ⚠ Do not judge by the
-  **C** collider overlay until `BL-042` lands — its wireframes draw offset from the geometry, so
-  read the impact effects and sounds, not the colours.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. The **C** collider
+  overlay is trustworthy again (`BL-042` + the `BL-198` inflate fix landed) — its colours show
+  which surface class the engine believes it hit.
 
 - `PT-06` **Damage-stage smoke/fire in flight (`BL-021` landed 2026-07-30).** Guns-only into a
   tower, HP falling — smoke should render on the object at the 60 % stage and fire smoke at the
