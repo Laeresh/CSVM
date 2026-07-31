@@ -218,6 +218,7 @@ public sealed class WorldSession
             // PLAYER_RANGE conditions measure from the player, resolved per call because no camera
             // exists yet here.
             PlayerPosition = o.PlayerPosition,
+            PlayerPositions = o.PlayerPositions,
             // On a single-subtree stage most definitions legitimately resolve nothing, so the bind
             // has to SAY which of "no handler ever fires" and "the node is not here" happened —
             // from outside they are the same still object.
@@ -295,6 +296,12 @@ public sealed class WorldSession
         /// per call because no camera exists yet at build time; player 1's camera is the honest
         /// answer in every mode (chase cam, free camera, or the orbit eye).</summary>
         public required Func<Vector3> PlayerPosition { get; init; }
+
+        /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate — the
+        /// aircraft themselves in flight, not the chase cameras (a chase camera trails ~25 m
+        /// behind, which is most of the spiderweb's 50 m radius). Null → the gate falls back
+        /// to <see cref="PlayerPosition"/>.</summary>
+        public Func<IReadOnlyList<Vector3>>? PlayerPositions { get; init; }
 
         /// <summary>Build world colliders (true in flight; false for a static or lab view).</summary>
         public bool Collision { get; init; }

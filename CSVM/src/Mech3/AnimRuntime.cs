@@ -105,6 +105,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <c>Loop{-1}</c>, so a bootstrap-time miss corrects on the next frame.</summary>
     public Func<Vector3>? PlayerPosition;
 
+    /// <summary>Every player's position, for the EXECUTION_BY_RANGE proximity gate (nearest
+    /// player wins). In flight this is the aircraft themselves — the chase camera trails far
+    /// enough behind the plane to eat most of a 50 m radius. Null → the gate measures from
+    /// <see cref="PlayerPosition"/>.</summary>
+    public Func<IReadOnlyList<Vector3>>? PlayerPositions;
+
     /// <summary>Answers the data's <c>PLAYER_1ST_PERSON</c> condition. No cockpit view
     /// exists yet (backlog), so false.</summary>
     public bool FirstPerson;
@@ -262,6 +268,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // the opacity parameter themselves, the most recent event wins the collider flag.
     private const float OpacityCollisionEpsilon = 0.01f;
 
+    // The deferred-EXECUTION_BY_RANGE sweep quantises the player position to this cell size and
+    // re-checks the deferred list only on a cell crossing (the MapEdgeExtender cadence, so a
+    // hovering camera costs one Vector3I compare per frame). Sized well under the smallest
+    // authored radius in the install (50 m, the C3 spiderweb): the sweep can lag an approach by
+    // at most one cell diagonal, and the spiderweb's 0.7 s fade needs the trigger to land close
+    // to the authored 50 m at cruise speed.
+    private const float RangeCheckCellSize = 8f;
+
     private readonly List<(Node3D Node, string SrcName)> _index = new();
 
     private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
@@ -336,6 +350,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<Node3D, float> _opacity = new();
 
     private readonly Dictionary<Node3D, bool> _opacityCollidable = new();
+
+    // ON_STARTUP defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
+    // each (def, anchor) starts once, the first time the player is inside its distance band.
+    // Checked on a cell-crossing cadence (see TickDeferredByRange), never per frame.
+    private readonly List<(AnimDefinition Def, Node3D Anchor)> _rangeDeferred = new();
+
+    private readonly List<Vector3I> _rangeCheckCells = new();
 
     private Node3D _root = null!;
 
@@ -663,6 +684,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 ApplyInstant(def.ResetState.Events, def, anchor);
         }
         HideUncoveredDestroyed();
+        _rangeDeferred.Clear(); // a quiet stage must not proximity-start ambient defs
         _ambientStarted = false;
         GD.Print($"anim: ambient stopped â€” {_instances.Count} live instance(s) kept, "
                  + $"{_motions.Count} live motion(s)");
@@ -776,6 +798,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         TickLights(dt);
         Sounds?.Tick();
         SweepEffectTtls(dt);
+        TickDeferredByRange();
         if (DebugMotions)
             LogMotions(dt);
         // Instances can finish (and CallAnimation can add) during the walk, so iterate a copy.
@@ -1037,6 +1060,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (wasCollidable != collidable)
         {
             SetCollidersEnabled(node, collidable);
+            GD.Print($"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
         }
         _opacityCollidable[node] = collidable;
 
@@ -1107,6 +1131,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             xform = p.Transform * xform;
         return xform.Origin;
     }
+
+    private static Vector3I CheckCellOf(Vector3 pos) => new(
+        Mathf.FloorToInt(pos.X / RangeCheckCellSize),
+        Mathf.FloorToInt(pos.Y / RangeCheckCellSize),
+        Mathf.FloorToInt(pos.Z / RangeCheckCellSize));
 
     /// <summary>A node's world transform, valid DURING the bootstrap too â€” the same detached-subtree
     /// problem <see cref="WorldPos"/> solves, but keeping the basis so an AT_NODE offset still rotates
@@ -1363,13 +1392,30 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         // Pass 2: ON_STARTUP definitions run for real (zepstate's roster is instantaneous
         // ObjectActiveStates, so this still settles on frame 0 for those).
+        // A def carrying EXECUTION_BY_RANGE is authored to execute only near the player
+        // (the C3 spiderweb's 50 m fade), so it defers to the proximity check instead of
+        // firing blind at t=0. An unanchored one has no position to measure from and starts
+        // immediately, like before.
         int startupRun = 0;
+        _rangeDeferred.Clear();
         foreach (var def in _program.Defs.Where(d => d.OnStartup))
             foreach (var anchor in Anchors(def))
             {
+                if (def.ByRange && anchor != null)
+                {
+                    _rangeDeferred.Add((def, anchor));
+                    continue;
+                }
                 Start(def, anchor);
                 startupRun++;
             }
+        _rangeCheckCells.Clear(); // force a sweep on the first Advance
+        if (_rangeDeferred.Count > 0)
+            GD.Print($"anim: {_rangeDeferred.Count} ON_STARTUP def(s) deferred by EXECUTION_BY_RANGE: " +
+                     string.Join(", ", _rangeDeferred
+                         .Select(e => $"{e.Def.AnimName ?? e.Def.Name}({Mathf.Sqrt(e.Def.RangeMax):0} m)")
+                         .Distinct().Take(10)) +
+                     (_rangeDeferred.Count > 10 ? ", ..." : ""));
 
         // Pass 3: the mission's start animations, by ANIMATION_NAME, in list order â€” each
         // through Play, which is also the debugger's --play-anim/Restart path, so the lab
@@ -1388,6 +1434,44 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
         }
         return (startupRun, ran, missing);
+    }
+
+    // Starts any deferred ON_STARTUP EXECUTION_BY_RANGE def whose anchor the player has come
+    // within range of. One-shot per (def, anchor): once started, the def runs exactly as an
+    // undeferred ON_STARTUP would (its own events decide what persists).
+    private void TickDeferredByRange()
+    {
+        if (_rangeDeferred.Count == 0)
+            return;
+        var positions = PlayerPositions?.Invoke() ?? new[] { PlayerPos() };
+        // No-op until some player crosses a check cell (the common case, every frame).
+        bool moved = positions.Count != _rangeCheckCells.Count;
+        for (int i = 0; !moved && i < positions.Count; i++)
+            moved = CheckCellOf(positions[i]) != _rangeCheckCells[i];
+        if (!moved)
+            return;
+        _rangeCheckCells.Clear();
+        foreach (var p in positions)
+            _rangeCheckCells.Add(CheckCellOf(p));
+        for (int i = _rangeDeferred.Count - 1; i >= 0; i--)
+        {
+            var (def, anchor) = _rangeDeferred[i];
+            if (!IsInstanceValid(anchor))
+            {
+                _rangeDeferred.RemoveAt(i);
+                continue;
+            }
+            var anchorPos = WorldPos(anchor);
+            float d2 = float.MaxValue;
+            foreach (var p in positions)
+                d2 = Mathf.Min(d2, anchorPos.DistanceSquaredTo(p));
+            if (d2 < def.RangeMin || d2 > def.RangeMax)
+                continue;
+            _rangeDeferred.RemoveAt(i);
+            GD.Print($"anim: EXECUTION_BY_RANGE reached - starting " +
+                     $"{def.AnimName ?? def.Name} at {Mathf.Sqrt(d2):0} m (range {Mathf.Sqrt(def.RangeMax):0} m)");
+            Start(def, anchor);
+        }
     }
 
     private void IndexWorld(Node3D worldRoot)

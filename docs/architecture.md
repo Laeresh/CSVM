@@ -429,9 +429,10 @@ shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + report
 ## src/Mech3/AnimRuntime.cs
 The animation engine: bootstrap passes (mission setup, anchored RESET_STATEs, ON_STARTUP,
 startanims, a safety net), then dispatch-table event playback; unhandled event kinds are counted,
-never fatal. `RunAmbientPasses` fires every ON_STARTUP def unconditionally — a def's
-`EXECUTION_BY_RANGE` proximity gate is never parsed (`AnimDefinition.Parse`), so proximity-gated
-defs run at world build regardless of where the player is. Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
+never fatal. An ON_STARTUP def carrying `EXECUTION_BY_RANGE` defers at bootstrap and starts once,
+the first time a player is inside its band (`TickDeferredByRange`, swept on an 8 m position-cell
+crossing, never per frame; measures from `PlayerPositions` — the aircraft, not the chase camera,
+which trails ~25 m behind). Also hosts the destructible-damage entries (`DamageAt`/`CollideDamageAt`/
 `ApplyDamageStages`/`RunDeathSequence`/`ResetDestructible`, fed by `ProjectilePool.DamageSink` and
 `FlightController.CollideDamageSink`) and the world-effects runtime (`PlayEffectAt` over a hidden
 template stage). Second instances serve per-player crash rigs and the world-effects closure, built

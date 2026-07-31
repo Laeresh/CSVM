@@ -99,6 +99,17 @@ public static class AnimDefs
                 case "ACTIVATION": def.Activation = PascalCase(FirstString(value) ?? "ON_CALL"); break;
                 case "LOCAL_NODES_ONLY": def.LocalNodesOnly = true; break;
                 case "HEALTH": def.Health = FirstNumber(value) ?? 0f; break;
+                // One argument, metres; the compiled form stores metres SQUARED with min 0 —
+                // the same reader↔compiled unit divergence as the PLAYER_RANGE condition,
+                // converted once here so the runtime has a single convention.
+                case "EXECUTION_BY_RANGE":
+                    if (FirstNumber(value) is { } range)
+                    {
+                        def.ByRange = true;
+                        def.RangeMin = 0f;
+                        def.RangeMax = range * range;
+                    }
+                    break;
                 case "RESET_STATE":
                     if (value != null)
                     {

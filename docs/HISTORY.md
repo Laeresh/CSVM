@@ -8696,3 +8696,26 @@ suites, 13/13 goldens). Follow-up filed as `BL-199`: the authored intermittent *
 degenerates to one burst per stage — `HandlePufferState`'s re-assert guard never revives a
 `SustainEnd`'ed emitter. `BL-021` deleted from `backlog.md`; `BL-046` re-scoped to what remains
 outside the closure (`b_steamtrail`, unbound death effects, template mesh halves).
+
+## 2026-07-31 — A1 `BL-183`: `EXECUTION_BY_RANGE` parsed, ON_STARTUP defs proximity-gated (closes `BL-006`)
+
+Both anim front-ends now parse the proximity gate (`CompiledAnim.AnimDefinition.Parse` reads
+`execution.ByRange` m²; `AnimDefs.ParseDef` converts the reader's `EXECUTION_BY_RANGE` metres to m²,
+the `PLAYER_RANGE` convention), and `AnimRuntime.RunAmbientPasses` defers any anchored ON_STARTUP def
+carrying it instead of firing it at t=0. `TickDeferredByRange` starts each (def, anchor) once, the
+first time a player enters the band — swept only when a player crosses an 8 m position cell (the
+MapEdgeExtender cadence), measuring from a new `PlayerPositions` source (the aircraft themselves,
+nearest player wins; the chase camera trails ~25 m behind the plane, most of the web's 50 m radius —
+proven when a camera-measured gate never fired on a fly-through). The fade→collider-drop mechanism is
+untouched and now logs its edge (`anim: fade dropped colliders under '…'`). Verified: C3 A/B at the
+tikicave — web solid at 100 m, gone after the 38 m trigger + 150 frames; fly-through logs trigger at
+47 m, fade, collider drop; 8-chapter freecam regression zero errors. Newly deferring (enumerated from
+data + logs): C3 `spiderweb_gone` (50 m) + `spew_water` (600 m), C1 `desert_onoff`/`hotelsign_loop`/
+`refinery_fire_always` (300 m) + `truck1_start`/`hauler1_start` (500 m) + reader-only `cloudparent#`
+(1900 m, re-fires on first sweep), and every chapter's IA1 `mp1z[lr]prop*` nacelle props (300 m) —
+48–108 (def, anchor) pairs per chapter. The backlog's `wl_glw`/`cfglow`/barrage-balloon suspicion is
+disproven: their compiled `execution` is `None`. `RunTests.ps1`: 312 units, 12/12 suites, goldens
+re-pinned — exactly `c1-flight`/`c1-crash` moved (29 px / 10 px: the C1 town's now-parked ambient
+truck), and a one-line deferral-off A/B reproduced all 13 old hashes byte-identically, attributing
+the move fully. Residual for the cockpit (`PT-07`): the authored 50 m / 0.7 s margin means a
+dead-center cruise-speed run can clip the still-solid web mid-fade (colliders drop at fade end).

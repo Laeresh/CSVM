@@ -78,7 +78,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — animation triggers & effect routing
 
-1. ☐ `BL-183` Parse `EXECUTION_BY_RANGE` and gate `OnStartup` defs on player proximity (C3 spiderweb)
+1. ☑ `BL-183` Parse `EXECUTION_BY_RANGE` and gate `OnStartup` defs on player proximity (C3 spiderweb)
 2. ☑ `BL-021` Damage-stage smoke/fire renders in flight, not only headless
 3. ☐ `BL-174` Player low-HP smoke/fire trail: settle reachability-vs-parenting, then fix
 
@@ -123,7 +123,7 @@ the other's verification.
 
 # Wave A — animation triggers & effect routing
 
-## A1 ☐ `BL-183` Parse `EXECUTION_BY_RANGE`, gate `OnStartup` defs on proximity
+## A1 ☑ `BL-183` Parse `EXECUTION_BY_RANGE`, gate `OnStartup` defs on proximity
 
 **Goal.** A proximity-gated `OnStartup` def (the C3 spiderweb's `spiderweb_gone`, 50 m radius)
 fires only when a player is inside its authored range — the web renders solid and collidable from

@@ -595,6 +595,20 @@ public partial class GameSession : Node3D
                 PlayerPosition = () => (_rigs.Count > 0 ? _rigs[0].Camera : _camera) is { } cam
                     ? cam.GlobalPosition
                     : Vector3.Zero,
+                // The EXECUTION_BY_RANGE gate measures from the aircraft themselves (every
+                // player, nearest wins) — the chase camera trails far enough behind the plane
+                // to eat most of a 50 m radius. Camera fallback for the plane-less modes.
+                PlayerPositions = () =>
+                {
+                    if (_rigs.Count == 0)
+                        return _camera is { } cam ? new[] { cam.GlobalPosition } : System.Array.Empty<Vector3>();
+                    var positions = new Vector3[_rigs.Count];
+                    for (int i = 0; i < _rigs.Count; i++)
+                        positions[i] = _rigs[i].Controller is { } fc
+                            ? fc.GlobalPosition
+                            : _rigs[i].Camera.GlobalPosition;
+                    return positions;
+                },
                 // The damage-test needs the collidable world (its census measures which
                 // destructible geometry is solid and whether death removes it) even though it
                 // runs in the freecam (non-fly) harness. Two interactive levers switch the

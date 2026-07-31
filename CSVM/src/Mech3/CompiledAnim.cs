@@ -206,6 +206,12 @@ public sealed class AnimDefinition
     public bool LocalNodesOnly;
     public string Activation = "OnCall";  // OnCall / OnStartup / WeaponHit / WeaponOrCollideHit
     public float Health;
+    /// <summary>EXECUTION_BY_RANGE: the def executes only while the player is within this
+    /// distance band of its anchor. Metres SQUARED, the compiled convention (reader 50 ↔
+    /// compiled 2500) — same unit divergence as the PLAYER_RANGE condition. Absent → both 0
+    /// and <see cref="ByRange"/> false.</summary>
+    public float RangeMin, RangeMax;
+    public bool ByRange;
     public int[] SiScriptIds = Array.Empty<int>();
     public AnimSequence? ResetState;
     public string SourceFile = "";
@@ -233,6 +239,13 @@ public sealed class AnimDefinition
             Health = d.Num("health") ?? 0f,
             SourceFile = sourceFile,
         };
+        // execution is a one-key union: "None" (a bare string) or {ByRange: {min, max}}.
+        if (d.Obj("execution")?.Obj("ByRange") is { } byRange)
+        {
+            def.ByRange = true;
+            def.RangeMin = byRange.Num("min") ?? 0f;
+            def.RangeMax = byRange.Num("max") ?? 0f;
+        }
         if (d.List("si_script_ids") is { } ids)
         {
             var arr = new int[ids.Count];

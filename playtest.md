@@ -145,6 +145,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   the original's intermittent sputter (`BL-199`). *Look for:* the stage effects appearing at the
   right HP, anchored on the object. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
 
+- `PT-07` **C3 spiderweb proximity trigger** (`BL-183`/`BL-006` landed). Fly at the tikicave web
+  from a normal spawn: it must read solid and visible on approach, start its 0.7 s fade only inside
+  ~50 m, and be passable once faded — never gone-from-spawn, never an invisible wall.
+  `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`. *Also judge:* the authored margin is tight — at
+  cruise speed a dead-center run can reach the web before the fade finishes and clip the still-solid
+  strands (colliders drop at fade end, matching the shipped fade). A/B the feel against
+  `OriginalScreenshots/Videos/C3 Spiderweb.mp4`; if the original clearly lets you through mid-fade,
+  that's a new backlog entry (drop colliders at fade start), not a revert of either mechanism.
+
 ---
 
 ## Everything else
@@ -152,5 +161,5 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
 `*Playtest after fix:*` line — the weapons re-tests (`BL-011`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
-(`BL-150`), graze pushback (`BL-172`) and the C3 spiderweb trigger (`BL-183`). Do not re-add them
-here; the entry brings its own test when the fix lands.
+(`BL-150`) and graze pushback (`BL-172`). Do not re-add them here; the entry brings its own test
+when the fix lands.

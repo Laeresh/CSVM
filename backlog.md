@@ -32,7 +32,6 @@ table outlive the landing.
 | **`BL-003`** Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
 | **`BL-004`** Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
 | **`BL-005`** `WARNING: … SOUND 'snd_exp_ground_a' … no audio session` on every ground crash | `fix/crash-sound-warning` | `PlaneViewer.BuildFlightCrashRuntime`: crash runtime gets `SoundHandledElsewhere = true` (matches the world-effects runtime) | warning gone; ground boom still plays (via `FlightAudio.OnGroundExplosion`) |
-| **`BL-006`** Flying into C3's (invisible) spiderweb crashes/damages the plane | `fix/opacity-fade-collider` | `AnimRuntime.SetSubtreeOpacity`: a fade to ~0 now **disables the subtree's colliders** (edge-triggered, reuses `SetCollidersEnabled`); data-driven, no node name hard-coded | fly at C3's faded web — no invisible wall, no damage. **Premise resolved and reversed:** the original shows the web **visible and solid at start, fading only on fly-through** (`OriginalScreenshots/Videos/C3 Spiderweb.mp4`). Root cause traced to `AnimRuntime` ignoring the def's `EXECUTION_BY_RANGE` proximity gate (see `BL-183`) — the fade itself and this collider-drop mechanism are both correct and should be **kept**; only the trigger timing needs fixing (gate on player proximity, not mission load). ⚠ couldn't confirm from code that `spiderweb` has a `col` body (assets gitignored); the fix generalizes to **all** fade-to-0 subtrees |
 
 ### Still open — the attempt did not work
 
@@ -109,52 +108,6 @@ table outlive the landing.
   `sghangar_doors` as an intended case, but the shipped C2 data does not make them destructible — an
   aspiration/data mismatch. ⚠ Even a working destructible door may leave wreck colliders — "clear
   passage" is its own playtest.
-
-- `BL-183` **C3 spiderweb: wrong-trigger bug, not a conflicting-animation bug — `EXECUTION_BY_RANGE` is
-  silently dropped.** There is exactly **one** animation definition anywhere that touches `spiderweb`
-  install-wide (`extracted/C3/cam_anim/spiderweb-spiderweb_gone.json`, confirmed by grepping all of
-  `extracted/C3/{cam_anim,zrdr}` and every C3 mission folder) — so the "perhaps some conflicting
-  animations" hypothesis is **wrong**; there is nothing to reconcile between two defs. The def is
-  `ACTIVATION: OnStartup` **plus** `EXECUTION_BY_RANGE`, compiled as
-  `execution: {ByRange: {min: 0.0, max: 2500.0}}`. Per the already-documented squared-metres
-  convention (`docs/formats/anim-definitions.md:258`, `PlayerRange` reader 270 ↔ compiled 72900),
-  2500 = 50², i.e. the def is meant to fire only once the camera is within **50 m** of the web's
-  anchor (world pos `(-4467.8, 143.9, -4840.1)`, node index 2912) — not at mission load for every
-  camera regardless of distance.
-  **`AnimDefinition.Parse` (`CompiledAnim.cs:224-262`) never reads the `execution`/`ByRange` field at
-  all**, and `AnimRuntime.RunAmbientPasses` (`AnimRuntime.cs:1309-1338`) runs **every** `OnStartup`
-  def unconditionally on bootstrap regardless of it. So `spiderweb_gone` fires at frame 0 for every
-  play-through, no matter where the plane spawns — exactly backwards from what the data encodes.
-  **This is the root cause of the spiderweb premise reversal.** All 8 C3 IA1 `dogfight_ace` spawns sit
-  1.5–3.1 km from the web; all 8 `dogfight_squadron` spawns and `stunt_flying` sit 350 m–2.9 km away —
-  every shipped spawn point is far outside the 50 m trigger radius, so under correct semantics the web
-  renders **solid and visible from spawn under every spawn choice**, and only fades once the player
-  actually flies within ~50 m and passes through it — matching the user's report
-  (`OriginalScreenshots/Videos/C3 Spiderweb.mp4`).
-  *Fix shape:* (1) parse `Execution`/`Range` into `AnimDefinition`; (2) gate `OnStartup` defs that
-  carry it behind a live distance check against the nearest player (cheap — re-evaluate on the same
-  cadence `MapEdgeExtender` uses for its own cell-crossing diff, not every frame) instead of firing
-  them blind in `RunAmbientPasses`; (3) once gated correctly, `fix/opacity-fade-collider`'s
-  collider-drop-on-fade behaviour is still exactly right and should be kept — the web needs to lose
-  its collider at the same moment it fades, just triggered by proximity instead of by mission load.
-  This also affects every other proximity-gated `OnStartup` def install-wide (C1 `cloudparent#`,
-  C5 `wl_glw`/`cfglow`, the C3/C4 barrage-balloon defs) — none of them are distance-gated either; they
-  are lower priority because their symptom (an ambient opacity that should fade in/out with distance
-  rendering as a constant) is far less visible than a wall you fly through.
-  *Playtest after fix:* fly to the C3 web from a normal spawn — it should render solid and visible
-  until you close to ~50 m, then fade over 0.7 s and stop colliding, never faded-and-gone from spawn.
-  `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`. *Blocks:* closing `BL-183`/`BL-006`.
-  ⚠ **Traps.** (a) **Do not read this as vindicating "we shouldn't fade the web at all."** The web
-  SHOULD still fade — just only once the player is ~50 m from it, not at t=0. Reverting the fade
-  outright would make the web permanently solid, which is equally wrong. (b)
-  **`fix/opacity-fade-collider` is not the bug and must not be reverted.** Its collider-drop mechanism
-  is a correct, general, data-driven behaviour (any fade-to-0 subtree loses its colliders) that is
-  still needed once the trigger fires at the right time. The bug is entirely in *when* the fade
-  starts, not *what* the fade does — conflating the two would regress a working fix while leaving the
-  real defect in place. (c) **Do not "fix" this by special-casing `spiderweb` by name.** The mechanism
-  (`EXECUTION_BY_RANGE` dropped in `AnimDefinition.Parse`) is general; a name-keyed patch would leave
-  `cloudparent#`, `wl_glw`/`cfglow` and the barrage balloons exactly as broken and would not survive
-  the next proximity-gated def someone adds.
 
 ### Playtest pass 2 (2026-07-25) — new findings + verdicts
 

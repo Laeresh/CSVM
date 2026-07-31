@@ -84,7 +84,7 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "11b9d943e1853ea7f9cca77ad2169395",
+      "hash": "f2bad0b488409d0be733d11a3cdb50d2",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
@@ -98,7 +98,7 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "a660598120e1197938037bc94107d088",
+      "hash": "3bf93b51af42e40f7ad01b3bdcd2a5d6",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
