@@ -17,8 +17,8 @@ When adding a new item, take the next number and bump this line.
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
 
 A pass of at-the-controls findings from the user (M3 weapons/destruction). **Six localized fixes are
-now merged into `m3-polishing`** (built clean together), each still owing a cockpit playtest; one
-attempt **failed and is documented under "Still open" below**; the **larger items** follow. The
+now merged into `m3-polishing`** (built clean together), each still owing a cockpit playtest; the
+**larger items** follow. The
 fixes were code-only, so this section is their documentation trail. **When `m3-polishing` lands on
 `main`, give each merged fix a `docs/HISTORY.md` entry and delete its row here** — do not let this
 table outlive the landing.
@@ -32,43 +32,6 @@ table outlive the landing.
 | **`BL-003`** Gun tracers appear behind the plane | `fix/tracer-grow-from-muzzle` | `RenderTracers`: cap the drawn streak to distance travelled (`min(TracerLength, Range−DistLeft)`) so it grows out of the muzzle | tracers start at the muzzle; steady-state tracers (round >14 m out) unchanged |
 | **`BL-004`** Rockets feel too fast | `fix/rocket-speed-tune-hook` | adds a `Config` knob `weapons.rocketSpeedScale` (default **1.0 = data speed, no change**); when set, scales rocket velocity **and** accel so it still despawns at the same range | **value is a TUNE** — set e.g. `0.7` in `config.json` and A/B vs the original (see TUNE list) |
 | **`BL-005`** `WARNING: … SOUND 'snd_exp_ground_a' … no audio session` on every ground crash | `fix/crash-sound-warning` | `PlaneViewer.BuildFlightCrashRuntime`: crash runtime gets `SoundHandledElsewhere = true` (matches the world-effects runtime) | warning gone; ground boom still plays (via `FlightAudio.OnGroundExplosion`) |
-
-### Still open — the attempt did not work
-
-- `BL-007` **`det == 0` invert error when destroying things — still open, but every stated mechanism so far
-  is disproven.** `ERROR: Condition "det == 0" is true. at: invert (core/math/basis.cpp:47)`.
-  Reproducer: `--damage-test --damage-hd=25 --chapter=C2` (4 errors) and `--chapter=C3` (3); C1 is
-  clean. **What is now measured (2026-07-25):**
-  - It is Godot's **native** `Basis::invert` guard — a C++ print-and-return macro, not a managed
-    throw. The run completes, exits 0, and every report line after it is written normally.
-  - **Every error is printed AFTER the sweep finished and both reports were written** (lines 55–61
-    of a 62-line log). So it does **not** abort a death sequence: `kkgate`'s death reported
-    `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects *before* the
-    first error line. (verification.md LOG-9)
-  - It is **not** the destructible damage/death code at all: `--run-tests=damage-hd --chapter=C2`
-    produces a **byte-identical** report to the tool while emitting **0** errors, because the
-    harness tears its world down before the frame that follows. So the singular basis is reached by
-    per-frame work on state the deaths left behind, not by the sweep.
-  - It is **not** `WorldSounds` — `--mute` (where `AnimRuntime.Sounds` is null and `PlayOneShot`
-    never runs) still gives exactly 4 on C2.
-  - It is **not** the damage-stage path — the continuous HP sweep (`ApplyDamageStages`, no clock
-    ticks) gives 0 on C1 and C2; only the discrete-hit mode, which ticks `runtime.Advance`, gives it.
-  - It needs **several deaths together**: `--damage-test=kkgate`, `=sign` and `=fcpan` each give 0
-    on C2; only the unfiltered 16-def sweep gives 4.
-  **Leading suspect now: the per-frame `GlobalPosition` sets in `Effects/Puffer.cs`** (462/496/536/
-  565) on emitters the deaths created, whose ancestor chain a death swap left with a zero-scale
-  basis — the only per-frame native global setter that survives `--mute`.
-  ⚠ **Traps — do not re-chase these:**
-  - **Do not re-apply the `MotionRuntime.Seek` scale-floor** (branch `fix/motion-scale-zero-guard`,
-    not merged): tried, builds clean, error persists. User-tested 2026-07-24.
-  - **`InheritedLocal`'s `parentBasis.Inverse()` (`AnimRuntime.cs` ~2666) is ruled out.** It is
-    Godot .NET's *managed* `Basis.Inverse()`, which cannot print a `core/math/basis.cpp:47`
-    location.
-  - **The "the throw aborts the death sequence" hypothesis (playtest pass 2, finding 13) is
-    disproven** by the log ordering above. The `kkgate` door-not-moving / collider-remains symptom
-    is a **separate** bug and needs its own diagnosis — do not treat fixing one as fixing the other.
-  - A quiet run is not proof of a fix: `--run-tests` reports 0 of these today because its world is
-    gone by then. Verify against `--damage-test --damage-hd=25 --chapter=C2`.
 
 ### Larger items — documented, not fixed
 

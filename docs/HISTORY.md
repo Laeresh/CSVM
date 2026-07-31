@@ -8850,3 +8850,27 @@ red→white — the per-type distinctness the plan names as acceptance, A/B'd ag
 `Rocket Streak 1..3.png`. `.\RunTests.ps1` green: build, 312 units, 12/12 suites, 13 goldens
 hash-identical (no golden fires rockets). `BL-015` deleted from backlog (playtest → PT-09,
 BL-112 speed re-judge noted); C21 ticked in `docs/PLAN-m3-polish-2.md`.
+
+## 2026-07-31 — M3 Wave D D32 BL-007: det==0 invert error — physics sync of scale-to-zero anims
+
+`ERROR: Condition "det == 0" is true. at: invert (basis.cpp:47)` on C2 (4) / C3 (3) multi-death
+sweeps: mechanism found, fixed. A temporary tree scan for singular GLOBAL bases inserted right
+before the damage-test's `Quit()` correlated 1:1 with the error count — C2 has exactly 4
+`StaticBody3D` under zero-scaled ancestors (`tarzan_bridg1/2` halves `tbridg1a/b`, `tbridg2a/b`,
+the bridge fires kkgate's death chains into), C3 exactly 3 (`susp_bridge/part1/4/5`). The
+authored data legitimately ends `OBJECT_MOTION_FROM_TO` scale channels at exact 0 on 1–2 axes
+("shrink away"; 217 such events install-wide + 216 zero `OBJECT_SCALE_STATE`s — hook retracts,
+grasshut fires, zdome collapse). `FromToMotion.Seek` wrote that scale verbatim; Godot's
+end-of-frame transform flush then syncs each `StaticBody3D` under the flattened node to the
+physics server, whose native `inv_transform = transform.affine_inverse()` prints the error —
+once per body, AFTER the sweep's report (LOG-9's ordering, now explained: the whole sweep runs
+in one frame, the flush runs at its end). Why the fences never caught it: the old
+`fix/motion-scale-zero-guard` floored `MotionRuntime` (script playback) but the offender is
+`FromToMotion`, a different interpreter; the Puffer suspect was innocent because its emitters
+are `TopLevel`, so their `GlobalPosition` sets never invert a parent. Fix:
+`AnimRuntime.NonSingularScale` clamps near-zero pose-scale components to 1e-3 (sub-pixel at
+gameplay distance; the anims hide these nodes anyway) at both pose-scale write sites,
+`FromToMotion.Seek` and `PoseScale`. Verified against the reproducer: C2 0 errors (was 4), C3 0
+(was 3), C1/C5 0 (still), singular-basis scans 0 everywhere; `.\RunTests.ps1` PASS (312 units,
+12 engine suites, 13/13 goldens hash-identical). `BL-007` deleted; LOG-15 added to
+`verification.md`; the clamp documented as an `⚠` on `docs/architecture.md`'s `src/Mech3/Anim/`.

@@ -139,7 +139,7 @@ internal sealed class FromToMotion : IAnimMotion
         if (_sdTo is { } sdTo)
             scale *= (_sdFrom ?? Vector3.One).Lerp(sdTo, u);
 
-        Target.Transform = new Transform3D(rot.Scaled(scale), origin);
+        Target.Transform = new Transform3D(rot.Scaled(AnimRuntime.NonSingularScale(scale)), origin);
     }
 
     private static (Vector3?, Vector3?) Channel(AnimData data, string name)

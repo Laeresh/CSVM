@@ -460,9 +460,13 @@ meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
 `MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum.
-⚠ `RestOf`, `_rng`, and `SetSubtreeOpacity` on `AnimRuntime` are `internal` (not `private`)
-  specifically so these motion types can reach them — same-assembly only, no wider exposure
-  intended; don't widen further without a reason.
+⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
+  (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
+  exposure intended; don't widen further without a reason.
+⚠ Every pose-scale write goes through `AnimRuntime.NonSingularScale` (`FromToMotion.Seek`,
+  `PoseScale`): the data ends scale channels at exact 0 ("shrink away" — 217 FROM_TOs + 216
+  SCALE_STATEs install-wide), and an un-clamped singular basis makes the physics server's
+  `affine_inverse` spam native `det == 0` for every StaticBody3D under the node (BL-007).
 ⚠ A node carries at most ONE motion per `MotionChannel` (`Transform` or `Opacity`) — a transform
   motion and an opacity fade coexist on the same node, but two motions on the same channel evict
   each other (`AnimRuntime.AddMotion`).

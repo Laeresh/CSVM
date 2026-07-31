@@ -327,6 +327,12 @@ cite these IDs.
   healthy — the failure can sit beside the checks you came for.** kkgate's damage-test row was
   cited as "death sequence working" from `swap✓ col✓` while `debris[0 launched]` on the same
   line WAS the bug (the chained genx12 exploder resolving to nothing).
+- **LOG-15** — **A native error that names no node is located by dumping candidate state on the
+  erroring frame and matching COUNTS, not by patching suspects and re-running.** A tree scan for
+  singular global bases put beside the `det == 0` prints matched 4/4 on C2 and 3/3 on C3
+  (`StaticBody3D`s under scale-to-zero anims); the prior suspect-patching attempt fixed the wrong
+  interpreter and measured nothing. Godot defers transform→physics flushes to end of frame, so
+  such errors print after the code that caused them — LOG-9's ordering, explained.
 
 ## WORLD — world data & engine traps
 

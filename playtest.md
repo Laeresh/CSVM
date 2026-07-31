@@ -159,8 +159,7 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   over ~3 s, after which the passage is clear to fly through — scripted runs confirm all of it; the
   owed read is whether the piece trajectories and fade feel like the original. ⚠ Flying in right
   behind the explosion still hits mid-air wreckage for the first ~3 s (colliders ride the pieces
-  until the fade ends) — that is the data's call, not a regression. The `det == 0` log line in the
-  same session is a separate bug (`BL-007`).
+  until the fade ends) — that is the data's call, not a regression.
   `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
 
 - `PT-09` **Rocket smoke trails (`BL-015` landed 2026-07-31).** Every rocket type now trails its

@@ -101,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — destruction bugs
 
 31. ☑ `BL-023` `kkgate` door: dies visibly and loses its collider in the live world
-32. ☐ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
+32. ☑ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
 
 ## Dependency and parallelism notes
 
@@ -536,7 +536,7 @@ the plane flying through into the sea hangar with no CRASH (was `CRASH into pt6/
 damage-lab post-fade capture shows the doorway fully open, `debris launched 12`. Owed cockpit
 read: `playtest.md` `PT-08`.
 
-## D32 ☐ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
+## D32 ☑ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
 
 **Goal.** The mechanism behind `Condition "det == 0" is true. at: invert (basis.cpp:47)` on
 C2/C3 multi-death sweeps is identified and either fixed or written up as a bounded disproof.
@@ -565,3 +565,20 @@ world is torn down before the erroring frame (`docs/verification.md` LOG-9).
 persists. (b) The error does not abort death sequences — that hypothesis is disproven by log
 ordering. (c) The `kkgate` symptom (D31) is a separate bug. (d) If A3 re-parented flight puffers,
 re-run this reproducer after — same module, possible interaction.
+
+**Outcome (2026-07-31) — mechanism found and fixed; the Puffer suspect is exonerated.** A
+singular-global-basis tree scan inserted right before the probe's `Quit()` correlated 1:1 with the
+error count: C2 has exactly 4 `StaticBody3D` under zero-scaled ancestors (`tbridg1a/b`,
+`tbridg2a/b`), C3 exactly 3 (`susp_bridge/part1/4/5`) — 4 and 3 errors. The mechanism: authored
+death anims legitimately end `OBJECT_MOTION_FROM_TO` scale channels at 0 on one or two axes
+("shrink away" — the bridge fires kkgate's death chains into; 217 such events install-wide, plus
+216 zero `OBJECT_SCALE_STATE`s), `FromToMotion.Seek` wrote that scale verbatim, and Godot's
+end-of-frame transform flush then syncs each `StaticBody3D` under the flattened node to the
+physics server, whose native `inv_transform = transform.affine_inverse()` prints `det == 0` —
+once per body, after the sweep's report, exactly as LOG-9 recorded. The old scale-floor branch
+failed because it floored `MotionRuntime` (script playback) while the offender is `FromToMotion`
+(a different interpreter); Puffer was innocent because its emitters are `TopLevel` (its
+`GlobalPosition` sets never invert a parent). Fix: `AnimRuntime.NonSingularScale` clamps each
+near-zero pose-scale component to 1e-3 (sub-pixel at gameplay distance) at both pose-scale write
+sites — `FromToMotion.Seek` and `PoseScale`. After: C2 0 (was 4), C3 0 (was 3), C1/C5 still 0,
+singular-node scans all 0; full `RunTests.ps1` gate green.

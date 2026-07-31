@@ -276,6 +276,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // to the authored 50 m at cruise speed.
     private const float RangeCheckCellSize = 8f;
 
+    /// <summary>Smallest magnitude a pose-scale component may reach. The data legitimately
+    /// animates scale to exactly 0 on one or more axes ("shrink away": hook retracts, the
+    /// C2/C3 bridge fires, C4's zdome collapse), but a node flattened to a singular basis
+    /// poisons every native consumer that inverts it — Godot's physics server spams
+    /// `det == 0` (basis.cpp:47) syncing any StaticBody3D under the node. 1e-3 of a
+    /// world-object's size is sub-pixel at gameplay distance, and the anims hide these
+    /// nodes anyway (OBJECT_ACTIVE_STATE off / opacity fade).</summary>
+    private const float MinPoseScale = 1e-3f;
+
     private readonly List<(Node3D Node, string SrcName)> _index = new();
 
     private readonly Dictionary<string, Func<string, bool>> _matcherCache = new(StringComparer.OrdinalIgnoreCase);
@@ -1032,6 +1041,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     }
 
     // ---- state application ----
+    /// <summary>Clamps each near-zero scale component to <see cref="MinPoseScale"/> (sign
+    /// preserved) so an animated pose can never write a singular basis. Applied at every
+    /// pose-scale write site: <c>PoseScale</c> and <c>FromToMotion.Seek</c>.</summary>
+    internal static Vector3 NonSingularScale(Vector3 s) => new(
+        Mathf.Abs(s.X) < MinPoseScale ? (s.X < 0f ? -MinPoseScale : MinPoseScale) : s.X,
+        Mathf.Abs(s.Y) < MinPoseScale ? (s.Y < 0f ? -MinPoseScale : MinPoseScale) : s.Y,
+        Mathf.Abs(s.Z) < MinPoseScale ? (s.Z < 0f ? -MinPoseScale : MinPoseScale) : s.Z);
+
     /// <summary>The node's authored pose, remembered the first time anything moves it, so
     /// every pose op stays an offset from the rest pose rather than compounding.</summary>
     internal Transform3D RestOf(Node3D node)
@@ -2861,7 +2878,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (scale.LengthSquared() < 1e-9f)
             return;
         var rest = RestOf(target);
-        target.Basis = rest.Basis.Orthonormalized().Scaled(scale);
+        target.Basis = rest.Basis.Orthonormalized().Scaled(NonSingularScale(scale));
         _opsApplied++;
     }
 
