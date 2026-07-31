@@ -79,7 +79,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — animation triggers & effect routing
 
 1. ☐ `BL-183` Parse `EXECUTION_BY_RANGE` and gate `OnStartup` defs on player proximity (C3 spiderweb)
-2. ☐ `BL-021` Damage-stage smoke/fire renders in flight, not only headless
+2. ☑ `BL-021` Damage-stage smoke/fire renders in flight, not only headless
 3. ☐ `BL-174` Player low-HP smoke/fire trail: settle reachability-vs-parenting, then fix
 
 ### Wave B — impacts & surfaces
@@ -153,7 +153,7 @@ revert the fade or the collider drop; only the trigger timing is wrong. (c) The 
 hashes may legitimately change on chapters where a deferred def altered frame-15 state — read
 `docs/verification.md` before re-pinning.
 
-## A2 ☐ `BL-021` Damage stages (smoke→fire) render in flight
+## A2 ☑ `BL-021` Damage stages (smoke→fire) render in flight
 
 **Goal.** Guns-only fire into a destructible in real flight shows the authored 60 %/30 % stage
 smoke and fire on the object, not just the final blast.

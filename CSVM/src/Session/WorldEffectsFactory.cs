@@ -38,6 +38,11 @@ public sealed class WorldEffectsFactory
         // destruction effects death sequences call
         "large_30sec_fire", "great_balls_of_fire", "large_black_smokeball", "biggun_flying_parts",
         "big_splash",
+        // progressive damage-stage effects DAMAGE_SEQUENCEs call (the smoke/fire sputter at the
+        // 0.60/0.30 HP stages). The install-wide DAMAGE_SEQUENCE call set is exactly these two
+        // plus C4's one-off `b_steamtrail`, which is excluded: its anim root is the live train
+        // subtree, not a relocatable effect template.
+        "sputter_black_smoke_obj", "sputter_fire_smoke_obj",
     };
 
     // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
@@ -61,7 +66,7 @@ public sealed class WorldEffectsFactory
         "gunhit", "dum_gunhit", "mag_gunhit", "flame_ball_01", "flame_ball_02", "he_ring",
         "ap_effect", "flak_control", "flash_control", "sonic_effect", "scatter_trails",
         "torp_effects", "rear_flash_control", "fire_here", "moving_fire_ball_01",
-        "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model",
+        "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model", "partial_damage_obj",
     };
 
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its

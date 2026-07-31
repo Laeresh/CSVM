@@ -8675,3 +8675,24 @@ produced the report, now `verification.md` **METHOD-18**; (b) a landed splash is
 0/8 (SHOT-14's "not shown"). No code changed; collider counts by construction unmoved;
 `.\RunTests.ps1` green. `BL-017` deleted; the real gap (the `Splash0N` sprite look + the
 range-expiry fidelity question) is the new `BL-186` with traps.
+
+## 2026-07-30 — M3 Wave A A2 BL-021: damage-stage smoke/fire renders in flight
+
+The routing already existed — `ApplyDamageStages` runs the `DAMAGE_SEQUENCE` host on the world
+runtime, whose CALL_ANIMATION dispatch offers every call to `ExternalEffect` (wired in flight at
+session build) — but the stage names were outside the world-effects closure, so `Handles()`
+declined and the call fell through to the local Start that renders nothing (WORLD-12). The
+install-wide `DAMAGE_SEQUENCE` call set is exactly `sputter_black_smoke_obj` (113 uses),
+`sputter_fire_smoke_obj` (113) and C4's one-off train-anchored `b_steamtrail`; the fix adds the
+sputter pair to `WorldEffectsFactory.EffectAnimNames` (28→30) and their shared anim root
+`partial_damage_obj` (present in all 8 chapter gamez) to `EffectStageRoots` (18→19). Verified
+live in flight (`--plane=player_pfighter --chapter=C1 --fly --pos/--direction at C1's
+ap_h2otwr1 --fire --debug-anim --screenshot`): stage-1 retarget at HP 41.25→35 (threshold 36),
+stage-2 `sputter_fire_smoke_obj` retarget past 18, the effects runtime's own census line
+(`anim/debug: 1 active puffer(s), 10 live particle(s)` — a built, emitting `Puffer`, WORLD-12),
+and grey stage-smoke pixels at the tower head in `.scratch/bl021_stage2.png`; `--effects-test`
+reports both names `puffer[1] rendered`, 30/30 resolved. `.\RunTests.ps1` PASS (312 units, 12/12
+suites, 13/13 goldens). Follow-up filed as `BL-199`: the authored intermittent *sputter*
+degenerates to one burst per stage — `HandlePufferState`'s re-assert guard never revives a
+`SustainEnd`'ed emitter. `BL-021` deleted from `backlog.md`; `BL-046` re-scoped to what remains
+outside the closure (`b_steamtrail`, unbound death effects, template mesh halves).

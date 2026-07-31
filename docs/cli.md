@@ -344,10 +344,11 @@ collision off *and* the wreck's on. Where collision was not built, the line says
 world-effects runtime of their own, and the world runtime's puffer factory is torn down after the
 build (WORLD-12), so a death would start its definitions and draw nothing. The first damage action
 builds the same runtime `--destroy` uses and wires it to the world runtime — a building's
-`great_balls_of_fire` then renders. **It does not cover everything:** that runtime binds a fixed
-closure of impact/destruction animation names, and the progressive-damage puffers
-(`sputter_black_smoke_obj`, `sputter_fire_smoke_obj`) and a def's own `PUFFER_STATE` sequences are
-not in it — those still fire in the log and draw nothing outside flight.
+`great_balls_of_fire` then renders, as do the progressive-damage puffers (`sputter_black_smoke_obj`,
+`sputter_fire_smoke_obj`, bound since BL-021 landed). **It does not cover everything:** that runtime
+binds a fixed closure of impact/destruction animation names, and a def's own `PUFFER_STATE`
+sequences (and any death-effect name outside the closure, BL-046) still fire in the log and draw
+nothing.
 
 - `--debug-damage[=script]` (`--freecam`/`--anim-lab` only — the scripted twin, since live keys and
   mouse are not scriptable here. Opens the panel at launch and runs an **ordered** script against it

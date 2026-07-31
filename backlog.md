@@ -260,15 +260,6 @@ work is below.
     and lingering. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
 **Destruction & doors (findings 12, 13).**
-11. `BL-021` **Damage stages (smoke→fire) never render in flight.** Guns-only into a tower, HP visibly falling,
-    **no intermediate smoke or fire — only the final blast** (user, grilled: "never showed"). The stages
-    fire headless (`--damage-hd` proves the 60 %/30 % stages), so this is a **render gap**: the
-    `DAMAGE_SEQUENCE` stage effects aren't reaching the flight world-effects runtime (same class as the
-    D32 gun-smoke follow-up — the puffer factory is torn down post-build outside the labs). *Investigate:*
-    does the flight damage path (`AnimRuntime.DamageAt` → stage sequences) route stage effects through the
-    flight `EffectSink`/world-effects runtime, or only the death effect?
-    *Playtest after fix:* guns-only into a tower, HP falling — look for smoke then fire rendering at the
-    60%/30% stages, not just the final blast. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
 12. `BL-022` **Debris trajectory is wrong, not merely slow.** In-flight kills throw pieces "but not in the correct
     trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit
     no launch momentum + `bounce_sequence` ground-rest unsimulated + magnitude decode is TUNE) — this pass
@@ -519,17 +510,20 @@ unscheduled.
   notice and the debris line. `./RunGame.ps1 --freecam --chapter=C1`, click a destructible, **H**.
 
 - `BL-046` **Destruction stage visuals do not reach the world for every object.** A destroyed building shows
-  its burn effect, but the water tower shows no smoke or fire — the stages are visible only in the
-  panel and the log, which the user found confusing. This is the known closure limit rather than a
-  damage-lab defect: the world-effects runtime binds a fixed 28-name set, and the tower's stage
-  puffers are not among them, so they start, log, and draw nothing (verification WORLD-12).
+  its burn effect, but some objects' effects are visible only in the panel and the log, which the
+  user found confusing. This is the known closure limit rather than a damage-lab defect: the
+  world-effects runtime binds a fixed 30-name set, and an effect name outside it starts, logs, and
+  draws nothing (verification WORLD-12). The progressive damage-stage pair (`sputter_*_obj`) was the
+  headline case and is bound since `BL-021` landed (2026-07-30); still outside the closure: any
+  death-effect name not in `EffectAnimNames`, C4 `train01`'s `b_steamtrail` damage stage (its anim
+  root is the live train, not a relocatable template — needs a different mechanism than
+  `PlayEffectAt`), and the template MESH halves (`BL-061` item 2).
   ⚠ Traps: confirming a def *started* is not confirming it rendered — check that a `Puffer` was
   built, or the measurement is of a no-op. Filed as an animation/visuals issue by the user's own
   call, not as part of D34.
   *Playtest after fix:* smoke should render at the damaged stage and fire at the destroyed stage, on the
-  object itself, for every destructible you can kill (not just buildings — check the water tower
-  specifically, the case that failed). `./RunGame.ps1 --freecam --chapter=C1`, **H**, slide HP down and
-  kill. *Blocks:* nothing here — an animation/visuals item, not a damage-lab one.
+  object itself, for every destructible you can kill. `./RunGame.ps1 --freecam --chapter=C1`, **H**,
+  slide HP down and kill. *Blocks:* nothing here — an animation/visuals item, not a damage-lab one.
 
 ### HUD & audio
 
@@ -743,6 +737,23 @@ unscheduled.
   time (a manufactured answer). And these effects **share puffer names** (`trailpuffer2` across
   `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
   if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
+
+- `BL-199` **Damage-stage sputter renders one brief burst, not an intermittent sputter (follow-up from
+  `BL-021`, 2026-07-30).** The `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` stage effects now
+  route to the world-effects runtime and build their puffer, but the authored *sputter* — the `puffit`
+  loop's 50 % `RANDOM_WEIGHT` off/on cycle — degenerates to a single burst: once the random gate fires
+  `PUFFER_STATE 0`, `HandlePufferState`'s re-assert guard (`_puffers.ContainsKey` → return) treats the
+  `SustainEnd`'ed emitter as still running, so the loop's `PUFFER_STATE 1` never revives it. The
+  original sputters smoke on and off for as long as the object stands damaged; ours puffs once per
+  stage. The 32 s `EffectRuntimeTtl` would also cap a fixed sustained emitter — moot until the revive
+  works.
+  ⚠ **Traps.** Do not just delete the `ContainsKey` guard — it exists because the data's poll idiom
+  re-asserts a *running* emitter every loop pass, and rebuilding each pass would stack emitters. The
+  fix needs "re-assert revives a stopped emitter" semantics (or key removal on `SustainEnd`), and any
+  census taken to verify it must respect the shared `(name, host)` key + seeded-only `RANDOM_WEIGHT`
+  reproducibility traps above (`BL-061`).
+  *Playtest after fix:* a tower held in a damage stage should sputter smoke intermittently, not emit
+  one puff cluster and go quiet. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24) — the round-robin fix is on branch `fix/rocket-drain-pylon`, pending merge + playtest.**
   The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
@@ -1055,7 +1066,7 @@ unscheduled.
   ⚠ **Traps.** (a) **The instrument that separates A from B is a damage-lab run holding HP in the
   10–20% band, not a flight test.** A flight test cannot distinguish "never reached" from "reached but
   invisible" — both look like nothing on screen. (b) It is **not** `BL-046`/`BL-061` (world
-  destructible stage puffers dying inside the fixed 28-name `EffectStageRoots` set) — both agents
+  destructible effects dying outside the fixed `EffectAnimNames` closure) — both agents
   checked independently and `DamageVisuals` never touches that registry, so a fix to the world-effects
   runtime will not make this render. (c) Do not conclude the `Puffer` code itself is broken — it is
   exercised in the `--viewer` damage lab via hand-set HP sliders; whatever the defect is, it is

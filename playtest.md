@@ -139,6 +139,12 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   **C** collider overlay until `BL-042` lands — its wireframes draw offset from the geometry, so
   read the impact effects and sounds, not the colours.
 
+- `PT-06` **Damage-stage smoke/fire in flight (`BL-021` landed 2026-07-30).** Guns-only into a
+  tower, HP falling — smoke should render on the object at the 60 % stage and fire smoke at the
+  30 % stage, not just the final blast. Known limit: each stage shows one brief burst rather than
+  the original's intermittent sputter (`BL-199`). *Look for:* the stage effects appearing at the
+  right HP, anchored on the object. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+
 ---
 
 ## Everything else

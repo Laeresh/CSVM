@@ -1070,8 +1070,9 @@ reset,tick=,open]` is the scripted twin (an ordered script, not a token set).
   read-only with the reason. Driving a twin damages a pool nothing can ever hit.
 ⚠ Swap + collider census are read PRE-tick (synchronous), debris POST-tick (scheduled, WORLD-11);
   colliders print `off=`/`on=` separately (WORLD-10) or the not-built notice (WORLD-9).
-⚠ **Freecam builds no world-effects runtime** — the `sputter_*_obj` stage puffers and a def's own
-  `PUFFER_STATE` fire in the log and draw nothing here (WORLD-12).
+⚠ **Freecam builds no world-effects runtime until the lab's first damage action asks** — bound
+  effect names (death effects, the `sputter_*_obj` stage puffers) render from then on; a def's own
+  `PUFFER_STATE` sequences still fire in the log and draw nothing (WORLD-12).
 
 ## src/UI/OrbitCamera.cs
 The static inspection view's orbit-camera controller (LMB-drag orbit, wheel zoom, AABB framing):
@@ -1402,7 +1403,10 @@ caller's build summary.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
-`BuildFlightCrashRuntime`. Constructed once per session (`_worldEffectsFactory`, same lifetime as
+`BuildFlightCrashRuntime`. `EffectAnimNames` binds impact + death effects **and** the
+`DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
+`partial_damage_obj`, staged via `EffectStageRoots`) — the install-wide stage-call closure except
+C4's train-anchored `b_steamtrail` (BL-046). Constructed once per session (`_worldEffectsFactory`, same lifetime as
 `LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`
 — the ctor closure over `GameSession`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
 in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`.
