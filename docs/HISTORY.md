@@ -9227,3 +9227,23 @@ pool is still non-billboarded and single-texture (`smoke101` only, no `102`/`103
 in this pass showed either is currently needed, so both stay as-is rather than being "fixed" against
 no observed symptom — re-open a new item if a future playtest surfaces an edge-on stripe or texture
 repetition.
+
+## 2026-07-31 — M3p3 Wave C C23 BL-210: tracer config knobs + distance-visibility floor
+
+`weapons.tracerLength`/`tracerWidth`/`tracerBrightness` (`Projectile.cs` C25 constants, defaults
+unchanged) now route through `Config.GetFloat`, so the user retunes the tracer look from
+`config.json` without a rebuild — length/width read once per frame in `RenderTracers`, brightness
+baked into each round's tint at `Spawn`. Added a distance-visibility floor,
+`weapons.tracerMinPixels` (default 2 px, 0 disables): `MinWorldSizeForPixels` inverts the listener
+camera's vertical-FOV/viewport-height projection to the minimum world size that still covers that
+many pixels at the round's current distance, and both the drawn width and the drawn length are
+floored to it before the existing muzzle-growth cap (so a fresh round still grows out of the
+muzzle instead of jumping to the floor size; the floor only lifts a round that has flown far
+enough to need it). Registered in `Config.WarmTuningRegistry` (read only from a live
+Spawn/RenderTracers, which the warmup never drives) so `--dump-config` documents all four keys.
+Verified: `RunTests.ps1` green, all 13 goldens hash-identical (none of them fire a weapon, so the
+floor and the new defaults never touch a golden pixel regardless of magnitude). Knobs + floor
+confirmed live by the user at the controls with a `--no-det` `config.json` override (`--det`, which
+every scripted capture implies, clears config overrides by design) — widened `tracerWidth`/
+`tracerLength` read visibly bigger, and disabling `tracerMinPixels` measurably shrank distant
+flecks back toward invisible. `BL-210` deleted from `backlog.md`.

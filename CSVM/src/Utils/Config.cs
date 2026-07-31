@@ -207,6 +207,12 @@ public static class Config
             // ProjectilePool reads this only on a live rocket shot, which the warmup never fires —
             // register it here so --dump-config still documents the weapon-fire tunable.
             GetFloat("weapons.rocketSpeedScale", ProjectilePool.RocketSpeedScale);
+            // Tracer look (C23) reads only from a live Spawn/RenderTracers, which the warmup never
+            // drives (no ProjectilePool here) — register them here so --dump-config documents them.
+            GetFloat("weapons.tracerLength", ProjectilePool.TracerLength);
+            GetFloat("weapons.tracerWidth", ProjectilePool.TracerWidth);
+            GetFloat("weapons.tracerBrightness", ProjectilePool.TracerBrightness);
+            GetFloat("weapons.tracerMinPixels", ProjectilePool.TracerMinPixels);
             // The gun-ammo testing cap is read only when a plane binds its loadout, which the warmup
             // never does — register it here so --dump-config still documents it.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);

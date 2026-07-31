@@ -42,18 +42,28 @@ public sealed partial class ProjectilePool : Node3D
                                                 // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
                                                 // both launch velocity and acceleration together so the whole
                                                 // profile stays proportional and the round still expires at RANGE.
-
-    private const int MaxProjectiles = 1024;
-    private const int MaxFlashes = 128;
-    // C25 retune toward the reference shots' short discrete dashes (was 3m/0.156m, read as a long
-    // glowing streak) — magnitudes are TUNE (BL-202), owed the cockpit A/B.
-    private const float TracerLength = 1.0f;   // streak length behind the round, m — TUNE (BL-202)
-    private const float TracerWidth = 0.10f;   // m — TUNE (BL-202)
+                                                // C25 retune toward the reference shots' short discrete dashes (was 3m/0.156m, read as a long
+                                                // glowing streak) — magnitudes are TUNE (BL-202), owed the cockpit A/B. C23 routes all three
+                                                // through Config (weapons.tracerLength/tracerWidth/tracerBrightness) so the user can retune the
+                                                // look without a rebuild; these consts are only the defaults now (Config.GetFloat falls through
+                                                // to them verbatim with no config.json, so the defaults stay byte-identical for goldens).
+    internal const float TracerLength = 1.0f;   // streak length behind the round, m — TUNE (BL-202)
+    internal const float TracerWidth = 0.10f;   // m — TUNE (BL-202)
     // Additive blending with no glow/bloom pass caps a tracer at the texture's own pixel value, which
     // read visibly dimmer than the reference captures' near-white core — an overbright multiplier (>1,
     // clipped by the additive blend itself) is the only lever available without a bloom pipeline.
     // Uniform across channels so it brightens rather than recolours the per-ammo texture's own hue.
-    private const float TracerBrightness = 3.0f; // TUNE (BL-202)
+    internal const float TracerBrightness = 3.0f; // TUNE (BL-202)
+    // C23 distance-visibility floor: the minimum screen footprint (px) a tracer's drawn width/length
+    // are allowed to shrink below at range, so a round many hundred metres out still reads as a
+    // fleck instead of vanishing into sub-pixel geometry (the original screenshots show distant fire
+    // as visible streaks). 0 disables the floor outright. Off the default screenshots/goldens (none
+    // fire a weapon) so this never moves a golden hash — magnitude is TUNE (BL-210), owed the
+    // cockpit A/B via weapons.tracerMinPixels.
+    internal const float TracerMinPixels = 2.0f;
+
+    private const int MaxProjectiles = 1024;
+    private const int MaxFlashes = 128;
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
                                                   // NO FLYOUT model (a chapter missing the prototype)
     private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
@@ -144,7 +154,6 @@ public sealed partial class ProjectilePool : Node3D
     // (index 4), the last entry.
     private static readonly string[] TracerTextures =
         { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium", "tracer1" };
-    private static readonly Color TracerTint = new(TracerBrightness, TracerBrightness, TracerBrightness);
 
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
@@ -297,6 +306,10 @@ public sealed partial class ProjectilePool : Node3D
         // FIRE-binding resolution as the muzzle flash); ordnance carries no ammo-type FIRE binding,
         // so it falls back to the generic tracer1 (the array's last entry).
         int tracerIdx = weapon.IsRocket ? TracerTextures.Length - 1 : MuzzleAmmoIndex(weapon);
+        // Brightness is baked into the tint at spawn (C23, weapons.tracerBrightness) rather than read
+        // per frame — a round's tint stands for its whole life, same as everything else in Proj.
+        float brightness = Config.GetFloat("weapons.tracerBrightness", TracerBrightness);
+        var tracerTint = new Color(brightness, brightness, brightness);
 
         int slot = -1;
         for (int i = 0; i < MaxProjectiles; i++)
@@ -324,7 +337,7 @@ public sealed partial class ProjectilePool : Node3D
                 Accel = accel,
                 Grav = (weapon.Gravity ?? 0f) * WorldGravity,
                 Weapon = weapon,
-                Tint = TracerTint,
+                Tint = tracerTint,
                 TracerIdx = tracerIdx,
                 Model = model,
                 Trails = trails,
@@ -1284,6 +1297,21 @@ public sealed partial class ProjectilePool : Node3D
         player.Play();
     }
 
+    // The minimum world-space size (m) that projects to `pixels` on screen at `distance` from the
+    // listener camera (C23) — inverts Godot's default vertical (KEEP_HEIGHT) perspective projection:
+    // screenPx = worldSize * viewportHeight / (2 * distance * tan(fov/2)). 0 with no bound camera or
+    // a degenerate distance/viewport (the weapon lab, a headless dump with no listener).
+    private float MinWorldSizeForPixels(float distance, float pixels)
+    {
+        if (_listener == null || distance <= 0f || pixels <= 0f)
+            return 0f;
+        float viewportHeight = _listener.GetViewport()?.GetVisibleRect().Size.Y ?? 0f;
+        if (viewportHeight <= 0f)
+            return 0f;
+        float fovRad = Mathf.DegToRad(_listener.Fov);
+        return pixels * 2f * distance * Mathf.Tan(fovRad * 0.5f) / viewportHeight;
+    }
+
     private void RenderTracers()
     {
         // A velocity-aligned, camera-facing streak: the quad's local Y (its length) lies along the
@@ -1291,6 +1319,11 @@ public sealed partial class ProjectilePool : Node3D
         // allows, and local X is the width. Not billboarded, so the streak keeps its length instead
         // of collapsing to a screen-vertical bar. The quad trails behind the round by half its length.
         var eye = _listener?.GlobalPosition;
+        // Config-driven look (C23): read once per frame, not per round — a session-wide setting,
+        // not a per-shot one. Falls through to the in-code defaults verbatim with no config.json.
+        float cfgLength = Config.GetFloat("weapons.tracerLength", TracerLength);
+        float cfgWidth = Config.GetFloat("weapons.tracerWidth", TracerWidth);
+        float minPixels = Config.GetFloat("weapons.tracerMinPixels", TracerMinPixels);
         System.Array.Clear(_tracerCounts, 0, _tracerCounts.Length);
         for (int i = 0; i < _projHigh; i++)
         {
@@ -1318,7 +1351,9 @@ public sealed partial class ProjectilePool : Node3D
                 }
             }
             var yAxis = p.Vel.Normalized();
-            var toEye = eye is { } e ? (e - p.Pos).Normalized() : Vector3.Up;
+            var toEyeVec = eye is { } e ? (e - p.Pos) : Vector3.Up;
+            float eyeDist = toEyeVec.Length();
+            var toEye = eyeDist > 1e-6f ? toEyeVec / eyeDist : Vector3.Up;
             var zAxis = (toEye - yAxis * toEye.Dot(yAxis)); // camera dir, projected ⟂ to the streak
             if (zAxis.LengthSquared() < 1e-6f)
                 zAxis = yAxis.Cross(Vector3.Right);
@@ -1329,15 +1364,22 @@ public sealed partial class ProjectilePool : Node3D
             float scale = p.Model != null ? RocketExhaustScale
                 : p.Weapon.IsRocket ? RocketStreakScale
                 : 1f;
+            // The distance-visibility floor (C23): the minimum world size that still covers
+            // minPixels on screen at this round's distance from the listener camera — 0 with no
+            // camera bound (the weapon lab). Raises the streak's baseline size before the muzzle-growth
+            // cap below, so a round that has flown far enough to need it still gets to show it; a
+            // fresh round can never exceed how far it has actually travelled, floor or not.
+            float floorSize = MinWorldSizeForPixels(eyeDist, minPixels);
+            float width = Mathf.Max(cfgWidth * scale, floorSize);
             // Cap the drawn streak to how far the round has actually flown, so it grows out of the
             // muzzle instead of pre-extending a full length behind it on the spawn frame.
             float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
-            float len = Mathf.Min(TracerLength * scale, traveled);
+            float len = Mathf.Min(Mathf.Max(cfgLength * scale, floorSize), traveled);
             // The authored texture's head sits at the opposite end of its V axis from where this
             // quad's +local-Y (the round's current position, per the trailing offset below) lands —
             // rotate the quad 180° about its own facing normal (negate X and Y together, a proper
             // rotation, not a mirror) so the bright head reads at the round instead of the tail (C21).
-            var basis = new Basis(-yAxis * len, -xAxis * (TracerWidth * scale), zAxis);
+            var basis = new Basis(-yAxis * len, -xAxis * width, zAxis);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;
             mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));

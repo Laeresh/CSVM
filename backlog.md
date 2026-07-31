@@ -189,19 +189,6 @@ its symptom and traps.
   water a visible splash — all readable at normal flight speed without frame-stepping.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
 
-**Weapon visuals round 3 (PT-10/11/12).**
-
-- `BL-210` **Tracer length/width become config knobs for the user to tune; distant tracers should
-  stay visible farther out.** User verdict on C25 (2026-07-31): colour is right; they want to
-  retune length/width themselves via config params, and tracers should read from farther away, as
-  in the original screenshots. Fix shape: expose `weapons.tracerLength` / `weapons.tracerWidth`
-  (and brightness) in `config.json` with the current values as defaults (byte-identical at
-  defaults), plus investigate a distance-visibility floor (a minimum apparent size so a distant
-  round still reads as a fleck). ⚠ Traps: defaults must not move the goldens; the far-visibility
-  floor is look, record its magnitude as TUNE.
-  *Playtest after fix:* the user tunes the knobs at the controls; distant rounds read as flecks.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
-
 **Rockets (PT-09).**
 
 - `BL-211` **Rocket sound differs from the original.** User note (2026-07-31), no further detail
@@ -1429,11 +1416,12 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   `TracerBrightness` 3.0 (additive blend with no bloom pass, so the only way to read brighter than
   the texture's own pixel value). Judge against `OriginalScreenshots/C1B
   IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png`.
-  **PT-12 verdict (2026-07-31): colour right; the user tunes length/width themselves once the
-  config knobs exist — `BL-210` (PLAN-m3-polish-3 C23).** ⚠ The bullet is fast enough (1000 m/s at
-  60 fps ≈ 16.7 m/frame) that a frame-locked `--screenshot` capture almost never lands exactly on a
-  round still at the muzzle — the near/bright look is easiest judged live, holding the trigger, not
-  from a single scripted shot.
+  **PT-12 verdict (2026-07-31): colour right; the user tunes length/width themselves — landed via
+  `BL-210` (PLAN-m3-polish-3 C23): `weapons.tracerLength`/`tracerWidth`/`tracerBrightness` config
+  knobs, plus a `weapons.tracerMinPixels` distance-visibility floor.** ⚠ The bullet is fast enough
+  (1000 m/s at 60 fps ≈ 16.7 m/frame) that a frame-locked `--screenshot` capture almost never lands
+  exactly on a round still at the muzzle — the near/bright look is easiest judged live, holding the
+  trigger, not from a single scripted shot.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 - `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.

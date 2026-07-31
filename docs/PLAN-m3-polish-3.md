@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 21. ☑ `BL-208` Muzzle flash: anchor the texture's left edge at the muzzle, full texture readable (landed 2026-07-31)
 22. ☑ `BL-209` Eject/muzzle smoke puffs read as round smoke101/102/103 puffs, not stripes (disproven 2026-07-31 — fixed by C21, not the traced billboard lead)
-23. ☐ `BL-210` Tracer length/width/brightness as config knobs + distance-visibility floor
+23. ☑ `BL-210` Tracer length/width/brightness as config knobs + distance-visibility floor (landed 2026-07-31; user-confirmed live)
 
 ### Wave D — rockets
 
@@ -373,7 +373,7 @@ through the broken look. (b) The muzzle *flash* pools are deliberately non-billb
 in the firing plane) — scope the billboard change to the smoke pool only. (c) Serial with
 C21/C23/A2 on `Projectile.cs`.
 
-## C23 ☐ `BL-210` Tracer config knobs + distance-visibility floor
+## C23 ☑ `BL-210` Tracer config knobs + distance-visibility floor
 
 **Goal.** `weapons.tracerLength` / `weapons.tracerWidth` / `weapons.tracerBrightness` exist in
 `config.json` (defaults = today's values, byte-identical), so the user tunes the look at the

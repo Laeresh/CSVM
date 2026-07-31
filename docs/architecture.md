@@ -610,8 +610,14 @@ flip gets it from its own geometry instead, never from that shared material — 
 (C25) carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, ordnance
 falling back to the generic `tracer1`) and rotates its own quad 180° about its facing normal
 (`RenderTracers`: `new Basis(-yAxis*len, -xAxis*width, zAxis)`) to put the authored texture's head at
-the round's current position, drawn with a uniform overbright tint (`TracerTint`) since additive
-blending with no bloom pass otherwise caps a tracer at the texture's own pixel value.
+the round's current position, drawn with a uniform overbright tint baked from `weapons.tracerBrightness`
+at spawn since additive blending with no bloom pass otherwise caps a tracer at the texture's own
+pixel value. `weapons.tracerLength`/`tracerWidth`/`tracerBrightness` (C23) route the C25 constants
+through `Config`, defaults unchanged; `RenderTracers` also floors the drawn width/length per round
+against `weapons.tracerMinPixels` via `MinWorldSizeForPixels` (inverts the listener camera's vertical
+FOV/viewport-height projection), so a round far enough out still reads as a fleck instead of
+shrinking under a pixel — floored *before* the muzzle-growth cap, so it never outgrows how far the
+round has actually flown.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly
