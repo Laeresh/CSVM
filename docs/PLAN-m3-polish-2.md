@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — destruction bugs
 
-31. ☐ `BL-023` `kkgate` door: dies visibly and loses its collider in the live world
+31. ☑ `BL-023` `kkgate` door: dies visibly and loses its collider in the live world
 32. ☐ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
 
 ## Dependency and parallelism notes
@@ -477,7 +477,7 @@ call is look, not correctness — if MIX-blend is tried near the ground, remembe
 
 # Wave D — destruction bugs
 
-## D31 ☐ `BL-023` `kkgate` door dies visibly and loses its collider
+## D31 ☑ `BL-023` `kkgate` door dies visibly and loses its collider
 
 **Goal.** Shooting `kkgate`'s propane tank makes the door deactivate, its pieces fly and fade,
 and its collider go — matching the original.
@@ -501,6 +501,24 @@ Cross-check the adjacent `BL-009` (SeaHangar doors — a data gap, not this bug)
 **⚠ Traps.** (a) The `det == 0` line in the same run is a separate, disproven-as-related bug
 (D32) — do not read one as the other. (b) A quiet `--damage-test` proves nothing here; it already
 passes.
+
+**Outcome (2026-07-31) — fixed; the "swap works" reading was true and irrelevant.** The swap and
+collider flip always ran, live included; the missing half was the chained `genx12` exploder. The
+gate's `destroyed` wreck is 12 pieces (`pt1..pt12`) authored in the closed pose, and
+`kkgate_destruction` `CALL_ANIMATION`s `genx12` with `operand_node=destroyed` to fly, fade and
+deactivate them. `genx12`'s compiled symbol table binds `pt1..pt12` to its own parentless,
+meshless template nodes (gamez 40–51), which `WorldBuilder` never builds — so every genx12 event
+hit `Targets`' "index-not-built" dead end and did nothing; the wreck stood in the closed pose
+holding its 12 colliders. The tell was on the report line all along: `debris[0 launched]`. Fix:
+when a compiled node index was not built, `AnimRuntime.Targets` now resolves the name strictly
+inside the instance's anchor subtree (never globally) — the template-parameter idiom binds onto
+the call-site's same-named pieces. Flip-off A/B over full C1/C2/C5 damage sweeps: exactly three
+rows move (kkgate debris 0→12, C1 `air_gen` 0→10 and 0→1, C2 `fcpan01` facade 0→1), everything
+else byte-identical; bootstrap op counts unchanged; 13/13 goldens hash-identical. Live-path
+verification under `--det`: scripted `--fly --fire` kill shows the gate blown apart at f100 and
+the plane flying through into the sea hangar with no CRASH (was `CRASH into pt6/col`); freecam
+damage-lab post-fade capture shows the doorway fully open, `debris launched 12`. Owed cockpit
+read: `playtest.md` `PT-08`.
 
 ## D32 ☐ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
 

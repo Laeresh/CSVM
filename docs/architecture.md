@@ -441,6 +441,9 @@ unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; 
 sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs`; this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
 `EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).
+`Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
+anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
+meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which

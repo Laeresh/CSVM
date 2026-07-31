@@ -8768,3 +8768,36 @@ normal engagement range cannot resolve them any better than the old 3 m spark co
 impacts unchanged by code inspection: the branch they use is untouched, only gated behind a new
 `surface == SurfaceClass.Default` check ahead of it. TUNE constants recorded in `backlog.md`.
 `BL-018` deleted from backlog; B13 ticked in `docs/PLAN-m3-polish-2.md`.
+
+## 2026-07-31 — D31 `BL-023`: kkgate's chained genx12 exploder resolved to nothing, so the wreck stood in the closed pose
+
+The headless "death sequence working" reading was true but beside the point: the
+healthy→destroyed swap and collider flip always ran (live too — a scripted `--fly --fire` kill
+logs `DESTROYED — death sequence run`), but the gate's `destroyed` variant is 12 wreck pieces
+(`pt1..pt12`) authored in the closed-door pose, and the part that flies, fades and deactivates
+them is the chained generic exploder: `kkgate_destruction` → `CALL_ANIMATION genx12,
+operand_node=destroyed`. `genx12` is a parentless template def whose compiled symbol table binds
+`pt1..pt12` to its own meshless parameter nodes (C2 gamez indexes 40–51), which `WorldBuilder`
+never builds — so every genx12 event (12 `ObjectMotion` launches, 12 fade sequences, the
+`ObjectActiveState` offs that drop the pieces' colliders) died in `AnimRuntime.Targets`'
+"index-not-built" branch. The wreck therefore stood in the closed pose holding 12 solid
+colliders: the plane CRASHed into `pt6/col` right after the kill. The tell was on the
+damage-test row all along — `debris[0 launched]` beside `swap✓ col✓` (verification.md LOG-14).
+
+**Fix.** `Targets`' index-not-built branch now falls back to resolving the name STRICTLY inside
+the instance's anchor subtree (never globally — the C1 caboose ambiguity stays excluded). A
+re-anchored template's `pt*` parameter names thereby bind to the call-site's same-named pieces
+— the template-parameter idiom the data uses (`genx12`, `facade_parts`).
+
+**Verified.** Flip-off A/B over full C1/C2/C5 `--damage-test --damage-hd=25` sweeps: exactly
+three defs move — kkgate `debris[0→12]`, C1 `air_gen` `0→10`/`0→1`, C2 `fcpan01` `0→1` — every
+other field of every row byte-identical, C5 unchanged, bootstrap op counts unchanged (C2:
+1846 applied / 68 unresolved before and after). `.\RunTests.ps1` PASS (312 units, 12 suites,
+13/13 goldens hash-identical, 82 s). Live path under `--det`: the same scripted kill that
+previously logged `CRASH into pt6/col` now shows the gate blown apart mid-tumble at f100 and
+the plane flying through the open gateway into the sea hangar at f400, no crash; a freecam
+damage-lab kill capture 4 s post-kill shows the doorway fully open (`debris launched 12`).
+`BL-009` (SeaHangar doors, a data gap) untouched by construction — the registry and the doors'
+HEALTH-0 defs are not involved. Owed cockpit read: `PT-08`. The genx12 smoke *puffer* still
+does not render in flight (WORLD-12 / A2 `BL-021`'s class), and piece trajectory magnitudes
+remain the `BL-022` TUNE.

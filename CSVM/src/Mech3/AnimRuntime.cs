@@ -2731,6 +2731,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // the unique name below.
             if (!NameResolveFallback)
             {
+                // One narrow rescue first: a generic exploder template (genx12) is a parentless
+                // root the world never builds, whose pt* symbol-table entries point at its own
+                // meshless parameter nodes — placeholders for the same-named pieces under the
+                // node a CALL_ANIMATION re-anchored it onto (kkgate's `destroyed` wreck). Resolve
+                // strictly inside the anchor's subtree, never globally (the caboose ambiguity).
+                if (anchor != null && FindAll(refName, anchor) is { Count: > 0 } scoped)
+                    return scoped;
                 _opsUnresolved++;
                 RecordMissingTarget(def, refName, "index-not-built");
                 return new List<Node3D>();

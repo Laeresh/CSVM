@@ -213,21 +213,6 @@ work is below.
     adds the *trajectory-shape* symptom, not just the *distance* one.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-13. `BL-023` **`kkgate`'s door does not move and keeps its collider — a bug of its own, NOT the `det == 0` one.**
-    Re-confirmed 2026-07-25: shooting `kkgate`'s propane tank leaves the door in place with its collision;
-    in the original the door deactivates, its pieces fly + fade, and it loses collision.
-    ⚠ **Traps.** The "det == 0 aborts the death sequence" hypothesis this finding was filed under is
-    **disproven** — every `det == 0` line is printed *after* the sweep completed, and `kkgate`'s own
-    headless kill reports `swap[healthy 0/1, destroyed 1/1]`, `col[off 4, on 12]` and seven stage effects
-    *before* the first error (see the "Still open — det==0" item and verification.md LOG-9). So the
-    two are separate bugs; fixing det==0 will not move this door. Note also that the headless harness
-    reports the swap and collider flip as *working* here, so the defect is in what the player sees, not
-    in the sequence's bookkeeping — diagnose from the live world, not from `--damage-test`. Cross-ref the
-    "C2 SeaHangar doors" larger item.
-    *Playtest after fix:* shoot `kkgate`'s propane tank — look for the door deactivating, pieces flying +
-    fading, collider gone. The `det==0` log line in the same run is a separate, already-disproven-as-
-    related bug; do not read one as the other. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
-
 **Gauges, selectors & cues (findings 6, 7, 9).**
 16. `BL-026` **Rocket empty-clip cue never heard (finding 6b).** The cue plays on a dry pull
     (`FlightController.cs:789-793`), but the dry branch is only reached when `_rocketCooldown <= 0`

@@ -269,6 +269,15 @@ physics ray). A format reader should know the current wiring:
     door itself is not directly damageable; the propane tank is the trigger, exactly as the original
     plays it. (`sghangar-opensgdoors` is a *different*, HEALTH-0 OnStartup animation, not weapon-
     destructible.)
+  - **`genx12` is a parameterized exploder template — its `pt1..pt12` are placeholder nodes, not
+    world pieces (D31).** The def is a parentless root (`genx12`, C2 gamez 39) whose own `pt*`
+    children are meshless; a death calls it with `operand_node=<wreck node>` (kkgate:
+    `destroyed`, whose 12 children are ALSO named `pt1..pt12`, authored in the closed-gate pose),
+    and the template's `ObjectMotion` launches / opacity fades / `ObjectActiveState` offs are
+    meant to bind to the *call-site's* same-named pieces. The pieces fly (6 s ballistic), fade
+    over 3 s, then deactivate — which is what finally drops their colliders and opens the
+    passage; for the first ~3 s the tumbling wreck is still solid, by the data. The same idiom
+    drives `facade_parts` and C1's `air_gen` chain.
   - ⚠ **Colliders exist only in the flight build.** `WorldSession.Options.Collision` is `_fly`
     (plus `_damageTest`); `--freecam` builds the world with **no** collision at all, so any collider
     census run there reads zero and lies. See `docs/verification.md`.

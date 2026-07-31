@@ -318,6 +318,10 @@ cite these IDs.
   share `.scratch/` outputs (`test-report.json`, same-second log names) and the collision
   reads as a phantom engine FAIL.** A concurrent hand-run `--run-tests` made the gate's
   engine stage die in 0.9 s, "exited -1 with no report", while the code was fine (B7).
+- **LOG-14** — **Read every field of a multi-metric report row before pronouncing the subject
+  healthy — the failure can sit beside the checks you came for.** kkgate's damage-test row was
+  cited as "death sequence working" from `swap✓ col✓` while `debris[0 launched]` on the same
+  line WAS the bug (the chained genx12 exploder resolving to nothing).
 
 ## WORLD — world data & engine traps
 

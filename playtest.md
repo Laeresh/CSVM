@@ -154,6 +154,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `OriginalScreenshots/Videos/C3 Spiderweb.mp4`; if the original clearly lets you through mid-fade,
   that's a new backlog entry (drop colliders at fade start), not a revert of either mechanism.
 
+- `PT-08` **`kkgate` death (`BL-023` landed).** Shoot the propane tank on Hollywood's gate
+  (C2, near the sea hangar). *Look for:* the doors blow into pieces that fly, tumble and fade out
+  over ~3 s, after which the passage is clear to fly through — scripted runs confirm all of it; the
+  owed read is whether the piece trajectories and fade feel like the original. ⚠ Flying in right
+  behind the explosion still hits mid-air wreckage for the first ~3 s (colliders ride the pieces
+  until the fade ends) — that is the data's call, not a regression. The `det == 0` log line in the
+  same session is a separate bug (`BL-007`).
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
+
 ---
 
 ## Everything else
