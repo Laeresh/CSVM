@@ -8996,3 +8996,58 @@ A–D — A: imperceptible feedback (`BL-199`/`BL-203`/`BL-204`/`BL-205`); B: de
 (`BL-206`/`BL-207`); C: weapon visuals round 3 (`BL-208`/`BL-209`/`BL-210`, all `Projectile.cs`,
 serial); D: rockets (`BL-016`/`BL-211`). `playtest.md` §1 shrank back to PT-01..PT-04; the
 re-tests ride their backlog entries. Docs-only change — no code, no test run owed.
+
+## 2026-07-31 — A1 `BL-199`: damage-stage smoke/fire visible and sputtering (PLAN-m3-polish-3)
+
+**The damage-stage sputter was dead three ways, all fixed in `AnimRuntime` + `WorldEffectsFactory`.**
+(1) The `puffit` loop's 50 % `RANDOM_WEIGHT` stop could fire in the same zero-dt advance as the
+build, and `HandlePufferState`'s re-assert guard read the `SustainEnd`'ed emitter as running — the
+loop's `PUFFER_STATE 1` never revived it, so a stage emitted at most one burst (often zero). A
+re-assert now revives a stopped emitter (running ones stay a no-op, the poll idiom).
+(2) Both sputter defs declare their puffer as `black_smoke`, so the shared `(name, host)` key let
+stage 1's smoke mask stage 2's fire build entirely — emitter keys are now def-scoped, but **only on
+the effects runtime** (`DefScopedPufferKeys`): scoped world-wide they stacked six spark emitters on
+C5's one resolved `man_spark` node (six `m_crane_go(#N)` defs) and moved the c5-city-night golden;
+the collapsed world key de-dups that name-resolution artifact. Data check: all 2,774 compiled
+PUFFER_STATE events install-wide reference only puffers their own def declares, so def-scoping is
+safe where applied. Side effect: `--effects-test` unmasked 7 gun-variant builds (18 → 25 of 30).
+(3) The routed call sited the effect at `h2twr_healthy.GlobalTransform.Origin` — the **map corner**
+for absolute-modelled world subtrees (WORLD-15; √(6064²+4267²) ≈ the recorded 7,420 m), so what did
+emit was kilometres off-site. `CallAnimation`'s external handoff and puffer emission now use the
+host's mesh-bounds centre *only when the node origin lies outside them* (zero offset — measured
+byte-identical goldens — otherwise), computed lazily at first tick (the bootstrap dispatches
+PUFFER_STATE before the world enters the tree).
+Lifecycle: `PlayEffectAt` gained the call-site node — the callee's INPUT_NODE, so the sputter emits
+on (and moves with) the damaged object and its authored `NodeActive` loop gate reads it. A
+NodeActive-governed def gets no 32 s `EffectRuntimeTtl` (its lifetime is authored: the loop exits
+when the death swap hides `healthy`, and the instance tears its emitters down on that natural
+finish); `ResetDestructible` stops routed stage effects via the new `ExternalEffectStop` (a heal
+never flips `NodeActive`). Look: the effects factory passes `softParticles: false` for MIX-ramp
+states — the depth fade zeroed fresh ground-level dark puffs (the crash-smokeball trap, recurred).
+
+**Verified with pixels** (the instrument failure this plan exists to fix): water tower `ap_h2otwr1`
+held at HP 30 / 15 via `--debug-damage` — black smoke wisps at stage 1, black smoke + climbing
+additive fire at stage 2, both visibly anchored on the tower; smoke-density trace over 90
+consecutive frames wanders 1,035–1,684 px (the sputter); still ~1,000 px at t = 40 s (survives the
+old TTL); reset → 0 px vs a same-sim-frame undamaged control (an instrument that shows 869 px when
+smoke is present); kill → no lingering emitter in the census. `m_build02` (user-supplied pose)
+smokes from inside the structure, clearing the roof. Flight: a scripted `--fire` gun run crossed
+both stages on `m_build02` through the identical path. `--tex-override` on the smoke textures
+showed 0 loud px while 55 particles were live — the COLORS ramp multiplies the override to
+near-black → new verification rule SHOT-18. Regression: `RunTests.ps1` fully green (312 units, 12
+suites, 13/13 goldens hash-identical — c1-waterfall byte-identical, c5-city-night restored by the
+key scoping), 8-chapter freecam sweep zero errors with unchanged counts. Owed: the user's
+at-the-controls re-test (PT-13); the authored puff size (0.6–1 m ×3 growth) reads small at flight
+range — judged there, TUNE if wanting.
+
+## 2026-07-31 — puffer size knobs: `puffer.{burst,trail,sustain}SizeScale` (A1 follow-up)
+
+**Three config tunables scale particle `BaseSize` per spawn path** (user request, for judging the
+authored-but-small damage-stage smoke at the controls): `puffer.burstSizeScale` (`SpawnBatch`),
+`puffer.trailSizeScale` (`SpawnTrailPuff`), `puffer.sustainSizeScale` (`SpawnSustained`), default 1
+= authored SIZE_RANGE; the cull margin scales with the largest so grown quads don't clip. Read at
+`Puffer.Init`, registered in `Config.WarmTuningRegistry` (an emitter needs a texture archive the
+warmup lacks). Verified: `sustainSizeScale=4` injected into config.json visibly fattens the tower's
+stage smoke under `--no-det` (overrides honoured there; `--det` drops them, DET-7); the user's
+config.json byte-restored after the A/B; `--dump-config` template carries the `puffer` block;
+`RunTests.ps1` fully green with 13/13 goldens hash-identical (default ×1 is exact identity).

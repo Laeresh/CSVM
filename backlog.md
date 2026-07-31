@@ -687,32 +687,14 @@ unscheduled.
      the `OPERAND_NODE` call path, not a bare point) if zeppelin kills are ever wanted to smoke.
   ⚠ **Traps.** The `--effects-test` census is only reproducible **seeded** — several gun `*_gunhit`
   variants gate their puffer behind `RANDOM_WEIGHT`, so an unseeded run reports a different set each
-  time (a manufactured answer). And these effects **share puffer names** (`trailpuffer2` across
-  `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`): a per-name build count is only clean
-  if the previous effect is fully `StopAll`'d first, or the shared `(name, host)` key masks the build.
-
-- `BL-199` **Damage-stage sputter renders one brief burst, not an intermittent sputter (follow-up from
-  `BL-021`, 2026-07-30).** The `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` stage effects now
-  route to the world-effects runtime and build their puffer, but the authored *sputter* — the `puffit`
-  loop's 50 % `RANDOM_WEIGHT` off/on cycle — degenerates to a single burst: once the random gate fires
-  `PUFFER_STATE 0`, `HandlePufferState`'s re-assert guard (`_puffers.ContainsKey` → return) treats the
-  `SustainEnd`'ed emitter as still running, so the loop's `PUFFER_STATE 1` never revives it. The
-  original sputters smoke on and off for as long as the object stands damaged; ours puffs once per
-  stage. The 32 s `EffectRuntimeTtl` would also cap a fixed sustained emitter — moot until the revive
-  works.
-  ⚠ **Traps.** Do not just delete the `ContainsKey` guard — it exists because the data's poll idiom
-  re-asserts a *running* emitter every loop pass, and rebuilding each pass would stack emitters. The
-  fix needs "re-assert revives a stopped emitter" semantics (or key removal on `SustainEnd`), and any
-  census taken to verify it must respect the shared `(name, host)` key + seeded-only `RANDOM_WEIGHT`
-  reproducibility traps above (`BL-061`).
-  *Playtest after fix:* a tower held in a damage stage should sputter smoke intermittently, not emit
-  one puff cluster and go quiet. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-  **PT-06 verdict (2026-07-31) hardens this:** the user saw *absolutely no difference* between
-  stages — in flight AND in the damage lab. So even the "one brief burst" this entry assumed is
-  unconfirmed at the controls; treat the symptom as "stage effects invisible", not merely
-  "sputter degenerates to a burst". A built `Puffer` is not a visible one — acceptance is pixels
-  (a mid-stage screenshot with visible smoke) plus the user's eye, never the build log
-  (verification.md WORLD-12). Scheduled: PLAN-m3-polish-3 A1.
+  time (a manufactured answer). These effects **share puffer names** (`trailpuffer2` across
+  `small_fireball`/`great_balls_of_fire`/`large_black_smokeball`) — since A1 (2026-07-31) the effects
+  runtime keys emitters per-def (`DefScopedPufferKeys`), which unmasked 7 gun-variant builds
+  (census 18 → 25 of 30); the WORLD runtime deliberately keeps the collapsed `(name, host)` key
+  (see the `_puffers` field comment — def-scoping it stacked C5's six `m_crane_go` spark defs on
+  one node and moved the c5 golden). Related limitation, same per-call-instancing family as
+  thread 1: **one live instance per effect def** — a second damaged object's sputter restarts the
+  shared def, so simultaneous damage-stage smoke collapses onto the latest object.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24) — the round-robin fix is on branch `fix/rocket-drain-pylon`, pending merge + playtest.**
   The original fires **only the selected/current hardpoint, draining it fully before advancing** to the

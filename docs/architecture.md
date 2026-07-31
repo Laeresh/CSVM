@@ -444,6 +444,17 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 `Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
 anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
 meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).
+Puffer emitters key `(name, host[, def])`: def-scoped only where `DefScopedPufferKeys` is set (the
+effects runtime — the two damage-stage sputters both declare `black_smoke`; on the world runtime the
+collapsed key de-dups C5's six same-node `m_crane_go` spark defs, measured via the c5 golden — see
+the `_puffers` field comment before changing this). A `PUFFER_STATE 1` re-assert REVIVES a
+SustainEnd'ed emitter (the `puffit` sputter loop cycles 0/1 forever); emission sits at the host's
+mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
+WORLD-15 — zero offset, byte-identical, otherwise). `PlayEffectAt(name, point, inputNode)` carries
+the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
+loop gate reads, the damaged object), a NodeActive-governed def gets no `EffectTtl` and tears its
+resources down when its loop exits (the death swap hides `healthy`), and `ResetDestructible` stops
+routed stage effects through `ExternalEffectStop` (a heal never flips `NodeActive`).
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -766,6 +777,10 @@ effects reader; `Puffer.Create` builds a texture atlas + ONE MultiMesh whose sha
 each quad, with quad-rim fade + soft-particle depth fade. Modes: `Burst`, `TrailAdvance` /
 `TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
 state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim payloads.
+Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
+`puffer.trailSizeScale` / `puffer.sustainSizeScale` (default 1 = authored SIZE_RANGE,
+byte-identical; the cull margin scales with the largest). Read at `Init`; registered in
+`Config.WarmTuningRegistry` for `--dump-config`.
 ⚠ COLORS ramp ⇒ blend_mix, else blend_add (effects.md); `Create`'s `blend`/`softParticles`
   overrides exist because the data can lie — the crash `large_black_smokeball` has
   `colors: null` yet needs MIX, and the depth fade zeroes fresh ground-level smoke. Defaults
@@ -1439,7 +1454,11 @@ Builds the impact/destruction effect stages and the per-player crash runtime: th
 C4's train-anchored `b_steamtrail` (BL-046). Constructed once per session (`_worldEffectsFactory`, same lifetime as
 `LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`
 — the ctor closure over `GameSession`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
-in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`.
+in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`. The
+effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
+emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
+crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
+soft edge for additive fire.
 ⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
   lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
   there); `GameSession` no longer mirrors that reference — the runtime node hangs under `_worldRoot`,

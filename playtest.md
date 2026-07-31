@@ -131,6 +131,18 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
 
+- `PT-13` **Damage-stage smoke/fire re-test (A1 / `BL-199` landed 2026-07-31).** Hold a
+  destructible in its stages with gunfire: black smoke should sputter at ≤60 % HP, black smoke +
+  climbing fire at ≤30 %, both anchored on the object, for as long as the stage holds (past 32 s),
+  ending at death or reset. *Look for:* (a) the sputter reads as intermittent thickness, per the
+  authored 50 %/0.1 s dice; (b) **size** — the authored puffs are 0.6–1 m growing ×3, which reads
+  small from flight range; **tune it yourself** via `config.json`'s `puffer` block
+  (`sustainSizeScale` is the damage-stage smoke; `burstSizeScale`/`trailSizeScale` cover the other
+  spawn paths — `--dump-config` writes the template), and report the value that reads right.
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire --infinite-ammo` (the water tower and
+  the `m_build` hangars by the airfield are 60 HP two-stagers). *Blocks:* closing PLAN-m3-polish-3
+  A1's cockpit half.
+
 ---
 
 ## Everything else
@@ -139,5 +151,6 @@ Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its o
 `*Playtest after fix:*` line — the weapons re-tests (`BL-016`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
-their re-tests ride `BL-199`/`BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`). Do not
+their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`'s landed
+and came back as `PT-13`). Do not
 re-add them here; the entry brings its own test when the fix lands.

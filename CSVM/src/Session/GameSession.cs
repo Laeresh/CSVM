@@ -1210,7 +1210,10 @@ public partial class GameSession : Node3D
             var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
             projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
             if (state.WorldRuntime != null)
-                state.WorldRuntime.ExternalEffect = (name, pt) => effects.Handles(name) && effects.PlayEffectAt(name, pt);
+            {
+                state.WorldRuntime.ExternalEffect = (name, pt, node) => effects.Handles(name) && effects.PlayEffectAt(name, pt, node);
+                state.WorldRuntime.ExternalEffectStop = name => effects.Stop(name);
+            }
         }
 
         // Stunt run: the mission's danger-zone objectives from ia.json

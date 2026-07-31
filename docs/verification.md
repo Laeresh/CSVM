@@ -187,6 +187,13 @@ cite these IDs.
   controls the pieces never turned transparent — the deactivate at end-of-ride had
   impersonated the fade. Same family as WORLD-12: a started opacity op that the material
   ignores measures as success unless you sample the pixels mid-ramp.
+- **SHOT-18** — **`--tex-override` cannot shout through a COLORS ramp — the puffer shader
+  multiplies the texture by the ramp colour, so a magenta drop-in on a dark-ramped emitter
+  renders near-black and "zero loud pixels" reads as "not drawing".** The damage-stage
+  `black_smoke` (ramp 5/255 ≈ 0.02 grey) was measured present at 55 live particles while
+  three overridden textures showed 0 loud pixels; for ramped puffers, locate by frame-DIFF
+  of consecutive `--shots` (moving pixels are the emitter) or a max-composite baseline,
+  never by the override colour.
 
 ## GOLD — golden images
 

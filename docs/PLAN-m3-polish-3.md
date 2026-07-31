@@ -85,7 +85,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — feedback that landed imperceptible
 
-1. ☐ `BL-199` Damage-stage smoke/fire is actually visible, and sputters (reopens `BL-021`'s effect)
+1. ☑ `BL-199` Damage-stage smoke/fire is actually visible, and sputters (landed 2026-07-31; cockpit re-test = `PT-13`)
 2. ☐ `BL-203` Gun-impact visuals read on every surface class (building/dirt/water; folds `BL-186`)
 3. ☐ `BL-204` C2 blue-water areas classify as water (BL-041 name-coverage gap)
 4. ☐ `BL-205` Collider overlay: colour→surface-class legend

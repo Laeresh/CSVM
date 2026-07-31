@@ -162,6 +162,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// staged instead of at its gamez origin.</summary>
     public bool PlaceCalledTemplates;
 
+    /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see the
+    /// <see cref="_puffers"/> remark. Set on the world-effects runtime, where distinct effect defs
+    /// declaring same-named puffers are distinct emitters (the damage-stage sputters); off on the
+    /// world runtime, where the collapsed key de-dups same-name multi-def ambient stacks.</summary>
+    public bool DefScopedPufferKeys;
+
     /// <summary>Makes this runtime resolve every node reference by NAME, ignoring the compiled
     /// gamez-index table (<see cref="_byIndex"/> is not populated â€” see <see cref="IndexWorld"/>).
     /// Off by default: the shared world MUST use the index, because name matching resolves C1's
@@ -178,10 +184,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Hands a named effect off to another runtime (the D32 world-effects runtime) instead
     /// of starting it locally. Set on the WORLD runtime: when a death sequence's CALL_ANIMATION names
     /// a destruction/impact effect the effects runtime handles, the world runtime â€” whose puffer
-    /// factory is gone after the build â€” routes it there with the call-site world point and returns
-    /// true, so the local Start (which would render nothing) is skipped. Null on every other runtime,
-    /// where CALL_ANIMATION behaves exactly as before.</summary>
-    public Func<string, Vector3, bool>? ExternalEffect;
+    /// factory is gone after the build â€” routes it there with the call-site world point, the resolved
+    /// call-site NODE (the callee's INPUT_NODE, which the local path expresses by anchoring the
+    /// callee on it), and returns true, so the local Start (which would render nothing) is skipped.
+    /// Null on every other runtime, where CALL_ANIMATION behaves exactly as before.</summary>
+    public Func<string, Vector3, Node3D?, bool>? ExternalEffect;
+
+    /// <summary>Stops a named effect on the external runtime <see cref="ExternalEffect"/> routes to
+    /// â€” the reverse channel, for undoing a routed effect the data has no stop event for:
+    /// <see cref="ResetDestructible"/> heals an object whose damage-stage sputter loops for as long
+    /// as its host stays active, so the reset itself must end it.</summary>
+    public Action<string>? ExternalEffectStop;
 
     /// <summary>This runtime does not own audio â€” its SOUND / SOUND_NODE events are no-ops, not
     /// late-failure reports. Set on the D32 world-effects runtime: it renders an effect def's
@@ -309,14 +322,40 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly Dictionary<int, Node3D> _byIndex = new();
 
-    // One emitter per (puffer name, emitter node). Definitions re-assert their PUFFER_STATE
-    // every loop iteration â€” C1's waterfall is [PufferState Ã—3, Loop{-1}] â€” so the handler has
-    // to be idempotent: re-asserting an already-running emitter must be a no-op, not a
-    // second emitter. The value carries the owning (def, anchor) so Stop can tear down exactly
-    // the emitters a stopped instance created.
-    private readonly Dictionary<(string Name, Node3D Node), (Effects.Puffer Puffer, AnimDefinition Def, Node3D? Anchor)> _puffers = new();
+    // One emitter per (puffer name, emitter node[, owning def]). Definitions re-assert their
+    // PUFFER_STATE every loop iteration â€” C1's waterfall is [PufferState Ã—3, Loop{-1}] â€” so the
+    // handler has to be idempotent: re-asserting an already-running emitter must be a no-op, not a
+    // second emitter. On the world-effects runtime (<see cref="DefScopedPufferKeys"/>) the key
+    // also carries the def, because two effect defs can declare same-named puffers on one host â€”
+    // the two damage-stage sputters both call theirs `black_smoke`, and a shared key let the
+    // stage-1 smoke emitter mask the stage-2 fire build. Safe by the data: all 2,774 compiled
+    // PUFFER_STATE events reference only puffers their own def declares (measured install-wide).
+    // The WORLD runtime deliberately keeps the def out of the key (Def = null): C5's six
+    // `m_crane_go(#N)` twins all name-resolve `man_spark` onto one node, and def-scoped keys there
+    // stacked six spark emitters on it (measured â€” it moved the c5-city-night golden); the
+    // collapsed key doubles as the de-dup for that name-resolution artifact. The value carries the
+    // owning (def, anchor) so Stop can tear down exactly the emitters a stopped instance created.
+    private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), (Effects.Puffer Puffer, AnimDefinition Def, Node3D? Anchor)> _puffers = new();
 
     private readonly List<(Effects.Puffer Puffer, Node3D Node)> _activePuffers = new();
+
+    // Each host node's emission point in its own frame (see VisualOriginOf) â€” zero for a node
+    // whose origin sits inside its mesh bounds. Computed lazily on the first tick, never at
+    // dispatch: the bootstrap dispatches PUFFER_STATE before the world enters the tree, where a
+    // GlobalTransform read only returns identity and an error. Local-frame, so it stays valid
+    // when a motion drives the node.
+    private readonly Dictionary<Node3D, Vector3> _hostOffsets = new();
+
+    // The call-site node a PlayEffectAt instance was invoked WITH â€” the callee's INPUT_NODE. The
+    // local CALL_ANIMATION path expresses this by anchoring the callee on the site node; the
+    // external path anchors on the staged template root instead, so the sentinel's referent is
+    // carried here, keyed by the instance identity. Cleared with the instance.
+    private readonly Dictionary<(AnimDefinition Def, Node3D? Anchor), Node3D> _inputNodes = new();
+
+    // Which defs condition on their own INPUT_NODE's active state (a NodeActive sentinel in any
+    // sequence) â€” the damage-stage sputters. Their lifetime is authored (loop while the host node
+    // is active), so PlayEffectAt gives them the real site node and no TTL.
+    private readonly Dictionary<AnimDefinition, bool> _inputGoverned = new();
 
     // Keyed by (sound name, anchor), like the lights and for the same reason: the anchor
     // identifies the *instance* of the definition, so C1's four firetrucks each get their own
@@ -465,6 +504,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             PlaceCalledTemplates = true,
             NameResolveFallback = true,
             SoundHandledElsewhere = true,
+            DefScopedPufferKeys = true,
             DebugMotions = debugMotions,
             PufferParent = pufferParent,
             PufferFactory = pufferFactory,
@@ -724,6 +764,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         _puffers.Clear();
         _activePuffers.Clear();
+        _inputNodes.Clear();
+        _hostOffsets.Clear();
         _lights.Clear();
         if (Sounds != null)
         {
@@ -818,6 +860,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             if (inst.Finished)
             {
                 _instances.RemoveAt(i);
+                FinishInputGoverned(inst.Def, inst.Anchor);
                 OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
             }
         }
@@ -867,7 +910,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // removed it â€” so only notify a finish that actually removed something, keeping the
         // start/finish notifications balanced against the live count for the timeline.
         if (inst.Finished && _instances.Remove(inst))
+        {
+            FinishInputGoverned(def, anchor);
             OnInstanceFinished?.Invoke(def, anchor);
+        }
     }
 
     /// <summary>Stops every live instance of an animation name (optionally only on one anchor) and
@@ -892,8 +938,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// the definition, exactly as a CALL_ANIMATION would but with a synthetic site. Returns true if a
     /// definition matched â€” the world-effects runtime that <c>ProjectilePool</c> and the death path
     /// call. Idempotent per template: the shared root is relocated, not copied, so overlapping calls
-    /// to the same effect collapse onto the latest site (the documented gun follow-up).</summary>
-    public bool PlayEffectAt(string animName, Vector3 worldPoint)
+    /// to the same effect collapse onto the latest site (the documented gun follow-up).
+    ///
+    /// <para><paramref name="inputNode"/> is the call-site NODE when the caller has one (the world
+    /// runtime's routed CALL_ANIMATION resolves WITH_NODE/AT_NODE) â€” the callee's INPUT_NODE, which
+    /// the local call path expresses by anchoring the callee on it. It resolves the def's
+    /// INPUT_NODE references, so a damage-stage sputter emits on (and moves with) the damaged
+    /// object itself and its <c>NodeActive</c> loop gate reads that object â€” the loop exits when
+    /// the death swap deactivates the healthy subtree. A def that conditions on its input node's
+    /// active state gets NO TTL (its lifetime is authored); every other effect keeps the
+    /// <see cref="EffectTtl"/> bound. An input-governed def is Stop'd before restart so a second
+    /// damaged object gets fresh emitters instead of orphaning the first object's (the same
+    /// latest-site collapse the templates already have).</para></summary>
+    public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null)
     {
         bool matched = false;
         foreach (var def in _program.ByAnimName(animName))
@@ -902,9 +959,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // Anchor the instance on the def's own template root when it resolves (its at_node/
             // motion targets live under that root); fall back to null (global name resolution).
             var anchor = Anchors(def).FirstOrDefault(a => a != null && IsInstanceValid(a));
+            bool governed = inputNode != null && IsInstanceValid(inputNode)
+                            && DefConditionsOnInputNode(def);
+            if (governed)
+            {
+                Stop(def.AnimName, anchor);
+                _inputNodes[(def, anchor)] = inputNode!;
+            }
             Start(def, anchor);
             matched = true;
-            if (EffectTtl > 0f)
+            if (!governed && EffectTtl > 0f)
                 _effectTtls.Add((def, anchor, _effectClock + EffectTtl));
         }
         return matched;
@@ -1032,6 +1096,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         var def = inst.Def;
         Stop(def.AnimName, inst.Anchor);
+        // The damage-stage effects live on the EXTERNAL runtime and loop for as long as the
+        // healthy node stays active â€” which a heal never interrupts, so the reset itself must
+        // stop them. The names come from the def's own DAMAGE_SEQUENCE calls, never a hardcoded
+        // list. (The external stop is per-name: with the shared-template collapse there is at
+        // most one live instance of each.)
+        if (ExternalEffectStop != null
+            && inst.DamageStage > 0
+            && def.Sequences.FirstOrDefault(s =>
+                string.Equals(s.Name, DamageSequenceName, StringComparison.OrdinalIgnoreCase)) is { } damageSeq)
+        {
+            foreach (var ev in damageSeq.Events)
+                if (ev.Kind == "CallAnimation" && ev.Data.Str("name") is { } stageEffect)
+                    ExternalEffectStop(stageEffect);
+        }
         RestoreRestPoses(def, inst.Anchor);
         if (def.ResetState != null)
             ApplyInstant(def.ResetState.Events, def, inst.Anchor);
@@ -1132,6 +1210,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private static string NameOf(Node3D n) =>
         n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
+
+    /// <summary>Where a world node visually IS, for effect siting and puffer emission. An
+    /// absolute-modelled gamez subtree carries its vertices in world space under an identity node
+    /// transform (WORLD-15), so its origin is the map corner, kilometers from the object â€” the
+    /// damage-stage smoke measurably emitted there. When the node's own origin lies outside its
+    /// subtree's world mesh bounds, the bounds centre is the honest position; a node whose origin
+    /// sits inside them (a real transform: the waterfall, the train, debris pieces) keeps it
+    /// exactly, so every effect that rendered correctly before is untouched. Meshless nodes have
+    /// no bounds and keep their origin.</summary>
+    private static Vector3 VisualOriginOf(Node3D node)
+    {
+        var box = UI.SelectionService.SubtreeWorldAabb(node);
+        if (box.Size.LengthSquared() <= 1e-9f)
+            return node.GlobalPosition;
+        return box.Grow(1f).HasPoint(node.GlobalPosition) ? node.GlobalPosition : box.GetCenter();
+    }
 
     /// <summary>A node's world position, valid DURING the bootstrap too. The world subtree
     /// is still detached while the bootstrap passes run (GameSession parents it after the
@@ -1530,9 +1624,26 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             _instances.RemoveAt(i);
             if (tearDown)
+            {
                 TearDownResourcesOf(inst.Def, inst.Anchor);
+                _inputNodes.Remove((inst.Def, inst.Anchor));
+            }
+            // Start's seamless restart (tearDown false) keeps the entry, exactly as it keeps
+            // the resources the new instance re-asserts.
             OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
         }
+    }
+
+    /// <summary>An input-governed effect instance (one <see cref="PlayEffectAt"/> gave a real
+    /// site node and whose def loops on that node's active state) ends by its own authored exit
+    /// â€” the NodeActive gate going false â€” not by Stop, so its sustained emitters would keep
+    /// emitting past the sequence's end. Tear them down with the instance. Scoped to instances
+    /// carrying an input node: ambient defs that finish leaving a resource alive keep today's
+    /// behaviour.</summary>
+    private void FinishInputGoverned(AnimDefinition def, Node3D? anchor)
+    {
+        if (_inputNodes.Remove((def, anchor)))
+            TearDownResourcesOf(def, anchor);
     }
 
     /// <summary>Tears down every live resource a stopped instance created â€” its motions, puffers,
@@ -1849,7 +1960,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     if (ExternalEffect != null && callAnchor != null && IsInstanceValid(callAnchor))
                     {
                         var siteXform = callAnchor.GlobalTransform;
-                        if (ExternalEffect(callName, siteXform.Origin + siteXform.Basis * siteOffset))
+                        // VisualOriginOf, not the raw origin: an absolute-modelled call target's
+                        // node origin is the map corner (WORLD-15), which placed the routed
+                        // effect kilometers off-site. The resolved site node rides along too: it
+                        // is the callee's INPUT_NODE (the local path below expresses that by
+                        // anchoring the callee on it), and the effects runtime needs it for defs
+                        // whose lifecycle reads that node.
+                        if (ExternalEffect(callName, VisualOriginOf(callAnchor) + siteXform.Basis * siteOffset, siteNode))
                             return true;
                     }
                     foreach (var target in _program.ByAnimName(callName))
@@ -1920,7 +2037,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // `PufferState(fire_n_smoke, at=INPUT_NODE)` thus emits on the effect's own relocated root,
         // which is what puts it at the call/hit site (D32) rather than nowhere.
         var host = ev.Data.Str("at_node") is { } atNode
-            ? (IsSelfNodeRef(atNode) ? anchor : ResolveOne(atNode, def, anchor))
+            ? (IsSelfNodeRef(atNode) ? InputNodeOf(def, anchor) ?? anchor : ResolveOne(atNode, def, anchor))
             : anchor;
         if (host == null)
         {
@@ -1928,7 +2045,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         }
 
-        var key = (pufferName, host);
+        var key = (pufferName, host, DefScopedPufferKeys ? def : null);
         if (!on)
         {
             if (_puffers.TryGetValue(key, out var running))
@@ -1938,8 +2055,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             }
             return;
         }
-        if (_puffers.ContainsKey(key))
-            return; // already running â€” the loop re-asserting it
+        if (_puffers.TryGetValue(key, out var existing))
+        {
+            // Re-asserting a RUNNING emitter is a no-op (the loop idiom). A SustainEnd'ed one
+            // REVIVES instead: the damage-stage `puffit` loop cycles ACTIVE_STATE 0/1 on a 50%
+            // dice every pass, and reading "stopped" as "still running" collapsed the authored
+            // sputter to at most one burst per stage.
+            if (!_activePuffers.Any(a => a.Puffer == existing.Puffer))
+                _activePuffers.Add((existing.Puffer, host));
+            return;
+        }
 
         if (PufferFactory == null)
         {
@@ -1964,6 +2089,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         }
         (PufferParent ?? _root).AddChild(puffer);
+        if (DebugMotions && DefScopedPufferKeys)
+        {
+            foreach (var other in _puffers)
+                if (other.Key.Name == pufferName && other.Key.Node == host && other.Value.Def != def)
+                    GD.Print($"anim: puffer '{pufferName}' on '{NameOf(host)}' builds beside "
+                             + $"'{other.Value.Def.AnimName}''s emitter [def {def.AnimName}]");
+        }
         _puffers[key] = (puffer, def, anchor);
         _activePuffers.Add((puffer, host));
         _opsApplied++;
@@ -1983,8 +2115,46 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 continue;
             }
             var xform = node.GlobalTransform;
-            puffer.SustainAt(xform.Origin, xform.Basis, dt);
+            var offset = HostOffsetOf(node, xform);
+            puffer.SustainAt(offset == Vector3.Zero ? xform.Origin : xform * offset, xform.Basis, dt);
         }
+    }
+
+    /// <summary>The host's emission point in its own frame, cached per node. Zero â€” and the
+    /// emission point exactly the node origin, byte-identical with the pre-cache behaviour â€” for
+    /// every node whose origin sits inside its mesh bounds; the offset to the bounds centre for
+    /// absolute-modelled world subtrees, whose origin is the map corner (WORLD-15). Local-frame,
+    /// so a motion-driven host carries its emission point along.</summary>
+    private Vector3 HostOffsetOf(Node3D host, in Transform3D xform)
+    {
+        if (_hostOffsets.TryGetValue(host, out var offset))
+            return offset;
+        var visual = VisualOriginOf(host);
+        offset = visual == xform.Origin ? Vector3.Zero : xform.AffineInverse() * visual;
+        _hostOffsets[host] = offset;
+        if (DebugMotions && offset != Vector3.Zero)
+            GD.Print($"anim: puffer host '{NameOf(host)}' origin {xform.Origin} is outside its mesh "
+                     + $"bounds â€” emitting at {visual}");
+        return offset;
+    }
+
+    /// <summary>The stored call-site node for a live instance, when it is still valid.</summary>
+    private Node3D? InputNodeOf(AnimDefinition def, Node3D? anchor) =>
+        _inputNodes.TryGetValue((def, anchor), out var node) && IsInstanceValid(node) ? node : null;
+
+    /// <summary>Whether any of the def's sequences conditions on the INPUT_NODE sentinel's active
+    /// state â€” the authored "run while my host stands" lifecycle (the damage-stage sputters'
+    /// <c>If NodeActive â†’ Loop</c>). Cached; the answer is a property of the data.</summary>
+    private bool DefConditionsOnInputNode(AnimDefinition def)
+    {
+        if (_inputGoverned.TryGetValue(def, out bool cached))
+            return cached;
+        bool governed = def.Sequences.Any(s => s.Events.Any(ev =>
+            (ev.Kind == "If" || ev.Kind == "Elseif")
+            && ev.Data.Obj("condition")?.Union() is { Tag: "NodeActive" } union
+            && AnimData.AsNum(union.Value) is { } idx && idx > 1e9f));
+        _inputGoverned[def] = governed;
+        return governed;
     }
 
     private void ReportLateSoundFailure(string name, string why, string kind = "SOUND_NODE")
@@ -2581,7 +2751,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (AnimData.AsNum(reference) is not { } idx)
             return null;
         if (idx > 1e9f)
-            return anchor; // negative sentinel
+            return InputNodeOf(def, anchor) ?? anchor; // negative sentinel = INPUT_NODE
         int i = (int)idx;
         if (i < 1 || i > def.NodeList.Count)
             return null;

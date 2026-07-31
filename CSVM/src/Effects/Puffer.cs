@@ -272,6 +272,11 @@ public sealed class PufferState
 /// </summary>
 public sealed partial class Puffer : Node3D
 {
+    /// <summary>Default for the three per-spawn-path size multipliers (config.json <c>puffer</c>
+    /// block) — 1 = the authored SIZE_RANGE, byte-identical. Referenced by
+    /// <see cref="Utils.Config.WarmTuningRegistry"/> so <c>--dump-config</c> documents the keys.</summary>
+    public const float SizeScaleDefault = 1f;
+
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
     // and out so particles don't pop at spawn/death. The flipbook itself already dims.
     private const float FadeIn = 0.12f, FadeOutStart = 0.6f;
@@ -337,6 +342,13 @@ public sealed partial class Puffer : Node3D
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
     // puffer stream, so a run repeats and two emitters still scatter independently.
     private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
+
+    // Dev-tunable BaseSize multipliers, one per spawn path (burst = SpawnBatch, trail =
+    // SpawnTrailPuff, sustain = SpawnSustained). Read once per emitter at Init; --det drops
+    // config overrides (DET-7), so scripted captures stay a function of the committed tree.
+    private float _burstSizeScale = SizeScaleDefault;
+    private float _trailSizeScale = SizeScaleDefault;
+    private float _sustainSizeScale = SizeScaleDefault;
 
     private PufferState _state = null!;
     private MultiMeshInstance3D _mmi = null!;
@@ -620,6 +632,9 @@ public sealed partial class Puffer : Node3D
     {
         _state = state;
         Name = "puffer_" + state.Name;
+        _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
+        _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
+        _sustainSizeScale = Config.GetFloat("puffer.sustainSizeScale", SizeScaleDefault);
         if (sustained)
         {
             int steady = Mathf.CeilToInt(state.Number * state.LifetimeMax
@@ -667,8 +682,10 @@ public sealed partial class Puffer : Node3D
             Multimesh = _mm,
             MaterialOverride = mat,
             CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // billboarding moves verts off the MultiMesh's computed AABB — pad culling
-            ExtraCullMargin = Mathf.Max(4f, state.SizeMax * state.GrowthFactor),
+            // billboarding moves verts off the MultiMesh's computed AABB — pad culling; the
+            // margin covers the largest tuned size any spawn path could produce
+            ExtraCullMargin = Mathf.Max(4f, state.SizeMax * state.GrowthFactor
+                * Mathf.Max(_burstSizeScale, Mathf.Max(_trailSizeScale, _sustainSizeScale))),
         };
         AddChild(_mmi);
         Visible = false;
@@ -692,7 +709,7 @@ public sealed partial class Puffer : Node3D
             {
                 Pos = origin + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
                 Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-                BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+                BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _sustainSizeScale,
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
                 Age = 0f,
                 Frame = _state.TextureSequence.Count > 0 ? 0f
@@ -713,7 +730,7 @@ public sealed partial class Puffer : Node3D
         {
             Pos = worldPos + new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
             Vel = _state.WorldVelocity + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-            BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+            BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _trailSizeScale,
             Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
             Age = 0f,
             Frame = _state.TextureSequence.Count > 0 ? 0f
@@ -749,7 +766,7 @@ public sealed partial class Puffer : Node3D
             {
                 Pos = new Vector3(Rand(-d, d), Rand(-d, d), Rand(-d, d)),
                 Vel = baseVel + new Vector3(Rand(min.X, max.X), Rand(min.Y, max.Y), Rand(min.Z, max.Z)),
-                BaseSize = Rand(_state.SizeMin, _state.SizeMax),
+                BaseSize = Rand(_state.SizeMin, _state.SizeMax) * _burstSizeScale,
                 Life = Rand(_state.LifetimeMin, _state.LifetimeMax),
                 Age = 0f,
             };
