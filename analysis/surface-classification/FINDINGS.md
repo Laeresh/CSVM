@@ -69,3 +69,47 @@ else ricochets, with `splashsm`/`splashbg` and `ricco1`–`ricco4` named in its 
 nothing about how the engine determined the surface. Searched for collision-mesh, terrain-database,
 per-polygon-flag and material-to-sound wording; nothing. Per the standing trust rule it is
 authoritative for shape and never for mechanism, so this is a dead end, not a gap to re-search.
+
+## 2026-07-31 — the area quorum's own bug: a real water polygon can still lose the mesh it's on (`BL-204`)
+
+PT-05 (2026-07-31): C2's turquoise (open) water splashed, its blue (near-shore) water didn't — read
+at first as a `BL-041` name-pattern gap (some water texture never matching `classify()`). It wasn't:
+every water texture C2 actually uses (`wtr00000`, `srf0001`, `watersquirt`) already matches, and no
+other texture family is used for water anywhere in the chapter — extending the patterns would
+reclassify nothing, a **measured disproof**, not a finding to build on.
+
+The real mechanism is the area quorum itself. It answers "what does this WHOLE MESH count as", and
+a coastal tile is mostly beach/cliff/dock by area with only a fringe of real, non-trivial water
+polygons — so the tile loses the vote outright and every polygon on it, water included, reads
+`default`. This is structurally the same failure the quorum was built to fix (`BL-041`'s single-vote
+mesh 33), just from the other direction: instead of a stray sliver dragging a whole mesh's tag UP to
+`water`, a real water area gets dragged DOWN to `default` because the mesh it happens to share with
+land is mostly not water.
+
+**Measured, stranded area under the whole-mesh vote** (`census.py`'s per-polygon-split section —
+every polygon's own texture area vs. what the area-quorum vote actually reaches):
+
+| chapter | water total area | quorum reached | stranded | buildings total area | quorum reached | stranded |
+|---|---|---|---|---|---|---|
+| C1 | 37,317,186 | 35,406,462 | 5.1% | 1,041,637 | 903,798 | 13.2% |
+| C2 | 54,611,451 | 50,305,379 | 7.9% | 259,537 | 91,785 | 64.6% |
+| C4 | 3,801,845 | 3,442,421 | 9.5% | 173,081 | 23,092 | 86.7% |
+
+Water's stranded fraction is the C2 symptom (7.9%, real and player-visible along the coast);
+buildings' is far larger in relative terms (up to 86.7% in C4) because small building clusters
+sharing a mesh with open terrain are exactly the shape that loses a whole-mesh vote — this was
+latent in every install chapter, not something `BL-204`'s report singled out.
+
+**The fix drops the vote, not the classifier.** `ClassifySurface` (the name-pattern function) is
+unchanged. `SceneBuilder.CollidersForMesh` now builds one collider PER SURFACE CLASS actually
+present in a mesh — each polygon's own texture decides which trimesh it joins — instead of forcing
+the whole mesh under one winning tag. A polygon with a merely name-matching but literally zero-area
+texture reference (mesh 33's stray `splash` poly, area 0.5 of 38) still contributes nothing, because
+its own triangulated area is what a collider is built from — no separate area threshold was needed
+to keep that case fixed.
+
+In-engine confirmation (C2, `--collision=show` overlay, `--det`): water colliders 75→104,
+buildings colliders 35→80, and the coastal fringe that used to draw as plain unclassified terrain
+now draws in the water/buildings wireframe colour matching what it visually is. `RunTests.ps1`
+green throughout (312 units, 12/12 suites, 13/13 goldens hash-identical — collision never touches
+a rendered pixel).

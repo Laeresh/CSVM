@@ -215,10 +215,12 @@ LastAlphaIsSoft ("soft" = a 0.5 scissor cutout would erase or shred it; drives b
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
 caches, nearest-LOD only, skip predicate. Replicates the original's draw order
-as depth bias (priority × surface rank × node index → polygon offset). Stamps each
-collider's surface class (water/buildings, feeds impact effects + overlay colours) by an
-area-weighted texture vote with a ≥50%-of-total-area quorum — unclassified polygons abstain
-but count toward the whole (`analysis/surface-classification/`).
+as depth bias (priority × surface rank × node index → polygon offset). `CollidersForMesh`
+splits a mesh's colliding geometry into one trimesh per surface class actually present
+(water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
+whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
+area-quorum vote it replaced gave real water polygons on it to `default` outright
+(`analysis/surface-classification/`).
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost).

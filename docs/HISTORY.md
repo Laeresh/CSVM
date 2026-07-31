@@ -9051,3 +9051,39 @@ warmup lacks). Verified: `sustainSizeScale=4` injected into config.json visibly 
 stage smoke under `--no-det` (overrides honoured there; `--det` drops them, DET-7); the user's
 config.json byte-restored after the A/B; `--dump-config` template carries the `puffer` block;
 `RunTests.ps1` fully green with 13/13 goldens hash-identical (default ×1 is exact identity).
+
+## 2026-07-31 — Wave A A3 `BL-204`: C2 blue-water splash gap was a mesh-granularity bug, not a name gap
+
+PT-05's "blue water doesn't splash" read at first like a `BL-041` name-pattern miss — it wasn't.
+Measured against `extracted/C2`: every water texture the chapter actually uses (`wtr00000`,
+`srf0001`, `watersquirt`) already matches `ClassifySurface`, and no other texture family is used for
+water anywhere in C2 — widening the patterns would have reclassified nothing. The real mechanism is
+the `BL-041` area-quorum vote itself: it tags the WHOLE mesh by whichever class covers ≥50% of its
+area, so a coastal tile that's mostly beach/cliff/dock by area drags its own real, sizeable water
+polygons down to `default` regardless of how much area they cover — 7.9% of C2's classified water
+area stranded this way (`census.py`'s new per-polygon-split section), up to 86.7% for the same
+effect on `buildings` in C4 (latent install-wide, not something C2's report singled out).
+
+**Fix: drop the vote, not the classifier.** `ClassifySurface` is unchanged.
+`SceneBuilder.CollidersForMesh` now builds one collider PER SURFACE CLASS actually present in a
+mesh — each polygon's own texture decides which trimesh it joins — instead of one trimesh for the
+whole mesh under a single winning tag; `AttachCollision` loops the result instead of attaching one
+body. A polygon whose texture matches but whose own triangulated area is ~0 (mesh 33's stray
+`splash` poly, the `BL-041` case) still contributes nothing, because area is what a collider is
+built from — no separate threshold was needed to keep that fixed. Named each body per class
+(`col`/`col_water`/`col_buildings`) rather than "col" for all of them: Godot renames colliding
+sibling names to an opaque `@StaticBody3D@N`, which broke `ColliderOverlay`'s untagged-body identity
+check the moment a mesh split into more than one body (surfaced as a stray "other"-coloured
+wireframe on colliders that should read `world`); `ColliderOverlay.ClassOf`'s fallback now matches
+the `col` prefix defensively too.
+
+**Verified with pixels.** `analysis/surface-classification/census.py` C1/C2/C4 before/after: total
+water/buildings texture area is unchanged (the classifier didn't move), stranded area is now fully
+reachable by construction (no mesh-level vote left to lose). In-engine (`--collision=show`, C2,
+`--det`): water colliders 75→104, buildings 35→80; the shoreline overlay screenshot that used to
+show a bare unclassified line at a mixed water/beach tile now draws the water wireframe colour
+across the whole visible surface, matching what it looks like. 8-chapter `--freecam --collision`
+sweep: zero errors, gamez-node/mesh-instance counts unchanged (rendering untouched), collider counts
+up everywhere (expected coverage gain). `RunTests.ps1` fully green (312 units, 12/12 suites, 13/13
+goldens hash-identical — collision never touches a rendered pixel). Owed: the user's
+at-the-controls re-test (`PT-14`).

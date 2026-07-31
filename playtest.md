@@ -143,6 +143,20 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   the `m_build` hangars by the airfield are 60 HP two-stagers). *Blocks:* closing PLAN-m3-polish-3
   A1's cockpit half.
 
+- `PT-14` **C2 blue-water re-test (A3 / `BL-204` landed 2026-07-31).** Fly the C2 coastline and
+  fire on both water looks — the open turquoise water and the near-shore blue water that
+  previously took no splash. *Look for:* every visible water surface answers with the splash +
+  sound, with no readable difference between the two looks; the **C** collider overlay agrees
+  (turquoise wireframe over both). The root cause was not a texture-name gap (`BL-041`'s patterns
+  already covered every water texture C2 uses) but a mesh-granularity one: a coastal tile is
+  mostly beach/cliff by area, so the whole-mesh area-quorum vote gave the real water polygons on it
+  to `default` regardless of size — measured at 7.9% of C2's classified water area stranded this
+  way, up to 86.7% for the same effect on `buildings` in C4. `SceneBuilder.CollidersForMesh` now
+  builds one collider per surface class actually present in a mesh instead of one for the whole
+  mesh, so there is nothing left to vote on.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. *Blocks:* closing
+  PLAN-m3-polish-3 A3.
+
 ---
 
 ## Everything else

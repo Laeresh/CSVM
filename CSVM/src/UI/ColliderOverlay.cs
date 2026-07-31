@@ -196,7 +196,10 @@ public sealed partial class ColliderOverlay : Node
                 string surface = sb.GetMeta(SceneBuilder.SurfaceMeta).AsString();
                 return surface == "water" ? "water" : surface == "buildings" ? "buildings" : "world";
             }
-            return name == "col" ? "world" : "other";
+            // SceneBuilder names its untagged/default body "col" and its tagged siblings
+            // "col_water"/"col_buildings" (CollidersForMesh) precisely so none of them collide
+            // as tree children and get renamed — a StartsWith stays a harmless safety net.
+            return name.StartsWith("col", StringComparison.Ordinal) ? "world" : "other";
         }
         return "other";
     }

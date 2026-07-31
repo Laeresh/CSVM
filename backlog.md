@@ -189,17 +189,6 @@ its symptom and traps.
   water a visible splash — all readable at normal flight speed without frame-stepping.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
 
-- `BL-204` **C2 water is still part-misclassified after the `BL-041` quorum vote: turquoise areas
-  splash, blue areas don't.** User observation at the controls (2026-07-31): the two water looks
-  behave differently — turquoise-textured water plays the splash sound, blue-textured water plays
-  nothing. The vote fix landed and measured well install-wide, so this is likely a *name-pattern*
-  gap (the blue water textures never classify `water`, so no vote can save them) rather than a vote
-  regression. ⚠ Traps (inherited from `BL-041`): the `soil` field is a dead end; do not widen name
-  patterns without re-running `analysis/surface-classification/` before/after; the collider overlay
-  (**C**) draws true since `BL-198` and is the right instrument.
-  *Playtest after fix:* every visible water surface in C2 answers gunfire with the splash.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
-
 - `BL-205` **The collider overlay needs a colour→surface-class legend.** User request (PT-05): when
   the **C** overlay is up, show a small list mapping wireframe colour to surface class, so the
   overlay can be read without memorising the palette. `ColliderOverlay`-side UI only.

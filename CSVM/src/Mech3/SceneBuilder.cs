@@ -171,9 +171,8 @@ void fragment() {
     private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
-    private readonly Dictionary<int, ConcavePolygonShape3D?> _shapeCache = new();
+    private readonly Dictionary<int, List<(string? Surface, ConcavePolygonShape3D Shape)>> _colliderCache = new();
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
-    private readonly Dictionary<int, string?> _surfaceCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
     private readonly Dictionary<int, Material> _glowMaterialCache = new();
@@ -483,6 +482,37 @@ void fragment() {
         return area;
     }
 
+    // Same triangulation as EmitPolygon/PolygonArea (strip order for tri_strips, a fan
+    // otherwise), but positions only — a collision shape carries no material/UV/normal data.
+    private static void EmitCollisionFaces(GameZMesh mesh, GameZPolygon poly, Vector3 offset, List<Vector3> faces)
+    {
+        int n = poly.VertexIndices.Count;
+        if (n < 3)
+            return;
+        Vector3 Pos(int i) => mesh.Vertices[poly.VertexIndices[i]] - offset;
+        void Tri(int a, int b, int c)
+        {
+            faces.Add(Pos(a));
+            faces.Add(Pos(b));
+            faces.Add(Pos(c));
+        }
+        if (poly.TriangleStrip)
+        {
+            for (int i = 0; i + 2 < n; i++)
+            {
+                if ((i & 1) == 0)
+                    Tri(i, i + 1, i + 2);
+                else
+                    Tri(i, i + 2, i + 1);
+            }
+        }
+        else
+        {
+            for (int i = 1; i + 1 < n; i++)
+                Tri(0, i, i + 1);
+        }
+    }
+
     private static string Sanitize(string name)
     {
         // Godot node names must not contain . : @ / " %
@@ -531,7 +561,7 @@ void fragment() {
                 n3d.AddChild(mi);
                 MeshInstanceCount++;
                 if (collidable)
-                    AttachCollision(n3d, node.MeshIndex, mesh);
+                    AttachCollision(n3d, node.MeshIndex);
             }
             // Point-sprite lights (night-sky stars, nav/tower beacons): rendered by the
             // original engine as small glowing dots. Never collidable, never shadowed.
@@ -558,76 +588,74 @@ void fragment() {
         return n3d;
     }
 
-    // A static trimesh body in the mesh's own space; the parent node carries the world
-    // transform, so the collider lines up with the rendered surface. The concave shape
-    // is cached per mesh and shared across instances (shapes are resources).
-    private void AttachCollision(Node3D parent, int meshIndex, ArrayMesh mesh)
+    // One static trimesh body PER SURFACE CLASS actually present in the mesh, not one body for
+    // the whole mesh — see CollidersForMesh. The parent node carries the world transform, so
+    // each collider lines up with the rendered surface it was carved from. Shapes are cached per
+    // mesh index and shared across instances (shapes are resources).
+    private void AttachCollision(Node3D parent, int meshIndex)
     {
-        if (!_shapeCache.TryGetValue(meshIndex, out var shape))
+        foreach (var (surface, shape) in CollidersForMesh(meshIndex))
         {
-            shape = mesh.CreateTrimeshShape();
-            // The source winding is inconsistent (why rendering culls nothing), so make the
-            // trimesh solid from both sides — otherwise raycasts pass through down-wound faces.
-            if (shape != null)
-                shape.BackfaceCollision = true;
-            _shapeCache[meshIndex] = shape;
+            // Named per class ("col", "col_water", "col_buildings") rather than "col" for all
+            // of them: a mesh yields at most one bucket per class, so these names never collide
+            // within one parent — sibling nodes Godot can't tell apart by the SAME requested name
+            // get silently renamed to an opaque "@StaticBody3D@N", which broke the untagged
+            // body's "col" identity check in ColliderOverlay the moment a mesh split in two.
+            var body = new StaticBody3D { Name = surface != null ? $"col_{surface}" : "col" };
+            body.AddChild(new CollisionShape3D { Shape = shape });
+            // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
+            // right IMPACT variant (B15). 'default' (terrain / anything unclassified) is the
+            // common case and stamps nothing.
+            if (surface != null)
+                body.SetMeta(SurfaceMeta, surface);
+            parent.AddChild(body);
+            ColliderCount++;
         }
-        if (shape == null)
-            return;
-        var body = new StaticBody3D { Name = "col" };
-        body.AddChild(new CollisionShape3D { Shape = shape });
-        // Stamp the struck-surface class (water / buildings), so a weapon impact can pick the
-        // right IMPACT variant (B15). Derived once per mesh from its dominant material texture;
-        // 'default' (terrain / anything unclassified) is the common case and stamps nothing.
-        var surface = SurfaceForMesh(meshIndex);
-        if (surface != null)
-            body.SetMeta(SurfaceMeta, surface);
-        parent.AddChild(body);
-        ColliderCount++;
     }
 
-    /// <summary>The dominant surface class of a mesh's colliding geometry — an area-weighted
-    /// vote over its polygons' material textures, classified by name (water:
+    /// <summary>This mesh's colliding geometry split into one trimesh per surface class (water:
     /// <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>; buildings:
-    /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>). Unclassified
-    /// polygons abstain but still count toward the whole: the winning tag must cover at least
-    /// half the mesh's total surface area, otherwise the mesh is null = terrain / unclassified
-    /// (the default IMPACT variant). A count-based vote that skipped abstentions let a single
-    /// stray polygon tag a whole mesh — half of C2's tagged meshes were tagged on a minority
-    /// of their own polygons. Cached per mesh index.</summary>
-    private string? SurfaceForMesh(int meshIndex)
+    /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>; everything else,
+    /// untagged) — each polygon's OWN texture decides which shape it joins, triangulated exactly
+    /// as <see cref="EmitPolygon"/> does. Replaces an earlier area-weighted vote that gave the
+    /// WHOLE mesh one winning tag: real, sizeable water polygons on an otherwise-dry shoreline
+    /// tile (a coastal tile is mostly beach/cliff by area) lost that vote outright and read as
+    /// dry ground to every weapon impact — 7.9% of C2's classified water area, measured in
+    /// <c>analysis/surface-classification/</c> (`BL-204`). A polygon with a merely name-matching
+    /// but literally zero-area texture reference (`BL-041`'s stray-polygon case) still contributes
+    /// nothing, because its own triangulated area is zero — no separate area threshold needed.
+    /// Cached per mesh index.</summary>
+    private List<(string? Surface, ConcavePolygonShape3D Shape)> CollidersForMesh(int meshIndex)
     {
-        if (_surfaceCache.TryGetValue(meshIndex, out var cached))
+        if (_colliderCache.TryGetValue(meshIndex, out var cached))
             return cached;
         var mesh = _gamez.Meshes[meshIndex];
-        var areas = new Dictionary<string, float>();
-        float total = 0f;
+        _meshPivotCache.TryGetValue(meshIndex, out var offset); // Vector3.Zero when this mesh has none
+        // "" stands in for the untagged/default bucket: Dictionary<TKey> needs a non-null key.
+        const string defaultTag = "";
+        var buckets = new Dictionary<string, List<Vector3>>();
         foreach (var poly in mesh.Polygons)
         {
-            float area = PolygonArea(mesh, poly);
-            total += area;
-            if (poly.MaterialIndex < 0 || poly.MaterialIndex >= _gamez.Materials.Count)
-                continue;
-            var tag = ClassifySurface(_gamez.Materials[poly.MaterialIndex].TextureName);
-            if (tag == null)
-                continue;
-            areas.TryGetValue(tag, out float a);
-            areas[tag] = a + area;
+            string tag = poly.MaterialIndex >= 0 && poly.MaterialIndex < _gamez.Materials.Count
+                ? ClassifySurface(_gamez.Materials[poly.MaterialIndex].TextureName) ?? defaultTag
+                : defaultTag;
+            if (!buckets.TryGetValue(tag, out var faces))
+                buckets[tag] = faces = new List<Vector3>();
+            EmitCollisionFaces(mesh, poly, offset, faces);
         }
-        string? best = null;
-        float bestArea = 0f;
-        foreach (var (tag, a) in areas)
+        var result = new List<(string?, ConcavePolygonShape3D)>();
+        foreach (var (tag, faces) in buckets)
         {
-            if (a > bestArea)
-            {
-                bestArea = a;
-                best = tag;
-            }
+            if (faces.Count == 0)
+                continue;
+            // The source winding is inconsistent (why rendering culls nothing), so make the
+            // trimesh solid from both sides — otherwise raycasts pass through down-wound faces.
+            var shape = new ConcavePolygonShape3D { BackfaceCollision = true };
+            shape.SetFaces(faces.ToArray());
+            result.Add((tag == defaultTag ? null : tag, shape));
         }
-        if (total <= 0f || bestArea < 0.5f * total)
-            best = null;
-        _surfaceCache[meshIndex] = best;
-        return best;
+        _colliderCache[meshIndex] = result;
+        return result;
     }
 
     // Point-sprite lights: camera-facing soft radial glows, additive blend so they shine
