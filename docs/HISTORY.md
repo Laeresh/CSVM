@@ -8874,3 +8874,28 @@ gameplay distance; the anims hide these nodes anyway) at both pose-scale write s
 (was 3), C1/C5 0 (still), singular-basis scans 0 everywhere; `.\RunTests.ps1` PASS (312 units,
 12 engine suites, 13/13 goldens hash-identical). `BL-007` deleted; LOG-15 added to
 `verification.md`; the clamp documented as an `⚠` on `docs/architecture.md`'s `src/Mech3/Anim/`.
+
+## 2026-07-31 — C22 `BL-013`/`BL-137`/`BL-138`: guns eject the authored casing; muzzle smoke + dynamic light land
+
+The three-part gun-shot secondary, all in `ProjectilePool`, none through the shared `gunshell`
+anchor (`BL-137`: `CallAnimation`'s per-anchor already-live gate vs `RUN_TIME 2` would drop every
+ejection but one per 2 s window — the trap the plan names): **casing** — a pooled per-shot
+instance of the `gunshell` gamez subtree (child `g1` = model 60, materials = `shell1`/`shell2`)
+flying the def's OBJECT_MOTION verbatim under `MotionRuntime`'s semantics (ranged launch
+xz [10,−10] / y [−75,−85] over run_time, gravity −3 folded, FORWARD_ROTATION 20.94 rad total =
+10.47 rad/s tumble about local X); **muzzle smoke** (`BL-138`) — the `muzzlepuffer` values
+verbatim (aft 20 m/s, ±0.8, size 0.3–0.6 m, life 0.1–0.2 s, deviation 0.05, `smoke101`) on a new
+gravity-free `_smoke` sprite pool; **muzzle light** (`BL-138`) — a pooled `OmniLight3D` per shot
+with the def's `3rdperson_lts` 3-way RandomWeight range/colour verbatim, ~2-frame life. The white
+eject-puff cluster the retail captures show is **unmatched to any shipped def** after a genuine
+search (only `muzzle_burst` references `gunshell`; the gunshell def is motion-only), so it is a
+hand-authored stand-in riding the casing's launch velocity — recorded as `BL-200` TUNE with the
+light energy and per-shot puff count. Docs: engine-wiring section + corrected footnote in
+`docs/formats/weapon-effects.md`.
+
+**Verified.** C1 Bloodhawk `--fire --infinite-ammo` captures (`.scratch/c22_fire_chase_f200.png`,
+`_f300.png`): white puff clusters at the wing mounts falling back and below, matching
+`C1B IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png` (clusters ride the casings there —
+the brass speck sits inside each cluster). Gun-rate regression proven gone by breadcrumb:
+`gun casings: 12 live simultaneously` under sustained fire (a shared-anchor build could never
+exceed 1 per 2 s); spec breadcrumb echoes the authored values. Cockpit A/B → `PT-10`.

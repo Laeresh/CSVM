@@ -27,6 +27,30 @@ toggle a gamez node of the same name active for one frame:
 The flash animation and the flash *node* share a name; the reader animates the prototype node
 listed under [Projectile prototypes](#projectile-prototypes-gamez-roots).
 
+### Engine wiring (M3, C22) — casing, muzzle smoke, muzzle light
+
+`ProjectilePool` renders `muzzle_burst`'s three secondaries per gun shot, each from the def's own
+values, none through a shared `gunshell` anchor (whose `RUN_TIME 2` under `CallAnimation`'s
+already-live gate would drop every ejection but one per 2 s window):
+
+- **Casing** — a pooled instance of the `gunshell` gamez subtree (the `g1` child carries the
+  mesh) per shot, flying the gunshell def's `OBJECT_MOTION` verbatim under `MotionRuntime`'s
+  semantics: `TRANSLATION_RANGE` xz `[10,−10]` / y `[−75,−85]` as distances travelled over
+  `RUN_TIME 2` (random azimuth, `GRAVITY −3` folded), and `FORWARD_ROTATION TIME 20.94` rad
+  (1200°) as a **total** angle over the run time — a 10.47 rad/s tumble about local X.
+- **Muzzle smoke** — the `muzzlepuffer` values (aft 20 m/s in the muzzle frame, ±0.8 random,
+  size 0.3–0.6 m, life 0.1–0.2 s, deviation 0.05 m, `smoke101`) as oriented sprites on the
+  pool's sprite path; the per-shot count glosses the authored 0.05 s × 0.3 s emission window.
+- **Muzzle light** — a pooled `OmniLight3D` per shot using the `3rdperson_lts` 3-way
+  `RANDOM_WEIGHT` variants' range/colour verbatim (1–2 / 1.25–3.25 / 2–3.75 m; 0.88–0.93,
+  0.78, 0.36); the def deactivates it on the next event tick, rendered as a ~2-frame flash.
+  The `PLAYER_1ST_PERSON` `bigmuzzle_lt` branch (range up to 21 m, ±11 offsets) is unbuilt —
+  there is no first-person view yet.
+
+The **white puff cluster** the retail captures show riding each ejected casing matches **no
+shipped effect def** (only `muzzle_burst` references `gunshell`, and the `gunshell` def carries
+no puffer), so the engine's cluster is a hand-authored stand-in (`BL-200` TUNE).
+
 ## Bullet impacts — `gunhit.zrd.json`
 
 `IMPACT`'s `default` `ANIMATION` for a gun names a `<caliber><ammo>_gunhit` — `3040` (30/40-cal),
@@ -176,9 +200,9 @@ carry `model_index: -1` (no mesh of their own) and exactly one child. `muzzle_bu
 this root alone lights/moves nothing visible. `gunshell`'s child (`g1`) carries a real mesh
 (`model_index: 60` in every chapter, 10 vertices / 7 polygons) and is structurally parented
 under `gunshell` itself — so the *casing* prototype does resolve to a visible mesh, one node
-below the name `FLYOUT`/`CallAnimation` target. `BL-137` (the shared-anchor firing-rate
-blocker) and any future ejection work should instance/anchor the `g1` child, not assume the
-root is a bare point.
+below the name `FLYOUT`/`CallAnimation` target. The C22 ejection wiring instances the whole
+`gunshell` subtree per shot (see the muzzle-flash engine-wiring section above), which renders
+the `g1` mesh with its own materials — never assume the root alone shows anything.
 
 `firepoint` is the marker prototype (the aircraft's own firepoints are documented in
 [markers.md](markers.md)).

@@ -63,6 +63,42 @@ public sealed partial class ProjectilePool : Node3D
     private const float ExplosionLife = 0.5f; // s
     private const float ExplosionSpread = 6f; // m — the cluster radius
 
+    // The authored muzzle smoke (muzzle_burst's `muzzlepuffer`): smoke101–103, aft 20 m/s in the
+    // muzzle frame, size 0.3–0.6 m, life 0.1–0.2 s, ±0.8 m/s random velocity, 5 cm deviation.
+    // The data emits every 0.05 s over a 0.3 s window from the moving muzzle node; the per-shot
+    // puff count here is the gloss of that window (TUNE) — the authored ranges are verbatim.
+    private const int MuzzleSmokePuffs = 3;            // TUNE (authored window: 6 puffs / 0.3 s)
+    private const float MuzzleSmokeAftSpeed = 20f;     // m/s, local_velocity z
+    private const float MuzzleSmokeDeviation = 0.05f;  // m, deviation_distance
+    private const float MuzzleSmokeRandVel = 0.8f;     // m/s, min/max_random_velocity
+    private const float MuzzleSmokeSizeMin = 0.3f, MuzzleSmokeSizeMax = 0.6f;   // m
+    private const float MuzzleSmokeLifeMin = 0.1f, MuzzleSmokeLifeMax = 0.2f;   // s
+
+    // The casing's white puff cluster (the original ejects ~5–6 persisting, aft-drifting white
+    // puffs with each shell — the reference captures). Unmatched to any shipped effect def after
+    // a genuine search (only muzzle_burst references gunshell, and the gunshell def is motion-only,
+    // no puffer), so this cluster is a hand-authored stand-in judged against the captures — TUNE.
+    private const int EjectPuffs = 5;
+    private const float EjectPuffSpread = 0.4f;   // m, cluster radius at spawn
+    private const float EjectPuffDrift = 1.0f;    // m/s random drift
+    private const float EjectPuffSink = 1.5f;     // m/s downward drift
+    private const float EjectPuffSizeMin = 0.5f, EjectPuffSizeMax = 0.9f;  // m
+    private const float EjectPuffLifeMin = 1.2f, EjectPuffLifeMax = 2.0f;  // s — the puffs persist
+
+    private const int MaxSmoke = 256;   // the persisting eject puffs dominate this pool
+
+    // The ejected shell casing (gunshell): one pooled chapter-gamez instance per shot, flying the
+    // def's own OBJECT_MOTION. Per-shot instances so sustained fire never drops an ejection — a
+    // shared anchor under AnimRuntime's already-live gate would swallow all but one per RUN_TIME.
+    private const int MaxCasings = 128;
+
+    // The muzzle light flash (muzzle_burst's `3rdperson_lts`): a real dynamic light per shot,
+    // range/colour from the def's 3-way RandomWeight variants. The data deactivates it on the next
+    // event tick, so the flash lives ~2 frames here; energy is ours to pick (TUNE).
+    private const int MaxMuzzleLights = 8;
+    private const float MuzzleLightLife = 0.03f;   // s
+    private const float MuzzleLightEnergy = 2.5f;  // TUNE — the def carries range/colour only
+
     // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
     // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE.
     private const int DirtDebrisSprites = 5;
@@ -72,6 +108,8 @@ public sealed partial class ProjectilePool : Node3D
     private const float DirtDebrisSpreadDeg = 60f; // cone half-angle around the surface normal
     private const float DirtDebrisSpinMax = 25f;  // rad/s, random per-chip tumble rate
     private static readonly Color DirtTint = new(0.5f, 0.38f, 0.22f); // dusty brown
+    private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
+    private static readonly Color EjectPuffTint = new(1f, 1f, 1f);
 
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
@@ -80,6 +118,7 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     private readonly List<Sprite> _muzzle = new();
     private readonly List<Sprite> _impact = new();
+    private readonly List<Sprite> _smoke = new();   // muzzle smoke + eject puffs (alpha-blended)
 
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
@@ -105,6 +144,16 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, TrailSpec?> _trailSpecs = new(); // anim name → parsed spec (null = none)
     private readonly List<TrailEmitter> _trailEmitters = new();          // reusable emitters, all states
 
+    // Casing ejection (C22): each gun shot ejects the authored `gunshell` casing — the chapter-gamez
+    // mesh (its child `g1` carries model 60, the shell1/shell2-textured shell) flying the gunshell
+    // def's own OBJECT_MOTION verbatim (LOCAL gravity, ranged ballistic launch, forward-rotation
+    // tumble over RUN_TIME 2 s). Instances are pooled and reused once a casing expires; the spec is
+    // read once from the anim program the way the rocket trails are (see BuildCasingSpec).
+    private readonly List<CasingSlot> _casings = new();
+
+    // Pooled muzzle-light flashes (C22): real OmniLight3Ds, reused round-robin.
+    private readonly List<LightFlash> _lights = new();
+
     // The named IMPACT effect models (D30): a per-surface IMPACT `ANIMATION` whose name is a chapter
     // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
     // GameZ/SceneBuilder above. Names that resolve to a reader/control def or nothing (the gun
@@ -124,14 +173,21 @@ public sealed partial class ProjectilePool : Node3D
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
+    private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
     private MultiMesh _tracerMm = null!;
     private MultiMesh _muzzleMm = null!;
     private MultiMesh _impactMm = null!;
+    private MultiMesh _smokeMm = null!;
     private Camera3D? _listener;               // billboards align their streak to this camera
     private int _sfxNext;
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
     private int _impactsLogged;
+    private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
+    private bool _casingSpecResolved;
+    private GameZNode? _casingProto;           // the gunshell gamez prototype, resolved once
+    private bool _casingProtoResolved;
+    private bool _casingLogged;
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
@@ -159,10 +215,15 @@ public sealed partial class ProjectilePool : Node3D
         _tracerMm = AddMultiMesh("tracer_slug", MaxProjectiles, additive: true, billboard: false, out _);
         _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
+        // Smoke (the muzzlepuffer puffs + the casing's eject-puff cluster): the authored puffer
+        // textures (smoke101), alpha-blended rather than additive so the puffs read as smoke.
+        _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
         _impactFxModels = new Node3D { Name = "impact_fx" };
         AddChild(_impactFxModels);
+        _casingModels = new Node3D { Name = "casings" };
+        AddChild(_casingModels);
         for (int i = 0; i < 8; i++)
         {
             var p = new AudioStreamPlayer();
@@ -247,6 +308,16 @@ public sealed partial class ProjectilePool : Node3D
                          $"y=({stored.Y.X:0.00},{stored.Y.Y:0.00},{stored.Y.Z:0.00}) " +
                          $"stored==aircraft match={match:0.000} t={t:0.00}s");
             }
+        }
+
+        // The gun shot's authored secondaries (C22): the ejected casing with its white puff
+        // cluster, the muzzlepuffer smoke, and the dynamic muzzle-light flash. Guns only — the
+        // muzzle_burst def is bound by the guns; rockets carry their own FIRE effects.
+        if (weapon.IsGun)
+        {
+            SpawnCasing(muzzle);
+            SpawnMuzzleSmoke(muzzle);
+            FlashMuzzleLight(muzzle.Origin);
         }
     }
 
@@ -358,6 +429,9 @@ public sealed partial class ProjectilePool : Node3D
 
         AgeSprites(_muzzle, dt);
         AgeSprites(_impact, dt);
+        AgeSprites(_smoke, dt);
+        AgeCasings(dt);
+        AgeLights(dt);
         for (int i = _impactFx.Count - 1; i >= 0; i--)
         {
             var f = _impactFx[i];
@@ -379,6 +453,7 @@ public sealed partial class ProjectilePool : Node3D
         RenderTracers();
         RenderSprites(_muzzleMm, _muzzle);
         RenderSprites(_impactMm, _impact);
+        RenderSprites(_smokeMm, _smoke);
     }
 
     /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
@@ -393,6 +468,17 @@ public sealed partial class ProjectilePool : Node3D
         _projHigh = 0;
         _muzzle.Clear();
         _impact.Clear();
+        _smoke.Clear();
+        foreach (var c in _casings)
+        {
+            c.InUse = false;
+            c.Node.Visible = false;
+        }
+        foreach (var l in _lights)
+        {
+            l.InUse = false;
+            l.Light.Visible = false;
+        }
         foreach (var f in _impactFx)
             f.Model.QueueFree();
         _impactFx.Clear();
@@ -464,14 +550,16 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
-                // Dirt debris carries velocity/spin; every other sprite has both zeroed and is
-                // unaffected — the position/orientation set at spawn stands for its whole life.
+                // Dirt debris carries velocity/spin; smoke puffs carry velocity without gravity;
+                // every other sprite has both zeroed and is unaffected — the position/orientation
+                // set at spawn stands for its whole life.
                 if (s.SpinRate != 0f)
                     s.Orient = s.Orient.Rotated(s.SpinAxis, s.SpinRate * dt);
                 if (s.Vel != Vector3.Zero)
                 {
                     s.Pos += s.Vel * dt;
-                    s.Vel.Y -= WorldGravity * dt;
+                    if (!s.NoGravity)
+                        s.Vel.Y -= WorldGravity * dt;
                 }
                 sprites[i] = s;
             }
@@ -814,6 +902,274 @@ public sealed partial class ProjectilePool : Node3D
         }
     }
 
+    /// <summary>Ejects one shell casing (C22): a pooled instance of the chapter-gamez
+    /// <c>gunshell</c> prototype (its <c>g1</c> child carries the shell mesh), launched with the
+    /// gunshell def's own <c>OBJECT_MOTION</c> read verbatim from the anim program — the ranged
+    /// ballistic drop and the forward-rotation tumble over its <c>RUN_TIME</c>, same semantics as
+    /// <c>MotionRuntime</c>. Each casing rides its own transient node, so sustained fire ejects at
+    /// gun rate — nothing shares the <c>gunshell</c> anchor. Alongside the casing goes its white
+    /// puff cluster (a hand-authored stand-in; no shipped def matches it — see EjectPuffs). No-op
+    /// without a world scene/anim program (the weapon lab, the empty stage).</summary>
+    private void SpawnCasing(Transform3D muzzle)
+    {
+        var spec = CasingSpecResolve();
+        if (spec == null)
+            return;
+        var slot = AcquireCasing();
+        var puffVel = Vector3.Down * EjectPuffSink; // fallback drift when the casing pool is at cap
+        if (slot != null)
+        {
+            // MotionRuntime's translation_range read: a random horizontal distance (random azimuth)
+            // and vertical drop travelled over run_time, gravity folded so the arc lands on target.
+            float rt = Mathf.Max(spec.RunTime, 0.1f);
+            float horiz = RandRange(spec.XzMin, spec.XzMax) / rt;
+            float vVert = RandRange(spec.YMin, spec.YMax) / rt - 0.5f * spec.Gravity * spec.RunTime;
+            float azimuth = _rng.Randf() * Mathf.Tau;
+            slot.Start = muzzle.Origin;
+            slot.V0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz);
+            slot.Basis = muzzle.Basis.Orthonormalized();
+            slot.Age = 0f;
+            slot.InUse = true;
+            slot.Node.Visible = true;
+            slot.Node.GlobalTransform = new Transform3D(slot.Basis, slot.Start);
+            puffVel = slot.V0; // the cluster rides with its casing (the reference captures show
+                               // the brass speck inside each falling puff cluster)
+        }
+
+        // The white puff cluster the original shows with every casing: persisting puffs that fall
+        // with the shell while the aircraft flies out of them.
+        var orient = muzzle.Basis.Orthonormalized();
+        for (int i = 0; i < EjectPuffs && _smoke.Count < MaxSmoke; i++)
+        {
+            var off = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
+                      * (2f * EjectPuffSpread);
+            var drift = puffVel + new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
+                        * (2f * EjectPuffDrift);
+            _smoke.Add(new Sprite
+            {
+                Pos = muzzle.Origin + off,
+                Life = RandRange(EjectPuffLifeMin, EjectPuffLifeMax),
+                Size = RandRange(EjectPuffSizeMin, EjectPuffSizeMax),
+                Tint = EjectPuffTint,
+                Orient = orient,
+                Vel = drift,
+                NoGravity = true,
+            });
+        }
+    }
+
+    /// <summary>The authored muzzlepuffer smoke (C22): a few short-lived puffs at the muzzle with
+    /// the def's aft velocity, size, lifetime and deviation — the aircraft flies out of them, so
+    /// they read as the smoke the shot leaves behind.</summary>
+    private void SpawnMuzzleSmoke(Transform3D muzzle)
+    {
+        var aft = muzzle.Basis.Z.Normalized(); // Godot forward is -Z; the puffer drifts aft
+        var orient = muzzle.Basis.Orthonormalized();
+        for (int i = 0; i < MuzzleSmokePuffs && _smoke.Count < MaxSmoke; i++)
+        {
+            var dev = new Vector3(_rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f)
+                      * (2f * MuzzleSmokeDeviation);
+            var vel = aft * MuzzleSmokeAftSpeed + new Vector3(
+                _rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f) * (2f * MuzzleSmokeRandVel);
+            _smoke.Add(new Sprite
+            {
+                Pos = muzzle.Origin + dev,
+                Life = RandRange(MuzzleSmokeLifeMin, MuzzleSmokeLifeMax),
+                Size = RandRange(MuzzleSmokeSizeMin, MuzzleSmokeSizeMax),
+                Tint = MuzzleSmokeTint,
+                Orient = orient,
+                Vel = vel,
+                NoGravity = true,
+            });
+        }
+    }
+
+    /// <summary>The dynamic muzzle-light flash (C22): a pooled <see cref="OmniLight3D"/> set to one
+    /// of the muzzle_burst def's three third-person variants — the same 3-way RandomWeight over
+    /// range and colour the data rolls — shown for a couple of frames at the muzzle.</summary>
+    private void FlashMuzzleLight(Vector3 pos)
+    {
+        // A pre-tree volley (the weapon lab engages while still building) has no world transform
+        // to place a light in — skip the flash rather than set GlobalPosition out of tree.
+        if (!IsInsideTree())
+            return;
+        LightFlash? slot = null;
+        foreach (var l in _lights)
+        {
+            if (!l.InUse)
+            {
+                slot = l;
+                break;
+            }
+        }
+        if (slot == null)
+        {
+            if (_lights.Count >= MaxMuzzleLights)
+                return;
+            slot = new LightFlash
+            {
+                Light = new OmniLight3D
+                {
+                    ShadowEnabled = false,
+                    LightEnergy = MuzzleLightEnergy,
+                    Visible = false,
+                },
+            };
+            AddChild(slot.Light);
+            _lights.Add(slot);
+        }
+        // The def's 3rdperson_lts variants: RANDOM_WEIGHT 0.333 / 0.333 / else, each a range band
+        // and a colour; the range within the band is a random pick.
+        float roll = _rng.Randf();
+        float range;
+        Color color;
+        if (roll < 0.333f)
+        {
+            range = RandRange(1.0f, 2.0f);
+            color = new Color(0.88f, 0.78f, 0.36f);
+        }
+        else if (roll < 0.667f)
+        {
+            range = RandRange(1.25f, 3.25f);
+            color = new Color(0.93f, 0.78f, 0.36f);
+        }
+        else
+        {
+            range = RandRange(2.0f, 3.75f);
+            color = new Color(0.93f, 0.78f, 0.36f);
+        }
+        slot.Light.OmniRange = range;
+        slot.Light.LightColor = color;
+        slot.Light.GlobalPosition = pos;
+        slot.Light.Visible = true;
+        slot.Age = 0f;
+        slot.InUse = true;
+    }
+
+    private void AgeCasings(float dt)
+    {
+        var spec = _casingSpec;
+        if (spec == null)
+            return;
+        foreach (var c in _casings)
+        {
+            if (!c.InUse)
+                continue;
+            c.Age += dt;
+            if (c.Age >= spec.RunTime)
+            {
+                c.InUse = false;
+                c.Node.Visible = false;
+                continue;
+            }
+            // Closed-form ballistic + tumble, exactly MotionRuntime's Seek: origin = start + v0·t
+            // + ½·g·t², basis rotated about its own local X by the tumble rate.
+            float t = c.Age;
+            var origin = c.Start + c.V0 * t + new Vector3(0f, 0.5f * spec.Gravity * t * t, 0f);
+            var basis = c.Basis.Rotated(c.Basis.X.Normalized(), spec.TumbleRate * t);
+            c.Node.GlobalTransform = new Transform3D(basis, origin);
+        }
+    }
+
+    private void AgeLights(float dt)
+    {
+        foreach (var l in _lights)
+        {
+            if (!l.InUse)
+                continue;
+            l.Age += dt;
+            if (l.Age >= MuzzleLightLife)
+            {
+                l.InUse = false;
+                l.Light.Visible = false;
+            }
+        }
+    }
+
+    /// <summary>A free (or freshly built) pooled casing instance, or null when the pool is at cap
+    /// or the chapter gamez lacks the <c>gunshell</c> prototype.</summary>
+    private CasingSlot? AcquireCasing()
+    {
+        foreach (var c in _casings)
+        {
+            if (!c.InUse)
+                return c;
+        }
+        if (_casings.Count >= MaxCasings)
+            return null;
+        if (!_casingProtoResolved)
+        {
+            _casingProtoResolved = true;
+            _casingProto = _flyoutGamez!.FindByName("gunshell");
+            if (_casingProto == null)
+                GD.Print("gun casing 'gunshell' absent from this chapter gamez — no ejection");
+        }
+        if (_casingProto == null)
+            return null;
+        var inst = _flyoutScene!.BuildSubtree(_casingProto, skip: null, collisionSkip: _ => true);
+        if (inst == null)
+            return null;
+        _casingModels.AddChild(inst);
+        inst.Visible = false;
+        // Verification breadcrumb (once): confirms the prototype's child mesh actually instanced —
+        // the root itself is meshless (model_index -1); the shell rides one level below.
+        if (!_casingLogged)
+        {
+            _casingLogged = true;
+            GD.Print($"gun casing 'gunshell' instanced: {CountMeshes(inst)} mesh(es)");
+        }
+        var slot = new CasingSlot { Node = inst };
+        _casings.Add(slot);
+        // Verification breadcrumb (once): sustained fire keeps this many casings alive at once —
+        // per-shot pooled anchors, so nothing is dropped by a shared-anchor already-live gate.
+        if (_casings.Count == 12)
+            GD.Print($"gun casings: 12 live simultaneously (gun-rate ejection, no shared-anchor gate)");
+        return slot;
+    }
+
+    /// <summary>Resolves the gunshell def's OBJECT_MOTION out of the anim program, once — gravity,
+    /// the ranged launch, the tumble (its <c>Time</c> value is a TOTAL angle over run_time, the
+    /// MotionRuntime decode: 20.94 rad = 1200° over 2 s) and the run time. Null without a program
+    /// or when the def is absent; the miss is cached and logged once.</summary>
+    private CasingSpec? CasingSpecResolve()
+    {
+        if (_casingSpecResolved)
+            return _casingSpec;
+        _casingSpecResolved = true;
+        if (_flyoutAnims == null || _flyoutGamez == null || _flyoutScene == null)
+            return null;
+        foreach (var def in _flyoutAnims.ByAnimName("gunshell"))
+        {
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind != "ObjectMotion" || ev.Data.Obj("translation_range") is not { } range)
+                        continue;
+                    float runTime = ev.Data.Num("run_time") ?? 2f;
+                    float fwdTotal = ev.Data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
+                    _casingSpec = new CasingSpec
+                    {
+                        Gravity = ev.Data.Obj("gravity")?.Num("value") ?? 0f,
+                        XzMin = range.Obj("xz")?.Num("min") ?? 0f,
+                        XzMax = range.Obj("xz")?.Num("max") ?? 0f,
+                        YMin = range.Obj("y")?.Num("min") ?? 0f,
+                        YMax = range.Obj("y")?.Num("max") ?? 0f,
+                        RunTime = runTime,
+                        TumbleRate = runTime > 0f ? fwdTotal / runTime : 0f,
+                    };
+                    GD.Print($"gun casing spec: gravity {_casingSpec.Gravity}, xz [{_casingSpec.XzMin},{_casingSpec.XzMax}], " +
+                             $"y [{_casingSpec.YMin},{_casingSpec.YMax}], tumble {_casingSpec.TumbleRate:0.##} rad/s over {runTime} s");
+                    return _casingSpec;
+                }
+            }
+        }
+        GD.Print("gun casing 'gunshell' def not in the anim program — no ejection");
+        return null;
+    }
+
+    private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);
+
     private void PlaySound(string sndName)
     {
         if (_sounds == null || _soundDefs == null || !_soundDefs.TryGetValue(sndName, out var def))
@@ -911,9 +1267,10 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal — a fixed world plane for neither.
-        public Vector3 Vel;    // m/s, world; zero for every sprite but dirt debris
+        public Vector3 Vel;    // m/s, world; zero for every sprite but dirt debris and smoke
         public Vector3 SpinAxis; // unit axis the debris tumbles about; unused when SpinRate is 0
         public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
+        public bool NoGravity; // smoke puffs drift on their spawn velocity; debris arcs (false)
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
@@ -939,5 +1296,35 @@ public sealed partial class ProjectilePool : Node3D
     {
         public readonly List<PufferState> States = new();
         public float RollRate;
+    }
+
+    // The gunshell def's OBJECT_MOTION, read once from the anim program (C22): the authored
+    // ranged ballistic launch + tumble every ejected casing flies.
+    private sealed class CasingSpec
+    {
+        public float Gravity;     // m/s², negative (LOCAL -3.0)
+        public float XzMin, XzMax; // random horizontal distance over run_time, m
+        public float YMin, YMax;   // random vertical drop over run_time, m
+        public float RunTime;     // s the casing lives
+        public float TumbleRate;  // rad/s about local X (forward_rotation Time ÷ run_time)
+    }
+
+    // One pooled casing: a gunshell subtree instance lent to one ejection at a time.
+    private sealed class CasingSlot
+    {
+        public Node3D Node = null!;
+        public Vector3 Start;   // launch position (world)
+        public Vector3 V0;      // launch velocity (world), m/s
+        public Basis Basis;     // launch orientation — the tumble rotates it about its local X
+        public float Age;
+        public bool InUse;
+    }
+
+    // One pooled muzzle-light flash: a real OmniLight3D shown for a couple of frames per shot.
+    private sealed class LightFlash
+    {
+        public OmniLight3D Light = null!;
+        public float Age;
+        public bool InUse;
     }
 }

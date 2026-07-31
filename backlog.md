@@ -105,16 +105,6 @@ work is below.
    (Distinct from the pass-1 `fix/tracer-grow-from-muzzle` position fix.)
    *Playtest after fix:* judge tracer shape (short dash vs. streak) and the additive-bloom look against
    the two ref shots. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
-3. `BL-013` **Casing (brass) ejection is missing entirely.** The original ejects shells with a **white smoke puff**
-   below/behind the plane (clusters of white puffs + tiny yellow shells in `…tracer and ejection*.png`
-   and `Water Splash.png`). Nothing in `Projectile.cs` emits casings. Medium priority — visible, adds
-   life to gunfire. **No longer blocked on data (2026-07-25):** `gunshell.zrd.json` is a complete
-   ON_CALL ejection def and a `gunshell` gamez root exists — see "Small per-impact feedback gaps"
-   item 4 under Feature backlog. Only the white puff is still unlocated.
-   *Playtest after fix:* once casings eject, judge against `OriginalScreenshots/C1B IA1 Bloodhawk tracer
-   and ejection.png`/`…ejection2.png` (one brass casing + a persisting, aft-drifting white puff cluster,
-   ejecting from the wing mounts). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
-   See `BL-137`/`BL-138`/`BL-141` for what wiring this actually needs beyond the def itself.
 4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
    (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
    nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
@@ -1025,7 +1015,8 @@ the document alone, it says so and marks the value TUNE.
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-090` **Small per-impact feedback gaps — five, all with the data already shipped.** Grouped because each
+- `BL-090` **Small per-impact feedback gaps — four (item 4, shell ejection, landed as C22 2026-07-31), all
+  with the data already shipped.** Grouped because each
   is a few lines of wiring against an authored def and they share one theme: the moment something
   hits the plane, or the plane touches something, is under-communicated.
   1. **`damaged_engine_sound` is never read.** It sits on `basic_airplane`, so **every** plane
@@ -1046,34 +1037,6 @@ the document alone, it says so and marks the value TUNE.
      `splash_touchdown` with `snd_exp_ground_b` / `snd_exp_water_b`. Nothing in `CSVM/src` mentions
      `touchdown`, and `FlightController.SurviveHit` plays **no audio and shows nothing** — only the
      fatal `Crash()` sounds (`OnCrash` + `OnGroundExplosion`).
-  4. **Shell ejection is authored data, not a fidelity guess.** `gunshell.zrd.json` is a complete
-     ON_CALL def — `OBJECT_MOTION` on the `gunshell` node, `GRAVITY [LOCAL, -3.0, NO_ALTITUDE]`,
-     `TRANSLATION_RANGE_MIN [10,-75,1.5,0]` / `_MAX [-10,-85,1.8,0]`, `FORWARD_ROTATION TIME 1200`
-     (the tumble), `RUN_TIME 2`, then deactivate — and a `gunshell` root node exists in the chapter
-     gamez. Referenced by nothing. **This closes the "blocked on data" question in "Playtest pass 2"
-     finding 3** (casings missing): the shell half is data.
-     **What retail actually does** (`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`
-     and `…ejection2.png`, chase view, guns firing): each ejection is **one small brass casing
-     sprite plus a cluster of ~5–6 overlapping white smoke puffs**, and the puffs **persist and
-     drift aft** — in shot 2 a cluster has fallen well back and below the aircraft while a fresh
-     casing is still leaving the wing. They originate **at the wing gun mounts, outboard on each
-     wing**, not from the fuselage. Same shots corroborate two open look items: the muzzle flash is
-     a bright yellow core with orange flame at its base, elongated forward and slightly outboard
-     from the wing mount, and fires from **one wing at a time**; tracers are **short yellow dashes**
-     (findings 1 and 2 above).
-     ⚠ **The design spec is wrong here twice and was rejected against those captures** — it gates
-     shell ejection to the 50- and 70-cal guns and places it on the underbelly. The Bloodhawk in the
-     shots is ejecting, and its stock fit is 40-cal inner + 30-cal outer **wing** guns
-     (`CSVM/data/stock_loadouts.json`), so neither the calibre gate nor the underbelly holds. Do not
-     re-derive either from the document. The white puff is still unmatched to any shipped effect def.
-     **Measured further, corrected across all 8 chapters (`analysis/weapon-effects-node-shape/`):**
-     the `gunshell` root itself carries `model_index: -1`, but its one child (`g1`) carries a real
-     mesh (`model_index: 60`, 10 vertices / 7 polygons), structurally parented under `gunshell` —
-     so the moving `gunshell` node *does* have a mesh to show, one level below the root
-     (`docs/formats/weapon-effects.md`'s gunshell/muzzle_burst footnote). `BL-141`'s `shell1`/`shell2`
-     texture pair is still unmatched to it. Wiring the child mesh onto the ejection anchor is the
-     remaining unknown for the casing half; the white smoke puff cluster is unmatched to any shipped
-     effect def for the other half.
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
@@ -1099,36 +1062,6 @@ the document alone, it says so and marks the value TUNE.
   `nom_gravity` and `sounds.md` the curve blocks — so `warning_shot_*`, `sticky_bullet_*`, the
   `crash` armour/health ranges and `respawn_rad`/`respawn_el` are all undocumented shipped tuning.
 
-- `BL-137` **`CallAnimation`'s per-anchor "already live" gate blocks `gunshell`/`muzzle_burst` from ever
-  firing at gun rate — a wiring blocker `BL-013`/`BL-090` item 4 don't name.**
-  `AnimRuntime.CallAnimation` explicitly does not restart a def already live on the same anchor
-  (`AnimRuntime.cs:1670-1712`, comment: "A call does NOT restart an animation that is already live on
-  this anchor"). `gunshell.zrd.json`'s own `ObjectMotion` runs for `RUN_TIME 2.0` s before its
-  `ObjectActiveState false` (`extracted/C1/cam_anim/gunshell-gunshell.json`); guns fire far faster than
-  one round per 2 s. Wiring guns straight onto a single shared `gunshell` anchor — the way
-  `muzzle_burst`'s own `CallAnimation{gunshell, AtNode: muzzle_burst}` is authored
-  (`extracted/C1/cam_anim/muzzle_burst-muzzleburst_effects.json`) — would silently drop almost every
-  ejection: only the first casing per ~2 s window would ever play.
-  *Fix shape:* a per-shot anchor (a fresh transient `Node3D` per ejection, or a small anchor pool the
-  way `ProjectilePool` already pools tracers/sprites), not a bare call onto the shared `gunshell` root.
-  ⚠ **Traps.** Do not "fix" this by shortening `gunshell`'s `RUN_TIME` — that is authored data (the
-  fall + 20.94 rad/s tumble need the full 2 s to read as a casing), and shortening it to fit the gate
-  would desync the visual from the authored motion for no reason.
-
-- `BL-138` **`muzzle_burst`'s authored smoke puffer and dynamic muzzle lights are entirely unbuilt —
-  today's "muzzle flash" is a static tinted sprite only.**
-  `muzzle_burst-muzzleburst_effects.json`'s `puff` sequence is a `PufferState` (`muzzlepuffer`,
-  textures `smoke101`/`102`/`103`, local velocity `(0,0,-20)` i.e. aft, random deviation 0.05, size
-  0.3–0.6, lifetime 0.1–0.2 s, fade 500–600) fired every shot at `at_node: muzzle_burst`, immediately
-  followed by an `ai_lights` sequence that flashes `muzzle_lt`/`bigmuzzle_lt` (`PointSource`,
-  range/colour picked by a 3-way `RandomWeight` for third-person, a fixed `bigmuzzle_lt` variant for
-  first-person via `PlayerFirstPerson`). Nothing in `CSVM/src/Flight/Projectile.cs` builds a puffer or
-  a dynamic light for a gun shot — `MuzzleFlash`/`Sprite` is a plain fading quad
-  (`Projectile.cs:53,202`).
-  *Fix shape:* a short-lived aft-drifting smoke puff (reuse the existing `Sprite`/`RenderSprites` path
-  with a velocity field) plus an actual `OmniLight3D` flash reusing the def's range/colour values —
-  separate from the size/look work in `BL-011`/`BL-012`.
-
 - `BL-141` **`shell1.png`/`shell2.png` — the doc's own listed "tracer" texture pair — are wired to
   nothing: not `gunshell`, not any reader def, not any engine code.**
   `docs/formats/weapon-effects.md:148` groups them under "Tracer" textures. Traced the actual
@@ -1140,7 +1073,7 @@ the document alone, it says so and marks the value TUNE.
   `shell1`/`shell2`/`rabbit_blur`/`gunshell`: only the texture files and this one material/model pair
   exist; nothing calls, anchors, or names them from any weapon-effect def.
   ⚠ **Correction (`BL-140`'s 8-chapter sweep, `analysis/weapon-effects-node-shape/`).** The node
-  numbers above are off by the same `+1` anim-def-ptr convention noted in `BL-137` — raw
+  numbers above are off by the `+1` anim-def-ptr convention (`analysis/weapon-effects-node-shape/`) — raw
   `nodes.json` index 204, not 205, is the `g1`/model-60 node — and at the raw index, its
   `parent_indices` is `[203]` (`gunshell`) only, not the `rabbit_blur`/`g11`/`rabbit_blur` chain
   this entry describes (those names sit at nearby *list positions*, not as this node's actual
@@ -1151,10 +1084,12 @@ the document alone, it says so and marks the value TUNE.
   further here — whether `rabbit_blur` itself is real terrain-effect geometry, model 60's actual
   visual shape, and the `rabbit_blur`/`g11` chain's true relationship to model 60's node are still
   open.
-  *Fix shape:* none — this is a "confirm before assuming" flag for whoever picks up
-  `BL-013`/`BL-137`. If a casing sprite is ever hand-authored, do not reach for `shell1`/`shell2`
-  without first checking whether `rabbit_blur` is itself
-  a real, unrelated visual effect (a motion-blur streak) that repurposing its texture would break.
+  *Fix shape:* none — a "confirm before assuming" flag. `BL-013`/`BL-137` landed (C22, 2026-07-31)
+  by **instancing the authored `gunshell` subtree**, so model 60 renders with its own materials (the
+  ones whose texture indices are `shell1`/`shell2`) and no texture was hand-repurposed — the trap
+  this entry guards never fired. Still open here: whether `rabbit_blur` is itself a real, unrelated
+  visual effect (a motion-blur streak), model 60's actual visual shape, and the `rabbit_blur`/`g11`
+  chain's true relationship to model 60's node.
 
 ### Flight-model gaps the video calibration measured (2026-07-25)
 
@@ -1442,6 +1377,19 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   branch `fix/rocket-speed-tune-hook` (see "Milestone 3 Polishing"). The FLYOUT smoke trail landed
   (C21, 2026-07-31) — the user attributed the "too fast" impression to the missing trail, so re-judge
   the speed with the trail visible before setting a non-neutral value.
+- `BL-200` **Casing-ejection look (C22, 2026-07-31)** — the authored halves are verbatim (the
+  `gunshell` OBJECT_MOTION per `MotionRuntime`'s translation_range decode; the `muzzlepuffer`
+  velocity/size/life/deviation; the muzzle-light range/colour variants), but four values are
+  hand-picked: the **white puff cluster stand-in** (`EjectPuff*` in `Projectile.cs` — count 5,
+  spread 0.4 m, drift ±1 m/s riding the casing's launch velocity, size 0.5–0.9 m, life 1.2–2.0 s;
+  no shipped effect def matches it — only `muzzle_burst` references `gunshell`, and the `gunshell`
+  def is motion-only), the **muzzle puff count per shot** (`MuzzleSmokePuffs` 3, glossing the
+  authored 0.05 s-interval × 0.3 s window from a moving node), the **light flash energy**
+  (`MuzzleLightEnergy` 2.5 — the def carries range/colour only) and its **2-frame life**
+  (`MuzzleLightLife` 0.03 s, glossing the def's next-event-tick deactivate). Judge at the controls
+  per `PT-10`. ⚠ Do not re-derive the calibre gate or underbelly mount from the design spec
+  (SRC-3 — rejected against the reference captures), and do not shorten `gunshell`'s `RUN_TIME 2`
+  to any gate — authored data.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 - `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.

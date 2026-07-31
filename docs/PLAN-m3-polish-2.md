@@ -93,7 +93,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — weapon secondary visuals
 
 21. ☑ `BL-015` Rocket smoke trail (the authored FLYOUT trail, orange→grey)
-22. ☐ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
+22. ☑ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
+    — landed 2026-07-31; the white puff cluster is a recorded stand-in (`BL-200`), cockpit A/B is `PT-10`
 23. ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
 24. ☐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
 25. ☐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
@@ -375,7 +376,7 @@ screenshots against `Rocket Streak 1..3.png`. Per-type distinctness is the accep
 treat `weapons.rocketSpeedScale` as probably-neutral; do not retune speed here. (b) New decodes
 land with their `docs/formats/` page, same change.
 
-## C22 ☐ `BL-013` Casing ejection + muzzle puff/light (`BL-137`, `BL-138`)
+## C22 ☑ `BL-013` Casing ejection + muzzle puff/light (`BL-137`, `BL-138`)
 
 **Goal.** Firing guns ejects a brass casing (the authored `gunshell` motion: fall + 20.94 rad/s
 tumble over 2 s) plus an aft-drifting white puff cluster from the wing mounts; each shot also gets

@@ -173,6 +173,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   the trail is visible. `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires; swap types
   with `--rocket=wep_04/05/07/08`).
 
+- `PT-10` **Casing ejection + muzzle puff/light (`BL-013`/`BL-137`/`BL-138` landed 2026-07-31).**
+  Guns now eject the authored brass casing (fall + tumble over 2 s) with a white puff cluster
+  riding it, plus a per-shot muzzle smoke puff and a real dynamic light flash. *Look for:* against
+  `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png` — a brass speck
+  inside each persisting white cluster, falling back and below, from the wing mounts, one wing at a
+  time; sustained fire ejects continuously (never one casing per ~2 s). The cluster
+  count/size/life, muzzle puff count and light energy are `BL-200`'s TUNE values.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
+
 ---
 
 ## Everything else

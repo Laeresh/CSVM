@@ -579,7 +579,12 @@ player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destru
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
 `AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,
-plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md).
+plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots add the
+`muzzle_burst` secondaries (C22): a pooled per-shot `gunshell` casing instance flying the def's
+OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
+already-live gate drops gun-rate ejections), the authored muzzlepuffer smoke plus a hand-authored
+white eject-puff cluster on a gravity-free sprite pool, and a pooled `OmniLight3D` flash from the
+def's `3rdperson_lts` range/colour variants — stand-in magnitudes are `BL-200` TUNE.
 ⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
   launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats
