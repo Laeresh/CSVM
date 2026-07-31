@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-203`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-213`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -88,6 +88,11 @@ work is below.
 **Rocket visuals (findings 2, 4).**
 5. `BL-016` **Rocket explosion looks different + faster than the original.** Goes through the D32 world-effects
    puffer (`EffectSink`). Tuning gap — cross-ref the "World-effects runtime follow-ups" (M3 D32) item.
+   Re-confirmed at the controls 2026-07-31 (PT-09, trails now visible): still a lot different from
+   the original. Lead from the user: the texture archives carry per-type explosion rings that
+   correspond — `ring_ap.png`, `ring_he.png`, `ring_sonic.png`. Survey the per-type explosion
+   effect defs for where those rings are authored before touching the look. Scheduled:
+   PLAN-m3-polish-3 D31.
    *Playtest after fix:* A/B the rocket explosion look/speed against the original.
    `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
@@ -159,6 +164,125 @@ work is below.
     ⚠ **Traps.** Don't skip this because `BL-024` "already tunes it" — `BL-024` only splits the code
     path; it does not re-examine whether 0.34 reads well for a gun belt, since nobody has watched one
     drain past that fraction with intent to judge the colour step.
+
+## Milestone 3 Polishing, pass 2 (playtest findings, 2026-07-31)
+
+The PT-05..PT-12 cockpit pass over the PLAN-m3-polish-2 landings. The common thread: **several items
+landed mechanically correct but perceptually near-nil** — the effect builds, the log says success,
+and the player sees nothing. All nine are scheduled into
+[`docs/PLAN-m3-polish-3.md`](docs/PLAN-m3-polish-3.md); each entry below is the record of record for
+its symptom and traps.
+
+**Impact feedback (PT-05).**
+
+- `BL-203` **Gun-impact visuals are imperceptible on every surface class.** At the controls in C2:
+  buildings show **no ricochet or flame at all**; dirt still reads as the old flame sprite, just
+  smaller (the `BL-018` tumbling-debris burst does not read as debris); the water ripple is visible
+  only when pausing and frame-stepping. The *classification and sound* path is live (splash sound
+  plays on correctly-tagged water), so this is the look layer: per-class effect size/count/life are
+  far below the original, and the building class may build nothing visible at all. Companion to
+  `BL-186` (water splash 0–12 px at 300 m — its evidence and traps apply here verbatim).
+  ⚠ Traps: METHOD-18 — gun rounds expire silently at RANGE = 1000 m, so any scripted probe must
+  fire from well inside that slant range or it measures nothing; `--tex-census` counts are lower
+  bounds, pair with `--no-fog`.
+  *Playtest after fix:* building hits give a visible ricochet/spark, dirt a visible debris burst,
+  water a visible splash — all readable at normal flight speed without frame-stepping.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
+
+- `BL-204` **C2 water is still part-misclassified after the `BL-041` quorum vote: turquoise areas
+  splash, blue areas don't.** User observation at the controls (2026-07-31): the two water looks
+  behave differently — turquoise-textured water plays the splash sound, blue-textured water plays
+  nothing. The vote fix landed and measured well install-wide, so this is likely a *name-pattern*
+  gap (the blue water textures never classify `water`, so no vote can save them) rather than a vote
+  regression. ⚠ Traps (inherited from `BL-041`): the `soil` field is a dead end; do not widen name
+  patterns without re-running `analysis/surface-classification/` before/after; the collider overlay
+  (**C**) draws true since `BL-198` and is the right instrument.
+  *Playtest after fix:* every visible water surface in C2 answers gunfire with the splash.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
+
+- `BL-205` **The collider overlay needs a colour→surface-class legend.** User request (PT-05): when
+  the **C** overlay is up, show a small list mapping wireframe colour to surface class, so the
+  overlay can be read without memorising the palette. `ColliderOverlay`-side UI only.
+  *Playtest after fix:* toggle **C** in flight/freecam and read the legend.
+
+**Destructible behaviour (PT-06/07/08).**
+
+- `BL-206` **The C3 spiderweb kills the plane; in the original it never damages the plane at all.**
+  User A/B (2026-07-31): flying at full speed into the tikicave crashes against the web; in the
+  original the web fades *after the plane makes contact* and no damage ever occurs — the web's
+  collider appears to exist only to detect the plane and start the fade, never to harm. The
+  authored numbers are confirmed: range 2500 m² = 50 m in `spiderweb_gone`, 0.7 s fade. The
+  `BL-183` range gate is correct and stays; what's wrong is that the web remains crash-solid
+  through approach and mid-fade.
+  ⚠ Traps: do not revert the `EXECUTION_BY_RANGE` gate or the fade; the fix is how the web's
+  collider participates in the *plane's* crash query (trigger-only vs solid), not when the def
+  fires. Rockets/guns hitting the web is a separate question — check what the original does before
+  changing projectile collision.
+  *Playtest after fix:* a full-speed dead-centre run into the web never crashes; the web fades on
+  contact/approach and the plane flies through. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
+
+- `BL-207` **`kkgate` debris never fades out, and dodging it is nearly impossible.** User at the
+  controls (2026-07-31): the tank kill and break-away/tumble look good, but the pieces stay fully
+  opaque to the end (no fade), and flying the gate right behind the blast means hitting invisible-
+  intent wreckage. The ~3 s ride IS authored (`genx12` motion + fade + deactivate over the pieces'
+  RUN_TIME) — the owed diagnosis is why the authored *fade* doesn't render: the user's lead is that
+  the generated world shader may have no runtime turn-transparent path for these opaque-pass piece
+  materials (the spiderweb's landed fade may run through a different material path). Second half,
+  explicitly requested: **prototype dropping the pieces' colliders at fade *start* instead of fade
+  end** and hand it to the user for a feel A/B before adopting.
+  ⚠ Traps: D31's scripted verification claimed "pieces fly, fade and deactivate" — the fade half of
+  that claim is refuted at the controls; a piece that *vanishes at deactivate* passes a
+  frame-sparse capture as "faded" (see verification.md). Also check the def's event ordering
+  (fly/fade simultaneous or sequential?) before assuming the shader.
+  *Playtest after fix:* pieces visibly turn transparent over the ride and the gate is flyable
+  shortly after the blast. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
+
+**Weapon visuals round 3 (PT-10/11/12).**
+
+- `BL-208` **The muzzle flash is an unreadable red blob: the texture must anchor its LEFT edge at
+  the muzzle, full texture visible.** User verdict on the C24 triad (2026-07-31): "way too blurry,
+  the texture is not even recognisable — just a red semi-transparent circle", rotation invisible.
+  Mechanism lead: all three 0.5 m quads are *centred* on `muzzle.Origin`
+  (`Projectile.cs` `Spawn`), so the three additive quads overlap into a saturated disc and half of
+  every texture is buried. User direction: the muzzle-flash texture is authored with the flash
+  rooted at its **left edge** — anchor each quad so its left texture edge sits at the muzzle
+  centre and the full texture extends outward; then the 120° triad and per-shot roll become
+  legible. ⚠ Traps: the per-ammo texture axis and the triad scheme are settled (`BL-201`) — this
+  is quad anchoring/UV, not another texture hunt; size stays TUNE after the fix.
+  *Playtest after fix:* each lobe reads as the authored flash texture, the triad and per-shot
+  rotation visible. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
+
+- `BL-209` **Eject/muzzle smoke puffs render as elongated white stripes, not round smoke puffs.**
+  User verdict on C22 (2026-07-31): casing + cluster present, but the puffs are "very elongated
+  rectangles… like two white stripes with different transparency"; in the original they read
+  exactly like `smoke101/102/103.png` at varying alpha. Leads to check on-site: the smoke pool is
+  one MultiMesh on the single texture `smoke101` with `billboard: false` (`Projectile.cs` `_Ready`)
+  — a non-billboarded quad seen edge-on is a stripe; and the pool never cycles the three authored
+  smoke textures. ⚠ Traps: the puff *values* (count/size/life/drift) are `BL-200`'s TUNE — fix the
+  rendering before re-tuning them.
+  *Playtest after fix:* the cluster reads as round soft smoke puffs from every angle.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
+
+- `BL-210` **Tracer length/width become config knobs for the user to tune; distant tracers should
+  stay visible farther out.** User verdict on C25 (2026-07-31): colour is right; they want to
+  retune length/width themselves via config params, and tracers should read from farther away, as
+  in the original screenshots. Fix shape: expose `weapons.tracerLength` / `weapons.tracerWidth`
+  (and brightness) in `config.json` with the current values as defaults (byte-identical at
+  defaults), plus investigate a distance-visibility floor (a minimum apparent size so a distant
+  round still reads as a fleck). ⚠ Traps: defaults must not move the goldens; the far-visibility
+  floor is look, record its magnitude as TUNE.
+  *Playtest after fix:* the user tunes the knobs at the controls; distant rounds read as flecks.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
+
+**Rockets (PT-09).**
+
+- `BL-211` **Rocket sound differs from the original.** User note (2026-07-31), no further detail
+  yet — the owed first step is a survey: what the authored data binds for rocket fire/flyout sound
+  vs what we play, then ask the user what specifically reads wrong (launch bark, flyout loop,
+  both?) or get a capture. Cross-ref `BL-016` (explosion look/speed — the explosion *sound* may be
+  part of the same complaint).
+  *Playtest after fix:* rocket fire A/B against the original.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires).
 
 ## Blocked / deferred
 
@@ -583,6 +707,12 @@ unscheduled.
   reproducibility traps above (`BL-061`).
   *Playtest after fix:* a tower held in a damage stage should sputter smoke intermittently, not emit
   one puff cluster and go quiet. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+  **PT-06 verdict (2026-07-31) hardens this:** the user saw *absolutely no difference* between
+  stages — in flight AND in the damage lab. So even the "one brief burst" this entry assumed is
+  unconfirmed at the controls; treat the symptom as "stage effects invisible", not merely
+  "sputter degenerates to a burst". A built `Puffer` is not a visible one — acceptance is pixels
+  (a mid-stage screenshot with visible smoke) plus the user's eye, never the build log
+  (verification.md WORLD-12). Scheduled: PLAN-m3-polish-3 A1.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24) — the round-robin fix is on branch `fix/rocket-drain-pylon`, pending merge + playtest.**
   The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
@@ -1345,13 +1475,9 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
-- `BL-112` **Rocket flyout speed** — the user reports rockets feel too fast. A `Config` knob
-  `weapons.rocketSpeedScale` was added (default **1.0 = data speed, byte-identical**); it scales a
-  rocket's flyout velocity **and** acceleration together, so the round still despawns at its `Range`,
-  just slower. Set a smaller value (try `0.7`) in `config.json` and A/B against the original. Hook on
-  branch `fix/rocket-speed-tune-hook` (see "Milestone 3 Polishing"). The FLYOUT smoke trail landed
-  (C21, 2026-07-31) — the user attributed the "too fast" impression to the missing trail, so re-judge
-  the speed with the trail visible before setting a non-neutral value.
+- `BL-212` **Rocket-trail puff size (C21, 2026-07-31)** — the trail look and per-type character
+  passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.
+  The authored FLYOUT values are verbatim; only render-side size/overlap is in play.
 - `BL-200` **Casing-ejection look (C22, 2026-07-31)** — the authored halves are verbatim (the
   `gunshell` OBJECT_MOTION per `MotionRuntime`'s translation_range decode; the `muzzlepuffer`
   velocity/size/life/deviation; the muzzle-light range/colour variants), but four values are
@@ -1362,9 +1488,11 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   authored 0.05 s-interval × 0.3 s window from a moving node), the **light flash energy**
   (`MuzzleLightEnergy` 2.5 — the def carries range/colour only) and its **2-frame life**
   (`MuzzleLightLife` 0.03 s, glossing the def's next-event-tick deactivate). Judge at the controls
-  per `PT-10`. ⚠ Do not re-derive the calibre gate or underbelly mount from the design spec
+  ⚠ Do not re-derive the calibre gate or underbelly mount from the design spec
   (SRC-3 — rejected against the reference captures), and do not shorten `gunshell`'s `RUN_TIME 2`
-  to any gate — authored data.
+  to any gate — authored data. **PT-10 verdict (2026-07-31): casing + cluster confirmed working;
+  the puffs render as stripes — that defect is `BL-209` (PLAN-m3-polish-3 C22). Re-judge these
+  values only after it lands.**
 - `BL-201` **Muzzle-flash shape (C24, 2026-07-31)** — the flash is now a triad of three quads 120°
   apart, the whole triad rotated by a shared random angle each shot (user direction, matching the
   reference captures' 3-lobed burst; the authored `mb_spinflame` node instead rotates one node to
@@ -1372,10 +1500,13 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   The per-ammo texture axis is now wired (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's
   `FIRE` `ANIMATION` — `muzzle_burst_slug`/`_dum`/`_ap`/`_mag`; the base `muzzle_burst` and heavy-mount
   `muzzle_burst2` default to slug). Hand-picked: `MuzzleFlashCount` 3, `MuzzleSize` 0.5 m (unchanged
-  waypoint), and the continuous (not 3-bucket discrete) per-shot rotation. Judge at the controls
-  per `PT-11` against `MuzzleFlash1..3.png` and shot 2 of `OriginalScreenshots/C1B IA1 Bloodhawk
-  tracer and ejection.png`. Also re-confirm A10 muzzle placement now the flash shape changed:
+  waypoint), and the continuous (not 3-bucket discrete) per-shot rotation. Judge against
+  `MuzzleFlash1..3.png` and shot 2 of `OriginalScreenshots/C1B IA1 Bloodhawk tracer and
+  ejection.png`. Also re-confirm A10 muzzle placement now the flash shape changed:
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`.
+  **PT-11 verdict (2026-07-31): unreadable — a red semi-transparent circle, rotation invisible;
+  the quad-anchoring defect is `BL-208` (PLAN-m3-polish-3 C21). Re-judge these values only after
+  it lands.**
 - `BL-202` **Tracer look (C25, 2026-07-31)** — the tail artifact (a short line bleeding past the
   streak's end) was the engine texture default, not the streak geometry: `StandardMaterial3D`
   defaults to `TextureRepeat = true`, so bilinear filtering at the UV=0/1 edge blends in the
@@ -1386,8 +1517,10 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   to the generic `tracer1`). Hand-picked, per the user's "a lot brighter" direction: `TracerLength`
   1.0 m (was 3 m), `TracerWidth` 0.10 m (was `0.0782f * 2`), and a uniform overbright tint
   `TracerBrightness` 3.0 (additive blend with no bloom pass, so the only way to read brighter than
-  the texture's own pixel value). Judge at the controls per `PT-12` against `OriginalScreenshots/C1B
-  IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png`. ⚠ The bullet is fast enough (1000 m/s at
+  the texture's own pixel value). Judge against `OriginalScreenshots/C1B
+  IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png`.
+  **PT-12 verdict (2026-07-31): colour right; the user tunes length/width themselves once the
+  config knobs exist — `BL-210` (PLAN-m3-polish-3 C23).** ⚠ The bullet is fast enough (1000 m/s at
   60 fps ≈ 16.7 m/frame) that a frame-locked `--screenshot` capture almost never lands exactly on a
   round still at the muzzle — the near/bright look is easiest judged live, holding the trigger, not
   from a single scripted shot.

@@ -131,80 +131,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
 
-- `PT-05` **Surface-class impacts (`BL-041` landed).** The area-quorum vote is measured good
-  (census + scripted impact runs: water → splash, `nycity` → building hit, the wooden dock → plain
-  ricochet), but nobody has *flown* it. *Look for:* gunfire into a C2 building gives a ricochet,
-  not a splash; gunfire into water gives the splash; no building sounds wet.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. The **C** collider
-  overlay is trustworthy again (`BL-042` + the `BL-198` inflate fix landed) — its colours show
-  which surface class the engine believes it hit.
-
-- `PT-06` **Damage-stage smoke/fire in flight (`BL-021` landed 2026-07-30).** Guns-only into a
-  tower, HP falling — smoke should render on the object at the 60 % stage and fire smoke at the
-  30 % stage, not just the final blast. Known limit: each stage shows one brief burst rather than
-  the original's intermittent sputter (`BL-199`). *Look for:* the stage effects appearing at the
-  right HP, anchored on the object. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-
-- `PT-07` **C3 spiderweb proximity trigger** (`BL-183`/`BL-006` landed). Fly at the tikicave web
-  from a normal spawn: it must read solid and visible on approach, start its 0.7 s fade only inside
-  ~50 m, and be passable once faded — never gone-from-spawn, never an invisible wall.
-  `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`. *Also judge:* the authored margin is tight — at
-  cruise speed a dead-center run can reach the web before the fade finishes and clip the still-solid
-  strands (colliders drop at fade end, matching the shipped fade). A/B the feel against
-  `OriginalScreenshots/Videos/C3 Spiderweb.mp4`; if the original clearly lets you through mid-fade,
-  that's a new backlog entry (drop colliders at fade start), not a revert of either mechanism.
-
-- `PT-08` **`kkgate` death (`BL-023` landed).** Shoot the propane tank on Hollywood's gate
-  (C2, near the sea hangar). *Look for:* the doors blow into pieces that fly, tumble and fade out
-  over ~3 s, after which the passage is clear to fly through — scripted runs confirm all of it; the
-  owed read is whether the piece trajectories and fade feel like the original. ⚠ Flying in right
-  behind the explosion still hits mid-air wreckage for the first ~3 s (colliders ride the pieces
-  until the fade ends) — that is the data's call, not a regression.
-  `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
-
-- `PT-09` **Rocket smoke trails (`BL-015` landed 2026-07-31).** Every rocket type now trails its
-  authored FLYOUT puffer (data from `missile_puffers` / cam_anim, colour ramps verbatim). *Look
-  for:* per-type character against `OriginalScreenshots/Rocket Streak 1..3.png` — HE orange fading
-  to grey, flak/scatter near-black, incendiary red fading to white, sonic teal (two emitters, body
-  rolling at the authored 8.73 rad/s), AP chartreuse-yellow. *Also judge:* the trail's density —
-  the original's HE ribbon reads thicker/more continuous than one authored puff per 1.5 m renders
-  here; if it reads too sparse at the controls, that is a puff-size/overlap render question (new
-  entry), not a data error. Also re-judge the "rockets feel too fast" impression (`BL-112`) now
-  the trail is visible. `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires; swap types
-  with `--rocket=wep_04/05/07/08`).
-
-- `PT-10` **Casing ejection + muzzle puff/light (`BL-013`/`BL-137`/`BL-138` landed 2026-07-31).**
-  Guns now eject the authored brass casing (fall + tumble over 2 s) with a white puff cluster
-  riding it, plus a per-shot muzzle smoke puff and a real dynamic light flash. *Look for:* against
-  `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png` — a brass speck
-  inside each persisting white cluster, falling back and below, from the wing mounts, one wing at a
-  time; sustained fire ejects continuously (never one casing per ~2 s). The cluster
-  count/size/life, muzzle puff count and light energy are `BL-200`'s TUNE values.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
-
-- `PT-11` **Muzzle-flash shape (`BL-011`/`BL-201` landed 2026-07-31).** Each gun shot now draws
-  three flash quads 120° apart around the muzzle axis, the whole triad rotated by a shared random
-  angle each shot (seeded, so `--det` runs stay reproducible), textured per ammo type
-  (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's `FIRE` binding). *Look for:* against
-  `OriginalScreenshots/MuzzleFlash1..3.png` and shot 2 of `…C1B IA1 Bloodhawk tracer and
-  ejection.png` — a compact, irregular/lobed burst (not a plain single quad), one wing at a time.
-  Size (`MuzzleSize` 0.5 m) and the flash-count/rotation scheme are `BL-201`'s TUNE values. Also
-  re-confirm A10 muzzle placement now the flash shape changed.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
-
-- `PT-12` **Tracer look (`BL-012`/`BL-202` landed 2026-07-31).** Tracers are shorter (1.0 m, was
-  3 m), thinner (0.10 m) and drawn markedly brighter (a uniform ×3.0 overbright tint on the
-  additive quad), the same per-ammo texture axis as the muzzle flash
-  (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, generic `tracer1` for ordnance), and the
-  bilinear wrap-around at the streak's tail is gone (`TextureRepeat` was defaulting on for a quad
-  that never tiles). *Look for:* against `OriginalScreenshots/C1B IA1 Bloodhawk tracer and
-  ejection.png`/`…ejection2.png` — a short, vividly bright yellow dash per round, no faint smear
-  past its trailing edge, distant rounds still visible as tiny flecks. Hold the trigger rather than
-  judging a single scripted shot — the round moves ~17 m per frame at 1000 m/s, so a frame-locked
-  capture rarely lands on one still near the muzzle. Length/width/brightness are `BL-202`'s TUNE
-  values. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with
-  Space).
-
 ---
 
 ## Everything else
@@ -212,5 +138,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
 `*Playtest after fix:*` line — the weapons re-tests (`BL-016`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
-(`BL-150`) and graze pushback (`BL-172`). Do not re-add them here; the entry brings its own test
-when the fix lands.
+(`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
+their re-tests ride `BL-199`/`BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`). Do not
+re-add them here; the entry brings its own test when the fix lands.

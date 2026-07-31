@@ -1,8 +1,10 @@
 # Milestone 3 polish, run 2 — combat look & feel
 
-**ACTIVE PLAN** (written 2026-07-30). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**✅ COMPLETE (2026-07-31).** All 14 items resolved (11 landed, 3 disproven-or-superseded in
+place); the closing cockpit pass (PT-05..PT-12, 2026-07-31) confirmed the mechanics but refuted
+several *looks* — those follow-ups are `BL-199`/`BL-203`–`BL-211` and run under
+[`PLAN-m3-polish-3.md`](../PLAN-m3-polish-3.md). Per-item verdicts are noted on the checklist
+below.
 
 Ten items drawn from `backlog.md` under the criteria: **M3 weapons/destruction fidelity, already
 root-caused or with a stated fix shape, not blocked on owed `CAP-nn` captures or future milestones
@@ -79,34 +81,43 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — animation triggers & effect routing
 
 1. ☑ `BL-183` Parse `EXECUTION_BY_RANGE` and gate `OnStartup` defs on player proximity (C3 spiderweb)
-2. ☑ `BL-021` Damage-stage smoke/fire renders in flight, not only headless
+   — PT-07 (2026-07-31): gate correct, but the web crashes the plane where the original never
+   damages it → `BL-206` (polish-3 B11)
+2. ☑ `BL-021` Damage-stage smoke/fire renders in flight, not only headless — **PT-06 refutes the
+   visible outcome** (nothing readable at the controls, lab included): the routing landed, the
+   look did not → reopened as `BL-199` (polish-3 A1)
 3. ❌ `BL-174` Player low-HP smoke/fire trail — disproven 2026-07-31: both reachability and
    parenting were false; a scripted dive shows it already renders, even on the worst-case airframe
 
 ### Wave B — impacts & surfaces
 
 11. ❌ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist — disproven 2026-07-30: the sea already collides, tags `water`, splashes and sounds; follow-up `BL-186` (splash imperceptible)
-12. ◐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); the at-the-controls overlay read stays owed until B14 draws true
-13. ☑ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
+12. ☑ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); PT-05's cockpit read (2026-07-31) confirms the vote but found a residual name-coverage gap (C2 blue water inert) → `BL-204` (polish-3 A3)
+13. ☑ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark — PT-05: still
+    reads as the smaller flame sprite at the controls → folded into `BL-203` (polish-3 A2)
 14. ☑ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
 
 ### Wave C — weapon secondary visuals
 
 21. ☑ `BL-015` Rocket smoke trail (the authored FLYOUT trail, orange→grey)
 22. ☑ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
-    — landed 2026-07-31; the white puff cluster is a recorded stand-in (`BL-200`), cockpit A/B is `PT-10`
+    — landed 2026-07-31; PT-10 verdict: casing + cluster work, but the puffs render as stripes →
+    `BL-209` (polish-3 C22); the stand-in values stay `BL-200` TUNE
 23. ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
-24. ◐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
+24. ☑ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
     — landed 2026-07-31 (three flashes 120° apart, shared random per-shot roll, per-ammo texture,
-    user direction); cockpit A/B is `PT-11`, item stays ◐ until it returns
-25. ◐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
+    user direction); PT-11 verdict: unreadable red disc — the centred-quad anchoring is wrong →
+    `BL-208` (polish-3 C21); scheme + texture axis confirmed as `BL-201`
+25. ☑ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
     — landed 2026-07-31 (length/width shrunk, uniform ×3.0 overbright tint, per-ammo texture axis,
-    tail-artifact fix — `TextureRepeat` was defaulting on); cockpit A/B is `PT-12`, item stays ◐
-    until it returns
+    tail-artifact fix — `TextureRepeat` was defaulting on); PT-12 verdict: colour right, tail gone;
+    the user tunes length/width via config knobs → `BL-210` (polish-3 C23)
 
 ### Wave D — destruction bugs
 
-31. ☑ `BL-023` `kkgate` door: dies visibly and loses its collider in the live world
+31. ☑ `BL-023` `kkgate` door: dies visibly and loses its collider in the live world — PT-08
+    confirms the kill + tumble; refutes the fade half of the scripted verification (no fadeout at
+    the controls) → `BL-207` (polish-3 B12)
 32. ☑ `BL-007` Diagnose the `det == 0` invert error on multi-death sweeps
 
 ## Dependency and parallelism notes

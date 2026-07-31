@@ -33,3 +33,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-sequencerunner-seam.md](PLAN-sequencerunner-seam.md) | Extract the sequence interpreter behind `ISequenceHost` + headless xUnit charter (2 items, Wave A) | 2026-07-30 |
 | [PLAN-animruntime-role-factories.md](PLAN-animruntime-role-factories.md) | `AnimRuntime` role factories (`ForEffects`/`ForCrashRig`) + delete dead `Apply` (5 items, Waves A–B) | 2026-07-30 |
 | [PLAN-m3-polish-quickwins.md](PLAN-m3-polish-quickwins.md) | M3 polish quick wins: gauges/cues, spurious errors, weapon/audio plumbing, doc drift (11 items, Waves A–D) | 2026-07-30 |
+| [PLAN-m3-polish-2.md](PLAN-m3-polish-2.md) | M3 combat look & feel: anim triggers, impacts/surfaces, weapon secondary visuals, destruction bugs (14 items, Waves A–D; cockpit follow-ups → PLAN-m3-polish-3) | 2026-07-31 |

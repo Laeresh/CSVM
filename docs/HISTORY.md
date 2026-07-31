@@ -8971,3 +8971,28 @@ screenshots with `--pos`/`--lookat` framing the firing mount close up show a sho
 brighter yellow streak leaving the muzzle with no trailing smear; a `--chapter=C1B --fire
 --infinite-ammo` chase-cam capture matches the reference shots' composition (a small bright fleck
 near the reticle at range). Cockpit A/B → `PT-12`.
+
+## 2026-07-31 — the PT-05..PT-12 cockpit pass triaged; PLAN-m3-polish-2 closed; PLAN-m3-polish-3 scaffolded
+
+**The user flew the eight owed playtests over the polish-2 landings and wrote the verdicts to
+`playtest-notes.md`; fully triaged the same day.** The unifying finding: several items landed
+mechanically correct but perceptually near-nil — the effect builds and the scripted verification
+passes while the player sees nothing (or the wrong thing). Verdicts → records: PT-05 → `BL-203`
+(impact visuals imperceptible on every surface class) + `BL-204` (C2 blue water still inert — a
+name-coverage gap past the landed quorum vote) + `BL-205` (overlay legend request); PT-06 →
+`BL-199` hardened (stage smoke/fire shows *no* visible difference, flight and damage lab both);
+PT-07 → `BL-206` (the original's spiderweb never damages the plane; ours crashes it — the range
+gate and fade stay); PT-08 → `BL-207` (kkgate debris never fades; the scripted fade verification
+was wrong → verification.md SHOT-17; collider-at-fade-start prototype owed); PT-09 → trails and
+rocket speed PASS (`BL-112` deleted — `weapons.rocketSpeedScale` stays 1.0 = data speed; puff size
+recorded as `BL-212` TUNE), explosions still wrong (`BL-016` extended with the `ring_ap/he/sonic`
+leads), rocket sound new (`BL-211`); PT-10 → casing works, puffs render as stripes (`BL-209`);
+PT-11 → muzzle flash unreadable, quad anchoring wrong — texture roots at its left edge (`BL-208`);
+PT-12 → tracer colour right, user tunes length/width via new config knobs (`BL-210`).
+
+**PLAN-m3-polish-2 archived COMPLETE** (all 14 items resolved; per-item cockpit verdicts noted on
+its checklist) and **`docs/PLAN-m3-polish-3.md` scaffolded as the active plan**: 11 items, waves
+A–D — A: imperceptible feedback (`BL-199`/`BL-203`/`BL-204`/`BL-205`); B: destructible behaviour
+(`BL-206`/`BL-207`); C: weapon visuals round 3 (`BL-208`/`BL-209`/`BL-210`, all `Projectile.cs`,
+serial); D: rockets (`BL-016`/`BL-211`). `playtest.md` §1 shrank back to PT-01..PT-04; the
+re-tests ride their backlog entries. Docs-only change — no code, no test run owed.

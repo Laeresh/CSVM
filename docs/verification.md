@@ -181,6 +181,12 @@ cite these IDs.
   window you are capturing from.** Creating the window minimized put 6 of 11 goldens on one
   identical blank hash while the other 5 passed; `ShowWindow(SW_HIDE)` from `_Ready` keeps
   all 11 hash-identical.
+- **SHOT-17** — **"It fades" needs a mid-fade frame at visibly partial alpha — a piece that
+  disappears at deactivate passes a frame-sparse capture as "faded".** The kkgate debris
+  verification (BL-023) claimed fly + fade + deactivate from before/after shots; at the
+  controls the pieces never turned transparent — the deactivate at end-of-ride had
+  impersonated the fade. Same family as WORLD-12: a started opacity op that the material
+  ignores measures as success unless you sample the pixels mid-ramp.
 
 ## GOLD — golden images
 
