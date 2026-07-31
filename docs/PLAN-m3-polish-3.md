@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — weapon visuals round 3
 
 21. ☑ `BL-208` Muzzle flash: anchor the texture's left edge at the muzzle, full texture readable (landed 2026-07-31)
-22. ☐ `BL-209` Eject/muzzle smoke puffs read as round smoke101/102/103 puffs, not stripes
+22. ☑ `BL-209` Eject/muzzle smoke puffs read as round smoke101/102/103 puffs, not stripes (disproven 2026-07-31 — fixed by C21, not the traced billboard lead)
 23. ☐ `BL-210` Tracer length/width/brightness as config knobs + distance-visibility floor
 
 ### Wave D — rockets

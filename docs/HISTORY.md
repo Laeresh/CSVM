@@ -9211,3 +9211,19 @@ captured in a pinned shot). Muzzle flash confirmed against `OriginalScreenshots/
 `--chapter=C1 --fire --infinite-ammo` capture; tracer head/tail direction confirmed by the user at
 the controls (`./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`) — "looks
 good." Owed: the user's full cockpit A/B pass per the plan's original acceptance step.
+
+## 2026-07-31 — M3p3 Wave C C22 BL-209: eject/muzzle smoke puffs disproven — already fixed by C21
+
+C22's traced lead (`billboard: false` on the smoke pool reading as a stripe when seen edge-on, plus
+never cycling `smoke101/102/103`) turned out not to be the cause: the "elongated white stripes"
+PT-10 reported were the same `Uv1Scale` mirror-without-offset bug C21 found and removed — the smoke
+pool shares `AddMultiMesh` with every other `ProjectilePool` sprite, so it was clamping to a single
+UV column exactly like the tracer and muzzle flash were. With the mirror gone the puffs read round
+without touching billboarding or texture cycling. **User confirmed live** ("the Puffs are now
+rendering correct") after C21 landed; a `--chapter=C1 --fire --infinite-ammo` capture
+(`.scratch/c22_puffs_flight.png`) independently shows round, soft-edged cloud puffs at the wing
+mount, not rectangles. No code change — a correct disproof, not a finding to implement. The smoke
+pool is still non-billboarded and single-texture (`smoke101` only, no `102`/`103` cycling); nothing
+in this pass showed either is currently needed, so both stay as-is rather than being "fixed" against
+no observed symptom — re-open a new item if a future playtest surfaces an edge-on stripe or texture
+repetition.

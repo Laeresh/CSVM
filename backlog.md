@@ -191,17 +191,6 @@ its symptom and traps.
 
 **Weapon visuals round 3 (PT-10/11/12).**
 
-- `BL-209` **Eject/muzzle smoke puffs render as elongated white stripes, not round smoke puffs.**
-  User verdict on C22 (2026-07-31): casing + cluster present, but the puffs are "very elongated
-  rectangles… like two white stripes with different transparency"; in the original they read
-  exactly like `smoke101/102/103.png` at varying alpha. Leads to check on-site: the smoke pool is
-  one MultiMesh on the single texture `smoke101` with `billboard: false` (`Projectile.cs` `_Ready`)
-  — a non-billboarded quad seen edge-on is a stripe; and the pool never cycles the three authored
-  smoke textures. ⚠ Traps: the puff *values* (count/size/life/drift) are `BL-200`'s TUNE — fix the
-  rendering before re-tuning them.
-  *Playtest after fix:* the cluster reads as round soft smoke puffs from every angle.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
-
 - `BL-210` **Tracer length/width become config knobs for the user to tune; distant tracers should
   stay visible farther out.** User verdict on C25 (2026-07-31): colour is right; they want to
   retune length/width themselves via config params, and tracers should read from farther away, as
