@@ -572,14 +572,19 @@ velocity-aligned, and none of the three is billboarded.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly
-their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`).
+their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
+`MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
+`AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,
+plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md).
 ⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
   launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats
   its whole impact pattern (two `--det` C1B dives: 8/8 identical impact positions); new randomness
-  must route through it.
-⚠ The FLYOUT `MODEL_ANIMATION` smoke trail is still pending; `RocketStreakScale` is only the
-  fallback when a chapter lacks the rocket's prototype model.
+  must route through it. Trail-puffer scatter draws each emitter's own `Rng.Puffer` stream.
+⚠ A trail emitter is reusable only when its round died AND `LiveCount == 0` — reusing sooner
+  grafts the new rocket's trail onto the old one's live smoke. `RocketStreakScale` stays the
+  fallback when a chapter lacks the rocket's prototype model; the empty stage (no world program)
+  flies trail-less.
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +

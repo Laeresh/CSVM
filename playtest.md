@@ -163,6 +163,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   same session is a separate bug (`BL-007`).
   `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
 
+- `PT-09` **Rocket smoke trails (`BL-015` landed 2026-07-31).** Every rocket type now trails its
+  authored FLYOUT puffer (data from `missile_puffers` / cam_anim, colour ramps verbatim). *Look
+  for:* per-type character against `OriginalScreenshots/Rocket Streak 1..3.png` — HE orange fading
+  to grey, flak/scatter near-black, incendiary red fading to white, sonic teal (two emitters, body
+  rolling at the authored 8.73 rad/s), AP chartreuse-yellow. *Also judge:* the trail's density —
+  the original's HE ribbon reads thicker/more continuous than one authored puff per 1.5 m renders
+  here; if it reads too sparse at the controls, that is a puff-size/overlap render question (new
+  entry), not a data error. Also re-judge the "rockets feel too fast" impression (`BL-112`) now
+  the trail is visible. `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires; swap types
+  with `--rocket=wep_04/05/07/08`).
+
 ---
 
 ## Everything else

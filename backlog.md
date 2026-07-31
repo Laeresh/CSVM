@@ -158,17 +158,7 @@ work is below.
    a flight bug.
 
 **Rocket visuals (findings 2, 4).**
-5. `BL-015` **The fat orange→grey smoke trail is missing — the biggest rocket gap.** A rocket with a MODEL body
-   gets only a slim `RocketExhaustScale = 0.5` exhaust streak (`Projectile.cs:62`); the original's
-   dominant visual is a **thick smoke trail fading orange→grey** (`Rocket Streak 1..3.png`). This is the
-   deferred `MODEL_ANIMATION` trail — it is why the round "looks completely different" and "too fast to
-   see." *Schedule it.* ⚠ Reframes the pass-1 "rockets feel too fast" TUNE (`weapons.rocketSpeedScale`):
-   the user now attributes the speed impression to the **missing trail**, not the velocity — treat the
-   speed scale as probably-neutral and fix the trail first.
-   *Playtest after fix:* once the FLYOUT smoke trail lands, look for each rocket type trailing its own
-   distinct trail (HE intermittent white puffs, flak continuous black, incendiary continuous red-hued,
-   sonic a sine wave). `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
-6. `BL-016` **Rocket explosion looks different + faster than the original.** Goes through the D32 world-effects
+5. `BL-016` **Rocket explosion looks different + faster than the original.** Goes through the D32 world-effects
    puffer (`EffectSink`). Tuning gap — cross-ref the "World-effects runtime follow-ups" (M3 D32) item.
    *Playtest after fix:* A/B the rocket explosion look/speed against the original.
    `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
@@ -1486,7 +1476,9 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   `weapons.rocketSpeedScale` was added (default **1.0 = data speed, byte-identical**); it scales a
   rocket's flyout velocity **and** acceleration together, so the round still despawns at its `Range`,
   just slower. Set a smaller value (try `0.7`) in `config.json` and A/B against the original. Hook on
-  branch `fix/rocket-speed-tune-hook` (see "Milestone 3 Polishing").
+  branch `fix/rocket-speed-tune-hook` (see "Milestone 3 Polishing"). The FLYOUT smoke trail landed
+  (C21, 2026-07-31) — the user attributed the "too fast" impression to the missing trail, so re-judge
+  the speed with the trail visible before setting a non-neutral value.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 - `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.

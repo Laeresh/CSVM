@@ -110,6 +110,40 @@ trail/puffer sub-readers driven from it. The `IMPACT`/`FIRE`/`FLYOUT` target →
 | `rear_arc.zrd.json` | `deploy_reararc` (FLYOUT), `rear_flash_effect` | both | the rear-arc flare deployment |
 | `missile_puffers.zrd.json` | `generate_smokescreen` | FIRE | the smoke-screen laydown |
 
+### FLYOUT `MODEL_ANIMATION` — the in-flight smoke trails
+
+Every rocket's `FLYOUT` also names a `MODEL_ANIMATION` — an `ON_CALL` def sharing the projectile
+prototype's name (`he_rocket`, `flak`, `sonic`, …). Reader source: `missile_puffers.zrd.json`
+(most types) / `torpedo_effects.zrd.json` / `rear_arc.zrd.json`; all are also compiled into every
+chapter's `cam_anim`, where the engine reads them. Each def activates the prototype node and runs
+one or two **`DISTANCE_INTERVAL` `PUFFER_STATE`s** `AT_NODE` the round itself — the authored trail:
+one puff per interval meters of flight, texture `splashbase` (a soft round blob), random velocity
+±0.8 m/s, size 0.3–0.9 m, growth `[0→1, 1→0.25]`, and a per-type `COLORS` ramp that is the trail's
+whole character (each stops emitting at animation time 10 s):
+
+| Type (weapon) | Puffer(s) | Interval | Lifetime | Colour ramp (rgb, life fraction) |
+|---|---|---|---|---|
+| HE (`wep_06`/`_24`) | `he_rocket_trail` | 1.5 m | 3.0–4.5 s | 255,180,0 → 100,100,100 @ 0.1 |
+| AP (`wep_05`) | `trailpuffer_ap` | 2.0 m | 3.0–5.0 s | 204,255,0 → 234,255,151 @ 0.15 → 100,100,100 @ 0.3 |
+| Flak (`wep_07`) | `trailpuffer_dark` | 2.0 m | 3.5–5.0 s | 255,180,0 → 50,50,50 @ 0.05 (near-black) |
+| Incendiary (`wep_04`/`_11`/`_25`/`_26`) | `trailpuffer2` | 2.0 m | 3.5–6.5 s | 230,90,90 → 255,220,163 @ 0.07 → white @ 0.2 |
+| Sonic (`wep_08`) | `sonicpuffertrail1`+`2` | 2.0 m | 3.5–6.5 s | 131,200,190 → 68,115,109 @ 0.07 → 40,40,40 @ 0.2 (teal; size 0.2–0.5, friction 0.2) |
+| Scatter / beeper / flash | `scatterpuffer_dark` / `beeper_trail` / `flash_trail` | 2.0 m | 2.5–5 s | the flak ramp |
+| AA flak (`wep_27`) | `trailpuffer` | 2.0 m | 2.0–3.0 s | no ramp — a fire→smoke flipbook (`fireflare1`/`fire_f01`/`smoke101`/`smoke102`) |
+| Cannonball (`wep_28`) | `trailpuffer2` + `forwardpuffer` | 2.0 m | 0.2–0.3 s | white trail + an orange forward glow (`local_velocity` z −350) |
+| Torpedo (`wep_14`) | `torpuffertrail1`/`2` + `torpufferblast` | 0.2 m | 0.5–1.2 s | fire flipbooks; the blast cloud is TIME-interval |
+
+The `sonic` def additionally runs a `sonic_spinner` sequence: a steady `OBJECT_MOTION`
+`XYZ_ROTATION` roll of the round's body at **8.7266 rad/s (500°/s)** about z, looped forever —
+the only rocket that spins.
+
+**Engine wiring (M3, C21).** `ProjectilePool` resolves each rocket's `MODEL_ANIMATION` name
+through the world `AnimProgram`, takes every ACTIVE `DISTANCE_INTERVAL` `PUFFER_STATE` verbatim
+(`PufferState.FromAnimEvent`) and drives one `Puffer.TrailAdvance` per live round; the spinner
+rate rolls the FLYOUT body. Emitters are pooled and reused once their smoke decays. Deliberately
+not rendered yet: the TIME-interval `torpufferblast` cloud, and the torpedo def's wing/prop
+`OBJECT_MOTION` events (`wep_14` is mountable via `--rocket=` but on no stock loadout).
+
 `large_fireball` / `small_fireball` (bound by `FIRE`/`IMPACT` on the heaviest ordnance) are the
 **shared** destruction fireballs defined in `flame_ball.zrd.json` and reused by nearly every
 destructible — see [destructibles.md](destructibles.md) and [effects.md](effects.md), not a

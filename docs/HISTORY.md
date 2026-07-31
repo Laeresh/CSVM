@@ -8823,3 +8823,30 @@ only confirms the remake renders *something*, not that it matches the reference.
 `.\RunTests.ps1` unaffected (build/tests untouched). `BL-174` deleted from `backlog.md`;
 `verification.md` DIAG-17 corrected (it was built on the same unverified premise) and DIAG-18
 added: fly a code-only mechanism before trusting it.
+
+## 2026-07-31 — C21 `BL-015`: rockets trail their authored FLYOUT smoke, per-type character verbatim
+
+The biggest rocket gap: a MODEL-body rocket flew with only the slim `RocketExhaustScale` streak,
+while the original's dominant visual is the FLYOUT `MODEL_ANIMATION` smoke trail. Data survey
+first (the plan's core demand): every rocket's `MODEL_ANIMATION` names an ON_CALL def sharing the
+prototype's name (`he_rocket`, `flak`, `sonic`, …) — reader source `missile_puffers.zrd.json`,
+compiled in every chapter's `cam_anim` — whose body is one or two DISTANCE_INTERVAL PUFFER_STATEs
+AT_NODE the round: texture `splashbase`, one puff per 1.5–2 m, size 0.3–0.9 m, life 2.5–6.5 s, and
+a per-type COLORS ramp (HE 255,180,0→grey; AP chartreuse→pale→grey; flak/scatter/beeper/flash
+orange→50,50,50; incendiary 230,90,90→white; sonic teal ×2 emitters + an 8.73 rad/s ObjectMotion
+body roll). Full table now in `docs/formats/weapon-effects.md`. Engine: `ProjectilePool` takes the
+world `AnimProgram` (`flyoutAnims`), resolves each rocket type's def once, builds its states
+verbatim via `PufferState.FromAnimEvent`, and drives one `Puffer.TrailAdvance` set per live round
+from `SimStep` (sim-clock driven, det-friendly); emitters pool and are reused only after the old
+round's smoke fully decays; the spinner rate rolls the FLYOUT body. No speed retune —
+`weapons.rocketSpeedScale` untouched per the item's trap. TUNE values introduced: none (all
+emission/colour/size/life values are the authored data; trail density vs the original's thicker
+ribbon is flagged on PT-08).
+
+**Verified.** Chase-cam captures over C1 (`--fire-rockets`, frame 150) for wep_06/05/07/08/04
+(`.scratch/trail_he_f150.png`, `trail_wep_0{4,5,7,8}_f150.png`): five visibly distinct trails —
+HE orange→grey, AP chartreuse, flak continuous near-black, sonic teal double, incendiary
+red→white — the per-type distinctness the plan names as acceptance, A/B'd against
+`Rocket Streak 1..3.png`. `.\RunTests.ps1` green: build, 312 units, 12/12 suites, 13 goldens
+hash-identical (no golden fires rockets). `BL-015` deleted from backlog (playtest → PT-09,
+BL-112 speed re-judge noted); C21 ticked in `docs/PLAN-m3-polish-2.md`.

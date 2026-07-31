@@ -1,4 +1,5 @@
 using System.Collections.Generic;
+using CSVM.Effects;
 using CSVM.Mech3;
 using CSVM.Utils;
 using Godot;
@@ -94,6 +95,16 @@ public sealed partial class ProjectilePool : Node3D
     private readonly SceneBuilder? _flyoutScene;
     private readonly Dictionary<string, GameZNode?> _flyoutNodes = new(); // model name → prototype (cached)
 
+    // The FLYOUT MODEL_ANIMATION smoke trail (C21): each rocket type's def (`he_rocket`, `sonic`, …,
+    // compiled in cam_anim, reader source missile_puffers.zrd.json) carries one or two
+    // DISTANCE_INTERVAL PUFFER_STATEs AT_NODE the round itself — the authored thick trail with its
+    // per-type colour ramp (HE orange→grey, flak orange→near-black, incendiary red→white, sonic
+    // teal ×2). Resolved once per anim name from the world program; each live round drives its own
+    // Puffer emitters via TrailAdvance, reused from a free-list once their smoke has decayed.
+    private readonly AnimProgram? _flyoutAnims;
+    private readonly Dictionary<string, TrailSpec?> _trailSpecs = new(); // anim name → parsed spec (null = none)
+    private readonly List<TrailEmitter> _trailEmitters = new();          // reusable emitters, all states
+
     // The named IMPACT effect models (D30): a per-surface IMPACT `ANIMATION` whose name is a chapter
     // gamez node (the water splash prototypes) is instanced at the hit point via the same flyout
     // GameZ/SceneBuilder above. Names that resolve to a reader/control def or nothing (the gun
@@ -124,13 +135,14 @@ public sealed partial class ProjectilePool : Node3D
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
-        GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null)
+        GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null, AnimProgram? flyoutAnims = null)
     {
         _textures = textures;
         _sounds = sounds;
         _soundDefs = soundDefs;
         _flyoutGamez = flyoutGamez;
         _flyoutScene = flyoutScene;
+        _flyoutAnims = flyoutAnims;
         Name = "projectiles";
     }
 
@@ -195,6 +207,8 @@ public sealed partial class ProjectilePool : Node3D
             var model = weapon.IsRocket ? BuildFlyoutModel(weapon) : null;
             if (model != null)
                 model.GlobalTransform = FlyoutPose(muzzle.Origin, vel);
+            float rollRate = 0f;
+            var trails = weapon.IsRocket ? AcquireTrails(weapon, muzzle.Origin, out rollRate) : null;
             _proj[slot] = new Proj
             {
                 Alive = true,
@@ -206,6 +220,8 @@ public sealed partial class ProjectilePool : Node3D
                 Weapon = weapon,
                 Tint = tint,
                 Model = model,
+                Trails = trails,
+                RollRate = rollRate,
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
@@ -309,10 +325,19 @@ public sealed partial class ProjectilePool : Node3D
                     Impact(p.Weapon, (Vector3)hit["position"], hit["collider"].Obj as Node, (Vector3)hit["normal"]);
                     p.Alive = false;
                     KillModel(ref p);
+                    ReleaseTrails(ref p);
                     continue;
                 }
             }
             p.Pos = next;
+            p.Age += dt;
+            // The FLYOUT smoke trail rides the round: one authored puff per DISTANCE_INTERVAL
+            // meters of flight, emitted in world space and left behind (C21).
+            if (p.Trails != null)
+            {
+                foreach (var t in p.Trails)
+                    t.Puffer.TrailAdvance(next);
+            }
             p.DistLeft -= stepLen;
             if (p.DistLeft <= 0f)
             {
@@ -327,6 +352,7 @@ public sealed partial class ProjectilePool : Node3D
                 }
                 p.Alive = false;   // spent
                 KillModel(ref p);
+                ReleaseTrails(ref p);
             }
         }
 
@@ -361,6 +387,7 @@ public sealed partial class ProjectilePool : Node3D
         for (int i = 0; i < _projHigh; i++)
         {
             KillModel(ref _proj[i]);
+            ReleaseTrails(ref _proj[i]);
             _proj[i].Alive = false;
         }
         _projHigh = 0;
@@ -411,6 +438,18 @@ public sealed partial class ProjectilePool : Node3D
             p.Model.QueueFree();
             p.Model = null;
         }
+    }
+
+    private static void ReleaseTrails(ref Proj p)
+    {
+        if (p.Trails == null)
+            return;
+        foreach (var t in p.Trails)
+        {
+            t.Puffer.TrailEnd(); // live smoke decays naturally
+            t.InUse = false;
+        }
+        p.Trails = null;
     }
 
     private static void AgeSprites(List<Sprite> sprites, float dt)
@@ -531,6 +570,105 @@ public sealed partial class ProjectilePool : Node3D
         if (inst != null)
             _flyoutModels.AddChild(inst);
         return inst;
+    }
+
+    /// <summary>Starts the round's FLYOUT smoke trail (C21): one <see cref="Puffer"/> per
+    /// DISTANCE_INTERVAL <c>PUFFER_STATE</c> in the weapon's <c>MODEL_ANIMATION</c> def, taken
+    /// from the free-list when an earlier round's emitter has fully decayed, else freshly built.
+    /// <paramref name="rollRate"/> is the def's spinner rate (rad/s about the nose axis; the
+    /// sonic), 0 for everything else. Null when there is no anim program (no world / the weapon
+    /// lab), the weapon names no <c>MODEL_ANIMATION</c>, or its textures are absent.</summary>
+    private TrailEmitter[]? AcquireTrails(WeaponDef weapon, Vector3 origin, out float rollRate)
+    {
+        rollRate = 0f;
+        var spec = TrailSpecFor(weapon);
+        if (spec == null || spec.States.Count == 0)
+            return null;
+        rollRate = spec.RollRate;
+        var set = new List<TrailEmitter>(spec.States.Count);
+        foreach (var state in spec.States)
+        {
+            TrailEmitter? emitter = null;
+            foreach (var e in _trailEmitters)
+            {
+                // Reusable once its round died AND its smoke finished decaying — TrailAdvance
+                // would otherwise graft a new rocket's trail onto the old one's live puffs.
+                if (!e.InUse && e.State == state && e.Puffer.LiveCount == 0)
+                {
+                    emitter = e;
+                    break;
+                }
+            }
+            if (emitter == null)
+            {
+                var puffer = Puffer.Create(state, _textures);
+                if (puffer == null)
+                {
+                    if (_flyoutLogged.Add("trail:" + state.Name))
+                        GD.Print($"rocket trail puffer '{state.Name}' ({weapon.Id}) has no textures in this chapter — skipped");
+                    continue;
+                }
+                AddChild(puffer);
+                emitter = new TrailEmitter { Puffer = puffer, State = state };
+                _trailEmitters.Add(emitter);
+            }
+            emitter.InUse = true;
+            emitter.Puffer.TrailAdvance(origin); // first call homes the trail at the muzzle
+            set.Add(emitter);
+        }
+        return set.Count > 0 ? set.ToArray() : null;
+    }
+
+    // Resolves a weapon's FLYOUT MODEL_ANIMATION name to its trail spec, cached (misses too).
+    private TrailSpec? TrailSpecFor(WeaponDef weapon)
+    {
+        if (_flyoutAnims == null || weapon.Flyout?.ModelAnimation is not { } animName)
+            return null;
+        if (_trailSpecs.TryGetValue(animName, out var spec))
+            return spec;
+        spec = BuildTrailSpec(animName, weapon.Id);
+        _trailSpecs[animName] = spec;
+        return spec;
+    }
+
+    /// <summary>Reads a FLYOUT def's trail out of the anim program: every ACTIVE
+    /// DISTANCE_INTERVAL <c>PUFFER_STATE</c> (the authored per-type smoke — colour ramp, size,
+    /// lifetime, one puff per interval meters), plus the def's steady <c>ObjectMotion</c> spin
+    /// rate if it carries one. Time-interval puffers (the torpedo's blast cloud) are left to a
+    /// future pass — this path renders the trail the round leaves behind.</summary>
+    private TrailSpec? BuildTrailSpec(string animName, string weaponId)
+    {
+        foreach (var def in _flyoutAnims!.ByAnimName(animName))
+        {
+            var spec = new TrailSpec();
+            foreach (var seq in def.Sequences)
+            {
+                foreach (var ev in seq.Events)
+                {
+                    if (ev.Kind == "PufferState" && (ev.Data.Num("active_state") ?? 0f) > 0f)
+                    {
+                        var state = PufferState.FromAnimEvent(ev.Data);
+                        if (state.DistanceInterval > 0f
+                            && (state.Textures.Count > 0 || state.TextureSequence.Count > 0))
+                            spec.States.Add(state);
+                    }
+                    else if (ev.Kind == "ObjectMotion"
+                             && ev.Data.Obj("xyz_rotation")?.Vec3("initial") is { } rate
+                             && !rate.IsZeroApprox())
+                    {
+                        spec.RollRate = rate.Z; // the spinners roll about the nose (z) axis
+                    }
+                }
+            }
+            if (spec.States.Count > 0)
+            {
+                GD.Print($"rocket trail '{animName}' ({weaponId}): {spec.States.Count} puffer state(s)"
+                         + (spec.RollRate != 0f ? $", roll {spec.RollRate:0.##} rad/s" : ""));
+                return spec;
+            }
+        }
+        GD.Print($"rocket trail '{animName}' ({weaponId}): no DISTANCE_INTERVAL puffer in the anim program — no trail");
+        return null;
     }
 
     /// <summary>Instances a named IMPACT effect's gamez MODEL prototype at the hit point, when the
@@ -706,7 +844,12 @@ public sealed partial class ProjectilePool : Node3D
             // Carry the rocket body along with the round, nose down its velocity (B14).
             if (p.Model != null)
             {
-                p.Model.GlobalTransform = FlyoutPose(p.Pos, p.Vel);
+                var pose = FlyoutPose(p.Pos, p.Vel);
+                // The def's spinner (the sonic's ObjectMotion XYZ_ROTATION, 8.73 rad/s): a steady
+                // roll about the round's own nose axis — pure roll, so the nose stays on velocity.
+                if (p.RollRate != 0f)
+                    pose = new Transform3D(pose.Basis * new Basis(Vector3.Back, p.RollRate * p.Age), pose.Origin);
+                p.Model.GlobalTransform = pose;
                 // Verification breadcrumb (once): read the APPLIED world basis back — through the
                 // prototype's own parent chain — and confirm the body's nose (local -Z) actually
                 // aligns with the round's flight direction. dot≈1 ⇒ nose-forward.
@@ -753,6 +896,9 @@ public sealed partial class ProjectilePool : Node3D
         public WeaponDef Weapon;
         public Color Tint;
         public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
+        public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters (C21)
+        public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
+        public float Age;        // s since launch — drives the roll angle
     }
 
     private struct Sprite
@@ -777,5 +923,21 @@ public sealed partial class ProjectilePool : Node3D
         public Node3D Model;
         public float Age;
         public float Life;
+    }
+
+    // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool
+    // and lent to one live round at a time (see AcquireTrails).
+    private sealed class TrailEmitter
+    {
+        public Puffer Puffer = null!;
+        public PufferState State = null!;
+        public bool InUse;
+    }
+
+    // A FLYOUT MODEL_ANIMATION def's renderable content: its trail puffer states + spin rate.
+    private sealed class TrailSpec
+    {
+        public readonly List<PufferState> States = new();
+        public float RollRate;
     }
 }

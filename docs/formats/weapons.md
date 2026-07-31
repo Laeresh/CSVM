@@ -188,8 +188,9 @@ slot values may be `null`.
 `ANIMATION ["muzzle_burst_slug"]`; rockets give `SOUND ["snd_missile_sm"]` with null anim.
 
 **`FLYOUT`** — the projectile itself, over slots `MODEL` (the `.flt` handle), `MODEL_ANIMATION`
-(spin/trail while in flight), and `SOUND` (looped in-flight sound, e.g. the torpedo). Present
-on all 48 entries.
+(spin/trail while in flight — decoded per type in
+[weapon-effects.md](weapon-effects.md#flyout-model_animation--the-in-flight-smoke-trails)), and
+`SOUND` (looped in-flight sound, e.g. the torpedo). Present on all 48 entries.
 
 **`IMPACT`** — keyed by **surface class**, one value per class:
 

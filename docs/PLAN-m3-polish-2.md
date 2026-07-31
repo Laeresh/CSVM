@@ -92,7 +92,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — weapon secondary visuals
 
-21. ☐ `BL-015` Rocket smoke trail (the authored FLYOUT trail, orange→grey)
+21. ☑ `BL-015` Rocket smoke trail (the authored FLYOUT trail, orange→grey)
 22. ☐ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
 23. ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
 24. ☐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
@@ -349,7 +349,7 @@ See `docs/HISTORY.md` 2026-07-31.
 
 # Wave C — weapon secondary visuals
 
-## C21 ☐ `BL-015` Rocket smoke trail
+## C21 ☑ `BL-015` Rocket smoke trail
 
 **Goal.** Rockets trail the authored thick smoke fading orange→grey — the original's dominant
 rocket visual (`Rocket Streak 1..3.png`), with per-type character (HE intermittent white, flak
