@@ -9141,3 +9141,28 @@ C1C 1733→1324, C2 1945→1533, C2B 1335→957, C3 2417→1775, C4 2638→1855,
 `RunTests.ps1` fully green (313 units incl. a new `IntersectSurface` reader fact, 12/12 suites —
 `damage-hd`'s destroy/reset/rekill census intact — 13/13 goldens hash-identical). Owed: the
 user's at-the-controls re-test (`PT-15`).
+
+## 2026-07-31 — M3p3 Wave B B12 BL-207: kkgate debris now visibly fades — opaque world shaders get a runtime fade twin
+
+PT-08's refutation confirmed the user's lead exactly: the authored `genx12` fades
+(`OBJECT_OPACITY_FROM_TO` 1→0 over 3–6 s per piece, verified in `extracted/C2/cam_anim/`) always
+fired, but `SceneBuilder`'s opaque bias-shader variants emit no `ALPHA` line at all — the
+per-instance `csky_opacity` write was a silent no-op, tallied as `ObjectOpacityState(no alpha
+path)`, and the pieces stayed opaque until deactivate (the SHOT-17 impersonation D31's scripted
+check fell for). Fix: `AnimRuntime.EnsureOpacityPath` — when a genuine partial opacity lands on a
+mesh whose shader lacks the opacity term, the instance's surfaces swap to a cached fade twin
+(`SceneBuilder.FadeShaderFor`: the same generated code plus the blend variants'
+`ALPHA = col.a * csky_opacity;`, which moves it into the transparent pass), installed as
+per-surface overrides so the shared material/mesh caches are never touched; opacity 1 removes the
+override and the surface rejoins the opaque pass.
+
+**Verified per SHOT-17 with measured mid-fade alpha, not before/after shots:** deterministic
+`--freecam --chapter=C2 --destroy=kkgate --screenshot` series at sim frames 90/140/170/200/240 —
+pieces opaque at f090, ghosted with the deck visible through the wood at f170/f200, gone by f240.
+Implied per-pixel alpha over the central piece (piece-over-background blend against the f600
+background and the f090 opaque wood reference): median 0.73 at f170 (t 2.83 s; the authored 3 s
+ramp from t≈2.0 predicts 0.72) falling to 0.63 at f200 — a descending mid-ramp, not a vanish. The
+kill log shows no `no alpha path` tally. `.\RunTests.ps1` fully green: 313 units, 12/12 suites,
+13/13 goldens hash-identical (the swap engages only during a live fade, so nothing else moved).
+The collider half stays closed under B11 (`intersect_surface` false ⇒ the pieces build no
+colliders). Owed: the user's at-the-controls re-test (`PT-16`).

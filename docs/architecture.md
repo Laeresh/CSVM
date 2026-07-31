@@ -449,6 +449,9 @@ unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; 
 sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs`; this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
 `EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).
+⚠ A partial opacity on an opaque-shader mesh swaps that instance's surfaces to a fade-twin
+  material (`EnsureOpacityPath`/`SceneBuilder.FadeShaderFor`) — per-instance surface overrides
+  only; the shared material/mesh caches must never be edited, and opacity 1 removes the override.
 `Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
 anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
 meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).

@@ -326,6 +326,26 @@ void fragment() {
                 mat.SetShaderParameter("albedo_tex", tex);
     }
 
+    /// <summary>The translucent twin of a generated opaque shader: the same code with the blend
+    /// variants' <c>ALPHA</c> line emitted at the end of <c>fragment()</c>, so a runtime fade
+    /// (an <c>OBJECT_OPACITY_FROM_TO</c> landing on an opaque-pass world piece) has an alpha
+    /// path to drive. Writing ALPHA moves the twin into the transparent pass, which is the
+    /// point — callers install it per-instance (surface override), never into the shared
+    /// caches. Null when the code cannot take the line: no instance-uniform preamble means
+    /// <c>csky_opacity</c> is undeclared (the bare sprite variants), and no <c>col</c> local
+    /// means there is no alpha to read.</summary>
+    internal static Shader? FadeShaderFor(Shader source)
+    {
+        string code = source.Code;
+        if (!code.Contains(InstanceUniformsInclude, StringComparison.Ordinal)
+            || !code.Contains("vec4 col = ", StringComparison.Ordinal))
+            return null;
+        int close = code.LastIndexOf('}');
+        if (close < 0)
+            return null;
+        return new Shader { Code = code[..close] + $"    ALPHA = col.a{OpacityTerm};\n" + code[close..] };
+    }
+
     /// <summary>The built <see cref="ArrayMesh"/> for one gamez model index, from this
     /// builder's shared cache and carrying this builder's materials (so a world builder hands
     /// back fullbright, fogged, correctly depth-biased world geometry).

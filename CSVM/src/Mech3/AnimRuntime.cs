@@ -401,6 +401,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly Dictionary<Node3D, bool> _opacityCollidable = new();
 
+    // The fade twins a genuine partial opacity installs per instance (see EnsureOpacityPath):
+    // source material -> its translucent twin (null = cannot be made translucent), the twin
+    // set for recognising an override this runtime installed, and the shader-level cache so
+    // materials sharing one generated shader share one twin shader.
+    private readonly Dictionary<ShaderMaterial, ShaderMaterial?> _fadeTwinCache = new();
+
+    private readonly HashSet<Material> _fadeTwins = new();
+
+    private readonly Dictionary<Shader, Shader?> _fadeShaderCache = new();
+
     // ON_STARTUP defs carrying EXECUTION_BY_RANGE wait here instead of starting at bootstrap:
     // each (def, anchor) starts once, the first time the player is inside its distance band.
     // Checked on a cell-crossing cadence (see TickDeferredByRange), never per frame.
@@ -1140,10 +1150,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     // OBJECT_OPACITY_STATE applies to the whole subtree, as a per-instance shader parameter
     // rather than a material edit: SceneBuilder's materials are cached and shared, so writing
-    // alpha into one would fade every other node that happens to use it. Meshes whose shader
-    // has no alpha path (opaque variants, where SceneBuilder deliberately omits the uniform)
-    // silently ignore the parameter, which is correct â€” every opaque target the data touches
-    // asks for 1.0 â€” but a genuine partial opacity landing on one is counted, not swallowed.
+    // alpha into one would fade every other node that happens to use it. A partial opacity
+    // landing on an opaque-variant mesh (no alpha path in the shader) swaps that instance's
+    // surfaces to a fade-capable twin material for the duration — see EnsureOpacityPath;
+    // anything still without a path after that is counted, not swallowed.
     internal void SetSubtreeOpacity(Node3D node, float alpha)
     {
         if (_opacity.TryGetValue(node, out float prev) && Mathf.IsEqualApprox(prev, alpha))
@@ -1291,23 +1301,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         SetCollidersEnabled(node, active);
     }
 
-    private static int ApplyOpacity(Node node, float alpha)
+    private static void SetCollidersEnabled(Node node, bool enabled)
     {
-        int n = 0;
-        if (node is GeometryInstance3D g)
-        {
-            g.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
-            if (HasOpacityPath(g))
-                n++;
-        }
+        if (node is CollisionShape3D shape)
+            shape.Disabled = !enabled;
         foreach (var child in node.GetChildren())
-            n += ApplyOpacity(child, alpha);
-        return n;
+            SetCollidersEnabled(child, enabled);
     }
 
-    // Whether this mesh's shader actually reads the opacity parameter. Setting an instance
-    // parameter a shader does not declare is silently a no-op in Godot, so without this check
-    // the "no alpha path" tally could never fire and would be a lie rather than a diagnostic.
+    // Whether this mesh's shader reads the opacity parameter — and if it does not, whether it
+    // can be made to. Setting an instance parameter a shader does not declare is silently a
+    // no-op in Godot, so without the check the "no alpha path" tally could never fire and
+    // would be a lie rather than a diagnostic.
+    //
+    // Opaque world variants deliberately have no alpha path (see SceneBuilder.OpacityTerm) —
+    // correct for the opacity-1.0 writes the bootstrap sends, but a genuine fade landing on
+    // one rendered nothing: the kkgate wreck pieces stayed fully opaque through their authored
+    // 3–6 s fades and vanished at deactivate. So a partial opacity installs a per-surface
+    // override on THIS instance wearing the fade twin of the shared material (materials and
+    // meshes are cached and shared across nodes, so the swap must never edit them), and
+    // opacity 1 removes it again, returning the surface to the opaque pass. A twin is a
+    // Duplicate(), so it detaches from any TextureCycler flipbook for the fade's duration.
     //
     // âš  Tests for the USE (`SceneBuilder.OpacityTerm`, i.e. " * csky_opacity"), not the uniform
     // NAME. Those used to be equivalent â€” the uniform was declared exactly in the
@@ -1316,23 +1330,66 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // with no alpha path at all. Testing the name would report true for every one of them.
     // Testing the include line would be worse still: the declaration is no longer textually in
     // `sh.Code`, so a name test would report FALSE everywhere and quietly invert this tally.
-    private static bool HasOpacityPath(GeometryInstance3D g)
+    private bool EnsureOpacityPath(GeometryInstance3D g, float alpha)
     {
         if (g is not MeshInstance3D mi || mi.Mesh is not { } mesh)
             return false;
+        bool fading = !Mathf.IsEqualApprox(alpha, 1f);
+        bool any = false;
         for (int i = 0; i < mesh.GetSurfaceCount(); i++)
-            if (mesh.SurfaceGetMaterial(i) is ShaderMaterial { Shader: { } sh }
-                && sh.Code.Contains(SceneBuilder.OpacityTerm, StringComparison.Ordinal))
-                return true;
-        return false;
+        {
+            if (mi.GetSurfaceOverrideMaterial(i) is { } installed && _fadeTwins.Contains(installed))
+            {
+                if (fading)
+                    any = true;
+                else
+                    mi.SetSurfaceOverrideMaterial(i, null);
+                continue;
+            }
+            if (mesh.SurfaceGetMaterial(i) is not ShaderMaterial { Shader: { } sh } sm)
+                continue;
+            if (sh.Code.Contains(SceneBuilder.OpacityTerm, StringComparison.Ordinal))
+            {
+                any = true;
+                continue;
+            }
+            if (fading && FadeTwinOf(sm, sh) is { } twin)
+            {
+                mi.SetSurfaceOverrideMaterial(i, twin);
+                any = true;
+            }
+        }
+        return any;
     }
 
-    private static void SetCollidersEnabled(Node node, bool enabled)
+    private ShaderMaterial? FadeTwinOf(ShaderMaterial source, Shader shader)
     {
-        if (node is CollisionShape3D shape)
-            shape.Disabled = !enabled;
+        if (_fadeTwinCache.TryGetValue(source, out var twin))
+            return twin;
+        if (!_fadeShaderCache.TryGetValue(shader, out var fadeShader))
+            _fadeShaderCache[shader] = fadeShader = SceneBuilder.FadeShaderFor(shader);
+        if (fadeShader != null)
+        {
+            twin = (ShaderMaterial)source.Duplicate();
+            twin.Shader = fadeShader;
+            _fadeTwins.Add(twin);
+        }
+        _fadeTwinCache[source] = twin;
+        return twin;
+    }
+
+    private int ApplyOpacity(Node node, float alpha)
+    {
+        int n = 0;
+        if (node is GeometryInstance3D g)
+        {
+            g.SetInstanceShaderParameter(SceneBuilder.OpacityParam, alpha);
+            if (EnsureOpacityPath(g, alpha))
+                n++;
+        }
         foreach (var child in node.GetChildren())
-            SetCollidersEnabled(child, enabled);
+            n += ApplyOpacity(child, alpha);
+        return n;
     }
 
     private void Bootstrap(Node3D worldRoot, AnimProgram program)

@@ -93,7 +93,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — destructible behaviour
 
 11. ☑ `BL-206` The C3 spiderweb never damages the plane (landed 2026-07-31 via the gamez `intersect_surface` flag; cockpit re-test = `PT-15`)
-12. ☐ `BL-207` kkgate debris fades out; ~~prototype colliders-off-at-fade-start~~ (collider half closed by B11: the `pt*` pieces are `intersect_surface` false and no longer build colliders — only the fade rendering remains)
+12. ☑ `BL-207` kkgate debris fades out; ~~prototype colliders-off-at-fade-start~~ (collider half closed by B11; fade rendering landed 2026-07-31 — cockpit re-test = `PT-16`)
 
 ### Wave C — weapon visuals round 3
 
@@ -273,7 +273,7 @@ trigger-only animated colliders), find the data signal. (c) The mid-fade clip wa
 PT-07's brief and the original confirms the pass-through — this is the "new backlog entry" that
 brief anticipated, not a revert of either landed mechanism.
 
-## B12 ☐ `BL-207` kkgate debris fades out; ~~colliders-off-at-fade-start prototype~~
+## B12 ☑ `BL-207` kkgate debris fades out; ~~colliders-off-at-fade-start prototype~~
 
 **Scope cut by B11's landing (2026-07-31):** the pieces' `pt*` nodes are gamez `intersect_surface`
 false, so they build no colliders at all now that the flag is honoured — the prototype's A/B would

@@ -51,7 +51,7 @@ State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.
 
 ## 4. Print the ready-to-paste next-task prompt
 
-Emit **one triple-backtick code block and nothing else inside it** — a self-contained prompt for the next item that stands on its own after a `/clear` or `/compact`. Assume the reader has CLAUDE.md loaded but zero memory of this session, so it must name the item and point at where the detail lives. Use this shape (fill in the `<...>`):
+Emit **one triple-backtick code block and nothing else inside it** — a self-contained prompt for the next item that stands on its own after a `/clear` or `/compact`. Assume the reader has CLAUDE.md loaded but zero memory of this session, so it must name the item and point at where the detail lives. Emit the block even if copied after. Use this shape (fill in the `<...>`):
 
 ~~~
 Implement item <ID> — <one-line title> — from <active plan path> (the M3 weapons plan).

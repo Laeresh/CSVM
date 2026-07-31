@@ -166,6 +166,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   terrain, water and buildings are unchanged. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
   *Blocks:* closing PLAN-m3-polish-3 B11.
 
+- `PT-16` **kkgate debris fade re-test (B12 / `BL-207` landed 2026-07-31).** Kill the propane tank
+  and watch the gate pieces through their ride. *Look for:* the 12 wreck pieces visibly turn
+  transparent over their authored 3–6 s fades while still tumbling — mid-fade you should see the
+  deck/water through the wood, not opaque-then-gone — and the gate is flyable right behind the
+  blast (the pieces build no colliders since B11). The fix: the opaque world shader had no runtime
+  alpha path, so the authored fade was a silent no-op; a fading piece now swaps to a translucent
+  twin material for the fade's duration. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
+  *Blocks:* closing PLAN-m3-polish-3 B12.
+
 ---
 
 ## Everything else
@@ -175,5 +184,5 @@ Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its o
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
 their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`/`BL-204`/
-`BL-206` landed and came back as `PT-13`/`PT-14`/`PT-15`). Do not
+`BL-206`/`BL-207` landed and came back as `PT-13`/`PT-14`/`PT-15`/`PT-16`). Do not
 re-add them here; the entry brings its own test when the fix lands.

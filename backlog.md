@@ -189,27 +189,6 @@ its symptom and traps.
   water a visible splash — all readable at normal flight speed without frame-stepping.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
 
-**Destructible behaviour (PT-06/07/08).**
-
-- `BL-207` **`kkgate` debris never fades out, and dodging it is nearly impossible.** User at the
-  controls (2026-07-31): the tank kill and break-away/tumble look good, but the pieces stay fully
-  opaque to the end (no fade), and flying the gate right behind the blast means hitting invisible-
-  intent wreckage. The ~3 s ride IS authored (`genx12` motion + fade + deactivate over the pieces'
-  RUN_TIME) — the owed diagnosis is why the authored *fade* doesn't render: the user's lead is that
-  the generated world shader may have no runtime turn-transparent path for these opaque-pass piece
-  materials (the spiderweb's landed fade may run through a different material path). **The
-  dodging/collider half closed with `BL-206` (2026-07-31):** the gate's 12 `pt*` pieces carry gamez
-  `intersect_surface` false, so they build no colliders at all now that the flag is honoured — the
-  original never made debris solid, superseding the requested fade-start-vs-fade-end collider
-  prototype (the pieces' A/B would compare two builds that both no longer collide). What remains
-  here is the fade rendering.
-  ⚠ Traps: D31's scripted verification claimed "pieces fly, fade and deactivate" — the fade half of
-  that claim is refuted at the controls; a piece that *vanishes at deactivate* passes a
-  frame-sparse capture as "faded" (see verification.md). Also check the def's event ordering
-  (fly/fade simultaneous or sequential?) before assuming the shader.
-  *Playtest after fix:* pieces visibly turn transparent over the ride and the gate is flyable
-  shortly after the blast. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
-
 **Weapon visuals round 3 (PT-10/11/12).**
 
 - `BL-208` **The muzzle flash is an unreadable red blob: the texture must anchor its LEFT edge at
