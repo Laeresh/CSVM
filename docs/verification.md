@@ -446,7 +446,8 @@ cite these IDs.
   Windows GUI-subsystem binary started without std handles reattaches to the parent CONSOLE
   and writes past your redirection.** Godot calls `AttachConsole(ATTACH_PARENT_PROCESS)`;
   give the child real handles (`ProcessStartInfo.RedirectStandardOutput`) and check the
-  bytes arrive — silence you can read is the only silence you have measured.
+  bytes arrive — silence you can read is the only silence you have measured. For ad-hoc
+  scripted launches the handles come free: go through `RunProbe.ps1`, never `& $GodotExe`.
 - **SHELL-11** — **A PowerShell property that throws yields `$null` silently, so a scoring
   expression reads the failure as a value.** A disposed `Start-Process -PassThru
   -RedirectStandard*` object's `ExitCode` read as empty and scored 9/9 passing suites as

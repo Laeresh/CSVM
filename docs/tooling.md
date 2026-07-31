@@ -259,3 +259,14 @@ helper, which waits for the process and redirects both streams to `<its --log-fi
 Stages still read their results from `--log-file` and the JSON reports rather than from console
 text; the suite table you see live is replayed from the log. `--no-focus` remains as the manual
 lever that marks any ad-hoc run as scripted.
+
+**`RunProbe.ps1` — the same launch for ad-hoc runs.** `Invoke-Godot` is private to `RunTests.ps1`,
+so every hand-launched probe (`--screenshot=`, `--dump-*`, a single `--run-tests=` suite) used to
+inherit both problems: the ~1 s window flash *and* the console scribble — a bare `& $GodotExe …`
+from any shell reattaches to the calling terminal and prints the whole world-build chatter over it
+(SHELL-10), which is exactly what an agent-driven session sprays across the user's screen. So:
+**never invoke the Godot binary directly for a scripted run — go through `.\RunProbe.ps1 <user
+args>`.** It forwards every argument verbatim (no build step — build first), runs on its own hidden
+desktop (`csvm-probe`, falling back to a *visible but still redirected* run if the OS refuses one),
+parks the streams beside the run's `--log-file` when one is passed (else
+`.scratch/logs/probe-<stamp>.out/.err`), prints where they went, and exits with Godot's exit code.

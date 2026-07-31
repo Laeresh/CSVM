@@ -8925,3 +8925,22 @@ byte-identical — no gun-fire pose is a golden). `--viewer --weapon-lab=wep_00 
 irregular, lobed burst silhouette (not a plain single quad) at the firing wing's gun barrel, two
 different rotations across shots. Cockpit A/B → `PT-11`; also re-confirm A10 muzzle placement now
 the flash shape changed.
+
+## 2026-07-31 — `RunProbe.ps1`: ad-hoc scripted launches stop scribbling on the terminal
+
+The user reported Godot's world-build chatter printing over their terminal again while agents
+worked. Mechanism already on record as SHELL-10: the 2026-07-25 fix (`Invoke-Godot`, redirected
+std handles + hidden desktop) is private to `RunTests.ps1`, so every hand-launched probe —
+`--screenshot=` captures, `--dump-*` reports, one-off suites, exactly what agent verification runs
+all day — still started the GUI binary bare, and it reattaches to the calling console and writes
+past every pipe. New `RunProbe.ps1` is that same launch as a standalone script: forwards user args
+verbatim (no build step), runs on its own hidden desktop (`csvm-probe`), degrades to a visible but
+still-redirected run if the OS refuses one, parks streams beside the run's `--log-file` (else
+`.scratch/logs/probe-<stamp>.out/.err`), exits with Godot's code. Rule of use: never `& $GodotExe`
+directly for a scripted run. Docs: CLAUDE.md repo-layout line, `tooling.md` section, SHELL-10
+pointer in `verification.md`.
+
+**Verified.** `.\RunProbe.ps1 --stage=empty --plane=player_bhawk --screenshot=….png`: exit 0,
+466 KB PNG written, summary line names desktop `csvm-probe`, streams landed in
+`.scratch/logs/probe-*.out/.err`, nothing printed to the calling terminal beyond the script's own
+three lines.
