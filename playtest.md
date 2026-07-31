@@ -157,6 +157,15 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`. *Blocks:* closing
   PLAN-m3-polish-3 A3.
 
+- `PT-15` **C3 spiderweb fly-through re-test (B11 / `BL-206` landed 2026-07-31).** Fly full speed
+  dead-centre into the tikicave web (around x −4470, y 130, z −4839; approach from the west/−X
+  side). *Look for:* the web starts its 0.7 s fade on approach and the plane passes through it
+  unharmed — no crash, no damage, matching `OriginalScreenshots/Videos/C3 Spiderweb.mp4`. The fix
+  honours the gamez `intersect_surface` flag install-wide, so also worth a feel pass: wreck debris
+  (e.g. the kkgate pieces), spinning props and effect geometry no longer collide anywhere — but
+  terrain, water and buildings are unchanged. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
+  *Blocks:* closing PLAN-m3-polish-3 B11.
+
 ---
 
 ## Everything else
@@ -165,6 +174,6 @@ Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its o
 `*Playtest after fix:*` line — the weapons re-tests (`BL-016`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
-their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`'s landed
-and came back as `PT-13`). Do not
+their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`/`BL-204`/
+`BL-206` landed and came back as `PT-13`/`PT-14`/`PT-15`). Do not
 re-add them here; the entry brings its own test when the fix lands.

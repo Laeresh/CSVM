@@ -9109,3 +9109,35 @@ the gate. `RunTests.ps1` fully green (312 units, 12/12 suites, 13/13 goldens has
 overlay is opt-in and untouched by a default capture). No owed playtest: the Verify step (toggle C,
 read the legend, colours agree) is fully checkable from a screenshot, unlike A1/A3's perceptual
 bugs.
+
+## 2026-07-31 — Wave B B11 `BL-206`: the C3 spiderweb never damages the plane (gamez `intersect_surface` honoured)
+
+PT-07: a full-speed dead-centre run into the tikicave web crashed the plane; in the original the
+web only triggers its 0.7 s fade on approach and the plane flies through unharmed. The plan's trap
+forbade a name special-case and asked for the data signal — found: **the gamez node flag
+`flags.intersect_surface` is the original's per-node collision-participation flag**
+(`analysis/intersect-surface/`, new decode in `docs/formats/gamez.md`). Surveyed install-wide over
+mesh-bearing nodes: all 419 distinct false-flagged names are non-solid (spinning props, wreck
+debris `part*`/`pt*`/`piece*`/`zdtop*`, fire/flake/ripple/splash/shadow effects, light glows,
+ropes, the `spiderweb`); terrain, water, buildings and every destructible healthy variant are
+true; no false node has a true-flagged mesh descendant, so the exemption inherits subtree-wide
+safely. `GameZ.cs` now reads the flag (`IntersectSurface`, default true when flags are absent —
+legacy extractions unchanged), and `WorldBuilder.NoCollisionNode` exempts false-flagged subtrees
+beside its sky/billboard rules. The `spiderweb_gone` def itself is untouched — its `ByRange`
+0–2500 m² gate and fade were already correct (`BL-183`); the def is pure range, no contact
+trigger, so the web never needed a collider to detect the plane. Side effect, recorded on
+`BL-207`: the kkgate wreck's 12 `pt*` pieces are false-flagged too, so debris no longer collides —
+the original never made debris solid, superseding that item's fade-start-vs-fade-end collider
+prototype.
+
+Verified with a flip: the scripted run (`--pos=-4750,133,-4839 --direction=1,0,0 --hold=0,0,0,1`,
+C3, bhawk) on the flag-ignored build logs `CRASH into spiderweb/col` at 122 m/s; on the landed
+build the same run logs the fade trigger (`spiderweb_gone at 45 m`), a mid-fade frame shows the
+web visibly thinning dead ahead, and the plane passes through alive (it flies 130+ m beyond the
+web before meeting the cave's genuinely solid inner wall `g29144` — terrain crashes still work).
+8-chapter `--freecam --collision` sweep: zero errors, gamez-node/mesh-instance counts unchanged,
+collider counts down as the false-flagged nodes stop building (C1 2477→2020, C1B 1439→1051,
+C1C 1733→1324, C2 1945→1533, C2B 1335→957, C3 2417→1775, C4 2638→1855, C5 4583→3569).
+`RunTests.ps1` fully green (313 units incl. a new `IntersectSurface` reader fact, 12/12 suites —
+`damage-hd`'s destroy/reset/rekill census intact — 13/13 goldens hash-identical). Owed: the
+user's at-the-controls re-test (`PT-15`).

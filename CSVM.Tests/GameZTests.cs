@@ -62,6 +62,16 @@ public class GameZTests
         Assert.True(Approx(markers.Basis, Basis.Identity));
     }
 
+    [Fact]
+    public void IntersectSurfaceReadsFalseAndDefaultsTrueWhenFlagsAreAbsent()
+    {
+        // The original's per-node collision-participation flag; nodes without a flags
+        // block (legacy extractions) must stay collidable.
+        var gamez = Load();
+        Assert.False(gamez.FindByName("target")!.IntersectSurface);
+        Assert.True(gamez.FindByName("markers")!.IntersectSurface);
+    }
+
     private static GameZ Load() => GameZ.Load(TestData.Fixture("gamez-plane"));
 
     private static bool Approx(Basis a, Basis b) =>

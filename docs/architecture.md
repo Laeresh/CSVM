@@ -193,6 +193,8 @@ transform arithmetic, `MarkerRig`, `AnimDefs`, …) plus golden invariants over 
 Loads a mech3ax GameZ extraction (zip or unpacked dir): nodes/models/materials/textures JSON into
 plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes (field mapping:
 docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
+Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
+absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
 ⚠ GameZNode.Index is the flat list position, NEVER the unified JSON `index` (1-based, duplicated);
   child_indices are flat positions too — getting this wrong rebuilds the graph without erroring.
 ⚠ The unified transform `scale` is deliberately ignored (measured unit on every transformed node).
@@ -294,6 +296,10 @@ re-skins the flares; WingLightBlinker flashes them.
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
 (`BuildHorizon` makes the camera-anchored skydome), `fvol*`, `dzpaths`. Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
+`NoCollisionNode` exempts three rendered-but-not-solid classes, subtree-inherited: sky/cloud
+textures, billboards, and any node with gamez `intersect_surface` false — the original's own
+collision flag, false on props/debris/effects/glows and the C3 spiderweb (docs/formats/gamez.md);
+honouring it is what lets the plane fly through the web and wreck debris as the original does.
 ⚠ `HideUnplacedEntities` is HALF the rule — motion targets still at origin (OBJECT_MOTION_FROM_TO)
   need `RestorePlacedEntities`, the other half; a one-shot sweep breaks them.
 ⚠ `BuildNode` (the `--node=` stage) is deliberately unlike `Build` in three ways, each of which

@@ -92,8 +92,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — destructible behaviour
 
-11. ☐ `BL-206` The C3 spiderweb never damages the plane; fade triggers on contact/approach
-12. ☐ `BL-207` kkgate debris fades out; prototype colliders-off-at-fade-start for a feel A/B
+11. ☑ `BL-206` The C3 spiderweb never damages the plane (landed 2026-07-31 via the gamez `intersect_surface` flag; cockpit re-test = `PT-15`)
+12. ☐ `BL-207` kkgate debris fades out; ~~prototype colliders-off-at-fade-start~~ (collider half closed by B11: the `pt*` pieces are `intersect_surface` false and no longer build colliders — only the fade rendering remains)
 
 ### Wave C — weapon visuals round 3
 
@@ -237,7 +237,7 @@ legend into viewer mode.
 
 # Wave B — destructible behaviour
 
-## B11 ☐ `BL-206` The spiderweb never damages the plane
+## B11 ☑ `BL-206` The spiderweb never damages the plane
 
 **Goal.** A full-speed dead-centre run into the C3 tikicave web never crashes the plane: the web
 detects the plane (contact or close approach), starts its authored 0.7 s fade, and the plane flies
@@ -273,7 +273,11 @@ trigger-only animated colliders), find the data signal. (c) The mid-fade clip wa
 PT-07's brief and the original confirms the pass-through — this is the "new backlog entry" that
 brief anticipated, not a revert of either landed mechanism.
 
-## B12 ☐ `BL-207` kkgate debris fades out; colliders-off-at-fade-start prototype
+## B12 ☐ `BL-207` kkgate debris fades out; ~~colliders-off-at-fade-start prototype~~
+
+**Scope cut by B11's landing (2026-07-31):** the pieces' `pt*` nodes are gamez `intersect_surface`
+false, so they build no colliders at all now that the flag is honoured — the prototype's A/B would
+compare two builds that both no longer collide. Only the fade-rendering half below remains.
 
 **Goal.** After the propane-tank kill, the gate's 12 pieces visibly turn transparent over their
 authored ride and the gate is flyable shortly after the blast; the user gets a feel A/B between

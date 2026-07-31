@@ -191,29 +191,18 @@ its symptom and traps.
 
 **Destructible behaviour (PT-06/07/08).**
 
-- `BL-206` **The C3 spiderweb kills the plane; in the original it never damages the plane at all.**
-  User A/B (2026-07-31): flying at full speed into the tikicave crashes against the web; in the
-  original the web fades *after the plane makes contact* and no damage ever occurs — the web's
-  collider appears to exist only to detect the plane and start the fade, never to harm. The
-  authored numbers are confirmed: range 2500 m² = 50 m in `spiderweb_gone`, 0.7 s fade. The
-  `BL-183` range gate is correct and stays; what's wrong is that the web remains crash-solid
-  through approach and mid-fade.
-  ⚠ Traps: do not revert the `EXECUTION_BY_RANGE` gate or the fade; the fix is how the web's
-  collider participates in the *plane's* crash query (trigger-only vs solid), not when the def
-  fires. Rockets/guns hitting the web is a separate question — check what the original does before
-  changing projectile collision.
-  *Playtest after fix:* a full-speed dead-centre run into the web never crashes; the web fades on
-  contact/approach and the plane flies through. `./RunGame.ps1 --chapter=C3 --plane=player_bhawk`.
-
 - `BL-207` **`kkgate` debris never fades out, and dodging it is nearly impossible.** User at the
   controls (2026-07-31): the tank kill and break-away/tumble look good, but the pieces stay fully
   opaque to the end (no fade), and flying the gate right behind the blast means hitting invisible-
   intent wreckage. The ~3 s ride IS authored (`genx12` motion + fade + deactivate over the pieces'
   RUN_TIME) — the owed diagnosis is why the authored *fade* doesn't render: the user's lead is that
   the generated world shader may have no runtime turn-transparent path for these opaque-pass piece
-  materials (the spiderweb's landed fade may run through a different material path). Second half,
-  explicitly requested: **prototype dropping the pieces' colliders at fade *start* instead of fade
-  end** and hand it to the user for a feel A/B before adopting.
+  materials (the spiderweb's landed fade may run through a different material path). **The
+  dodging/collider half closed with `BL-206` (2026-07-31):** the gate's 12 `pt*` pieces carry gamez
+  `intersect_surface` false, so they build no colliders at all now that the flag is honoured — the
+  original never made debris solid, superseding the requested fade-start-vs-fade-end collider
+  prototype (the pieces' A/B would compare two builds that both no longer collide). What remains
+  here is the fade rendering.
   ⚠ Traps: D31's scripted verification claimed "pieces fly, fade and deactivate" — the fade half of
   that claim is refuted at the controls; a piece that *vanishes at deactivate* passes a
   frame-sparse capture as "faded" (see verification.md). Also check the def's event ordering

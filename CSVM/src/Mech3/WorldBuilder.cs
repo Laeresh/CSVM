@@ -576,8 +576,18 @@ public sealed class WorldBuilder
     // Rendered but not solid: the plane should fly through cloud/sky geometry and through
     // every billboard sprite, not crash into them. Terrain, water, buildings, zeppelins and
     // trains stay solid.
+    //
+    // The gamez data has its own say too: flags.intersect_surface is the original's per-node
+    // collision-participation flag, false on exactly the geometry that should never stop a plane
+    // or a round — spinning props (spin/counterspin/propstill), wreck/debris pieces (part*/pt*/
+    // piece*/zdtop*), fire/flake/ripple/splash effects, light glows, ropes, shadows, and the C3
+    // spiderweb (whose approach-triggered fade is pure EXECUTION_BY_RANGE and needs no contact).
+    // Surveyed install-wide: all 419 distinct false-flagged names are non-solid things, no
+    // terrain/water/building is ever false, and no false node has a collidable-flagged mesh
+    // descendant — so inheriting the exemption down the subtree (like the other two rules) is
+    // safe.
     private bool NoCollisionNode(GameZNode n) =>
-        MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
+        !n.IntersectSurface || MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
 
     // A billboard is a flat card the engine turns toward the camera — it has no solid side to
     // hit, and its collider is a phantom wall wherever the card happens to be facing. Asking

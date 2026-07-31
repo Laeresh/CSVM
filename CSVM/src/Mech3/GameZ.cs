@@ -211,6 +211,11 @@ public sealed class GameZ
                     || header.TryGetProperty("mesh_index", out mi)) ? mi.GetInt32() : -1,
                 Index = index++,
             };
+            // Both shapes carry flags on the header level (unified: the flat node; legacy: the
+            // variant body, which IS the header there). Absent → stay collidable.
+            if (header.TryGetProperty("flags", out var fl) && fl.ValueKind == JsonValueKind.Object
+                && fl.TryGetProperty("intersect_surface", out var isf))
+                node.IntersectSurface = isf.ValueKind == JsonValueKind.True;
             // Both spellings are flat list positions, NOT the node's own "index" field
             // (which the unified shape also exposes, 1-based and with duplicates — the
             // legacy "node_index" by another name). Verified on C1: reading them as flat
@@ -466,6 +471,11 @@ public sealed class GameZNode
     public string Kind = "";   // "Object3d", "Lod", "World", "Display", "Window", "Camera", "Light"
     public string Name = "";
     public int MeshIndex = -1;
+    // The original's per-node collision-participation flag (flags.intersect_surface): false on
+    // geometry the engine never intersection-tests — spinning props, wreck/debris pieces, fire/
+    // flake/ripple/splash effects, light glows, ropes, shadows, the C3 spiderweb. Absent flags
+    // (legacy extraction) default to collidable.
+    public bool IntersectSurface = true;
     // Flat position in nodes.json. The file is a depth-first serialization of the tree,
     // so this is the original engine's draw order — the cross-node tie-break for
     // coplanar surfaces of equal polygon priority (later node draws on top).

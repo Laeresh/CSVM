@@ -271,8 +271,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private const string DamageSequenceName = "DAMAGE_SEQUENCE";
 
     // A subtree faded to ~invisible must also drop its colliders: the opacity path only writes a
-    // shader parameter, so without this a node faded to alpha 0 (C3's startup-faded `spiderweb`)
-    // stays solid and the player hits an invisible wall. Mirror the deactivation path's
+    // shader parameter, so without this a node faded to alpha 0 stays solid and the player hits
+    // an invisible wall. (Most authored fade-to-0 targets — the spiderweb, debris pieces — are
+    // intersect_surface=false and never build colliders at all; this covers any collidable
+    // subtree a fade reaches.) Mirror the deactivation path's
     // "invisible â‡’ non-collidable" rule and restore colliders when it fades back above the
     // threshold (so a subtree still fading IN stays solid). Edge-triggered on the last collidable
     // state per subtree root â€” a fade re-writes opacity every tick, and re-walking the subtree to
