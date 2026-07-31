@@ -114,10 +114,15 @@ cite these IDs.
 - **DIAG-16** — **To verify one effect, isolate it and remove whatever clears it early.**
   The 1.5 s auto-respawn kept clearing crash smoke that develops at ~2–3 s.
 - **DIAG-17** — **"Never reached" and "reached but invisible" look identical in play — pick the
-  instrument that holds the state, not the one that has to arrive at it.** The plane's low-HP
-  smoke never appeared in flight, which fits both a threshold no graze survives long enough to
-  cross and an emitter parented so it draws nothing; only the damage lab, holding HP inside the
-  band, separates them.
+  instrument that holds the state, not the one that has to arrive at it.** BL-174 argued the
+  plane's low-HP smoke might never appear in flight, fitting both a threshold no graze survives
+  long enough to cross and an emitter parented so it draws nothing — see DIAG-18 for how that
+  premise itself checked out.
+- **DIAG-18** — **A mechanism argued from code alone is a hypothesis, not a finding — fly it
+  before trusting it.** BL-174's two hypotheses (unreachable HP band; puffer parented under the
+  mover, unrendered) were both reasoned from source, never played; a scripted
+  `--pos --direction --hold` dive rendered the trail plainly before a later crash, even on the
+  worst-case airframe (autogyro, all four parts 15 HP) — both hypotheses were false.
 
 ## SHOT — screenshots & pixel evidence
 

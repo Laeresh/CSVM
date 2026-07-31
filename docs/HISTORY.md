@@ -8801,3 +8801,25 @@ damage-lab kill capture 4 s post-kill shows the doorway fully open (`debris laun
 HEALTH-0 defs are not involved. Owed cockpit read: `PT-08`. The genx12 smoke *puffer* still
 does not render in flight (WORLD-12 / A2 `BL-021`'s class), and piece trajectory magnitudes
 remain the `BL-022` TUNE.
+
+## 2026-07-31 — M3 Wave A A3 BL-174: disproven — the low-HP trail already renders in flight
+
+Both hypotheses were reasoned from source, never played. The first discrimination attempt was a
+false lead: a forced `DamageVisuals.OnPartDamage` call landed *before*
+`FlightController.Setup()` → `Respawn()` → `DamageVisuals.Reset()`, which silently wiped the
+forced smoking state — every "it never renders" screenshot that followed was this test artifact,
+not the shipped path. Once the probe fired after `Setup()`, two real tests landed the actual
+answer: (1) re-parenting the smoke/fire puffers from the per-player `FlightController` to the
+world root — hypothesis B's fix — changed **zero** rendered pixels (identical md5 both ways),
+so B is false; (2) a real scripted dive (`--pos --direction --hold`, no forced state) produced a
+genuine sub-crash graze, and the trail rendered plainly before a later fatal impact — reproduced
+on `player_bhawk` (20 HP parts) and on `player_autogyro`, hypothesis A's named worst case (all
+four parts 15 HP): `--plane=player_autogyro --stage=empty "--pos=0,150,0"
+"--direction=0,-0.6,-1" "--hold=0,0,0,0.3" --view=8 --frames=250` shows a visible trail streaming
+from the nose at sim_time=4.167 s, still flying; reproduced again over `--chapter=C1`. So A is
+false too — the pipeline already renders correctly in flight; the backlog claim was never
+actually played. `CAP-15`'s look-half (comparison against original footage) stays owed — this
+only confirms the remake renders *something*, not that it matches the reference. No code changed;
+`.\RunTests.ps1` unaffected (build/tests untouched). `BL-174` deleted from `backlog.md`;
+`verification.md` DIAG-17 corrected (it was built on the same unverified premise) and DIAG-18
+added: fly a code-only mechanism before trusting it.

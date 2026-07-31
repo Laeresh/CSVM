@@ -80,7 +80,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-183` Parse `EXECUTION_BY_RANGE` and gate `OnStartup` defs on player proximity (C3 spiderweb)
 2. ☑ `BL-021` Damage-stage smoke/fire renders in flight, not only headless
-3. ☐ `BL-174` Player low-HP smoke/fire trail: settle reachability-vs-parenting, then fix
+3. ❌ `BL-174` Player low-HP smoke/fire trail — disproven 2026-07-31: both reachability and
+   parenting were false; a scripted dive shows it already renders, even on the worst-case airframe
 
 ### Wave B — impacts & surfaces
 
@@ -104,8 +105,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ## Dependency and parallelism notes
 
-A2 and A3 both concern puffer routing/parenting around the world-effects runtime — land them
-sequentially (A2 first; its findings about the flight `EffectSink` path feed A3's hypothesis B).
+A2 and A3 both concerned puffer routing/parenting around the world-effects runtime; A3 landed as a
+disproof touching no code, so it does not gate anything downstream.
 A1 is independent of both. **B14 lands before B12's playtest verification** — the collider
 overlay is B12's acceptance instrument, and it must draw true before anyone reads it (user
 direction, 2026-07-30). File contention: B11, B13, C21, C22, C24 and C25 all touch
@@ -115,9 +116,8 @@ Wave C** — it makes the lab a faithful bench for judging C22/C24/C25. C24 and 
 the user's cockpit A/B — expect them to sit ◐ across sessions. B12 is `SceneBuilder.cs`-side and
 independent; B14 is `ColliderOverlay`-only. D31 and D32 are both destruction-path investigations on
 C2 and may share a root cause — run D31 before D32 and cross-check, but per `BL-023`'s trap they
-are *presumed separate*; do not close one as the other. A3 (Puffer parenting) and D32 (Puffer
-`GlobalPosition` suspect) touch the same module — sequential, and whichever lands second re-runs
-the other's verification.
+are *presumed separate*; do not close one as the other. A3 touched no code in the end, so D32
+(Puffer `GlobalPosition` suspect) is unaffected and can run standalone.
 
 ---
 
@@ -183,7 +183,23 @@ as success).
 (b) Do not conflate with `BL-046`'s 28-name closure limit; if that is the real blocker, report it
 and re-scope rather than widening the set ad hoc.
 
-## A3 ☐ `BL-174` Player low-HP smoke/fire trail renders in flight
+## A3 ❌ `BL-174` Player low-HP smoke/fire trail renders in flight
+
+**Outcome (2026-07-31): disproven — no code.** Both hypotheses were reasoned from source, never
+played. Lab discrimination was inconclusive by design (`OnPartDamage` fired before
+`FlightController.Setup()` → `Respawn()` → `DamageVisuals.Reset()`, which silently wiped the
+forced state — a test artifact, not a finding). Once the probe fired after `Setup()`, re-parenting
+the puffers from the per-player controller to the world root changed **zero** rendered pixels
+(pixel-identical screenshots both ways), disproving B outright. A real scripted dive
+(`--pos --direction --hold`, no forced state) then produced a genuine sub-crash graze that dropped
+a part into the ≤10 % band mid-flight, and the smoke/fire trail rendered plainly — confirmed on
+`player_bhawk` (20 HP parts) and on `player_autogyro`, the worst case A named (all four parts
+15 HP): `--plane=player_autogyro --stage=empty "--pos=0,150,0" "--direction=0,-0.6,-1"
+"--hold=0,0,0,0.3" --view=8 --frames=250` shows a visible trail streaming from the nose at
+sim_time=4.167s, still flying. Reproduced again over a real chapter (`--chapter=C1`). Both
+hypotheses false; the pipeline already works. `CAP-15`'s look-half (original-footage comparison)
+stays owed — this only confirms the remake renders something, not that it matches the reference.
+Corrected the premise verification.md DIAG-17 was built on; added DIAG-18.
 
 **Goal.** A plane held in the low-HP band shows its `player_smoketrail` smoke/fire pair in real
 flight before it is destroyed.

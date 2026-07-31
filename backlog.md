@@ -946,42 +946,6 @@ unscheduled.
   `GaugeCluster.cs` is at its 3-⚠ cap in `docs/architecture.md` — this entry records the gap, it does
   not schedule a `GaugeCluster.cs` doc change.
 
-- `BL-174` **The player aircraft's own low-HP smoke/fire trail never renders in flight — two competing
-  code-level hypotheses, neither yet run at the controls.** Both were reached by reading code, not by
-  playing; they are not variants of one claim and the fix differs.
-  **Hypothesis A — reachability.** `DamageVisuals.OnPartDamage` arms `player_smoketrail` at any part's
-  HP fraction ≤ 0.10 (`docs/formats/vehicle.md:159-168`), but every player `destroyable_parts` zone is
-  `critical` (plane destroyed at 0 HP) with `MaxHp` 15–40 (`docs/formats/vehicle.md:84-91`), and a
-  single graze near `CrashSpeed` (25 m/s) already deals `GrazeMaxDamage` 18 HP — enough to zero the
-  smallest (15 HP) zone outright in one hit (`FlightController.cs:253,259,1455-1456`), instantly
-  ending the flight via the critical-part check (`:1461-1466`) before `Update()` runs again (`_crashed`
-  gates it off, `:794,798`). So the plane tends to go from healthy straight to destroyed without ever
-  lingering in the 10%-HP band the smoke threshold needs.
-  **Hypothesis B — parenting.** `FlightRigAssembler.cs:228-229` parents the smoke/fire `Puffer` nodes
-  under the moving per-player `controller`, **not** the world root — the exact anti-pattern
-  `WorldEffectsFactory.cs:228-233` documents as already diagnosed and fixed for the crash rig
-  ("`PufferParent` is the WORLD root, NOT the crash root: a `PUFFER_STATE` emitter goes TopLevel
-  (world-space) the moment it emits, and parenting it under the per-player controller subtree left it
-  drawn-but-unrendered — every particle correctly positioned, `IsVisibleInTree` true, yet nothing on
-  screen"). The flight damage-visuals path was never given that fix.
-  **Discriminating observation.** The evidence offered for A — that the pipeline "works in the
-  `--viewer` damage lab" — is equally *consistent with* B, because the lab builds its puffers at a
-  different site (`GameSession.cs:915-916`). "Works in lab, fails in flight" tracks the parent
-  difference, not the HP curve.
-  *Fix shape:* settle which one first. For A, either raise `player_smoketrail`'s threshold or lower
-  `GrazeMaxDamage` relative to the smallest zone's `MaxHp`; for B, re-parent the `Puffer`s to the world
-  root the way the crash rig already is.
-  *Playtest after fix:* fly a deliberate shallow multi-hit scrape (not a hard crash) and confirm the
-  nose smoke/fire pair renders before the plane is destroyed; also confirms the torn-panel flips render
-  in real flight, not just in the lab (`CAP-15`).
-  ⚠ **Traps.** (a) **The instrument that separates A from B is a damage-lab run holding HP in the
-  10–20% band, not a flight test.** A flight test cannot distinguish "never reached" from "reached but
-  invisible" — both look like nothing on screen. (b) It is **not** `BL-046`/`BL-061` (world
-  destructible effects dying outside the fixed `EffectAnimNames` closure) — both agents
-  checked independently and `DamageVisuals` never touches that registry, so a fix to the world-effects
-  runtime will not make this render. (c) Do not conclude the `Puffer` code itself is broken — it is
-  exercised in the `--viewer` damage lab via hand-set HP sliders; whatever the defect is, it is
-  specific to the flight path.
 
 ### Combat-fidelity gaps found by a design cross-check (2026-07-25)
 
@@ -1614,9 +1578,10 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight (the thresholds need states normal play actually reaches — see `BL-174` for why the
-  smoke/fire half never renders today, which is a mechanism question, not a magnitude one). Tree
-  softness is retired dead code (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
+  real flight (both the panel-flip and the smoke/fire trail have been confirmed to render in real
+  flight, `docs/HISTORY.md` 2026-07-31 — this item is a magnitude/feel judgement, not a mechanism
+  question). Tree softness is retired dead code (`docs/HISTORY.md` 2026-07-23), not a TUNE — do
+  not re-add it here.
 - `BL-122` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight
