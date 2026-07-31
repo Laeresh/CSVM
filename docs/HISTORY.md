@@ -8743,3 +8743,28 @@ destructible healthy→wreck swap (`--destroy=apbuild03`, wreck wireframe hugs t
 mirrored relief), plane boxes (`--stage=empty --view=6`, unchanged, still hug). `.\RunTests.ps1`:
 build, 312 units, 12/12 suites, 13 goldens hash-identical, 107.8 s. `BL-198` closed and removed
 from `backlog.md`.
+
+## 2026-07-31 — B13 `BL-018`: dirt impacts throw a tumbling-debris burst, not one spark
+
+`Projectile.Impact`'s stand-in spark (`ImpactSize` 3 m, one orange billboard-ish quad facing the
+struck surface normal) fired for every surface that resolves no named effect model — water,
+buildings, and dirt (`SurfaceClass.Default`) alike. The reference (`Dirt Splash.png`) shows small,
+randomly-rotated tumbling debris on dirt, not a single fat flash. Added `SpawnDirtDebris`, called
+only when `surface == SurfaceClass.Default`, replacing that one sprite with `DirtDebrisSprites` (5)
+small chips launched outward from the surface normal (`ApplySpread`) and arcing under
+`WorldGravity`; `Sprite` gained `Vel`/`SpinAxis`/`SpinRate` fields (zero and inert for every other
+sprite kind — muzzle flash, generic spark, explosion burst — so only debris moves/tumbles) and
+`AgeSprites` now integrates them each frame. Water and buildings still fall through to the
+unmodified single-spark branch.
+
+**Verified.** Build clean; `.\RunTests.ps1` green (312 units, 12/12 `--run-tests` suites, all 13
+goldens hash-identical — no golden shot fires guns, so none was expected to move). A close scripted
+`--stage=empty --pos=0,15,0 --direction=1,-0.6,0 --hold=0,0,0,1 --fire` dive logs repeated `impact:
+wep_40 (40slug) -> Default … on ground/col`, and the paired `--screenshot` burst
+(`.scratch/b13_verynear_01.png`) shows a small isolated brown speck at the impact point rather than
+a large disc — consistent with the reference's "small, not billboards" description at the scale a
+scripted capture can resolve (the chips are sub-metre and short-lived, so a chase-camera shot from
+normal engagement range cannot resolve them any better than the old 3 m spark could). Building/water
+impacts unchanged by code inspection: the branch they use is untouched, only gated behind a new
+`surface == SurfaceClass.Default` check ahead of it. TUNE constants recorded in `backlog.md`.
+`BL-018` deleted from backlog; B13 ticked in `docs/PLAN-m3-polish-2.md`.

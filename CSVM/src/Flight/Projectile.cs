@@ -62,6 +62,16 @@ public sealed partial class ProjectilePool : Node3D
     private const float ExplosionLife = 0.5f; // s
     private const float ExplosionSpread = 6f; // m — the cluster radius
 
+    // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
+    // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE.
+    private const int DirtDebrisSprites = 5;
+    private const float DirtDebrisSize = 0.35f;   // m
+    private const float DirtDebrisLife = 0.3f;    // s
+    private const float DirtDebrisSpeed = 4f;     // m/s launch speed
+    private const float DirtDebrisSpreadDeg = 60f; // cone half-angle around the surface normal
+    private const float DirtDebrisSpinMax = 25f;  // rad/s, random per-chip tumble rate
+    private static readonly Color DirtTint = new(0.5f, 0.38f, 0.22f); // dusty brown
+
     // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
     private static readonly Color RocketTint = new(1.0f, 0.6f, 0.25f);  // orange exhaust
@@ -415,6 +425,15 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
+                // Dirt debris carries velocity/spin; every other sprite has both zeroed and is
+                // unaffected — the position/orientation set at spawn stands for its whole life.
+                if (s.SpinRate != 0f)
+                    s.Orient = s.Orient.Rotated(s.SpinAxis, s.SpinRate * dt);
+                if (s.Vel != Vector3.Zero)
+                {
+                    s.Pos += s.Vel * dt;
+                    s.Vel.Y -= WorldGravity * dt;
+                }
                 sprites[i] = s;
             }
         }
@@ -591,6 +610,11 @@ public sealed partial class ProjectilePool : Node3D
             // single spark, so the blast is visible. Flight keeps its real puffer (EffectSink set).
             SpawnExplosion(point, orient);
         }
+        else if (!showedModel && surface == SurfaceClass.Default && _impact.Count < MaxFlashes)
+        {
+            // Dirt (unclassified terrain): a tumbling-debris burst, not one fat spark.
+            SpawnDirtDebris(point, orient);
+        }
         else if (!showedModel && _impact.Count < MaxFlashes)
         {
             var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
@@ -619,6 +643,35 @@ public sealed partial class ProjectilePool : Node3D
                 Size = ExplosionSize * (0.7f + 0.6f * t),
                 Tint = new Color(1f, 0.45f + 0.4f * t, 0.12f * t), // deep orange → yellow core
                 Orient = orient,
+            });
+        }
+    }
+
+    /// <summary>A dirt impact's stand-in: a few small, randomly-rotated chips launched outward
+    /// from the surface normal and arcing under gravity, replacing the single 3 m spark so a
+    /// gun/rocket round hitting terrain reads as scattered debris rather than one orange flash.
+    /// Reuses the impact sprite pool/material — same draw path, no new texture.</summary>
+    private void SpawnDirtDebris(Vector3 point, Basis orient)
+    {
+        for (int i = 0; i < DirtDebrisSprites && _impact.Count < MaxFlashes; i++)
+        {
+            var dir = ApplySpread(orient.Z, DirtDebrisSpreadDeg);
+            float speed = DirtDebrisSpeed * (0.5f + 0.5f * _rng.Randf());
+            var spinAxis = new Vector3(
+                _rng.Randf() - 0.5f, _rng.Randf() - 0.5f, _rng.Randf() - 0.5f).Normalized();
+            // A random starting roll so the chips don't all share the impact's surface-facing
+            // orientation before their own tumble (SpinRate) takes over.
+            var startOrient = orient.Rotated(spinAxis, _rng.Randf() * Mathf.Tau);
+            _impact.Add(new Sprite
+            {
+                Pos = point,
+                Life = DirtDebrisLife * (0.75f + 0.5f * _rng.Randf()),
+                Size = DirtDebrisSize * (0.7f + 0.6f * _rng.Randf()),
+                Tint = DirtTint,
+                Orient = startOrient,
+                Vel = dir * speed,
+                SpinAxis = spinAxis,
+                SpinRate = (_rng.Randf() * 2f - 1f) * DirtDebrisSpinMax,
             });
         }
     }
@@ -712,6 +765,9 @@ public sealed partial class ProjectilePool : Node3D
         public Basis Orient;   // unit quad orientation: X width, Y height, Z the facing normal.
                                // Muzzle flashes roll in the firing plane's basis; impact sprites
                                // face the struck surface normal — a fixed world plane for neither.
+        public Vector3 Vel;    // m/s, world; zero for every sprite but dirt debris
+        public Vector3 SpinAxis; // unit axis the debris tumbles about; unused when SpinRate is 0
+        public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water

@@ -191,12 +191,6 @@ work is below.
    binding → model + sound) is live — only the *look* is missing; sound audibility is unverified (user).
    *Playtest after fix:* small white splash sprites + audible sound on water gunfire. Get low over the
    water first — rounds only reach ~1000 m. `./RunGame.ps1 --plane=player_bhawk --chapter=C1B`.
-8. `BL-018` **Dirt impact too prominent — should be small tumbling debris.** Dirt falls to the stand-in spark: one
-   big `ImpactSize = 3 m` orange billboard (`Projectile.cs:66,515`). Original = small, **randomly-rotated
-   tumbling debris** sprites (`Dirt Splash.png`: "not billboards — rotating randomly"). *Fix shape:* a
-   small dirt-debris burst (a few sprites, random roll + short arc) in place of the single fat spark.
-   *Playtest after fix:* look for small, randomly-rotated tumbling debris on dirt impacts rather than
-   one big spark. `./RunGame.ps1 --plane=player_bhawk --chapter=C2`.
 9. `BL-019` **Building vs dirt impacts are identical (both a fireball puff).** Original: buildings → `large_fireball`;
    dirt (HE) → `he_ground_effect` (a light flash, no puff). The per-surface lookup exists
    (`Projectile.cs:490`) but isn't differentiating. *Investigate:* does the HE rocket's `weapon.Impact`
@@ -1699,6 +1693,11 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   2026-07-30 and read fine for now — see `BL-181` for the provisional, pending-menu-hub caveat.
 - `BL-126` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
+- **Dirt-debris burst (B13/`BL-018`, landed 2026-07-31)** — `Projectile.cs`'s `DirtDebrisSprites` **5**,
+  `DirtDebrisSize` **0.35 m**, `DirtDebrisLife` **0.3 s**, `DirtDebrisSpeed` **4 m/s**,
+  `DirtDebrisSpreadDeg` **60°**, `DirtDebrisSpinMax` **25 rad/s**. Chosen to read as scattered chips at
+  normal chase-camera range without a reference video to match frame-by-frame; A/B against
+  `Dirt Splash.png` at the controls when convenient.
 
 ## Owed playtests (need hardware or a human at the controls)
 

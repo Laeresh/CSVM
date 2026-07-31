@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 11. ❌ `BL-017` Sea surface gets a projectile-layer collider so water impacts exist — disproven 2026-07-30: the sea already collides, tags `water`, splashes and sounds; follow-up `BL-186` (splash imperceptible)
 12. ◐ `BL-041` Fix the surface-classification polygon vote (buildings tagged water and vice versa) — landed + measured (census + scripted impacts); the at-the-controls overlay read stays owed until B14 draws true
-13. ☐ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
+13. ☑ `BL-018` Dirt impacts: small tumbling-debris burst instead of the 3 m spark
 14. ☑ `BL-042` Collider-overlay wireframes hug their geometry (fix the shared-axis offset)
 
 ### Wave C — weapon secondary visuals
@@ -277,7 +277,7 @@ design document does not describe the mechanism — already searched, dead end. 
 name patterns without measuring; the *vote* is what is broken. (d) The overlay was the instrument,
 not the defect.
 
-## B13 ☐ `BL-018` Dirt impacts: tumbling-debris burst
+## B13 ☑ `BL-018` Dirt impacts: tumbling-debris burst
 
 **Goal.** A gun/rocket dirt impact shows a few small, randomly-rotated, tumbling debris sprites
 with a short arc — not one 3 m orange billboard.
