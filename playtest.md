@@ -182,12 +182,22 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   count/size/life, muzzle puff count and light energy are `BL-200`'s TUNE values.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
 
+- `PT-11` **Muzzle-flash shape (`BL-011`/`BL-201` landed 2026-07-31).** Each gun shot now draws
+  three flash quads 120° apart around the muzzle axis, the whole triad rotated by a shared random
+  angle each shot (seeded, so `--det` runs stay reproducible), textured per ammo type
+  (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's `FIRE` binding). *Look for:* against
+  `OriginalScreenshots/MuzzleFlash1..3.png` and shot 2 of `…C1B IA1 Bloodhawk tracer and
+  ejection.png` — a compact, irregular/lobed burst (not a plain single quad), one wing at a time.
+  Size (`MuzzleSize` 0.5 m) and the flash-count/rotation scheme are `BL-201`'s TUNE values. Also
+  re-confirm A10 muzzle placement now the flash shape changed.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
+
 ---
 
 ## Everything else
 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
-`*Playtest after fix:*` line — the weapons re-tests (`BL-011`–`BL-028`), the inspect-tool
+`*Playtest after fix:*` line — the weapons re-tests (`BL-012`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`) and graze pushback (`BL-172`). Do not re-add them here; the entry brings its own test
 when the fix lands.

@@ -572,7 +572,11 @@ and arc under gravity via `Sprite.Vel`/`SpinAxis`/`SpinRate`, both zero and iner
 sprite. Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
 rolls in the firing plane's basis, the impact spark/explosion/debris faces the struck surface
 normal (then tumbles, for debris) — a fixed world plane for none of them (BL-139); tracers stay
-velocity-aligned, and none of the three is billboarded.
+velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flash (C24) is three
+quads 120° apart around that basis's facing normal, the triad sharing one random per-shot roll
+(seeded via `Rng.Weapons`, so `--det` stays reproducible) — one `List<Sprite>[]`/`MultiMesh[]` pair
+per ammo-type texture (`{slug,dum,ap,mag}_muzzle1`, `MuzzleAmmoIndex` resolved from the weapon's
+`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly

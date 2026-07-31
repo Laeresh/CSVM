@@ -96,7 +96,9 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 22. ☑ `BL-013` Casing ejection + muzzle puff/light (`BL-137` per-shot anchors, `BL-138` puffer+light)
     — landed 2026-07-31; the white puff cluster is a recorded stand-in (`BL-200`), cockpit A/B is `PT-10`
 23. ☑ `BL-014` Weapon lab fires a group's mounts alternately, like flight
-24. ☐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
+24. ◐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
+    — landed 2026-07-31 (three flashes 120° apart, shared random per-shot roll, per-ammo texture,
+    user direction); cockpit A/B is `PT-11`, item stays ◐ until it returns
 25. ☐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
 
 ### Wave D — destruction bugs
@@ -432,11 +434,16 @@ behaviour byte-unchanged (no `FlightController.cs`/`Projectile.cs` edits expecte
 
 **⚠ Traps.** Do not touch the flight firing path — it is the reference, not the patient.
 
-## C24 ☐ `BL-011` Muzzle flash: re-measure, retune size/look
+## C24 ◐ `BL-011` Muzzle flash: re-measure, retune size/look
 
-**Goal.** The muzzle flash reads like the original's: one compact forward flash — bright yellow
-core, orange flame at the base, elongated forward and slightly outboard — firing from one wing at
-a time.
+**Landed 2026-07-31.** Superseding the goal below: the user's direct read of the reference shots
+is three flashes 120° apart, the whole triad rotating to a random angle each shot — landed as
+three quads sharing one per-shot random roll, textured per ammo type. Cockpit A/B is `PT-11`;
+stays ◐ until it returns.
+
+**Goal (superseded — see above).** The muzzle flash reads like the original's: one compact
+forward flash — bright yellow core, orange flame at the base, elongated forward and slightly
+outboard — firing from one wing at a time.
 
 **Evidence (confidence: direction sound; magnitude is a cockpit judgement).** `MuzzleSize` now
 reads 0.5 m (`Projectile.cs:53`), set by hand in the weapons lab — the user's verdict at the

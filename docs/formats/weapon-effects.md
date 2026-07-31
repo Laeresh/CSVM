@@ -217,6 +217,18 @@ ammo types**. In each chapter's `texture/`:
 - **Tracer:** `tracer_slug` / `tracer_dumdum` / `tracer_armorpierce` / `tracer_magnesium`, plus
   the generic `tracer1`; `slugtip`, `shell1` / `shell2`, `atorp`.
 
+### Engine wiring (M3, C24) — flash shape + ammo texture
+
+`ProjectilePool` resolves each weapon's ammo index from its `FIRE` `ANIMATION` binding
+(`MuzzleAmmoIndex`: `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base
+`muzzle_burst`/heavy-mount `muzzle_burst2` carry no suffix and default to slug) and draws that
+ammo's `_muzzle1` frame only — the `_muzzle2` frame is unused by the flash (the impact stand-in
+spark reuses it as an unrelated bright-flash texture, predating this wiring). The def's own
+`mb_spinflame` mechanism rotates one flash node to one of three discrete angles per shot
+(30°/80°/140°, `RANDOM_WEIGHT` 1/3 each); the engine instead draws three quads 120° apart with one
+shared continuous random roll per shot, matching the reference captures' 3-lobed burst
+(`BL-201` TUNE — the discrete 3-bucket roll wasn't reproduced).
+
 ## Binding resolution — 5 unresolved names
 
 Of the **57** distinct asset names referenced across all 48 weapons' `FIRE`/`FLYOUT`/`IMPACT`

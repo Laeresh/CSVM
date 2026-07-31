@@ -8899,3 +8899,29 @@ light energy and per-shot puff count. Docs: engine-wiring section + corrected fo
 the brass speck sits inside each cluster). Gun-rate regression proven gone by breadcrumb:
 `gun casings: 12 live simultaneously` under sustained fire (a shared-anchor build could never
 exceed 1 per 2 s); spec breadcrumb echoes the authored values. Cockpit A/B → `PT-10`.
+
+**2026-07-31 — M3 Wave C C24 (`BL-011`): muzzle-flash shape — three flashes 120° apart, per-ammo
+texture.** User direction, given directly against the `MuzzleFlash1..3.png` reference captures:
+the flash reads as three flashes 120° apart, the whole triad rotating to a random angle each shot
+— superseding the plan's original "one compact forward flash" goal text (also updated). Landed in
+`ProjectilePool` (`Projectile.cs`): `Spawn` now resolves an ammo index from the weapon's `FIRE`
+`ANIMATION` binding (`MuzzleAmmoIndex` — `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type
+directly; base `muzzle_burst`/heavy-mount `muzzle_burst2` default to slug, confirmed against
+`weapons.zrd.json`: all 48 `FIRE` bindings resolve to one of the six names) and spawns three
+`Sprite`s per shot, each the muzzle's plane-local basis rolled about its own facing normal
+(`RollAroundNormal`) by a shared random angle (`Rng.Weapons`) plus its 120° slot — one
+`List<Sprite>[]`/`MultiMesh[]` pair per ammo texture (`{slug,dum,ap,mag}_muzzle1`, confirmed
+present in `C1/gamez/textures.json`), since a `MultiMesh` shares one texture across every instance.
+The authored mechanism (`muzzle_burst.zrd.json`'s `mb_spinflame` `OBJECT_ROTATE_STATE`) instead
+rotates one flash node to one of three *discrete* angles per shot (30°/80°/140°, `RANDOM_WEIGHT`
+1/3 each) — read as a single node whose texture already carries the 3-lobed shape, so the
+continuous 3-quad-triad approach here is a deliberate divergence toward the user's literal read of
+the captures, recorded as `BL-201` TUNE. Docs: `weapon-effects.md` engine-wiring section, this
+module's `architecture.md` entry, the plan goal text.
+
+**Verified.** `RunTests.ps1` green (build 0 warnings, 312 units, 12 engine suites, 13 goldens
+byte-identical — no gun-fire pose is a golden). `--viewer --weapon-lab=wep_00 --weapon-fire`
+(slug) and `--weapon-lab=wep_32 --weapon-fire` (AP) screenshots, zoomed 10×: both show an
+irregular, lobed burst silhouette (not a plain single quad) at the firing wing's gun barrel, two
+different rotations across shots. Cockpit A/B → `PT-11`; also re-confirm A10 muzzle placement now
+the flash shape changed.

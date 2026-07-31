@@ -53,6 +53,13 @@ public sealed partial class ProjectilePool : Node3D
                                                    // MODEL body (B14): the body is the round, this is its trail
     private const float MuzzleSize = 0.5f;    // m
     private const float MuzzleLife = 0.05f;   // s
+    // The authored flash is one `mb_spinflame` node the def rolls to a random Z angle each shot
+    // (RANDOM_WEIGHT over 30/80/140 degrees, muzzle_burst.zrd.json) rather than a fixed pose — the
+    // reference captures (MuzzleFlash1-3.png) read as a 3-lobed burst, so three quads 120 degrees
+    // apart reproduce that shape, with the whole triad sharing one random per-shot roll (continuous,
+    // not the def's 3-bucket discrete roll — TUNE if the discrete cadence reads better at the
+    // controls).
+    private const int MuzzleFlashCount = 3;
     private const float ImpactSize = 3.0f;    // m
     private const float ImpactLife = 0.14f;   // s
     private const float ImpactModelLife = 0.4f; // s the instanced IMPACT model shows before it is freed
@@ -115,8 +122,17 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
     private static readonly Color RocketTint = new(1.0f, 0.6f, 0.25f);  // orange exhaust
 
+    // The muzzle-flash ammo-type axis (weapon-effects.md "Muzzle & tracer textures"): each
+    // chapter's texture archive carries a `{slug,dum,ap,mag}_muzzle1` per ammo type. The index into
+    // this array is resolved once per weapon from its FIRE ANIMATION binding (MuzzleAmmoIndex) —
+    // `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base `muzzle_burst` /
+    // heavy-mount `muzzle_burst2` carry no ammo suffix and default to slug, the common case.
+    private static readonly string[] MuzzleAmmoTextures = { "slug_muzzle1", "dum_muzzle1", "ap_muzzle1", "mag_muzzle1" };
+
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
-    private readonly List<Sprite> _muzzle = new();
+    // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
+    // texture, since a MultiMesh's material (and so its texture) is shared across every instance.
+    private readonly List<Sprite>[] _muzzle = { new(), new(), new(), new() };
     private readonly List<Sprite> _impact = new();
     private readonly List<Sprite> _smoke = new();   // muzzle smoke + eject puffs (alpha-blended)
 
@@ -169,13 +185,14 @@ public sealed partial class ProjectilePool : Node3D
     // per draw: two draws fire per round.
     private readonly RandomNumberGenerator _rng = Rng.Stream(Rng.Weapons);
     private readonly HashSet<string> _flyoutLogged = new();
+    // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures) — built in _Ready.
+    private readonly MultiMesh[] _muzzleMm = new MultiMesh[MuzzleAmmoTextures.Length];
 
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
     private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
     private MultiMesh _tracerMm = null!;
-    private MultiMesh _muzzleMm = null!;
     private MultiMesh _impactMm = null!;
     private MultiMesh _smokeMm = null!;
     private Camera3D? _listener;               // billboards align their streak to this camera
@@ -213,7 +230,8 @@ public sealed partial class ProjectilePool : Node3D
         // carrying its own basis (Sprite.Orient) — the muzzle flash rolls in the firing plane's
         // basis, the impact spark faces the struck surface normal; neither is a fixed world plane.
         _tracerMm = AddMultiMesh("tracer_slug", MaxProjectiles, additive: true, billboard: false, out _);
-        _muzzleMm = AddMultiMesh("slug_muzzle1", MaxFlashes, additive: true, billboard: false, out _);
+        for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
+            _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
         // Smoke (the muzzlepuffer puffs + the casing's eject-puff cluster): the authored puffer
         // textures (smoke101), alpha-blended rather than additive so the puffs read as smoke.
@@ -288,25 +306,36 @@ public sealed partial class ProjectilePool : Node3D
                 _projHigh = slot + 1;
         }
 
-        if (_muzzle.Count < MaxFlashes)
+        int ammoIdx = MuzzleAmmoIndex(weapon);
+        var muzzleSprites = _muzzle[ammoIdx];
+        if (muzzleSprites.Count + MuzzleFlashCount <= MaxFlashes)
         {
-            // The flash quad rolls with the firing aircraft: its orientation IS the muzzle's world
-            // basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane.
+            // The flash triad rolls with the firing aircraft: its base orientation IS the muzzle's
+            // world basis, which inherits the plane's roll/pitch/yaw — not a fixed world plane. Each
+            // of the three quads is that basis rolled about its own facing normal (Z, unaffected by
+            // the roll) by a shared per-shot random angle plus its 120-degree slot, reproducing the
+            // reference captures' 3-lobed burst (MuzzleFlashCount).
             var planeBasis = muzzle.Basis.Orthonormalized();
-            _muzzle.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = planeBasis });
-            // Verification breadcrumbs (two, low-volume): the first flash reads the stored sprite
-            // basis back and confirms it IS the aircraft basis at spawn (match≈1.000 — a regression
-            // that stopped feeding Orient would read 0); a second sample once the plane has had a
-            // second to maneuver shows that basis rolled with it, not locked to a world plane.
+            float baseAngle = _rng.Randf() * Mathf.Tau;
+            for (int i = 0; i < MuzzleFlashCount; i++)
+            {
+                float angle = baseAngle + i * (Mathf.Tau / MuzzleFlashCount);
+                var orient = RollAroundNormal(planeBasis, angle);
+                muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = orient });
+            }
+            // Verification breadcrumbs (two, low-volume): the first flash reads a stored sprite's
+            // facing normal back and confirms it IS the aircraft basis's at spawn (match≈1.000 — a
+            // regression that stopped feeding Orient would read 0, and the roll leaves Z untouched);
+            // a second sample once the plane has had a second to maneuver shows that basis rolled
+            // with it, not locked to a world plane.
             double t = GameClock.Current?.Time ?? 0.0;
             if (_muzzleBasisLogs < 2 && (_muzzleBasisLogs == 0 || t >= 1.0))
             {
                 _muzzleBasisLogs++;
-                var stored = _muzzle[^1].Orient;
-                float match = (stored.X.Dot(planeBasis.X) + stored.Y.Dot(planeBasis.Y) + stored.Z.Dot(planeBasis.Z)) / 3f;
-                GD.Print($"muzzle flash basis: x=({stored.X.X:0.00},{stored.X.Y:0.00},{stored.X.Z:0.00}) " +
-                         $"y=({stored.Y.X:0.00},{stored.Y.Y:0.00},{stored.Y.Z:0.00}) " +
-                         $"stored==aircraft match={match:0.000} t={t:0.00}s");
+                var stored = muzzleSprites[^1].Orient;
+                float match = stored.Z.Dot(planeBasis.Z);
+                GD.Print($"muzzle flash basis: z=({stored.Z.X:0.00},{stored.Z.Y:0.00},{stored.Z.Z:0.00}) " +
+                         $"stored.Z==aircraft.Z match={match:0.000} ammo={ammoIdx} t={t:0.00}s");
             }
         }
 
@@ -427,7 +456,8 @@ public sealed partial class ProjectilePool : Node3D
             }
         }
 
-        AgeSprites(_muzzle, dt);
+        foreach (var m in _muzzle)
+            AgeSprites(m, dt);
         AgeSprites(_impact, dt);
         AgeSprites(_smoke, dt);
         AgeCasings(dt);
@@ -451,7 +481,8 @@ public sealed partial class ProjectilePool : Node3D
     public override void _Process(double delta)
     {
         RenderTracers();
-        RenderSprites(_muzzleMm, _muzzle);
+        for (int i = 0; i < _muzzle.Length; i++)
+            RenderSprites(_muzzleMm[i], _muzzle[i]);
         RenderSprites(_impactMm, _impact);
         RenderSprites(_smokeMm, _smoke);
     }
@@ -466,7 +497,8 @@ public sealed partial class ProjectilePool : Node3D
             _proj[i].Alive = false;
         }
         _projHigh = 0;
-        _muzzle.Clear();
+        foreach (var m in _muzzle)
+            m.Clear();
         _impact.Clear();
         _smoke.Clear();
         foreach (var c in _casings)
@@ -564,6 +596,33 @@ public sealed partial class ProjectilePool : Node3D
                 sprites[i] = s;
             }
         }
+    }
+
+    // The muzzle-flash ammo-type index (into MuzzleAmmoTextures) resolved from the weapon's FIRE
+    // ANIMATION binding: muzzle_burst_slug/_dum/_ap/_mag name the ammo type directly; the base
+    // muzzle_burst and heavy-mount muzzle_burst2 carry no ammo suffix and read as slug.
+    private static int MuzzleAmmoIndex(WeaponDef weapon)
+    {
+        var anim = weapon.Fire?.Animation;
+        if (anim == null)
+            return 0;
+        if (anim.EndsWith("_dum", System.StringComparison.OrdinalIgnoreCase))
+            return 1;
+        if (anim.EndsWith("_ap", System.StringComparison.OrdinalIgnoreCase))
+            return 2;
+        if (anim.EndsWith("_mag", System.StringComparison.OrdinalIgnoreCase))
+            return 3;
+        return 0;
+    }
+
+    // Rolls a quad's basis about its own facing normal (Z) — the in-plane rotation the flash triad
+    // uses to vary its look per shot without disturbing which way the quad faces.
+    private static Basis RollAroundNormal(Basis b, float radians)
+    {
+        float c = Mathf.Cos(radians), s = Mathf.Sin(radians);
+        var x = b.X * c + b.Y * s;
+        var y = b.Y * c - b.X * s;
+        return new Basis(x, y, b.Z);
     }
 
     private static SurfaceClass ClassifySurface(Node? collider)

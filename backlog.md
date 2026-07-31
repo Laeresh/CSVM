@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-185`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-202`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -80,20 +80,6 @@ were traced to code before writing. Verdicts on pass-1 items are noted on their 
 work is below.
 
 **Gun visuals (finding 1).**
-1. `BL-011` **Muzzle flash size/look is still wrong, and the constants now in the tree are an unfinished
-   experiment, not a calibrated result.** `MuzzleSize` was 2.2 m at filing; it now reads **0.5 m**
-   (`Projectile.cs:53`), set by hand in the weapons lab. **User verdict at the controls: still tunable
-   and not looking like the original** — treat 0.5 m as a waypoint, not an answer, and re-measure the
-   live build before re-tuning. Ref: `MuzzleFlash1..3.png` (small textured starburst) and shot 2 of
-   `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` (one compact forward flash on a
-   single wing) remain the target. **Orientation is now plane-local** (the flash rolls in the firing
-   aircraft's x/y basis; the world-locked-quad defect that had its own entry is fixed), so only
-   size/look remain here. ⚠ This flash also masks A10 muzzle-placement verification (finding 11: "hard to see with the
-   large flash") — re-check A10 now that it is smaller.
-   *Playtest after fix:* judge muzzle-flash shape and size against `OriginalScreenshots/C1B IA1
-   Bloodhawk tracer and ejection.png`/`…ejection2.png` (one compact forward flash, one wing at a
-   time). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`. Also re-confirm A10 muzzle
-   placement (finding 11): `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`.
 2. `BL-012` **Tracers read as long glowing streaks, not short yellow dashes — and the constants now in the
    tree are an unfinished experiment, not a calibrated result.** `TracerLength` was 14 m at filing; it
    now reads **3 m**, `TracerWidth` **`0.0782f * 2` m** (was 0.7 m) and the texture **`tracer_slug`**
@@ -1390,6 +1376,17 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   per `PT-10`. ⚠ Do not re-derive the calibre gate or underbelly mount from the design spec
   (SRC-3 — rejected against the reference captures), and do not shorten `gunshell`'s `RUN_TIME 2`
   to any gate — authored data.
+- `BL-201` **Muzzle-flash shape (C24, 2026-07-31)** — the flash is now a triad of three quads 120°
+  apart, the whole triad rotated by a shared random angle each shot (user direction, matching the
+  reference captures' 3-lobed burst; the authored `mb_spinflame` node instead rotates one node to
+  one of three discrete angles — 30°/80°/140° — `RANDOM_WEIGHT` 1/3 each, `muzzle_burst.zrd.json`).
+  The per-ammo texture axis is now wired (`{slug,dum,ap,mag}_muzzle1`, resolved from the weapon's
+  `FIRE` `ANIMATION` — `muzzle_burst_slug`/`_dum`/`_ap`/`_mag`; the base `muzzle_burst` and heavy-mount
+  `muzzle_burst2` default to slug). Hand-picked: `MuzzleFlashCount` 3, `MuzzleSize` 0.5 m (unchanged
+  waypoint), and the continuous (not 3-bucket discrete) per-shot rotation. Judge at the controls
+  per `PT-11` against `MuzzleFlash1..3.png` and shot 2 of `OriginalScreenshots/C1B IA1 Bloodhawk
+  tracer and ejection.png`. Also re-confirm A10 muzzle placement now the flash shape changed:
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 - `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.
