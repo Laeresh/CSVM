@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-202`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-203`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -80,17 +80,6 @@ were traced to code before writing. Verdicts on pass-1 items are noted on their 
 work is below.
 
 **Gun visuals (finding 1).**
-2. `BL-012` **Tracers read as long glowing streaks, not short yellow dashes — and the constants now in the
-   tree are an unfinished experiment, not a calibrated result.** `TracerLength` was 14 m at filing; it
-   now reads **3 m**, `TracerWidth` **`0.0782f * 2` m** (was 0.7 m) and the texture **`tracer_slug`**
-   (was `tracer1`) — `Projectile.cs:47-48,134`, all set by hand in the weapons lab. **User verdict at
-   the controls: still tunable and not looking like the original**, so re-measure the live build before
-   re-tuning length/width. The additive bloom that experiment did not touch (`additive: true`,
-   `Projectile.cs:134`) is still open on its own terms. Original = small discrete yellow streaks;
-   `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png` stay the target.
-   (Distinct from the pass-1 `fix/tracer-grow-from-muzzle` position fix.)
-   *Playtest after fix:* judge tracer shape (short dash vs. streak) and the additive-bloom look against
-   the two ref shots. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo`.
 4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
    (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
    nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
@@ -1387,6 +1376,21 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   per `PT-11` against `MuzzleFlash1..3.png` and shot 2 of `OriginalScreenshots/C1B IA1 Bloodhawk
   tracer and ejection.png`. Also re-confirm A10 muzzle placement now the flash shape changed:
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire`.
+- `BL-202` **Tracer look (C25, 2026-07-31)** — the tail artifact (a short line bleeding past the
+  streak's end) was the engine texture default, not the streak geometry: `StandardMaterial3D`
+  defaults to `TextureRepeat = true`, so bilinear filtering at the UV=0/1 edge blends in the
+  *opposite* edge of the tracer texture; the quads never tile, so repeat is now off for every
+  `ProjectilePool` sprite material. The per-ammo texture axis is now wired for tracers too
+  (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, the same `FIRE`-binding resolution as the
+  muzzle flash — `MuzzleAmmoIndex` reused; ordnance has no ammo-type `FIRE` binding and falls back
+  to the generic `tracer1`). Hand-picked, per the user's "a lot brighter" direction: `TracerLength`
+  1.0 m (was 3 m), `TracerWidth` 0.10 m (was `0.0782f * 2`), and a uniform overbright tint
+  `TracerBrightness` 3.0 (additive blend with no bloom pass, so the only way to read brighter than
+  the texture's own pixel value). Judge at the controls per `PT-12` against `OriginalScreenshots/C1B
+  IA1 Bloodhawk tracer and ejection.png`/`…ejection2.png`. ⚠ The bullet is fast enough (1000 m/s at
+  60 fps ≈ 16.7 m/frame) that a frame-locked `--screenshot` capture almost never lands exactly on a
+  round still at the muzzle — the near/bright look is easiest judged live, holding the trigger, not
+  from a single scripted shot.
 - `BL-113` **Compass tape** — `TileOverscan` / `RimGain` / the nearest-tick look remain TUNE
   (north = −Z is now confirmed against the original, 2026-07-30 — do not reopen).
 - `BL-115` **Flight model** — `StallNoseRate`, `KnifeAlignFloor`, `ClimbGravityScale`, `LowSpeedDragBlend`.

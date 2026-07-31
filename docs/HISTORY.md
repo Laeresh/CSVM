@@ -8944,3 +8944,30 @@ pointer in `verification.md`.
 466 KB PNG written, summary line names desktop `csvm-probe`, streams landed in
 `.scratch/logs/probe-*.out/.err`, nothing printed to the calling terminal beyond the script's own
 three lines.
+
+**2026-07-31 — M3 Wave C C25 (`BL-012`): tracer look — shorter/brighter, per-ammo texture, tail
+artifact fixed.** User direction, given directly: the texture direction (bright front, dark tail)
+is right, but a short line bleeds past the streak's end, and the tracers need to be a lot brighter
+and shorter/thinner than the 3 m/`0.0782f * 2` m in-tree experiment; each ammo type has its own
+tracer texture in the original, hard to see but present in the reference captures. Landed in
+`ProjectilePool` (`Projectile.cs`): the tail artifact traced to `AddMultiMesh`'s
+`StandardMaterial3D` leaving `TextureRepeat` at its engine default (on) — none of the pool's
+sprite quads tile, so bilinear filtering at the UV=0/1 edge was blending in the *opposite* edge of
+the texture, which is exactly a bright-front/dark-tail streak bleeding a faint line past its own
+end; now off on every sprite material the pool builds, muzzle flash and impact included.
+`TracerLength` 1.0 m (was 3 m), `TracerWidth` 0.10 m (was `0.0782f * 2`), and a new uniform
+overbright tint `TracerBrightness` ×3.0 on the additive quad (the only way to read brighter than
+the texture's own pixel value without a bloom pass) — recorded as `BL-202` TUNE. The tracer now
+carries the same per-ammo texture axis as the C24 muzzle flash (`tracer_slug`/`_dumdum`/
+`_armorpierce`/`_magnesium`, generic `tracer1` for ordnance, which carries no ammo-type `FIRE`
+binding), reusing `MuzzleAmmoIndex`'s resolution — one `MultiMesh` per texture, replacing the
+single shared `tracer_slug` mesh every round drew into regardless of ammo type. Docs:
+`weapon-effects.md`'s existing "Muzzle & tracer textures" section already named the tracer axis;
+this module's `architecture.md` entry, the plan goal text.
+
+**Verified.** `RunTests.ps1` green (build 0 warnings, 312 units, 12 engine suites, 13 goldens
+byte-identical — no gun-fire pose is a golden). `--viewer --weapon-lab=wep_30 --weapon-fire`
+screenshots with `--pos`/`--lookat` framing the firing mount close up show a short, thin, visibly
+brighter yellow streak leaving the muzzle with no trailing smear; a `--chapter=C1B --fire
+--infinite-ammo` chase-cam capture matches the reference shots' composition (a small bright fleck
+near the reticle at range). Cockpit A/B → `PT-12`.

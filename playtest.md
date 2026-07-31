@@ -192,12 +192,25 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   re-confirm A10 muzzle placement now the flash shape changed.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with Space).
 
+- `PT-12` **Tracer look (`BL-012`/`BL-202` landed 2026-07-31).** Tracers are shorter (1.0 m, was
+  3 m), thinner (0.10 m) and drawn markedly brighter (a uniform ×3.0 overbright tint on the
+  additive quad), the same per-ammo texture axis as the muzzle flash
+  (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, generic `tracer1` for ordnance), and the
+  bilinear wrap-around at the streak's tail is gone (`TextureRepeat` was defaulting on for a quad
+  that never tiles). *Look for:* against `OriginalScreenshots/C1B IA1 Bloodhawk tracer and
+  ejection.png`/`…ejection2.png` — a short, vividly bright yellow dash per round, no faint smear
+  past its trailing edge, distant rounds still visible as tiny flecks. Hold the trigger rather than
+  judging a single scripted shot — the round moves ~17 m per frame at 1000 m/s, so a frame-locked
+  capture rarely lands on one still near the muzzle. Length/width/brightness are `BL-202`'s TUNE
+  values. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire` (or fly it with
+  Space).
+
 ---
 
 ## Everything else
 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
-`*Playtest after fix:*` line — the weapons re-tests (`BL-012`–`BL-028`), the inspect-tool
+`*Playtest after fix:*` line — the weapons re-tests (`BL-016`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`) and graze pushback (`BL-172`). Do not re-add them here; the entry brings its own test
 when the fix lands.

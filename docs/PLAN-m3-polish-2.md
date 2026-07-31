@@ -99,7 +99,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 24. ◐ `BL-011` Muzzle flash: re-measure the live build, retune size/look toward the reference shots
     — landed 2026-07-31 (three flashes 120° apart, shared random per-shot roll, per-ammo texture,
     user direction); cockpit A/B is `PT-11`, item stays ◐ until it returns
-25. ☐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
+25. ◐ `BL-012` Tracers: re-measure, retune toward short yellow dashes; settle the additive bloom
+    — landed 2026-07-31 (length/width shrunk, uniform ×3.0 overbright tint, per-ammo texture axis,
+    tail-artifact fix — `TextureRepeat` was defaulting on); cockpit A/B is `PT-12`, item stays ◐
+    until it returns
 
 ### Wave D — destruction bugs
 
@@ -471,10 +474,19 @@ measure before moving them. (b) Values are TUNE; record the landed numbers in `b
 list if the A/B is still owed at commit time. (c) Distinct from C22's puffer/light — that adds
 authored elements; this tunes the sprite.
 
-## C25 ☐ `BL-012` Tracers: re-measure, retune toward short yellow dashes
+## C25 ◐ `BL-012` Tracers: re-measure, retune toward short yellow dashes
 
-**Goal.** Tracers read as small discrete yellow dashes, matching the reference shots — not long
-glowing streaks.
+**Landed 2026-07-31.** Per the user's direct direction: tracers are shorter/thinner
+(`TracerLength` 1.0 m, `TracerWidth` 0.10 m) and drawn markedly brighter (a uniform ×3.0 overbright
+tint on the additive quad), with the same per-ammo texture axis as the muzzle flash
+(`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, generic `tracer1` for ordnance — reuses
+`MuzzleAmmoIndex`). The reported tail artifact traced to the engine default: `StandardMaterial3D`
+defaults `TextureRepeat` on, so bilinear filtering at the streak's UV=0/1 edge blended in the
+opposite edge of the texture — none of `ProjectilePool`'s sprite quads tile, so repeat is now off
+across the board. Cockpit A/B is `PT-12`; stays ◐ until it returns.
+
+**Goal (superseded — see above).** Tracers read as small discrete yellow dashes, matching the
+reference shots — not long glowing streaks.
 
 **Evidence (confidence: direction sound; magnitude is a cockpit judgement).** Current in-tree
 values are a hand experiment: `TracerLength` 3 m, `TracerWidth` `0.0782f * 2`, texture

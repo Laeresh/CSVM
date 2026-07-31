@@ -45,8 +45,15 @@ public sealed partial class ProjectilePool : Node3D
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
-    private const float TracerLength = 3f;   // streak length behind the round, m
-    private const float TracerWidth = 0.0782f * 2;   // m
+    // C25 retune toward the reference shots' short discrete dashes (was 3m/0.156m, read as a long
+    // glowing streak) — magnitudes are TUNE (BL-202), owed the cockpit A/B.
+    private const float TracerLength = 1.0f;   // streak length behind the round, m — TUNE (BL-202)
+    private const float TracerWidth = 0.10f;   // m — TUNE (BL-202)
+    // Additive blending with no glow/bloom pass caps a tracer at the texture's own pixel value, which
+    // read visibly dimmer than the reference captures' near-white core — an overbright multiplier (>1,
+    // clipped by the additive blend itself) is the only lever available without a bloom pipeline.
+    // Uniform across channels so it brightens rather than recolours the per-ammo texture's own hue.
+    private const float TracerBrightness = 3.0f; // TUNE (BL-202)
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
                                                   // NO FLYOUT model (a chapter missing the prototype)
     private const float RocketExhaustScale = 0.5f; // a slim exhaust streak behind a rocket that HAS a
@@ -118,7 +125,8 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
     private static readonly Color EjectPuffTint = new(1f, 1f, 1f);
 
-    // Tracer colours per ammo type, keyed off the tracer texture name axis (slug/dum/ap/mag).
+    // Muzzle-flash sprite tint (C24) — unrelated to the tracer tint below, which is a separate,
+    // uniform overbright multiplier so each ammo's own tracer texture colour shows through unshifted.
     private static readonly Color SlugTint = new(1.0f, 0.85f, 0.35f);   // warm yellow
     private static readonly Color RocketTint = new(1.0f, 0.6f, 0.25f);  // orange exhaust
 
@@ -128,6 +136,15 @@ public sealed partial class ProjectilePool : Node3D
     // `muzzle_burst_slug`/`_dum`/`_ap`/`_mag` name the type directly; the base `muzzle_burst` /
     // heavy-mount `muzzle_burst2` carry no ammo suffix and default to slug, the common case.
     private static readonly string[] MuzzleAmmoTextures = { "slug_muzzle1", "dum_muzzle1", "ap_muzzle1", "mag_muzzle1" };
+
+    // The tracer ammo-type axis (weapon-effects.md "Muzzle & tracer textures", C25): each chapter's
+    // texture archive also carries a per-ammo tracer streak (`tracer_slug`/`_dumdum`/`_armorpierce`/
+    // `_magnesium`), same four-way axis as the muzzle flash — TracerIndex reuses MuzzleAmmoIndex for
+    // guns. Ordnance carries no FIRE ammo-type binding, so it falls back to the generic `tracer1`
+    // (index 4), the last entry.
+    private static readonly string[] TracerTextures =
+        { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium", "tracer1" };
+    private static readonly Color TracerTint = new(TracerBrightness, TracerBrightness, TracerBrightness);
 
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
@@ -187,12 +204,15 @@ public sealed partial class ProjectilePool : Node3D
     private readonly HashSet<string> _flyoutLogged = new();
     // One MultiMesh per muzzle-flash ammo texture (MuzzleAmmoTextures) — built in _Ready.
     private readonly MultiMesh[] _muzzleMm = new MultiMesh[MuzzleAmmoTextures.Length];
+    // One MultiMesh per tracer texture (TracerTextures) — built in _Ready; one shared per-mesh
+    // instance-count scratch array, cleared and refilled every frame in RenderTracers.
+    private readonly MultiMesh[] _tracerMm = new MultiMesh[TracerTextures.Length];
+    private readonly int[] _tracerCounts = new int[TracerTextures.Length];
 
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
     private Node3D _impactFxModels = null!;  // container for the short-lived impact-effect instances
     private Node3D _casingModels = null!;    // container for the pooled shell-casing instances
-    private MultiMesh _tracerMm = null!;
     private MultiMesh _impactMm = null!;
     private MultiMesh _smokeMm = null!;
     private Camera3D? _listener;               // billboards align their streak to this camera
@@ -229,7 +249,10 @@ public sealed partial class ProjectilePool : Node3D
         // long streak into a screen-vertical bar); muzzle/impact bursts are oriented quads too, each
         // carrying its own basis (Sprite.Orient) — the muzzle flash rolls in the firing plane's
         // basis, the impact spark faces the struck surface normal; neither is a fixed world plane.
-        _tracerMm = AddMultiMesh("tracer_slug", MaxProjectiles, additive: true, billboard: false, out _);
+        // One MultiMesh per tracer texture (TracerTextures) — its material is shared across every
+        // instance it draws, same reason the muzzle flash is split per ammo texture.
+        for (int i = 0; i < TracerTextures.Length; i++)
+            _tracerMm[i] = AddMultiMesh(TracerTextures[i], MaxProjectiles, additive: true, billboard: false, out _);
         for (int i = 0; i < MuzzleAmmoTextures.Length; i++)
             _muzzleMm[i] = AddMultiMesh(MuzzleAmmoTextures[i], MaxFlashes, additive: true, billboard: false, out _);
         _impactMm = AddMultiMesh("slug_muzzle2", MaxFlashes, additive: true, billboard: false, out _);
@@ -270,6 +293,10 @@ public sealed partial class ProjectilePool : Node3D
             accel *= scale;
         }
         var tint = weapon.IsRocket ? RocketTint : SlugTint;
+        // The tracer's own ammo-type axis (TracerTextures) — reuses MuzzleAmmoIndex for guns (same
+        // FIRE-binding resolution as the muzzle flash); ordnance carries no ammo-type FIRE binding,
+        // so it falls back to the generic tracer1 (the array's last entry).
+        int tracerIdx = weapon.IsRocket ? TracerTextures.Length - 1 : MuzzleAmmoIndex(weapon);
 
         int slot = -1;
         for (int i = 0; i < MaxProjectiles; i++)
@@ -297,7 +324,8 @@ public sealed partial class ProjectilePool : Node3D
                 Accel = accel,
                 Grav = (weapon.Gravity ?? 0f) * WorldGravity,
                 Weapon = weapon,
-                Tint = tint,
+                Tint = TracerTint,
+                TracerIdx = tracerIdx,
                 Model = model,
                 Trails = trails,
                 RollRate = rollRate,
@@ -671,6 +699,11 @@ public sealed partial class ProjectilePool : Node3D
             BillboardKeepScale = true,
             VertexColorUseAsAlbedo = true,
             Uv1Scale = new Vector3(-1.0f, 1.0f, 1.0f),
+            // None of these quads tile — every one draws exactly one whole texture. Left at the
+            // engine default (true), bilinear filtering at the UV=0/1 edge blends in the OPPOSITE
+            // edge (wrap), which is the tail artifact on a tracer streak (bright front bleeding into
+            // the dark tail) — C25.
+            TextureRepeat = false,
         };
         quad.Material = mat;
         var mm = new MultiMesh
@@ -1250,7 +1283,7 @@ public sealed partial class ProjectilePool : Node3D
         // allows, and local X is the width. Not billboarded, so the streak keeps its length instead
         // of collapsing to a screen-vertical bar. The quad trails behind the round by half its length.
         var eye = _listener?.GlobalPosition;
-        int n = 0;
+        System.Array.Clear(_tracerCounts, 0, _tracerCounts.Length);
         for (int i = 0; i < _projHigh; i++)
         {
             ref var p = ref _proj[i];
@@ -1293,11 +1326,13 @@ public sealed partial class ProjectilePool : Node3D
             float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
             float len = Mathf.Min(TracerLength * scale, traveled);
             var basis = new Basis(yAxis * len, xAxis * (TracerWidth * scale), zAxis);
-            _tracerMm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
-            _tracerMm.SetInstanceColor(n, p.Tint);
-            n++;
+            var mm = _tracerMm[p.TracerIdx];
+            int n = _tracerCounts[p.TracerIdx]++;
+            mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
+            mm.SetInstanceColor(n, p.Tint);
         }
-        _tracerMm.VisibleInstanceCount = n;
+        for (int i = 0; i < _tracerMm.Length; i++)
+            _tracerMm[i].VisibleInstanceCount = _tracerCounts[i];
     }
 
     private struct Proj
@@ -1309,7 +1344,8 @@ public sealed partial class ProjectilePool : Node3D
         public float Accel;      // ACCELERATION along the velocity direction, m/s²
         public float Grav;       // GRAVITY scale × world gravity, m/s² (0 throughout this install)
         public WeaponDef Weapon;
-        public Color Tint;
+        public Color Tint;       // tracer brightness multiplier (uniform, TracerTint) — C25
+        public int TracerIdx;    // which TracerTextures entry/MultiMesh this round's streak draws into
         public Node3D? Model;    // the FLYOUT MODEL body (rockets only; null for gun tracers) — B14
         public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters (C21)
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll

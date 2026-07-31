@@ -576,7 +576,11 @@ velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flas
 quads 120° apart around that basis's facing normal, the triad sharing one random per-shot roll
 (seeded via `Rng.Weapons`, so `--det` stays reproducible) — one `List<Sprite>[]`/`MultiMesh[]` pair
 per ammo-type texture (`{slug,dum,ap,mag}_muzzle1`, `MuzzleAmmoIndex` resolved from the weapon's
-`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws.
+`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws. The
+tracer streak (C25) carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/
+`_magnesium`, ordnance falling back to the generic `tracer1`), one `MultiMesh` per texture, drawn
+with a uniform overbright tint (`TracerTint`) since additive blending with no bloom pass otherwise
+caps a tracer at the texture's own pixel value.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly
