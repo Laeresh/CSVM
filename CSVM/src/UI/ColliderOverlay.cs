@@ -42,7 +42,10 @@ public sealed partial class ColliderOverlay : Node
     private const int MaxTotalLines = 400000;
 
     /// <summary>Wireframes sit exactly on the surface they outline, which z-fights into dashes.
-    /// Scaling each shape a hair about its own local origin lifts the lines clear.</summary>
+    /// Scaling each shape a hair about its own geometric centre lifts the lines clear.
+    /// ⚠ Never about the local origin: chapter-world trimeshes carry vertices baked in world
+    /// coordinates under identity nodes, so an origin-relative scale shifts the whole wireframe
+    /// by 0.25% of the vertex magnitude — ~20 m at a map corner, invisible near the origin.</summary>
     private const float Inflate = 1.0025f;
 
     // How often the drawing re-reads the Disabled flags. Fast enough that a kill's swap is visibly
@@ -254,15 +257,16 @@ public sealed partial class ColliderOverlay : Node
         {
             return false;
         }
+        var bounds = new Aabb(faces[0], Vector3.Zero);
+        foreach (var v in faces)
+        {
+            bounds = bounds.Expand(v);
+        }
+        var centre = bounds.GetCenter();
         if (tris > MaxShapeTris || lines > MaxTotalLines)
         {
-            var bounds = new Aabb(faces[0], Vector3.Zero);
-            foreach (var v in faces)
-            {
-                bounds = bounds.Expand(v);
-            }
             var boxAt = at;
-            boxAt.Origin = at * bounds.GetCenter();
+            boxAt.Origin = at * centre;
             EmitBox(mesh, boxAt, bounds.Size * Inflate, col);
             lines += 12;
             return true;
@@ -282,8 +286,8 @@ public sealed partial class ColliderOverlay : Node
                 {
                     continue;
                 }
-                mesh.SurfaceAddVertex(at * (a * Inflate));
-                mesh.SurfaceAddVertex(at * (b * Inflate));
+                mesh.SurfaceAddVertex(at * (centre + (a - centre) * Inflate));
+                mesh.SurfaceAddVertex(at * (centre + (b - centre) * Inflate));
                 lines++;
             }
         }

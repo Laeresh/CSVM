@@ -425,27 +425,6 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-198` **`BL-042`'s plane-box fix removed a real bug but did not reproduce the originally-reported
-  symptom — if the wireframe still reads offset from the controls, the mechanism is still open.**
-  `ColliderOverlay` drew the plane's airframe boxes parented to the plane MODEL node, but
-  `PlaneCollider.Parts.Local` is expressed in the model's PARENT frame (the `FlightController`,
-  per its own class doc) — drawing under the model doubled the model's own local transform. Fixed
-  by parenting to the controller instead (`GameSession.cs`, `ColliderOverlay.cs`). Byte-identical
-  screenshots on all 11 stock aircraft (`--fly --plane=<x> --stage=empty --collision=show --view=6`)
-  before/after prove every stock plane's model-root transform is already identity, so the fix has
-  **no visible effect on any shipped aircraft today** — it only guards against a future plane (or a
-  data change) whose root carries a real offset.
-  ⚠ Traps: (a) do not re-chase the plane-box path again without new evidence — it is now verified
-  correct by construction, matching `PlaneCollider`'s documented frame contract. (b) The
-  node-backed world path and the clutter (`PhysicsServer3D.BodyGetShape*`) path were both checked
-  by close-up freecam screenshot (C2, buildings and house roofs) and hug their meshes exactly — do
-  not re-suspect them without a fresh repro. (c) Not checked: a destructible's collider mid
-  healthy→wreck swap, and `MapEdgeExtender`'s mirrored edge tiles — both build collision through
-  paths this pass did not exercise, and either is a plausible home for the original "flew through
-  the wireframe" report if it recurs.
-  *Playtest after fix:* fly into a C2 building and watch the **C** overlay at the moment of impact —
-  the crash should happen exactly where the wireframe is drawn, not past it.
-
 - `BL-044` **The node lab's hide action does not change the tree row it applies to.** The world node toggles
   correctly and the button's own text flips Show/Hide, but the row's text and colour stay as they
   were, so a hidden subtree is invisible in the tree itself. Animated visibility changes do come

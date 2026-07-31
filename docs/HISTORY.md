@@ -8719,3 +8719,27 @@ re-pinned — exactly `c1-flight`/`c1-crash` moved (29 px / 10 px: the C1 town's
 truck), and a one-line deferral-off A/B reproduced all 13 old hashes byte-identically, attributing
 the move fully. Residual for the cockpit (`PT-07`): the authored 50 m / 0.7 s margin means a
 dead-center cruise-speed run can clip the still-solid web mid-fade (colliders drop at fade end).
+
+## 2026-07-31 — B14 revisit, `BL-198`: overlay trimesh inflate scaled about the local origin
+
+The user refuted the first pass at the controls: at C2 `--pos="-6341.194,142.46,-4693.261"` the
+**C** overlay's wireframes sat visibly beside their meshes. Mechanism: `ColliderOverlay.Inflate`
+(the 1.0025 anti-z-fight scale) was applied as `vertex * Inflate` — a scale about the shape's
+**local origin**. Chapter-world trimeshes carry vertices baked in world coordinates under
+identity-transform nodes, so the inflate became a position-proportional shift: 0.25% of the vertex
+magnitude, ~16–20 m at a map corner, sub-millimetre near the world origin — which is exactly why
+the first pass's close-ups (taken on near-origin geometry) looked correct, and why the offsets all
+read as one shared direction (locally constant radial from the origin). Fixed in
+`ColliderOverlay.EmitTriangles`: the inflate now scales about the faces' AABB centre
+(`centre + (v - centre) * Inflate`), computed once and shared with the bounding-box fallback. The
+plane boxes were never the problem (their `EmitBox` path never inflated vertices), and collision
+itself was always correct — drawing only.
+
+**Verified.** Before/after `--screenshot` at the user's exact viewpoint: wireframes offset ~20 m →
+hugging every tower, pier and island edge. Each build path captured separately: plain world nodes +
+buildings + water (the repro shot), clutter close-up (C2 suburb, houses/warehouses/cars hug),
+destructible healthy→wreck swap (`--destroy=apbuild03`, wreck wireframe hugs the wreck mesh),
+`MapEdgeExtender` mirrored tiles (beyond both a water and a land edge, wireframes track the
+mirrored relief), plane boxes (`--stage=empty --view=6`, unchanged, still hug). `.\RunTests.ps1`:
+build, 312 units, 12/12 suites, 13 goldens hash-identical, 107.8 s. `BL-198` closed and removed
+from `backlog.md`.

@@ -324,6 +324,13 @@ before/after `--screenshot` pair at the same `--pos` makes the offset's disappea
 code paths. (b) The colliders themselves are correct; do not "fix" collision to match the
 wireframe. (c) Land before B12's playtest read of the overlay.
 
+**Revisit (2026-07-31, `BL-198`).** The user refuted the first pass at the controls: the real
+mechanism was the anti-z-fight `Inflate` scaling trimesh vertices about the local origin — a
+position-proportional shift (~20 m at a map corner) on world-baked-vertex trimeshes, invisible in
+the first pass's near-origin close-ups. Fixed to scale about the faces' AABB centre; all five draw
+paths (world nodes, clutter, plane boxes, wreck swap, edge tiles) captured hugging their meshes.
+See `docs/HISTORY.md` 2026-07-31.
+
 # Wave C — weapon secondary visuals
 
 ## C21 ☐ `BL-015` Rocket smoke trail

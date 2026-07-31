@@ -1038,10 +1038,11 @@ The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` s
   and draws NOTHING — an empty overlay would read as "nothing here is solid" (WORLD-9). The
   tallies that follow are logged as **separate on and off counts plus the names that flipped**,
   never a net (WORLD-10: the C2 gate nets +7 — `col[off 1, on 8]`).
-⚠ The plane's airframe boxes are drawn parented to the `FlightController`, never the plane MODEL
-  node: `PlaneCollider.Parts.Local` is expressed in the model's PARENT frame (see that class's own
-  doc), so parenting under the model itself doubles the model's own local transform — inert on all
-  11 stock aircraft today since their model roots are identity, but wrong the moment one isn't.
+⚠ Two frame traps in the drawing. Plane airframe boxes parent to the `FlightController`, never
+  the plane MODEL node (`Parts.Local` is in the model's PARENT frame — under the model its local
+  transform applies twice). And `Inflate` scales trimesh vertices about their AABB centre, never
+  the local origin: world trimeshes carry world-baked vertices, so an origin-relative scale shifts
+  the wireframe by 0.25% of position — ~20 m at a map corner, invisible near the origin (BL-198).
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
   1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
 
