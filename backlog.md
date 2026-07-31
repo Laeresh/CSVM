@@ -191,19 +191,6 @@ its symptom and traps.
 
 **Weapon visuals round 3 (PT-10/11/12).**
 
-- `BL-208` **The muzzle flash is an unreadable red blob: the texture must anchor its LEFT edge at
-  the muzzle, full texture visible.** User verdict on the C24 triad (2026-07-31): "way too blurry,
-  the texture is not even recognisable — just a red semi-transparent circle", rotation invisible.
-  Mechanism lead: all three 0.5 m quads are *centred* on `muzzle.Origin`
-  (`Projectile.cs` `Spawn`), so the three additive quads overlap into a saturated disc and half of
-  every texture is buried. User direction: the muzzle-flash texture is authored with the flash
-  rooted at its **left edge** — anchor each quad so its left texture edge sits at the muzzle
-  centre and the full texture extends outward; then the 120° triad and per-shot roll become
-  legible. ⚠ Traps: the per-ammo texture axis and the triad scheme are settled (`BL-201`) — this
-  is quad anchoring/UV, not another texture hunt; size stays TUNE after the fix.
-  *Playtest after fix:* each lobe reads as the authored flash texture, the triad and per-shot
-  rotation visible. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`.
-
 - `BL-209` **Eject/muzzle smoke puffs render as elongated white stripes, not round smoke puffs.**
   User verdict on C22 (2026-07-31): casing + cluster present, but the puffs are "very elongated
   rectangles… like two white stripes with different transparency"; in the original they read

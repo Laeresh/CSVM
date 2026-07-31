@@ -81,7 +81,7 @@ public sealed partial class ProjectilePool : Node3D
     // muzzle frame, size 0.3–0.6 m, life 0.1–0.2 s, ±0.8 m/s random velocity, 5 cm deviation.
     // The data emits every 0.05 s over a 0.3 s window from the moving muzzle node; the per-shot
     // puff count here is the gloss of that window (TUNE) — the authored ranges are verbatim.
-    private const int MuzzleSmokePuffs = 3;            // TUNE (authored window: 6 puffs / 0.3 s)
+    private const int MuzzleSmokePuffs = 0;            // TUNE (authored window: 6 puffs / 0.3 s)
     private const float MuzzleSmokeAftSpeed = 20f;     // m/s, local_velocity z
     private const float MuzzleSmokeDeviation = 0.05f;  // m, deviation_distance
     private const float MuzzleSmokeRandVel = 0.8f;     // m/s, min/max_random_velocity
@@ -349,7 +349,7 @@ public sealed partial class ProjectilePool : Node3D
             {
                 float angle = baseAngle + i * (Mathf.Tau / MuzzleFlashCount);
                 var orient = RollAroundNormal(planeBasis, angle);
-                muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = orient });
+                muzzleSprites.Add(new Sprite { Pos = muzzle.Origin, Life = MuzzleLife, Size = MuzzleSize, Tint = tint, Orient = orient, AnchorLeft = true });
             }
             // Verification breadcrumbs (two, low-volume): the first flash reads a stored sprite's
             // facing normal back and confirms it IS the aircraft basis's at spawn (match≈1.000 — a
@@ -675,7 +675,10 @@ public sealed partial class ProjectilePool : Node3D
             float k = 1f - s.Age / s.Life;            // shrink + fade over life
             float size = s.Size * (0.6f + 0.4f * k);
             var basis = new Basis(s.Orient.X * size, s.Orient.Y * size, s.Orient.Z * size);
-            mm.SetInstanceTransform(n, new Transform3D(basis, s.Pos));
+            // QuadMesh's default UV puts U=0 (the texture's left edge) at local X=-0.5 — anchoring
+            // there keeps it pinned to Pos as the quad shrinks over its life.
+            var pos = s.AnchorLeft ? s.Pos + s.Orient.X * (size * 0.5f) : s.Pos;
+            mm.SetInstanceTransform(n, new Transform3D(basis, pos));
             var c = s.Tint;
             c.A = k;
             mm.SetInstanceColor(n, c);
@@ -698,11 +701,16 @@ public sealed partial class ProjectilePool : Node3D
             BillboardMode = billboard ? BaseMaterial3D.BillboardModeEnum.Enabled : BaseMaterial3D.BillboardModeEnum.Disabled,
             BillboardKeepScale = true,
             VertexColorUseAsAlbedo = true,
-            Uv1Scale = new Vector3(-1.0f, 1.0f, 1.0f),
             // None of these quads tile — every one draws exactly one whole texture. Left at the
             // engine default (true), bilinear filtering at the UV=0/1 edge blends in the OPPOSITE
             // edge (wrap), which is the tail artifact on a tracer streak (bright front bleeding into
-            // the dark tail) — C25.
+            // the dark tail) — C25. (A `Uv1Scale.x=-1` mirror lived here from the same C25 tuning
+            // pass with no matching `Uv1Offset` — with `TextureRepeat` off, that clamped every
+            // sample to the texture's single U=0 column instead of mirroring it, so every sprite
+            // drawn by this pool — tracer, muzzle flash, impact, smoke — rendered as a flat colour
+            // stripe instead of its texture. C21 removed it; a texture that needs flipping now gets
+            // that from its own geometry — e.g. RenderTracers rotates the streak quad 180° about its
+            // own facing normal — never from another `Uv1Scale` mirror on this shared material.)
             TextureRepeat = false,
         };
         quad.Material = mat;
@@ -1325,7 +1333,11 @@ public sealed partial class ProjectilePool : Node3D
             // muzzle instead of pre-extending a full length behind it on the spawn frame.
             float traveled = Mathf.Max(0f, (p.Weapon.Range ?? 1000f) - p.DistLeft);
             float len = Mathf.Min(TracerLength * scale, traveled);
-            var basis = new Basis(yAxis * len, xAxis * (TracerWidth * scale), zAxis);
+            // The authored texture's head sits at the opposite end of its V axis from where this
+            // quad's +local-Y (the round's current position, per the trailing offset below) lands —
+            // rotate the quad 180° about its own facing normal (negate X and Y together, a proper
+            // rotation, not a mirror) so the bright head reads at the round instead of the tail (C21).
+            var basis = new Basis(-yAxis * len, -xAxis * (TracerWidth * scale), zAxis);
             var mm = _tracerMm[p.TracerIdx];
             int n = _tracerCounts[p.TracerIdx]++;
             mm.SetInstanceTransform(n, new Transform3D(basis, p.Pos - yAxis * (len * 0.5f)));
@@ -1366,6 +1378,9 @@ public sealed partial class ProjectilePool : Node3D
         public Vector3 SpinAxis; // unit axis the debris tumbles about; unused when SpinRate is 0
         public float SpinRate; // rad/s about SpinAxis; zero for every sprite but dirt debris
         public bool NoGravity; // smoke puffs drift on their spawn velocity; debris arcs (false)
+        public bool AnchorLeft; // Pos is the texture's left edge (UV x=0), not the quad centre —
+                                // the muzzle flash triad (C21); the centre is derived in RenderSprites
+                                // from the *current* (shrinking) size so the anchor doesn't drift.
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water

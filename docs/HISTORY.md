@@ -9166,3 +9166,48 @@ kill log shows no `no alpha path` tally. `.\RunTests.ps1` fully green: 313 units
 13/13 goldens hash-identical (the swap engages only during a live fade, so nothing else moved).
 The collider half stays closed under B11 (`intersect_surface` false ⇒ the pieces build no
 colliders). Owed: the user's at-the-controls re-test (`PT-16`).
+
+## 2026-07-31 — M3p3 Wave C C21 BL-208: muzzle flash anchors its left edge at the muzzle — plus the `ProjectilePool`-wide texture-stripe bug that discovery uncovered
+
+PT-11's refutation confirmed the traced mechanism exactly: all three triad quads were *centred* on
+`muzzle.Origin` (`Projectile.cs` `Spawn`), so the three additive quads overlapped into the reported
+saturated red disc with half of every texture buried. First fix: `Sprite` gained an `AnchorLeft`
+flag, set only on the muzzle-flash triad; `RenderSprites` derives the quad centre from
+`Pos + Orient.X * (currentSize / 2)` instead of drawing centred on `Pos`, so the texture's left edge
+stays pinned at the muzzle as the quad shrinks over its short life, rather than drifting if the
+offset had been baked in once at spawn.
+
+**That alone wasn't enough — the user caught it live: "not a red circle, only red stripes."** A
+`--tex-override=slug_muzzle1=00FF00` check (flat-colour, so it can't reveal a UV bug) had shown the
+anchored *shape* was right and was wrongly read as confirmation. The real defect was
+`AddMultiMesh`'s shared material: `Uv1Scale = (-1, 1, 1)` with no matching `Uv1Offset`, paired with
+`TextureRepeat = false` (clamp addressing) — a mirror-without-offset landed as a degenerate clamp
+that samples every fragment at U≈0, so **every sprite `ProjectilePool` draws — tracer, muzzle flash,
+impact spark, smoke — rendered as a flat single-column colour stripe instead of its texture.** It
+just read as "a red circle" for the muzzle flash before the anchor change because three overlapping
+identical stripes additive-blend into a blurred blob; anchoring separated the three quads, so the
+same stripes became visible as individual radiating lines instead. This predates C21 (`git blame`:
+commit `eb29231`, "Tuned the Tracer visuals. still needs work," the same pass that added the tracer
+axis swap) and was never specific to the muzzle flash — the earlier "colour right" tracer verdict
+(`BL-202`) and "irregular, lobed burst" muzzle verdict (`BL-201`) both judged a stripe pattern
+subtle enough, at the zoom used, to read as plausible. **Fix:** removed the `Uv1Scale` mirror
+entirely — confirmed via `.scratch/c21_noflip_01.png` that the *unmirrored* UV renders the full
+authored `slug_muzzle1` flame (bright core + flame lobes) matching
+`OriginalScreenshots/MuzzleFlash1.png`, so no mirror was ever needed here.
+
+Removing the mirror then exposed a second, pre-existing effect it had been masking: with UV
+un-mirrored, the tracer streak's head/tail read backwards (the bright head trailed instead of
+leading) — confirmed live in `RunGame.ps1`. Rather than re-add a material-level `Uv1Scale`/`Offset`
+pair on the *shared* `AddMultiMesh` material (the same trap that caused this whole bug — a flip
+meant for one texture silently applying to every sprite type sharing that call), the fix is
+geometric and local to the tracer: `RenderTracers`' streak basis is now
+`new Basis(-yAxis * len, -xAxis * width, zAxis)` — negating both local axes together is a 180°
+rotation about the quad's own facing normal (not a mirror), so only the tracer's own quad flips.
+
+**Verified.** `RunTests.ps1` fully green: 313 units, 12/12 suites, 13/13 goldens hash-identical (no
+gun-fire pose is a golden — this material change touches every `ProjectilePool` sprite but none is
+captured in a pinned shot). Muzzle flash confirmed against `OriginalScreenshots/MuzzleFlash1.png`
+(`.scratch/c21_noflip_01.png`); eject-puff smoke confirmed round/cloud-like, not striped, in a live
+`--chapter=C1 --fire --infinite-ammo` capture; tracer head/tail direction confirmed by the user at
+the controls (`./RunGame.ps1 --plane=player_bhawk --chapter=C1 --infinite-ammo --fire`) — "looks
+good." Owed: the user's full cockpit A/B pass per the plan's original acceptance step.

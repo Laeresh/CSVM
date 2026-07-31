@@ -598,11 +598,20 @@ velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flas
 quads 120° apart around that basis's facing normal, the triad sharing one random per-shot roll
 (seeded via `Rng.Weapons`, so `--det` stays reproducible) — one `List<Sprite>[]`/`MultiMesh[]` pair
 per ammo-type texture (`{slug,dum,ap,mag}_muzzle1`, `MuzzleAmmoIndex` resolved from the weapon's
-`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws. The
-tracer streak (C25) carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/
-`_magnesium`, ordnance falling back to the generic `tracer1`), one `MultiMesh` per texture, drawn
-with a uniform overbright tint (`TracerTint`) since additive blending with no bloom pass otherwise
-caps a tracer at the texture's own pixel value.
+`FIRE` binding), since a `MultiMesh`'s material is shared across every instance it draws. Each quad
+is centred by default (`Sprite.Pos`), except the muzzle flash triad, which sets `Sprite.AnchorLeft`
+so `RenderSprites` derives the quad centre from `Pos + Orient.X * (currentSize/2)` — the texture's
+left edge (QuadMesh's default UV, U=0 at local X=-0.5) stays pinned at the muzzle as the quad
+shrinks over its life, instead of the texture being buried under a centred blob (C21). `AddMultiMesh`
+draws every texture un-mirrored (a `Uv1Scale` mirror without a matching `Uv1Offset` here once
+degenerated, under `TextureRepeat=false` clamping, into every sprite this pool draws — tracer,
+muzzle, impact, smoke — rendering as a flat single-column colour stripe, C21); a texture needing a
+flip gets it from its own geometry instead, never from that shared material — the tracer streak
+(C25) carries the same per-ammo axis (`tracer_slug`/`_dumdum`/`_armorpierce`/`_magnesium`, ordnance
+falling back to the generic `tracer1`) and rotates its own quad 180° about its facing normal
+(`RenderTracers`: `new Basis(-yAxis*len, -xAxis*width, zAxis)`) to put the authored texture's head at
+the round's current position, drawn with a uniform overbright tint (`TracerTint`) since additive
+blending with no bloom pass otherwise caps a tracer at the texture's own pixel value.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly
