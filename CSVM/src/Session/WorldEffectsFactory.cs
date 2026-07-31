@@ -56,17 +56,25 @@ public sealed class WorldEffectsFactory
     private static readonly string[] EffectTemplateRoots =
         { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
 
-    // The gamez template roots those effects' puffers ride — staged (hidden) under the world-effects
-    // stage so a PlayEffectAt relocates one onto the hit/death point. Union of the anim defs'
-    // anchor roots; all present in every chapter's gamez (checked). The stage is hidden, so the
-    // roots' own meshes (gunhit debris bits, the he_ring/splash models) do not render — the puffers,
-    // parented at world level, do; the mesh half is a documented follow-up.
+    // The gamez template roots those effects' meshes and puffers ride — staged under the
+    // world-effects stage so a PlayEffectAt relocates one onto the hit/death point. This is the
+    // FULL set of anchor roots the EffectAnimNames call closure needs (derived from the reader
+    // defs by analysis/effect-anchor-roots/); a root left out leaves every def anchored on it
+    // unanchored, so it plays nothing at all — which is how the rocket explosion lost its
+    // per-type rings (ring_ap/ring_he/ring_sonic), its trail columns and the torpedo ripple.
+    // All present as a single parentless root in every chapter's gamez (checked, all 8).
     private static readonly string[] EffectStageRoots =
     {
         "gunhit", "dum_gunhit", "mag_gunhit", "flame_ball_01", "flame_ball_02", "he_ring",
         "ap_effect", "flak_control", "flash_control", "sonic_effect", "scatter_trails",
         "torp_effects", "rear_flash_control", "fire_here", "moving_fire_ball_01",
         "black_smoke_ball_01", "zep_ng_dstry1.flt", "huge_splash_model", "partial_damage_obj",
+        // the rocket-explosion rings and their companions (D31): the HE upper ring, the four
+        // rising sonic rings + the falling one, the AP/HE/flak/torpedo smoke-trail columns, the
+        // sonic puff clusters, and the torpedo ring/ripple/splash.
+        "he_ring1", "sonic_ring1", "sonic_ring2", "sonic_ring3", "sonic_ring4", "sonic_ring5",
+        "ap_trails", "he_trails", "flak_trails", "carnage_trails", "carnage_ring",
+        "sonic_puff1", "sonic_puff2", "hg_splash", "ripple",
     };
 
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its
@@ -102,7 +110,12 @@ public sealed class WorldEffectsFactory
         int n = 0;
         foreach (var rootName in roots)
         {
-            if (gamez.FindByName(rootName) is { } node && scene.BuildSubtree(node) is { } built)
+            // An effect template is pure presentation and gets NO colliders: several carry
+            // intersect_surface (he_ringer, the splash models), and the authored ring scales to
+            // 7-20x, so a collidable copy relocated onto an impact point would leave an invisible
+            // plate up to ~170 m across floating at the blast site.
+            if (gamez.FindByName(rootName) is { } node
+                && scene.BuildSubtree(node, collisionSkip: _ => true) is { } built)
             {
                 built.Transform = Transform3D.Identity; // sit at the stage; reposition moves it on call
                 parent.AddChild(built);
@@ -128,20 +141,30 @@ public sealed class WorldEffectsFactory
     }
 
     /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
-    /// per-player crash runtime. It stages the impact/destruction effect templates (hidden) under a
+    /// per-player crash runtime. It stages the impact/destruction effect templates under a
     /// dedicated subtree so their names resolve locally without colliding with the world or the crash
     /// roots, keeps a live <c>PufferFactory</c> over the session textures, and binds the closure of
     /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
     /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a rocket impact,
     /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
-    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the hidden stage does
-    /// not suppress them.</summary>
+    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
+    /// not suppress them.
+    ///
+    /// <para>The stage itself is visible and each template ROOT starts hidden
+    /// (<see cref="AnimRuntime.ShowPlacedTemplates"/> reveals one for as long as an effect plays on
+    /// it): a template's meshes are half the effect — the rocket's authored per-type rings, the
+    /// fireball facades, the splash models — and hiding the whole stage rendered none of them
+    /// (D31). Inside a revealed root the data still decides what shows: every ring is reset
+    /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para></summary>
     public AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
         TextureArchive textures, AnimProgram worldProgram)
     {
-        var stage = new Node3D { Name = "world_effects", Visible = false };
+        var stage = new Node3D { Name = "world_effects" };
         _worldRoot.AddChild(stage);
         int staged = BuildEffectStage(gamez, worldScene, stage, EffectStageRoots);
+        foreach (var child in stage.GetChildren())
+            if (child is Node3D root)
+                root.Visible = false;
         // The impact/death SOUND an effect def carries is already played by the projectile pool
         // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
         // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
@@ -153,9 +176,10 @@ public sealed class WorldEffectsFactory
         var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects), _worldRoot,
             st => Puffer.Create(st, textures, sustained: true, softParticles: st.Colors.Count == 0),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
-        // Bind name resolution to the (hidden) template stage — so the effect names resolve to
-        // these templates and not to the world's or the crash roots' same-named nodes — but parent
-        // the runtime node itself under the visible world root, a plain logic node that self-ticks.
+        // Bind name resolution to the template stage — so the effect names resolve to these
+        // templates and not to the world's or the crash roots' same-named nodes — but parent the
+        // runtime node itself under the visible world root, a plain logic node that self-ticks.
+        effects.ShowPlacedTemplates = true;
         effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
         _worldRoot.AddChild(effects);
         GD.Print($"world-effects runtime: {staged}/{EffectStageRoots.Length} effect template(s) staged, "

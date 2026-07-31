@@ -466,6 +466,10 @@ the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, a
 loop gate reads, the damaged object), a NodeActive-governed def gets no `EffectTtl` and tears its
 resources down when its loop exits (the death swap hides `healthy`), and `ResetDestructible` stops
 routed stage effects through `ExternalEffectStop` (a heal never flips `NodeActive`).
+`ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
+instance's: revealed after `Start`, hidden only on teardown (Stop/TTL), because the authored
+scale/opacity motions outlive the sequence that launched them — hiding on instance-finish would cut
+an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the data's call.
 ⚠ `_rng` is the runtime's ONE die (`RANDOM_WEIGHT`, `SOUND_GROUPS` picks, crash-debris scatter) —
   every session sets `Seed` (`Rng.Anim`/`Rng.Crash`/`Rng.Effects`); route new dice through it or a
   replay stops being identical. `Reseed()` also clears the sound groups' recency memory, which
@@ -1481,13 +1485,17 @@ Builds the impact/destruction effect stages and the per-player crash runtime: th
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
 `partial_damage_obj`, staged via `EffectStageRoots`) — the install-wide stage-call closure except
 C4's train-anchored `b_steamtrail` (BL-046). Constructed once per session (`_worldEffectsFactory`, same lifetime as
-`LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`
-— the ctor closure over `GameSession`'s `_rigs`/`_camera` replaces the old inline lambda, unchanged
-in effect since it is only ever evaluated per-frame from inside the built `AnimRuntime`. The
-effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
+`LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
+The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the
 crash-smokeball lesson; the damage-stage smoke measured near-invisible with it on) — and keeps the
-soft edge for additive fire.
+soft edge for additive fire. Templates build with collision suppressed and the stage is visible with
+each ROOT hidden (`AnimRuntime.ShowPlacedTemplates` reveals one while an effect plays on it), so a
+template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31).
+⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure — a def
+  anchors on the node its NAME names, so an omitted root leaves it unanchored and it plays nothing,
+  silently. Staging 19 of 28 cost the rings, all four trail columns, the sonic puffs and the torpedo
+  ripple; regenerate the list with `analysis/effect-anchor-roots/`, never by hand.
 ⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
   lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
   there); `GameSession` no longer mirrors that reference — the runtime node hangs under `_worldRoot`,
@@ -1498,9 +1506,6 @@ soft edge for additive fire.
 ⚠ `BuildEffectStage`, `BuildCrashAnchorSet` and `EffectAnimNames` are `public static` (no session
   state) — `GameSession`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
   them as `Session.WorldEffectsFactory.X`, not through the instance.
-⚠ `BuildWorldEffectsRuntime`/`EnsureWorldEffects`/`BuildFlightCrashRuntime` read `_spec.DebugAnim` and
-  `_worldRoot` off the factory instance instead of a passed session — same values, same lifetime, just
-  no longer re-passed at every call site.
 
 ## src/Session/WeatherRig.cs
 Loads/applies the flown mission's weather and drives its per-frame rig state: `LoadWeather`/`SetupWeather` become

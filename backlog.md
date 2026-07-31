@@ -85,17 +85,6 @@ work is below.
    nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
    a flight bug.
 
-**Rocket visuals (findings 2, 4).**
-5. `BL-016` **Rocket explosion looks different + faster than the original.** Goes through the D32 world-effects
-   puffer (`EffectSink`). Tuning gap — cross-ref the "World-effects runtime follow-ups" (M3 D32) item.
-   Re-confirmed at the controls 2026-07-31 (PT-09, trails now visible): still a lot different from
-   the original. Lead from the user: the texture archives carry per-type explosion rings that
-   correspond — `ring_ap.png`, `ring_he.png`, `ring_sonic.png`. Survey the per-type explosion
-   effect defs for where those rings are authored before touching the look. Scheduled:
-   PLAN-m3-polish-3 D31.
-   *Playtest after fix:* A/B the rocket explosion look/speed against the original.
-   `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
-
 **Impacts & surfaces (findings 3, 4).**
 7. `BL-186` **Water impacts land but READ as nothing — the splash is imperceptible, and out-of-range rounds
    expire silently.** Replaces the disproven `BL-017` "the sea has no collider" (2026-07-30): the C1B sea
@@ -125,7 +114,8 @@ work is below.
     wreck and stays (the authored `large_30sec_fire` is literally a 30 s fire). The original oil-tank kill
     is a rich ground-level fireball + smoke column (`Oil Tank Explosion1..3.png`), not a lone high floating
     puff. *Investigate:* the puffer's anchor (it should sit at the wreck, not climb) and its mode/lifetime.
-    Cross-ref the D32 world-effects follow-ups.
+    Cross-ref the D32 world-effects follow-ups — and `BL-212`: the 30 s fire's authored stop is a
+    `STOP_SEQUENCE`, which this engine does not implement, so "lingers far too long" may be that bug.
     *Playtest after fix:* look for an oil-tank kill's fire sitting at the wreck rather than floating high
     and lingering. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
@@ -198,6 +188,41 @@ its symptom and traps.
   part of the same complaint).
   *Playtest after fix:* rocket fire A/B against the original.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires).
+
+- `BL-212` **`STOP_SEQUENCE` is a no-op, so the rocket fireball burns until something else moves
+  it.** User at the controls (2026-07-31): the red fire after a rocket hit runs far too long and
+  "only dissipates when another rocket hits". Traced, not guessed. The fire is `large_fireball`
+  (`zrdr/flame_ball.zrd.json`, anim root `flame_ball_01`, puffer `fierypuffer`, `TEXTURE_SEQUENCE`
+  `fire_f01`–`fire_f06`), which `he_ground_effect` calls `AT_NODE he_ring, 0, 12, 0`. **The data
+  stops it after 0.3 s** — `activate_puffer` ends with `STOP_SEQUENCE{stop_p1trail}` at
+  `EVENT_OFFSET 0.3`, and `stop_p1trail` is a defined ON_CALL sequence whose whole body is
+  `PUFFER_STATE fierypuffer INACTIVE` + `OBJECT_ACTIVE_STATE flame_ball_01 INACTIVE`. **We never
+  run it:** `AnimRuntime.Dispatch`'s `case "StopSequence"` returns true with no action ("handled by
+  the runner owning the sequence"), and `SequenceRunner` has no `StopSequence` handling at all — the
+  event is a silent no-op install-wide (73 sites). So the emitter runs to the 32 s `EffectRuntimeTtl`
+  instead of 0.3 s, and because `PlayEffectAt` relocates the ONE shared template rather than copying
+  it, the next rocket drags the same still-emitting fire to the new impact point — which is exactly
+  the "only dissipates when another rocket hits" the user sees. Measured: a `--debug-anim` C1
+  rocket run shows the effects runtime's live-particle count climbing monotonically (46 → 742 over
+  ~8 s) and never falling.
+  *Fix shape:* implement `STOP_SEQUENCE`. **Do not just delete or time-box the fireball** — it is
+  authored content and the correct duration is in the data.
+  ⚠ Traps: (a) **The semantics are genuinely ambiguous and must be decoded before implementing** —
+  `flame_ball.zrd.json` uses `STOP_SEQUENCE` to reach a *stopper* sequence that is started nowhere
+  else (reads as "call"), while the same file's `large_30sec_fire` targets `fire_n_smoke`, its own
+  *emitting* sequence, at `ANIMATION_OFFSET 30` (reads as "halt the running sequence"). One reading
+  must satisfy both; pick it from the data, not from what makes the fireball look right. Survey the
+  73 targets first (`test_player`×33, `setprop`×8, `flame_light_seq`×7, `zepskinfire`×5, …).
+  (b) A wrong reading is invisible in `--effects-test`, which never measures an effect's DURATION —
+  it plays each name and `StopAll`s between them (verification.md WORLD-19).
+  (c) Anything that ends an effect early must not cut the authored scale/opacity motions, which
+  outlive the sequence that launched them (the D31 ring lesson, `docs/architecture.md`
+  `AnimRuntime`).
+  (d) Cross-ref `BL-020` (oil-tank `large_30sec_fire` "floats high and lingers far too long") — its
+  30 s stop goes through this same unimplemented event, so the two may be one fix.
+  *Playtest after fix:* a single rocket's fireball flares and dies within ~1.5 s and stays at its
+  own impact point; firing a second rocket elsewhere does not move or clear the first.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
 ## Blocked / deferred
 

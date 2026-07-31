@@ -415,6 +415,15 @@ cite these IDs.
   item's own tier — check the index, never the first matching row.** The Bloodhawk's
   `engine` 11 is the Lvl-2 row (power 0.62), not Lvl-1's 0.47; the 32% error passed every
   downstream check because they only ever see the product.
+- **WORLD-19** — **An effect has a MESH half and a PARTICLE half; a probe that counts
+  particles is blind to the other one and will report a half-built effect as working.**
+  `--effects-test`'s "built a puffer" column called the rocket explosion healthy for a whole
+  milestone while every per-type ring mesh was missing: 19 of the 28 anchor roots its bound
+  name closure needs were unstaged (so those defs were unanchored and played nothing) and the
+  staged ones drew under a `Visible = false` stage. Two lessons that generalise past effects:
+  a definition anchored on a node the build skipped **fails silently — no error, no event**,
+  so measure the anchor set, not the play call; and when a probe answers one channel, name the
+  channel it does NOT answer before trusting a pass.
 
 ## SHELL — Windows, PowerShell & processes
 

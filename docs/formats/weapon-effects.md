@@ -91,7 +91,8 @@ effect **animation**, splits by what the bound name resolves to:
 
 That dedicated runtime is now built (`WorldEffectsFactory.BuildWorldEffectsRuntime`): one per session, a
 world-scoped `AnimRuntime` bound to the closure of every impact/destruction effect name, over a
-**hidden** stage of their gamez template roots (`gunhit`, `flame_ball_01`, `he_ring`, …), with a
+stage of their gamez template roots (`gunhit`, `flame_ball_01`, `he_ring`, …) — each root hidden
+until an effect plays on it — with a
 live puffer factory (the session textures stay open for the crash runtime already).
 `PlayEffectAt(name, worldPoint)` relocates the effect's template root onto the point and starts the
 def — its puffers ride that root and parent at world level, so they render. Two callers:
@@ -104,18 +105,45 @@ def — its puffers ride that root and parent at world level, so they render. Tw
 - **Destructible death** → the world runtime's `ExternalEffect` routes a death sequence's
   `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, `great_balls_of_fire`, …) here.
 
-`--effects-test` is the headless verify: it plays each of the 28 bound names at the camera point and
+`--effects-test` is the headless verify: it plays each of the 30 bound names at the camera point and
 reports which resolve and which actually **build a puffer** (`verification.md` WORLD-12 — a started
 def whose factory/textures are absent renders nothing). Deterministic (seeded, `StopAll` between
-names): **16 build a puffer** — the fireballs (`large_fireball`/`small_fireball`/`large_30sec_fire`/
-`great_balls_of_fire`/`large_black_smokeball`/`big_splash`), the gun `*_gunhit` smoke, and the
-`ap`/`sonic`/`flak`/`scatter`/`torpedo` ground bursts. The rest are light/model/container effects
-(`he_ground_effect`/`flash_effect` are point-light flashes; `biggun_flying_parts` rides unstaged
-`fly_trail*` sub-trails) or `RANDOM_WEIGHT`-gated gun variants. The template **meshes** (the `gunhit`
-debris bits, the `he_ring`/splash models) stay hidden — only the puffers render; the mesh half is a
-follow-up. A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the effect's
-own relocated root (the sentinel = "the node this def was invoked on"; see
+names): **27 build a puffer**; the remaining 3 (`flash_effect`, `rear_flash_effect`,
+`biggun_flying_parts`) are point-light / model-only effects with no particles of their own.
+A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the effect's own
+relocated root (the sentinel = "the node this def was invoked on"; see
 [anim-definitions.md](anim-definitions.md)).
+
+**The staged set must be the closure's WHOLE anchor-root set** (D31, `analysis/effect-anchor-roots/`).
+A definition anchors on the gamez node its `NAME` names, so a root the stage omits leaves every def
+anchored on it unanchored — it plays nothing, silently. Staging only 19 of the 28 roots the rocket
+IMPACT closure needs cost the per-type explosion rings below, all four smoke-trail columns
+(`ap_trails`/`he_trails`/`flak_trails`/`carnage_trails`), the sonic puff clusters and the torpedo
+ripple; `--effects-test` reported it only as `PufferState(no host node)×20`.
+
+### Explosion rings — the per-type ground decals
+
+Each ordnance type's ground burst carries a **ring mesh**, not a particle: a flat 8.4 m quad the def
+activates, scales up and fades out. This is the visual signature that tells the types apart.
+
+| Rocket | `IMPACT` anim | ring def (`NAME` → `ANIMATION_NAME`) | ring node | texture |
+|---|---|---|---|---|
+| ARMOR (`wep_05`) | `ap_ground_effect` | `ap_effect` → `call_cracks` | `ap_cracks` | `ring_ap` (yellow-green) |
+| BOOM (`wep_06`) | `he_ground_effect` | `he_ring` → `call_he_ring`; `he_ring1` → `call_he_ring1` | `he_ringer`; `he_ringer1` | `ring_he` (violet-fringed white) |
+| SONIC (`wep_08`) | `sonic_ground_effect` | `sonic_ring1..5` → `ring_up1..4`, `ring_down1` | `sonic_ring` (one per root) | `ring_sonic` (pale cyan) |
+
+Timings are authored and must not be retuned: HE's ground ring scales 1→7 over 1.6 s behind a 0.2 s
+opacity fade-in and a 0.6 s fade-out; its upper ring (called `AT_NODE he_ring, 0, 12, 0`) scales
+1→20 over 2.0 s. The sonic rings are five staggered copies with authored start scales
+(`sonic_ring2/3/4` reset to 0.6/0.7/0.8) so they read as an expanding stack.
+
+⚠ A ring is reset **`INACTIVE`** (HE) or **`ACTIVE` with `OPACITY_STATE OFF`** (AP, sonic) — two
+different ways of starting invisible. Anything that decides "does this template show?" must honour
+both, and must never assume an idle template is inactive.
+
+⚠ Ring nodes carry `intersect_surface`, so a naively built template gets colliders — and the
+authored scale (up to ×20 on a 8.4 m quad) would leave an invisible ~170 m plate at the blast site.
+Effect templates are presentation only and are built with collision suppressed.
 
 ## Ordnance effect readers
 

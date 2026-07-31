@@ -9247,3 +9247,35 @@ confirmed live by the user at the controls with a `--no-det` `config.json` overr
 every scripted capture implies, clears config overrides by design) — widened `tracerWidth`/
 `tracerLength` read visibly bigger, and disabling `tracerMinPixels` measurably shrank distant
 flecks back toward invisible. `BL-210` deleted from `backlog.md`.
+
+## 2026-07-31 — M3p3 Wave D D31 BL-016: rocket explosions get their authored per-type rings
+
+The user's lead — `ring_ap.png`/`ring_he.png`/`ring_sonic.png` in the texture archives, one per
+rocket type — traced to real authored content we were not building. The rings are gamez **meshes**
+driven by ordinary anim defs, not particles: an 8.4 m quad the def activates, scales and fades
+(`ap_effect`→`call_cracks`/`ap_cracks`, `he_ring`/`he_ring1`→`he_ringer`/`he_ringer1`,
+`sonic_ring1..5`→`ring_up1..4`/`ring_down1`). Decode in `docs/formats/weapon-effects.md`; the survey
+script is `analysis/effect-anchor-roots/`.
+
+Two independent reasons nothing showed. (1) **Anchor roots.** A def anchors on the gamez node its
+`NAME` names, and `EffectStageRoots` staged 19 of the **28** roots the bound name closure needs — so
+14 defs were unanchored and played nothing at all, silently: the HE upper ring, all five sonic
+rings, the four smoke-trail columns (`ap_trails`/`he_trails`/`flak_trails`/`carnage_trails`), the
+sonic puff clusters and the torpedo ring/ripple/splash. (2) **The stage was `Visible = false`**, so
+even the two roots that were staged drew no mesh — the puffers rendered only because they parent at
+world level. Fixed by staging the full closure (34 roots, resolving 34/34 in all 8 chapters) and
+making the stage visible with each ROOT hidden until an effect plays on it
+(`AnimRuntime.ShowPlacedTemplates`, released on teardown rather than on instance-finish so the
+1.6–2.0 s authored scale/opacity motions are not cut off). Timings are the data's, untouched.
+Effect templates now also build with collision suppressed: the ring nodes carry `intersect_surface`
+and scale up to ×20, which would have parked an invisible ~170 m plate at every blast site.
+
+Verified: `RunTests.ps1` green (313 units, 12 suites, **all 13 goldens hash-identical** — no golden
+fires a rocket). `--effects-test` across all 8 chapters: 34/34 templates staged, 30/30 resolved,
+puffers 25→**27**, and `PufferState(no host node)` **20→0**; `he_ground_effect` 0→5 puffers,
+`ap_ground_effect` 2→7, `torpedo_ground_effect` 0→5. Pixels: a `--det` C1 dive-fire capture
+(`--pos=-7600,150,-3150 --direction=0,-0.75,-1 --fire-rockets`) A/B'd frame-for-frame against the
+same run built from HEAD — the HE impact frame gains the violet `ring_he` disc on the ground
+(2.7 % of the frame; the baseline frame has no ring at all), and the AP run differs on 69 of 110
+frames, peaking at 4.4 %. Per-type A/B against the ORIGINAL captures is still owed and rides
+`PT-17`. `BL-016` deleted from `backlog.md`.

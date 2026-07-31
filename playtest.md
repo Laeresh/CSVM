@@ -175,14 +175,25 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   twin material for the fade's duration. `./RunGame.ps1 --plane=player_pfighter --chapter=C2 --fire`.
   *Blocks:* closing PLAN-m3-polish-3 B12.
 
+- `PT-17` **Rocket explosion A/B against the original (D31 / `BL-016` landed 2026-07-31).** Fire
+  each rocket type at open ground and compare against the original, one type at a time:
+  `--rocket=wep_05` (ARMOR), the stock `wep_06` (BOOM), `--rocket=wep_08` (SONIC). *Look for:* a
+  per-type ring now expanding from the impact — yellow-green cracks for AP, a violet-fringed white
+  disc plus a second larger ring above it for HE, a stack of five pale-cyan rings rising for SONIC —
+  plus the smoke-trail columns that never had a host node before. The rings' scale/fade timings are
+  the data's and were not retuned, so **the remaining "faster than the original" half of `BL-016`
+  is the open question**: if the burst still reads too fast after this, that is a new finding, not
+  this fix failing. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
+  *Blocks:* closing PLAN-m3-polish-3 D31.
+
 ---
 
 ## Everything else
 
 Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its own
-`*Playtest after fix:*` line — the weapons re-tests (`BL-016`–`BL-028`), the inspect-tool
+`*Playtest after fix:*` line — the weapons re-tests (`BL-017`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
 their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`/`BL-204`/
-`BL-206`/`BL-207` landed and came back as `PT-13`/`PT-14`/`PT-15`/`PT-16`). Do not
+`BL-206`/`BL-207`/`BL-016` landed and came back as `PT-13`–`PT-17`). Do not
 re-add them here; the entry brings its own test when the fix lands.

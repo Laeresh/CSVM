@@ -103,7 +103,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — rockets
 
-31. ☐ `BL-016` Rocket explosion look: wire the authored per-type rings (`ring_ap/he/sonic`)
+31. ☑ `BL-016` Rocket explosion look: wire the authored per-type rings (`ring_ap/he/sonic`) (landed 2026-07-31 — the rings are authored meshes on 14 unstaged anchor roots, under a hidden stage; cockpit A/B vs the original = `PT-17`)
 32. ☐ `BL-211` Rocket sound: survey authored bindings vs playback, get the user's specifics
 
 ## Dependency and parallelism notes
@@ -400,7 +400,7 @@ artifact — `TextureRepeat` stays off (`BL-202`). (c) Serial with C21/C22/A2 on
 
 # Wave D — rockets
 
-## D31 ☐ `BL-016` Rocket explosion look: the authored per-type rings
+## D31 ☑ `BL-016` Rocket explosion look: the authored per-type rings
 
 **Goal.** Rocket explosions read like the original's, per type — starting from the authored ring
 textures the user identified (`ring_ap.png`, `ring_he.png`, `ring_sonic.png`).

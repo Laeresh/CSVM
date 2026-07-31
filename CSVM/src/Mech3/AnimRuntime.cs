@@ -162,6 +162,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// staged instead of at its gamez origin.</summary>
     public bool PlaceCalledTemplates;
 
+    /// <summary>Reveals an effect template's root while an effect plays on it, and hides it again
+    /// when that effect is torn down. Set on the world-effects runtime, whose templates are staged
+    /// hidden so nothing renders ambiently at the stage origin: without this the templates' own
+    /// MESHES — the rocket's per-type explosion rings, the fireball facades, the splash models —
+    /// never draw, only their puffers do (D31). Only the root's own visibility is touched; what
+    /// shows inside it stays the data's decision (the rings are reset INACTIVE or opacity-OFF and
+    /// their defs turn them on). Off everywhere else, where the stage is visible anyway.</summary>
+    public bool ShowPlacedTemplates;
+
     /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see the
     /// <see cref="_puffers"/> remark. Set on the world-effects runtime, where distinct effect defs
     /// declaring same-named puffers are distinct emitters (the damage-stage sputters); off on the
@@ -979,6 +988,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 _inputNodes[(def, anchor)] = inputNode!;
             }
             Start(def, anchor);
+            // After Start, not with the placement: a governed def's Stop above hides the root
+            // again, and this must be the last word on it for the instance now running.
+            ShowTemplate(def, visible: true);
             matched = true;
             if (!governed && EffectTtl > 0f)
                 _effectTtls.Add((def, anchor, _effectClock + EffectTtl));
@@ -1686,6 +1698,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 TearDownResourcesOf(inst.Def, inst.Anchor);
                 _inputNodes.Remove((inst.Def, inst.Anchor));
+                ShowTemplate(inst.Def, visible: false);
             }
             // Start's seamless restart (tearDown false) keeps the entry, exactly as it keeps
             // the resources the new instance re-asserts.
@@ -1989,7 +2002,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopSequence":
-                return true; // handled by the runner owning the sequence; nothing global to do
+                // NOT IMPLEMENTED, and not counted as unhandled either (BL-212). SequenceRunner has
+                // no StopSequence handling, so all 73 authored sites are silent no-ops — which is
+                // why the rocket fireball's authored 0.3 s stop never runs and it emits to its TTL.
+                // The semantics need a decode first: the data uses this both to reach a stopper
+                // sequence nothing else calls and to halt a running one.
+                return true;
 
             case "CallAnimation":
                 // A call does NOT restart an animation that is already live on this anchor.
@@ -2587,6 +2605,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Moves an effect template's own root(s) to an absolute world point â€” the
     /// <see cref="PlayEffectAt"/> path, where the site is a hit/death coordinate rather than a
     /// world node.</summary>
+    /// <summary>Shows or hides the effect-template root(s) a definition anchors on, when this
+    /// runtime stages its templates hidden (<see cref="ShowPlacedTemplates"/>). Paired with the
+    /// effect's life, not its instance: hiding on instance-finish would cut the ring off mid-flight,
+    /// because the authored scale/opacity motions outlive the sequence that launched them.</summary>
+    private void ShowTemplate(AnimDefinition def, bool visible)
+    {
+        if (!ShowPlacedTemplates)
+            return;
+        foreach (var root in Anchors(def))
+            if (root != null && IsInstanceValid(root))
+                root.Visible = visible;
+    }
+
     private void PlaceTemplateAt(AnimDefinition callee, Vector3 origin)
     {
         foreach (var root in Anchors(callee))
