@@ -567,7 +567,8 @@ void fragment() {
         if (node.Local is { } local)
             n3d.Transform = local;
 
-        if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
+        if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
+            && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
             var mesh = GetMesh(node.MeshIndex);
             if (mesh != null)

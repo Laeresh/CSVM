@@ -49,7 +49,7 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "cb550de3080c1b0d22168c154fb6dc52",
+      "hash": "becc96e99d84bc3bfa620a156d6e3c25",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },

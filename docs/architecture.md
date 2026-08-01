@@ -195,6 +195,8 @@ plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes
 docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
 Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
 absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
+`IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
+coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
 ⚠ GameZNode.Index is the flat list position, NEVER the unified JSON `index` (1-based, duplicated);
   child_indices are flat positions too — getting this wrong rebuilds the graph without erroring.
 ⚠ The unified transform `scale` is deliberately ignored (measured unit on every transformed node).
@@ -222,7 +224,8 @@ splits a mesh's colliding geometry into one trimesh per surface class actually p
 (water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
 area-quorum vote it replaced gave real water polygons on it to `default` outright
-(`analysis/surface-classification/`).
+(`analysis/surface-classification/`). A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
+still built with its transform — animations attach puffers and sounds to those nodes by name.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
   (16-vec4 per-instance buffer cost).

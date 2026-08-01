@@ -52,6 +52,8 @@ public sealed class GameZ
 
     private int[]? _parent; // flat index → parent flat index (−1 for roots), built lazily
 
+    private bool[]? _markerGizmo; // mesh index → single flat-coloured triangle, built lazily
+
     public List<GameZNode> Nodes { get; } = new();
     public List<GameZMesh> Meshes { get; } = new();
     public List<GameZMaterial> Materials { get; } = new();
@@ -86,6 +88,32 @@ public sealed class GameZ
             using (var s = OpenEntry(zip, "materials.json")) gz.ParseMaterials(s);
         }
         return gz;
+    }
+
+    /// <summary>The mesh is a level-editor gizmo, not scenery: one flat-coloured triangle with no
+    /// texture. The original never draws these — they are the authoring marks for AI/mission
+    /// anchors (approach cones, landing spheres, puffer and sound emitters, look-at targets,
+    /// flak/scatter trail origins). 142 nodes install-wide carry one, and every name in that set
+    /// is a marker; nothing legible as scenery is a lone untextured triangle.
+    /// The owning node still gets built — animations attach puffers and sounds to it by name.</summary>
+    public bool IsMarkerGizmo(int meshIndex)
+    {
+        if (meshIndex < 0 || meshIndex >= Meshes.Count)
+            return false;
+        _markerGizmo ??= new bool[Meshes.Count];
+        // Cheap enough to recompute on a miss; the array only memoizes the true answers.
+        if (_markerGizmo[meshIndex])
+            return true;
+        var mesh = Meshes[meshIndex];
+        if (mesh == null || mesh.Vertices.Count != 3 || mesh.Polygons.Count != 1)
+            return false;
+        var poly = mesh.Polygons[0];
+        if (poly.VertexIndices.Count != 3)
+            return false;
+        if (poly.MaterialIndex < 0 || poly.MaterialIndex >= Materials.Count
+            || Materials[poly.MaterialIndex].TextureName != null)
+            return false;
+        return _markerGizmo[meshIndex] = true;
     }
 
     public GameZNode? FindByName(string name)

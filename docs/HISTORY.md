@@ -9474,3 +9474,24 @@ a guess at the original engine's default (the sibling `large_10sec_fire` authors
 `FADE_RANGE` (set on 400 of 721) and
 `NEAR_FADE` (the compiled payload's `unk_range`, decoded this session) are documented in
 `effects.md` but still unimplemented.
+
+## 2026-08-01 — Level-editor marker gizmos no longer render
+
+**What landed.** The user reported white triangles in flight: one in mid-air over C3
+(`treasure_approach` → `do_approachN` → `cone`) and a pair behind the C1 pirate zeppelin
+(`tilt_zeppelin` → `pz_auto_land`/`pz_manual_land` → `sphere`/`half_cone`). They are the level
+editor's visual marks for mission/AI anchors, which the original never draws. `GameZ.IsMarkerGizmo`
+classifies them by the exact conjunction that identifies the class — a single-polygon, three-vertex
+mesh whose only material is untextured `Colored` — and `SceneBuilder.BuildSubtree` skips the
+`MeshInstance3D` and its collider while still building the `Node3D`, because animations attach
+puffers and sounds to precisely these nodes by name. Survey and the rejected weaker rules are in
+`docs/formats/world-structure.md`.
+
+**How verified.** 142 nodes install-wide match, and every name in that set reads as a marker
+(`cone`/`sphere`/`half_cone`, the `*_emitter*`/`*_emit*` puffer origins, `flak_explosion` /
+`scat_explosion`, `lookat_caboose`, `hangar_panic_scream`, `p2..p4_lightmarker`, `exhaust1`).
+Before/after `--freecam` captures at the user's reported C3 camera show four large white sails
+replaced by clean sky; C3's world build drops from 2380 to 2364 mesh instances. `.\RunTests.ps1`:
+318 units, 13 in-engine suites, 13 goldens. One golden moved — `c3-island`, 433 px of 921,600, a
+pixel diff confined to two fog-darkened cone spikes on the horizon — reviewed as an image and
+re-pinned.
