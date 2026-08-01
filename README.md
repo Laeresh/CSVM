@@ -79,5 +79,6 @@ and carries its own license terms. It is a separate tool, not linked into this e
 
 ## AI assistance disclosure
 
-This project is developed with the help of [Claude Code](https://claude.com/claude-code).
-Parsers, engine code and documentation are AI-assisted and human-reviewed.
+This project is developed with the help of AI coding agents. Parsers, engine code and
+documentation are AI-assisted and human-reviewed; commit trailers name the specific agent and
+model that did the work.

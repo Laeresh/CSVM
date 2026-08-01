@@ -1,8 +1,8 @@
 # Milestone 3 — Polish run 4 (impact feedback, test affordances, blast radius)
 
 **ACTIVE PLAN** (written 2026-08-01). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
+`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
 
 Ten items drawn from `backlog.md` under a **mixed shape**: two test affordances that make the
 remaining M3 playtests possible at all, five cockpit-visible feedback fixes whose data already ships
@@ -66,7 +66,7 @@ than as fact. The armour/health split (`BL-085`) stays out — it is a hypothesi
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
-- **`CLAUDE.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
   landed item; a landed item gets a dated entry in `docs/HISTORY.md` and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
@@ -141,10 +141,10 @@ the pylon-drain order (`BL-062`) stay unreachable; **(2) it is config-only, and 
 constant's exact pattern and comment. (2) Add `--ammo=N` to `SessionSpec` as the CLI form that sets
 **both** caps and therefore survives `--det`; mutually exclusive with `--infinite-ammo` (last one
 wins, log which). Document the flag in `docs/cli.md` (the description of record) and keep the
-parser's accepted-flag count and `docs/cli.md`'s index count equal (94 → 95); CLAUDE.md's table gets
-a row only if the gloss would otherwise be wrong.
+parser's accepted-flag count and `docs/cli.md`'s index count equal (94 → 95); PROJECT_CONTEXT.md's
+table gets a row only if the gloss would otherwise be wrong.
 
-**Model recommendation.** sonnet — mechanical, with an existing flag to mirror end to end.
+**Model recommendation.** medium — mechanical, with an existing flag to mirror end to end.
 
 **Verify.** `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --ammo=3` and confirm from
 `.scratch/logs/` that each group starts at 3 and the `pylon ordnance: pylonN dry` breadcrumb appears
@@ -178,7 +178,7 @@ class (the `--tex-census` per-name flat-colour path is the closest existing patt
 colour assignment rather than inventing a second one). Gate it behind the existing freecam/anim-lab
 availability, print the class→colour legend to the log once, and leave flight untouched.
 
-**Model recommendation.** sonnet — additive debug UI over existing classification data.
+**Model recommendation.** medium — additive debug UI over existing classification data.
 
 **Verify.** `./RunGame.ps1 --freecam --chapter=C2` with the mode on: the SeaHangar, the water tower
 and the storefront facades must each read as a distinct colour, and a scripted
@@ -216,7 +216,7 @@ pick the matching `touchdown_*` def, and play it at the contact point through th
 runtime plus its authored sound. Rate-limit to one per contact event so a long scrape does not
 restart the def every frame.
 
-**Model recommendation.** opus — it touches the collision path and picks the surface-classification
+**Model recommendation.** high — it touches the collision path and picks the surface-classification
 seam that a later water-crash item will inherit.
 
 **Verify.** `./RunGame.ps1 --plane=player_bhawk --chapter=C1B` — graze dirt, a building and the sea
@@ -247,7 +247,7 @@ world-effects runtime, and anchor it at the randomly chosen `pdpN` panel node on
 random panel choice must derive from the master seed (`--seed`, pinned to 1 by `--det`) so scripted
 captures reproduce — `docs/verification.md`'s seeded-RNG rule.
 
-**Model recommendation.** opus — the threshold semantics and the seeded anchor choice are judgement,
+**Model recommendation.** high — the threshold semantics and the seeded anchor choice are judgement,
 not transcription.
 
 **Verify.** `./RunGame.ps1 --viewer` damage lab (**H**), slide HP just under 0.99 and confirm sparks
@@ -279,7 +279,7 @@ adopt in the code comment and add the mapping to `backlog.md`'s TUNE list rather
 Wire the mix gain through `Config` (`Config.GetFloat("flightAudio.…", …)`) the way `BL-159` wired
 `WhineMixGain` — so it can be tuned without a rebuild.
 
-**Model recommendation.** sonnet — the parse and the blend both have an exact in-repo pattern to
+**Model recommendation.** medium — the parse and the blend both have an exact in-repo pattern to
 copy; the undecoded floats are the only judgement, and the plan already says to park them as TUNE.
 
 **Verify.** `./RunGame.ps1 --plane=player_bhawk --chapter=C1` — take damage and confirm the second
@@ -304,7 +304,7 @@ above the debris line.
 **Approach.** Pure layout in the world damage panel: tighten container margins/separation and remove
 the empty row. Change no strings and no readout content.
 
-**Model recommendation.** sonnet, low effort — cosmetic layout with a stated target shape.
+**Model recommendation.** medium, low effort — cosmetic layout with a stated target shape.
 
 **Verify.** `./RunGame.ps1 --freecam --chapter=C1`, click a destructible, **H** — one compact block,
 no gap. A `--det` screenshot before/after for the record. `.\RunTests.ps1` green; goldens unchanged
@@ -333,7 +333,7 @@ whether `buildings` and `default` are actually distinct in the data; (2) if they
 lookup collapses; (3) if they are not, the finding is that the data does not differentiate and this
 item closes ❌ with a `docs/formats/weapon-effects.md` note. Only write code after (1) answers.
 
-**Model recommendation.** opus — it is a diagnosis with a real chance of ending in a disproof, and
+**Model recommendation.** high — it is a diagnosis with a real chance of ending in a disproof, and
 the wrong move (hand-assigning effects per surface) would be content invention.
 
 **Verify.** `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets` — a building fireball
@@ -382,7 +382,7 @@ bounded life. Prefer whichever composes with the existing `DefScopedPufferKeys` 
 2026-07-31) rather than adding a third keying scheme. Rate-limit per firing group so a held trigger
 does not spawn an emitter per round.
 
-**Model recommendation.** opus — the lifetime/pooling design is the whole item, and getting it wrong
+**Model recommendation.** high — the lifetime/pooling design is the whole item, and getting it wrong
 leaks emitters at the game's highest event rate.
 
 **Verify.** `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo --fire` — hold the
@@ -432,7 +432,7 @@ scoreboard still consume the marker point, and the 826 m C1-dz2 marker↔gate di
 mattering** under a gate test. Delete `DzRadius`'s docstring line claiming "the original has no gate
 geometry" — it is false.
 
-**Model recommendation.** opus — geometric test design plus a scoring-rule change that a
+**Model recommendation.** high — geometric test design plus a scoring-rule change that a
 splitscreen race depends on.
 
 **Verify.** `./RunGame.ps1 --stunt --chapter=C4 --plane=player_fury` — gates trigger where the danger
@@ -472,7 +472,7 @@ a proximity fuse that detonates at `DETONATION_DISTANCE` before contact, gated b
 radius × damage loop over them carpets the map. Record the falloff shape and knockback magnitude in
 `backlog.md`'s TUNE list; they are invented values, not data.
 
-**Model recommendation.** opus — the largest blast radius in this plan, on damage numbers that
+**Model recommendation.** high — the largest blast radius in this plan, on damage numbers that
 goldens and the damage suites both observe.
 
 **Verify.** Take a baseline first: an unchanged number proves nothing unless you have seen it able to

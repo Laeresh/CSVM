@@ -3,7 +3,7 @@
 Every file here was written **by hand from `docs/formats/`**, describing invented content:
 `probe_*` node names, `wep_probe_*` weapon ids, `snd_probe_*` sound names, `MSG_PROBE_*`
 message keys. None of it is a copy — trimmed, sampled or otherwise — of a Crimson Skies
-extraction. The repo's hard rule (see `CLAUDE.md`) is that a "small real example" is still a
+extraction. The repo's hard rule (see `PROJECT_CONTEXT.md`) is that a "small real example" is still a
 game asset, so anything sourced from the install stays out of version control and is covered
 instead by the golden-invariant tests, which read the player's own `extracted/` at run time and
 skip when it is absent.

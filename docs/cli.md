@@ -12,8 +12,8 @@ tools/godot/.../Godot_v4.7-stable_mono_win64_console.exe --path CSVM res://scene
 `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4,
 where both used to open a static orbit view. `--viewer` asks for that static inspection view
 back, and is where the damage, livery and mesh labs live. A bare launch (no content arg) shows
-the launchscreen. CLAUDE.md carries a compact table of the day-to-day subset; this page is the
-long tail.
+the launchscreen. PROJECT_CONTEXT.md carries a compact table of the day-to-day subset; this page
+is the long tail.
 
 ## Flag index
 
@@ -26,8 +26,8 @@ Grep "^- .--collision" docs/cli.md
 ```
 
 Names only, deliberately: a gloss here would be a second description of the same flag, and that is
-exactly how `CLAUDE.md`'s day-to-day table drifted from this page (four contradictions, found
-2026-07-25). One flag, one description.
+exactly how `PROJECT_CONTEXT.md`'s day-to-day table drifted from this page (four contradictions,
+found 2026-07-25). One flag, one description.
 
 **Modes and content — what gets built**
 `--viewer` · `--fly` · `--stunt` · `--freecam` · `--anim-lab` · `--menu` · `--chapter` · `--stage` · `--node` · `--plane` · `--players` · `--mission` · `--scenario` · `--play-anim`
@@ -73,8 +73,9 @@ the shared selection (`--debug-select`), the node lab (`--debug-nodelab`), the w
 (`--debug-damage`).
 
 ⚠ **A new flag adds its index entry and its `## Flags` bullet in the same edit.** Both are in this
-  file so they cannot drift apart. `CLAUDE.md` carries a curated day-to-day *subset* whose rows are
-  glosses, never the description of record — a behaviour change edits the bullet here.
+  file so they cannot drift apart. `PROJECT_CONTEXT.md` carries a curated day-to-day *subset*
+  whose rows are glosses, never the description of record — a behaviour change edits the bullet
+  here.
 
 **Written exceptions to "one flag, one bullet":** `--direction` shares `--pos`'s bullet and
 `--spawn-dir` shares `--spawn-at`'s — each pair is one mechanism (a position and the way it faces, or

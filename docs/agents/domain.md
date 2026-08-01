@@ -6,11 +6,14 @@ Layout: **single-context** — one project, one shared vocabulary, no per-packag
 
 ## Before exploring, read these
 
-This repo predates the `CONTEXT.md` / `docs/adr/` convention and does not use it.
-Its equivalents, all binding:
+This repo predates the `CONTEXT.md` / `docs/adr/` convention and does not use it — that
+`CONTEXT.md` would be a domain-terminology/wording glossary, distinct from the project brief
+below, and doesn't exist yet (see "Use the project's vocabulary" below for where that gap is
+tracked). Its equivalents, all binding:
 
-- **`CLAUDE.md`** — the compact authoritative index: charter, hard rules, module
-  index, CLI flags, current status.
+- **`PROJECT_CONTEXT.md`** — the compact authoritative project brief: charter, hard rules,
+  module index, CLI flags, current status. `CLAUDE.md` / `AGENTS.md` are thin, tool-specific
+  pointers into it — read whichever of those your tool uses, then this file.
 - **`docs/architecture.md`** — per-module purpose + still-binding `⚠` constraints,
   one `##` entry per `CSVM/src` module. **Read a module's entry before changing it** —
   it opens with a routing index; find the module there, then

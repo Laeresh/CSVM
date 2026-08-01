@@ -4,7 +4,7 @@
     finished agent worktrees in .claude/worktrees/.
 
 .DESCRIPTION
-    .scratch/ is where every temporary artifact lands (CLAUDE.md: probe images,
+    .scratch/ is where every temporary artifact lands (PROJECT_CONTEXT.md: probe images,
     --screenshot= captures, debug dumps, throwaway scripts). It is git-ignored and
     grows without bound -- 322 files / 206 MB by 2026-07-22 -- so it needs an
     occasional sweep.

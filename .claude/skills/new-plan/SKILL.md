@@ -27,5 +27,5 @@ Then tell the author the file is ready, and point them at how to fill it (their 
 ## 3. Remind them of the lifecycle (don't do it — just point)
 
 The process of *running* a plan lives in other tools; name them so the author knows where to go:
-- **Landing each item** — flip its checklist status ☐/◐ → ☑ (or ❌ if disproven), rewrite its per-item section to lead with **Landed.** / **Verified.** and keep the pre-landing text under **Original approach (kept for reference).**, then commit. The commit ritual (docs/HISTORY.md entry, CLAUDE.md "Current status" refresh, message + `Co-Authored-By` trailer, main only) is the **`commit-next`** skill — use it per item.
+- **Landing each item** — flip its checklist status ☐/◐ → ☑ (or ❌ if disproven), rewrite its per-item section to lead with **Landed.** / **Verified.** and keep the pre-landing text under **Original approach (kept for reference).**, then commit. The commit ritual (docs/HISTORY.md entry, PROJECT_CONTEXT.md "Current status" refresh, message + `Co-Authored-By` trailer naming the acting agent, main only) is the **`commit-next`** skill — use it per item.
 - **Completing the plan** — swap the ACTIVE PLAN banner for a `✅ COMPLETE` banner, move the file to `docs/plans/`, and append its row to `docs/plans/plans.md` (that file documents the archive step).

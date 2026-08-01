@@ -175,7 +175,7 @@ public sealed class ProbeRunner
             return false;
         }
         GD.Print(r.Text);
-        // ./.scratch/ inside the workspace, per CLAUDE.md — never the OS temp dir.
+        // ./.scratch/ inside the workspace, per PROJECT_CONTEXT.md — never the OS temp dir.
         WriteScratch("markers_dump.txt", r.Text);
         GD.Print($"{r.Summary} → ./.scratch/markers_dump.txt");
         return true;

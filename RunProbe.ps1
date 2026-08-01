@@ -40,7 +40,7 @@ if ((-not (Test-Path $GodotExe)) -and $env:CSVM_DATA_ROOT) {
     $GodotExe = Join-Path $env:CSVM_DATA_ROOT $GodotRel
 }
 if (-not (Test-Path $GodotExe)) {
-    throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup."
+    throw "Godot not found at $GodotExe -- see PROJECT_CONTEXT.md for the tools/ setup."
 }
 
 $LogDir = Join-Path $RepoRoot ".scratch\logs"

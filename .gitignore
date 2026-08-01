@@ -44,6 +44,9 @@ CopyToOneDrive.ps1
 # NOTE: /.claude/skills/ is deliberately NOT ignored; project skills are committed.
 /.claude/worktrees/
 /.claude/workspaces/
+# .agents/skills/ is a local junction to /.claude/skills/ (the tracked source), created per
+# checkout — see AGENTS.md. Not tracked itself.
+/.agents/skills/
 # Dev-facing tuning-override file (src/Utils/Config.cs). A personal, sparse scratchpad: the in-code
 # consts are the canonical values, config.json only overrides while fine-tuning. Kept out of
 # version control so scripted --screenshot runs see no file → pure defaults → byte-identical.

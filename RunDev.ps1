@@ -98,7 +98,7 @@ $Planes = @(
 $DefaultPlane = "player_bhawk"   # Bloodhawk: the primary test aircraft
 
 # The chapter worlds (--chapter=). Code is the extracted folder; Name is the map
-# (region labels per CLAUDE.md; C1/C1B/C1C are day/night/weather variants of Sea Haven).
+# (region labels per PROJECT_CONTEXT.md; C1/C1B/C1C are day/night/weather variants of Sea Haven).
 $Chapters = @(
     [pscustomobject]@{ Name = "Sea Haven (Northwest) - night"; Code = "C1" }
     [pscustomobject]@{ Name = "Sea Haven - variant B";         Code = "C1B" }
@@ -143,7 +143,7 @@ if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
 }
 if (-not (Test-Path $GodotExe)) {
-    throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup."
+    throw "Godot not found at $GodotExe -- see PROJECT_CONTEXT.md for the tools/ setup."
 }
 
 Write-Host "Building CSVM..." -ForegroundColor Cyan

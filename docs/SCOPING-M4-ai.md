@@ -1,12 +1,12 @@
 # Milestone 4 — Artificial Intelligence (scoping study)
 
 > **⚠ SCOPED, NOT STARTED, NOT SCHEDULED — written 2026-07-25.**
-> This is **not** a live plan. The active plan is [`PLAN-testing.md`](PLAN-testing.md), and CLAUDE.md's
-> "Current status" names it. This file is deliberately **not** called `PLAN-M4-ai.md`, because this
-> repo's convention is that a `PLAN-*.md` sitting in `docs/` *is live* — a second one here would read
-> as scheduled work. It carries the plan **shape** (waves, IDs, per-item Goal/Evidence/Approach/Verify)
-> so that scheduling it is a rename to `docs/PLAN-M4-ai.md`, a date, and a CLAUDE.md pointer swap —
-> nothing else.
+> This is **not** a live plan. The active plan is [`PLAN-testing.md`](PLAN-testing.md), and
+> PROJECT_CONTEXT.md's "Current status" names it. This file is deliberately **not** called
+> `PLAN-M4-ai.md`, because this repo's convention is that a `PLAN-*.md` sitting in `docs/` *is
+> live* — a second one here would read as scheduled work. It carries the plan **shape** (waves,
+> IDs, per-item Goal/Evidence/Approach/Verify) so that scheduling it is a rename to
+> `docs/PLAN-M4-ai.md`, a date, and a PROJECT_CONTEXT.md pointer swap — nothing else.
 >
 > Nothing in here has been implemented. Every checklist item is ☐ and stays ☐ until M4 is actually
 > scheduled.

@@ -28,8 +28,8 @@
      completes you move it to docs/plans/ and swap this for a ✅ COMPLETE banner (the skill handles
      the archive step — see /new-plan). This one-liner is what tells the next session the plan is live. -->
 **ACTIVE PLAN** (written <YYYY-MM-DD>). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
+`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
 
 <!-- [core] Scope paragraph(s). State what this plan delivers, and — just as important — what it
      deliberately excludes and why. If the plan draws items from backlog.md, record that EACH was
@@ -90,7 +90,7 @@ exact fields/keys. Cite files by path. This is the shared evidence the per-item 
   data/code before building on it; **a correct disproof that lands no code is a success here**, not a
   failure. Mark each item's Evidence with its confidence (traced-to-code / direction-sound-magnitude-
   TUNE / lead-only).
-- **`CLAUDE.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
+- **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn** as each
   landed item; a landed item gets a dated entry in `docs/HISTORY.md` and is **deleted** from
   `backlog.md` (not marked FIXED there). New decodes land with their `docs/formats/` page.
 - **Read `docs/verification.md` before measuring anything** — the instruments here mislead; cite the
@@ -146,12 +146,14 @@ you've already ruled out so it isn't re-chased.>
 **Approach.** <How to do it, concretely — the files/functions to touch, the pattern to reuse. Name
 what NOT to touch if that's a live risk.>
 
-**Model recommendation.** <Which model tier should execute this item, by name without a version
-number (e.g. sonnet / opus / fable), with a one-line why — mechanical or exploratory work goes to a
-cheaper model, judgement-heavy or high-blast-radius work to a stronger one. Optionally suffix a
-reasoning-effort override when the item clearly warrants one (e.g. "sonnet, low effort" for a
-mechanical fan-out); omit it to inherit the session default — don't invent a tier you can't
-justify. Never recommend haiku.>
+**Model recommendation.** <Which capability tier should execute this item — **low / medium /
+high**, tool-agnostic so any agent can map it onto its own model roster — with a one-line why:
+mechanical or exploratory work goes to a lower tier, judgement-heavy or high-blast-radius work to
+a higher one. Optionally suffix a reasoning-effort override when the item clearly warrants one
+(e.g. "medium, low effort" for a mechanical fan-out); omit it to inherit the session default —
+don't invent a tier you can't justify. **Never recommend low** for a whole item in this codebase —
+even mechanical work here needs at least medium-tier judgement; use low *effort* on medium instead
+when you want cheap execution.>
 
 **Verify.** <The specific check that proves it: the exact capture/pose/command, plus the regression
 surface. "An unchanged number is not evidence unless you've seen it able to fail" — take a baseline

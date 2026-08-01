@@ -65,7 +65,7 @@ if (-not $Source) { $Source = Join-Path $RepoRoot "CrimsonSkiesGame\GOSDATA\ASSE
 if (-not $Dest)   { $Dest   = Join-Path $RepoRoot "extracted\rof" }
 
 if (-not (Test-Path $Source)) {
-    throw "Game ASSETS folder not found at $Source -- see CLAUDE.md for the install layout."
+    throw "Game ASSETS folder not found at $Source -- see PROJECT_CONTEXT.md for the install layout."
 }
 
 Add-Type -AssemblyName System.Drawing

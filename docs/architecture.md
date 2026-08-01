@@ -14,8 +14,8 @@ Narratives, diagnoses, and landed-work stories do not live here: they get a shor
 `docs/formats/`, not here.
 
 ⚠ **A new or renamed module updates the index and its entry in the same edit.** Both are in this
-  file precisely so they cannot drift apart; `CLAUDE.md` carries only the namespace-level map and
-  must not grow a per-module list again.
+  file precisely so they cannot drift apart; `PROJECT_CONTEXT.md` carries only the namespace-level
+  map and must not grow a per-module list again.
 
 ## Module index
 

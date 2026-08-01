@@ -599,8 +599,8 @@ cite these IDs.
   `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png`.
 - **SRC-4** — **Where one fact must appear twice, name which copy is the description of
   record — descriptions drift long before lists diverge, and a name-level sync check cannot
-  see it.** CLAUDE.md's flag table vs `docs/cli.md` passed a both-directions diff at 28/28
-  flags while four rows contradicted in prose.
+  see it.** PROJECT_CONTEXT.md's flag table vs `docs/cli.md` passed a both-directions diff at
+  28/28 flags while four rows contradicted in prose.
 
 ## What this project cannot verify itself
 

@@ -15,7 +15,7 @@ distinct roles:
 Append an entry to `backlog.md` in the style of its neighbours. If closing it
 would leave follow-up work, that follow-up becomes its **own new entry** with a
 `⚠ Traps` section naming rejected fixes and misleading instruments — see the
-`backlog.md` rule in `CLAUDE.md`.
+`backlog.md` rule in `PROJECT_CONTEXT.md`.
 
 To schedule a batch of entries instead, scaffold a plan with `/new-plan`, which
 writes `docs/PLAN-<name>.md`.
@@ -27,12 +27,12 @@ Read the named section of `backlog.md`, or the checklist item in the live
 
 ## When work lands — the close-out is not optional
 
-`CLAUDE.md` binds these, and they apply to skill output too:
+`PROJECT_CONTEXT.md` binds these, and they apply to skill output too:
 
 - **Delete the `backlog.md` entry.** A `FIXED`/closed entry does not stay there.
 - Append a dated entry to `docs/HISTORY.md`: what landed, how verified, outcome.
 - Tick the live plan's checklist and **swap** the "Current status" next-step
-  pointer in `CLAUDE.md` — that section may only get shorter, never longer.
+  pointer in `PROJECT_CONTEXT.md` — that section may only get shorter, never longer.
 - A way a *measurement* can mislead → a transferable rule in `docs/verification.md`.
 - A still-binding module constraint → a `⚠` one-liner in `docs/architecture.md`.
 

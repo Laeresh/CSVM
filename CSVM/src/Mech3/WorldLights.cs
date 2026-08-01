@@ -10,7 +10,7 @@ namespace CSVM.Mech3;
 ///
 /// Why a texture and not real <see cref="OmniLight3D"/> nodes: the world renders
 /// <c>unshaded</c> (its lighting is the baked per-corner vertex colour — see the vertex_colors
-/// entry in CLAUDE.md's format gotchas), so a Godot dynamic light contributes exactly nothing
+/// entry in the format gotchas), so a Godot dynamic light contributes exactly nothing
 /// to it. The original's DX7 point lights modulated the same vertex lighting, i.e. what a
 /// LIGHT_STATE actually does is *spill onto nearby geometry* — and the flare sprite a player
 /// sees at the light's position is already drawn by SceneBuilder from the gamez Facade mesh

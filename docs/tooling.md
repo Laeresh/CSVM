@@ -3,7 +3,7 @@
 Everything *around* the project rather than in it: how game files become `extracted/`, how the
 game gets launched, and how the mech3ax fork is maintained. None of it changes often, and none of
 it needs to be in context to write engine code — which is why it lives here rather than in
-CLAUDE.md.
+PROJECT_CONTEXT.md.
 
 For *which* archive types extract and how far each is validated, see
 [formats/extraction.md](formats/extraction.md). For the engine's own CLI flags, see [cli.md](cli.md).

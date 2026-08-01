@@ -54,7 +54,7 @@ if (-not (Test-Path $Sln)) {
     throw "Solution not found at $Sln"
 }
 if (-not (Test-Path $GodotExe)) {
-    throw "Godot not found at $GodotExe -- see CLAUDE.md for the tools/ setup. In a git worktree, set `$env:CSVM_DATA_ROOT to the primary tree."
+    throw "Godot not found at $GodotExe -- see PROJECT_CONTEXT.md for the tools/ setup. In a git worktree, set `$env:CSVM_DATA_ROOT to the primary tree."
 }
 
 Write-Host "Building CSVM..." -ForegroundColor Cyan

@@ -11,11 +11,11 @@ If an item id was passed as an argument (e.g. `B19`), treat that as the explicit
 
 ## 1. Commit the current changes (if there are some)
 
-First find the **active plan**: CLAUDE.md's "Current status / next step" section names it (none is active as of 2026-07-25 — every plan sits in `docs/plans/`). Everything below refers to that file.
+First find the **active plan**: PROJECT_CONTEXT.md's "Current status / next step" section names it (none is active as of 2026-07-25 — every plan sits in `docs/plans/`). Everything below refers to that file.
 
 Before committing, confirm the plan reflects the work you just did — per the plan's own ground rules this is part of the change, not a follow-up:
 - The item you just finished is flipped to ☑ in the plan's `## Checklist`.
-- CLAUDE.md "Current status" is refreshed (current state + next step only).
+- PROJECT_CONTEXT.md "Current status" is refreshed (current state + next step only).
 - A dated entry is appended to `docs/HISTORY.md`, and any docs/formats or architecture updates the item requires are in.
 
 If any of that is missing, make those edits **now**, before the commit, so they land together.
@@ -24,8 +24,9 @@ Then commit ALL current changes as one commit:
 - Run `git status --short` and `git diff --stat HEAD` to see the state. If there is nothing to commit, say so and skip to step 2.
 - `git add -A`, then `git commit`.
 - **Message style** matches `git log --oneline -5`: `M3 Wave <X> <item(s)>: <what landed>` (e.g. `M3 Wave B B18: weapon selectors`). Name the item(s) you actually implemented this session — you know them from context; don't reverse-engineer them from the diff.
-- End the message with this trailer on its own line:
-  `Co-Authored-By: Claude <noreply@anthropic.com>`
+- End the message with a `Co-Authored-By:` trailer on its own line, naming whichever agent and
+  model is actually running this session (not a fixed name) — e.g.
+  `Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>`.
 - Commit to the current branch (**main**). Do NOT create a branch. Do NOT push.
 - Note the resulting commit hash and subject line for the final message (don't print them yet — see the output rule above).
 
@@ -41,7 +42,7 @@ Read the `## Checklist` section of the active plan. Statuses: ☐ open · ◐ in
 
 The loop's default is `/clear` between items (fresh context per task). But when the next item is strongly related to what you just did, clearing throws away context you would only rebuild — re-reading the same files, re-deriving the same findings — which burns tokens for nothing. Judge which of the three fits and recommend it with a one-line reason.
 
-**Check the model first.** Read the next item's `**Model recommendation.**` line in the plan (older plans may not have one — then skip this check). Compare it against the model running this session (you know which model you are). A mismatch weighs toward `/clear`: the whole point of continue is keeping context warm in the *same* session, and that argument collapses when the next item belongs on a different tier — a cheaper item continued on an expensive model wastes money, and an item flagged for a stronger model must not be continued on a weaker one. Only recommend **continue** on a mismatch if the in-session context is genuinely irreplaceable, and say so explicitly.
+**Check the tier first.** Read the next item's `**Model recommendation.**` line in the plan (older plans may not have one — then skip this check). It names a tier (low / medium / high), not a specific model. Compare it against this session's tier — you know which model you're running and can place it on that scale. A mismatch weighs toward `/clear`: the whole point of continue is keeping context warm in the *same* session, and that argument collapses when the next item belongs on a different tier — a cheap item continued on an expensive model wastes money, and an item flagged for a higher tier must not be continued on a lower one. Only recommend **continue** on a mismatch if the in-session context is genuinely irreplaceable, and say so explicitly.
 
 Weigh the just-finished item against the next one:
 
@@ -49,7 +50,7 @@ Weigh the just-finished item against the next one:
 - **`/compact`** — related, but the session is **long and full of exploration or dead ends**. Compact keeps the distilled thread (what shipped, the live findings) and sheds the transcript noise — continuity at a lower token cost than carrying everything forward.
 - **`/clear`** — the next item is **independent**: a different wave/module, no shared files, nothing it needs beyond the plan + docs (which a fresh context reloads cheaply). Safest against stale assumptions, and the loop's default. Because each item lands its own `docs/HISTORY.md` + `docs/` updates, most durable context is already on disk, so a clear rarely loses anything that matters — the exception is the un-written in-session context the "continue" case is about.
 
-State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.** When the plan names a model for the next item, append it: **Next item wants `<model>` (this session: `<model>`).**
+State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.** When the plan names a tier for the next item, append it: **Next item wants `<tier>` (this session: `<tier>`).**
 
 ## 4. Compose the ready-to-paste next-task prompt, copy it, THEN print everything
 
@@ -60,7 +61,7 @@ Implement item <ID> — <one-line title> — from <active plan path> (the M3 wea
 
 Before writing code: read that item's full "### <ID>" detail in the plan and the plan's "## Ground rules" and "## ⚠ Read this before implementing anything" sections, plus the docs/architecture.md entry for every module you'll touch. Verify data against the extracted JSON — never guess a value.
 
-Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh CLAUDE.md "Current status". Commit only when I ask (with /commit-next).
+Land it complete in the same turn: follow the plan's Verify step, update docs/formats or docs/architecture as the item requires, append a dated docs/HISTORY.md entry, flip the checklist item to ☑, and refresh PROJECT_CONTEXT.md "Current status". Commit only when I ask (with /commit-next).
 ~~~
 
 First copy that exact prompt text into the clipboard with the PowerShell tool, using a single-quoted here-string (closing `'@` at column 0):
@@ -71,7 +72,7 @@ Set-Clipboard -Value @'
 '@
 ~~~
 
-**Then — with no further tool calls — emit the single final message** containing, in order: the commit hash + subject from step 1 (or "nothing to commit"), the step-3 recommendation line, the prompt inside **one triple-backtick code block and nothing else inside it**, and a single closing line matched to your step-3 recommendation, noting the prompt is already in the clipboard. If the next item's model recommendation differs from the session's current model, include the switch (`/model <model>`) in the instruction:
+**Then — with no further tool calls — emit the single final message** containing, in order: the commit hash + subject from step 1 (or "nothing to commit"), the step-3 recommendation line, the prompt inside **one triple-backtick code block and nothing else inside it**, and a single closing line matched to your step-3 recommendation, noting the prompt is already in the clipboard. If the next item's tier differs from the session's current tier, name the tier and let the human switch models however their tool does that (in Claude Code, `/model <name>`):
 - **continue** → *Recommended: continue — no clear needed. Say the word and I'll start `<ID>` in this context. (The block above is already in your clipboard if you'd rather clear anyway.)*
 - **`/compact`** → *Recommended: run `/compact`, then paste the block above (already in your clipboard) to start `<ID>`.*
-- **`/clear`** → *Recommended: `/clear` (and `/model <model>` per the plan, if it differs), then paste — the block above is already in your clipboard.*
+- **`/clear`** → *Recommended: `/clear` (switch to a `<tier>`-tier model per the plan, if it differs), then paste — the block above is already in your clipboard.*
