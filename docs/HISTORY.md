@@ -9971,3 +9971,41 @@ instead of (3.5,10,3.5), a slightly larger cloud seen from inside).
 Open, and recorded rather than chosen quietly: **whether the base should be 1 or the node's own
 authored scale.** Every node carrying this channel is authored at exactly unit scale in this install,
 so the two readings coincide and no capture can separate them.
+
+## 2026-08-01 — M3 Wave B/C C8: gun rounds leave the authored `gunhit` smoke
+
+`BL-061` item 1. `ProjectilePool.EffectSink` was gated `!weapon.IsGun`, so a gun hit never reached
+the world-effects runtime and the smoke the data ships never rendered.
+
+**The census first, and it moved the design.** The plan's evidence — "`gunhit`'s `blacksmokepuffer`
+has no `ACTIVE_STATE 0`, so a shared emitter emits forever" — holds for the case that matters and
+not for the family. There are **12** defs (caliber `3040`/`5060`/`70` × ammo `slug`/`dum`/`ap`/`mag`)
+and **9 stop their own emitter**: ap/dum turn `whitehotpuffer` off at `EVENT_OFFSET` +0.1 s, mag
+turns `firepuffer`+`whitehotpuffer` off at +0.3 s. Only the three `*slug_gunhit` defs ship no stop —
+and slug is the stock ammo on `wep_00`–`wep_03`, `30`–`70slug`, `MPTUR` and `TURRET`. Since puffer
+particles already go `TopLevel` into world space, a relocated shared template gives a per-hit puff
+by itself; the missing piece was a bound, not a copy.
+
+**What landed.** `PlayEffectAt` takes a per-call `ttl` (0 = the runtime's own) and keeps one deadline
+per `(def, anchor)` — previously a replay was stopped on the *previous* instance's deadline, which
+would have cut a second gun hit's smoke to 0.1 s and was already latent for two rockets. Gun hits
+pass `GunEffectTtl` **0.3 s**, the family's longest authored stop, which also sits below
+`blacksmokepuffer`'s `TIME_INTERVAL` of 1.1 s, so one hit is one puff — what the effect is.
+`GunEffectInterval` **0.1 s** throttles plays per effect name = per firing group (the templates are
+shared and relocated, `BL-225`, so two plays inside one emission window only move one emitter; 0.1 s
+is also just under the fastest gun's `FIRE_RATE` of 10.5/s, so a single group still smokes on
+essentially every round). Per-call template instancing stays `BL-225`.
+
+**How verified.** `--effects-test` seeded: 33/33 resolve, **30 build a puffer**, including all 12
+variants (the three `mag` ones two each). A C1 strafing run (`--fire --ammo=5 --debug-anim`) logs
+`blacksmokepuffer` emitting while rounds land and **no emitter at all** one second after firing
+stops; the able-to-fail control (`GunEffectTtl` 60 s) leaves 2 emitters still growing at t=3 s, so
+the check can fail (METHOD-9). `--debug-anim`'s puffer line now names its emitters — three runtimes
+print it and a bare count cannot say whose smoke is running, which is exactly the question here.
+`.\RunTests.ps1` green: 320 units, 14/14 suites, **13 goldens hash-identical**.
+
+**Two traps found on the way.** The first two probes fired from a natural standoff and rendered
+nothing, with every impact correctly resolved in the log — the puffer sits behind `PLAYER_RANGE 500`
+(`verification.md` WORLD-24). And a gun's `buildings` entry is `bld_damage.flt`, absent from the
+install, on every gun but `wep_02`: the `gunhit` family is reached through `default`, so gun-impact
+work is verified by strafing dirt, never a hangar.

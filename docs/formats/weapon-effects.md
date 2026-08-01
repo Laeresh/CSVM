@@ -58,9 +58,10 @@ no puffer), so the engine's cluster is a hand-authored stand-in (`BL-200` TUNE).
 caliber×ammo axis as the weapon matrix. Each is one `ON_CALL` def whose `ANIMATION_NAME` is the
 bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
 
-- **`PLAYER_RANGE 500`** gates a `PUFFER_STATE` — `blacksmokepuffer` for slug (a slow 1.1 s
-  smoke that fades black→clear), `whitehotpuffer` + `firepuffer` for dum/mag (fast, `magnesiumtip`
-  / `fire_f01`–`04` textures). Beyond 500 m the impact is silent visual-wise.
+- **`PLAYER_RANGE 500`** gates a `PUFFER_STATE`, one per ammo family: `blacksmokepuffer` for
+  **slug** (`smoke101`–`103`, black→clear, **`TIME_INTERVAL` 1.1 s** — one puff per hit, not a
+  plume), `whitehotpuffer` for **ap**/**dum** (`magnesiumtip`), `firepuffer` + `whitehotpuffer` for
+  **mag** (`fire_f01`–`04`). Beyond 500 m the impact is silent visual-wise.
 - **`PLAYER_RANGE 200`** adds flung debris via ballistic `OBJECT_MOTION` (`bit1`/`bit2`/`bit3`/
   `chunk`, `RUN_TIME` 1–4 s). The `bit1`–`bit3` gamez nodes carry **no geometry** in this install
   (0 vertices, measured C1/C2; `chunk` has one 4-vertex quad) — the debris art is the `bit01`–
@@ -69,6 +70,20 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
 
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
 distant hit shows nothing.
+
+⚠ **Only the ap/dum/mag defs stop their own emitter — the three `*slug_gunhit` defs ship no
+`ACTIVE_STATE 0` at all.** Measured across all 12 defs (C1 `cam_anim`): ap and dum turn
+`whitehotpuffer` off at `EVENT_OFFSET` **+0.1 s**, mag turns both of its puffers off at **+0.3 s**,
+and slug — the **stock ammo on every gun weapon** (`wep_00`–`wep_03`, `30`–`70slug`, `MPTUR`,
+`TURRET`) — never turns `blacksmokepuffer` off. So "the gunhit smoke has no stop" is true of the
+common case and false of three quarters of the family; a reader that generalises from either half
+gets the other one wrong. The slug def's only other authored bound is its debris `OBJECT_MOTION`
+`RUN_TIME` (1–2 s), which does not gate emission.
+
+⚠ **A gun's `buildings` entry is not a `gunhit`.** Every gun but `wep_02` (50slug) routes
+`buildings` → `bld_damage.flt`, which is absent from the install, so a gun round on a building
+draws the engine's ricochet stand-in and no smoke. The `gunhit` family is reached through
+`default` — i.e. terrain. Verify gun-impact work by strafing **dirt**, not a hangar.
 
 ### Engine wiring (M3, D30)
 
@@ -124,18 +139,23 @@ live puffer factory (the session textures stay open for the crash runtime alread
 `PlayEffectAt(name, worldPoint)` relocates the effect's template root onto the point and starts the
 def — its puffers ride that root and parent at world level, so they render. Two callers:
 
-- **Rocket/ordnance impact** → `ProjectilePool.EffectSink`. The rocket ground/building bursts
+- **Weapon impact** → `ProjectilePool.EffectSink`. The rocket ground/building bursts
   (`large_fireball`, `he_ground_effect`, `ap_ground_effect`, `flak_effect`, …) render their smoke/
-  fire at the hit. **Guns are excluded** (`!weapon.IsGun`): the `gunhit` `blacksmokepuffer` has no
-  `ACTIVE_STATE 0` stop, so a per-round shared emitter would collapse onto one ever-emitting puff — a
-  documented follow-up, not wired per-round (the names are still bound, testable via `--effects-test`).
+  fire at the hit, and since C8 so do gun rounds, under two bounds the ordnance path does not need:
+  a **0.3 s instance TTL** (`ProjectilePool.GunEffectTtl`, passed through `PlayEffectAt`) and a
+  **0.1 s per-effect-name throttle** (`GunEffectInterval` — one name per firing group). The TTL is
+  the family's own longest authored stop, and it is what bounds the slug defs, which ship none; it
+  sits below `blacksmokepuffer`'s 1.1 s `TIME_INTERVAL`, so a hit is one puff. The throttle exists
+  because the templates are shared and relocated (`BL-225`): two plays inside one emission window
+  only move a single emitter.
 - **Destructible death** → the world runtime's `ExternalEffect` routes a death sequence's
   `CALL_ANIMATION` of a curated effect (`large_30sec_fire`, `great_balls_of_fire`, …) here.
 
-`--effects-test` is the headless verify: it plays each of the 30 bound names at the camera point and
+`--effects-test` is the headless verify: it plays each of the 33 bound names at the camera point and
 reports which resolve and which actually **build a puffer** (`verification.md` WORLD-12 — a started
 def whose factory/textures are absent renders nothing). Deterministic (seeded, `StopAll` between
-names): **27 build a puffer**; the remaining 3 (`flash_effect`, `rear_flash_effect`,
+names): **30 build a puffer** — including all 12 `*_gunhit` variants, the three `mag` ones with two
+each; the remaining 3 (`flash_effect`, `rear_flash_effect`,
 `biggun_flying_parts`) are point-light / model-only effects with no particles of their own.
 A `PUFFER_STATE` whose `AT_NODE` is `INPUT_NODE`/`MAIN_ROOT_NODE` emits on the effect's own
 relocated root (the sentinel = "the node this def was invoked on"; see

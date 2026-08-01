@@ -20,8 +20,8 @@ public sealed class WorldEffectsFactory
 {
     // The impact/destruction effect ANIMATION names the world-effects runtime (D32) is bound to —
     // the closure of these is staged and playable via PlayEffectAt. IMPACT names come from
-    // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance; the gun
-    // `*_gunhit` family is bound so a later guns pass can reach it, but is not fired per-round);
+    // weapons.json (the non-model `default`/`buildings` effects of rockets/ordnance, plus the gun
+    // `*_gunhit` family, which a gun hit plays throttled and time-bounded — C8);
     // destruction names are the ones death sequences CALL_ANIMATION. `random_gun_impact` (root
     // `player`, a player-plane hit) is excluded — unreachable in M3 and its generic root would
     // mis-anchor. Verified against extracted/*/cam_anim: every name resolves in all 8 chapters.
@@ -31,7 +31,7 @@ public sealed class WorldEffectsFactory
         "large_fireball", "small_fireball", "he_ground_effect", "ap_ground_effect", "flak_effect",
         "flash_effect", "sonic_ground_effect", "scatter_effect", "torpedo_ground_effect",
         "rear_flash_effect", "torpedo_water_effect",
-        // gun IMPACT family (bound for a later guns pass; see ProjectilePool.EffectSink)
+        // gun IMPACT family — caliber (3040/5060/70) × ammo (slug/dum/ap/mag); see EffectSink
         "3040slug_gunhit", "3040ap_gunhit", "3040dum_gunhit", "3040mag_gunhit",
         "5060slug_gunhit", "5060ap_gunhit", "5060dum_gunhit", "5060mag_gunhit",
         "70slug_gunhit", "70ap_gunhit", "70dum_gunhit", "70mag_gunhit",
@@ -160,7 +160,7 @@ public sealed class WorldEffectsFactory
     /// dedicated subtree so their names resolve locally without colliding with the world or the crash
     /// roots, keeps a live <c>PufferFactory</c> over the session textures, and binds the closure of
     /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
-    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a rocket impact,
+    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
     /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
     /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
     /// not suppress them.

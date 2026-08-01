@@ -31,10 +31,10 @@ public sealed partial class ProjectilePool : Node3D
 
     /// <summary>Plays a named IMPACT effect (its puffer half) at a hit point through the world-effects
     /// runtime (D32): the gun/rocket smoke and fireballs whose <c>ANIMATION</c> is an ON_CALL effect
-    /// def rather than a gamez model. Null in views with no anim runtime. Gated to non-gun weapons —
-    /// the <c>gunhit</c> smoke has no stop event, so a shared per-round emitter would collapse onto one
-    /// jumping, ever-emitting puff (a documented guns follow-up); rockets/ordnance fire ≤1/s.</summary>
-    public System.Action<string, Vector3>? EffectSink;
+    /// def rather than a gamez model. Null in views with no anim runtime. The third argument is the
+    /// instance's time bound in seconds (0 = the runtime's own): gun hits pass
+    /// <see cref="GunEffectTtl"/>, rockets/ordnance take the default.</summary>
+    public System.Action<string, Vector3, float>? EffectSink;
 
     internal const float WorldGravity = PhysicsConstants.NomGravity; // only the 5 GRAVITY rockets use it
                                                                      // (shared: FlightController's reticle integration reads it too)
@@ -61,6 +61,22 @@ public sealed partial class ProjectilePool : Node3D
     // fire a weapon) so this never moves a golden hash — magnitude is TUNE (BL-210), owed the
     // cockpit A/B via weapons.tracerMinPixels.
     internal const float TracerMinPixels = 2.0f;
+
+    // How long a gun hit's `<caliber><ammo>_gunhit` instance may run (C8). The family's own
+    // authored emission windows are the bound: ap/dum stop their `whitehotpuffer` at +0.1 s and mag
+    // stops `firepuffer`+`whitehotpuffer` at +0.3 s, while the four **slug** defs — the stock ammo
+    // on every gun — ship no ACTIVE_STATE 0 at all for their `blacksmokepuffer`. The longest
+    // authored stop in the family is therefore what bounds the ones with none. What this cuts short
+    // is the def's flung debris (`bit1`/`bit2`/`bit3` carry no geometry in this install, `chunk` is
+    // one 4-vertex quad) — invisible next to a smoke emitter that would otherwise never stop.
+    internal const float GunEffectTtl = 0.3f;
+
+    // Minimum sim seconds between two plays of one gun's impact effect. The effect templates are
+    // shared and relocated, not copied (BL-225), so two plays inside one emission window only move
+    // a single emitter — below this the extra plays buy nothing and only restart sequences. Sits at
+    // the ap/dum emission window (0.1 s) and just under the fastest gun's FIRE_RATE (10.5/s), so a
+    // single group still gets its smoke on essentially every round.
+    private const float GunEffectInterval = 0.1f;
 
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
@@ -253,6 +269,12 @@ public sealed partial class ProjectilePool : Node3D
     // per distinct shared source material (OverrideUnlit).
     private readonly Dictionary<Material, StandardMaterial3D> _impactFxUnlit = new();
 
+    // Gun-impact effect throttle (C8): effect name → the sim time it last played. Keyed by name,
+    // which is exactly "per firing group" — a group's rounds all carry one weapon and one
+    // `<caliber><ammo>_gunhit`. Advanced by SimStep, so it follows the sim clock like everything
+    // else here and a `--det` run throttles identically.
+    private readonly Dictionary<string, float> _gunEffectAt = new();
+
     private readonly PhysicsRayQueryParameters3D _ray = new(); // reused each step (no per-round alloc)
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
@@ -279,6 +301,7 @@ public sealed partial class ProjectilePool : Node3D
     private bool _flyoutPoseLogged;
     private int _muzzleBasisLogs;
     private int _impactsLogged;
+    private float _simClock;                   // sim seconds since the pool started (the gun-effect throttle)
     private CasingSpec? _casingSpec;           // the gunshell OBJECT_MOTION, resolved once
     private bool _casingSpecResolved;
     private GameZNode? _casingProto;           // the gunshell gamez prototype, resolved once
@@ -518,6 +541,7 @@ public sealed partial class ProjectilePool : Node3D
     /// session call this instead of Godot's physics tick.</summary>
     public void SimStep(float dt)
     {
+        _simClock += dt;
         var space = GetWorld3D()?.DirectSpaceState;
         for (int i = 0; i < _projHigh; i++)
         {
@@ -1127,12 +1151,12 @@ public sealed partial class ProjectilePool : Node3D
         }
         bool showedModel = fxName != null && SpawnImpactModel(fxName, point);
         // The puffer half (D32): when the effect is not a gamez model, hand its name to the
-        // world-effects runtime, which builds the smoke/fireball at the hit. Rockets/ordnance only
-        // (the gun `gunhit` smoke is a documented follow-up — see EffectSink). The runtime no-ops on
+        // world-effects runtime, which builds the smoke/fireball at the hit. The runtime no-ops on
         // a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so the spark below
-        // still stands in for those.
-        if (!showedModel && fxName != null && !weapon.IsGun)
-            EffectSink?.Invoke(fxName, point);
+        // still stands in for those. A gun hit is throttled and time-bounded (C8) — see
+        // GunEffectInterval / GunEffectTtl; a rocket fires at most ~1/s and takes the defaults.
+        if (!showedModel && fxName != null && (!weapon.IsGun || GunEffectDue(fxName)))
+            EffectSink?.Invoke(fxName, point, weapon.IsGun ? GunEffectTtl : 0f);
         if (!showedModel && !weapon.IsGun && EffectSink == null)
         {
             // A hardpoint weapon with no world-effects runtime to render its real fireball: a
@@ -1162,6 +1186,16 @@ public sealed partial class ProjectilePool : Node3D
             PlaySound(snd);
         // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
         DamageSink?.Invoke(collider, weapon.HealthDamage ?? 0f);
+    }
+
+    /// <summary>Whether this gun's impact effect may play again now, stamping the time when it may.
+    /// The throttle is per effect name = per firing group (see <see cref="_gunEffectAt"/>).</summary>
+    private bool GunEffectDue(string fxName)
+    {
+        if (_gunEffectAt.TryGetValue(fxName, out float last) && _simClock - last < GunEffectInterval)
+            return false;
+        _gunEffectAt[fxName] = _simClock;
+        return true;
     }
 
     /// <summary>A stand-in fireball: a cluster of large, bright, additive sprites at the hit point,

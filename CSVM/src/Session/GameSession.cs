@@ -1211,7 +1211,7 @@ public partial class GameSession : Node3D
         {
             var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
             worldEffects = effects; // the rigs' graze reaction plays through the same runtime
-            projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
+            projectiles.EffectSink = (name, pt, ttl) => effects.PlayEffectAt(name, pt, null, ttl);
             if (state.WorldRuntime != null)
             {
                 state.WorldRuntime.ExternalEffect = (name, pt, node) => effects.Handles(name) && effects.PlayEffectAt(name, pt, node);

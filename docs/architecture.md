@@ -490,9 +490,11 @@ ends emission under that node (`EndSustainedOn`) — the only authored stop a st
 has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
 effects stage keeps template roots hidden while their world-space particles show; emission sits at the host's
 mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
-WORLD-15 — zero offset, byte-identical, otherwise). `PlayEffectAt(name, point, inputNode)` carries
+WORLD-15 — zero offset, byte-identical, otherwise). `PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
-loop gate reads, the damaged object), a NodeActive-governed def gets no `EffectTtl` and tears its
+loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
+C8) and one deadline is kept per (def, anchor), so a replay's instance is not stopped on the
+previous one's deadline; a NodeActive-governed def gets no `EffectTtl` and tears its
 resources down when its loop exits (the death swap hides `healthy`), and `ResetDestructible` stops
 routed stage effects through `ExternalEffectStop` (a heal never flips `NodeActive`).
 `ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
@@ -673,7 +675,10 @@ shrinking under a pixel — floored *before* the muzzle-growth cap, so it never 
 round has actually flown.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
-`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects;
+`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
+runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
+stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
+per effect name = per firing group (`GunEffectDue`, on the sim clock);
 `ClassifySurface` is `public static` — the ONE surface classifier, shared with the airframe's
 graze reaction so a round and a wingtip never disagree about what they hit; the first 8 impacts log
 a breadcrumb carrying the class AND the `fx=`/`snd=` the class selected out of the weapon's
@@ -1586,7 +1591,8 @@ Builds the impact/destruction effect stages and the per-player crash runtime: th
 crash def's closure **plus** `PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
 `player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live puffer factory.
-`EffectAnimNames` binds impact + death effects **and** the
+`EffectAnimNames` binds impact + death effects — including the 12 gun `*_gunhit` variants, which a
+gun hit plays throttled and time-bounded (C8) — **and** the
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
 `partial_damage_obj`, staged via `EffectStageRoots`) **and** the airframe's three graze reactions
 (`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`

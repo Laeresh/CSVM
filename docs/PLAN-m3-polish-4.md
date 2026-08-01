@@ -33,7 +33,7 @@ merged as `bea7947`. Delete all five stale notes; their records are already in `
 - Every moment something hits the plane, or the plane scrapes something, is seen **and** heard: a
   glancing collision sparks/dusts/splashes with its authored sound, damage sparks at a panel, and a
   hurt airframe carries a second engine loop.
-- A gun round that hits a building leaves smoke; an HE rocket tells dirt and buildings apart.
+- A gun round that hits the ground leaves smoke; an HE rocket tells dirt and buildings apart.
 - Danger Zones score by crossing the authored gate pair, not by clipping a 15 m sphere.
 - A rocket damages what is *near* the detonation, not only what its ray struck.
 
@@ -97,7 +97,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — fidelity with a settled mechanism
 
-8. ☐ `BL-061` item 1 Gun-impact `gunhit` smoke — a per-hit emitter that self-expires
+8. ☑ `BL-061` item 1 Gun-impact `gunhit` smoke — throttled plays, each bounded to 0.3 s
 9. ☐ `BL-088` Danger Zones score on the authored gate pair, not one sphere
 
 ### Wave D — the last unimplemented weapons mechanic
@@ -364,7 +364,7 @@ WORLD-20. `.\RunTests.ps1` green (320 units, 14 suites, 13 goldens hash-identica
 
 # Wave C — fidelity with a settled mechanism
 
-## C8 ☐ `BL-061` item 1 — gun-impact `gunhit` smoke
+## C8 ☑ `BL-061` item 1 — gun-impact `gunhit` smoke
 
 **Goal.** Gun rounds striking a surface leave the authored `gunhit` smoke, and it stops — no
 permanent emitter parked at the last hit.
@@ -396,6 +396,21 @@ out. (b) The WORLD runtime deliberately keeps the collapsed `(name, host)` key (
 stacked C5's six `m_crane_go` spark defs on one node and **moved the c5 golden**) — do not
 "unify" the two keying schemes as a cleanup. (c) An unseeded `--effects-test` manufactures its own
 answer; seed it or the census is noise.
+
+**Outcome (2026-08-01).** Landed, but not as a per-hit copy — the census that had to run first
+changed the shape. Of the **12** `gunhit` defs (caliber 3040/5060/70 × ammo slug/dum/ap/mag), **9
+stop their own emitter**: ap/dum at `EVENT_OFFSET` +0.1 s, mag at +0.3 s. Only the three `*slug_gunhit`
+defs ship no `ACTIVE_STATE 0` — and slug is the stock ammo on every gun, so the evidence above is
+right about the case that matters and wrong about the family. With the puffer particles already
+world-space (`TopLevel`), a relocated shared template gives a per-hit puff on its own; what was
+missing was a bound. So: a per-call `ttl` on `PlayEffectAt` (guns pass **0.3 s** — the family's own
+longest authored stop, and below `blacksmokepuffer`'s 1.1 s `TIME_INTERVAL`, so a hit is one puff)
+plus a **0.1 s** per-effect-name throttle, which is per firing group. Per-call template instancing
+stays `BL-225`, unchanged in scope. Verified: `--effects-test` 30/33 build a puffer (all 12
+variants); a C1 strafing run logs `blacksmokepuffer` active while firing and **zero** emitters a
+second after it stops, against an able-to-fail control (TTL 60 s → 2 emitters still growing at
+t=3 s). `.\RunTests.ps1` green, 13 goldens hash-identical. New trap: WORLD-24 — the effect's own
+`PLAYER_RANGE 500` gate makes a probe flown at normal standoff show nothing at all.
 
 ## C9 ☐ `BL-088` Danger Zones score on the gate pair
 

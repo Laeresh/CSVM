@@ -968,9 +968,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// active state gets NO TTL (its lifetime is authored); every other effect keeps the
     /// <see cref="EffectTtl"/> bound. An input-governed def is Stop'd before restart so a second
     /// damaged object gets fresh emitters instead of orphaning the first object's (the same
-    /// latest-site collapse the templates already have).</para></summary>
-    public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null)
+    /// latest-site collapse the templates already have).</para>
+    ///
+    /// <para><paramref name="ttl"/> overrides <see cref="EffectTtl"/> for this call (0 = use the
+    /// runtime's own bound). A gun impact passes a short one: the <c>*slug_gunhit</c> smoke ships
+    /// no ACTIVE_STATE 0 at all, and at ten hits a second the session-length bound would stack
+    /// emitters.</para></summary>
+    public bool PlayEffectAt(string animName, Vector3 worldPoint, Node3D? inputNode = null,
+        float ttl = 0f)
     {
+        float bound = ttl > 0f ? ttl : EffectTtl;
         bool matched = false;
         foreach (var def in _program.ByAnimName(animName))
         {
@@ -990,8 +997,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // again, and this must be the last word on it for the instance now running.
             ShowTemplate(def, visible: true);
             matched = true;
-            if (!governed && EffectTtl > 0f)
-                _effectTtls.Add((def, anchor, _effectClock + EffectTtl));
+            if (!governed && bound > 0f)
+            {
+                // One deadline per (def, anchor): a replay restarts the instance, so an older
+                // entry left in place would stop the NEW instance at the OLD deadline — a second
+                // gun hit 0.2 s after the first would emit for 0.1 s.
+                _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
+                _effectTtls.Add((def, anchor, _effectClock + bound));
+            }
         }
         return matched;
     }
@@ -2993,7 +3006,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             int live = 0;
             foreach (var a in _activePuffers)
                 live += a.Puffer.LiveCount;
-            GD.Print($"anim/debug: {_activePuffers.Count} active puffer(s), {live} live particle(s)");
+            // Name them: three runtimes (world, world-effects, each crash rig) print this line, so
+            // a bare count cannot say whose emitters are running — which is the whole question when
+            // checking that an impact effect stopped.
+            var which = _puffers.Where(p => _activePuffers.Any(a => a.Puffer == p.Value.Puffer))
+                .Select(p => p.Key.Name).Distinct();
+            GD.Print($"anim/debug: {_activePuffers.Count} active puffer(s), {live} live particle(s)"
+                     + $": {string.Join(", ", which)}");
         }
         if (_motions.Count == 0)
         {

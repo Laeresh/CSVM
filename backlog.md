@@ -105,8 +105,10 @@ work is below.
     template (before that it was skipped by the live-instance guard and drew nothing), so the second blast
     is served — but the first blast's in-flight trails jump to the new site with it.
     *Fix shape:* a small pool of template copies per effect root, cycled per call, with motions and puffers
-    keyed by instance. Composes with `BL-061`'s per-hit `gunhit` emitter (`PLAN-m3-polish-4` C8) — same
-    problem at a higher event rate; do them together or make C8's keying reusable.
+    keyed by instance. The gun-impact smoke (C8, landed 2026-08-01) is the same problem at a much higher
+    event rate and does **not** solve it — it throttles plays to one per 0.1 s per effect name and bounds
+    each instance to 0.3 s, so consecutive hits reuse the one relocated template deliberately. A pool here
+    would let the throttle go.
     ⚠ **Traps.** (a) Do not "fix" it by dropping the restart — that regresses to the second explosion
     showing nothing. (b) The restart is gated on the call site having MOVED; a poll-idiom call
     (`If … CallAnimation; Endif; Loop{-1}`) must keep hitting the live guard or its callee restarts every
@@ -531,14 +533,8 @@ unscheduled.
   inverted flag (`has_interval_value` false, key off `interval_type`).
 
 - `BL-061` **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
-  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; three threads
-  it left open:
-  1. **Gun-impact `gunhit` smoke.** Not wired — `ProjectilePool.EffectSink` is gated `!weapon.IsGun`.
-     The plan assumed the shared per-round emitter would *collapse onto one puff*; the real blocker is
-     that `gunhit`'s `blacksmokepuffer` has **no `ACTIVE_STATE 0` stop**, so one shared emitter
-     (`_puffers` key `(name, host)`, one `gunhit` template root) emits **forever** at the last hit.
-     A guns pass needs a per-hit emitter that copies (not relocates) the template and self-expires —
-     either a pool of `gunhit` roots or a burst-mode puffer with a bounded life.
+  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; two threads
+  still open (numbering kept — other entries cite `item 2`):
   2. **The template MESH half.** The effects stage is hidden, so only the puffers render; the
      `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their `OBJECT_MOTION`), the `he_ring` ground
      shockwave, and the `huge_splash_model`/`zep_ng_dstry1.flt` models do **not** show. Rendering them
@@ -556,7 +552,7 @@ unscheduled.
   (census 18 → 25 of 30); the WORLD runtime deliberately keeps the collapsed `(name, host)` key
   (see the `_puffers` field comment — def-scoping it stacked C5's six `m_crane_go` spark defs on
   one node and moved the c5 golden). Related limitation, same per-call-instancing family as
-  thread 1: **one live instance per effect def** — a second damaged object's sputter restarts the
+  `BL-225`: **one live instance per effect def** — a second damaged object's sputter restarts the
   shared def, so simultaneous damage-stage smoke collapses onto the latest object.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user

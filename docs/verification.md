@@ -484,6 +484,15 @@ cite these IDs.
   arcade `nom_gravity` is 20, which invites reading `gravity: -3.0` as an offset to it, but the same
   census carries a literal **−9.8** on 173 events, so it is absolute m/s².
 
+- **WORLD-24** — **An effect's own `PLAYER_RANGE` gate decides whether a scripted probe can see it
+  at all — read the gate before flying the probe.** The `gunhit` puffer sits behind `PLAYER_RANGE
+  500` (logged as `cond PlayerRange(250000)`, the squared metres). A strafing run set up at a
+  natural standoff put the impacts ~800 m out: every round hit, the `impact:` breadcrumb resolved
+  the right effect, and **not one puffer was built** — indistinguishable from unwired code. Two
+  probes were spent on it. `--debug-anim` prints the verdict per condition, so grep the gate first
+  and place the probe inside it; distance-gated effects are the norm in this data, not the
+  exception (`gunhit` also gates its debris at 200 m and its light at 1000 m).
+
 ## SHELL — Windows, PowerShell & processes
 
 - **SHELL-1** — **The repo path contains a space — a mis-quoted launch aborts every run

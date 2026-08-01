@@ -289,6 +289,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   *accumulates*, and whether 1.0 sits right against the healthy engine loop.
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
 
+- `PT-27` **Gun-impact smoke (C8 / `BL-061` item 1 landed 2026-08-01).** Strafe **terrain** — not a
+  building; a gun's `buildings` entry is the install-missing `bld_damage.flt` — and get inside 500 m
+  of where the rounds land, which is the effect's own `PLAYER_RANGE` gate. Each hit should leave one
+  small black smoke puff that drifts and fades, with nothing left parked at the last hit once you
+  stop firing. What to judge: (a) is one puff per hit the right density at gun rates, or does the
+  0.1 s per-group throttle read as gaps; (b) does 0.3 s of emission read as too brief; (c) the
+  authored puff is 0.1–0.5 m and black — against dark terrain it is subtle by design, so the call is
+  whether the original reads more strongly at the same range. Try the other ammo too if you fit it:
+  `dum`/`ap` give a white-hot flash and `mag` adds fire (a different look, not a different bug).
+  `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo`.
+
 ---
 
 ## Everything else
