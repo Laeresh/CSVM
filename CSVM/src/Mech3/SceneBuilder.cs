@@ -209,8 +209,9 @@ void fragment() {
     /// origin-local sprites; NOT for the horizontal cloudlayer deck, which must stay flat.</param>
     /// <param name="cullBackfaces">Backface-cull polygons not flagged SHOW_BACKFACE
     /// ("unk2"), like the original engine — hides inward-facing interior structure (the
-    /// autogyro's frame lattice behind its fuselage openings). Used for aircraft; the
-    /// world keeps rendering double-sided until validated the same way.</param>
+    /// autogyro's frame lattice behind its fuselage openings), keeps a back-to-back polygon
+    /// pair (same vertices, opposite winding, one texture per side) from z-fighting, and stops
+    /// the skydome's near wall drawing over what is inside it. On for aircraft and the world.</param>
     /// <param name="glowTexture">Given a material's texture name, true for light-source flare
     /// sprites (lamp/beacon glow quads, `*flare*` textures): billboarded like the cloud
     /// sprites, always alpha-blended, and exempt from the `csky_world_light` night dimming —

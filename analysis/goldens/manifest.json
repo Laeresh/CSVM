@@ -14,36 +14,36 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "e82109d1a56a89af53cc36543d461fc7",
-      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121. Re-pinned when TEXTURE_SEQUENCE times became lifetime fractions: 0.01 % of pixels, the mist's flipbook column",
+      "hash": "2983b4197196eba4bbe47247e111ab8d",
+      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121. Re-pinned when TEXTURE_SEQUENCE times became lifetime fractions: 0.01 % of pixels, the mist's flipbook column. Re-pinned when the world gained backface culling (2026-08-01): the skydome stops drawing its near wall over the far shore",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
       "name": "c1b-night-sea",
       "frame": 120,
-      "hash": "5daeff5c25d336c660399d1873dc1cce",
-      "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift)",
+      "hash": "e5a10d63e423ecaa6d8b6cb6b043374a",
+      "exercises": "night lighting, skydome, islands, the ambient cloud-puff field; static at 120 vs 121, 0.13 % at 120 vs 360 (puff drift). Re-pinned when the world gained backface culling (2026-08-01): 0.00 % of pixels, max delta 9 - the skydome wall alone",
       "args": ["--freecam", "--chapter=C1B", "--pos=-6748,300,-8885", "--direction=0.242,-0.25,0.970", "--det", "--mute"]
     },
     {
       "name": "c1c-rain",
       "frame": 120,
-      "hash": "03e7e43cfc1232801ace40df89195f51",
-      "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %",
+      "hash": "471671446c732dfdb914f0a8a200de12",
+      "exercises": "rain precipitation (seeded field on the sim clock), cloud deck, heavy fog; frame-sensitive 2.50 %. Re-pinned when the world gained backface culling (2026-08-01): 8.5 % - the cloud deck and far terrain stop being occluded",
       "args": ["--freecam", "--chapter=C1C", "--pos=-3843,700,-1101", "--direction=-0.052,-0.25,-0.999", "--det", "--mute"]
     },
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "a9a21a039810a78c6bb870ffef2f9857",
-      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121",
+      "hash": "4cc8247bf4bcf6409c05362e19c8d06e",
+      "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121. Re-pinned when the world gained backface culling (2026-08-01): 2.0 % - the shot that names the fix, the backlot facade panels stop z-fighting",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
     {
       "name": "c2b-rain",
       "frame": 120,
-      "hash": "bf1d59e272d71db33d4069766812d370",
-      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %",
+      "hash": "7896b7a5636d360166fdca238e467faa",
+      "exercises": "rain over open water — the surface A3 measured at 4.75 % unpinned; frame-sensitive 3.47 %. Re-pinned when the world gained backface culling (2026-08-01): 0.9 % - the skydome wall over the far water",
       "args": ["--freecam", "--chapter=C2B", "--pos=-3843,200,-1101", "--direction=-0.052,-0.1,-0.999", "--det", "--mute"]
     },
     {
@@ -56,15 +56,15 @@
     {
       "name": "c4-snow",
       "frame": 120,
-      "hash": "0b7f937925707df037328d6a7cb62793",
-      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set",
+      "hash": "3b2eb10bdef22b778bfaefb397f89e90",
+      "exercises": "snow precipitation plus the chapter carrying 6 UV-scroll models; frame-sensitive 3.74 %, the largest of the freecam set. Re-pinned when the world gained backface culling (2026-08-01): 26.6 % - the far mountain range and Chandler mesa become visible again",
       "args": ["--freecam", "--chapter=C4", "--pos=-3330,958,-9181", "--direction=-0.682,-0.2,0.731", "--det", "--mute"]
     },
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "08b2bf163667907a3b6a7c2822811800",
-      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360",
+      "hash": "a9dc6eb3ead21af12ae4c58246973b98",
+      "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360. Re-pinned when the world gained backface culling (2026-08-01): 0.2 % - the 172 back-to-back panel pairs plus the skydome wall",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
     {
@@ -84,22 +84,22 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "f2bad0b488409d0be733d11a3cdb50d2",
-      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here",
+      "hash": "7d22033348cdfa22b78418605fb3d45c",
+      "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here. Re-pinned when the world gained backface culling (2026-08-01): 29.6 % - the cloud banks stop being hidden by the skydome wall",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "1eb9138fac93f6d3d14d0025007b5d3e",
-      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter. Re-pinned again for the TEXTURE_SEQUENCE lifetime-fraction fix: 0.26 % of pixels, the ground puffers' flipbook columns",
+      "hash": "51ad948cf7ffb7507b54b9d666f674ac",
+      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter. Re-pinned again for the TEXTURE_SEQUENCE lifetime-fraction fix: 0.26 % of pixels, the ground puffers' flipbook columns. Re-pinned when the world gained backface culling (2026-08-01): 7.3 % - the same skydome wall behind the kill",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "a8ac1f1f78650cfeb06b2bce44126e04",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one",
+      "hash": "43bdb7ad7a14d5e7bc7fd255f92e7555",
+      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Re-pinned when the world gained backface culling (2026-08-01): 18.0 % - the same, cloud banks behind the fireball",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

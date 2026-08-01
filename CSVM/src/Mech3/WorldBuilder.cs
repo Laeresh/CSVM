@@ -80,10 +80,17 @@ public sealed class WorldBuilder
         // Clouds are the only cloud*/sky* surfaces with an alpha channel, so this blend rule
         // touches only them; the opaque Sky1.tif skydome walls and cloudlayer deck are unaffected.
         // The cloud sprites additionally billboard toward the camera (cloudlayer deck excluded).
+        // Backface culling, like the original: 60% of world polygons are single-sided in the
+        // data (the other 40% carry SHOW_BACKFACE) and only cull it makes them right. Without
+        // it a back-to-back pair — two polygons over the SAME vertices, opposite winding,
+        // different textures, which is how the Hollywood backlot's facade panels put sky on
+        // the front and framing on the back — is exactly coplanar and z-fights, unfixable by
+        // depth bias; and the camera-anchored skydome's near wall draws over distant terrain
+        // and cloud banks.
         _scene = new SceneBuilder(gamez, textures, fullbright: true,
             generateCollision: collision, blendTexture: IsCloudOrSkyTexture,
             billboardTexture: IsCloudSpriteTexture, glowTexture: IsFlareTexture,
-            scrollOverrides: scrollOverrides);
+            cullBackfaces: true, scrollOverrides: scrollOverrides);
         _scene.Cycler = Cycler;
     }
 

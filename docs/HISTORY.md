@@ -9531,3 +9531,40 @@ under `hk_zep` (`lkztailgasbag/destroytailgasbag`, `lkgasbag0*` — the Locklear
 gasbag/turret destructibles) and 5,535 under `multiplayer1zep` (`reng11/destroy_mp1zreng11` and
 siblings). Each def anchors on a node inside the entity it belongs to and activates its own
 `healthy` group, which is correct — the only defect was the collider/visibility mismatch.
+
+## 2026-08-01 — The world backface-culls, like the original (Hollywood's z-fighting screens)
+
+**What landed.** `WorldBuilder` now builds with `cullBackfaces: true`. `PlaneBuilder` already
+did; the world was the last consumer still rendering every polygon `cull_disabled`, and the
+parameter's doc comment had said "until validated the same way" since it was written.
+
+**What it fixes.** The Hollywood backlot's studio screens (`fcpan01…33`) flickered between a sky
+texture and a wood-framing texture. They are not double-sided sprites: each is a **back-to-back
+pair** — two polygons over the *same* four vertex indices in opposite winding, one material each,
+both flagged `show_backface: false`. Being exactly coplanar they z-fight at every pixel and no
+depth bias of any magnitude can order them; the original relied on culling, where only one of the
+two ever survives. The census (`analysis/backface-pairs/`) found **266 such pairs game-wide** in
+128 models — C5 172, C2 71, two chapters none — so a fix scoped to the backlot would have missed
+six chapters. It also confirmed the data expects culling at all: 36–49 % of world polygons carry
+`SHOW_BACKFACE`, i.e. ~60 % are marked single-sided, which means nothing to a renderer that
+does not cull.
+
+**The second defect it turned out to fix.** The camera-anchored skydome's near wall had been
+drawing over things inside the dome — C4's far mountain range and Chandler mesa, and C1's cloud
+banks, were being occluded by it. That, not the panels, is what moved the goldens most.
+
+**How verified.** `.\RunTests.ps1` green: 318 units, 14 in-engine suites, engine errors clean.
+**10 of 13 goldens moved** and were re-pinned with per-shot notes in the same commit (GOLD-1):
+`c1-flight` 29.6 %, `c4-snow` 26.6 %, `c1-crash` 18.0 %, `c1c-rain` 8.5 %, `c1-waterfall` 7.8 %,
+`c1-destroy-effects` 7.3 %, `c2-city` 2.0 %, `c2b-rain` 0.9 %, `c5-city-night` 0.2 %,
+`c1b-night-sea` 0.00 %. The three that held are the ones with no world gamez or no world at all —
+`c3-island` (0 differing pixels), `viewer-bhawk` and `empty-stage`. Note the shape: the shot
+containing the reported bug moved 2.0 % while three shots containing no facade panel at all moved
+18–30 %, which is now GOLD-3. The A/B pair for the repro camera is
+`--chapter=C2 --freecam --pos=-5727.858,102.473,-4025.697 --direction=-0.8505,-0.52226,-0.06235`.
+
+**Owed at the controls.** 64 instant-action spawn captures (8 spawns × the 6 chapters with a
+`stunt_flying` scenario, plus C1C/C2B on `dogfight_ace` — those two ship no stunt scenario) and
+two C1 above-the-deck cloud shots are staged for an A/B against the original; the newly-revealed
+distant terrain and cloud banks are unconfirmed against a real capture, and terrain-from-below /
+interiors have not been walked.

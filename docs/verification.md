@@ -224,6 +224,14 @@ cite these IDs.
   `--debug-anim` for pose and emitters, the mesh lab for shading), never by staring at the
   diff.** Perturbing the snow flutter constant moved exactly `c4-snow` and held the other
   ten — the moved shot names are the diagnosis's starting point, not its answer.
+- **GOLD-3** — **A render-MODE change has a blast radius the repro shot cannot show. Sweep
+  every golden both ways before calling the fix local, and read the big movers before
+  reading the diff percentage as a regression.** Turning world backface culling on to stop
+  the Hollywood facade panels z-fighting moved `c2-city` (which contains them) by 2.0 %,
+  but moved `c1-flight` 29.6 %, `c4-snow` 26.6 % and `c1-crash` 18.0 % — none of which
+  contains a facade panel. Those three were the same change fixing a *second* defect: the
+  camera-anchored skydome's near wall had been drawing over distant terrain and cloud banks.
+  The percentage said "regression"; the images said "fix".
 
 ## DET — determinism & randomness
 

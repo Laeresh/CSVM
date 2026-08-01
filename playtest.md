@@ -228,6 +228,21 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   say if that reads better or worse. `./RunGame.ps1 --plane=player_bhawk --chapter=C1
   --fire-rockets`. A/B against the original if you have or can take a capture of a burning wreck.
 
+- `PT-23` **Backface-culling A/B (landed 2026-08-01).** The world now backface-culls like the
+  original. The reported symptom is settled — Hollywood's studio screens no longer z-fight — but
+  the change also stopped the camera-anchored skydome's near wall drawing over things inside the
+  dome, which **revealed distant geometry that was previously hidden**, and that half is unconfirmed
+  against the real game. Staged for you in `.scratch/ia-stunt/` (64 shots: 8 instant-action spawns
+  × the 6 chapters with a `stunt_flying` scenario, plus C1C/C2B on `dogfight_ace` — those two ship
+  no stunt scenario) and `.scratch/c1-above-cloud-deck-zone1-day.png` /
+  `-zone2-night.png`. *Look for:* (a) C4 — a far mountain range and the Chandler mesa are now
+  visible from the spawn; does the original show them or is the horizon meant to close there?
+  (b) C1 above the deck — cloud banks and towers over the deck top; right density and draw
+  distance? (c) any surface that is now **see-through from the wrong side**, which is what culling
+  costs if a polygon's winding disagrees with its data: terrain seen from below, water from
+  underneath, hangar/tunnel interiors, the inside of the backlot ring. (c) is the one that would
+  send the fix back. `./RunGame.ps1 --chapter=C4` and `--chapter=C1`.
+
 ---
 
 ## Everything else
