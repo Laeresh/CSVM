@@ -196,6 +196,11 @@ public sealed record SessionSpec
     public string? RocketOverride { get; private set; }
     public int GunSelect { get; private set; }
     public bool InfiniteAmmo { get; private set; }
+    /// <summary>The <c>--ammo=</c> low-ammo start knob: caps both gun groups and pylons to this many
+    /// rounds at rig build, bypassing config.json (DET-8 drops it) so the cap survives <c>--det</c>.
+    /// Null when the flag was absent. Mutually exclusive with <see cref="InfiniteAmmo"/> — whichever
+    /// flag comes last in the arg list wins; the loser is logged in <see cref="Warnings"/>.</summary>
+    public int? AmmoCap { get; private set; }
     public bool AutoFire { get; private set; }
     public bool AutoFireRockets { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
@@ -498,7 +503,24 @@ public sealed record SessionSpec
             else if (arg == "--crash") { s.CrashFrame = DefaultCrashFrame; }
             else if (arg.StartsWith("--crash=")) { s.CrashFrame = int.Parse(arg["--crash=".Length..]); }
             else if (arg.StartsWith("--loadout=")) { s.LoadoutOverride = arg["--loadout=".Length..]; }
-            else if (arg == "--infinite-ammo") { s.InfiniteAmmo = true; }
+            else if (arg == "--infinite-ammo")
+            {
+                s.InfiniteAmmo = true;
+                if (s.AmmoCap != null)
+                {
+                    notes.Add(new Note("weapons", "--infinite-ammo overrides the earlier --ammo=; using infinite ammo"));
+                    s.AmmoCap = null;
+                }
+            }
+            else if (arg.StartsWith("--ammo="))
+            {
+                s.AmmoCap = int.Parse(arg["--ammo=".Length..]);
+                if (s.InfiniteAmmo)
+                {
+                    notes.Add(new Note("weapons", "--ammo= overrides the earlier --infinite-ammo; using the capped load"));
+                    s.InfiniteAmmo = false;
+                }
+            }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }
             else if (arg.StartsWith("--gun-select=")) { s.GunSelect = int.Parse(arg["--gun-select=".Length..]); }

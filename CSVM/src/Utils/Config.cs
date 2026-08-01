@@ -213,9 +213,10 @@ public static class Config
             GetFloat("weapons.tracerWidth", ProjectilePool.TracerWidth);
             GetFloat("weapons.tracerBrightness", ProjectilePool.TracerBrightness);
             GetFloat("weapons.tracerMinPixels", ProjectilePool.TracerMinPixels);
-            // The gun-ammo testing cap is read only when a plane binds its loadout, which the warmup
-            // never does — register it here so --dump-config still documents it.
+            // The gun-ammo / ordnance testing caps are read only when a plane binds its loadout, which
+            // the warmup never does — register them here so --dump-config still documents them.
             GetInt("weapons.gunAmmoCap", FlightController.GunAmmoCapDefault);
+            GetInt("weapons.ordnanceCap", FlightController.OrdnanceCapDefault);
             // The whine mix gain is read only from a live FlightAudio.Update, which the warmup never
             // drives (no SoundArchive here) — register it here so --dump-config still documents it.
             GetFloat("flightAudio.whineMixGain", FlightAudio.WhineMixGain);

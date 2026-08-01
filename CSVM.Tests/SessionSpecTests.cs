@@ -567,6 +567,30 @@ public class SessionSpecTests
         Assert.Equal(new[] { "--spawn-at", "--spawn-dir" }, s.Deprecated.Select(d => d.Old));
     }
 
+    [Fact]
+    public void AmmoSetsTheCap()
+    {
+        var s = S("--ammo=3");
+        Assert.Equal(3, s.AmmoCap);
+        Assert.False(s.InfiniteAmmo);
+    }
+
+    /// <summary>Mutually exclusive with `--infinite-ammo`: whichever comes last on the command line
+    /// wins, and the loser is logged.</summary>
+    [Fact]
+    public void AmmoAndInfiniteAmmoAreMutuallyExclusiveByOrder()
+    {
+        var ammoWins = S("--infinite-ammo", "--ammo=3");
+        Assert.Equal(3, ammoWins.AmmoCap);
+        Assert.False(ammoWins.InfiniteAmmo);
+        Assert.Contains(ammoWins.Warnings, w => w.Message.Contains("--ammo="));
+
+        var infiniteWins = S("--ammo=3", "--infinite-ammo");
+        Assert.Null(infiniteWins.AmmoCap);
+        Assert.True(infiniteWins.InfiniteAmmo);
+        Assert.Contains(infiniteWins.Warnings, w => w.Message.Contains("--infinite-ammo"));
+    }
+
     /// <summary>A nose direction with nothing to place it on is a silently ignored argument, so it
     /// says so.</summary>
     [Fact]

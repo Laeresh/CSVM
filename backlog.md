@@ -79,12 +79,6 @@ settled). Reference shots are in `OriginalScreenshots/` (gitignored — cited by
 were traced to code before writing. Verdicts on pass-1 items are noted on their rows above; the new
 work is below.
 
-**Gun visuals (finding 1).**
-4. `BL-014` **Weapon lab fires a group's muzzles synchronously (flight is correct).** `WeaponLab.FireVolley`
-   (`WeaponLab.cs:411-421`) spawns from *every* mount node at once; flight alternates. Lab-only fidelity
-   nit — low priority (the lab arguably wants to show all muzzles). Recorded so it is not re-diagnosed as
-   a flight bug.
-
 **Impacts & surfaces (findings 3, 4).**
 7. `BL-213` **Open fidelity question (was part of `BL-186`, whose splash look landed with `BL-203`,
    2026-08-01):** does the original splash when gun rounds range-expire over water? Needs a CAP of the
@@ -104,19 +98,7 @@ work is below.
     adds the *trajectory-shape* symptom, not just the *distance* one.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-**Gauges, selectors & cues (findings 6, 7, 9).**
-16. `BL-026` **Rocket empty-clip cue never heard (finding 6b).** The cue plays on a dry pull
-    (`FlightController.cs:789-793`), but the dry branch is only reached when `_rocketCooldown <= 0`
-    (`:782`) — a pull within 1 s of the last shot returns early and stays silent. *Investigate:* is the
-    cue simply inaudible, or is the cooldown swallowing the pull that would sound it?
-    *Playtest after fix:* pull the rocket trigger dry within 1 s of the last shot and confirm the empty
-    cue is now heard.
-
 **Test / debug affordances (findings 6, 14).**
-18. `BL-028` **Debug low-ammo knob.** Empty-clip can't be tested without firing 2000+ rounds. Add a start-with-low-
-    ammo switch (e.g. `--ammo=N`, or per-group). Fits `docs/plans/PLAN-testing.md`'s test-affordance theme.
-    *Playtest after fix:* once a low-ammo start knob exists, reach a dry gun group by hand and confirm
-    one empty cue plays once per group.
 19. `BL-029` **Debug: colour world objects by type / class.** The user couldn't locate a C2 water tower or the
     storefront facades (found filmset panels instead). A "colour by object class" overlay (destructible /
     facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/plans/PLAN-testing.md`
@@ -320,17 +302,6 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-044` **The node lab's hide action does not change the tree row it applies to.** The world node toggles
-  correctly and the button's own text flips Show/Hide, but the row's text and colour stay as they
-  were, so a hidden subtree is invisible in the tree itself. Animated visibility changes do come
-  through. Frame also struggles on the moving `agyrobus` — reported as minor, not serious.
-  ⚠ Traps: a def re-showing a user-hidden node is correct behaviour and the panel is meant to show
-  live `Visible` state, so the fix is to reflect that state in the row rather than to latch what the
-  button did.
-  *Playtest after fix:* a hidden subtree should be obvious in the tree row without clicking it, and a
-  node an animation re-shows should go back to looking visible on its own.
-  `./RunGame.ps1 --freecam --chapter=C1`, **N**.
-
 - `BL-045` **The world damage panel is larger than it needs to be, with a gap between the no-controls notice
   and the debris line.** Layout only; the readout itself was called comprehensible.
   *Playtest after fix:* the panel should read as one compact block, with no gap between the no-controls
@@ -455,26 +426,6 @@ unscheduled.
   still spawns** — check whether C5 draws doubled buildings, but treat this as a question, not a
   finding (the report flags it as an open question, not a measurement).
 
-- `BL-159` **`WhineMixGain` is a hardcoded const, not config-wired.** `FlightAudio.cs:30`
-  (`private const float WhineMixGain = 0.12f;`) is read directly at `FlightAudio.cs:144`. Every other
-  TUNE constant in this codebase follows `FlightModel.cs`'s pattern —
-  `Config.GetFloat("flightModel.pitchTune", PitchTune)` (`FlightModel.cs:141`) — but `FlightAudio` has
-  no `Config` calls at all. So `--dump-config` never emits a `flightAudio.whineMixGain` key, and the
-  playtest finding ("could be a bit louder", 2026-07-30) cannot be live-tuned without editing the
-  constant and rebuilding.
-  *Fix shape:* wire it exactly like `FlightModel`'s constants —
-  `Config.GetFloat("flightAudio.whineMixGain", WhineMixGain)` at the read site in `Update`.
-  ⚠ **Traps.** (a) **Do not assume the key appears in `--dump-config` for free.**
-  `Config.WarmTuningRegistry` (`Config.cs:200-215`) only builds a throwaway `FlightModel` and queries
-  `weapons.rocketSpeedScale`; it never touches `FlightAudio`, so the template may still omit the key
-  until a live session queries it once or a warmup line is added. `FlightAudio` needs a `SoundArchive`
-  + defs to construct, unlike `FlightModel`, so a throwaway warmup instance is not as cheap — check
-  whether `Register` can be called directly instead of via a dummy `Update`. (b) The git-ignored
-  `CSVM/config.json` silently overrules interactive runs while `--det` runs drop it
-  (`docs/verification.md` DET-8), so **delete any whine-gain override after tuning** — otherwise an
-  interactive session quietly diverges from every scripted/golden capture while looking identical on
-  paper.
-
 - `BL-160` **No Doppler on any 3D emitter today — open whether the original has one.** Godot's
   `AudioStreamPlayer3D` exposes `DopplerTracking`, but nothing in `CSVM/src` sets it: `WorldSounds.cs`
   constructs every ambient emitter (`:162-169`) and one-shot (`:211-218`) with only
@@ -570,20 +521,11 @@ unscheduled.
   thread 1: **one live instance per effect def** — a second damaged object's sputter restarts the
   shared def, so simultaneous damage-stage smoke collapses onto the latest object.
 
-- `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user 2026-07-24) — the round-robin fix is on branch `fix/rocket-drain-pylon`, pending merge + playtest.**
-  The original fires **only the selected/current hardpoint, draining it fully before advancing** to the
-  next. Current code (`FlightController.NextArmedHardpoint`, B17) instead spreads pulls **round-robin**
-  across the pylons. On a stock Bloodhawk (3 pylons × 3 HE) the depletion order differs:
-  - **Original:** pylon1 empties on the **3rd** pull, pylon2 on the **6th**, pylon3 on the **9th**.
-  - **Current:** pylon1 on the **7th**, pylon2 on the **8th**, pylon3 on the **9th** (only the last pull
-    agrees). Confirmed by the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
-
-  The fix (on `fix/rocket-drain-pylon`) is the localized change to `NextArmedHardpoint`: keep the
-  cursor on the just-fired pylon (`_nextPylon = idx`) so it keeps firing until dry, then the scan
-  advances — rather than advancing every pull. **D44's pylon-ordnance visual needs no rework** — it
-  already hides each pylon's mounted rocket the instant *that pylon* hits zero, so the wing simply
-  empties one rocket at a time in the correct order once the firing order is fixed. Total capacity and
-  the one-rocket-per-pull cadence are unchanged.
+- `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user
+  2026-07-24) — the round-robin fix merged as `bea7947`.** The original fires **only the
+  selected/current hardpoint, draining it fully before advancing** to the next; `NextArmedHardpoint`
+  now keeps the cursor on the just-fired pylon until it is dry before the scan advances, confirmed by
+  the D44 hide-breadcrumb (`pylon ordnance: pylonN dry`).
 
   **Still open — the H-selector design question (the "hardpoints won't cycle" finding).** H / D-pad
   Right *is* wired (`RocketSelectPressed` → `CycleWeaponSelectors`) but gated `_ordnanceTypes.Length >
@@ -1505,10 +1447,10 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   bespoke crash on branch `bespoke-crash-animation` is the A/B reference for these.
   *Blocked on `CAP-16`* (`playtest.md` §0).
 - `BL-123` **Audio (Run-2 item 11)** — `WhineMixGain` 0.12; A/B'd against the original 2026-07-30:
-  close, but "could be a bit louder." **Blocked on `BL-159`** (no config key exists yet, so a live
-  tune means editing the constant and rebuilding). *Playtest after fix:* nudge
-  `flightAudio.whineMixGain` up from 0.12 via `config.json`, re-A/B a dive, then delete the override
-  (`docs/verification.md` DET-8 applies here too).
+  close, but "could be a bit louder." `flightAudio.whineMixGain` is now config-wired
+  (`FlightAudio.cs:145`). *Playtest after fix:* nudge `flightAudio.whineMixGain` up from 0.12 via
+  `config.json`, re-A/B a dive, then delete the override (`docs/verification.md` DET-8 applies here
+  too).
 - `BL-124` **Knife-edge nose sag (polish-4 item 6, landed 2026-07-23)** — `KnifeNoseSag` **0.07 rad (≈4°)**,
   the bound the nose settles to at full knife-edge, and `KnifeNoseRate` **0.2 rad/s**, how fast it
   gets there. Both `FlightModel.cs`. Presence and direction are proven by scripted test; **magnitude

@@ -9584,3 +9584,22 @@ code: `--infinite-ammo` exists but no reduce knob; `touchdown`, `damaged_engine_
 and only printed; `StuntMission` still tests one 15 m sphere. **Found stale in `backlog.md`:** rows
 for the already-landed `BL-014`/`BL-026`/`BL-044`/`BL-159` and the stale pending-merge note on
 `BL-062` (merged as `bea7947`) — swept as part of A1's commit. CLAUDE.md status now names the plan.
+
+## 2026-08-01 — A1 `BL-028`: `--ammo=N` low-ammo start knob
+
+Added the missing pylon half of the existing `weapons.gunAmmoCap` testing cap
+(`weapons.ordnanceCap`, same pattern: caps `Capacity` as well as the live counter at rig build) and
+a `--ammo=N` CLI form (`SessionSpec.AmmoCap`) that sets both caps directly on `FlightController`
+(`AmmoCapOverride`), bypassing `config.json` so the knob survives `--det` (DET-8 drops config.json
+entirely). Mutually exclusive with `--infinite-ammo` — whichever flag comes last on the command line
+wins, the loser logged as a session warning. `docs/cli.md` flag index/count 94 → 95, CLAUDE.md's
+count line updated to match. Swept the five stale `backlog.md` rows this item's commit owed:
+deleted the landed `BL-014`/`BL-026`/`BL-044`/`BL-159` rows outright, and rewrote `BL-062`'s
+stale "pending merge" note to past tense (`bea7947`) while keeping its still-open H-selector
+question; also dropped `BL-123`'s now-resolved "blocked on `BL-159`" clause.
+
+**How verified.** `./RunProbe.ps1 --plane=player_bhawk --chapter=C1 --ammo=3 --fire --fire-rockets`:
+log shows `(--ammo=3)` at rig build and `pylon ordnance: pylon1 dry — mounted model hidden` after
+the third rocket. `.\RunTests.ps1` green: 320 units (+2 new `SessionSpec` tests for `--ammo=`
+parsing and the mutual-exclusivity order rule), 14 in-engine suites, 13/13 goldens hash-identical
+(unchanged, as expected — `--det` does not imply `--ammo`).

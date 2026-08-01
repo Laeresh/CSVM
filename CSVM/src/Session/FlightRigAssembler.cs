@@ -108,6 +108,7 @@ public sealed class FlightRigAssembler
                 controller.Loadout = Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
                 controller.Projectiles = _in.Projectiles;
                 controller.InfiniteAmmo = _spec.InfiniteAmmo;
+                controller.AmmoCapOverride = _spec.AmmoCap;
                 controller.AutoFire = _spec.AutoFire;
                 controller.AutoFireRockets = _spec.AutoFireRockets;
                 controller.InitialGunSelect = _spec.GunSelect;
@@ -130,7 +131,8 @@ public sealed class FlightRigAssembler
                              $"hardpoint(s), guns=Space/pad-B rockets=F/pad-A, " +
                              $"select guns=G/dpad-L rockets=H/dpad-R" +
                              (_spec.GunSelect != 0 ? $" [gun-select={_spec.GunSelect}]" : "") +
-                             (_spec.InfiniteAmmo ? " (infinite ammo)" : ""));
+                             (_spec.InfiniteAmmo ? " (infinite ammo)" : "") +
+                             (_spec.AmmoCap != null ? $" (--ammo={_spec.AmmoCap})" : ""));
                     if (controller.Ordnance is { } ord)
                     {
                         GD.Print($"pylon ordnance: {ord.Count} mounted rocket model(s)" +

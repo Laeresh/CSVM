@@ -42,6 +42,10 @@ public partial class FlightController : Node3D
     /// tedious to reach. Capped at each group's real capacity; the gauge reads full at the cap.</summary>
     public const int GunAmmoCapDefault = 0;
 
+    /// <summary><c>weapons.ordnanceCap</c> (config.json) default: 0 = off, full stock pylon load —
+    /// the same knob as <see cref="GunAmmoCapDefault"/>, for hardpoints instead of gun groups.</summary>
+    public const int OrdnanceCapDefault = 0;
+
     /// <summary>When set, replaces keyboard input — used by automated screenshot runs.
     /// Each segment holds its input for its duration (seconds of sim time); the last
     /// segment holds forever, and a respawn restarts the sequence (deterministic runs).
@@ -126,6 +130,11 @@ public partial class FlightController : Node3D
 
     /// <summary>--infinite-ammo: guns/hardpoints fire without depleting (frictionless testing).</summary>
     public bool InfiniteAmmo;
+
+    /// <summary>--ammo=N: overrides both <c>weapons.gunAmmoCap</c> and <c>weapons.ordnanceCap</c> at
+    /// rig build, so the low-ammo start survives <c>--det</c> (which drops config.json entirely).
+    /// Null when the flag was absent — falls through to the config.json knobs.</summary>
+    public int? AmmoCapOverride;
 
     /// <summary>--fire: hold the gun trigger down (scripted screenshot / soak runs), as
     /// <see cref="HoldSegments"/> does for flight input.</summary>
@@ -427,17 +436,28 @@ public partial class FlightController : Node3D
             }
             _firableGuns = firable.ToArray();
             int n = _firableGuns.Length;
-            // weapons.gunAmmoCap (config.json, testing): cap each firable group's load so the
-            // low-ammo cases — chiefly the on-empty group hand-off — are reachable without draining
+            // weapons.gunAmmoCap (config.json, testing) / --ammo=N: cap each firable group's load so
+            // the low-ammo cases — chiefly the on-empty group hand-off — are reachable without draining
             // thousands of stock rounds. 0 = off. Capping Capacity too makes the gauge read full at
-            // the cap and drain from there; RefillWeapons refills to it on every respawn.
-            int gunCap = Config.GetInt("weapons.gunAmmoCap", GunAmmoCapDefault);
+            // the cap and drain from there; RefillWeapons refills to it on every respawn. AmmoCapOverride
+            // (--ammo=N) wins over config.json so the knob survives --det (DET-8 drops config.json).
+            int gunCap = AmmoCapOverride ?? Config.GetInt("weapons.gunAmmoCap", GunAmmoCapDefault);
             if (gunCap > 0)
             {
                 foreach (var g in _firableGuns)
                 {
                     g.Capacity = Mathf.Min(g.Capacity, gunCap);
                     g.Ammo = g.Capacity;
+                }
+            }
+            // weapons.ordnanceCap / --ammo=N: the pylon equivalent of the gun cap above, same pattern.
+            int ordnanceCap = AmmoCapOverride ?? Config.GetInt("weapons.ordnanceCap", OrdnanceCapDefault);
+            if (ordnanceCap > 0)
+            {
+                foreach (var h in Loadout.Hardpoints)
+                {
+                    h.Capacity = Mathf.Min(h.Capacity, ordnanceCap);
+                    h.Ammo = h.Capacity;
                 }
             }
             _gunStates = new GunState[n];

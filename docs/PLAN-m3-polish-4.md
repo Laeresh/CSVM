@@ -83,7 +83,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — test affordances (these unblock the rest)
 
-1. ☐ `BL-028` `--ammo=N` low-ammo start knob (+ the stale-backlog-row sweep)
+1. ☑ `BL-028` `--ammo=N` low-ammo start knob (+ the stale-backlog-row sweep)
 2. ☐ `BL-029` Colour world objects by class — a findable-targets overlay
 
 ### Wave B — impact and damage feedback the data already ships
@@ -119,7 +119,7 @@ A2's overlay and C8's per-hit emitter pattern already in the tree.
 
 # Wave A — test affordances
 
-## A1 ☐ `BL-028` `--ammo=N` low-ammo start knob
+## A1 ☑ `BL-028` `--ammo=N` low-ammo start knob
 
 **Goal.** A run can start with a chosen number of rounds per gun group and rockets per pylon, so a
 dry group / dry pylon is reachable in seconds instead of after 2000+ rounds — and the empty-clip cue
