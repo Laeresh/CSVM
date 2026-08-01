@@ -289,8 +289,7 @@ public sealed class WorldBuilder
             {
                 continue; // an ON_STARTUP translate placed it — this is real, shown content
             }
-            built.Visible = false;
-            SetCollidersEnabled(built, false);
+            built.Visible = false; // colliders follow (WorldCollision)
             _hiddenUnplaced.Add((node, built));
             hidden.Add(node.Name);
         }
@@ -321,7 +320,6 @@ public sealed class WorldBuilder
                 continue; // still parked — leave it switched off
             }
             built.Visible = true;
-            SetCollidersEnabled(built, true);
             _hiddenUnplaced.RemoveAt(i);
             restored.Add(node.Name);
         }
@@ -503,21 +501,6 @@ public sealed class WorldBuilder
         // only ever touches it, never surrounds it.
         return box.Position.X < 0f && box.End.X > 0f
             && box.Position.Z < 0f && box.End.Z > 0f;
-    }
-
-    // Mirrors AnimRuntime's own INACTIVE handling: invisible AND non-collidable, so the player
-    // cannot hit a zeppelin that is not being drawn. Kept local rather than reaching into
-    // AnimRuntime's private helper to keep this change off that file.
-    private static void SetCollidersEnabled(Node node, bool enabled)
-    {
-        if (node is CollisionShape3D shape)
-        {
-            shape.Disabled = !enabled;
-        }
-        foreach (var child in node.GetChildren())
-        {
-            SetCollidersEnabled(child, enabled);
-        }
     }
 
     // The dome's star point-lights sit ~22 km out (camera-anchored, 2.5× scaled) — far past

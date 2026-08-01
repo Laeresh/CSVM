@@ -27,6 +27,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/GameZ.cs` — GameZ extraction loader (zip or dir): nodes/models/materials/textures JSON → C# objects, either extraction shape.
 - `src/Mech3/TextureArchive.cs` — texture lookup (zip or dir): resolves the name quirks, classifies each texture's alpha (soft vs hard).
 - `src/Mech3/SceneBuilder.cs` — shared GameZ-subtree → MeshInstance3D builder: triangulation, LOD, depth bias, billboards, fog, UV scroll.
+- `src/Mech3/WorldCollision.cs` — derives every world collider's `Disabled` flag from its owner's tree visibility (+ the fade channel), so hiding anything drops its collision.
 - `src/Mech3/PlaneBuilder.cs` — builds one aircraft from its GameZ subtree (shaded, backface-culled); `Repaint` re-liveries it in place.
 - `src/Mech3/PaintScheme.cs` — one aircraft livery: pattern + 3 colours + 3 decals, parsed from vehicle.json or drawn at random.
 - `src/Mech3/PatternLibrary.cs` — decodes the original's `.BM` paint patterns from the extracted ROF archive; `PatternsFor` lists a plane's liveries.
@@ -224,7 +225,8 @@ splits a mesh's colliding geometry into one trimesh per surface class actually p
 (water/buildings/untagged, each polygon's own texture deciding) rather than forcing the
 whole mesh under one dominant-class vote — a coastal tile is mostly beach by area, so the
 area-quorum vote it replaced gave real water polygons on it to `default` outright
-(`analysis/surface-classification/`). A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
+(`analysis/surface-classification/`). Each collider-bearing node is registered with
+`WorldCollision`, which owns its `Disabled` flag from then on. A `GameZ.IsMarkerGizmo` mesh draws nothing, but its Node3D is
 still built with its transform — animations attach puffers and sounds to those nodes by name.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
@@ -233,6 +235,20 @@ still built with its transform — animations attach puffers and sounds to those
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
   nested node must overwrite it with `GameZ.WorldTransformOf` or it lands at its parent's origin.
+
+## src/Mech3/WorldCollision.cs
+Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the
+owning node is visible in the scene tree and no ancestor is faded out. `Track` (called once per
+collider-bearing node as it is built) binds it to the node's `VisibilityChanged` — which Godot
+propagates to descendants — plus `TreeEntered`, because a world is assembled and bootstrapped while
+still detached, where visibility writes emit nothing. `SetFaded` is the second input: an
+`OBJECT_OPACITY_*` fade is a shader parameter visibility knows nothing about.
+⚠ Godot visibility is INHERITED, `Disabled` is not. That asymmetry is the whole reason this exists —
+  any code writing the two separately re-creates the invisible-wall class (1,484 solid-but-invisible
+  colliders across the 8 chapters when it is off, measured); `--run-tests=collision-visibility` is
+  the tripwire.
+⚠ Scoped to world colliders on purpose: deliberately invisible-but-solid bodies built elsewhere
+  (the weapon lab's target, plane hitboxes, `EmptyStage`'s ground) are untracked and keep working.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -455,6 +471,9 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 ⚠ A partial opacity on an opaque-shader mesh swaps that instance's surfaces to a fade-twin
   material (`EnsureOpacityPath`/`SceneBuilder.FadeShaderFor`) — per-instance surface overrides
   only; the shared material/mesh caches must never be edited, and opacity 1 removes the override.
+⚠ `SetSubtreeActive` writes ONLY `Visible`, and the fade path only `WorldCollision.SetFaded` —
+  collision is DERIVED from both. Never write `CollisionShape3D.Disabled` from here again: a
+  recursive walk re-solidifies activations landing inside an already-hidden subtree.
 `Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
 anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
 meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).

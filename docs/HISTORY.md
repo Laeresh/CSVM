@@ -9495,3 +9495,39 @@ replaced by clean sky; C3's world build drops from 2380 to 2364 mesh instances. 
 318 units, 13 in-engine suites, 13 goldens. One golden moved — `c3-island`, 433 px of 921,600, a
 pixel diff confined to two fog-darkened cone spikes on the horizon — reviewed as an image and
 re-pinned.
+
+## 2026-08-01 — Hidden world entities are no longer solid (the invisible zeppelin)
+
+**What landed.** The user could crash into `hk_zep` in C1/IA1 — an entity the mission's setup
+script hides. Cause: Godot's visibility is inherited (`IsVisibleInTree`) while
+`CollisionShape3D.Disabled` is absolute, and the engine wrote the two independently from three
+places (`AnimRuntime.SetSubtreeActive`, `WorldBuilder`'s unplaced sweep, the opacity-fade channel),
+each recursing over the subtree. So any write landing INSIDE an already-hidden subtree re-enabled
+its shapes: bootstrap pass 0 hides `hk_zep`, then the anchored `RESET_STATE` pass activates the
+zeppelin's own destructible groups inside it. The mirror case did the same in reverse — enabling a
+subtree switched on descendants that were themselves deactivated, e.g. the hidden `destroyed`
+wrecks. New `src/Mech3/WorldCollision.cs` makes collision a DERIVED property instead: a
+`SceneBuilder`-built collider is enabled exactly while its owner is visible in tree and no ancestor
+is faded out, bound through `VisibilityChanged` (which Godot propagates to descendants) plus
+`TreeEntered` (a world is bootstrapped while still detached, where visibility writes emit nothing).
+The three writers now write only `Visible`, or `WorldCollision.SetFaded` for the fade channel.
+Hand-built bodies stay untracked, so deliberately invisible-but-solid ones (the weapon lab's target,
+plane hitboxes) are unaffected.
+
+**How verified.** New `--run-tests=collision-visibility` suite (`Probes.InvisibleEnabledColliders`)
+asserts zero enabled colliders under an invisible node across all 8 chapters — green, and shown
+able to fail: with the old walk restored **and** `Track` stubbed it reports 1,484 offenders
+(C1 504, C3 291, C1B/C2B/C5 109 each, C1C 109, C2 122, C4 127) naming `hk_zep`, all four MP
+zeppelins, `piratezep`, the CTF props, the AA guns and `destroyed` wrecks — the class was never
+one entity. Restoring only the old walk left the suite GREEN, because the tree-entry sync repaired
+it afterwards (now METHOD-19). The original repro — `--fly --chapter=C1 --mission=IA1
+--pos=-5000,200,-5208 --direction=-1,0,0 --frames=220`, which logged
+`CRASH into turret/col impact=(-5216,199,-5207)` — flies through cleanly. `.\RunTests.ps1` green:
+318 units, 14 in-engine suites, 13 goldens hash-identical; C1 world build 2762 ms vs 2818 ms before.
+
+**Sub-question settled.** The activations landing inside hidden subtrees are the hidden entity's
+OWN defs, not a name-resolution leak: a one-off diagnostic over C1/IA1 logged 6,611 of them, 296
+under `hk_zep` (`lkztailgasbag/destroytailgasbag`, `lkgasbag0*` — the Locklear zeppelin's own
+gasbag/turret destructibles) and 5,535 under `multiplayer1zep` (`reng11/destroy_mp1zreng11` and
+siblings). Each def anchors on a node inside the entity it belongs to and activates its own
+`healthy` group, which is correct — the only defect was the collider/visibility mismatch.

@@ -408,8 +408,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     // lesson as LightState's per-light host cache, which cost ~7 ms/frame before it existed.
     private readonly Dictionary<Node3D, float> _opacity = new();
 
-    private readonly Dictionary<Node3D, bool> _opacityCollidable = new();
-
     // The fade twins a genuine partial opacity installs per instance (see EnsureOpacityPath):
     // source material -> its translucent twin (null = cannot be made translucent), the twin
     // set for recognising an override this runtime installed, and the shader-level cache so
@@ -1172,16 +1170,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         _opacity[node] = alpha;
 
-        // Colliders default to enabled, so an untracked root is treated as currently collidable;
-        // walk the subtree only on a genuine crossing of the invisibility threshold.
+        // The fade is a shader parameter, which visibility knows nothing about — so a subtree
+        // faded to nothing is marked faded and its colliders derive from that too. Reports only
+        // the crossing, not every tick of the fade.
         bool collidable = alpha > OpacityCollisionEpsilon;
-        bool wasCollidable = !_opacityCollidable.TryGetValue(node, out bool tracked) || tracked;
-        if (wasCollidable != collidable)
+        if (WorldCollision.SetFaded(node, !collidable))
         {
-            SetCollidersEnabled(node, collidable);
             GD.Print($"anim: fade {(collidable ? "restored" : "dropped")} colliders under '{node.Name}'");
         }
-        _opacityCollidable[node] = collidable;
 
         int applied = ApplyOpacity(node, alpha);
         if (applied == 0 && !Mathf.IsEqualApprox(alpha, 1f))
@@ -1306,19 +1302,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         string.Equals(name, "INPUT_NODE", StringComparison.OrdinalIgnoreCase)
         || string.Equals(name, "MAIN_ROOT_NODE", StringComparison.OrdinalIgnoreCase);
 
-    // INACTIVE = invisible and non-collidable, the whole subtree; ACTIVE re-enables both.
+    // INACTIVE = invisible and non-collidable, the whole subtree. Only visibility is written:
+    // world colliders derive their Disabled flag from it (WorldCollision), which is what makes
+    // an activation INSIDE an already-hidden subtree stay non-collidable.
     private static void SetSubtreeActive(Node3D node, bool active)
     {
         node.Visible = active;
-        SetCollidersEnabled(node, active);
-    }
-
-    private static void SetCollidersEnabled(Node node, bool enabled)
-    {
-        if (node is CollisionShape3D shape)
-            shape.Disabled = !enabled;
-        foreach (var child in node.GetChildren())
-            SetCollidersEnabled(child, enabled);
     }
 
     // Whether this mesh's shader reads the opacity parameter — and if it does not, whether it

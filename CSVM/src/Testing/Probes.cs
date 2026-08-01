@@ -323,6 +323,49 @@ public static class Probes
         return set;
     }
 
+    /// <summary>Every collider under a subtree that is enabled while nothing is drawn there — the
+    /// invisible-wall census. Reports the offending shape's owning node chain, leaf-first.
+    ///
+    /// <para>This is the generic tripwire for the whole class the C1/IA1 zeppelin belonged to
+    /// (<see cref="Mech3.WorldCollision"/>): visibility is inherited and <c>Disabled</c> is not, so
+    /// any code that writes the two separately eventually disagrees with itself. Run over a built
+    /// world it needs no knowledge of which entity a mission hides.</para></summary>
+    public static List<string> InvisibleEnabledColliders(Node root)
+    {
+        var found = new List<string>();
+
+        // Leaf-first ancestor names, cut at the first invisible one (bracketed), so the report
+        // names the node that actually hid the geometry rather than the path to the world root.
+        static string Chain(Node3D leaf)
+        {
+            var parts = new List<string>();
+            for (Node? n = leaf; n != null && parts.Count < 12; n = n.GetParent())
+            {
+                bool hidden = n is Node3D { Visible: false };
+                parts.Add(hidden ? $"[{n.Name}]" : n.Name.ToString());
+                if (hidden)
+                {
+                    break;
+                }
+            }
+            return string.Join(" < ", parts);
+        }
+
+        void Walk(Node n)
+        {
+            if (n is CollisionShape3D { Disabled: false } cs && !cs.IsVisibleInTree())
+            {
+                found.Add(Chain(cs));
+            }
+            foreach (var c in n.GetChildren())
+            {
+                Walk(c);
+            }
+        }
+        Walk(root);
+        return found;
+    }
+
     /// <summary>The top <see cref="Node3D"/> above a node — the world subtree root, so a census
     /// walks placed + partition geometry and not the UI or the Window.</summary>
     public static Node3D WorldRootOf(Node3D n)

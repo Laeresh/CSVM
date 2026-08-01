@@ -71,6 +71,12 @@ cite these IDs.
   keep the slant under RANGE.** 4 s of continuous 40slug fire (RANGE 1000 m) at 1380 m
   slant logged zero impacts over a fully collidable sea and filed as "the sea has no
   collider" (BL-017, disproven).
+- **METHOD-19** — **To show a new tripwire can fail, restore the OLD behaviour *and* disable
+  the new mechanism — a fix that repairs state later in the build hides the reinstated bug.**
+  Reinstating the pre-fix collider walk alone left `collision-visibility` green, because
+  `WorldCollision`'s tree-entry sync ran after the bootstrap and repaired every shape it had
+  wrongly enabled; only with `Track` also stubbed did the suite report the real 1,484
+  offenders across the 8 chapters.
 
 ## DIAG — chasing a symptom
 

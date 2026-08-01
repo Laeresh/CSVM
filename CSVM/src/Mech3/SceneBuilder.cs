@@ -617,6 +617,7 @@ void fragment() {
     // mesh index and shared across instances (shapes are resources).
     private void AttachCollision(Node3D parent, int meshIndex)
     {
+        bool tracked = false;
         foreach (var (surface, shape) in CollidersForMesh(meshIndex))
         {
             // Named per class ("col", "col_water", "col_buildings") rather than "col" for all
@@ -633,6 +634,13 @@ void fragment() {
                 body.SetMeta(SurfaceMeta, surface);
             parent.AddChild(body);
             ColliderCount++;
+            tracked = true;
+        }
+        // Collision follows the node's tree visibility from here on; nothing else writes
+        // Disabled (WorldCollision).
+        if (tracked)
+        {
+            WorldCollision.Track(parent);
         }
     }
 

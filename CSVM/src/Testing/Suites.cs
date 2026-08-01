@@ -74,6 +74,8 @@ public static class Suites
             "the census/override flatten repaints RGB and changes nothing else", TexDropIn));
         into.Add(new TestHarness.Suite("gltf-export",
             "the viewer plane exports to glTF and re-imports with a textured mesh", GltfExport));
+        into.Add(new TestHarness.Suite("collision-visibility",
+            "nothing a chapter hides is left solid: no enabled collider under an invisible node", CollisionVisibility));
         into.Add(new TestHarness.Suite("nodelab-visibility",
             "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
     }
@@ -318,6 +320,26 @@ public static class Suites
             }
             ctx.Note($"{r.Summary}");
         });
+    }
+
+    /// <summary>The invisible-wall tripwire: after a chapter's world has bootstrapped — mission
+    /// setup script, RESET_STATEs, ON_STARTUP, the unplaced sweep — no collider may still be
+    /// enabled where nothing is drawn. Every chapter, because what each mission hides differs and
+    /// the failure is silent until someone flies into it (C1/IA1's <c>hk_zep</c>).</summary>
+    private static void CollisionVisibility(TestContext ctx)
+    {
+        foreach (var (chapter, _, _) in Census)
+        {
+            ctx.WithWorld(chapter, collision: true, world =>
+            {
+                var solid = Probes.InvisibleEnabledColliders(world.Session.Root);
+                ctx.Same(0, solid.Count, $"{chapter} invisible-but-solid colliders");
+                for (int i = 0; i < solid.Count && i < 8; i++)
+                {
+                    ctx.Note($"{chapter} solid where nothing is drawn: {solid[i]}");
+                }
+            });
+        }
     }
 
     private static void DamageHd(TestContext ctx)
