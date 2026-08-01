@@ -304,6 +304,25 @@ public sealed partial class ProjectilePool : Node3D
     /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
     public Camera3D? Listener { get => _listener; set => _listener = value; }
 
+    /// <summary>Which weapons.json IMPACT surface class a struck collider belongs to, from the
+    /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag. The ONE surface classifier for the
+    /// collision-consequence paths — the airframe's graze reaction
+    /// (<c>FlightController.GrazeReaction</c>) picks its <c>touchdown_*</c> def from this same
+    /// read, so a round and a wingtip never disagree about what they hit.</summary>
+    public static SurfaceClass ClassifySurface(Node? collider)
+    {
+        if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
+        {
+            return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
+            {
+                "water" => SurfaceClass.Water,
+                "buildings" => SurfaceClass.Buildings,
+                _ => SurfaceClass.Default,
+            };
+        }
+        return SurfaceClass.Default;
+    }
+
     public override void _Ready()
     {
         // Tracers are velocity-aligned streaks (NOT billboarded — billboard would collapse the
@@ -777,20 +796,6 @@ public sealed partial class ProjectilePool : Node3D
         var x = b.X * c + b.Y * s;
         var y = b.Y * c - b.X * s;
         return new Basis(x, y, b.Z);
-    }
-
-    private static SurfaceClass ClassifySurface(Node? collider)
-    {
-        if (collider != null && collider.HasMeta(SceneBuilder.SurfaceMeta))
-        {
-            return collider.GetMeta(SceneBuilder.SurfaceMeta).AsString() switch
-            {
-                "water" => SurfaceClass.Water,
-                "buildings" => SurfaceClass.Buildings,
-                _ => SurfaceClass.Default,
-            };
-        }
-        return SurfaceClass.Default;
     }
 
     private static void RenderSprites(MultiMesh mm, List<Sprite> sprites)

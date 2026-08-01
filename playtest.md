@@ -247,6 +247,24 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   underneath, hangar/tunnel interiors, the inside of the backlot ring. (c) is the one that would
   send the fix back. `./RunGame.ps1 --chapter=C4` and `--chapter=C1`.
 
+- `PT-24` **Graze reaction re-test at 4× puff size (`BL-090` item 3, first playtest 2026-08-01).**
+  Round 1 confirmed the sounds and the 1.5 s cadence, and found the smoke "mostly hidden in the
+  surfaces". Both verdicts are now **code defaults**, so the goldens and every scripted run agree
+  with what you see: `Puffer.SizeScaleDefault` 1 → **4**, and the graze staged at the **contact
+  point** (`graze.siteAtContact` true — set it false in `CSVM/config.json` to A/B the aircraft
+  staging the def's authored offsets argue for, though `--det` drops that file). *Look for:*
+  (a) whether 4× is now too **big** for the graze specifically — the same scale drives the rocket
+  trails and the 30 s destruction fire (`PT-22`), so a "right for fire, wrong for grazes" verdict
+  means the graze needs its own scale rather than sharing this one — and `PT-22`'s destruction-fire
+  density verdict is now measuring size and count together (`BL-218`); (b) that dirt and a building
+  wall give the *same* smoke is correct and needs no report — the two puffers are byte-identical in
+  the data, and only the building adds the yellow sparks; (c) the sparks are **still expected to
+  read high/delayed** — that is `BL-221`, an unsettled axis-order question covering every def's
+  `AT_NODE` offsets, so a "still floating" verdict just confirms it and is not a new bug.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (water and dirt both within reach of the C1
+  spawn), `--chapter=C2` for walls. ⚠ The `C` collider overlay you wanted for picking surfaces is
+  broken — `BL-220`.
+
 ---
 
 ## Everything else

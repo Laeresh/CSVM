@@ -296,6 +296,20 @@ unscheduled.
   ⚠ Traps: don't attribute it to the concurrent-run collision — that failure mode is instant
   (0.9 s, LOG-13); this one died seconds in, with nothing else running.
 
+- `BL-220` **The `C` collider wireframe overlay crashes on a freed mesh and has lost its legend
+  (user, 2026-08-01, found while playtesting `PT-24`).** Pressing `C` throws
+  `ObjectDisposedException: 'Godot.MeshInstance3D'` from `ColliderOverlay.Toggle()`
+  (`ColliderOverlay.cs:159`, reached from `_UnhandledKeyInput` at `:134`) — the overlay holds
+  `MeshInstance3D` references to wireframes whose source nodes have since been freed (a destructible
+  dying and swapping its subtree is the obvious producer, the same lifetime problem `ClassOverlay`
+  avoids by rebuilding on every toggle). The on-screen legend the overlay used to print is also gone.
+  ⚠ Traps. (a) `Toggle` writing `Visible` on a stale reference is the *symptom*; the fix is
+  ownership — either rebuild the wireframe set per toggle (`ClassOverlay`'s approach) or drop
+  references on free, not an `IsInstanceValid` guard sprinkled at the write site, which would leave
+  the overlay silently missing whatever died. (b) The user reports `C` is the better tool than
+  `ClassOverlay`'s `X` for judging *surfaces*, so this is on the critical path for any further
+  per-surface work — don't treat it as a cosmetic debug-tool nit.
+
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
 - `BL-045` **The world damage panel is larger than it needs to be, with a gap between the no-controls notice
@@ -914,7 +928,8 @@ the document alone, it says so and marks the value TUNE.
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-090` **Small per-impact feedback gaps — four (item 4, shell ejection, landed as C22 2026-07-31), all
+- `BL-090` **Small per-impact feedback gaps — three (item 4, shell ejection, landed as C22
+  2026-07-31; item 3, the glancing-collision reaction, landed 2026-08-01), all
   with the data already shipped.** Grouped because each
   is a few lines of wiring against an authored def and they share one theme: the moment something
   hits the plane, or the plane touches something, is under-communicated.
@@ -930,12 +945,6 @@ the document alone, it says so and marks the value TUNE.
      `random_gun_impact` → `yellow_sparks_follow` at a randomly chosen `pdpN` panel.
      `DamageVisuals.cs:194-195` explicitly skips both. Now wireable — the D32 world-effects runtime
      that plays a named effect at a point exists.
-  3. **A glancing collision is silent, and three per-surface variants ship.** `touchdown.zrd.json`
-     holds `touchdown_default` / `touchdown_dirt` / `touchdown_water` (sequences `glance_spark` /
-     `glance_dust` / `glance`), each activating `spark_touchdown` / `dust_touchdown` /
-     `splash_touchdown` with `snd_exp_ground_b` / `snd_exp_water_b`. Nothing in `CSVM/src` mentions
-     `touchdown`, and `FlightController.SurviveHit` plays **no audio and shows nothing** — only the
-     fatal `Crash()` sounds (`OnCrash` + `OnGroundExplosion`).
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
@@ -1102,6 +1111,27 @@ needs one of them to move needs a new measurement first.
   two easy to get wrong.
 
 ## Open fidelity questions (answerable by testing the original)
+
+- `BL-221` **Which axis order does an anim-def `AT_NODE` *position* use? The graze reaction is the
+  first def whose offsets are nonzero and visually judgeable, and they read wrong (user, 2026-08-01,
+  `PT-24`).** Mesh coordinates are settled right-handed Y-up, nose at −Z (`docs/formats/gotchas.md`),
+  and the engine applies `AT_NODE`/`PufferState` offsets in that frame. `touchdown_default`'s five
+  `small_yellow_sparks` calls sit at `(0, 8, −2)`, `(±1.5, 8, 0)`, `(±4, 8, 0)`. Read as Y-up that is
+  five sparks in a horizontal rake **8 m above** the plane, spread across the span — which is what
+  the user saw ("sparks start above and inside the building"). Read as the game's Z-up world
+  (x, y = forward, z = up) it is five sources **across the wing, 8 m ahead**, the centre one 2 m
+  low — exactly a nose/leading-edge scrape. The ±1.5/±4 lateral spread matching a wingspan is the
+  strongest single clue that the *first* component is spanwise and the constant 8.0 is not height.
+  ⚠ **Traps.** (a) This is not a touchdown-only fix — every `AT_NODE` position in every def goes
+  through the same read, so flipping it globally would move the rocket/crash effects that currently
+  look right. Settle it by finding defs with nonzero offsets whose correct placement is already
+  known (turret muzzle points, zeppelin nacelle fires) and testing both readings against them —
+  a census in `analysis/`, not a guess. (b) `small_yellow_sparks` emits with
+  `world_velocity (0, 10, 0)`, which reads plausibly under BOTH conventions (sparks fly up / stream
+  forward), so it cannot break the tie — don't cite it as evidence. (c) The graze def's staging site
+  (`graze.siteAtContact`) is a *different* question with the same symptom family — it decides where
+  the offsets are measured FROM, not which axis each component is. Settling one does not settle the
+  other, and the site currently defaults to the contact point on feel, against what the data argues.
 
 - `BL-184` **Does the original animate the ammo-gauge arrow on weapon switch?** Our gauge already
   draws the pointer (`gg`/`mgarrow`) rotated to the selected belt slot, but the rotation is applied
@@ -1277,9 +1307,12 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   correspondingly thin. Judge the density at the controls now that the fire's *shape* is right
   (`PT-22`) — it is a whole-effect multiplier, so a wrong value is visible on the destruction fires,
   the damage-stage sputters and the wreck smoke at once.
-  ⚠ Traps: this is not the `puffer.*SizeScale` config knobs — those scale sprite size, and trading
+  ⚠ Traps: this is not the `puffer.*SizeScale` knobs — those scale sprite size, and trading
   count for size is exactly the substitution that makes a too-sparse plume read as "too small"
-  instead. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
+  instead. **That substitution has now partly happened**: `SizeScaleDefault` went 1 → **4** at the
+  controls on 2026-08-01, which makes every unnumbered emitter read fuller without adding a sprite,
+  so a density verdict taken today is measuring the two together. If `NUMBER` is later raised, 4 has
+  to be re-judged in the same session, not left standing. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
   (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
   are a biased sample, since `PufferState.FindInReader` treats the presence of `NUMBER` as what
   makes a state "fully defined" in the first place.

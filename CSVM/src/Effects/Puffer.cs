@@ -274,9 +274,11 @@ public sealed class PufferState
 public sealed partial class Puffer : Node3D
 {
     /// <summary>Default for the three per-spawn-path size multipliers (config.json <c>puffer</c>
-    /// block) — 1 = the authored SIZE_RANGE, byte-identical. Referenced by
+    /// block). 1 = the authored SIZE_RANGE verbatim; **4 is a judged stand-in for a missing engine
+    /// constant, not a decode** — at 1 the emitters read as a thin scatter of specks against the
+    /// original's volume, and 4 was settled at the controls (TUNE, 2026-08-01). Referenced by
     /// <see cref="Utils.Config.WarmTuningRegistry"/> so <c>--dump-config</c> documents the keys.</summary>
-    public const float SizeScaleDefault = 1f;
+    public const float SizeScaleDefault = 4f;
 
     /// <summary>Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
     /// counts as smoke, so the emitter alpha-blends instead of adding. The measured population

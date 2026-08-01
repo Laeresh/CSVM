@@ -9629,3 +9629,73 @@ not framed in either shot. Swept all 8 chapters with `--debug-classoverlay --scr
 zero engine errors in every log (one pre-existing, unrelated `SOUND_NODE`-after-build warning under
 `--mute`). `.\RunTests.ps1` green: 320 units, 14 in-engine suites, 13/13 goldens hash-identical
 (debug-only path, opt-in, adds no nodes when off).
+
+## 2026-08-01 — B3 `BL-090` item 3: a glancing collision is no longer silent
+
+A survivable graze now plays touchdown.zrd's authored per-surface reaction instead of sliding
+silently. `FlightController.SurviveHit` gained `GrazeReaction`: the struck collider is classified
+through `ProjectilePool.ClassifySurface` (made `public static` — the plan's "reuse it, don't write a
+third one"), which picks `touchdown_default` on a buildings-classed surface (the `glance_spark`
+sequence, five `small_yellow_sparks` calls + `collide_puffer`), `touchdown_dirt` on everything else
+(`glance_dust` → `collide_dirt_puffer`) and `touchdown_water` on water (`glance` →
+`collide_water_puffer`). The def is staged at the contact point through the session's world-effects
+runtime via a new `GrazeEffectSink` (wired in `FlightRigAssembler` from a new `Inputs.WorldEffects`,
+the same runtime the projectile pool's `EffectSink` uses), and `FlightAudio.OnGraze` plays the
+sequence's own SOUND — `snd_exp_ground_b` for default/dirt, `snd_exp_water_b` for water; the `_b`
+pair, not the crash's `_a`. `WorldEffectsFactory.EffectAnimNames` 30 → 33 and `EffectStageRoots`
+34 → 38 (`spark_touchdown`/`dust_touchdown`/`splash_touchdown` plus `yellow_spark_01`, which the
+spark variant's `CALL_ANIMATION`s anchor on) — derived with `analysis/effect-anchor-roots/` retargeted
+at the three touchdown names, which also confirmed all four exist as a single parentless root in all
+8 chapters. Rate limit is `GrazeReactionInterval` 1.5 s, not a tuned number: the defs stop their own
+puffer at `ANIMATION_OFFSET 1.5`, so a long scrape repeats whole authored reactions instead of
+restarting one every physics frame.
+
+**Where the def stages is left as an A/B, `graze.siteAtContact`, defaulting to the contact point.**
+The data argues for the aircraft: every offset the def carries is authored against `MAIN_ROOT_NODE` —
+the node the engine invokes it on, which is the plane (its SOUND is `AT_NODE MAIN_ROOT_NODE` too) —
+and `PlaceTemplateAt` moves only a template's origin, leaving the offsets in world axes, so staging
+at the contact point puts the puffer's authored −0.5 Y half a metre *under* the struck surface. The
+user's first playtest reported exactly that ("mostly hidden in the surfaces I grazed") and
+re-anchoring on the plane visibly lifted the spray clear. It was then reverted at the user's
+judgement: with `puffer.*SizeScale` raised the burial no longer masks the effect, and smoke leaving
+the *surface* reads better than smoke leaving the plane. The knob keeps both a keypress apart.
+Two findings from that playtest that are data facts, not bugs: **the dirt and default puffers are
+identical** — same `smoke101/102/103` textures, same size/lifetime/count/offset and the same
+115→100→95/91/90→155/101/50 colour ramp — so only water differs (a white→blue ramp) and only the
+default variant adds the yellow spark cluster; and the spark cluster's five `AT_NODE` offsets read
+wrong under the settled Y-up mesh convention, which is filed as `BL-221` (an axis-order question
+spanning every def's `AT_NODE` position, not a touchdown-local fix).
+
+**How verified.** `RunProbe.ps1 --chapter=C1B --effects-test`: 33/33 resolve and **30 build a
+puffer**, the three new names among them (`touchdown_default` 2, `_dirt` 1, `_water` 1) — the WORLD-12
+check that a started def actually built an emitter, not just logged. A scripted `--det` water graze
+(`--chapter=C1 "--pos=-6500,8,-1500" "--direction=1,-0.012,0" "--hold=0,0,0,0"`, contact at sim
+frame ~136) logs `graze reaction effect=touchdown_water surface=Water into=g16220/col_water` and the
+burst frames show the splash spray on the water behind the plane (staged in `playtest/PT-24/`).
+Flight builds log `world-effects runtime: 38/38 effect template(s)
+staged, 33 effect name(s) bound`. `.\RunTests.ps1` green: 320 units, 14 in-engine suites, 13/13
+goldens hash-identical — including the three flight goldens that now stage four extra template
+roots, confirming they stay hidden until an effect plays on them. The three-surfaces-by-eye
+comparison is `PT-24`.
+
+## 2026-08-01 — Puffer size default 1 → 4, and the graze staging site settled on feel
+
+Two playtest verdicts from `PT-24`, both landed as defaults rather than left in the git-ignored
+`config.json` (which `--det` drops, so a scripted run would otherwise disagree with what the pilot
+sees). `Puffer.SizeScaleDefault` 1 → **4**, scaling all three spawn paths (burst/trail/sustain):
+1 is the authored `SIZE_RANGE` verbatim and reads as a thin scatter of specks against the original's
+volume, so this is a judged stand-in for a missing engine constant — TUNE, not a decode, and it is
+now entangled with `BL-218`'s open `NUMBER` default (noted there: raising `NUMBER` means re-judging
+4 in the same session). And `FlightController.GrazeReaction` stages its `touchdown_*` def back at the
+**contact point** (`graze.siteAtContact`, default true) after briefly moving to the aircraft: the
+data argues for the aircraft — the def's offsets are authored against `MAIN_ROOT_NODE` — but with the
+puffs 4× larger the burial that motivated the move no longer masks the effect, and smoke leaving the
+surface reads better than smoke leaving the plane. The flag keeps both an edit apart; `BL-221` (the
+`AT_NODE` axis-order question) is separate and untouched by it.
+
+**How verified.** `.\RunTests.ps1 -RegenGoldens`: 320 units, 14 in-engine suites, engine errors
+clean. **4 of 13 goldens re-pinned** — `c1-waterfall`, `c3-island`, `c1-destroy-effects`,
+`c1-crash` — and exactly those: the other 9 shots carry no live emitter, which is the signature a
+global sprite-size change should leave. The waterfall's mist at the cliff base goes from a sparse
+speck field to a billowing cloud (`.scratch/goldens/c1-waterfall.png` at regen time). The graze site
+is confirmed back at the contact point by the flight log's `contact=… site=…` pair reading equal.

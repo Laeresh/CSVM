@@ -37,6 +37,8 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp;
     private float _groundExpVol = 1f;
+    private AudioStreamPlayer? _grazeGround, _grazeWater;
+    private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
     private float _propStartVol = 1f, _propStopVol = 1f;
     private float _engineRamp = 1f; // 0→1 gain envelope while the engine catches after a start
@@ -89,6 +91,12 @@ public partial class FlightAudio : Node
         // def fires it as its Sound event. Air/water hits use their own sounds, so this stays
         // gated on the surface in FlightController (OnGroundExplosion), not folded into OnCrash.
         _groundExp = MakeOneShot(archive, defs, "snd_exp_ground_a", out _groundExpVol);
+
+        // The graze reaction's authored sounds (touchdown.zrd): the touchdown_default/_dirt
+        // sequences Sound snd_exp_ground_b, touchdown_water snd_exp_water_b — the lighter `_b`
+        // pair, not the crash's `_a`.
+        _grazeGround = MakeOneShot(archive, defs, "snd_exp_ground_b", out _grazeGroundVol);
+        _grazeWater = MakeOneShot(archive, defs, "snd_exp_water_b", out _grazeWaterVol);
     }
 
     /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
@@ -189,6 +197,13 @@ public partial class FlightAudio : Node
     /// plane explosion <see cref="OnCrash"/> already fired. Called only for a Ground surface
     /// (FlightController.Crash), so it does not sound on a future air or water destruct.</summary>
     public void OnGroundExplosion() => PlayOneShot(_groundExp, _groundExpVol);
+
+    /// <summary>The survivable scrape's authored bark, alongside the <c>touchdown_*</c> effect the
+    /// world-effects runtime renders: snd_exp_water_b off water, snd_exp_ground_b off everything
+    /// else. Rate-limited by the caller (FlightController), not here — a long scrape would
+    /// otherwise re-fire it every physics frame.</summary>
+    public void OnGraze(bool water) => PlayOneShot(water ? _grazeWater : _grazeGround,
+        (water ? _grazeWaterVol : _grazeGroundVol) * MixGain);
 
     /// <summary>Graceful engine wind-down (future landing/parking): plays snd_propstop and
     /// kills the loops. NOT called on crash — the explosion one-shot already covers that

@@ -14,7 +14,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "2983b4197196eba4bbe47247e111ab8d",
+      "hash": "180a4521b56368e0b851921941947ff8",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121. Re-pinned when TEXTURE_SEQUENCE times became lifetime fractions: 0.01 % of pixels, the mist's flipbook column. Re-pinned when the world gained backface culling (2026-08-01): the skydome stops drawing its near wall over the far shore",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -49,7 +49,7 @@
     {
       "name": "c3-island",
       "frame": 120,
-      "hash": "becc96e99d84bc3bfa620a156d6e3c25",
+      "hash": "167977cbb87f7e82938a169288585c88",
       "exercises": "coastline, surf edge and open water at close range; static — 9 px at 120 vs 360, so it proves geometry and shading, not the clock",
       "args": ["--freecam", "--chapter=C3", "--pos=-4518,400,-2015", "--direction=-0.35,-0.35,-1", "--det", "--mute"]
     },
@@ -91,14 +91,14 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "51ad948cf7ffb7507b54b9d666f674ac",
+      "hash": "f0538b0d01d8648b2d72061fcf506b93",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter. Re-pinned again for the TEXTURE_SEQUENCE lifetime-fraction fix: 0.26 % of pixels, the ground puffers' flipbook columns. Re-pinned when the world gained backface culling (2026-08-01): 7.3 % - the same skydome wall behind the kill",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "43bdb7ad7a14d5e7bc7fd255f92e7555",
+      "hash": "ff50560f7b816d9735b683839190fe4f",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Re-pinned when the world gained backface culling (2026-08-01): 18.0 % - the same, cloud banks behind the fireball",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

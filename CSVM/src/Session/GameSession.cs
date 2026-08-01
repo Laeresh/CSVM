@@ -1206,9 +1206,11 @@ public partial class GameSession : Node3D
         // rocket impact plays its named effect here; the world runtime routes a death's
         // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
         // the templates, so it is built only when the world was.
+        AnimRuntime? worldEffects = null;
         if (state.WorldScene != null)
         {
             var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
+            worldEffects = effects; // the rigs' graze reaction plays through the same runtime
             projectiles.EffectSink = (name, pt) => effects.PlayEffectAt(name, pt);
             if (state.WorldRuntime != null)
             {
@@ -1280,6 +1282,7 @@ public partial class GameSession : Node3D
                 Gamez = state.Gamez,
                 WorldScene = state.WorldScene,
                 WorldRuntime = state.WorldRuntime,
+                WorldEffects = worldEffects,
                 CrashProgram = state.CrashProgram,
                 Sounds = state.Sounds,
                 SoundDefs = state.SoundDefs,

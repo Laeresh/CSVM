@@ -43,6 +43,9 @@ public sealed class WorldEffectsFactory
         // plus C4's one-off `b_steamtrail`, which is excluded: its anim root is the live train
         // subtree, not a relocatable effect template.
         "sputter_black_smoke_obj", "sputter_fire_smoke_obj",
+        // the airframe's per-surface graze reaction (touchdown.zrd): sparks off a hard surface,
+        // dust off terrain, a splash off water. FlightController.SurviveHit plays one per contact.
+        "touchdown_default", "touchdown_dirt", "touchdown_water",
     };
 
     // A stop-less sustained effect (large_30sec_fire) would emit for the whole session; the
@@ -75,6 +78,10 @@ public sealed class WorldEffectsFactory
         "he_ring1", "sonic_ring1", "sonic_ring2", "sonic_ring3", "sonic_ring4", "sonic_ring5",
         "ap_trails", "he_trails", "flak_trails", "carnage_trails", "carnage_ring",
         "sonic_puff1", "sonic_puff2", "hg_splash", "ripple",
+        // the graze reaction's three anchor roots plus the spark cluster `touchdown_default`
+        // CALL_ANIMATIONs (small_yellow_sparks anchors on `yellow_spark_01`). All four exist as a
+        // single parentless root in every chapter (analysis/effect-anchor-roots/).
+        "spark_touchdown", "dust_touchdown", "splash_touchdown", "yellow_spark_01",
     };
 
     // The player crash-anchor set: meshless nodes named exactly the crash def's targets (its

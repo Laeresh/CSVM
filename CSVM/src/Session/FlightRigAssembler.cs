@@ -87,6 +87,9 @@ public sealed class FlightRigAssembler
             // C27: flying into a WeaponOrCollideHit object (the 44 facades/windows/agyrobus)
             // breaks it and passes through; every other collision stays solid.
             CollideDamageSink = _in.WorldRuntime != null ? _in.WorldRuntime.CollideDamageAt : null,
+            // B3: a survivable scrape plays touchdown.zrd's per-surface reaction (sparks/dust/
+            // splash) at the contact point, through the same runtime a rocket impact uses.
+            GrazeEffectSink = _in.WorldEffects is { } fx ? (name, pt) => fx.PlayEffectAt(name, pt) : null,
             // splitscreen: this player's own device(s), own pane for the HUD,
             // and no debug freeze (it would halt the shared world for everyone)
             PadDevices = _in.PadAssignment?[pi],
@@ -355,6 +358,9 @@ public sealed class FlightRigAssembler
         public GameZ Gamez = null!;
         public SceneBuilder? WorldScene;
         public AnimRuntime? WorldRuntime;
+        /// The session's one world-effects runtime, so a graze plays its touchdown_* def (B3).
+        /// Null on a world-less build — the scrape then keeps its sound and loses its effect.
+        public AnimRuntime? WorldEffects;
         public AnimProgram? CrashProgram;
         public SoundArchive? Sounds;
         public Dictionary<string, SoundDef>? SoundDefs;

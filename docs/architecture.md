@@ -660,7 +660,9 @@ shrinking under a pixel — floored *before* the muzzle-growth cap, so it never 
 round has actually flown.
 `Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
-`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects; rockets fly
+`EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects;
+`ClassifySurface` is `public static` — the ONE surface classifier, shared with the airframe's
+graze reaction so a round and a wingtip never disagree about what they hit; rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
 `AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,
@@ -836,13 +838,16 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
 ## src/Flight/FlightAudio.cs
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
-in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `snd_exp_ground_a`.
+in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `snd_exp_ground_a`,
+`OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
+(touchdown.zrd; rate-limited by `FlightController`, not here).
 ⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
   reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
   cap); re-derive from a new reference.
 ⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
   driving `Update`, or the restart hook re-fires propstart.
-⚠ `MixGain` (1/√N in splitscreen, TUNE) covers only the three loops, never the one-shots.
+⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the three loops and the per-player cues
+  (`PlayEmptyClip`, `OnGraze`); the crash/prop one-shots are deliberately left unscaled.
 
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
@@ -852,9 +857,12 @@ each quad, with quad-rim fade + soft-particle depth fade. Modes: `Burst`, `Trail
 `TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
 state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
-`puffer.trailSizeScale` / `puffer.sustainSizeScale` (default 1 = authored SIZE_RANGE,
-byte-identical; the cull margin scales with the largest). Read at `Init`; registered in
-`Config.WarmTuningRegistry` for `--dump-config`.
+`puffer.trailSizeScale` / `puffer.sustainSizeScale` (`SizeScaleDefault` **4**, a TUNE stand-in for a
+missing engine constant settled at the controls — 1 is the authored SIZE_RANGE verbatim, which reads
+as a thin scatter of specks; the cull margin scales with the largest). Read at `Init`; registered in
+`Config.WarmTuningRegistry` for `--dump-config`. Moving `SizeScaleDefault` re-pins every
+puffer-bearing golden and only those (measured: `c1-waterfall`, `c3-island`, `c1-destroy-effects`,
+`c1-crash`; the other 9 carry no live emitter).
 ⚠ TEXTURE_SEQUENCE times are FRACTIONS of a particle's lifetime, not seconds (effects.md).
 ⚠ The blend is derived, never authored: a COLORS ramp or a near-black dying sprite (measured off
   the atlas, `SmokeLuminance`) ⇒ blend_mix + no depth fade, else blend_add (effects.md).
@@ -967,6 +975,12 @@ PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, Loadout + ProjectilePool (guns/rockets), `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
+A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
+collider classified through `ProjectilePool.ClassifySurface` picks `touchdown_default` (buildings,
+sparks) / `touchdown_dirt` / `touchdown_water`, staged at the contact point via `GrazeEffectSink`
+(the world-effects runtime) with `FlightAudio.OnGraze` under it, one per `GrazeReactionInterval`.
+Where it stages is an open A/B — `graze.siteAtContact`, default the contact point (judged at the
+controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE` offsets assume.
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt (inverted flight renders upside
   down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
   distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones
@@ -1543,7 +1557,9 @@ caller's build summary.
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
 `BuildFlightCrashRuntime`. `EffectAnimNames` binds impact + death effects **and** the
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
-`partial_damage_obj`, staged via `EffectStageRoots`) — the install-wide stage-call closure except
+`partial_damage_obj`, staged via `EffectStageRoots`) **and** the airframe's three graze reactions
+(`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`
++ `yellow_spark_01`, played by `FlightController.GrazeReaction`) — the install-wide stage-call closure except
 C4's train-anchored `b_steamtrail` (BL-046). Constructed once per session (`_worldEffectsFactory`, same lifetime as
 `LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects

@@ -111,6 +111,12 @@ public partial class FlightController : Node3D
     /// (a viewer/static build with no world runtime) makes every collision solid, as before.</summary>
     public System.Func<Node?, float, bool>? CollideDamageSink;
 
+    /// <summary>Plays a named effect def at a world point through the session's world-effects
+    /// runtime — the survivable graze's authored <c>touchdown_*</c> reaction (B3). Same sink shape
+    /// as <c>ProjectilePool.EffectSink</c>; null (no world, or a build with no effects runtime)
+    /// leaves the scrape's sound without its sparks/dust/splash.</summary>
+    public System.Action<string, Vector3>? GrazeEffectSink;
+
     /// <summary>Visible damage: torn-skin pdpanel flips + the low-HP
     /// smoke/fire trail, driven from the data's injure_anims thresholds. Optional.</summary>
     public DamageVisuals? Visuals;
@@ -276,6 +282,10 @@ public partial class FlightController : Node3D
     private const float GrazeKick = 1.2f;        // rad/s attitude kick at full severity
     private const float GrazePushOut = 0.15f;    // m off the surface after a graze (no sticky slide)
     private const float DamageCooldown = 0.3f;   // s between HP subtractions (multi-frame scrapes)
+    private const float GrazeReactionInterval = 1.5f; // s between graze reactions — NOT a tuned value:
+                                                      // the touchdown defs stop their own puffer at
+                                                      // ANIMATION_OFFSET 1.5, so this is one whole authored
+                                                      // reaction per scrape rather than a restart per frame
     private const float DamageFlashTime = 2.5f;  // s the HUD shows the impact line
     private const float GrazeStopSpeed = 12f;    // m/s — grinding to (near) standstill on the
                                                  // ground explodes the plane (user-reported:
@@ -341,6 +351,7 @@ public partial class FlightController : Node3D
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
     private ImmediateMesh? _probe;               // debug collision-probe line
     private float _damageCooldown;               // s left before the next HP subtraction
+    private float _grazeReactionCooldown;        // s left before the next touchdown_* reaction
     private float _damageFlash;                  // s left on the HUD impact line
     private string _damageFlashText = "";
     private GunState[]? _gunStates;              // per firable gun group: fire clock, muzzle rotation, empty-warned
@@ -519,6 +530,7 @@ public partial class FlightController : Node3D
                 }
         }
         _damageCooldown = 0f;
+        _grazeReactionCooldown = 0f;
         _damageFlash = 0f;
         if (PlaneModel != null)
             PlaneModel.Visible = true;
@@ -612,6 +624,7 @@ public partial class FlightController : Node3D
         var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
         _lastInput = input;
         _damageCooldown -= dt;
+        _grazeReactionCooldown -= dt;
         _model.Step(input, dt);
 
         // Crash when the frame's flight path runs into solid world geometry (terrain,
@@ -649,7 +662,7 @@ public partial class FlightController : Node3D
                 hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
             }
         }
-        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal))
+        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal, hitBody))
         {
             Crash(impact, hitName, part);
             return;
@@ -1486,7 +1499,7 @@ public partial class FlightController : Node3D
     /// placed at the swept safe pose, its velocity deflects along the surface with
     /// some tangential loss, and the attitude takes a lever-arm kick.</summary>
     private bool SurviveHit(Vector3 prev, Vector3 step, float stopFrac, Vector3 impact,
-        string hitName, string part, Vector3 normal)
+        string hitName, string part, Vector3 normal, Node? hitBody)
     {
         if (Damage == null)
             return false; // no destroyable_parts data — every hit crashes (old behavior)
@@ -1502,6 +1515,7 @@ public partial class FlightController : Node3D
         float speedBefore = _model.Speed;
         var localImpact = GlobalTransform.AffineInverse() * impact;
         string dataPart = PlaneDamage.MapStruckPart(part, localImpact);
+        GrazeReaction(impact, hitName, hitBody);
         if (_damageCooldown <= 0f)
         {
             _damageCooldown = DamageCooldown;
@@ -1585,6 +1599,49 @@ public partial class FlightController : Node3D
             }
         }
         return true;
+    }
+
+    /// <summary>The survivable scrape's authored per-surface reaction (B3): the struck collider's
+    /// <see cref="SceneBuilder.SurfaceMeta"/> class picks one of touchdown.zrd's three defs —
+    /// <c>touchdown_default</c> sparks off a hard building surface, <c>touchdown_dirt</c> raises
+    /// dust off terrain, <c>touchdown_water</c> splashes — which the world-effects runtime stages at
+    /// the contact point, alongside the sequence's own SOUND. Classification is
+    /// <see cref="ProjectilePool.ClassifySurface"/>, the same read a round's impact makes.
+    ///
+    /// <para>One reaction per <see cref="GrazeReactionInterval"/> rather than per frame: a scrape
+    /// confirms a hit every physics frame, and each call restarts the def and re-fires its sound.
+    /// The interval is the authored puffer window, so a long slide reads as a repeating reaction
+    /// instead of a stutter.</para>
+    ///
+    /// <para><b>Where the def is staged is an open A/B</b> (<c>graze.siteAtContact</c>, default the
+    /// CONTACT POINT — the user's judgement at the controls, 2026-08-01). The data argues for the
+    /// aircraft: every offset the def carries is authored against <c>MAIN_ROOT_NODE</c>, the node
+    /// the engine invokes it on, and its SOUND is <c>AT_NODE MAIN_ROOT_NODE</c> too — staging at the
+    /// contact point puts the puffer's own −0.5 Y half a metre UNDER the struck surface. But the
+    /// puffs are scaled up in practice (<c>puffer.*SizeScale</c>), which lifts them clear of the
+    /// burial anyway, and smoke visibly leaving the SURFACE reads better than smoke leaving the
+    /// plane. Set the flag false to stage on the aircraft instead.</para>
+    ///
+    /// <para>⚠ Effects (BL-061) keep ONE live instance per def across the session — two players
+    /// scraping at once collapse onto the later site, as every PlayEffectAt caller does.</para></summary>
+    private void GrazeReaction(Vector3 impact, string hitName, Node? hitBody)
+    {
+        if (_grazeReactionCooldown > 0f)
+            return;
+        _grazeReactionCooldown = GrazeReactionInterval;
+        var surface = ProjectilePool.ClassifySurface(hitBody);
+        // Buildings are the hard surface the spark variant is for; water splashes; everything else
+        // (terrain, the unclassified majority) is dirt.
+        string effect = surface switch
+        {
+            SurfaceClass.Water => "touchdown_water",
+            SurfaceClass.Buildings => "touchdown_default",
+            _ => "touchdown_dirt",
+        };
+        var site = Config.GetBool("graze.siteAtContact", true) ? impact : _model.Position;
+        GrazeEffectSink?.Invoke(effect, site);
+        Audio?.OnGraze(surface == SurfaceClass.Water);
+        Log.Info("flight", $"graze reaction effect={effect} surface={surface} into={hitName} contact=({impact.X:0},{impact.Y:0},{impact.Z:0}) site=({site.X:0},{site.Y:0},{site.Z:0}) rendered={(GrazeEffectSink != null ? 1 : 0)}");
     }
 
     /// <summary>Sweeps each airframe box along this frame's motion against the static

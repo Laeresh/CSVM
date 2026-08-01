@@ -88,7 +88,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — impact and damage feedback the data already ships
 
-3. ☐ `BL-090` item 3 A glancing collision is silent — wire `touchdown_default/dirt/water`
+3. ☑ `BL-090` item 3 A glancing collision is silent — wire `touchdown_default/dirt/water`
 4. ☐ `BL-090` item 2 Per-impact spark burst via the `injure_anims` 0.99 entry
 5. ☐ `BL-090` item 1 `damaged_engine_sound` — the second engine loop nothing reads
 6. ☐ `BL-045` World damage panel is oversized, with a gap above the debris line
@@ -195,7 +195,7 @@ overlay tints is not evidence it drew — check a pixel census or a screenshot, 
 
 # Wave B — impact and damage feedback the data already ships
 
-## B3 ☐ `BL-090` item 3 — a glancing collision is silent
+## B3 ☑ `BL-090` item 3 — a glancing collision is silent
 
 **Goal.** Scraping a surface produces its authored per-surface reaction: sparks off hard surfaces,
 dust off dirt, a splash off water, each with its own sound — instead of today's silent, effectless
