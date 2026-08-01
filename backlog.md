@@ -97,17 +97,6 @@ work is below.
    while a building classifies `buildings` (`ClassifySurface`, `Projectile.cs:544`)?
    *Playtest after fix:* look for buildings giving a fireball and dirt (HE) a light flash — the two
    visibly telling apart. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
-10. `BL-020` **Oil-tank death fire puff floats too high and lingers far too long.** One puff climbs well above the
-    wreck and stays (the authored `large_30sec_fire` is literally a 30 s fire). The original oil-tank kill
-    is a rich ground-level fireball + smoke column (`Oil Tank Explosion1..3.png`), not a lone high floating
-    puff. *Investigate:* the puffer's anchor (it should sit at the wreck, not climb) and its mode/lifetime.
-    Cross-ref the D32 world-effects follow-ups. The "lingers" half was likely `BL-212`
-    (`STOP_SEQUENCE` a no-op): that landed 2026-08-01 and the authored 30 s halt of `fire_n_smoke`
-    is now suite-verified (`stop-sequence`), so re-test — the "floats too high" anchor half is what
-    remains of this entry (`PT-19` covers the re-test).
-    *Playtest after fix:* look for an oil-tank kill's fire sitting at the wreck rather than floating high
-    and lingering. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
-
 **Destruction & doors (findings 12, 13).**
 12. `BL-022` **Debris trajectory is wrong, not merely slow.** In-flight kills throw pieces "but not in the correct
     trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit

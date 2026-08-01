@@ -198,15 +198,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo` (nycity + the coast in
   one flight). *Blocks:* closing PLAN-m3-polish-3 A2.
 
-- `PT-19` **Rocket fireball duration re-test (`BL-212` STOP_SEQUENCE landed 2026-08-01).** Fire
-  single rockets at open ground, spaced out. *Look for:* each hit's red fireball flares and dies
-  within ~1.5 s at its own impact point — no long-burning fire, and firing a second rocket
-  elsewhere neither moves nor clears the first (the shared-template drag only had ~0.3 s to show
-  itself now). Also worth one oil-tank kill: its authored 30 s fire now actually ends at 30 s, so
-  judge whether `BL-020`'s "lingers far too long" half is gone (the "floats too high" anchor half
-  is still open). `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
-  *Blocks:* closing `BL-212`'s record; re-scoping `BL-020`.
-
 ---
 
 ## Everything else

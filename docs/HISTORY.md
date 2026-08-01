@@ -9350,3 +9350,12 @@ Bookkeeping: `BL-212` deleted from backlog; `BL-020` re-scoped (the "lingers" ha
 fix — suite-verified 30 s halt — the "floats too high" anchor half stays open); the TUNE entry
 accidentally also tagged `BL-212` (rocket-trail puff size) renumbered to `BL-215`, next-ID bumped
 to `BL-216`; cockpit re-test = `PT-19`.
+
+## 2026-08-01 — PT-19 PASS at the controls: BL-212 closed, BL-020 closed
+
+User cockpit verdict on the BL-212 landing: single rocket fireballs flare and die at their own
+impact points with no long burn and no drag-to-the-next-hit, and the oil-tank kill reads right —
+both the "lingers far too long" and the "floats too high" symptoms are gone now that the authored
+30 s stop actually ends `large_30sec_fire` (the high floating puff was the lingering emitter, not
+a separate anchor bug). `PT-19` removed from playtest.md; `BL-020` deleted from backlog.md — no
+follow-up work remains from either.
