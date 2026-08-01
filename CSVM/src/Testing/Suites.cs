@@ -66,6 +66,8 @@ public static class Suites
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
+        into.Add(new TestHarness.Suite("stop-sequence",
+            "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
         into.Add(new TestHarness.Suite("tex-dropin",
@@ -425,6 +427,113 @@ public static class Suites
                 ctx.Same(anchors, registry.DistinctAnchors, $"{chapter} destructible node groups");
             });
         }
+    }
+
+    /// <summary>The authored STOP_SEQUENCE stops must actually run — nothing else in the gate
+    /// measures an effect's DURATION (<c>--effects-test</c> only proves a puffer builds;
+    /// verification.md WORLD-19). Asserts on the dispatch timeline via
+    /// <see cref="AnimRuntime.OnEventDispatched"/>, not on puffers, so it needs no textures:
+    /// the rocket fireball's ON_CALL stopper is reached through the call fallback at its
+    /// authored 0.3 s, and the 30 s fire's emitting poll loop is halted — an un-halted
+    /// <c>Loop{-1}</c> re-fires every frame forever, so "no dispatches after the stop" is the
+    /// crisp discriminator.</summary>
+    private static void StopSequenceStops(TestContext ctx)
+    {
+        ctx.WithWorld(ctx.Chapter, collision: false, world =>
+        {
+            var program = world.Session.Program.Subset(new[] { "large_fireball", "large_30sec_fire" });
+            var fireball = program.ByAnimName("large_fireball");
+            var fire30 = program.ByAnimName("large_30sec_fire");
+            ctx.Check(fireball.Count > 0, $"chapter program has large_fireball defs={fireball.Count}");
+            ctx.Check(fire30.Count > 0, $"chapter program has large_30sec_fire defs={fire30.Count}");
+            if (fireball.Count == 0 || fire30.Count == 0)
+            {
+                return;
+            }
+
+            var stage = new Node3D { Name = "StopSequenceStage" };
+            var runtime = new AnimRuntime { AutoStart = false, ManualAdvance = true, SoundHandledElsewhere = true };
+            ctx.Host.AddChild(stage);
+            ctx.Host.AddChild(runtime);
+            try
+            {
+                runtime.Bind(stage, program);
+                var timeline = new List<(float T, string Seq, string Kind)>();
+                float clock = 0f;
+                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind));
+
+                // The fireball: activate_puffer names its ON_CALL stopper at EVENT_OFFSET 0.3 while
+                // nothing runs under that name — the stop must CALL it (the stopper idiom).
+                runtime.Start(fireball[0], stage);
+                for (int i = 0; i < 60; i++)
+                {
+                    clock += 1f / 60f;
+                    runtime.Advance(1f / 60f);
+                }
+                int stopperPuffs = 0;
+                float stopAt = -1f;
+                bool objectOffAfter = false;
+                foreach (var e in timeline)
+                {
+                    if (e.Seq != "stop_p1trail")
+                    {
+                        continue;
+                    }
+                    if (e.Kind == "PufferState")
+                    {
+                        stopperPuffs++;
+                        stopAt = e.T;
+                    }
+                    else if (e.Kind == "ObjectActiveState" && stopAt >= 0f)
+                    {
+                        objectOffAfter = true;
+                    }
+                }
+                ctx.Same(1, stopperPuffs, $"stop_p1trail PUFFER_STATE dispatches within 1 s");
+                ctx.Check(stopAt >= 0.3f && stopAt <= 0.45f,
+                    $"the stopper runs at its authored 0.3 s t={stopAt:0.000}");
+                ctx.Check(objectOffAfter, $"the stopper's OBJECT_ACTIVE_STATE off follows its puffer stop");
+
+                // The 30 s fire: fire_n_smoke is a running Loop{-1} poll re-asserting its emitter
+                // every frame — the ANIMATION_OFFSET 30 stop must HALT it (the halt idiom), or the
+                // re-assert would revive the puffer one frame after the paired INACTIVE.
+                float t0 = clock;
+                runtime.Start(fire30[0], stage);
+                for (int i = 0; i < 320; i++)
+                {
+                    clock += 0.1f;
+                    runtime.Advance(0.1f);
+                }
+                int pollsBefore = 0;
+                float lastPoll = -1f;
+                int stopPuffs = 0;
+                float stop30At = -1f;
+                foreach (var e in timeline)
+                {
+                    float rel = e.T - t0;
+                    if (e.Seq == "fire_n_smoke")
+                    {
+                        pollsBefore += rel <= 30f ? 1 : 0;
+                        lastPoll = rel > lastPoll ? rel : lastPoll;
+                    }
+                    else if (e.Seq == "stop_fire_n_smoke" && e.Kind == "PufferState")
+                    {
+                        stopPuffs++;
+                        stop30At = rel;
+                    }
+                }
+                ctx.Check(pollsBefore > 100, $"the fire's poll loop runs until its stop polls={pollsBefore}");
+                ctx.Check(lastPoll <= 30.2f, $"no fire_n_smoke dispatch after the authored 30 s halt last={lastPoll:0.0}");
+                ctx.Same(1, stopPuffs, $"stop_fire_n_smoke PUFFER_STATE dispatches");
+                ctx.Check(stop30At >= 29.5f && stop30At <= 30.5f,
+                    $"the fire's own puffer-off lands at the authored 30 s t={stop30At:0.0}");
+            }
+            finally
+            {
+                runtime.Free();
+                stage.Free();
+            }
+        });
     }
 
     // ---- BL-044: node lab tree rows must follow live Visible ------------------------------------

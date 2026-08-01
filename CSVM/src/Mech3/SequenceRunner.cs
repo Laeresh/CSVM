@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using System.Linq;
 using Godot;
 
 namespace CSVM.Mech3;
@@ -65,6 +66,38 @@ public sealed class AnimInstance
                 Runners.RemoveAt(i);
         }
     }
+
+    /// <summary>CALL_SEQUENCE: adds a runner for this definition's named sequence. Duplicates
+    /// are legitimate — a second call runs a second concurrent copy. Returns whether the
+    /// definition has that sequence.</summary>
+    public bool CallSequence(string name)
+    {
+        var seq = Def.Sequences.FirstOrDefault(s =>
+            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
+        if (seq == null)
+            return false;
+        Runners.Add(new SequenceRunner(seq));
+        return true;
+    }
+
+    /// <summary>STOP_SEQUENCE: halts every active runner named <paramref name="name"/> —
+    /// including the caller's own runner (the data's break-out-of-my-own-IF-chain idiom). If
+    /// none is running, starts the sequence exactly like CALL_SEQUENCE instead (the stopper
+    /// idiom: reaching an ON_CALL teardown sequence nothing else calls). Semantics decoded in
+    /// docs/formats/anim-definitions.md. Returns false only when the name matched no runner
+    /// and no sequence.</summary>
+    public bool StopSequence(string name)
+    {
+        bool halted = false;
+        foreach (var r in Runners)
+        {
+            if (!string.Equals(r.SequenceName, name, StringComparison.OrdinalIgnoreCase))
+                continue;
+            r.Halt();
+            halted = true;
+        }
+        return halted || CallSequence(name);
+    }
 }
 
 /// <summary>
@@ -108,6 +141,8 @@ public sealed class SequenceRunner
 
     public bool Done => _done;
 
+    public string SequenceName => _seq.Name;
+
     /// <summary>Has some branch of the innermost open IF chain already run? A malformed
     /// chain (an ELSE with no IF) reads as "not taken" and writes are dropped, so bad
     /// data degrades to running the branch instead of faulting.</summary>
@@ -116,6 +151,13 @@ public sealed class SequenceRunner
         get => _branchTaken.Count > 0 && _branchTaken[^1];
         set { if (_branchTaken.Count > 0) _branchTaken[^1] = value; }
     }
+
+    /// <summary>Halts this runner: no further events fire. Safe mid-advance — the advance loop
+    /// re-tests Done after every dispatch, so a self-halt exits before the next event, and
+    /// <see cref="AnimInstance.Advance"/>'s sweep removes the runner. Resources the sequence
+    /// already launched (motions, puffers) are untouched: their lifetimes are authored
+    /// independently and outlive the sequence that launched them.</summary>
+    public void Halt() => _done = true;
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
     {

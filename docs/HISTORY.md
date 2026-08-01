@@ -9316,3 +9316,37 @@ weapons). Docs: weapon-effects.md (splash-def decode + A2 wiring), architecture.
 (`Projectile.cs`), surface-classification FINDINGS; `BL-203`+`BL-186` deleted from backlog (the
 range-expiry fidelity question survives as `BL-213`, the lighting-flag pass as `BL-214`); cockpit
 re-test = `PT-18`.
+
+## 2026-08-01 — BL-212: STOP_SEQUENCE implemented (halt-or-call); the rocket fireball stops at its authored 0.3 s
+
+The decode came first, per the entry's trap (a): an install-wide survey of every site (94 raw
+reader occurrences, ~73 canonical; wire-identical to CALL_SEQUENCE per the mech3ax structs) settled
+one rule with zero counter-sites — **halt every active runner of the named sequence on this
+instance, including the carrier's own (the test_player/setprop break idiom); if none is running,
+invoke it exactly like CALL_SEQUENCE (the stopper idiom)**. The fallback is settled by
+`flame_ball.zrd` itself using a literal `CALL_SEQUENCE [stop_p1trail]` for the same purpose
+elsewhere; the halt reading is load-bearing because a PUFFER_STATE re-assert REVIVES a stopped
+emitter, so `large_30sec_fire`'s paired INACTIVE alone could never end the fire. Decode recorded in
+`docs/formats/anim-definitions.md`.
+
+Implementation: the semantics live on `AnimInstance` (`CallSequence`/`StopSequence`, headlessly
+testable) with `SequenceRunner.SequenceName`/`Halt()`; `AnimRuntime`'s dispatch cases are thin
+shims over them (`InstanceOf` + missing-name counts; the instant/bootstrap path no-ops with no
+instance). One diagnostic delta: `CallSequence(missing)` no longer counts when no instance exists.
+Halting touches only the runner — already-launched motions/puffers keep their authored lifetimes
+(the D31 ring lesson).
+
+Verified: 5 new SequenceRunner units (318 total) covering halt-sibling, same-frame self-break,
+call-fallback in the fireball's exact shape, duplicate-runner halt, and name-miss no-op; a new
+in-engine `stop-sequence` suite asserting the authored timeline on real data (the fireball's
+`stop_p1trail` fires once at 0.30–0.45 s; `fire_n_smoke`'s Loop{-1} poll dispatches ~300 times then
+NEVER after its 30 s halt) — closing the duration hole `--effects-test` cannot see (WORLD-19);
+`.\RunTests.ps1` green. The `--debug-anim` C1 rocket re-measure shows the effects census
+plateauing ~200 and decaying (was 46→742 monotonic); `--effects-test` still 30/30. One golden
+moved and was re-pinned with cause traced: `c1-destroy-effects` — the radio tower's death calls
+`large_fireball`, whose emitter now correctly no longer burns at frame 120.
+
+Bookkeeping: `BL-212` deleted from backlog; `BL-020` re-scoped (the "lingers" half is likely this
+fix — suite-verified 30 s halt — the "floats too high" anchor half stays open); the TUNE entry
+accidentally also tagged `BL-212` (rocket-trail puff size) renumbered to `BL-215`, next-ID bumped
+to `BL-216`; cockpit re-test = `PT-19`.

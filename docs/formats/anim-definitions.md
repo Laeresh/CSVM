@@ -355,6 +355,37 @@ host origin). The original instantiates by *copying* the template mesh; a consum
 the single shared template instead must expect overlapping same-template calls to collapse onto
 the last site.
 
+## `STOP_SEQUENCE` halts the named running sequence — or calls it (the stopper idiom)
+
+Decoded 2026-08-01 from an install-wide survey of every site (94 raw occurrences across the
+readers, ~73 distinct authored signatures; the wire format is identical to `CALL_SEQUENCE` — a
+36-byte struct carrying only the name). One rule satisfies all of them, with zero counter-sites:
+
+**`STOP_SEQUENCE [NAME [x]]`: halt every active runner of sequence `x` on this instance —
+including the sequence carrying the event. If none is running, invoke `x` exactly like
+`CALL_SEQUENCE`.** Three authored idioms hang off it:
+
+- **Break** (`test_player`×33, `setprop`×8): a sequence stops *itself* inside an `IF` branch —
+  `random_prop` picks one of 8 random prop rotations and `STOP_SEQUENCE [setprop]` ends the
+  taken pass so the remaining branches never evaluate. Requires the halt reading on self.
+- **Halt a running sibling** (`large_30sec_fire`'s `fire_n_smoke`, `zepskinfire`×5,
+  `flame_light_seq`): the target is genuinely running — a `LOOP -1` poll or a sequence started
+  earlier by `CALL_SEQUENCE`. The halt is load-bearing beyond bookkeeping: a `PUFFER_STATE`
+  re-assert *revives* a stopped emitter (the damage-stage sputter contract), so the
+  `PUFFER_STATE INACTIVE` these stops pair with cannot end the fire alone — the un-halted poll
+  would re-light it one frame later.
+- **Stopper** (`flame_ball.zrd`'s `stop_p1trail`): the target is `ACTIVATION ON_CALL`, not
+  running at fire time, and its body is pure teardown (`PUFFER_STATE … INACTIVE`,
+  `OBJECT_ACTIVE_STATE … INACTIVE`) — the event falls through to a call. The same file uses a
+  literal `CALL_SEQUENCE [stop_p1trail]` for the identical purpose elsewhere
+  (`moving_fire_ball_01`'s `fly_flare`), which is what settles the fallback: the two events are
+  author-interchangeable for reaching a stopper. No target install-wide is reachable *only* via
+  `STOP_SEQUENCE`.
+
+Halting a runner never retracts what its events already launched — motions, puffers and lights
+run out their own authored lifetimes (the same independence that keeps a rocket ring's scale
+motion alive after its launching sequence ends).
+
 ## Fire: templates, flipbooks, and a trigger that lives in the exe
 
 Decoded 2026-07-21 while chasing the user's "there is a fire flipbook at the refinery" report.

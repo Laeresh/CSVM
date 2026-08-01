@@ -91,8 +91,8 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "5efeefaa0b207f43a1a4b229cf73398e",
-      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1)",
+      "hash": "338b125a53ee185d020f8b4d8e403e4d",
+      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {

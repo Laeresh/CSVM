@@ -249,6 +249,111 @@ public class SequenceRunnerTests
         Assert.True(inst.Finished);
     }
 
+    // ---- 11. STOP_SEQUENCE halts the named running sequence; its later events never fire ----
+
+    [Fact]
+    public void StopSequenceHaltsTheRunningTargetAndItsLaterEventsNeverFire()
+    {
+        // The halt idiom (large_30sec_fire, zepskinfire): the target is a genuinely running
+        // sibling, and STOP_SEQUENCE must end it — already-fired events stand, later ones never
+        // come. Without the halt, the sibling's loop re-asserts its puffer forever.
+        var host = new RecordingHost();
+        var emitter = Seq("emitter", Swap("puff", "Event", 0.25f), Swap("late", "Event", 1.0f));
+        var main = Seq("main", StopSeq("emitter", "Event", 0.5f));
+        var inst = Instance(new[] { emitter, main }, emitter, main);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 8);
+
+        Assert.Equal(new[] { "puff" }, t[0]);          // 0.25s: the target fired normally
+        Assert.DoesNotContain("late", host.Fired);     // due 1.25s, but halted at 0.5s
+        Assert.True(inst.Finished);
+    }
+
+    // ---- 12. STOP_SEQUENCE on its own sequence breaks out the same frame (test_player) ----
+
+    [Fact]
+    public void StopSequenceOnItsOwnSequenceBreaksOutSameFrame()
+    {
+        // The break idiom (test_player ×33, setprop ×8): a sequence stops ITSELF once its taken
+        // branch ran, so the remaining events must not fire — and the exit happens inside the
+        // same Advance (the while loop re-tests Done after every dispatch), not via the
+        // 256-fire guard.
+        var host = new RecordingHost();
+        var main = Seq("main", Swap("before"), StopSeq("main"), Swap("after"));
+        var inst = Instance(new[] { main }, main);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 1f, 1);
+
+        Assert.Equal(new[] { "before", "main" }, t[0]);   // the stop itself is the last dispatch
+        Assert.DoesNotContain("after", host.Fired);
+        Assert.True(inst.Finished);                        // removed by the sweep, same Advance
+    }
+
+    // ---- 13. STOP_SEQUENCE with no running target calls it, exactly like CALL_SEQUENCE ----
+
+    [Fact]
+    public void StopSequenceWithNoRunningTargetCallsItLikeCallSequence()
+    {
+        // The stopper idiom, shaped like the rocket fireball: activate starts a trail and, a
+        // beat later, names an ON_CALL stopper nothing else calls. Not running -> STOP_SEQUENCE
+        // invokes it, and the stopper's own events dispatch in order on the next frames.
+        var host = new RecordingHost();
+        var activate = Seq("activate",
+            Swap("on"), CallSeq("trail"), StopSeq("stopper", "Event", 0.5f));
+        var trail = Seq("trail", Swap("emit"));
+        var stopper = Seq("stopper", Swap("off1"), Swap("off2"));
+        var inst = Instance(new[] { activate, trail, stopper }, activate);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 0.25f, 5);
+
+        Assert.Equal(new[] { "on", "trail" }, t[0]);      // 0.25s: start + the call
+        Assert.Equal(new[] { "emit" }, t[1]);             // 0.50s: the called trail runs
+        Assert.Equal(new[] { "stopper" }, t[2]);          // 0.75s: the stop finds nothing running
+        Assert.Equal(new[] { "off1", "off2" }, t[3]);     //        and calls the stopper instead
+        Assert.True(inst.Finished);
+    }
+
+    // ---- 14. STOP_SEQUENCE halts every duplicate runner of the name ----
+
+    [Fact]
+    public void StopSequenceHaltsEveryDuplicateRunnerOfTheName()
+    {
+        // CALL_SEQUENCE legitimately starts duplicate concurrent runners of one sequence;
+        // "stop that sequence" in the data names the sequence, not one copy — every runner
+        // carrying the name halts.
+        var host = new RecordingHost();
+        var trail = Seq("trail", Swap("emit", "Event", 0.5f));
+        var main = Seq("main", StopSeq("trail", "Event", 0.25f));
+        var inst = Instance(new[] { trail, main }, trail, trail, main);
+        host.Instance = inst;
+
+        RunSteps(inst, host, 0.25f, 4);
+
+        Assert.DoesNotContain("emit", host.Fired);   // both copies halted before their 0.5s fire
+        Assert.True(inst.Finished);
+    }
+
+    // ---- 15. a STOP_SEQUENCE name miss is a no-op and the sequence continues ----
+
+    [Fact]
+    public void StopSequenceNameMissIsANoOpAndTheSequenceContinues()
+    {
+        // A name matching no runner and no sequence must neither fault nor gate the rest of
+        // the sequence — the same degrade-to-continuing direction the malformed-IF rule takes.
+        var host = new RecordingHost();
+        var main = Seq("main", StopSeq("ghost"), Swap("after"));
+        var inst = Instance(new[] { main }, main);
+        host.Instance = inst;
+
+        var t = RunSteps(inst, host, 1f, 1);
+
+        Assert.Equal(new[] { "ghost", "after" }, t[0]);
+        Assert.True(inst.Finished);
+    }
+
     private static AnimInstance Instance(params AnimSequence[] seqs)
     {
         var inst = new AnimInstance(Dummy, null);
@@ -257,9 +362,24 @@ public class SequenceRunnerTests
         return inst;
     }
 
-    private static AnimSequence Seq(params AnimEvent[] events)
+    /// <summary>An instance over a definition that KNOWS the given sequences (so CALL_SEQUENCE /
+    /// STOP_SEQUENCE can look them up by name), with runners started only for
+    /// <paramref name="run"/> — the rest sit ON_CALL.</summary>
+    private static AnimInstance Instance(AnimSequence[] defined, params AnimSequence[] run)
     {
-        var s = new AnimSequence { Name = "test" };
+        var def = new AnimDefinition();
+        def.Sequences.AddRange(defined);
+        var inst = new AnimInstance(def, null);
+        foreach (var s in run)
+            inst.Runners.Add(new SequenceRunner(s));
+        return inst;
+    }
+
+    private static AnimSequence Seq(params AnimEvent[] events) => Seq("test", events);
+
+    private static AnimSequence Seq(string name, params AnimEvent[] events)
+    {
+        var s = new AnimSequence { Name = name };
         s.Events.AddRange(events);
         return s;
     }
@@ -274,6 +394,14 @@ public class SequenceRunnerTests
     /// <see cref="RecordingHost.Durations"/>).</summary>
     private static AnimEvent Timed(string name, string? offset = null, float time = 0f) =>
         new() { Kind = "ObjectMotion", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    private static AnimEvent CallSeq(string name, string? offset = null, float time = 0f) =>
+        new() { Kind = "CallSequence", StartOffset = offset, StartTime = time,
+                Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
+
+    private static AnimEvent StopSeq(string name, string? offset = null, float time = 0f) =>
+        new() { Kind = "StopSequence", StartOffset = offset, StartTime = time,
                 Data = new AnimData(new Dictionary<string, object?> { ["name"] = name }) };
 
     private static AnimEvent Loop(int count, string? offset = null, float time = 0f) =>
@@ -315,6 +443,11 @@ public class SequenceRunnerTests
         public readonly Dictionary<string, bool> Conditions = new(StringComparer.Ordinal);
         public readonly List<EventDispatch> Dispatched = new();
 
+        /// <summary>The instance CALL_SEQUENCE/STOP_SEQUENCE act on — the same thin routing the
+        /// real runtime's dispatch does; the composition under test is <see cref="AnimInstance"/>'s.
+        /// </summary>
+        public AnimInstance? Instance;
+
         private static readonly HashSet<string> ControlFlow =
             new(StringComparer.Ordinal) { "Loop", "If", "Elseif", "Else", "Endif" };
 
@@ -325,6 +458,10 @@ public class SequenceRunnerTests
             duration = 0f;
             if (ControlFlow.Contains(ev.Kind))
                 return false;
+            if (ev.Kind == "CallSequence" && ev.Data.Str("name") is { } callName)
+                Instance?.CallSequence(callName);
+            else if (ev.Kind == "StopSequence" && ev.Data.Str("name") is { } stopName)
+                Instance?.StopSequence(stopName);
             Durations.TryGetValue(ev.Kind, out duration);
             Fired.Add(ev.Data.Str("name") ?? ev.Kind);
             return true;

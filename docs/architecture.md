@@ -501,7 +501,10 @@ namespace, purely for file size — not an independently-owned subsystem, still 
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.
 `SequenceRunner` runs one sequence's event list on a clock (per-event START_TIME gating, LOOP with
 authored-count-0 = infinite, IF/ELSEIF/ELSE/ENDIF via a `_branchTaken` stack + nesting-aware `Scan`);
-`AnimInstance` holds a definition's concurrent runners and removes them as they finish. Both are
+`AnimInstance` holds a definition's concurrent runners and removes them as they finish, and carries
+the CALL_SEQUENCE/STOP_SEQUENCE semantics (`CallSequence`/`StopSequence`: halt every matching
+runner, else call — decode in `docs/formats/anim-definitions.md`; `AnimRuntime`'s dispatch cases are
+thin shims over these). Both are
 public so `CSVM.Tests` drives them against a fake host; the host is any `ISequenceHost` (the game's
 real one is `AnimRuntime`, tests pass a recorder). Anchors are opaque `Node3D?` pass-through — the
 interpreter never dereferences them.

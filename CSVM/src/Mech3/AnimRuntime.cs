@@ -2002,11 +2002,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 return true;
 
             case "StopSequence":
-                // NOT IMPLEMENTED, and not counted as unhandled either (BL-212). SequenceRunner has
-                // no StopSequence handling, so all 73 authored sites are silent no-ops — which is
-                // why the rocket fireball's authored 0.3 s stop never runs and it emits to its TTL.
-                // The semantics need a decode first: the data uses this both to reach a stopper
-                // sequence nothing else calls and to halt a running one.
+                // Halt the named sequence's active runners on this instance — or, when none is
+                // running, start it exactly like CALL_SEQUENCE (the stopper idiom: an ON_CALL
+                // teardown sequence nothing else calls). Halting never retracts motions or
+                // puffers the sequence already launched; their lifetimes are authored
+                // independently. Decode in docs/formats/anim-definitions.md.
+                if (ev.Data.Str("name") is { } stopName)
+                    StopSequence(def, anchor, stopName);
                 return true;
 
             case "CallAnimation":
@@ -2646,19 +2648,25 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    // Both sequence events act on the live instance of (def, anchor); on the instant/bootstrap
+    // dispatch path no instance exists and both are no-ops.
+    private AnimInstance? InstanceOf(AnimDefinition def, Node3D? anchor) =>
+        _instances.FirstOrDefault(i => i.Def == def && i.Anchor == anchor);
+
     private void CallSequence(AnimDefinition def, Node3D? anchor, string name)
     {
-        var seq = def.Sequences.FirstOrDefault(s =>
-            string.Equals(s.Name, name, StringComparison.OrdinalIgnoreCase));
-        if (seq == null)
-        {
+        if (InstanceOf(def, anchor) is not { } inst)
+            return;
+        if (!inst.CallSequence(name))
             Count("CallSequence(missing)");
+    }
+
+    private void StopSequence(AnimDefinition def, Node3D? anchor, string name)
+    {
+        if (InstanceOf(def, anchor) is not { } inst)
             return;
-        }
-        var inst = _instances.FirstOrDefault(i => i.Def == def && i.Anchor == anchor);
-        if (inst == null)
-            return;
-        inst.Runners.Add(new SequenceRunner(seq));
+        if (!inst.StopSequence(name))
+            Count("StopSequence(missing)");
     }
 
     /// <summary>
