@@ -473,6 +473,17 @@ cite these IDs.
   gate on emission (the rule `TickLights` correctly uses for lights) would silence every staged
   impact effect. Use the explicit state the data sets, not the flag it happens to share.
 
+- **WORLD-23** — **Before simulating a decoded field, range-test it against the whole install: a
+  unit shows up as a bound, not as a plausible number.** `translation_range`'s `xz`/`y` had been
+  read as distances travelled, which produced arcs nobody could call obviously wrong. The census
+  settled it in one pass: every `xz` in [−170, 359] and every `y` but one in [−90, 90] — those are
+  **degrees**, an azimuth and an elevation, with `initial` the speed. Corroborate with the sign and
+  with siblings: `y` goes negative exactly where the object falls, and the five trails of one
+  explosion carry evenly spaced azimuth bands (35–55, 85–105, 135–165, 185–205, 235–255) that read
+  as a starburst and as nothing else. A neighbouring constant can mislead here — the aircraft's
+  arcade `nom_gravity` is 20, which invites reading `gravity: -3.0` as an offset to it, but the same
+  census carries a literal **−9.8** on 173 events, so it is absolute m/s².
+
 ## SHELL — Windows, PowerShell & processes
 
 - **SHELL-1** — **The repo path contains a space — a mis-quoted launch aborts every run

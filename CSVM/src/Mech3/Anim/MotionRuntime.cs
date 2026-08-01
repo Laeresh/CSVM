@@ -1,3 +1,4 @@
+using System.Numerics;
 using CSVM.Mech3;
 using Godot;
 
@@ -20,15 +21,25 @@ namespace CSVM.Mech3.Anim;
 ///   <c>_rng</c>, so a lab replay is deterministic); <c>delta</c> a velocity ramp over the
 ///   run time (change from initial to initial+delta) — 0 on every reachable piece, so its
 ///   exact reading is near-invisible.</item>
-/// <item><c>translation_range</c> is a RANGED ballistic launch (the burning-debris arcs): a
-///   random horizontal distance <c>xz</c> and vertical <c>y</c> travelled over the run time,
-///   fired in a random azimuth — <c>vHoriz = xz/run_time</c>,
-///   <c>vVert = y/run_time − ½·g·run_time</c> (so the arc reaches <c>y</c> at the end).
-///   ⚠ undocumented and never simulated before; <c>initial</c>/<c>delta</c> are unmapped.</item>
+/// <item><c>translation_range</c> is a launch in SPHERICAL form, not a distance: <c>xz</c> is an
+///   AZIMUTH and <c>y</c> an ELEVATION, both in DEGREES, and <c>initial</c> is the launch SPEED
+///   in m/s (<c>delta</c> a speed ramp over the run time). Measured over all 1,217 events
+///   install-wide (<c>analysis/object-motion-range/</c>): every <c>xz</c> lies in [−170, 359];
+///   every <c>y</c> but one lies in [−90, 90] and goes negative exactly where the thing falls
+///   (a balloon turret's parts at −70…−90, a helium tank blowing sideways at 1…2); and the
+///   five <c>fly_trailN</c> of one explosion carry evenly spaced <c>xz</c> bands — 35–55,
+///   85–105, 135–165, 185–205, 235–255 — i.e. a starburst around the circle. Read as distances
+///   those became a quarter-kilometre sideways throw, which is what put the trails far from
+///   their explosion and made a fan read as scatter.
+///   ⚠ Which world bearing azimuth 0 points along (+X here) is a choice, not a decode — the
+///   data fixes the trails' spacing relative to each other, not their absolute compass.</item>
 /// <item><c>gravity.value</c> (negative) accelerates the launch; folded straight into the
-///   constant acceleration. <c>do_intersections</c> ground-rest and the <c>bounce_sequence</c>
-///   re-launch are a Layer-1.5 follow-up (they need a physics ray) — the body integrates
-///   freely over the run time and then finishes.</item>
+///   constant acceleration. It is an ABSOLUTE m/s², not an offset to the aircraft's arcade
+///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
+///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
+///   trails, where floating is the authored look. <c>do_intersections</c> ground-rest and the
+///   <c>bounce_sequence</c> re-launch are a Layer-1.5 follow-up (they need a physics ray) — the
+///   body integrates freely over the run time and then finishes.</item>
 /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
 ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
 ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for
@@ -119,15 +130,29 @@ internal sealed class MotionRuntime : IAnimMotion
         }
         else if (data.Obj("translation_range") is { } range)
         {
-            float horiz = Rand(range.Obj("xz")?.Num("min") ?? 0f, range.Obj("xz")?.Num("max") ?? 0f)
-                          / Mathf.Max(rtSafe, 0.1f);
-            float vVert = Rand(range.Obj("y")?.Num("min") ?? 0f, range.Obj("y")?.Num("max") ?? 0f)
-                          / Mathf.Max(rtSafe, 0.1f)
-                          - 0.5f * gravity * rtSafe; // gravity < 0 → the second term adds launch speed
-            float azimuth = Rand(0f, Mathf.Tau);
-            m._v0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz)
-                    + InheritedLocal();
-            m._accel = new Vector3(0f, gravity, 0f);
+            // A launch in SPHERICAL form: `xz` is an azimuth and `y` an elevation, both in
+            // DEGREES, and `initial` is the launch speed in m/s (`delta` a speed ramp over the
+            // run time). Not a distance travelled — see the class remark for the census.
+            // `translation_range_min_only` marks the rows whose `max` fields are all 0 and
+            // meaningless; there the min IS the value, and interpolating toward 0 would aim
+            // every one of them at a bearing and elevation the data never asked for.
+            bool minOnly = data.Bool("translation_range_min_only");
+            float Pick(AnimData? o)
+            {
+                if (o == null)
+                    return 0f;
+                float lo = o.Num("min") ?? 0f;
+                return minOnly ? lo : Rand(lo, o.Num("max") ?? 0f);
+            }
+            float azimuth = Pick(range.Obj("xz"));
+            float elevation = Pick(range.Obj("y"));
+            float speed = Pick(range.Obj("initial"));
+            float speedRamp = Pick(range.Obj("delta"));
+            var dir = RangeLaunchDirection(azimuth, elevation);
+            m._v0 = dir * speed + InheritedLocal();
+            // delta ramps the launch speed over run_time, along the same direction — the same
+            // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
+            m._accel = dir * (rtSafe > 0f ? speedRamp / rtSafe : 0f) + new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
         }
 
@@ -145,6 +170,19 @@ internal sealed class MotionRuntime : IAnimMotion
         float fwdTotal = data.Obj("forward_rotation")?.Obj("Time")?.Num("initial") ?? 0f;
         m._tumbleRate = rtSafe > 0f ? fwdTotal / rtSafe : 0f;
         m._spinRate = data.Obj("xyz_rotation")?.Vec3("initial") ?? Vector3.Zero;
+
+        // A ballistic launch starts from the node's AUTHORED rest pose, not from wherever the last
+        // launch left it. The original instances a fresh copy of an effect template per call; we
+        // relocate one shared copy (PlaceTemplateAt), and its children — `fly_trailN` and friends —
+        // are never re-homed, so seeding from the live pose made every repeat explosion start its
+        // trails further from the blast than the one before. The two readings agree everywhere a
+        // launch is re-homed by something else (the crash's CrashRestPoses, ResetDestructible), so
+        // this only changes the case nothing was resetting.
+        if (m._hasBallistic)
+        {
+            m._heldOrigin = rest.Origin;
+            m._heldRot = rest.Basis.Orthonormalized();
+        }
 
         // Nothing to drive → no motion (a bare gravity/bounce stub, handled by the caller).
         bool any = m._hasBallistic || m._hasScale || m._tumbleRate != 0f || !m._spinRate.IsZeroApprox();
@@ -176,8 +214,20 @@ internal sealed class MotionRuntime : IAnimMotion
             if (a.Z != 0f) basis = basis.Rotated(basis.Z.Normalized(), a.Z);
         }
 
-        var scale = _hasScale ? _scaleInit + _scaleDelta * u : _heldScale;
+        var scale = _hasScale ? Vector3.One * _scaleInit + _scaleDelta * u : _heldScale;
 
         Target.Transform = new Transform3D(basis.Scaled(scale), origin);
+    }
+
+    /// <summary>The unit launch direction one <c>translation_range</c> draw asks for, from its
+    /// azimuth and elevation in degrees. The ONE expression of that decode: the gun-casing
+    /// ejection in <c>ProjectilePool</c> reads the very same <c>gunshell</c> event and used to
+    /// spell the maths out for itself, which is how the two came to disagree (INSTR-3).</summary>
+    internal static Vector3 RangeLaunchDirection(float azimuthDeg, float elevationDeg)
+    {
+        float az = Mathf.DegToRad(azimuthDeg);
+        float el = Mathf.DegToRad(elevationDeg);
+        float cosEl = Mathf.Cos(el);
+        return new Vector3(cosEl * Mathf.Cos(az), Mathf.Sin(el), cosEl * Mathf.Sin(az));
     }
 }

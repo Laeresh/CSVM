@@ -515,6 +515,11 @@ an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the 
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
 `MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum.
+`MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
+degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
+seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
+nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
+gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason.

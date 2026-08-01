@@ -9894,3 +9894,54 @@ runtime's 4 ambient emitters are untouched. `.\RunTests.ps1`: 320 units, 14/14 s
 goldens hash-identical; **`c1-crash` re-pinned** — 0.65 % of pixels, max delta 18, confined to one
 73×124 px patch, a crash emitter now stopping at its authored `OBJECT_ACTIVE_STATE false` instead of
 running on (the manifest entry records it). `verification.md` gained WORLD-21 and WORLD-22.
+
+## 2026-08-01 — `translation_range` decoded: an azimuth/elevation launch, not a distance
+
+Playtesting the `BL-219`/`BL-224` fixes, the user compared an HE impact against captures of the
+original (`OriginalScreenshots/HE Rocket 1-3.png`, a three-frame sequence of one blast): the
+original's five smoke columns leave the explosion **from its own centre** and fan out in a slightly
+curved starburst, where ours started scattered around it. Their read of the data — that
+`translation_range`'s `xz`/`y` are a direction and `initial` the speed — is correct, and a census of
+all 1,217 `ObjectMotion` events install-wide settles it (`analysis/object-motion-range/`).
+
+**`xz` is an AZIMUTH and `y` an ELEVATION, both in degrees; `initial` is the launch speed in m/s.**
+Every `xz` in the install lies in [−170, 359] and every `y` but one in [−90, 90]. `y` goes negative
+exactly where the object falls (a balloon turret's parts at −70…−90 against a collapsing dock
+platform's +70…+80, a helium tank blowing sideways at +1…+2). The five `fly_trailN` of one explosion
+carry evenly spaced azimuth bands — 35–55, 85–105, 135–165, 185–205, 235–255 — which is the
+starburst the captures show and nothing else. And `gunshell` reads ±10° of bearing at **−75…−85°**
+elevation at 1.5–1.8 m/s: brass dropping out of the gun port. The old reading took `xz`/`y` as
+distances travelled over `run_time`, so `fly_trail3`'s 235–255 became a quarter-kilometre sideways
+throw — which is what put the trails far from their blast and turned an authored fan into scatter.
+`translation_range_min_only` (112 events, all with `max` = 0) is now honoured too.
+
+**`gravity.value` is absolute m/s², not an offset to `nom_gravity`.** Worth stating because the
+aircraft's arcade gravity is 20, which invites the offset reading; the census carries a literal
+**−9.8 on 173 events** (and −10 on 400). The weak −1/−2/−3 values sit on smoke trails, where
+floating is the authored look. No change — the existing reading was right.
+
+**Two follow-ups the user found at the controls, in the same pass.** Repeat explosions walked their
+trails further from the blast each time: a launch seeded from the node's *live* pose, and a shared
+effect template's children are re-homed by nothing between calls (the original instances a fresh
+copy per call; we relocate one). A launch now seeds from the authored **rest** pose — which agrees
+with the live pose everywhere something else already re-homes it (`CrashRestPoses`,
+`ResetDestructible`), so it only changes the case nothing was resetting. And a second rocket landing
+inside the first explosion's 2.5 s run showed no trails at all, because `CallAnimation`'s live-instance
+guard skipped it: a **placed** template called at a *different* site now restarts. Gated on the site
+having actually moved, so the data's poll idiom (`If … CallAnimation; Endif; Loop{-1}`) still hits
+the guard and does not restart its callee every frame. Overlapping calls still collapse onto the
+last site — per-call instancing remains the real answer and stays a follow-up.
+
+`ProjectilePool`'s gun-casing ejection read the same `gunshell` event and spelled the maths out for
+itself, so it moved too; both now go through one `MotionRuntime.RangeLaunchDirection` (INSTR-3), and
+the casing launches in the muzzle's frame rather than the world's.
+
+**How verified.** `--debug-anim` over six rockets fired in succession: every impact's `fly_trailN`
+sit within ~5 m of their own blast, and the offset is identical for the first and the sixth (no
+accumulation) — where the trails previously started progressively further out. `.\RunTests.ps1`:
+320 units, 14/14 suites; **two goldens re-pinned**, both the ones that exercise ballistic debris.
+`c1-destroy-effects` moved only 0.08 % of pixels but is the whole point of the shot — the kill's
+fireballs were strung in a line hundreds of metres up the runway and now sit compact at the tower
+(before/after read, not just the percentage, per GOLD-3). `c1-crash` moved 18.8 %: the camera sits
+inside the fireball at frame 20, so re-aimed sparks repaint most of it while the fireball's extent
+is unchanged. `verification.md` gained WORLD-23.

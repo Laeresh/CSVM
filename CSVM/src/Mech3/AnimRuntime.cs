@@ -2041,7 +2041,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             return true;
                     }
                     foreach (var target in _program.ByAnimName(callName))
-                        if (!IsLive(target, callAnchor))
+                        // A placed template called at a DIFFERENT site restarts even while live:
+                        // one shared template can only be in one place, so a second rocket landing
+                        // inside the first explosion's 2.5 s run was skipped by the live guard and
+                        // showed no trails at all. Restarting collapses the first call onto the new
+                        // site (the documented shared-template limitation — per-call instancing is
+                        // the real answer), which still beats the second blast having nothing.
+                        // Gated on the site actually having moved, so the data's poll idiom
+                        // (`If … CallAnimation; Endif; Loop{-1}`) keeps hitting the guard and does
+                        // not restart its callee every frame.
+                        if (!IsLive(target, callAnchor)
+                            || (PlaceCalledTemplates && !instant && callAnchor != null
+                                && !TemplateIsAt(target, callAnchor, siteOffset)))
                         {
                             // Re-anchoring alone is not enough for an effect template: its puffers
                             // ride the template's OWN root, so unless that root is MOVED to the call
@@ -2676,6 +2687,25 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         foreach (var root in Anchors(def))
             if (root != null && IsInstanceValid(root))
                 root.Visible = visible;
+    }
+
+    /// <summary>Whether a placed template already sits where a call wants it. Separates "the data
+    /// is re-issuing the same call from a poll loop" (leave the live instance alone) from "a second
+    /// explosion needs this template somewhere else" (relocate and restart). Metre-scale tolerance:
+    /// distinct impacts are metres apart, and an exact compare on kilometre-scale world
+    /// coordinates would call a float round-trip a move. Resolves the roots the way
+    /// <see cref="ResolveInOwnRoot"/> does — this runs per event, and <see cref="Anchors"/> would
+    /// re-enter its per-definition anchoring census on every frame of a poll loop.</summary>
+    private bool TemplateIsAt(AnimDefinition callee, Node3D site, Vector3 offset)
+    {
+        if (string.IsNullOrEmpty(callee.Name))
+            return true;
+        var xf = site.GlobalTransform;
+        var want = xf.Origin + xf.Basis * offset;
+        foreach (var root in FindAll(callee.Name, null))
+            if (IsInstanceValid(root) && root.GlobalTransform.Origin.DistanceSquaredTo(want) > 0.25f)
+                return false;
+        return true;
     }
 
     private void PlaceTemplateAt(AnimDefinition callee, Vector3 origin)

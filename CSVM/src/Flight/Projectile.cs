@@ -1258,15 +1258,17 @@ public sealed partial class ProjectilePool : Node3D
         var puffVel = Vector3.Down * EjectPuffSink; // fallback drift when the casing pool is at cap
         if (slot != null)
         {
-            // MotionRuntime's translation_range read: a random horizontal distance (random azimuth)
-            // and vertical drop travelled over run_time, gravity folded so the arc lands on target.
-            float rt = Mathf.Max(spec.RunTime, 0.1f);
-            float horiz = RandRange(spec.XzMin, spec.XzMax) / rt;
-            float vVert = RandRange(spec.YMin, spec.YMax) / rt - 0.5f * spec.Gravity * spec.RunTime;
-            float azimuth = _rng.Randf() * Mathf.Tau;
-            slot.Start = muzzle.Origin;
-            slot.V0 = new Vector3(Mathf.Cos(azimuth) * horiz, vVert, Mathf.Sin(azimuth) * horiz);
+            // MotionRuntime's translation_range read, through its own expression so the two
+            // cannot drift: `xz`/`y` are an azimuth/elevation in degrees and `initial` the launch
+            // speed. The authored gunshell values are ±10° of bearing at −75…−85° of elevation and
+            // 1.5–1.8 m/s — a casing dropping out of the gun port, which is why the direction is
+            // taken in the MUZZLE's frame rather than the world's: a rolling plane throws its brass
+            // out sideways, not at the ground.
             slot.Basis = muzzle.Basis.Orthonormalized();
+            slot.Start = muzzle.Origin;
+            slot.V0 = slot.Basis * (Mech3.Anim.MotionRuntime.RangeLaunchDirection(
+                          RandRange(spec.XzMin, spec.XzMax), RandRange(spec.YMin, spec.YMax))
+                      * RandRange(spec.SpeedMin, spec.SpeedMax));
             slot.Age = 0f;
             slot.InUse = true;
             slot.Node.Visible = true;
@@ -1494,11 +1496,14 @@ public sealed partial class ProjectilePool : Node3D
                         XzMax = range.Obj("xz")?.Num("max") ?? 0f,
                         YMin = range.Obj("y")?.Num("min") ?? 0f,
                         YMax = range.Obj("y")?.Num("max") ?? 0f,
+                        SpeedMin = range.Obj("initial")?.Num("min") ?? 0f,
+                        SpeedMax = range.Obj("initial")?.Num("max") ?? 0f,
                         RunTime = runTime,
                         TumbleRate = runTime > 0f ? fwdTotal / runTime : 0f,
                     };
-                    GD.Print($"gun casing spec: gravity {_casingSpec.Gravity}, xz [{_casingSpec.XzMin},{_casingSpec.XzMax}], " +
-                             $"y [{_casingSpec.YMin},{_casingSpec.YMax}], tumble {_casingSpec.TumbleRate:0.##} rad/s over {runTime} s");
+                    GD.Print($"gun casing spec: gravity {_casingSpec.Gravity}, azimuth [{_casingSpec.XzMin},{_casingSpec.XzMax}]deg, " +
+                             $"elevation [{_casingSpec.YMin},{_casingSpec.YMax}]deg, speed [{_casingSpec.SpeedMin},{_casingSpec.SpeedMax}] m/s, " +
+                             $"tumble {_casingSpec.TumbleRate:0.##} rad/s over {runTime} s");
                     return _casingSpec;
                 }
             }
@@ -1696,8 +1701,9 @@ public sealed partial class ProjectilePool : Node3D
     private sealed class CasingSpec
     {
         public float Gravity;     // m/s², negative (LOCAL -3.0)
-        public float XzMin, XzMax; // random horizontal distance over run_time, m
-        public float YMin, YMax;   // random vertical drop over run_time, m
+        public float XzMin, XzMax; // launch AZIMUTH range, degrees (translation_range)
+        public float YMin, YMax;   // launch ELEVATION range, degrees (negative = downward)
+        public float SpeedMin, SpeedMax; // launch speed range, m/s (translation_range.initial)
         public float RunTime;     // s the casing lives
         public float TumbleRate;  // rad/s about local X (forward_rotation Time ÷ run_time)
     }

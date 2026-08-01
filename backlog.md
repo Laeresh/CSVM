@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-225`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-226`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -85,12 +85,34 @@ work is below.
    original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
    expire silently, which METHOD-18 documents as correct-per-data.
 **Destruction & doors (findings 12, 13).**
-12. `BL-022` **Debris trajectory is wrong, not merely slow.** In-flight kills throw pieces "but not in the correct
-    trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit
-    no launch momentum + `bounce_sequence` ground-rest unsimulated + magnitude decode is TUNE) — this pass
-    adds the *trajectory-shape* symptom, not just the *distance* one.
+12. `BL-022` **Debris trajectory is wrong, not merely slow — RE-PLAYTEST, the magnitude half is no longer
+    a TUNE.** In-flight kills threw pieces "but not in the correct trajectory". **The largest cause landed
+    2026-08-01**: `translation_range` was read as a distance travelled when it is an azimuth/elevation launch
+    with `initial` the speed (`analysis/object-motion-range/`), which threw debris hundreds of metres along
+    one bearing — visible as the `c1-destroy-effects` golden's line of fireballs marching up the runway.
+    What remains of this item is what that fix does NOT cover: world objects inherit no launch momentum, and
+    `bounce_sequence` ground-rest is unsimulated (both need a physics ray).
+    ⚠ **Traps.** (a) Do not re-open the magnitude as a TUNE — the speeds are decoded and censused now; a
+    piece that still looks wrong is the momentum or the ground-rest, not the launch. (b) `gravity.value` is
+    absolute m/s² (a literal −9.8 on 173 events), NOT an offset to the aircraft's arcade `nom_gravity` of 20
+    — that reading was considered and disproven by the same census.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
+13. `BL-225` **One effect template per call, instead of one shared copy relocated.** The original instances a
+    fresh copy of an effect template (`he_trails`, `flame_ball_01`, …) per `CALL_ANIMATION`; we relocate a
+    single shared copy, so overlapping calls collapse onto the last site. Two rockets landing within one
+    explosion's run share one set of trails: since 2026-08-01 the second call relocates and **restarts** the
+    template (before that it was skipped by the live-instance guard and drew nothing), so the second blast
+    is served — but the first blast's in-flight trails jump to the new site with it.
+    *Fix shape:* a small pool of template copies per effect root, cycled per call, with motions and puffers
+    keyed by instance. Composes with `BL-061`'s per-hit `gunhit` emitter (`PLAN-m3-polish-4` C8) — same
+    problem at a higher event rate; do them together or make C8's keying reusable.
+    ⚠ **Traps.** (a) Do not "fix" it by dropping the restart — that regresses to the second explosion
+    showing nothing. (b) The restart is gated on the call site having MOVED; a poll-idiom call
+    (`If … CallAnimation; Endif; Loop{-1}`) must keep hitting the live guard or its callee restarts every
+    frame and never progresses.
+    *Playtest after fix:* fire two rockets a half-second apart at separate targets — both explosions keep
+    their own trails. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 **Test / debug affordances (findings 6, 14).**
 20. `BL-142` **Re-tune `IndicatorLowFrac` for guns on its own merits, not the pylon coincidence.**
     The 0.34 threshold (`GaugeCluster.cs:76`) was picked so a 3-round rocket pylon steps

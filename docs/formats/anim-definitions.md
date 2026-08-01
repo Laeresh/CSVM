@@ -147,20 +147,32 @@ two jobs that have nothing to do with each other. Surveyed across all 8 chapters
 rotation-only; every ballistic use is `ON_CALL`/`WEAPON_HIT`, fired by a crash or (in M3) a kill.
 So the rotation half runs through the lightweight `AnimRuntime.SpinMotion` (unchanged — the
 ambient world boots byte-for-byte the same), and the ballistic/scale/tumble half is **implemented
-2026-07-23** through `AnimRuntime.MotionRuntime`, a full rigid body seeded from the node's live
-parent-frame pose:
+2026-07-23** through `AnimRuntime.MotionRuntime`, a full rigid body in the node's parent frame,
+seeded from its **authored rest** pose for a launch and from its live pose otherwise (2026-08-01: a
+shared effect template's children are never re-homed between calls, so seeding a launch from the
+live pose walked every repeat explosion's debris further from the blast than the one before):
 
 - `TRANSLATION.initial` is the launch **velocity** (a crash piece leaves at y=10 m/s); `rnd_xz` a
   per-axis random spread added to it (through the runtime's **seedable** `_rng`, so a lab replay
   is deterministic); `delta` a velocity ramp over `RUN_TIME`, 0 on every reachable piece.
-- `TRANSLATION_RANGE` is a **ranged** ballistic launch (the burning-debris arcs): random
-  horizontal `xz` and vertical `y` distance travelled over `RUN_TIME`, fired in a random azimuth —
-  `vHoriz = xz/RUN_TIME`, `vVert = y/RUN_TIME − ½·g·RUN_TIME`. ⚠ **a reading, not a decode** —
-  never simulated before, `initial`/`delta` unmapped, the anchor invisible so only the arc's rough
-  scale reads (TUNE).
-- `GRAVITY.value` (negative) accelerates the launch. `DO_INTERSECTIONS` ground-rest and the
-  `BOUNCE_SEQUENCE` re-launch are a **Layer-1.5 follow-up** (they need a physics ray) — the body
-  integrates freely over `RUN_TIME` then finishes.
+- `TRANSLATION_RANGE` is a ballistic launch in **spherical form** — **`xz` is an AZIMUTH and `y` an
+  ELEVATION, both in DEGREES, and `initial` is the launch SPEED in m/s** (`delta` a speed ramp over
+  `RUN_TIME`). **Decoded 2026-08-01**, replacing a distance reading that threw debris hundreds of
+  metres; census + evidence in `analysis/object-motion-range/`. Over all 1,217 events install-wide
+  every `xz` lies in [−170, 359] and every `y` but one in [−90, 90]; `y` goes negative exactly where
+  the thing falls (a balloon turret's parts at −70…−90 against a collapsing dock platform's +70…+80);
+  the five `fly_trailN` of one explosion carry evenly spaced azimuth bands (35–55, 85–105, 135–165,
+  185–205, 235–255) — the starburst the original's HE impact shows; and `gunshell` reads ±10° of
+  bearing at −75…−85° elevation and 1.5–1.8 m/s, i.e. brass dropping out of the gun port.
+  `TRANSLATION_RANGE_MIN_ONLY` (112 events) marks rows whose `max` fields are all 0 and meaningless
+  — there the min IS the value. ⚠ 623 of 3,651 ranges have `min > max`, so interpolate rather than
+  clamp. ⚠ Which world bearing azimuth 0 points along (+X in the engine) is a choice, not a decode:
+  the data fixes the trails' spacing relative to each other, never their absolute compass.
+- `GRAVITY.value` (negative) accelerates the launch, and is an **absolute m/s², not an offset to the
+  aircraft's arcade `nom_gravity` of 20** — the census carries a literal −9.8 on 173 events (and −10
+  on 400); the weak −1/−2/−3 values sit on smoke trails, where floating is the authored look.
+  `DO_INTERSECTIONS` ground-rest and the `BOUNCE_SEQUENCE` re-launch are a **Layer-1.5 follow-up**
+  (they need a physics ray) — the body integrates freely over `RUN_TIME` then finishes.
 - `FORWARD_ROTATION.Time.initial` is a tumble **total angle over `RUN_TIME`**, not a rate: divide
   by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
   the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).
