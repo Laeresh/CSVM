@@ -9775,3 +9775,27 @@ immediately followed by `damageFrac=0.067 gain=0.067` on every frame after, trac
 confirming both the fade-curve math and that `Update` (and so the loop) truly stops driving once
 crashed. Full `.\RunTests.ps1`: 320 units, 14/14 in-engine suites, 13/13 goldens hash-identical
 (a non-visual audio path — no golden should move, and none did).
+
+## 2026-08-01 — B6 `BL-045`: world damage panel shrinks to fit its content
+
+`WorldDamageLab`'s panel (`H` in `--freecam`/`--anim-lab`) was anchored full-height (`RightWide`,
+top 126 to `-BottomMargin`) with its `ScrollContainer` set to `ExpandFill`, so the panel's
+translucent background always spanned nearly the whole window regardless of pool count — a
+one- or two-pool object (confirmed on `ap_h2otwr1`, the C1 water tower's 2 pools) left a large
+blank gap between the last row/no-controls note and the `world: debris launched …` status line.
+Reanchored the panel to a top-right point (`AnchorTop=AnchorBottom=0`) so its height is no longer
+engine-stretched, and added `ResizeToContent`/`RequestResize`: after each `Rebuild()`, it measures
+`_box`'s combined minimum size and sets `panel.OffsetBottom` to hug it, capped at the window height
+minus `BottomMargin` — beyond the cap the scroll container's minimum size is trimmed to force a
+real scrollbar instead of overflow. The measurement has to be deferred a frame
+(`Callable.From(ResizeToContent).CallDeferred()`): Godot's own container layout pass (which
+resolves a word-wrapped label's real height) is itself queued via a deferred call when children
+change, so measuring synchronously right after `AddChild` read stale pre-layout sizes (an
+undamaged single-pool object briefly measured over 1000px tall before this fix landed). No
+readout content or wording changed, per the item's trap.
+
+**How verified.** `--freecam --chapter=C1 --det --debug-damage=node=ap_h2otwr1,open --screenshot=`
+before/after (`.scratch/damage_panel_before.png` / `_after3.png`): before, a ~300px blank gap
+between the pool rows and the debris line; after, one compact block ending right at the
+instructions line. Full `.\RunTests.ps1`: 320 units, 14/14 in-engine suites, 13/13 goldens
+hash-identical (no golden frames the panel).

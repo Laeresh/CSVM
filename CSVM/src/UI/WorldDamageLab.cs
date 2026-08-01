@@ -43,6 +43,7 @@ public sealed partial class WorldDamageLab : Node
     public const float TickSlice = 0.5f;
 
     private const float StatusPeriod = 0.25f;
+    private const int PanelMargin = 8; // MarginContainer's four sides, used to size the panel to content
 
     private static readonly Color Amber = new(1f, 0.93f, 0.35f);
     private static readonly Color Loud = new(1f, 0.42f, 0.42f);
@@ -54,6 +55,9 @@ public sealed partial class WorldDamageLab : Node
     private readonly List<PoolRow> _rows = new();
 
     private CanvasLayer? _layer;
+    private PanelContainer? _panel;
+    private VBoxContainer? _box;
+    private ScrollContainer? _scroll;
     private Label? _header;
     private Label? _reach;
     private Label? _status;
@@ -233,21 +237,29 @@ public sealed partial class WorldDamageLab : Node
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
         // Down the RIGHT edge: the node lab owns the left, and the two are meant to be readable
-        // together (pick a node there, damage it here).
+        // together (pick a node there, damage it here). Anchored top-right (not RightWide) so the
+        // panel's own height is under our control below rather than stretched to fill the screen —
+        // ResizeToContent sets OffsetBottom to hug whatever the rows need, capped at BottomMargin
+        // above the bottom edge, so a short pool list is a compact block instead of a tall panel
+        // with dead translucent space over the debris line (BL-045).
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.88f) };
-        panel.SetAnchorsPreset(Control.LayoutPreset.RightWide);
+        panel.AnchorLeft = 1;
+        panel.AnchorRight = 1;
+        panel.AnchorTop = 0;
+        panel.AnchorBottom = 0;
         panel.OffsetLeft = -448;
         panel.OffsetRight = -8;
         panel.OffsetTop = 126;
-        panel.OffsetBottom = -BottomMargin;
+        _panel = panel;
 
         var margin = new MarginContainer();
         foreach (string side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
         {
-            margin.AddThemeConstantOverride(side, 8);
+            margin.AddThemeConstantOverride(side, PanelMargin);
         }
         var box = new VBoxContainer();
         box.AddThemeConstantOverride("separation", 4);
+        _box = box;
 
         box.AddChild(new Label { Text = "DAMAGE LAB — WORLD", Modulate = Amber });
         _header = Small("");
@@ -257,9 +269,9 @@ public sealed partial class WorldDamageLab : Node
 
         var scroll = new ScrollContainer
         {
-            SizeFlagsVertical = Control.SizeFlags.ExpandFill,
             HorizontalScrollMode = ScrollContainer.ScrollMode.Disabled,
         };
+        _scroll = scroll;
         _rowBox = new VBoxContainer { SizeFlagsHorizontal = Control.SizeFlags.ExpandFill };
         _rowBox.AddThemeConstantOverride("separation", 6);
         scroll.AddChild(_rowBox);
@@ -274,6 +286,38 @@ public sealed partial class WorldDamageLab : Node
         root.AddChild(panel);
         _layer.AddChild(root);
         AddChild(_layer);
+        RequestResize();
+    }
+
+    /// <summary>Queues <see cref="ResizeToContent"/> for after Godot's own container layout pass.
+    /// Container sizing (and therefore any word-wrapped label's real height) is resolved lazily on a
+    /// deferred call the engine queues itself when children change, so measuring synchronously right
+    /// after <c>AddChild</c> reads stale, pre-layout sizes — queuing ours after theirs (both FIFO on
+    /// the same deferred-call queue) is what makes the measurement below correct.</summary>
+    private void RequestResize() => Callable.From(ResizeToContent).CallDeferred();
+
+    /// <summary>Sizes the panel to exactly what the current rows need, capped at the window height
+    /// minus <see cref="BottomMargin"/>: a short pool list shrinks the whole block instead of
+    /// leaving blank panel below it, and a pool list taller than the cap gets a real scrollbar
+    /// rather than being squeezed silently.</summary>
+    private void ResizeToContent()
+    {
+        if (_panel == null || _box == null || _scroll == null || _rowBox == null || !IsInstanceValid(_panel))
+        {
+            return;
+        }
+        float available = GetViewport().GetVisibleRect().Size.Y - _panel.OffsetTop - BottomMargin;
+        float rowsHeight = _rowBox.GetCombinedMinimumSize().Y;
+        _scroll.CustomMinimumSize = new Vector2(0, rowsHeight);
+        float natural = _box.GetCombinedMinimumSize().Y + 2 * PanelMargin;
+        if (natural <= available)
+        {
+            _panel.OffsetBottom = _panel.OffsetTop + natural;
+            return;
+        }
+        _panel.OffsetBottom = _panel.OffsetTop + available;
+        float overflow = natural - available;
+        _scroll.CustomMinimumSize = new Vector2(0, Mathf.Max(0, rowsHeight - overflow));
     }
 
     private Button Btn(string text, Action pressed)
@@ -320,11 +364,13 @@ public sealed partial class WorldDamageLab : Node
         if (_runtime == null)
         {
             SetHeader("no animation runtime in this session — nothing here is a destructible", Loud);
+            RequestResize();
             return;
         }
         if (node == null || !IsInstanceValid(node))
         {
             SetHeader("nothing selected — click an object (PgUp/PgDn walk its ladder)", Dim);
+            RequestResize();
             return;
         }
         var registry = _runtime.Destructibles;
@@ -341,6 +387,7 @@ public sealed partial class WorldDamageLab : Node
         if (pools.Count == 0)
         {
             SetHeader(Log.Format($"'{name}' is not a destructible, and nothing up its parent chain is one"), Dim);
+            RequestResize();
             return;
         }
         SetHeader(Log.Format($"'{name}' — {pools.Count} pool(s)"), Amber);
@@ -356,6 +403,7 @@ public sealed partial class WorldDamageLab : Node
             AddRow(pools[i], i + 1, pools.Count, ReferenceEquals(pools[i], reachable), reachable);
         }
         UpdateReadouts();
+        RequestResize();
     }
 
     private void SetHeader(string text, Color color)

@@ -330,11 +330,6 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-045` **The world damage panel is larger than it needs to be, with a gap between the no-controls notice
-  and the debris line.** Layout only; the readout itself was called comprehensible.
-  *Playtest after fix:* the panel should read as one compact block, with no gap between the no-controls
-  notice and the debris line. `./RunGame.ps1 --freecam --chapter=C1`, click a destructible, **H**.
-
 - `BL-046` **Destruction stage visuals do not reach the world for every object.** A destroyed building shows
   its burn effect, but some objects' effects are visible only in the panel and the log, which the
   user found confusing. This is the known closure limit rather than a damage-lab defect: the

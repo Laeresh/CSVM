@@ -91,7 +91,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ `BL-090` item 3 A glancing collision is silent — wire `touchdown_default/dirt/water`
 4. ☑ `BL-090` item 2 Per-impact spark burst via the `injure_anims` 0.99 entry
 5. ☑ `BL-090` item 1 `damaged_engine_sound` — the second engine loop nothing reads
-6. ☐ `BL-045` World damage panel is oversized, with a gap above the debris line
+6. ☑ `BL-045` World damage panel is oversized, with a gap above the debris line
 7. ☐ `BL-019` HE rocket: buildings and dirt give identical impact effects
 
 ### Wave C — fidelity with a settled mechanism
@@ -291,7 +291,7 @@ would quietly diverge from every golden while looking identical on paper. (c) `s
 3D-ranged in the data but own-ship engine audio is deliberately non-positional
 (`FlightAudio.cs`) — keep it non-positional and say why, rather than "fixing" it to 3D.
 
-## B6 ☐ `BL-045` World damage panel layout
+## B6 ☑ `BL-045` World damage panel layout
 
 **Goal.** The world damage panel reads as one compact block, with no gap between the no-controls
 notice and the debris line.
