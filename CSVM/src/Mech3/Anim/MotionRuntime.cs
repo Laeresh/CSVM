@@ -1,4 +1,3 @@
-using System.Numerics;
 using CSVM.Mech3;
 using Godot;
 
@@ -46,9 +45,16 @@ namespace CSVM.Mech3.Anim;
 ///   scattered wreckage.</item>
 /// <item><c>xyz_rotation.initial</c> a steady multi-axis spin (rad/s), composed like
 ///   <see cref="SpinMotion"/>; present only on the rare spin+ballistic events.</item>
-/// <item><c>scale.initial</c> a start scale and <c>scale.delta</c> the change over the run
-///   time, a linear ramp (the dust: (3.5,10,3.5) → (2.5,5,2.5) over 6 s). Absolute, like
-///   <c>PoseScale</c>, so it replaces the held scale rather than multiplying it.</item>
+/// <item><c>scale.initial</c> and <c>scale.delta</c> are OFFSETS from unit scale, not absolute
+///   sizes: <c>scale = 1 + initial + delta·u</c>. Unlike <c>PoseScale</c>/<c>OBJECT_SCALE_STATE</c>,
+///   which are absolute. Settled by the install's commonest value — a bare
+///   <c>(-0.1, -0.1, -0.1)</c> with zero delta, on <b>30 of the 45 distinct SCALE events</b>
+///   (every `h2twr`/`radiotwr`/`transmitter` collapse and every `gullfly`): as an absolute that is
+///   a NEGATIVE scale, i.e. the object inside-out at a tenth of its size; as an offset it is a
+///   clean 10 % shrink, which is what the water tower collapsing actually does (user playtest).
+///   ⚠ The base is <c>Vector3.One</c>, and whether it should instead be the node's own authored
+///   scale is UNDECIDED — every node carrying this channel is authored at exactly unit scale in
+///   this install, so the two readings coincide and no capture can separate them.</item>
 /// </list></para>
 /// </summary>
 internal sealed class MotionRuntime : IAnimMotion
@@ -214,7 +220,10 @@ internal sealed class MotionRuntime : IAnimMotion
             if (a.Z != 0f) basis = basis.Rotated(basis.Z.Normalized(), a.Z);
         }
 
-        var scale = _hasScale ? Vector3.One * _scaleInit + _scaleDelta * u : _heldScale;
+        // scale = 1 + initial + delta·u: the channel is an OFFSET from unit scale, not an absolute
+        // scale (see the class remark). Read as absolute, the install's commonest value — a bare
+        // (-0.1, -0.1, -0.1) on 30 of the 45 distinct SCALE events — is a NEGATIVE scale.
+        var scale = _hasScale ? Vector3.One + _scaleInit + _scaleDelta * u : _heldScale;
 
         Target.Transform = new Transform3D(basis.Scaled(scale), origin);
     }

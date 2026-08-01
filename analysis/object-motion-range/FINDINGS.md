@@ -63,3 +63,29 @@ and no capture can settle it — a rotated starburst is the same starburst.
 
 ⚠ **623 of 3,651 ranges have `min > max`.** Interpolation must handle an inverted pair rather than
 assuming ordering (`a + rand·(b−a)` does; a `clamp(min,max)` would not).
+
+## `SCALE` is an offset from unit scale too (2026-08-01)
+
+Same event, same shape of mistake. **`scale.initial` and `scale.delta` are offsets from 1**, not
+absolute sizes: `scale = 1 + initial + delta·u`. (`OBJECT_SCALE_STATE` and `OBJECT_SCALE_FROM_TO`
+*are* absolute — this is `OBJECT_MOTION`'s channel only.)
+
+The install decides it. Of **45 distinct SCALE events**, **30 carry a bare `(-0.1, -0.1, -0.1)` with
+zero delta** — every `h2twr`/`radiotwr`/`transmitter` collapse and every `gullfly`. Read as an
+absolute that is a **negative scale**: the piece inside-out at a tenth of its size, effectively
+invisible. Read as an offset it is a clean 10 % shrink.
+
+Confirmed visually on C1's `ap_h2otwr1` at frame 250 of a `--freecam --destroy --det` capture:
+
+| reading | what the kill looks like |
+|---|---|
+| absolute (`initial`) | only the legs remain standing; the tank and roof sections are gone (a dark speck) |
+| offset (`1 + initial`) | the tank body tumbles away at 90 % size — a collapsing water tower |
+
+⚠ **That shot only discriminates late.** At frame 90 the tower is still intact and the image is
+byte-identical under *both* readings **and** under a forced `Vector3.One * 5f` control — an
+able-to-fail check is what caught it (METHOD-9). Use frame 250.
+
+⚠ **The base is 1, and whether it should be the node's own authored scale is undecided.** Every node
+carrying this channel is authored at exactly unit scale in this install, so the two coincide and no
+capture can separate them.

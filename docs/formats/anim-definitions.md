@@ -177,8 +177,17 @@ live pose walked every repeat explosion's debris further from the blast than the
   by `RUN_TIME` before integrating (read as rad/s, the crash pieces spin ~15 rad/s, visibly wrong;
   the ÷`RUN_TIME` reading passed the crash A/B playtest and remains a TUNE handle, not a decode).
   ⚠ the axis is a reasoned choice (local X): the data carries a scalar, not an axis.
-- `SCALE.initial`/`delta` a linear scale ramp (absolute, like `OBJECT_SCALE_STATE`) — the crash
-  `dust` grows and shrinks over 6 s.
+- `SCALE.initial`/`delta` a linear scale ramp that is an **OFFSET from unit scale, not an absolute
+  size**: `scale = 1 + initial + delta·u`. Unlike `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO`, which
+  are absolute. **Settled 2026-08-01** by the install's commonest value — a bare `(-0.1, -0.1, -0.1)`
+  with zero delta on **30 of the 45 distinct SCALE events** (every `h2twr`/`radiotwr`/`transmitter`
+  collapse, every `gullfly`): as an absolute that is a *negative* scale, i.e. the piece inside-out at
+  a tenth of its size and effectively invisible; as an offset it is a clean 10 % shrink. Confirmed
+  visually — killing C1's `ap_h2otwr1` under the absolute reading leaves only the legs standing (the
+  tank and roof sections vanish), under the offset reading the tank tumbles away intact. The crash
+  `dust` ramps (4.5,11,4.5) → (3.5,6,3.5) over 6 s. ⚠ The base is 1, and whether it should instead be
+  the node's own authored scale is **undecided**: every node carrying this channel is authored at
+  exactly unit scale in this install, so the two readings coincide and nothing can separate them.
 
 Verified 2026-07-23 in `--anim-lab --play-anim=player_crash_dirt` (seeded, fixed-dt): the five
 `fly_trail*` debris anchors integrate outward and the two carrying `FORWARD_ROTATION` tumble while

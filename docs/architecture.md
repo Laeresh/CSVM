@@ -519,7 +519,9 @@ namespace, purely for file size — not an independently-owned subsystem, still 
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
 nothing between calls. `RangeLaunchDirection` is that decode's ONE expression; `ProjectilePool`'s
-gun-casing ejection reads the same `gunshell` event through it (INSTR-3).
+gun-casing ejection reads the same `gunshell` event through it (INSTR-3). Its `scale` channel is an
+OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScale`/`OBJECT_SCALE_STATE`
+— 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
   exposure intended; don't widen further without a reason.
