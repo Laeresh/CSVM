@@ -328,3 +328,29 @@ rank already implements.
 | `item9_whatif.py` | paper test of the candidate schemes + the validated control |
 | `item9_budget.py` | surface-group counts, slot arithmetic, regression-guard checks |
 | `item9_q1_groups.py`, `item9_q1_dag.py` | **superseded** — polygon-outline versions, kept as the record of the `tri_strip` instrument bug |
+
+---
+
+## 2026-08-01 — BL-052 re-measure: the cap still has small, real non-subface survivors
+
+**Method.** `item9_withinmesh.py` now mirrors the current `SceneBuilder` surface key
+`(material, priority, subface)` and reads the extracted polygon flag from `flags.unk3` (absent =
+false). It triangulates the same way as `SceneBuilder`, clips true coplanar triangle overlap, and
+counts only different-surface pairs whose two ranks both collapse to `SurfaceRankCap = 5`.
+Pairs containing a subface are reported separately and excluded: `SubfaceBias` is `1e-4`, fifty
+rank steps, after the capped rank.
+
+**Result.** Across all eight extracted chapters, **36** cap-collapsed, non-subface pairs remain:
+**13,640 m²** in **12 nodes**. C1 has 10 pairs / 2,795 m² (chiefly `a8` road/ground plus
+`a6` and six sign faces); C2 has 25 / 10,837 m² (`g36347`, `g36353`, `g36360` building faces);
+C5 has 1 / 8 m² (`g4674`, `cblock5.tif` / `cement1.tif`). C1B, C1C, C2B, C3, and C4 have none.
+
+**Control.** The formerly cited C5 `cblock*` pairs are no longer survivors: 124 subface-containing
+pairs, 24,122,439 m², are reported as separated. The previous 774,152 m² group is therefore not
+reused as risk evidence. A deterministic fog-off freecam capture was taken at C2 `g36347`
+(`.scratch/bl052/c2-g36347.png`); this census alone does not establish a visible defect, so no cap
+change is proposed.
+
+**Closure (2026-08-01).** The user confirmed the dominant C1 survivor, `a8`, visibly z-fights in
+the original game. With no demonstrated regression among the C2/C5 remainder, `BL-052` is closed:
+the residual is retained as measurement evidence, not a mandate to change `SurfaceRankCap`.

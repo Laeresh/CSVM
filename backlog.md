@@ -397,19 +397,6 @@ unscheduled.
   what separates C3's `zepbridge1/2` and C4/C5's `zepdock` (identity transform, geometry already in
   world coordinates, correctly drawn) from the zeppelin vehicles.
 
-- `BL-052` **`SurfaceRankCap` = 5 produces genuine zero-separation coplanar pairs.** 0.0–4.1% of built
-  meshes per chapter have more than 6 (material, priority) groups, so ranks 5+ all collapse onto
-  the same bias; the worst mesh has **32** groups (C4). It is a real hole in the tie-break, and it
-  is **invisible to any node-level scheme** because both sides share a node. Measured 2026-07-22,
-  `analysis/item9-depth-bias/`.
-  **⚠ Partly overtaken 2026-07-23 — re-measure before acting.** The four C5 pairs this entry used
-  to cite as its evidence (774,152 m² across `g4642` — `cblock3` vs `cblock6`, `cblock1` vs
-  `cblock4` — plus `g4622` and `g4674`) are all **subface-over-base pairs**, and the subface fix
-  now separates them by half a priority level, which is 50× the rank step and cannot be collapsed
-  by the cap. The *cap* is unchanged and the structural hole is unchanged, but **this entry no
-  longer has a measured example**: the surviving cases are whatever zero-separation pairs remain
-  once subfaces are excluded, and that number has not been re-measured. Do not quote the old
-  774,152 m² figure — it is now the area the fix resolved, not the area at risk.
 - `BL-053` **`node_bias` already spans 1.22–2.86 priority levels per chapter** (C1 1.77, C1B 1.40,
   C1C 1.41, C2 1.24, C2B 1.22, C3 1.35, C4 2.07, **C5 2.86**). `docs/architecture.md` recorded
   this as an accepted corner case ("a prio-0 node >~4000 indices later can out-bias a prio-1
@@ -418,17 +405,6 @@ unscheduled.
   cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
   rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
   (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
-- `BL-054` **✅ CLOSED 2026-07-22 by user ruling — C1B z-fighting is NOT a bug: "it's in the original."**
-  The C1B repro pose reproduces the original game's own z-fighting, so our replication there is
-  already correct and **must not be "fixed"**. This retires the open question that sat here (does
-  surf draw over water at that pose — moot: the original z-fights, so neither surface stably
-  wins), and it retires the **dense conflict-rank scheme entirely**, because C1B was the only
-  half that scheme could fix (C5's conflict is within one node, where `node_bias` cancels).
-  **Do not raise `NodeOrderBias`** — now for a stronger reason than before: the measured
-  5e-8 → 2e-6 control taking C1B 30.95% → 2.35% was never an improvement, it was 1.4 points from
-  erasing a faithful artifact. Kept as a closed entry rather than deleted because three separate
-  sessions have tried to fix this pose. Evidence: `analysis/item9-depth-bias/`.
-
 - `BL-055` **Authored `_1`/`_2` mip levels are ignored; we box-filter our own instead.** 52–91 base textures
   per chapter ship hand-authored half- and quarter-resolution levels (`cblock1`, `cblock1_1`,
   `cblock1_2`), referenced by **no gamez material**, and `TextureArchive.cs:100` generates its own

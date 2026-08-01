@@ -10048,3 +10048,24 @@ rockets, logged four authored `he_ground_effect` impacts, and saved the targeted
 `BL-220`. The C collider overlay releases its current wireframes when hidden and rebuilds from the live tree whenever shown. A destructible swap can therefore neither leave a freed `MeshInstance3D` in its toggle list nor omit the wreck's current colliders; the existing class legend is shown by the normal successful path.
 
 **How verified.** A data-backed C2 freecam run destroyed `gate1` (one extracted object) before opening the overlay. It built and displayed the post-swap set — buildings 80, clutter 14,187, water 100, world 1,362 — and saved `.scratch/bl-220-c2-gate1.png` with no exception. `RunTests.ps1` passed: 320 units, 16/16 engine suites with zero engine errors, and all 13 golden hashes unchanged.
+
+## 2026-08-01 — M3 polish-5 A2: re-measured `SurfaceRankCap` after the subface fix
+
+- Updated the read-only depth-bias instrument to reproduce the current `(material, priority, subface)`
+  surface grouping and read the verified extracted JSON field `flags.unk3`. It reports subface pairs
+  separately, rather than letting the resolved C5 overlays masquerade as cap failures.
+- Re-scoped `BL-052` to 36 genuine non-subface cap-collapsed pairs (13,640 m²; C1 2,795, C2 10,837,
+  C5 8). The old C5 area is excluded: 124 subface pairs / 24,122,439 m² are separated by the landed
+  `SubfaceBias`. No `SurfaceRankCap` change landed or is proposed without a visible named case.
+- Verified the all-eight-chapter analysis, a deterministic fog-off freecam capture of C2 `g36347`,
+  eight sequential `--freecam` captures (all exit 0), and `RunTests.ps1`: build, units, 16 engine
+  suites with 0 errors, and 13 unchanged golden hashes all passed.
+
+## 2026-08-01 — Closed BL-052 and removed stale BL-054 backlog entries
+
+- The user confirmed C1 `a8`, the dominant remaining `SurfaceRankCap` survivor, z-fights in the
+  original game. With no demonstrated regression in the smaller C2/C5 survivors, BL-052 is closed;
+  its 36-pair / 13,640 m² measurement remains in `analysis/item9-depth-bias/` as evidence, not a
+  call to change the cap.
+- Removed BL-054 from `backlog.md` because it was already closed by the documented original-game
+  ruling. The relevant evidence remains in history and `analysis/item9-depth-bias/`.

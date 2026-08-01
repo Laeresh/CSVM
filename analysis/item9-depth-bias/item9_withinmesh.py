@@ -13,11 +13,45 @@ This script reports, per chapter:
   - coplanar, same-priority, genuinely OVERLAPPING triangle pairs from two DIFFERENT
     surfaces of one mesh, split by whether their capped ranks differ
   - the same for pairs inside ONE surface (rank identical by construction)
+  - subface-containing pairs separately: they are excluded from BL-052 because
+    SubfaceBias separates them by 1e-4
 """
 import sys, os, time
 from collections import defaultdict
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from item9_lib import *
+
+
+def triangles_with_subface(ch, node_idx, xf):
+    """Triangulate as SceneBuilder does, retaining the JSON SUBFACE flag."""
+    n = ch.nodes[node_idx]
+    mi = model_index(n)
+    if mi is None or mi < 0 or mi >= len(ch.models):
+        return
+    mdl = ch.models[mi]
+    if not isinstance(mdl, dict):
+        return
+    verts = mdl.get("vertices") or []
+    wv = [mat_xform(xf, (v["x"], v["y"], v["z"])) for v in verts]
+    for p in (mdl.get("polygons") or []):
+        idxs = p.get("vertex_indices") or []
+        if len(idxs) < 3:
+            continue
+        pri = p.get("priority", p.get("unk04", 0))
+        mats = p.get("materials")
+        matidx = mats[0].get("material_index") if mats else p.get("material_index")
+        subface = (p.get("flags") or {}).get("unk3", False) is True
+        strip = bool((p.get("flags") or {}).get("tri_strip") or (p.get("flags") or {}).get("triangle_strip"))
+        try:
+            if strip:
+                for i in range(len(idxs) - 2):
+                    a, b, c = (i, i + 1, i + 2) if (i & 1) == 0 else (i, i + 2, i + 1)
+                    yield pri, matidx, (wv[idxs[a]], wv[idxs[b]], wv[idxs[c]]), subface
+            else:
+                for i in range(1, len(idxs) - 1):
+                    yield pri, matidx, (wv[idxs[0]], wv[idxs[i]], wv[idxs[i + 1]]), subface
+        except IndexError:
+            continue
 
 NORM_TOL = 1e-4
 D_TOL = 1e-3
@@ -32,12 +66,12 @@ def quant(n, d):
 
 def surface_ranks(mdl):
     """Reproduce BuildMesh's grouping. The world builder passes cullBackfaces:false, so
-    `doubleSided` is always true and the key is (material, priority)."""
+    `doubleSided` is always true and the key is (material, priority, subface)."""
     order, rank = [], {}
     for p in (mdl.get("polygons") or []):
         mats = p.get("materials")
         mi = mats[0].get("material_index") if mats else p.get("material_index")
-        key = (mi, p.get("priority", 0))
+        key = (mi, p.get("priority", 0), (p.get("flags") or {}).get("unk3", False) is True)
         if key not in rank:
             rank[key] = len(order)
             order.append(key)
@@ -52,6 +86,8 @@ def run(chname, top=8):
     cross_same_bias = defaultdict(float)   # (node, plane, pri) -> area, ranks tie AFTER cap
     cross_sep = defaultdict(float)
     within_surface = defaultdict(float)
+    subface_separated = defaultdict(float)
+    subface_tied = defaultdict(float)
     grp_hist = defaultdict(int)
 
     for idx, xf in bn:
@@ -71,25 +107,25 @@ def run(chname, top=8):
         rk, ngroups = surface_ranks(mdl)
 
         buck = defaultdict(list)
-        for pri, matidx, tri in triangles_world(ch, idx, xf):
+        for pri, matidx, tri, subface in triangles_with_subface(ch, idx, xf):
             pl = plane_of(tri)
             if pl is None:
                 continue
-            buck[(quant(*pl), pri)].append((matidx, tri, pl[0]))
+            buck[(quant(*pl), pri)].append((matidx, subface, tri, pl[0]))
         for key, items in buck.items():
             if len(items) < 2:
                 continue
-            u, v = project_basis(items[0][2])
+            u, v = project_basis(items[0][3])
             recs = []
-            for (matidx, tri, _n) in items:
+            for (matidx, subface, tri, _n) in items:
                 t2 = ensure_ccw(to2d(tri, u, v))
                 xs = [p[0] for p in t2]; ys = [p[1] for p in t2]
-                recs.append((matidx, t2, min(xs), min(ys), max(xs), max(ys)))
-            recs.sort(key=lambda r: r[2])
+                recs.append((matidx, subface, t2, min(xs), min(ys), max(xs), max(ys)))
+            recs.sort(key=lambda r: r[3])
             for i in range(len(recs)):
-                am, a2, ax0, ay0, ax1, ay1 = recs[i]
+                am, asf, a2, ax0, ay0, ax1, ay1 = recs[i]
                 for j in range(i + 1, len(recs)):
-                    bm, b2, bx0, by0, bx1, by1 = recs[j]
+                    bm, bsf, b2, bx0, by0, bx1, by1 = recs[j]
                     if bx0 >= ax1:
                         break
                     if ay1 <= by0 or by1 <= ay0:
@@ -97,9 +133,13 @@ def run(chname, top=8):
                     ov = clip_area(a2, b2)
                     if ov <= MIN_OVERLAP:
                         continue
-                    ra = min(rk.get((am, key[1]), 0), CAP)
-                    rb = min(rk.get((bm, key[1]), 0), CAP)
+                    ra = min(rk.get((am, key[1], asf), 0), CAP)
+                    rb = min(rk.get((bm, key[1], bsf), 0), CAP)
                     k = (idx, key, ch.tex_name(am), ch.tex_name(bm), ra, rb)
+                    if asf or bsf:
+                        # SubfaceBias is 1e-4: fifty rank steps after the capped rank.
+                        (subface_tied if (asf == bsf and ra == rb) else subface_separated)[k] += ov
+                        continue
                     if am == bm:
                         within_surface[k] += ov
                     elif ra == rb:
@@ -117,7 +157,11 @@ def run(chname, top=8):
                       ("SAME-MESH, DIFFERENT surfaces, rank differs -> 2e-6+ separation",
                        cross_sep),
                       ("SAME SURFACE (identical material+priority) -> ZERO separation",
-                       within_surface)):
+                       within_surface),
+                      ("SUBFACE CONTROL (excluded): separated by SubfaceBias",
+                       subface_separated),
+                      ("SUBFACE CONTROL (excluded): tied only when both sides are subfaces",
+                       subface_tied)):
         tot = sum(dd.values())
         print(f"  {label}")
         print(f"      pairs {len(dd)}, total overlap {tot:,.0f} m^2, "
