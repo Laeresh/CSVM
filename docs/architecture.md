@@ -683,6 +683,10 @@ first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cann
   fallback when a chapter lacks the rocket's prototype model; the empty stage (no world program)
   flies trail-less.
 
+## src/Flight/PhysicsConstants.cs
+`PhysicsConstants.NomGravity` — the single 20 m/s² player.json `nom_gravity` value, shared by
+`PlaneStats.Gravity`'s default and `ProjectilePool.WorldGravity` so the two can't drift apart.
+
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
 engines.json stock engine power + player.json globals, the `engine_sound` def name with its

@@ -36,8 +36,8 @@ public sealed partial class ProjectilePool : Node3D
     /// jumping, ever-emitting puff (a documented guns follow-up); rockets/ordnance fire ≤1/s.</summary>
     public System.Action<string, Vector3>? EffectSink;
 
-    internal const float WorldGravity = 20f;  // nom_gravity (player.json) — only the 5 GRAVITY rockets use it
-                                              // (shared: FlightController's reticle integration reads it too)
+    internal const float WorldGravity = PhysicsConstants.NomGravity; // only the 5 GRAVITY rockets use it
+                                                                     // (shared: FlightController's reticle integration reads it too)
     internal const float RocketSpeedScale = 1f; // dev scale for rocket flyout speed (weapons.rocketSpeedScale);
                                                 // 1.0 = neutral. Rocket feel is a pending playtest A/B — scales
                                                 // both launch velocity and acceleration together so the whole
