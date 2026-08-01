@@ -20,7 +20,8 @@ Keys the remake consumes (see `src/Flight/PlaneStats.cs`):
 | `kind_of` | parent def (inheritance chain) |
 | `nodename` | planes.zbd model root node |
 | `engine` | engines.json row id → power factor |
-| `engine_sound` / `cockpit_engine_sound` | sound-def names (SETS in sounds.json) |
+| `engine_sound` / `cockpit_engine_sound` | sound-def names (SETS in sounds.json) — only `cockpit_engine_sound` unconsumed (needs a cockpit view) |
+| `damaged_engine_sound` | `[[soundName, f0, f1]]` — one shared `basic_airplane` entry (`snd_damagedengine`, 0.0, 1.0) covers every plane; `f0`/`f1` are undecoded and read as a fade window over accumulated damage fraction (below) |
 | `dynamics` | nested dict: `pitch_torque`, `roll_torque`, `rudder_torque`, `return_rate`, `ang_momentum_damp`, `rec_moments_inertia` (xyz), `fd_speed` (m/s), `drag_factor`, `veh_weight`, `ref_area` |
 | `spin_props_anim` / `stop_props_anim` | prop-disc anim names (plane_props.json) |
 | `start_anims` | anims run at spawn (`wing_lights_blink`, `reset_bulletholes`) |
@@ -273,4 +274,4 @@ and scales, `preferred_engagement_altitude`/`return_range`, `activation` = spawn
 range). The boat and truck add surface-vehicle motion keys (`platform`, `collision_d`,
 `a_damping`). Paint keys (`paint_pattern`, `paint_colorN`, `paint_decalN`) set the AI
 liveries — see [paint.md](paint.md). A few airframe oddballs round out the set: `fuel`,
-`is_autogyro`, `rudder_tol`, `damaged_engine_sound`, `pilot`, `flight_ceiling`, `title`.
+`is_autogyro`, `rudder_tol`, `pilot`, `flight_ceiling`, `title`.

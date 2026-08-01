@@ -697,9 +697,11 @@ volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `D
 records (name, max HP, `critical`/`engine` flags, `got_hit_anim`, per-part `injure_anims`), and
 the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
 ⚠ Def-level injure_anims are consumed as ANY-part HP fractions, not per-part — see DamageVisuals.
-⚠ Only `engine_sound` is parsed — vehicle.json also ships `cockpit_engine_sound` and
-  `damaged_engine_sound` per plane, so cockpit/damage audio has real parsing to add, not wired-but-
-  unused data waiting.
+⚠ `damaged_engine_sound` is now parsed (`DamagedEngineSound` + `DamagedEngineGain`); only
+  `cockpit_engine_sound` remains unparsed — it needs a cockpit view (`BL-161`).
+⚠ `DamagedEngineGain`'s two source floats (0.0, 1.0 for every plane — one shared `basic_airplane`
+  entry) are undecoded; read here as a fade window over accumulated damage fraction, a TUNE
+  candidate not a confirmed mechanic — see `FlightAudio.cs`.
 
 ## src/Flight/SpawnPoints.cs
 Reads the flight spawn from a mission's OWN zrdr (`extracted/<chapter>/<mission>/zrdr/` — a
@@ -836,17 +838,19 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
   (negative result in weather.md), so a fallback is the only correct behaviour.
 
 ## src/Flight/FlightAudio.cs
-Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle) +
+Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
+damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
 in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `snd_exp_ground_a`,
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
 (touchdown.zrd; rate-limited by `FlightController`, not here).
 ⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
   reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
-  cap); re-derive from a new reference.
+  cap); re-derive from a new reference. `DamagedEngineMixGain` 1.0 is the same shape
+  (`flightAudio.damagedEngineMixGain`) with no reference recording yet to derive a value from.
 ⚠ `OnEngineStop` is deliberately NOT called on crash; a future shutdown flow must also stop
   driving `Update`, or the restart hook re-fires propstart.
-⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the three loops and the per-player cues
+⚠ `MixGain` (1/√N in splitscreen, TUNE) covers the four loops and the per-player cues
   (`PlayEmptyClip`, `OnGraze`); the crash/prop one-shots are deliberately left unscaled.
 
 ## src/Effects/Puffer.cs
@@ -996,7 +1000,8 @@ controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE
 Per-part hit points from vehicle.json destroyable_parts (via PlaneStats). MapStruckPart maps a
 struck collider box + plane-local impact to the data part: wing/canard by impact X sign (left =
 −X), fuselage fore/aft of z 0 → nose/tail. Apply subtracts, Reset refills on respawn, Summary
-feeds the HUD DMG line.
+feeds the HUD DMG line, WorstFraction (lowest part fraction, 1f pristine) feeds whole-plane
+feedback like FlightAudio's damaged-engine loop.
 ⚠ The "tail" arm ignores localImpact and is correct only because PlaneCollider.Relabel hands it
   no outboard boxes — do not fix tail sidedness here; widening the signature was rejected.
 ⚠ The `engine` flag (power loss) is unwired **by design, not deferred** — the original states damage

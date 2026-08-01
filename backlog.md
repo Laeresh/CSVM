@@ -946,17 +946,12 @@ the document alone, it says so and marks the value TUNE.
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-090` **Small per-impact feedback gaps — two (item 4, shell ejection, landed as C22
+- `BL-090` **Small per-impact feedback gaps — three landed (item 4, shell ejection, C22
   2026-07-31; items 3 and 2, the glancing-collision reaction and the per-impact spark burst,
-  landed 2026-08-01), all
+  2026-08-01; item 1, `damaged_engine_sound`, B5 2026-08-01) — one remains,
   with the data already shipped.** Grouped because each
   is a few lines of wiring against an authored def and they share one theme: the moment something
   hits the plane, or the plane touches something, is under-communicated.
-  1. **`damaged_engine_sound` is never read.** It sits on `basic_airplane`, so **every** plane
-     inherits it: `[["snd_damagedengine", 0.0, 1.0]]`, and `snd_damagedengine` is a LOOPED 3D loop
-     (`RANGE [130,420]`) — a second engine loop to blend in as the airframe takes damage.
-     `PlaneStats` reads `engine_sound` (`PlaneStats.cs:190`) and not this one. The two trailing
-     floats are unlabelled and undecoded (plausibly a health-fraction fade window).
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a
@@ -1328,6 +1323,16 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
   are a biased sample, since `PufferState.FindInReader` treats the presence of `NUMBER` as what
   makes a state "fully defined" in the first place.
+- `BL-223` **Damaged-engine loop gain (B5, 2026-08-01)** — `vehicle.json`'s `damaged_engine_sound`
+  entry (`["snd_damagedengine", 0.0, 1.0]`, shared by every plane via `basic_airplane`) has two
+  undecoded trailing floats. `PlaneStats`/`FlightAudio` read them as a fade window over accumulated
+  damage fraction (`1 - PlaneDamage.WorstFraction`): 0 gain at `f0`, full gain at `f1` — for this
+  data that means "no blend until pristine, full blend the instant any part is scratched," since
+  `f0=0.0`. `FlightAudio.DamagedEngineMixGain` (default 1.0, the def's own sounds.json volume,
+  unattenuated) has no reference recording to derive an attenuation from, unlike `WhineMixGain`'s
+  measured dive. Judge both — whether the loop should ramp in more gradually as damage *accumulates*
+  rather than snapping in on first scratch, and whether 1.0 sits right against the healthy engine —
+  at the controls. Config keys: `flightAudio.damagedEngineMixGain`.
 - `BL-215` **Rocket-trail puff size (C21, 2026-07-31; was mis-tagged `BL-212`, an accidental ID
   collision with the landed STOP_SEQUENCE bug — renumbered 2026-08-01)** — the trail look and per-type character
   passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.

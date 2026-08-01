@@ -26,14 +26,20 @@ public partial class FlightAudio : Node
     // for this loop. 0.12 puts our saturated whine ~24 dB under the engine, at the bound. TUNE.
     internal const float WhineMixGain = 0.12f;
 
+    // No reference recording exists for the damaged-engine loop the way the whine had a spectral
+    // dive to measure against — 1.0 (the def's own sounds.json volume, unattenuated) is the
+    // starting point until a real capture says otherwise. TUNE, Config-wired so it can move
+    // without a rebuild.
+    internal const float DamagedEngineMixGain = 1f;
+
     private const float SilenceThreshold = 0.002f;
     private const float EngineStartRamp = 1.8f; // s for the loop to fade to full behind snd_propstart
 
     private readonly List<(string name, AudioStreamWav stream, float volume)> _crashSounds = new();
 
     private PlaneStats _stats = null!;
-    private AudioStreamPlayer? _engine, _whine, _rattle;
-    private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f; // sounds.json VOLUME base gain
+    private AudioStreamPlayer? _engine, _whine, _rattle, _damagedEngine;
+    private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f, _damagedEngineVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
     private AudioStreamPlayer? _groundExp;
     private float _groundExpVol = 1f;
@@ -63,6 +69,9 @@ public partial class FlightAudio : Node
         _engine = MakeLoop(archive, defs, stats.EngineSound, out _engineVol);
         _whine = MakeLoop(archive, defs, stats.WhineSound, out _whineVol);
         _rattle = MakeLoop(archive, defs, stats.RattleSound, out _rattleVol);
+        // damaged_engine_sound: a second engine loop blended in as the airframe takes damage.
+        if (stats.DamagedEngineSound is { } damagedEngineSound)
+            _damagedEngine = MakeLoop(archive, defs, damagedEngineSound, out _damagedEngineVol);
 
         // Prop start/stop one-shots (both non-looped, no VOLUME field → base gain 1.0):
         // snd_propstart plays as the engine ramps in on (re)spawn; snd_propstop is the
@@ -135,9 +144,10 @@ public partial class FlightAudio : Node
 
     public override void _Ready() => StartEngine(); // whine/rattle start on demand
 
-    /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed.
-    /// Not called while crashed, so the loops stay dead until respawn.</summary>
-    public void Update(float dt, float throttle, float speedFrac)
+    /// <summary>Per-frame drive: <paramref name="speedFrac"/> is speed / fd_speed,
+    /// <paramref name="damageFrac"/> is accumulated damage (1 - PlaneDamage.WorstFraction, 0 when
+    /// pristine). Not called while crashed, so the loops stay dead until respawn.</summary>
+    public void Update(float dt, float throttle, float speedFrac, float damageFrac)
     {
         if (_engineRamp < 1f)
             _engineRamp = Mathf.Min(1f, _engineRamp + dt / EngineStartRamp);
@@ -153,6 +163,8 @@ public partial class FlightAudio : Node
             * Config.GetFloat("flightAudio.whineMixGain", WhineMixGain) * MixGain,
             _stats.WhinePitch.Eval(speedFrac));
         UpdateLoop(_rattle, _stats.RattleVolume.Eval(speedFrac) * _rattleVol * MixGain, 1f);
+        UpdateLoop(_damagedEngine, _stats.DamagedEngineGain.Eval(damageFrac) * _damagedEngineVol
+            * Config.GetFloat("flightAudio.damagedEngineMixGain", DamagedEngineMixGain) * MixGain, 1f);
     }
 
     /// <summary>Holds (or releases) the own-plane loops where they are, for the sim-clock halt:
@@ -173,6 +185,10 @@ public partial class FlightAudio : Node
         {
             _rattle.StreamPaused = paused;
         }
+        if (_damagedEngine != null)
+        {
+            _damagedEngine.StreamPaused = paused;
+        }
     }
 
     /// <summary>Kills the flight loops (dead engine) and fires one of the game's
@@ -182,6 +198,7 @@ public partial class FlightAudio : Node
         _engine?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
+        _damagedEngine?.Stop();
         if (_crash == null)
             return;
         var (name, stream, volume) = _crashSounds[
@@ -215,6 +232,7 @@ public partial class FlightAudio : Node
         _engine?.Stop();
         _whine?.Stop();
         _rattle?.Stop();
+        _damagedEngine?.Stop();
         PlayOneShot(_propStop, _propStopVol);
     }
 

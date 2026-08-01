@@ -19,6 +19,8 @@ definitions and curve blocks, and the audio container format. Consumed by
 
 Each plane def names its own engine loop via `engine_sound` / `cockpit_engine_sound`
 (see [vehicle.md](vehicle.md)) — e.g. `engine_sound snd_bloodhawkengine` → bloodhawk.wav.
+`damaged_engine_sound` is a second, vehicle.json-only loop (`snd_damagedengine`) blended in as
+damage accumulates — its own two-float shape, not a `player.json` curve block; see vehicle.md.
 
 ## `sounds.json` — the SOUND_GROUPS block
 

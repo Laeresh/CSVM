@@ -9747,3 +9747,31 @@ mistaken for the other. ⚠ **The instrument lied once and the fix is worth keep
 def's `PufferState` events dispatch on the runtime's *next* tick — the count has to be sampled
 later. `.\RunTests.ps1` green: 320 units, 14 in-engine suites, 13/13 goldens hash-identical (the
 goldens fly `player_bhawk`, which carries no 0.99 entry, and the extra staged template is hidden).
+
+## 2026-08-01 — B5 `BL-090` item 1: `damaged_engine_sound`, the second engine loop
+
+`PlaneStats.Load` now parses `damaged_engine_sound` (`[[soundName, f0, f1]]`) alongside
+`engine_sound`; **re-verified install-wide before parsing** — `basic_airplane` carries the sole
+entry (`snd_damagedengine`, 0.0, 1.0), so every plane inherits it through the `kind_of` chain.
+`FlightAudio` gets a fourth own-ship loop, built in `Setup` when the def carries the sound and
+blended in `Update` via a new `damageFrac` parameter (`1 - PlaneDamage.WorstFraction`, a new
+property: the lowest HP fraction across all parts, 1f pristine). The two source floats are
+undecoded; adopted as a fade window over `damageFrac` using the exact `SoundCurve` shape every
+other engine-audio curve already uses (`MinX=f0, MinY=0, MaxX=f1, MaxY=1`) — recorded as TUNE, not
+fact, in both `PlaneStats.cs` and `docs/formats/vehicle.md`. `DamagedEngineMixGain` (default 1.0,
+no reference recording exists yet to derive an attenuation from) is `Config`-wired the same way
+`BL-159` wired `WhineMixGain` — registered in `Config.WarmTuningRegistry` since a throwaway
+`FlightAudio` needs a `SoundArchive` the warmup doesn't build. The loop stops with the other three
+on `OnCrash`/`OnEngineStop` and pauses with them in `SetPaused`; it stays non-positional like the
+rest of `FlightAudio`'s own-ship loops even though `snd_damagedengine` is `RANGE`d 3D data, per the
+module's standing non-positional design.
+
+**How verified.** `--dump-config` template now includes `flightAudio.damagedEngineMixGain: 1`.
+Round-trip confirmed with a temporary log line (removed after, `BL-159`'s pattern): a scripted
+`--det` water graze (`--chapter=C1 --plane=player_bhawk "--pos=-6500,8,-1500"
+"--direction=1,-0.012,0" "--hold=0,0,0,0" --frames=200`) logs `graze (tail→tail): … hp=18,7/20`
+immediately followed by `damageFrac=0.067 gain=0.067` on every frame after, tracking
+`1 - 18.7/20` exactly, and the print stream stops the moment the plane crashes on a second hit —
+confirming both the fade-curve math and that `Update` (and so the loop) truly stops driving once
+crashed. Full `.\RunTests.ps1`: 320 units, 14/14 in-engine suites, 13/13 goldens hash-identical
+(a non-visual audio path — no golden should move, and none did).

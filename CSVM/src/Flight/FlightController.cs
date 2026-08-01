@@ -843,7 +843,8 @@ public partial class FlightController : Node3D
         }
         else
         {
-            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed);
+            Audio?.Update(simDt, _model.Throttle, _model.Speed / _model.Stats.FdSpeed,
+                1f - (Damage?.WorstFraction ?? 1f));
         }
 
         // Spin the propeller/rotor blur discs: they keep turning even at idle (windmilling)

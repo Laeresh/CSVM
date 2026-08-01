@@ -279,6 +279,16 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   sequences). *Not a bug:* one hit lighting **two** panels — the data always sparks `pdp4` on top of
   its 40/40 pick between `pdp1` and `pdp2`. `./RunGame.ps1 --plane=player_pfighter --chapter=C1`.
 
+- `PT-26` **Damaged-engine loop (B5 / `BL-090` item 1 landed 2026-08-01).** A second engine loop
+  (`snd_damagedengine`) now blends in the moment any part takes damage — every plane carries this
+  data, so any of the 11 works. Scrape something lightly and listen for the loop rising under the
+  healthy engine sound; it should stay audible (not swamp the healthy loop) and fade back out on
+  respawn. *TUNE, not a bug either way* (`BL-223`): the shipped data reads as "full blend on first
+  scratch, no ramp," and the mix gain (`flightAudio.damagedEngineMixGain`, default 1.0) has no
+  reference recording behind it — judge whether it should ramp in more gradually as damage
+  *accumulates*, and whether 1.0 sits right against the healthy engine loop.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1`.
+
 ---
 
 ## Everything else

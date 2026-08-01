@@ -25,6 +25,11 @@ public sealed class PlaneDamage
 
     public IReadOnlyDictionary<string, PartState> Parts => _parts;
 
+    /// <summary>Worst (lowest) HP fraction across all parts — 1f (pristine) when there are no parts
+    /// or none has taken damage. Drives whole-plane damage feedback keyed to "how hurt is the
+    /// airframe" rather than any one part (e.g. FlightAudio's damaged-engine loop).</summary>
+    public float WorstFraction => _parts.Count == 0 ? 1f : _parts.Values.Min(p => p.Fraction);
+
     /// <summary>Maps the struck collider box (fuselage/wing/canard/tail, or the
     /// backstop ray's "center") + the impact point in the PLANE's local frame to
     /// the data's part name: wings split by side (x &lt; 0 = left — verified against

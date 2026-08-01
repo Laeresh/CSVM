@@ -81,6 +81,15 @@ public sealed class PlaneStats
     public string RattleSound = "snd_planeshake";
     public SoundCurve RattleVolume = new(1f, 0f, 1.2f, 1f);
 
+    /// <summary>vehicle.json 'damaged_engine_sound' — null when a def carries none (none do; every
+    /// plane inherits basic_airplane's single entry, verified install-wide). DamagedEngineGain reads
+    /// the entry's two trailing floats (0.0, 1.0 for every plane) as a fade window over accumulated
+    /// damage fraction (1 - worst part HP fraction): 0 gain at the low value, full gain at the high
+    /// one — the same shape as every other engine-audio SoundCurve. The floats are otherwise
+    /// undecoded; this reading is a TUNE candidate, not a confirmed original mechanic.</summary>
+    public string? DamagedEngineSound;
+    public SoundCurve DamagedEngineGain = new(0f, 0f, 1f, 1f);
+
     /// <summary>The plane's damageable sections ('destroyable_parts', nearest def in
     /// the kind_of chain). Empty when the def has none (damage model disabled).</summary>
     public List<DestroyablePart> DestroyableParts = new();
@@ -198,6 +207,20 @@ public sealed class PlaneStats
                 if (item is List<object?> { Count: >= 2 } entry
                     && entry[0] is float frac && entry[1] is string anim)
                     stats.VehicleInjureAnims.Add((frac, anim));
+            break;
+        }
+
+        // damaged_engine_sound: [[soundName, fadeStart, fadeEnd]] — see DamagedEngineSound's doc.
+        foreach (var d in chain)
+        {
+            if (d.List("damaged_engine_sound") is not { Count: > 0 } dmgList)
+                continue;
+            if (dmgList[0] is List<object?> { Count: >= 3 } entry
+                && entry[0] is string dmgName && entry[1] is float fadeStart && entry[2] is float fadeEnd)
+            {
+                stats.DamagedEngineSound = dmgName;
+                stats.DamagedEngineGain = new SoundCurve(fadeStart, 0f, fadeEnd, 1f);
+            }
             break;
         }
 

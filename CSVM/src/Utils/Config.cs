@@ -220,6 +220,9 @@ public static class Config
             // The whine mix gain is read only from a live FlightAudio.Update, which the warmup never
             // drives (no SoundArchive here) — register it here so --dump-config still documents it.
             GetFloat("flightAudio.whineMixGain", FlightAudio.WhineMixGain);
+            // Same reason as whineMixGain: the damaged-engine loop is only read from a live
+            // FlightAudio.Update with damage data, which the warmup never drives.
+            GetFloat("flightAudio.damagedEngineMixGain", FlightAudio.DamagedEngineMixGain);
             // Puffer emitters read these at Init, which the warmup never reaches (an emitter needs
             // a texture archive) — register them here so --dump-config still documents them.
             GetFloat("puffer.burstSizeScale", Effects.Puffer.SizeScaleDefault);
