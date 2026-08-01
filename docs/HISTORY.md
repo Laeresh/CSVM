@@ -9568,3 +9568,19 @@ containing the reported bug moved 2.0 % while three shots containing no facade p
 two C1 above-the-deck cloud shots are staged for an A/B against the original; the newly-revealed
 distant terrain and cloud banks are unconfirmed against a real capture, and terrain-from-below /
 interiors have not been walked.
+
+## 2026-08-01 — Polish run 4 selected from `backlog.md`
+
+Ten items scheduled into `docs/PLAN-m3-polish-4.md` under a mixed shape (user's criteria): A
+`BL-028`/`BL-029` (test affordances), B `BL-090` items 3/2/1 + `BL-045`/`BL-019` (impact and damage
+feedback), C `BL-061` item 1 / `BL-088` (fidelity with a settled mechanism), D `BL-086` (explosive
+radius). Capture-blocked items were excluded by the user's ruling — the whole TUNE list, the camera
+rebuild (`BL-149`/`BL-150`), the flight-model gaps (`BL-092`–`BL-097`, `BL-147`), the armour layer
+(`BL-085`/`BL-173`), graze pushback (`BL-172`), the cloud band (`BL-118`) and the stall ramp
+(`BL-148`) — as were future-milestone items and items blocked on an open question (`BL-051` on
+`BL-099`, `BL-050`, `BL-036`). Verified during selection against both `docs/HISTORY.md` and the
+code: `--infinite-ammo` exists but no reduce knob; `touchdown`, `damaged_engine_sound` and
+`random_gun_impact` have zero hits in `CSVM/src`; `ImpactProximity`/`DetonationDistance` are parsed
+and only printed; `StuntMission` still tests one 15 m sphere. **Found stale in `backlog.md`:** rows
+for the already-landed `BL-014`/`BL-026`/`BL-044`/`BL-159` and the stale pending-merge note on
+`BL-062` (merged as `bea7947`) — swept as part of A1's commit. CLAUDE.md status now names the plan.
