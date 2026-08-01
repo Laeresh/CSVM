@@ -9945,3 +9945,34 @@ fireballs were strung in a line hundreds of metres up the runway and now sit com
 (before/after read, not just the percentage, per GOLD-3). `c1-crash` moved 18.8 %: the camera sits
 inside the fireball at frame 20, so re-aimed sparks repaint most of it while the fireball's extent
 is unchanged. `verification.md` gained WORLD-23.
+
+## 2026-08-01 — `OBJECT_MOTION`'s `SCALE` is an offset from unit scale, not an absolute size
+
+Found by the user while playtesting the `translation_range` decode, and tested here the same way:
+`scale = 1 + initial + delta·u`. `OBJECT_SCALE_STATE`/`OBJECT_SCALE_FROM_TO` stay absolute — this is
+`OBJECT_MOTION`'s channel only, which is what made the two easy to conflate.
+
+**The install decides it.** Of the 45 distinct SCALE events, **30 carry a bare `(-0.1, -0.1, -0.1)`
+with zero delta** — every `h2twr`/`radiotwr`/`transmitter` collapse and every `gullfly`. Read as an
+absolute that is a *negative* scale: the piece inside-out at a tenth of its size, so it renders as
+nothing. Read as an offset it is a clean 10 % shrink.
+
+**How verified.** C1's `ap_h2otwr1` killed under `--freecam --destroy --det` at frame 250: under the
+absolute reading only the legs remain standing and the tank and roof sections are gone; under the
+offset reading the tank tumbles away intact at 90 %. The instrument nearly lied first — **at frame 90
+the shot is byte-identical under both readings and under a forced `Vector3.One * 5f` control**,
+because the tower has not started collapsing yet. Only the able-to-fail check exposed that (METHOD-9);
+the frame-250 requirement is recorded with the finding in
+`analysis/object-motion-range/FINDINGS.md`. `.\RunTests.ps1`: 320 units, 14/14 suites, **the same two
+goldens re-pinned** — `c1-destroy-effects` 0.02 % (the radio tower's `upper` is drawn at 0.9 instead
+of vanishing) and `c1-crash` 8.9 %, max delta 37 (the crash `flydirt` dust ramps from (4.5,11,4.5)
+instead of (3.5,10,3.5), a slightly larger cloud seen from inside).
+
+Open, and recorded rather than chosen quietly: **whether the base should be 1 or the node's own
+authored scale.** Every node carrying this channel is authored at exactly unit scale in this install,
+so the two readings coincide and no capture can separate them.
+
+**Process note.** The previous commit swept a stray `using System.Numerics;` and a no-op
+`Vector3.One * _scaleInit` out of the user's working tree, from an in-progress edit of theirs. Neither
+changed behaviour, but neither was reviewed; both are removed here. `git add -A` after a session where
+the user is editing the same file needs a `git diff` read first.
