@@ -9971,8 +9971,3 @@ instead of (3.5,10,3.5), a slightly larger cloud seen from inside).
 Open, and recorded rather than chosen quietly: **whether the base should be 1 or the node's own
 authored scale.** Every node carrying this channel is authored at exactly unit scale in this install,
 so the two readings coincide and no capture can separate them.
-
-**Process note.** The previous commit swept a stray `using System.Numerics;` and a no-op
-`Vector3.One * _scaleInit` out of the user's working tree, from an in-progress edit of theirs. Neither
-changed behaviour, but neither was reviewed; both are removed here. `git add -A` after a session where
-the user is editing the same file needs a `git diff` read first.
