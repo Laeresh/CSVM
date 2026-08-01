@@ -45,14 +45,33 @@ A state is a **fully-defined emitter iff it has `NUMBER` (burst) or `DISTANCE_IN
 | `LIFETIME_RANGE` | [min, max] s | sprite life |
 | `GROWTH_FACTOR` | float | size growth over life |
 | `DEVIATION_DISTANCE` | m | positional jitter |
-| `TEXTURE_SEQUENCE` | [(name, t)…] | **flipbook**: frames with per-frame timestamps |
+| `TEXTURE_SEQUENCE` | [(name, t)…] | **flipbook**: frames keyed by **fraction of the sprite's own lifetime**, 0–1 — *not* seconds (see below) |
 | `TEXTURES` | [name…] | **static pool**: each sprite picks one at random (smoke101/102/103) |
 | `COLORS` | [[lifeFrac, r, g, b, a]…] | colour-over-age ramp; rgb dual-encoded (the [weather.md](weather.md) rule: any component > 1 ⇒ ÷255), alpha 0–1. `dense_firetrail`'s smoke is born orange (255,164,90) → near-black |
+| `FADE_RANGE` | [near, far] m | camera-distance fade (`fire_n_smoke`: 1500–1700). Parsed by mech3ax, **not implemented** — set on 400 of C1's 721 events |
+| `NEAR_FADE` | [a, b] | near-camera fade (70/20 almost everywhere). The compiled payload calls it `unk_range`. Parsed, **not implemented** |
+| `START_AGE` / `WIND_FACTOR` / `PRIORITY` | — | carried by 11 / 6 / 11 C1 events, **not implemented** |
 
-Rendering note (measured, remake convention): states **with** a COLORS ramp must be
-alpha-blended (a near-black smoke ramp is invisible additively); ramp-less fire/flash
-states read correctly additive. The fade at end-of-life belongs to the ramp when present
-(its alpha ends at 0).
+**`TEXTURE_SEQUENCE` times are lifetime fractions, not seconds.** Across all 1,750 flipbook
+`PufferState` events in this install the largest key is **0.8** and none exceeds 1.0 — while
+`LIFETIME_RANGE` maxima run from 0.2 s to 5.5 s, so under a seconds reading nobody ever wrote a
+sequence longer than 0.8 s for a 5.5 s sprite, 1,750 times running; and the 16 `mag_gunhit`
+`firepuffer` events key frames out to 0.5 with a 0.1–0.2 s lifetime, which under that reading
+could never draw at all. Read as seconds, `large_30sec_fire`'s `fire_n_smoke` burned
+`fire_f01 → fire_f06` in a quarter second and then held the near-black smoke frame for the
+other ~95 % of a 3.5–5.5 s life — which is what collapsed the game's most-called death effect
+into a stationary red ball instead of a climbing flame.
+
+Rendering note (measured, remake convention): the authored data never states a blend mode, so
+it is **derived from the sprite a particle dies on** — the last flipbook frame, or the mean of a
+static pool. Near-black ⇒ alpha-blend, else additive. A COLORS ramp forces alpha-blend too (its
+own alpha ends at 0, and a near-black smoke ramp is invisible additively). The measured
+population separates cleanly: alpha-weighted mean luminance is 0.004 for `thickblksmoke*` and
+0.018 for `fire_f06`, then nothing until 0.12 (`fire101`), 0.17 (`exp_yel01`), 0.22 (`smoke101`)
+and 0.34 (`fire_f01`) — so white smoke and flashes stay additive and only genuinely black
+sprites flip. A presence-of-COLORS rule alone was not enough: `fire_n_smoke` and
+`large_black_smokeball` both carry `colors: null` yet end on black sprites, and adding those
+turned every dying smoke puff into more glow.
 
 
 ## Texture flipbooks, layer by layer (2026-07-21)

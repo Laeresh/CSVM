@@ -9427,3 +9427,50 @@ gap as `BL-211`), so both are A/B'd by the user at the controls, not measured he
 
 Bookkeeping: reported and fixed same session, never queued to `backlog.md`; next ID bumped to
 `BL-218`.
+
+## 2026-08-01 — `large_30sec_fire` read as a ball of fire: two puffer bugs, both in the render path
+
+**Reported at the controls:** the game's most-called death effect (`large_30sec_fire`, 1,035 call
+sites) sits as a glowing ball where the original's flames climb. Asked whether the authored
+velocity/acceleration values were being used correctly.
+
+**They were.** `LOCAL_VELOCITY (0,5,0)`, `WORLD_VELOCITY (0,4,0)`, `MIN/MAX_RANDOM_VELOCITY
+(-4,-1,-4)…(4,5,4)`, `WORLD_ACCELERATION (0,-1,0)`, `FRICTION 0.6` and the rest are parsed verbatim
+by `PufferState.FromAnimEvent` and integrated correctly in `Puffer._Process` — local velocity
+rotated by the host basis, world velocity raw, per-axis random box, exponential friction. The
+extracted frame is already right-handed Y-up, so no axis conversion is missing. That data makes a
+plume ~12 m tall; the geometry was never the problem. Two render-path bugs were:
+
+1. **`TEXTURE_SEQUENCE` times are fractions of a particle's lifetime, not seconds.** `FrameFor`
+   compared the key against `age`. This puffer keys six frames at 0…0.25 with a 3.5–5.5 s lifetime,
+   so every particle burned `fire_f01 → fire_f06` in a quarter second (≈2.5 m of rise) and held the
+   near-black smoke frame for the other ~95 %. Evidence, surveyed over all 1,750 flipbook
+   `PufferState` events in the install: the largest key anywhere is 0.8, none exceeds 1.0, across
+   lifetimes from 0.2 s to 5.5 s; and 16 `mag_gunhit` `firepuffer` events key frames out to 0.5 with
+   a 0.1–0.2 s lifetime, which under a seconds reading could never draw at all.
+2. **The blend was inferred from the wrong thing.** The old rule was "a COLORS ramp ⇒ mix, else
+   add". `fire_n_smoke` carries `colors: null` but its flipbook *is* the fire→smoke transition
+   (`fire_f01` alpha-weighted luminance 0.34 → `fire_f06` 0.018), so ~50 overlapping dim-red quads
+   accumulated additively into exactly the reported ball. `Puffer.Create` now measures the sprite a
+   particle DIES on — last flipbook frame, or the mean of a static pool — and alpha-blends when it
+   is near-black (`SmokeLuminance`, 16/255), pairing that with the depth fade off. The measured
+   population separates cleanly either side: `thickblksmoke*` 0.004 and `fire_f06` 0.018 below,
+   nothing above until `fire101` 0.12, so white smoke and flashes stay additive. This also fixes
+   `large_black_smokeball`, which the code comments claimed was overridden to MIX — the
+   `PufferBlend` enum had no external caller at all.
+
+**Verified:** `.\RunTests.ps1` — 318 units, 13/13 engine suites (including `stop-sequence`, which
+asserts this def's 30 s halt), engine errors clean. `--effects-test` byte-identical: still 25 of 30
+effects build a puffer. Before/after `--play-anim=large_30sec_fire` captures at 1/3/6 s: a diffuse
+translucent red haze becomes a yellow-white flame at the base, orange mid-column and dark smoke on
+top. Three goldens moved, all three of the puffer-bearing shots and no others — `c1-waterfall`
+0.01 %, `c1-destroy-effects` 0.26 %, `c1-crash` 26.55 % (the crash fireball now holds its mid
+flipbook frames instead of the blown-out last one) — reviewed as images and re-pinned in
+`analysis/goldens/manifest.json`.
+
+**Left open:** `NUMBER` is absent on 680 of C1's 721 `PufferState` events and defaults to 1 here,
+a guess at the original engine's default (the sibling `large_10sec_fire` authors 3) — filed as
+`BL-218`, a density TUNE to judge at the controls (`PT-22`) now that the shape is right.
+`FADE_RANGE` (set on 400 of 721) and
+`NEAR_FADE` (the compiled payload's `unk_range`, decoded this session) are documented in
+`effects.md` but still unimplemented.

@@ -169,12 +169,11 @@ public sealed class WorldEffectsFactory
         // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
         // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
         // off the master seed — decide which effects render at all.
-        // softParticles off for MIX-ramp states: these effects emit at ground-level sites, where
-        // the depth fade zeroes a fresh dark puff against the terrain right behind it (the crash
-        // smokeball lesson) â€” the damage-stage black smoke measured near-invisible with it on.
-        // Additive fire keeps the soft edge; it leaks through the fade anyway.
+        // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
+        // sprites emit at these ground-level sites and measured near-invisible with it on (the
+        // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
         var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects), _worldRoot,
-            st => Puffer.Create(st, textures, sustained: true, softParticles: st.Colors.Count == 0),
+            st => Puffer.Create(st, textures, sustained: true),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the

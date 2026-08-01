@@ -828,11 +828,10 @@ Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
 `puffer.trailSizeScale` / `puffer.sustainSizeScale` (default 1 = authored SIZE_RANGE,
 byte-identical; the cull margin scales with the largest). Read at `Init`; registered in
 `Config.WarmTuningRegistry` for `--dump-config`.
-⚠ COLORS ramp ⇒ blend_mix, else blend_add (effects.md); `Create`'s `blend`/`softParticles`
-  overrides exist because the data can lie — the crash `large_black_smokeball` has
-  `colors: null` yet needs MIX, and the depth fade zeroes fresh ground-level smoke. Defaults
-  leave every existing caller byte-identical.
-⚠ A fading additive fireball READS AS SMOKE — isolate the emitter before believing smoke works.
+⚠ TEXTURE_SEQUENCE times are FRACTIONS of a particle's lifetime, not seconds (effects.md).
+⚠ The blend is derived, never authored: a COLORS ramp or a near-black dying sprite (measured off
+  the atlas, `SmokeLuminance`) ⇒ blend_mix + no depth fade, else blend_add (effects.md).
+  `Create`'s `blend`/`softParticles` force the verdict for a caller that knows better.
 ⚠ Each emitter's `_rng` is a per-instance stream off `Rng.Puffer`, so particle spread is pinned by
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
   after. Its seed depends on how many puffers were built before it — deterministic under `--det`.

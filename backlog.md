@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-218`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-219`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -1331,6 +1331,20 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-218` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
+  `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
+  falls back to **1** sprite per `TIME_INTERVAL`. That fallback is a guess at the original engine's
+  default, not decoded data: the sibling `large_10sec_fire` authors `NUMBER 3` from otherwise
+  comparable values, so the real default may well be higher and every unnumbered emitter in the game
+  correspondingly thin. Judge the density at the controls now that the fire's *shape* is right
+  (`PT-22`) — it is a whole-effect multiplier, so a wrong value is visible on the destruction fires,
+  the damage-stage sputters and the wreck smoke at once.
+  ⚠ Traps: this is not the `puffer.*SizeScale` config knobs — those scale sprite size, and trading
+  count for size is exactly the substitution that makes a too-sparse plume read as "too small"
+  instead. Do not tune it from a single `--screenshot`: sprite count only reads over a time series
+  (SHOT-19). And do not infer the default from the effects readers — the `NUMBER`-carrying states
+  are a biased sample, since `PufferState.FindInReader` treats the presence of `NUMBER` as what
+  makes a state "fully defined" in the first place.
 - `BL-215` **Rocket-trail puff size (C21, 2026-07-31; was mis-tagged `BL-212`, an accidental ID
   collision with the landed STOP_SEQUENCE bug — renumbered 2026-08-01)** — the trail look and per-type character
   passed the cockpit A/B (PT-09), but the user flags the puff size as possibly needing more tuning.

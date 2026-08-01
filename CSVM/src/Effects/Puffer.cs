@@ -7,11 +7,9 @@ using Godot;
 
 namespace CSVM.Effects;
 
-/// <summary>How a puffer's sprites composite. <see cref="Auto"/> keeps the historical rule
-/// (a COLORS ramp ⇒ <c>blend_mix</c>, else <c>blend_add</c>); the explicit modes override it
-/// for effects whose blend the data does not imply — the crash <c>large_black_smokeball</c>
-/// carries <c>colors: null</c> yet must render as MIX, because additive black smoke adds ~0
-/// and is invisible.</summary>
+/// <summary>How a puffer's sprites composite. The authored data never says, so <see cref="Auto"/>
+/// derives it: a COLORS ramp or a near-black dying sprite ⇒ <c>blend_mix</c>, else
+/// <c>blend_add</c>. The explicit modes force the verdict.</summary>
 public enum PufferBlend { Auto, Additive, Mix }
 
 /// <summary>
@@ -21,9 +19,10 @@ public enum PufferBlend { Auto, Additive, Mix }
 /// sprites per <see cref="TimeInterval"/>, each with a random velocity, size, and
 /// lifetime, cycling a flipbook of textures over its age.
 ///
-/// Only the fields we currently render are parsed; the reader carries more
-/// (WORLD_ACCELERATION, FADE_RANGE camera-distance fades, NEAR_FADE) — added here as
-/// they're needed. Distances/velocities are meters and seconds, matching the world.
+/// Only the fields we currently render are parsed; the reader carries more (the FADE_RANGE
+/// camera-distance fade, NEAR_FADE, START_AGE, WIND_FACTOR, PRIORITY) — added here as they're
+/// needed. Distances/velocities are meters and seconds, matching the world; TEXTURE_SEQUENCE
+/// times are the exception, being fractions of a particle's lifetime.
 /// </summary>
 public sealed class PufferState
 {
@@ -52,7 +51,9 @@ public sealed class PufferState
     /// pufftrails.json's dense_firetrail). 0 = burst-style (NUMBER per TIME_INTERVAL).</summary>
     public float DistanceInterval;
 
-    /// <summary>Flipbook: texture name to show once the particle's age reaches Time (ascending).</summary>
+    /// <summary>Flipbook: texture name to show once the particle has lived Time of its lifetime
+    /// (ascending, 0–1 — a FRACTION of LIFETIME_RANGE, not seconds; see
+    /// <see cref="Puffer.FrameFor"/>).</summary>
     public IReadOnlyList<(float Time, string Texture)> TextureSequence = Array.Empty<(float, string)>();
 
     /// <summary>Static texture pool (the TEXTURES key — smoke101/102/103): each
@@ -277,6 +278,13 @@ public sealed partial class Puffer : Node3D
     /// <see cref="Utils.Config.WarmTuningRegistry"/> so <c>--dump-config</c> documents the keys.</summary>
     public const float SizeScaleDefault = 1f;
 
+    /// <summary>Alpha-weighted mean luminance (0–1) below which the sprite a particle dies on
+    /// counts as smoke, so the emitter alpha-blends instead of adding. The measured population
+    /// separates cleanly either side of it: fire_f06 0.018 and thickblksmoke 0.004 below,
+    /// nothing above it under 0.12 (fire101 0.12, exp_yel01 0.17, smoke101 0.22, fire_f01 0.34)
+    /// — so white smoke stays additive and only genuinely black sprites flip.</summary>
+    private const float SmokeLuminance = 16f / 255f;
+
     // Life-fade envelope (a render nicety, not in the reader): ease the additive glow in
     // and out so particles don't pop at spawn/death. The flipbook itself already dims.
     private const float FadeIn = 0.12f, FadeOutStart = 0.6f;
@@ -377,30 +385,37 @@ public sealed partial class Puffer : Node3D
     /// if no frame texture is found. <paramref name="activeDuration"/> is how long a
     /// burst puffer emits (the calling animation's STOP time; large_fireball stops its
     /// puffer at 0.3 s) — ignored by trail (DISTANCE_INTERVAL) states, which emit while
-    /// driven via <see cref="TrailAdvance"/>. States with a COLORS ramp alpha-blend
-    /// (black smoke is invisible additively); flipbook fire stays additive.</summary>
+    /// driven via <see cref="TrailAdvance"/>. States that end on a dark sprite alpha-blend
+    /// (black smoke is invisible additively); everything else stays additive.</summary>
     /// <param name="sustained">Continuous emission driven by <see cref="SustainAt"/> — the
     /// animation system's ACTIVE_STATE 1 puffers (the C1 train's steam plume, the waterfall
     /// mist), which run indefinitely at their TIME_INTERVAL rather than for a burst duration.</param>
     /// <param name="blend">Composite mode (see <see cref="PufferBlend"/>). Default
-    /// <see cref="PufferBlend.Auto"/> keeps the COLORS-ramp rule; the crash smokeball passes
-    /// <see cref="PufferBlend.Mix"/> because its dark textures carry no ramp yet must not
-    /// blend additively (which would make black smoke invisible).</param>
-    /// <param name="softParticles">When true (default) the alpha fades over the last ~1.5 m
-    /// before the scene depth, softening the hard line where a tilted billboard dips into
-    /// terrain. The crash smokeball passes false: it emits just above the ground, and the
-    /// fade would zero its alpha against the terrain right behind it until it grows tall.</param>
+    /// <see cref="PufferBlend.Auto"/> measures the sprite a particle dies on (see
+    /// <see cref="SmokeLuminance"/>); the explicit modes override that verdict.</param>
+    /// <param name="softParticles">The depth fade over the last ~1.5 m before the scene depth,
+    /// which softens the hard line where a tilted billboard dips into terrain. Null (default)
+    /// pairs it with the blend: off for MIX, whose dark sprites emit at ground-level sites where
+    /// the fade would zero them against the terrain right behind them, on for additive, which
+    /// leaks through the fade anyway.</param>
     public static Puffer? Create(PufferState state, TextureArchive textures, float activeDuration = 0.3f,
-        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
+        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool? softParticles = null)
     {
-        var frameNames = state.TextureSequence.Count > 0
+        bool sequenced = state.TextureSequence.Count > 0;
+        var frameNames = sequenced
             ? state.TextureSequence.Select(f => f.Texture).ToList()
             : state.Textures.ToList();
-        var atlas = BuildAtlas(frameNames, textures);
+        var (atlas, diesDark) = BuildAtlas(frameNames, textures, sequenced);
         if (atlas == null)
             return null;
+        // Auto: a COLORS ramp still forces MIX (its own alpha ends at 0), and so does a sprite
+        // set whose dying frame is near-black.
+        var resolved = blend != PufferBlend.Auto ? blend
+            : state.Colors.Count > 0 || diesDark ? PufferBlend.Mix
+            : PufferBlend.Additive;
         var puffer = new Puffer();
-        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained, blend, softParticles);
+        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained, resolved,
+            softParticles ?? resolved != PufferBlend.Mix);
         return puffer;
     }
 
@@ -581,7 +596,7 @@ public sealed partial class Puffer : Node3D
             // The COLORS ramp owns the fade when present (its alpha ends at 0);
             // otherwise the render-nicety envelope eases the additive glow in/out.
             _mm.SetInstanceCustomData(i, new Color(
-                flipbook ? FrameFor(p.Age) : p.Frame,
+                flipbook ? FrameFor(lifeFrac) : p.Frame,
                 hasRamp ? 1f : FadeFor(lifeFrac), 0f, 0f));
             _mm.SetInstanceColor(i, hasRamp ? RampColor(lifeFrac) : Colors.White);
         }
@@ -599,17 +614,25 @@ public sealed partial class Puffer : Node3D
         : lifeFrac > FadeOutStart ? Mathf.Max(0f, 1f - (lifeFrac - FadeOutStart) / (1f - FadeOutStart))
         : 1f;
 
-    private static ImageTexture? BuildAtlas(IReadOnlyList<string> names, TextureArchive textures)
+    /// <summary>Packs the frames side by side into one atlas, and measures whether a particle
+    /// DIES on a dark sprite — the last frame of a flipbook, or the mean of a static pool, since
+    /// a pool sprite is picked once and held. The measurement is what tells "fire_n_smoke", whose
+    /// flipbook really does run bright flame (fire_f01, 88) → near-black smoke (fire_f06, 4.6),
+    /// apart from a ramp-less flash; the authored data says nothing about compositing, and the
+    /// old ramp-presence rule read both as additive, which turned every dying smoke sprite into
+    /// more glow. Null atlas when a frame is missing from the archive.</summary>
+    private static (ImageTexture? Atlas, bool DiesDark) BuildAtlas(IReadOnlyList<string> names,
+        TextureArchive textures, bool sequenced)
     {
         if (names.Count == 0)
-            return null;
+            return (null, false);
         var frames = new Image[names.Count];
         int fw = 0, fh = 0;
         for (int i = 0; i < names.Count; i++)
         {
             var tex = textures.Find(names[i]);
             if (tex == null)
-                return null;
+                return (null, false);
             var img = tex.GetImage();
             img.Convert(Image.Format.Rgba8);
             frames[i] = img;
@@ -617,14 +640,35 @@ public sealed partial class Puffer : Node3D
             fh = Mathf.Max(fh, img.GetHeight());
         }
         var atlas = Image.CreateEmpty(fw * names.Count, fh, false, Image.Format.Rgba8);
+        float lastLum = 0f, meanLum = 0f;
         for (int i = 0; i < frames.Length; i++)
         {
             var f = frames[i];
             if (f.GetWidth() != fw || f.GetHeight() != fh)
                 f.Resize(fw, fh);
             atlas.BlitRect(f, new Rect2I(0, 0, fw, fh), new Vector2I(i * fw, 0));
+            lastLum = MeanLuminance(f);
+            meanLum += lastLum / frames.Length;
         }
-        return ImageTexture.CreateFromImage(atlas);
+        return (ImageTexture.CreateFromImage(atlas),
+            (sequenced ? lastLum : meanLum) < SmokeLuminance);
+    }
+
+    /// <summary>A sprite's mean luminance weighted by its own alpha — what it actually
+    /// contributes when composited, rather than what its unmasked pixels contain.</summary>
+    private static float MeanLuminance(Image img)
+    {
+        int w = img.GetWidth(), h = img.GetHeight();
+        if (w == 0 || h == 0)
+            return 0f;
+        float sum = 0f;
+        for (int y = 0; y < h; y++)
+            for (int x = 0; x < w; x++)
+            {
+                var c = img.GetPixel(x, y);
+                sum += (0.2126f * c.R + 0.7152f * c.G + 0.0722f * c.B) * c.A;
+            }
+        return sum / (w * h);
     }
 
     private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
@@ -652,9 +696,8 @@ public sealed partial class Puffer : Node3D
             _particles = new Particle[state.Number * _burstsTotal];
         }
 
-        // Auto keeps the COLORS-ramp rule (ramp ⇒ mix, else add); the explicit modes override
-        // it — the crash smokeball is MIX despite carrying no ramp, because its textures are
-        // near-black with a smoke-shaped alpha, which adds ~0 (invisible) but masks correctly.
+        // Create resolves Auto from the COLORS ramp and the dying sprite's luminance; a direct
+        // Init caller that leaves it Auto gets the ramp half of that rule.
         string blendMode = blend switch
         {
             PufferBlend.Additive => "blend_add",
@@ -774,12 +817,19 @@ public sealed partial class Puffer : Node3D
         _burstsSpawned++;
     }
 
-    // Latest flipbook frame whose keyed time has been reached (sequence times ascending).
-    private float FrameFor(float age)
+    /// <summary>Latest flipbook frame whose keyed time has been reached (times ascending).
+    /// The key is a FRACTION of the particle's own lifetime, not a second count: no
+    /// TEXTURE_SEQUENCE in the install keys a frame past 0.8, across lifetimes from 0.2 s to
+    /// 5.5 s, and the mag_gunhit firepuffers key frames out to 0.5 with a 0.1–0.2 s lifetime —
+    /// which under a seconds reading could never draw at all. Read as seconds, a 5 s
+    /// fire_n_smoke particle burned fire_f01→f06 in a quarter second and then held the near-black
+    /// smoke frame for its remaining 95%, which is what collapsed large_30sec_fire into a
+    /// stationary ball instead of a climbing flame.</summary>
+    private float FrameFor(float lifeFrac)
     {
         var seq = _state.TextureSequence;
         int frame = 0;
-        for (int i = 0; i < seq.Count && seq[i].Time <= age; i++)
+        for (int i = 0; i < seq.Count && seq[i].Time <= lifeFrac; i++)
             frame = i;
         return frame;
     }

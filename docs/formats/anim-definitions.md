@@ -921,7 +921,10 @@ are not visible from the byte format alone, each measured against this install.
   **second entry's max** is the reader's scalar (matches 172 of 177 puffers whose name resolves
   to a single reader definition); and an event whose `textures` array is **empty** is an
   adjust/stop stub referencing a puffer another event defines — the readers have the same idiom
-  (C1's `truck1dust_puffer` and `black_exhaust_puffer`). `at_node` is the attach point, and is
+  (C1's `truck1dust_puffer` and `black_exhaust_puffer`). A `textures[]` entry's `run_time` is a
+  **fraction of the sprite's lifetime**, not a second count — the survey that settles it, and what
+  reading it as seconds did to `large_30sec_fire`, are in
+  [effects.md](effects.md#puffer_state-schema). `at_node` is the attach point, and is
   NOT the event's `name` (that is the puffer's own name, a separate namespace). `ACTIVE_STATE`
   1 starts a continuous emitter and 0 stops it; definitions re-assert their puffers on every
   loop iteration, so a consumer must treat re-assertion as idempotent.

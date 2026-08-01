@@ -216,6 +216,18 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   looping under the wreck until respawn. `./RunGame.ps1 --plane=player_pfighter --chapter=C1
   --infinite-ammo --fire` (multiple gun groups to cycle between; fly into terrain for (b)).
 
+- `PT-22` **Destruction-fire shape re-test (the `TEXTURE_SEQUENCE`/blend fix, landed 2026-08-01).**
+  Destroy a building and watch its fire for the full 30 s — this is `large_30sec_fire`, the effect
+  behind ~1,035 death call sites, so it is worth a long look. *Look for:* (a) flames **climbing**
+  from the base and giving way to a rising dark plume, not the stationary ball you reported;
+  (b) the fire still **ending at 30 s** (the `BL-212` halt must not have regressed); (c) whether the
+  plume now reads too **thin** — `NUMBER` is absent from this puffer's data and defaults to 1 sprite
+  per 0.1 s, a guess at the original engine's default, so density is the one number still open and
+  is a `config.json` `puffer` tune either way. Also worth a glance in the same flight: the **crash
+  fireball** (fly into terrain) now holds its mid flipbook frames rather than washing out white —
+  say if that reads better or worse. `./RunGame.ps1 --plane=player_bhawk --chapter=C1
+  --fire-rockets`. A/B against the original if you have or can take a capture of a burning wreck.
+
 ---
 
 ## Everything else

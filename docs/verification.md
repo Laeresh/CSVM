@@ -194,6 +194,16 @@ cite these IDs.
   three overridden textures showed 0 loud pixels; for ramped puffers, locate by frame-DIFF
   of consecutive `--shots` (moving pixels are the emitter) or a max-composite baseline,
   never by the override colour.
+- **SHOT-19** — **A fading additive fireball reads as smoke — isolate the emitter before
+  believing smoke works.** The converse bites harder: an additive emitter whose sprites go dark
+  renders its whole late life as a dim haze that saturates into a glowing ball when the puffs
+  overlap, so "there is fire here" is not evidence the fire is behaving. `large_30sec_fire`
+  passed every headless check — resolves, builds a puffer, halts at 30 s — while showing a
+  motionless red blob where the original climbs. Capture a **time series** (several `--frames=`
+  values across the effect's life), never one frame: a shape defect only exists over time.
+- **SHOT-20** — **`--screenshot=` into a directory that does not exist logs
+  `screenshot saved: <path>` and writes nothing.** The exit code is 0 and the log line is
+  identical to a real capture. `ls` the file before reading anything into a conclusion.
 
 ## GOLD — golden images
 

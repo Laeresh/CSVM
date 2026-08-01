@@ -14,8 +14,8 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "0bb2532d29261339fb11e3eda79403d0",
-      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121",
+      "hash": "e82109d1a56a89af53cc36543d461fc7",
+      "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121. Re-pinned when TEXTURE_SEQUENCE times became lifetime fractions: 0.01 % of pixels, the mist's flipbook column",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
     {
@@ -91,15 +91,15 @@
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "338b125a53ee185d020f8b4d8e403e4d",
-      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter",
+      "hash": "1eb9138fac93f6d3d14d0025007b5d3e",
+      "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter. Re-pinned again for the TEXTURE_SEQUENCE lifetime-fraction fix: 0.26 % of pixels, the ground puffers' flipbook columns",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "3bf93b51af42e40f7ad01b3bdcd2a5d6",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw",
+      "hash": "a8ac1f1f78650cfeb06b2bce44126e04",
+      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]
