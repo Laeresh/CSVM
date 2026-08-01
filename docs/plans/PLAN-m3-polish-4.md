@@ -258,7 +258,7 @@ a bug (`BL-061`'s `RANDOM_WEIGHT` census trap, same family). (c) Do not let this
 `GaugeCluster.OnPartDamage`'s cockpit blink drift into one abstraction — different data, different
 surface.
 
-## B5 ☐ `BL-090` item 1 — `damaged_engine_sound`
+## B5 ☑ `BL-090` item 1 — `damaged_engine_sound`
 
 **Goal.** A hurt airframe sounds hurt: `snd_damagedengine` blends in over the healthy engine loop as
 damage accumulates.
@@ -410,7 +410,7 @@ second after it stops, against an able-to-fail control (TTL 60 s → 2 emitters 
 t=3 s). `.\RunTests.ps1` green, 13 goldens hash-identical. New trap: WORLD-24 — the effect's own
 `PLAYER_RANGE 500` gate makes a probe flown at normal standoff show nothing at all.
 
-## C9 ☐ `BL-088` Danger Zones score on the gate pair
+## C9 ☑ `BL-088` Danger Zones score on the gate pair
 
 **Goal.** A Danger Zone is cleared by crossing both authored gate apertures — so flying
 *around* the danger no longer scores, and a tangential clip cannot count.
