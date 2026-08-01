@@ -134,7 +134,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — effects and feedback whose data ships complete
 
 4. ☑ `BL-046` Census the install-wide death-effect call set against the world-effects closure
-5. ☐ `BL-061` item 3 `biggun_flying_parts` builds no puffer — stage the `fly_trail*` sub-roots
+5. ❌ `BL-061` item 3 `biggun_flying_parts` builds no puffer — stage the `fly_trail*` sub-roots
 6. ☐ `BL-059` item 2 A sea dive plays the dirt crash — make `ClassifySurface` read the surface tag
 7. ☐ `BL-087` Incoming-fire near-miss cue — `bullet_warning_sg` and its shipped accumulator
 
@@ -333,7 +333,19 @@ family) makes a probe flown at normal standoff show nothing — fly close or the
 (d) Do not extend the closure to the template MESH halves here; that is `BL-061` item 2 and stays in
 `backlog.md`.
 
-## B5 ☐ `BL-061` item 3 — stage the `fly_trail*` sub-roots
+## B5 ❌ `BL-061` item 3 — stage the `fly_trail*` sub-roots — **disproven 2026-08-02**
+
+**Outcome.** The named mechanism does not exist in the data. `biggun_flying_parts`'s only event is
+`CALL_ANIMATION dblcannon_flying_parts AT_NODE zep_ng_dstry1.flt` — a root **already** in
+`EffectStageRoots`, and a seeded `--effects-test --debug-anim` run confirms the retarget resolves
+cleanly (no `UNRESOLVED`). `dblcannon_flying_parts` is 8 `OBJECT_MOTION`/`OBJECT_ACTIVE_STATE` pairs
+on real mesh nodes `part1`-`part8` — **zero `PUFFER_STATE` events anywhere in its closure**.
+`fly_trail1..5`/`spurtpuffer1..5` are real gamez data but belong to a wholly different effect family
+(`ap_trails`/`he_trails`/`carnage_trails`/`pd_trails` — rocket-impact and player-crash trails), never
+reachable from this call. "started, built no puffer" is therefore the *correct* result, the same
+bucket `flash_effect`/`rear_flash_effect` already sit in — this is a model/debris effect, not a
+particle effect, and the item's own goal ("so a zeppelin kill smokes") was the wrong expectation.
+Full trace: `analysis/death-effect-closure/biggun-flying-parts.md`.
 
 **Goal.** `biggun_flying_parts` — the zeppelin-destruction container — builds its puffers, so a
 zeppelin kill smokes instead of firing a bound-but-anchorless effect.

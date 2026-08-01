@@ -10100,3 +10100,22 @@ or anchor root changed; the full classification is in `analysis/death-effect-clo
 unclassified target. Eight freecam captures, a one-object C1 `ap_radiotwr.flt` targeted capture,
 and seeded `--effects-test` (33/33 resolved, 30 puffers) passed. `RunTests.ps1`: clean build,
 320/320 units, 16/16 engine suites with zero engine errors, and 13 unchanged golden hashes.
+
+## 2026-08-02 — M3 polish-5 B5: `BL-061` item 3 disproven — no `fly_trail*` anchor gap
+
+`BL-061` item 3 claimed `biggun_flying_parts` builds no puffer because its `spurtpuffer1..5` ride
+`fly_trail1..5` roots missing from `EffectStageRoots`. Traced the full call closure instead: the
+def's only event retargets onto `zep_ng_dstry1.flt`, already staged, and resolves cleanly (seeded
+`--effects-test --debug-anim`, no `UNRESOLVED`); its callee `dblcannon_flying_parts` is 8
+`OBJECT_MOTION`/`OBJECT_ACTIVE_STATE` pairs on real mesh nodes with **zero `PUFFER_STATE` events**
+anywhere in the closure. `fly_trail1..5`/`spurtpuffer1..5` are real but belong to an unrelated
+family (rocket-impact/player-crash trails) never reachable from this call. "started, built no
+puffer" is the correct result — the zeppelin debris effect is a model effect, not particles, the
+same bucket `flash_effect`/`rear_flash_effect` sit in. No code change; `EffectStageRoots` and
+`EffectAnimNames` are unchanged. Item deleted from `backlog.md`'s `BL-061` entry (item numbering
+kept at item 2). Full trace: `analysis/death-effect-closure/biggun-flying-parts.md`.
+
+**How verified.** Seeded `--effects-test --debug-anim` (C4) log inspected directly: the retarget
+line and the puffer-bucket classification. `grep -c RUN_TIME` on both source `.zrd.json` files
+confirmed 0 (a separate, unchased observation, noted in the analysis file). No runtime change, so
+no `RunTests.ps1`/regression run needed beyond the read-only probe.

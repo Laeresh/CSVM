@@ -479,17 +479,19 @@ unscheduled.
   inverted flag (`has_interval_value` false, key off `interval_type`).
 
 - `BL-061` **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
-  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; two threads
-  still open (numbering kept — other entries cite `item 2`):
+  (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; one thread
+  still open (numbering kept — other entries cite `item 2`; **item 3 disproven, M3 polish-5 B5,
+  2026-08-02** — see `analysis/death-effect-closure/biggun-flying-parts.md`: `biggun_flying_parts`
+  resolves cleanly onto the already-staged `zep_ng_dstry1.flt` and its callee is pure
+  `OBJECT_MOTION` debris with zero `PUFFER_STATE` events; `fly_trail1..5`/`spurtpuffer1..5` belong to
+  the unrelated rocket-trail/player-crash-trail effect family and were never reachable from this
+  call. "started, built no puffer" is the correct result, the same bucket `flash_effect`/
+  `rear_flash_effect` sit in):
   2. **The template MESH half.** The effects stage is hidden, so only the puffers render; the
      `gunhit` debris bits (`bit1`/`bit2`/`chunk` + their `OBJECT_MOTION`), the `he_ring` ground
      shockwave, and the `huge_splash_model`/`zep_ng_dstry1.flt` models do **not** show. Rendering them
      needs the mesh visible-at-the-site without flashing at the stage origin (per-def visibility, or a
      copied instance per call rather than a hidden shared template).
-  3. **`biggun_flying_parts`** (the zeppelin-destruction container) builds no puffer in `--effects-test`
-     — its `spurtpuffer1..5` ride `fly_trail1..5` sub-trail roots that are gamez nodes but **not in
-     `EffectStageRoots`**. Stage the `fly_trail*`/`*_trails` sub-templates (and check whether it needs
-     the `OPERAND_NODE` call path, not a bare point) if zeppelin kills are ever wanted to smoke.
   ⚠ **Traps.** The `--effects-test` census is only reproducible **seeded** — several gun `*_gunhit`
   variants gate their puffer behind `RANDOM_WEIGHT`, so an unseeded run reports a different set each
   time (a manufactured answer). These effects **share puffer names** (`trailpuffer2` across
