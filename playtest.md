@@ -209,6 +209,13 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires). *Blocks:* closing
   PLAN-m3-polish-3 D32.
 
+- `PT-21` **Gun-loop switch/crash re-test (`BL-216`/`BL-217` landed 2026-08-01).** (a) Hold the
+  trigger, then cycle gun groups (G) without releasing it — the firing loop sound should switch to
+  the newly-selected group's caliber immediately, not keep playing the old one's. (b) Hold the
+  trigger into a crash — the firing loop should cut the instant the plane crashes, not keep
+  looping under the wreck until respawn. `./RunGame.ps1 --plane=player_pfighter --chapter=C1
+  --infinite-ammo --fire` (multiple gun groups to cycle between; fly into terrain for (b)).
+
 ---
 
 ## Everything else

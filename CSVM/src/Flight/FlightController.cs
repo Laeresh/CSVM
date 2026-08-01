@@ -1162,12 +1162,15 @@ public partial class FlightController : Node3D
                 }
             }
         }
-        if (wantLoop && !_gunLoopOn)
+        if (wantLoop)
         {
+            // Called every frame the trigger is held, not just on the silence-to-firing edge:
+            // switching gun groups mid-burst changes loopSound while wantLoop stays true, and
+            // StartGunLoop only rebuilds the player when the name it's given actually changes.
             _gunLoopOn = true;
             Audio?.StartGunLoop(loopSound);
         }
-        else if (!wantLoop && _gunLoopOn)
+        else if (_gunLoopOn)
         {
             _gunLoopOn = false;
             Audio?.StopGunLoop();
@@ -1334,6 +1337,14 @@ public partial class FlightController : Node3D
         _autoRespawnIn = AutoRespawnDelay;
         if (PlaneModel != null)
             PlaneModel.Visible = false; // the airframe is gone; HUD prompts for respawn
+        // Crash freezes the airframe before UpdateGuns runs again this frame (the early _crashed
+        // return above it), so a held trigger's loop would otherwise keep playing under the wreck
+        // until respawn — nothing else ever calls StopGunLoop while _crashed is true.
+        if (_gunLoopOn)
+        {
+            _gunLoopOn = false;
+            Audio?.StopGunLoop();
+        }
         var surface = ClassifySurface(hitName);
         Audio?.OnCrash();
         if (surface == CrashSurface.Ground)

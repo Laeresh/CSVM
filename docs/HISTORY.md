@@ -9397,3 +9397,33 @@ as `PT-20` in `playtest.md`. `docs/architecture.md`'s `Projectile.cs` entry upda
 
 Bookkeeping: `BL-211` deleted from backlog (both traced gaps landed, no open follow-up); cockpit
 re-test = `PT-20`.
+
+## 2026-08-01 — `BL-216`/`BL-217`: gun-loop sound didn't follow a mid-burst group switch, and never stopped on crash
+
+User-reported live at the controls, same session as `BL-211`: (1) switching gun groups while
+holding the trigger kept the previous group's firing sound instead of switching to the new
+group's; (2) crashing while the trigger was held left the firing loop playing under the wreck
+until respawn.
+
+**`BL-216` — root cause:** `FlightController.UpdateGuns` only called `Audio.StartGunLoop(loopSound)`
+on the silence→firing rising edge (`wantLoop && !_gunLoopOn`); once the loop was already on,
+switching the selected gun group changes `loopSound` but nothing re-calls `StartGunLoop` with the
+new name, so `FlightAudio`'s own "rebuild only when the name changes" logic never got a chance to
+run. Fix: call `StartGunLoop(loopSound)` every frame the trigger is held (not just on the edge) —
+`FlightAudio.StartGunLoop` already no-ops the rebuild when the name is unchanged and guards
+`Play()` behind `Playing: false`, so this is a correctly cheap per-frame call, not a new player
+spun up each frame.
+
+**`BL-217` — root cause:** `FlightController.SimStep` early-returns on `_crashed` *before* reaching
+`UpdateGuns` (the wreck-freeze branch), so once a crash sets `_crashed = true`, `UpdateGuns` — the
+only place that ever called `Audio.StopGunLoop()` mid-flight — never runs again until `Respawn()`.
+`Crash()` itself never stopped the loop. Fix: `Crash()` now stops the gun loop itself (same
+if-`_gunLoopOn`-then-stop shape already used in `Respawn()`, which stays as a safety net for the
+non-crash respawn paths — stunt restart, scoreboard reset — that don't go through `Crash()`).
+
+Verified: `.\RunTests.ps1` green (318 units, 13/13 engine suites, all 13 goldens hash-identical —
+gun-loop timing has no visual side effect). No headless audio-correctness instrument exists (same
+gap as `BL-211`), so both are A/B'd by the user at the controls, not measured here.
+
+Bookkeeping: reported and fixed same session, never queued to `backlog.md`; next ID bumped to
+`BL-218`.
