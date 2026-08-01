@@ -55,6 +55,8 @@ public static class Suites
             "the belt indicator's yellow tier is gun-only; hardpoints step green→red", GaugeColours));
         into.Add(new TestHarness.Suite("weapons-defs",
             "every weapons.json BALLISTICS entry reads through the typed reader", WeaponsDefs));
+        into.Add(new TestHarness.Suite("weapon-blast",
+            "blast falloff, authored fuse/radius independence, and zero-damage special exclusion", WeaponBlast));
         into.Add(new TestHarness.Suite("flight-envelope",
             "the flown envelope still matches the original's measured manoeuvres", FlightEnvelope));
         into.Add(new TestHarness.Suite("markers-rig",
@@ -195,6 +197,27 @@ public static class Suites
         ctx.Same(0, r.UnhandledTotal, $"unhandled weapon keys");
         ctx.Check(!string.IsNullOrEmpty(r.EmptyClipSound), $"empty-clip sound resolves value={r.EmptyClipSound ?? "-"}");
         ctx.Note($"{r.Summary}");
+    }
+
+    private static void WeaponBlast(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        ctx.Check(weapons.TryGet("wep_14", out var torpedo), $"torpedo definition loads");
+        ctx.Check(Mathf.IsEqualApprox(torpedo.DetonationDistance ?? -1f, 1f), $"torpedo authored fuse distance = 1 m");
+        ctx.Check(Mathf.IsEqualApprox(torpedo.ImpactProximity ?? -1f, 30f), $"torpedo authored blast radius = 30 m");
+        ctx.Check(Mathf.IsEqualApprox(ProjectilePool.BlastDamage(200f, 30f, 0f), 200f), $"blast full damage at centre");
+        ctx.Check(Mathf.IsEqualApprox(ProjectilePool.BlastDamage(200f, 30f, 15f), 100f), $"blast linear half damage");
+        ctx.Check(Mathf.IsZeroApprox(ProjectilePool.BlastDamage(200f, 30f, 30f)), $"blast zero damage at edge");
+
+        ctx.Check(weapons.TryGet("wep_09", out var flash), $"flash definition loads");
+        ctx.Check(weapons.TryGet("wep_15", out var flare), $"flare definition loads");
+        ctx.Check(!ProjectilePool.HasBlastDamage(flash), $"zero-damage FLASH radius is not a damage blast");
+        ctx.Check(!ProjectilePool.HasBlastDamage(flare), $"zero-damage FLARE radius is not a damage blast");
+        ctx.Check(ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Forward),
+            $"authored dot gate accepts a target ahead");
+        ctx.Check(!ProjectilePool.FuseDotAllows(0.3f, Vector3.Forward, Vector3.Back),
+            $"authored dot gate rejects a target behind");
     }
 
     private static void MarkersRig(TestContext ctx)

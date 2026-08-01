@@ -873,22 +873,6 @@ the document alone, it says so and marks the value TUNE.
   (`armor_damage_range`/`health_damage_range`/`bounce_factor`) is unconsumed on **every** axis —
   weapons, grazes, and crashes alike. See `BL-172` for the pushback half of the same block.
 
-- `BL-086` **No explosive radius — every rocket in the engine is direct-hit-only.** `ProjectilePool.SimStep`
-  does one `IntersectRay` per round per step and `Impact` spends `weapon.HealthDamage` on that
-  single struck collider (`Projectile.cs:428-431,534`). `ImpactProximity` (14 entries, 15–500 m)
-  and `DetonationDistance` (13 entries, 1–50 m) are parsed (`WeaponDefs.cs:85-86`) and only printed
-  (`PlaneViewer.cs:2794`). Wanted: a blast sphere at the detonation point with **linear falloff
-  applied to every damage zone inside it**, a **proximity fuse** detonating at
-  `DETONATION_DISTANCE` before contact (gated by `DETONATION_DOT_PRODUCT` on the three entries that
-  carry it), and knockback on the struck body. Falloff shape and knockback magnitude are spec, not
-  data — TUNE them.
-  ⚠ **Traps.** The anim-def `proximity_damage` flag is **`false` on every def install-wide**
-  (checked all 8 chapters) — it is not the mechanism and must not be wired as one.
-  `IMPACT_PROXIMITY` is not uniformly a *damage* radius: its two largest values are `FLARE` 500 m
-  and `FLASH` 450 m, both zero-damage specials that carry `DAMAGE 0` instead of the armour/health
-  split, so a naive radius × damage loop carpets the map. And the two fields are independent — the
-  torpedo is a **1 m** fuse with a **30 m** blast.
-
 - `BL-087` **Incoming-fire audio: the cue set ships complete and nothing can trigger it.** `bullet_warning_sg`
   (= `snd_bulletpass1-3`, 3D, `RANGE [20,200]`) is bound in `player.json` as `warning_shot_sound`,
   and the whole near-miss accumulator ships with it: `warning_shot_max 2.0`,
@@ -1312,6 +1296,13 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-227` **Rocket blast falloff + knockback magnitude (D10, 2026-08-01).** The radius and full
+  health damage are authored (`IMPACT_PROXIMITY`, `HEALTH_DAMAGE`), but the shipped data does not
+  encode a falloff curve or impulse. D10 uses linear falloff to zero at the edge and
+  `BlastImpulsePerDamage = 1 N·s` on a directly struck rigid body. Judge clustered-object damage
+  and physical push against the original before changing either.
+  ⚠ Traps: do not retune the authored radius or fuse distance; `DAMAGE 0` specials carry large
+  effect radii and are deliberately excluded from blast damage.
 - `BL-218` **Puffer `NUMBER` default (2026-08-01)** — `NUMBER` is absent from 680 of C1's 721
   `PufferState` events, including `large_30sec_fire`'s `fire_n_smoke`, and `PufferState.FromAnimEvent`
   falls back to **1** sprite per `TIME_INTERVAL`. That fallback is a guess at the original engine's

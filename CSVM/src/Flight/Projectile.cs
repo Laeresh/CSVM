@@ -78,6 +78,11 @@ public sealed partial class ProjectilePool : Node3D
     // single group still gets its smoke on essentially every round.
     private const float GunEffectInterval = 0.1f;
 
+    // Blast damage falls linearly from the weapon's authored HEALTH_DAMAGE at the detonation point
+    // to zero at IMPACT_PROXIMITY. The shape is a design choice, not encoded by the weapon data.
+    private const float BlastImpulsePerDamage = 1f; // N*s per point of dealt damage; TUNE
+    private const int MaxBlastBodies = 4096;
+
     private const int MaxProjectiles = 1024;
     private const int MaxFlashes = 128;
     private const float RocketStreakScale = 2.4f; // fatter/longer streak, the fallback when a rocket has
@@ -276,6 +281,8 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, float> _gunEffectAt = new();
 
     private readonly PhysicsRayQueryParameters3D _ray = new(); // reused each step (no per-round alloc)
+    private readonly SphereShape3D _proximitySphere = new();
+    private readonly PhysicsShapeQueryParameters3D _proximityQuery = new();
     private readonly List<AudioStreamPlayer> _sfxPool = new();
     // CANNON_SPREAD jitter and the stand-in fireball's sprite scatter. Held rather than resolved
     // per draw: two draws fire per round.
@@ -327,6 +334,23 @@ public sealed partial class ProjectilePool : Node3D
     /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
     public Camera3D? Listener { get => _listener; set => _listener = value; }
 
+    /// <summary>Whether an authored effect radius is also a positive-health damage blast.</summary>
+    public static bool HasBlastDamage(WeaponDef weapon) =>
+        weapon.HealthDamage is > 0f && weapon.ImpactProximity is > 0f;
+
+    /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
+    public static float BlastDamage(float fullDamage, float radius, float distance) =>
+        radius > 0f ? fullDamage * Mathf.Clamp(1f - distance / radius, 0f, 1f) : 0f;
+
+    /// <summary>Whether a candidate lies inside an authored proximity-fuse forward cone.</summary>
+    public static bool FuseDotAllows(float? minimumDot, Vector3 velocity, Vector3 towardTarget)
+    {
+        if (minimumDot is null)
+            return true;
+        if (velocity.LengthSquared() <= 1e-6f || towardTarget.LengthSquared() <= 1e-6f)
+            return true;
+        return velocity.Normalized().Dot(towardTarget.Normalized()) >= minimumDot.Value;
+    }
     /// <summary>Which weapons.json IMPACT surface class a struck collider belongs to, from the
     /// per-mesh <see cref="SceneBuilder.SurfaceMeta"/> tag. The ONE surface classifier for the
     /// collision-consequence paths — the airframe's graze reaction
@@ -562,6 +586,14 @@ public sealed partial class ProjectilePool : Node3D
 
             if (space != null && stepLen > 1e-5f)
             {
+                if (ProximityFuseTriggered(space, p.Weapon, prev, next, p.Vel, out var fusePoint))
+                {
+                    Impact(p.Weapon, fusePoint, null, Vector3.Zero);
+                    p.Alive = false;
+                    KillModel(ref p);
+                    ReleaseTrails(ref p);
+                    continue;
+                }
                 _ray.From = prev;
                 _ray.To = next;
                 var hit = space.IntersectRay(_ray);
@@ -1185,7 +1217,93 @@ public sealed partial class ProjectilePool : Node3D
         if (effect?.Sound is { } snd)
             PlaySound(snd);
         // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
-        DamageSink?.Invoke(collider, weapon.HealthDamage ?? 0f);
+        ApplyDamage(weapon, point, collider);
+    }
+
+    private bool ProximityFuseTriggered(PhysicsDirectSpaceState3D space, WeaponDef weapon,
+        Vector3 from, Vector3 to, Vector3 velocity, out Vector3 detonationPoint)
+    {
+        detonationPoint = to;
+        if (weapon.DetonationDistance is not > 0f)
+            return false;
+
+        ConfigureSphereQuery(weapon.DetonationDistance.Value, from);
+        var motion = to - from;
+        _proximityQuery.Motion = motion;
+        var fractions = space.CastMotion(_proximityQuery);
+        _proximityQuery.Motion = Vector3.Zero;
+        if (fractions[0] >= 1f)
+            return false;
+
+        detonationPoint = from + motion * fractions[0];
+        if (weapon.DetonationDotProduct is null)
+            return true;
+
+        // GetRestInfo needs a slightly overlapping pose, not the first-touch safe fraction.
+        _proximityQuery.Transform = new Transform3D(Basis.Identity, from + motion * fractions[1]);
+        var rest = space.GetRestInfo(_proximityQuery);
+        if (rest.Count == 0)
+            return false;
+        return FuseDotAllows(weapon.DetonationDotProduct, velocity,
+            (Vector3)rest["point"] - detonationPoint);
+    }
+
+    private void ConfigureSphereQuery(float radius, Vector3 point)
+    {
+        _proximitySphere.Radius = radius;
+        _proximityQuery.Shape = _proximitySphere;
+        _proximityQuery.Transform = new Transform3D(Basis.Identity, point);
+        _proximityQuery.Motion = Vector3.Zero;
+    }
+    private Vector3 DamageZonePosition(Node3D body, int shapeIndex)
+    {
+        if (body is CollisionObject3D collision)
+        {
+            uint owner = collision.ShapeFindOwner(shapeIndex);
+            return (collision.GlobalTransform * collision.ShapeOwnerGetTransform(owner)).Origin;
+        }
+        return body.GlobalPosition;
+    }
+    private void ApplyDamage(WeaponDef weapon, Vector3 point, Node? struck)
+    {
+        float fullDamage = weapon.HealthDamage ?? 0f;
+        float radius = weapon.ImpactProximity ?? 0f;
+        if (DamageSink == null || fullDamage <= 0f)
+            return;
+
+        if (!HasBlastDamage(weapon) || GetWorld3D()?.DirectSpaceState is not { } space)
+        {
+            DamageSink(struck, fullDamage);
+            return;
+        }
+
+        // The ray contact is the detonation centre even when the collider's transform origin is far
+        // away (large chapter meshes), so preserve full direct-hit damage and exclude it below.
+        if (struck != null)
+            DamageSink(struck, fullDamage);
+
+        ConfigureSphereQuery(radius, point);
+        var hits = space.IntersectShape(_proximityQuery, MaxBlastBodies);
+        if (hits.Count == MaxBlastBodies)
+            GD.PushWarning($"blast query reached {MaxBlastBodies} bodies at radius {radius:0.##} m");
+        foreach (var hit in hits)
+        {
+            var body = hit["collider"].Obj as Node;
+            if (body == struck || body is not Node3D body3D)
+                continue;
+            int shapeIndex = hit["shape"].AsInt32();
+            var zonePoint = DamageZonePosition(body3D, shapeIndex);
+            float damage = BlastDamage(fullDamage, radius, zonePoint.DistanceTo(point));
+            if (damage > 0f)
+                DamageSink(body, damage);
+        }
+
+        if (struck is RigidBody3D rigid)
+        {
+            var away = rigid.GlobalPosition - point;
+            if (away.LengthSquared() > 1e-6f)
+                rigid.ApplyCentralImpulse(away.Normalized() * fullDamage * BlastImpulsePerDamage);
+        }
     }
 
     /// <summary>Whether this gun's impact effect may play again now, stamping the time when it may.

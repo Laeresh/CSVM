@@ -10025,3 +10025,21 @@ zero native errors.
 
 `--debug-dzpaths` now shows the two gate polygons green/red at 50% alpha and the AI route as an
 open white line strip, preserving its source vertex order without closing it into a polygon.
+
+## 2026-08-01 — M3 Wave D D10: authored rocket blast radius and proximity fuse
+
+`BL-086`. Ordnance now detonates when its swept `DETONATION_DISTANCE` sphere reaches a collider (subject
+to an authored `DETONATION_DOT_PRODUCT` cone), and positive-health blasts query every body inside
+`IMPACT_PROXIMITY`. The direct contact receives full `HEALTH_DAMAGE`; neighbours receive linear
+falloff from their collision-shape centres to zero at the radius edge. `DAMAGE 0` specials may fuse cosmetically but cannot damage the
+map. Directly struck rigid bodies receive a 1 N·s-per-HP impulse; that magnitude and the linear curve
+remain `BL-227` TUNE values.
+
+**How verified.** The new `weapon-blast` in-engine suite reads the extracted catalogue and pins the
+torpedo's independent 1 m fuse / 30 m radius, centre/half/edge falloff, the FLASH/FLARE exclusion,
+and the dot gate. Its able-to-fail control changed the half-radius expectation and exited 1 after an
+explicit rebuild. `RunTests.ps1` passed: 320 units, 16/16 suites, clean engine errors, and all 13
+goldens hash-identical. An absolute-path eight-chapter freecam sweep produced all eight captures
+with unchanged node/mesh counts and zero errors (the first relative-path attempt correctly was not
+credited after native stderr exposed SHOT-10). A deterministic C1 Bloodhawk run fired four BOOM
+rockets, logged four authored `he_ground_effect` impacts, and saved the targeted capture.

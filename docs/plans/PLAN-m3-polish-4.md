@@ -1,8 +1,6 @@
 # Milestone 3 — Polish run 4 (impact feedback, test affordances, blast radius)
 
-**ACTIVE PLAN** (written 2026-08-01). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-01). Archived under `docs/plans/`; all ten items landed or were closed after verification.
 
 Ten items drawn from `backlog.md` under a **mixed shape**: two test affordances that make the
 remaining M3 playtests possible at all, five cockpit-visible feedback fixes whose data already ships
@@ -102,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the last unimplemented weapons mechanic
 
-10. ☐ `BL-086` Explosive radius + proximity fuse — rockets stop being direct-hit-only
+10. ☑ `BL-086` Explosive radius + proximity fuse — rockets stop being direct-hit-only
 
 ## Dependency and parallelism notes
 
@@ -450,7 +448,7 @@ field; the original does not require an order within a zone either — score aft
 
 # Wave D — the last unimplemented weapons mechanic
 
-## D10 ☐ `BL-086` Explosive radius and proximity fuse
+## D10 ☑ `BL-086` Explosive radius and proximity fuse
 
 **Goal.** A rocket damages everything inside its blast, with falloff, and detonates at its authored
 fuse distance rather than only on contact — so rockets stop being direct-hit-only.

@@ -145,7 +145,7 @@ instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
-- `src/Testing/Suites.cs` — the ten registered suites and their golden counts (48 weapon defs, 11 airframes, the destructible census, the original's own flight envelope, the glTF-export round trip).
+- `src/Testing/Suites.cs` — the 16 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -700,6 +700,10 @@ def's `3rdperson_lts` range/colour variants — stand-in magnitudes are `BL-200`
 name (e.g. the incendiary rocket's `ground_mixed_exp_sg` default impact) through `_soundGroups`
 first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cannon in the data
 (`LOOPED_SOUND_NAME` covers continuous gunfire instead), so the one-shot never doubles up (BL-211).
+Positive-`HEALTH_DAMAGE` blasts linearly fall from full at direct contact to zero at the authored
+`IMPACT_PROXIMITY`, measured from each intersected collision-shape centre; `DAMAGE 0` effect radii
+never damage. A swept `DETONATION_DISTANCE` sphere prevents fuse tunnelling and gates its actual
+contact point through `DETONATION_DOT_PRODUCT`. The linear curve and 1 N·s/HP impulse are TUNE.
 ⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
   launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats
@@ -1449,17 +1453,13 @@ PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
   them (LOG-8).
 
 ## src/Testing/Suites.cs
-The nine registered suites: `weapons-defs`, `flight-envelope`, `markers-rig`, `loadout-bind`,
-`weapons-fire`, `damage-stages`, `damage-hd`, `destructible-census`, `tex-dropin`.
-⚠ The expected numbers are **golden counts against the retail install** (48 weapon defs, 11
-  airframes, the per-chapter destructible census) — the data is a fixed input, so they are
-  invariants. Change one only with the measurement that moved it. `flight-envelope`'s targets are
-  golden in the same sense: they measure the original itself, not our model.
-⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`: a skipped weapon is a
-  success-looking outcome (no mount on this plane) that nothing else would notice.
-⚠ `--loadout=<def>` reaches `loadout-bind` — `--run-tests=loadout-bind --loadout=pbloodhawk` is the
-  real able-to-fail control (a def wanting `firepoint8` bound to the 7-firepoint Kestrel).
-
+The 16 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+flight envelope, plane/loadout bindings, live weapon fire, destructible stages/death/census, animation
+stops, texture flattening, glTF round trips, collision/node visibility, and authored stunt gates.
+⚠ Expected numbers are **golden counts against the retail install** (48 weapon defs, 11 airframes,
+  per-chapter destructibles); change one only with the measurement that moved it.
+⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
+⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
 ## src/Testing/GoldenShot.cs
 The engine half of the golden-image tripwire: `PixelHash(Image)` (md5, lower-case hex) and
 `Adapter()` (`"<gpu> / <api>"`). Called at the `--screenshot` save site, which prints
