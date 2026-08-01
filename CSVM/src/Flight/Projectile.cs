@@ -124,14 +124,47 @@ public sealed partial class ProjectilePool : Node3D
     private const float MuzzleLightEnergy = 2.5f;  // TUNE — the def carries range/colour only
 
     // A dirt impact's tumbling-debris burst: a few small chips that fly outward and arc under
-    // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE.
+    // gravity, in place of the single 3 m stand-in spark. Count/size/speed/spin are TUNE; the
+    // life leans on the gunhit def's own debris OBJECT_MOTIONs (bit1 RUN_TIME 1 s, bit2/3/chunk
+    // 2 s). Drawn on the authored chip textures below, alpha-blended — through the additive
+    // muzzle-flash-textured impact pool they read as a small flame, not debris (BL-203).
     private const int DirtDebrisSprites = 5;
-    private const float DirtDebrisSize = 0.35f;   // m
-    private const float DirtDebrisLife = 0.3f;    // s
+    private const float DirtDebrisSize = 0.45f;   // m
+    private const float DirtDebrisLife = 0.9f;    // s
     private const float DirtDebrisSpeed = 4f;     // m/s launch speed
     private const float DirtDebrisSpreadDeg = 60f; // cone half-angle around the surface normal
     private const float DirtDebrisSpinMax = 25f;  // rad/s, random per-chip tumble rate
-    private static readonly Color DirtTint = new(0.5f, 0.38f, 0.22f); // dusty brown
+
+    // A gun hit on a buildings-classed surface: a ricochet spark burst. Both authored assets are
+    // confirmed missing from the install (`bld_damage.flt` and the `rcochet1` EFFECT are 2 of the
+    // 5 referenced-but-undefined names — weapon-effects.md), so this stand-in is judged by eye:
+    // fast bright sparks flying off the wall plus the flash. Count/size/speed/life are TUNE.
+    private const int RicochetSparks = 8;
+    private const float RicochetSparkSize = 0.55f;  // m
+    private const float RicochetSparkLife = 0.55f;  // s
+    private const float RicochetSparkSpeed = 22f;   // m/s launch speed
+    private const float RicochetSpreadDeg = 90f;    // cone half-angle around the surface normal
+
+    // The authored water-splash playback (splash1.zrd.json / bsplsh.zrd.json — identical shapes):
+    // the instanced model's `*_base` disc scales xz 1→2 over 0.2 s then eases back to 1.8 over
+    // [1.0,2.0] s, while the `*_splash` column pops to its authored scale (1,100,1) and collapses
+    // to zero over the 2 s run (OBJECT_MOTION SCALE initial+delta·u — MotionRuntime's decode).
+    // Values verbatim from the defs; NOT rendered from them: the 0.05 s opacity fade-in / 1 s
+    // fade-out (partial opacity on world materials needs AnimRuntime's opacity-twin path) and the
+    // OBJECT_CYCLE_TEXTURE splash01→03 flipbook — the scale animation is what makes it visible.
+    private const float SplashRunTime = 2.0f;      // s, the def's sequence length
+    private const float SplashBaseGrowTime = 0.2f; // s, base 1→2
+    private const float SplashBaseEaseStart = 1.0f; // s (0.2 + EVENT_OFFSET 0.8), 2→1.8 over 1 s
+    private const float SplashBaseMax = 2.0f, SplashBaseEnd = 1.8f;
+    private const float SplashColumnScale = 100f;  // the column's authored initial Y scale
+    // TUNE: the authored splash1_splash quad is 5 cm wide — sub-pixel beyond ~30 m, it dilutes
+    // to an invisible grey sliver however bright the texture. The reference's ticks measure
+    // ~0.35 m wide (Water Splash.png), so the column's x/z are widened toward that; height
+    // stays the authored curve.
+    private const float SplashColumnWidthScale = 8f;
+
+    private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
+    private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
     private static readonly Color EjectPuffTint = new(1f, 1f, 1f);
 
@@ -155,12 +188,20 @@ public sealed partial class ProjectilePool : Node3D
     private static readonly string[] TracerTextures =
         { "tracer_slug", "tracer_dumdum", "tracer_armorpierce", "tracer_magnesium", "tracer1" };
 
+    // The dirt-debris chip textures: the gunhit def's flung-debris art. The def's bit1/bit2/bit3
+    // gamez nodes carry no geometry in this install (0 vertices, measured C1/C2) — the bit0N
+    // textures in every chapter archive are the chips themselves, so the burst draws them on
+    // alpha-blended quads, one MultiMesh per texture (a MultiMesh's material is shared).
+    private static readonly string[] DirtDebrisTextures = { "bit01", "bit02", "bit03", "bit04" };
+
     private readonly Proj[] _proj = new Proj[MaxProjectiles];
     // One sprite list per muzzle-flash ammo texture (MuzzleAmmoTextures) — a separate MultiMesh per
     // texture, since a MultiMesh's material (and so its texture) is shared across every instance.
     private readonly List<Sprite>[] _muzzle = { new(), new(), new(), new() };
     private readonly List<Sprite> _impact = new();
     private readonly List<Sprite> _smoke = new();   // muzzle smoke + eject puffs (alpha-blended)
+    // One sprite list per dirt-debris chip texture (DirtDebrisTextures), same split as _muzzle.
+    private readonly List<Sprite>[] _debris = { new(), new(), new(), new() };
 
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
@@ -204,6 +245,9 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
+    // Unshaded override materials for the splash instances (authored lighting/fog: false), one
+    // per distinct shared source material (OverrideUnlit).
+    private readonly Dictionary<Material, StandardMaterial3D> _impactFxUnlit = new();
 
     private readonly PhysicsRayQueryParameters3D _ray = new(); // reused each step (no per-round alloc)
     private readonly List<AudioStreamPlayer> _sfxPool = new();
@@ -217,6 +261,8 @@ public sealed partial class ProjectilePool : Node3D
     // instance-count scratch array, cleared and refilled every frame in RenderTracers.
     private readonly MultiMesh[] _tracerMm = new MultiMesh[TracerTextures.Length];
     private readonly int[] _tracerCounts = new int[TracerTextures.Length];
+    // One MultiMesh per dirt-debris chip texture (DirtDebrisTextures) — built in _Ready.
+    private readonly MultiMesh[] _debrisMm = new MultiMesh[DirtDebrisTextures.Length];
 
     private int _projHigh;                     // highest slot ever used (bounds the scan)
     private Node3D _flyoutModels = null!;   // container for the live rocket-body instances
@@ -268,6 +314,10 @@ public sealed partial class ProjectilePool : Node3D
         // Smoke (the muzzlepuffer puffs + the casing's eject-puff cluster): the authored puffer
         // textures (smoke101), alpha-blended rather than additive so the puffs read as smoke.
         _smokeMm = AddMultiMesh("smoke101", MaxSmoke, additive: false, billboard: false, out _);
+        // Dirt-debris chips: the authored bit0N art, alpha-blended so the chips read as debris
+        // rather than glowing through the additive flash pool (BL-203).
+        for (int i = 0; i < DirtDebrisTextures.Length; i++)
+            _debrisMm[i] = AddMultiMesh(DirtDebrisTextures[i], MaxFlashes, additive: false, billboard: false, out _);
         _flyoutModels = new Node3D { Name = "flyout" };
         AddChild(_flyoutModels);
         _impactFxModels = new Node3D { Name = "impact_fx" };
@@ -501,6 +551,8 @@ public sealed partial class ProjectilePool : Node3D
             AgeSprites(m, dt);
         AgeSprites(_impact, dt);
         AgeSprites(_smoke, dt);
+        foreach (var d in _debris)
+            AgeSprites(d, dt);
         AgeCasings(dt);
         AgeLights(dt);
         for (int i = _impactFx.Count - 1; i >= 0; i--)
@@ -514,6 +566,7 @@ public sealed partial class ProjectilePool : Node3D
             }
             else
             {
+                AdvanceSplash(f);
                 _impactFx[i] = f;
             }
         }
@@ -526,6 +579,8 @@ public sealed partial class ProjectilePool : Node3D
             RenderSprites(_muzzleMm[i], _muzzle[i]);
         RenderSprites(_impactMm, _impact);
         RenderSprites(_smokeMm, _smoke);
+        for (int i = 0; i < _debris.Length; i++)
+            RenderSprites(_debrisMm[i], _debris[i]);
     }
 
     /// <summary>Deactivates every live round (R / respawn: no tracers hang in the air).</summary>
@@ -542,6 +597,8 @@ public sealed partial class ProjectilePool : Node3D
             m.Clear();
         _impact.Clear();
         _smoke.Clear();
+        foreach (var d in _debris)
+            d.Clear();
         foreach (var c in _casings)
         {
             c.InUse = false;
@@ -563,6 +620,51 @@ public sealed partial class ProjectilePool : Node3D
         foreach (var child in n.GetChildren())
             c += CountMeshes(child);
         return c;
+    }
+
+    // Poses one live splash instance at its age along the authored curves (see the Splash*
+    // constants): the base disc's xz ramp and the column's collapsing Y scale. Same scale
+    // application as AnimRuntime.PoseScale (rest basis orthonormalized, then scaled). A model
+    // with neither child (not a splash) has nothing to drive and its Life stayed the short
+    // static one.
+    private static void AdvanceSplash(ImpactFx f)
+    {
+        float t = f.Age;
+        if (f.Base != null)
+        {
+            float s = t < SplashBaseGrowTime
+                ? Mathf.Lerp(1f, SplashBaseMax, t / SplashBaseGrowTime)
+                : t < SplashBaseEaseStart
+                    ? SplashBaseMax
+                    : Mathf.Lerp(SplashBaseMax, SplashBaseEnd,
+                        Mathf.Min((t - SplashBaseEaseStart) / (SplashRunTime - SplashBaseEaseStart), 1f));
+            f.Base.Transform = new Transform3D(
+                f.BaseRest.Basis.Orthonormalized().Scaled(new Vector3(s, 1f, s)), f.BaseRest.Origin);
+        }
+        if (f.Splash != null)
+        {
+            // OBJECT_MOTION SCALE (1,100,1) + (0,-100,0)·u over the 2 s run: the column pops to
+            // its full authored height and collapses to nothing.
+            float y = Mathf.Max(SplashColumnScale * (1f - t / SplashRunTime), 0.001f);
+            f.Splash.Transform = new Transform3D(
+                f.SplashRest.Basis.Orthonormalized().Scaled(
+                    new Vector3(SplashColumnWidthScale, y, SplashColumnWidthScale)), f.SplashRest.Origin);
+        }
+    }
+
+    // The built subtree's nodes carry their gamez cs_name as NameMeta (Godot renames duplicate
+    // siblings, WORLD-8) — resolve the splash children by that, never by Godot node name.
+    private static Node3D? FindChildByMetaSuffix(Node node, string suffix)
+    {
+        if (node is Node3D n3d && node.HasMeta(AnimRuntime.NameMeta)
+            && node.GetMeta(AnimRuntime.NameMeta).AsString().EndsWith(suffix, System.StringComparison.OrdinalIgnoreCase))
+            return n3d;
+        foreach (var child in node.GetChildren())
+        {
+            if (FindChildByMetaSuffix(child, suffix) is { } found)
+                return found;
+        }
+        return null;
     }
 
     // The flyout body's world pose: its geometry is authored nose-along-(-Z) (uniform across all 15
@@ -905,10 +1007,79 @@ public sealed partial class ProjectilePool : Node3D
         }
         _impactFxModels.AddChild(inst);
         inst.GlobalTransform = new Transform3D(Basis.Identity, point); // splash geometry stands upright at the hit
-        _impactFx.Add(new ImpactFx { Model = inst, Age = 0f, Life = ImpactModelLife });
+        // A splash prototype (splash1.flt / bsplsh.flt) carries a `*_base` disc and a `*_splash`
+        // column child; when either resolves, the instance plays the authored 2 s scale curves
+        // (AdvanceSplash) instead of standing statically for the short stand-in life.
+        var baseNode = FindChildByMetaSuffix(inst, "_base");
+        var splashNode = FindChildByMetaSuffix(inst, "_splash");
+        bool animated = baseNode != null || splashNode != null;
+        if (animated)
+        {
+            // The splash models are authored `lighting: false` + `fog: false` (self-lit effect
+            // geometry — the reference captures show white splashes at night), but the shared
+            // world materials multiply the mission SUNLIGHT (`csky_world_light`) into every
+            // surface, which dims the splash to invisibility on a night map. Honour the authored
+            // flags on these short-lived instances with an unshaded override; the column is a
+            // `Facade` (SphericalY) model, so it Y-billboards toward the camera.
+            if (baseNode != null)
+                OverrideUnlit(baseNode, billboardY: false);
+            if (splashNode != null)
+                OverrideUnlit(splashNode, billboardY: true);
+        }
+        var fx = new ImpactFx
+        {
+            Model = inst,
+            Age = 0f,
+            Life = animated ? SplashRunTime : ImpactModelLife,
+            Base = baseNode,
+            Splash = splashNode,
+            BaseRest = baseNode?.Transform ?? Transform3D.Identity,
+            SplashRest = splashNode?.Transform ?? Transform3D.Identity,
+        };
+        if (animated)
+            AdvanceSplash(fx); // pose t=0 (the column at full authored scale) before the first tick
+        _impactFx.Add(fx);
         if (_impactFxLogged.Add(animName))
-            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)");
+            GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)"
+                     + (animated ? $" — splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : ""));
         return true;
+    }
+
+    /// <summary>Replaces a splash child's shared world materials with unshaded (self-lit,
+    /// unfogged) overrides per the models' authored <c>lighting/fog: false</c> flags, keeping each
+    /// surface's own albedo texture. Overrides are cached per source material — the world's
+    /// materials are themselves shared, so each distinct one maps to one override.</summary>
+    private void OverrideUnlit(Node3D node, bool billboardY)
+    {
+        if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
+        {
+            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
+            {
+                var src = mi.GetActiveMaterial(s);
+                if (src == null)
+                    continue;
+                if (!_impactFxUnlit.TryGetValue(src, out var over))
+                {
+                    over = new StandardMaterial3D
+                    {
+                        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                        AlbedoTexture = (src as ShaderMaterial)?.GetShaderParameter("albedo_tex").Obj as Texture2D,
+                        VertexColorUseAsAlbedo = true,
+                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+                        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+                        BillboardMode = billboardY ? BaseMaterial3D.BillboardModeEnum.FixedY : BaseMaterial3D.BillboardModeEnum.Disabled,
+                        BillboardKeepScale = true, // the column's whole height is its node Y scale
+                    };
+                    _impactFxUnlit[src] = over;
+                }
+                mi.SetSurfaceOverrideMaterial(s, over);
+            }
+        }
+        foreach (var child in node.GetChildren())
+        {
+            if (child is Node3D c)
+                OverrideUnlit(c, billboardY);
+        }
     }
 
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal)
@@ -949,10 +1120,17 @@ public sealed partial class ProjectilePool : Node3D
             // single spark, so the blast is visible. Flight keeps its real puffer (EffectSink set).
             SpawnExplosion(point, orient);
         }
-        else if (!showedModel && surface == SurfaceClass.Default && _impact.Count < MaxFlashes)
+        else if (!showedModel && surface == SurfaceClass.Default)
         {
             // Dirt (unclassified terrain): a tumbling-debris burst, not one fat spark.
             SpawnDirtDebris(point, orient);
+        }
+        else if (!showedModel && surface == SurfaceClass.Buildings && weapon.IsGun)
+        {
+            // A gun round off a building: ricochet sparks + the flash. The authored assets for
+            // this class (`bld_damage.flt`, the `rcochet1` EFFECT) are confirmed missing from the
+            // install, so the stand-in has to carry the read on its own (BL-203).
+            SpawnRicochet(point, orient);
         }
         else if (!showedModel && _impact.Count < MaxFlashes)
         {
@@ -989,11 +1167,15 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>A dirt impact's stand-in: a few small, randomly-rotated chips launched outward
     /// from the surface normal and arcing under gravity, replacing the single 3 m spark so a
     /// gun/rocket round hitting terrain reads as scattered debris rather than one orange flash.
-    /// Reuses the impact sprite pool/material — same draw path, no new texture.</summary>
+    /// Drawn on the gunhit def's own <c>bit0N</c> chip textures, alpha-blended (their own pools) —
+    /// through the additive muzzle-flash-textured impact pool they read as a small flame (BL-203).</summary>
     private void SpawnDirtDebris(Vector3 point, Basis orient)
     {
-        for (int i = 0; i < DirtDebrisSprites && _impact.Count < MaxFlashes; i++)
+        for (int i = 0; i < DirtDebrisSprites; i++)
         {
+            var pool = _debris[i % _debris.Length]; // cycle the chip art without an extra RNG draw
+            if (pool.Count >= MaxFlashes)
+                continue;
             var dir = ApplySpread(orient.Z, DirtDebrisSpreadDeg);
             float speed = DirtDebrisSpeed * (0.5f + 0.5f * _rng.Randf());
             var spinAxis = new Vector3(
@@ -1001,7 +1183,7 @@ public sealed partial class ProjectilePool : Node3D
             // A random starting roll so the chips don't all share the impact's surface-facing
             // orientation before their own tumble (SpinRate) takes over.
             var startOrient = orient.Rotated(spinAxis, _rng.Randf() * Mathf.Tau);
-            _impact.Add(new Sprite
+            pool.Add(new Sprite
             {
                 Pos = point,
                 Life = DirtDebrisLife * (0.75f + 0.5f * _rng.Randf()),
@@ -1011,6 +1193,30 @@ public sealed partial class ProjectilePool : Node3D
                 Vel = dir * speed,
                 SpinAxis = spinAxis,
                 SpinRate = (_rng.Randf() * 2f - 1f) * DirtDebrisSpinMax,
+            });
+        }
+    }
+
+    /// <summary>A gun round ricocheting off a buildings-classed surface: fast, bright sparks
+    /// flying off the wall (additive, on the impact pool) plus the brief hit flash. A stand-in —
+    /// the authored `bld_damage.flt`/`rcochet1` assets do not exist in the install; magnitudes
+    /// are TUNE (BL-203).</summary>
+    private void SpawnRicochet(Vector3 point, Basis orient)
+    {
+        if (_impact.Count < MaxFlashes)
+            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = new Color(1f, 0.9f, 0.5f), Orient = orient });
+        for (int i = 0; i < RicochetSparks && _impact.Count < MaxFlashes; i++)
+        {
+            var dir = ApplySpread(orient.Z, RicochetSpreadDeg);
+            float speed = RicochetSparkSpeed * (0.5f + 0.5f * _rng.Randf());
+            _impact.Add(new Sprite
+            {
+                Pos = point,
+                Life = RicochetSparkLife * (0.7f + 0.6f * _rng.Randf()),
+                Size = RicochetSparkSize * (0.7f + 0.6f * _rng.Randf()),
+                Tint = RicochetTint,
+                Orient = orient,
+                Vel = dir * speed,
             });
         }
     }
@@ -1426,12 +1632,18 @@ public sealed partial class ProjectilePool : Node3D
     }
 
     // A named IMPACT effect that resolved to a chapter-gamez MODEL prototype (the authored water
-    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point and shown briefly (D30).
+    // splash `splash1.flt`/`bsplsh.flt`), instanced at the hit point (D30). A splash model's
+    // `*_base`/`*_splash` children are driven along the authored scale curves for the def's 2 s
+    // run (A2); a model with neither child just shows briefly.
     private struct ImpactFx
     {
         public Node3D Model;
         public float Age;
         public float Life;
+        public Node3D? Base;        // the `*_base` disc child (null: not a splash model)
+        public Node3D? Splash;      // the `*_splash` column child
+        public Transform3D BaseRest;
+        public Transform3D SplashRest;
     }
 
     // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool

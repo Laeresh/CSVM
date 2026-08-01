@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-213`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-215`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -86,23 +86,10 @@ work is below.
    a flight bug.
 
 **Impacts & surfaces (findings 3, 4).**
-7. `BL-186` **Water impacts land but READ as nothing — the splash is imperceptible, and out-of-range rounds
-   expire silently.** Replaces the disproven `BL-017` "the sea has no collider" (2026-07-30): the C1B sea
-   is fully collidable and `water`-tagged — six dive-fire probes across the map (incl. the mission spawn
-   and 2 km past the map edge on extension tiles) each log 8/8 `-> Water` impacts on distinct sea tiles,
-   instance `splash1.flt` and select `snd_water_bullet`. What "nothing at all" actually was: (a) gun
-   rounds expire **silently at RANGE = 1000 m** — from 400 m altitude in a 17° dive the sea is 1380 m
-   slant away, and 4 s of continuous fire produces zero impacts; (b) when rounds do land, `splash1.flt`
-   covers **0–12 px at 300 m** (`--tex-census=splash`: `splashbase` 0 confident / 644 contested,
-   `splash01` 0/8 — SHOT-14's "not shown"). *Fix shape:* the original's small white `Splash0N` sprite
-   burst walking across the surface (`Water Splash.png`); size/count/life are TUNE. Open fidelity
-   question: does the original splash when rounds range-expire over water? (needs a CAP of the original.)
-   ⚠ Traps: do **not** add a sea collider — it exists, and the disproven premise was the instrument's own
-   artifact (a fire probe beyond the weapon's RANGE logs nothing whatever the sea has — METHOD-18); keep
-   probe slant under ~800 m. The whole mechanism (collider → `ClassifySurface` → per-surface IMPACT
-   binding → model + sound) is live — only the *look* is missing; sound audibility is unverified (user).
-   *Playtest after fix:* small white splash sprites + audible sound on water gunfire. Get low over the
-   water first — rounds only reach ~1000 m. `./RunGame.ps1 --plane=player_bhawk --chapter=C1B`.
+7. `BL-213` **Open fidelity question (was part of `BL-186`, whose splash look landed with `BL-203`,
+   2026-08-01):** does the original splash when gun rounds range-expire over water? Needs a CAP of the
+   original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
+   expire silently, which METHOD-18 documents as correct-per-data.
 9. `BL-019` **Building vs dirt impacts are identical (both a fireball puff).** Original: buildings → `large_fireball`;
    dirt (HE) → `he_ground_effect` (a light flash, no puff). The per-surface lookup exists
    (`Projectile.cs:490`) but isn't differentiating. *Investigate:* does the HE rocket's `weapon.Impact`
@@ -165,19 +152,18 @@ its symptom and traps.
 
 **Impact feedback (PT-05).**
 
-- `BL-203` **Gun-impact visuals are imperceptible on every surface class.** At the controls in C2:
-  buildings show **no ricochet or flame at all**; dirt still reads as the old flame sprite, just
-  smaller (the `BL-018` tumbling-debris burst does not read as debris); the water ripple is visible
-  only when pausing and frame-stepping. The *classification and sound* path is live (splash sound
-  plays on correctly-tagged water), so this is the look layer: per-class effect size/count/life are
-  far below the original, and the building class may build nothing visible at all. Companion to
-  `BL-186` (water splash 0–12 px at 300 m — its evidence and traps apply here verbatim).
-  ⚠ Traps: METHOD-18 — gun rounds expire silently at RANGE = 1000 m, so any scripted probe must
-  fire from well inside that slant range or it measures nothing; `--tex-census` counts are lower
-  bounds, pair with `--no-fog`.
-  *Playtest after fix:* building hits give a visible ricochet/spark, dirt a visible debris burst,
-  water a visible splash — all readable at normal flight speed without frame-stepping.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo`.
+- `BL-214` **Honour the gamez model `lighting`/`fog` flags world-wide.** Found landing `BL-203`:
+  every chapter carries a small authored set of self-lit models (`lighting: false` — 25–31 per
+  chapter unfogged, ~270–390 more fogged-but-unlit), but the generated world materials multiply
+  the mission SUNLIGHT (`csky_world_light`) into everything, so authored self-lit effect geometry
+  (the splash models, plausibly the explosion rings and other effect meshes) dims to invisibility
+  on night maps. `BL-203` landed a narrow exemption for the projectile-instanced splash models
+  only (`ProjectilePool.OverrideUnlit`); the general fix is a per-model term in the shared shader
+  path. ⚠ Traps: (a) the flag moves ~300 models per chapter — expect golden churn on night
+  chapters; regenerate with the moved shots named, GOLD-1. (b) The world-effects stage templates
+  (rings, fireballs) render through the same dimmed path — check them under `--effects-test`
+  screenshots at night before assuming the flag fixes them.
+  *Playtest after fix:* night-chapter effect meshes (rocket rings, splashes) read bright.
 
 **Rockets (PT-09).**
 
@@ -1603,11 +1589,15 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   2026-07-30 and read fine for now — see `BL-181` for the provisional, pending-menu-hub caveat.
 - `BL-126` **Splitscreen** — the `HudMetrics` sqrt pane damping, `MixGain`, `SpawnAbreast`, join/lock
   feel, tag-gutter widths.
-- **Dirt-debris burst (B13/`BL-018`, landed 2026-07-31)** — `Projectile.cs`'s `DirtDebrisSprites` **5**,
-  `DirtDebrisSize` **0.35 m**, `DirtDebrisLife` **0.3 s**, `DirtDebrisSpeed` **4 m/s**,
-  `DirtDebrisSpreadDeg` **60°**, `DirtDebrisSpinMax` **25 rad/s**. Chosen to read as scattered chips at
-  normal chase-camera range without a reference video to match frame-by-frame; A/B against
-  `Dirt Splash.png` at the controls when convenient.
+- **Gun-impact looks (A2/`BL-203`, landed 2026-08-01)** — `Projectile.cs`: dirt chips
+  `DirtDebrisSprites` **5**, `DirtDebrisSize` **0.45 m**, `DirtDebrisLife` **0.9 s** (authored bit
+  RUN_TIME is 1–2 s), `DirtDebrisSpeed` **4 m/s**, `DirtDebrisSpreadDeg` **60°**, `DirtDebrisSpinMax`
+  **25 rad/s**; building ricochet `RicochetSparks` **8**, `RicochetSparkSize` **0.55 m**,
+  `RicochetSparkLife` **0.55 s**, `RicochetSparkSpeed` **22 m/s**, `RicochetSpreadDeg` **90°** (a
+  stand-in — both authored assets are missing from the install); water-splash column width
+  `SplashColumnWidthScale` **8×** (the authored quad is 5 cm wide — sub-pixel past ~30 m; the
+  reference ticks measure ~0.35 m). A/B against `Dirt Splash.png` / `Water Splash.png` at the
+  controls; the splash *height/timing* curves are authored data, not TUNE.
 
 ## Owed playtests (need hardware or a human at the controls)
 

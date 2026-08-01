@@ -113,3 +113,17 @@ buildings colliders 35→80, and the coastal fringe that used to draw as plain u
 now draws in the water/buildings wireframe colour matching what it visually is. `RunTests.ps1`
 green throughout (312 units, 12/12 suites, 13/13 goldens hash-identical — collision never touches
 a rendered pixel).
+
+## 2026-08-01 — the film-set skyscrapers never classified `buildings` (`BL-203` buildings half)
+
+A square-on `--det` fire probe at C2's `nycity` towers logged `-> Default` on `nycity/col`: the
+landmark tower walls texture as `empire1`/`chrysler1`/`chrysler2`, which match no name pattern, so
+under the per-polygon split their polygons join the default trimesh — and a gun hit there showed
+the dirt stand-in, not the buildings binding. Measured before widening (the `BL-041` gate): those
+are the **only 3 matching textures install-wide** (C2 + C5, nothing else contains either
+substring), moving one model per chapter — C2 `nycity` 22,694 area units (empire1 15,344 +
+chrysler2 6,221 + chrysler1 1,129), C5 53,652 (chrysler2 45,996 + chrysler1 7,656) — from default
+to `buildings`; nothing else can drift. `classify()` here and `SceneBuilder.ClassifySurface` both
+gained `empire*`/`chrysler*`. Post-change the same probe logs 8/8 `-> Buildings` on
+`nycity/col_buildings`. Still-unclassified residual on `nycity`, accepted as before: `tankerdeck`
+(a ship deck), `aphagar01/05`, `woodsupport*`, `oldroad1`, signage (~18 k area total).

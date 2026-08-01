@@ -62,7 +62,9 @@ bound name (`3040slug_gunhit`, …) and whose body is distance-gated:
   smoke that fades black→clear), `whitehotpuffer` + `firepuffer` for dum/mag (fast, `magnesiumtip`
   / `fire_f01`–`04` textures). Beyond 500 m the impact is silent visual-wise.
 - **`PLAYER_RANGE 200`** adds flung debris via ballistic `OBJECT_MOTION` (`bit1`/`bit2`/`bit3`/
-  `chunk`, `RUN_TIME` 1–4 s).
+  `chunk`, `RUN_TIME` 1–4 s). The `bit1`–`bit3` gamez nodes carry **no geometry** in this install
+  (0 vertices, measured C1/C2; `chunk` has one 4-vertex quad) — the debris art is the `bit01`–
+  `bit04` textures every chapter archive ships.
 - **`PLAYER_RANGE 1000` + `ANIMATION_LOD HIGH`** randomly flashes a short `gunhit_lt` light.
 
 Puffer definitions are shared with [effects.md](effects.md); the range gates are the reason a
@@ -74,9 +76,10 @@ On a projectile impact `ProjectilePool` plays the struck surface's `IMPACT` soun
 effect **animation**, splits by what the bound name resolves to:
 
 - **A gamez model prototype** (the name IS a `nodes.json` root) → the model is instanced at the
-  hit point and shown briefly. In practice this is the **water splash**: `splash1.flt` (guns) and
+  hit point. In practice this is the **water splash**: `splash1.flt` (guns) and
   `bsplsh.flt` (HE) each instance 2 meshes (`splash1_base`/`splash1_splash`, …) — verified on
-  C1B/C2B.
+  C1B/C2B. Since A2 the instance also **plays its authored def** (below) instead of standing
+  statically for 0.4 s.
 - **A reader/control def** (`3040slug_gunhit`, `he_ground_effect`, `large_fireball`) or an
   **undefined** name (`bld_damage.flt`, …) names no root, so nothing instances and a stand-in
   spark shows. The authored **puffer/particle** half of these (the `blacksmokepuffer` smoke, the
@@ -85,7 +88,31 @@ effect **animation**, splits by what the bound name resolves to:
   builds nothing. Rendering them needs a dedicated world-effects runtime that keeps textures open
   and relocates the effect templates onto the hit point — the same machinery the per-player crash
   runtime already proves (`BuildFlightCrashRuntime`) and that **destruction effects (D32)** share,
-  so the impact-puffer wiring folds into D32.
+  so the impact-puffer wiring folds into D32. The per-class stand-ins these names fall to (A2):
+  dirt → tumbling chips on the authored `bit01–04` textures, alpha-blended; a gun round on a
+  buildings-classed surface → a ricochet spark burst + flash (judged by eye — `bld_damage.flt`
+  and the `rcochet1` `EFFECT` are both install-missing, see the unresolved-names table).
+
+### Water splash defs — `splash1.zrd.json` / `bsplsh.zrd.json`
+
+The two water-hit models each ship an `ON_CALL` def of the same name with an identical shape:
+activate → opacity 0→1 over 0.05 s, 1→0 over 1 s starting at 0.95 s; the `*_base` disc scales
+xz 1→2 over 0.2 s (`OBJECT_MOTION_FROM_TO`), then 2→1.8 over 1 s from `EVENT_OFFSET` 0.8; the
+`*_splash` column runs `OBJECT_MOTION SCALE [1,100,1, 0,-100,0]` over `RUN_TIME 2` — under
+MotionRuntime's decode (`scale = initial + delta·u`) the column **starts at ×100 Y and collapses
+to 0 over 2 s** — plus an `OBJECT_CYCLE_TEXTURE` reset on the column (the `splash01/02/03`
+flipbook). The models are authored `lighting: false`, `fog: false` (self-lit — the retail
+captures show white splashes at night) with full-white vertex colors. Geometry is tiny:
+`splash1_splash` is a **5 cm × 1.4 cm** quad (`Facade` SphericalY — camera-Y-billboarded), the
+base disc 24 cm across.
+
+**Engine wiring (A2).** `ProjectilePool` drives the scale curves procedurally on each per-hit
+instance (`AdvanceSplash`, values verbatim; per-hit instances rather than def playback so 8
+rounds/s give concurrent walking splashes) and honours `lighting/fog: false` with unshaded
+override materials (the shared world materials multiply mission SUNLIGHT in). Not rendered: the
+opacity ramps (partial opacity on world materials needs the AnimRuntime opacity-twin path — the
+column collapsing to 0 stands in) and the `splash01→03` flipbook. The column's **width** is
+widened ×8 (TUNE — 5 cm is sub-pixel past ~30 m; the reference ticks measure ~0.35 m wide).
 
 ### Engine wiring (M3, D32) — the world-effects runtime
 

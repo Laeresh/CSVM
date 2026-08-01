@@ -30,7 +30,8 @@ def classify(tex):
        or 'wakefront' in t or 'watersquirt' in t:
         return 'water'
     if 'build' in t or t.startswith('hangar') or t.startswith('bld') \
-       or 'cblock' in t or 'warehouse' in t or 'roof' in t or 'filmblock' in t:
+       or 'cblock' in t or 'warehouse' in t or 'roof' in t or 'filmblock' in t \
+       or t.startswith('empire') or t.startswith('chrysler'):
         return 'buildings'
     return None
 

@@ -9279,3 +9279,40 @@ same run built from HEAD — the HE impact frame gains the violet `ring_he` disc
 (2.7 % of the frame; the baseline frame has no ring at all), and the AP run differs on 69 of 110
 frames, peaking at 4.4 %. Per-type A/B against the ORIGINAL captures is still owed and rides
 `PT-17`. `BL-016` deleted from `backlog.md`.
+
+## 2026-08-01 — M3p3 Wave A A2 BL-203: gun-impact visuals read on every surface class (folds BL-186)
+
+Three per-class mechanisms, each diagnosed before code. **Buildings** — two compounding causes:
+(1) C2's film-set skyscraper walls (`empire1`/`chrysler1`/`chrysler2`) matched no classifier
+pattern, so under BL-204's per-polygon collider split a square-on `--det` probe at `nycity` logged
+`-> Default` and drew the dirt stand-in; the classifier gained `empire*`/`chrysler*` — measured
+first per BL-041's gate (the only 3 matching textures install-wide, one model per chapter: C2
+22,694 / C5 53,652 area units move, nothing else can drift; `analysis/surface-classification/`
+FINDINGS 2026-08-01, census.py kept in step). (2) Even a true Buildings hit drew only one 0.14 s
+flash; gun building hits now spawn `SpawnRicochet` — flash + 8 fast white-hot sparks (a judged
+stand-in: `bld_damage.flt` and `rcochet1` are 2 of the 5 install-missing names; magnitudes TUNE).
+**Dirt** — the "old flame sprite, smaller" was literal: the BL-018 chips drew through the additive
+impact pool whose texture is `slug_muzzle2`, a muzzle-flash frame. The chips now draw in
+alpha-blended per-texture pools on the gunhit def's own `bit01–04` debris art (the def's
+`bit1`–`bit3` gamez nodes carry 0 vertices — the textures ARE the chips), life 0.3→0.9 s per the
+authored bit RUN_TIMEs. **Water** — the splash model was instanced statically for 0.4 s at its raw
+24 cm size; `splash1.zrd.json`/`bsplsh.zrd.json` (newly decoded → weapon-effects.md) animate it:
+base disc xz 1→2→1.8, column `SCALE [1,100,1, 0,-100,0]` over RUN_TIME 2 = ×100 Y collapsing to 0.
+`AdvanceSplash` now drives those curves verbatim on each per-hit instance (per-hit so 8 rounds/s
+walk concurrent splashes), under unshaded overrides honouring the models' authored
+`lighting/fog: false` (the shared world materials multiply mission SUNLIGHT in — night maps
+blacked the splash out; the general flag pass filed as `BL-214`). Not rendered, recorded: the
+opacity ramps and the splash01→03 flipbook. One TUNE beyond the data: column width ×8 — the
+authored quad is 5 cm wide, sub-pixel past ~30 m (measured 1 px at 250 m via `--tex-override`
+loose-magenta counts); the reference's ticks measure ~0.35 m (`Water Splash.png`).
+
+Verified with close-range `--det` capture bursts per class (inside RANGE, METHOD-18): C2 nycity
+8/8 `-> Buildings` on `col_buildings` with the spark burst legible in crop-zooms; empty-stage dive
+shows textured tumbling chips (A/B `Dirt Splash.png`); C2 water shows a walking field of pale
+columns near the reticle (A/B `Water Splash.png`), with the width TUNE justified by before/after
+pixel counts. `.\RunTests.ps1` PASS (313 units, 12/12 suites, 13/13 goldens hash-identical — the 8
+chapter freecam goldens double as the regression; classification draws nothing and no golden fires
+weapons). Docs: weapon-effects.md (splash-def decode + A2 wiring), architecture.md
+(`Projectile.cs`), surface-classification FINDINGS; `BL-203`+`BL-186` deleted from backlog (the
+range-expiry fidelity question survives as `BL-213`, the lighting-flag pass as `BL-214`); cockpit
+re-test = `PT-18`.

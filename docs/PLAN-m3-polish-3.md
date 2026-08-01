@@ -86,7 +86,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — feedback that landed imperceptible
 
 1. ☑ `BL-199` Damage-stage smoke/fire is actually visible, and sputters (landed 2026-07-31; cockpit re-test = `PT-13`)
-2. ☐ `BL-203` Gun-impact visuals read on every surface class (building/dirt/water; folds `BL-186`)
+2. ☑ `BL-203` Gun-impact visuals read on every surface class (building/dirt/water; folds `BL-186`; landed 2026-08-01 — cockpit re-test = `PT-18`)
 3. ☑ `BL-204` C2 blue-water areas classify as water (landed 2026-07-31; cockpit re-test = `PT-14`)
 4. ☑ `BL-205` Collider overlay: colour→surface-class legend (landed 2026-07-31)
 
@@ -156,7 +156,14 @@ pixels. (b) The `--run-tests` suite and headless paths prove nothing here. (c) T
 `EffectRuntimeTtl` caps a fixed sustained emitter — check it isn't the second killer once the
 revive works.
 
-## A2 ☐ `BL-203` Gun-impact visuals read on every surface class
+## A2 ☑ `BL-203` Gun-impact visuals read on every surface class
+
+**Landed 2026-08-01** — see `docs/HISTORY.md` 2026-08-01 for the three per-class mechanisms
+(buildings: classifier gap on the film-set towers + a new ricochet burst; dirt: chips were drawn
+through the additive muzzle-flash-textured pool; water: the authored splash def's scale curves now
+play on per-hit instances, unlit per the models' flags, column width ×8 TUNE). Cockpit re-test =
+`PT-18`; the range-expiry fidelity question split off as `BL-213`, the general lighting-flag pass
+as `BL-214`.
 
 **Goal.** At normal flight speed, without frame-stepping: a building hit shows a visible
 ricochet/spark, a dirt hit a visible tumbling-debris burst, a water hit a visible splash — matching

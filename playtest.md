@@ -186,6 +186,18 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   this fix failing. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
   *Blocks:* closing PLAN-m3-polish-3 D31.
 
+- `PT-18` **Gun-impact looks per surface class re-test (A2 / `BL-203` + `BL-186` landed
+  2026-08-01).** Fire on all three classes at normal flight speed, no frame-stepping. *Look for:*
+  (a) **water** — each round raises a small white column that persists ~2 s, so a burst walks a
+  field of ticks across the surface (A/B `Water Splash.png`; the height/timing is authored data,
+  the ×8 column width is TUNE — say if it reads too thin/fat); (b) **dirt** — small textured
+  chips tumbling outward for ~1 s (A/B `Dirt Splash.png`), no more flame-sprite look; (c)
+  **buildings** — a spark flash plus fast white-hot ricochet sparks flying off the wall (a judged
+  stand-in, both authored assets missing from the install — all magnitudes TUNE); the C2/C5
+  film-set skyscrapers (`empire`/`chrysler` walls) now class as buildings too.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo` (nycity + the coast in
+  one flight). *Blocks:* closing PLAN-m3-polish-3 A2.
+
 ---
 
 ## Everything else
@@ -195,5 +207,5 @@ Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its o
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
 their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`/`BL-204`/
-`BL-206`/`BL-207`/`BL-016` landed and came back as `PT-13`–`PT-17`). Do not
+`BL-206`/`BL-207`/`BL-016`/`BL-203` landed and came back as `PT-13`–`PT-18`). Do not
 re-add them here; the entry brings its own test when the fix lands.

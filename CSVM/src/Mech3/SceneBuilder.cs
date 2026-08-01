@@ -369,9 +369,11 @@ void fragment() {
         if (t.StartsWith("water") || t.StartsWith("wtr") || t.StartsWith("srf")
             || t.Contains("wakefront") || t.Contains("watersquirt"))
             return "water";
+        // 'empire'/'chrysler' are the C2/C5 film-set skyscraper walls (empire1, chrysler1/2 —
+        // the only 3 matching textures install-wide, measured before widening per BL-041's rule).
         if (t.Contains("build") || t.StartsWith("hangar") || t.StartsWith("bld")
             || t.Contains("cblock") || t.Contains("warehouse") || t.Contains("roof")
-            || t.Contains("filmblock"))
+            || t.Contains("filmblock") || t.StartsWith("empire") || t.StartsWith("chrysler"))
             return "buildings";
         return null;
     }
@@ -635,7 +637,7 @@ void fragment() {
 
     /// <summary>This mesh's colliding geometry split into one trimesh per surface class (water:
     /// <c>water*</c>/<c>wtr*</c>/<c>srf*</c>/<c>wakefront</c>; buildings:
-    /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>; everything else,
+    /// <c>hangar*</c>/<c>*build*</c>/<c>cblock</c>/<c>warehouse</c>/<c>roof</c>/<c>empire*</c>/<c>chrysler*</c>; everything else,
     /// untagged) — each polygon's OWN texture decides which shape it joins, triangulated exactly
     /// as <see cref="EmitPolygon"/> does. Replaces an earlier area-weighted vote that gave the
     /// WHOLE mesh one winning tag: real, sizeable water polygons on an otherwise-dry shoreline

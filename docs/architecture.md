@@ -592,10 +592,20 @@ file is stateless.
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
 with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
-muzzle flashes, the per-surface IMPACT sound + effect model, and the stand-in spark — a dirt
-(unclassified-terrain) hit instead spawns a few small chips (`SpawnDirtDebris`) that launch outward
-and arc under gravity via `Sprite.Vel`/`SpinAxis`/`SpinRate`, both zero and inert for every other
-sprite. Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
+muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks (A2): a
+water hit instances the authored splash model and plays its def's own scale curves for the 2 s run
+(`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the
+splash1/bsplsh zrd values verbatim; column *width* ×8 is TUNE — the authored quad is 5 cm wide,
+sub-pixel past ~30 m) under unshaded override materials honouring the models' authored
+`lighting/fog: false` (`OverrideUnlit`; the shared world materials multiply mission SUNLIGHT in,
+which blacked the splash out at night — the general flag pass is BL-214); a dirt
+(unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
+`bit01–04` chip textures in alpha-blended per-texture pools (through the additive
+muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism; the def's
+bit1–3 gamez nodes carry no geometry, the textures ARE the chips), launched outward and arcing via
+`Sprite.Vel`/`SpinAxis`/`SpinRate`, zero and inert for every other sprite; a gun hit on a
+buildings-classed surface spawns a ricochet spark burst + flash (`SpawnRicochet`, additive — a
+judged stand-in: the authored `bld_damage.flt`/`rcochet1` are 2 of the 5 install-missing names). Each burst sprite carries its own orientation basis (`Sprite.Orient`): the muzzle flash
 rolls in the firing plane's basis, the impact spark/explosion/debris faces the struck surface
 normal (then tumbles, for debris) — a fixed world plane for none of them (BL-139); tracers stay
 velocity-aligned, and none of the three is billboarded. A gun shot's muzzle flash (C24) is three
