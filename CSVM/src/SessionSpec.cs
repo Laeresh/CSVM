@@ -359,6 +359,7 @@ public sealed record SessionSpec
     public bool ForceCollision { get; private set; }
     public bool ShowColliders { get; private set; }
     public bool DebugCollision { get; private set; }
+    public bool ShowClassOverlay { get; private set; }
 
     // ---- Where the data comes from: override VALUES only, null = not given ---------------------
 
@@ -483,6 +484,7 @@ public sealed record SessionSpec
                 }
             }
             else if (arg == "--debug-colliders") { s.ShowColliders = true; }
+            else if (arg == "--debug-classoverlay") { s.ShowClassOverlay = true; }
             else if (arg == "--debug-damage") { s.DebugDamage ??= ""; }
             else if (arg.StartsWith("--debug-damage=")) { s.DebugDamage = arg["--debug-damage=".Length..]; }
             else if (arg == "--markers") { s.MarkersOverlay = true; s.HasContentArg = true; }

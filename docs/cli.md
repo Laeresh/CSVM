@@ -48,7 +48,7 @@ exactly how `CLAUDE.md`'s day-to-day table drifted from this page (four contradi
 `--loadout` · `--rocket` · `--gun-select` · `--fire` · `--fire-rockets` · `--infinite-ammo` · `--ammo` · `--weapon-lab` · `--weapon-mount` · `--weapon-fire` · `--weapon-test` · `--damage` · `--damage-hd` · `--destroy` · `--crash`
 
 **Debug labs — the scripted twin of each interactive lab key**
-`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--collision` · `--debug-colliders` · `--markers`
+`--debug-livery` · `--debug-mesh` · `--debug-select` · `--debug-nodelab` · `--debug-damage` · `--debug-names` · `--debug-join` · `--debug-scoreboard` · `--debug-anim-ui` · `--debug-collision` · `--debug-dzpaths` · `--collision` · `--debug-colliders` · `--debug-classoverlay` · `--markers`
 
 **Dumps and the test harness — report text plus a verdict, then quit**
 `--dump-markers` · `--dump-weapons` · `--dump-loadout` · `--dump-flight` · `--dump-config` · `--run-tests` · `--damage-test` · `--effects-test` · `--hud-font-test`
@@ -100,6 +100,20 @@ flags**, and **bullet *lines* == parser flags** once the 2 shared and the 3 doub
   there instead. In a flight mode, or after `--collision`, colliders already exist and the overlay
   just opens against them. Distinct from `--debug-collision`, which draws the **flown plane's own**
   collision probe, not the world's)
+- `--debug-classoverlay` (open the **X** colour-by-class overlay at launch — the scripted twin of
+  the X press, in `--freecam`/`--anim-lab`/`--fly`/`--stunt` (the same mode set as the **C** collider
+  overlay, unlike the freecam/anim-lab-only labs). Tints every drawn world mesh a flat colour by what
+  it IS rather than what it looks like: destructible (red, from the exact `DestructibleRegistry.Resolve`
+  climb a weapon hit takes — a door that only *looks* breakable reads as scenery, which is the correct
+  finding, not a bug — BL-009), facade (pink, `SceneBuilder.ClassifyBillboard` on the source
+  `GameZMesh`), clutter (green, every `MultiMeshInstance3D` under the world root — trees/bushes and
+  C2/C5's instanced city blocks), everything else plain scenery (blue). Rebuilt on every X press
+  rather than cached once, so a destructible's death (which swaps its subtree for wreck pieces) never
+  tints a freed node. Deliberately NOT keyed on `SceneBuilder.SurfaceMeta` — that tag answers "what
+  does a bullet do here", not "what is this object". No gamez world to classify (`--stage=empty`)
+  prints the same kind of "nothing to draw" notice as the C overlay's "no collision built", rather
+  than a silently empty overlay. Debug-only material swap: mesh/node counts and goldens are
+  unaffected)
 - `--plane=` (a comma-separated list gives one plane per splitscreen player — `--plane=player_bhawk,player_fury` — and implies that player count unless `--players=` says otherwise)
 - `--rof=` (default `extracted/rof` — the extracted UI archive holding the paint patterns; run `ExtractRof.ps1` to produce it)
 - `--paint=<pattern|random|none>` (aircraft livery, 2026-07-20: a pattern name, or `random`, or `none`. **Patterns are per aircraft** — the Fury has FORTUNE/BLCKSWAN/HUGHES/STUDIO, the Balmoral only FORTUNE/BRITISH; naming one the plane lacks logs its actual set and paints decals only. `random` draws from that plane's set. Comma-separated per player like `--plane=`, last covers the rest. **Defaults: `--fly`/`--stunt` randomize a fresh livery per player on every map load; static `--plane`/`--damage` views build unpainted**, so every pre-paint orbit/damage screenshot still renders byte-identically)

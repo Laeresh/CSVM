@@ -9603,3 +9603,29 @@ log shows `(--ammo=3)` at rig build and `pylon ordnance: pylon1 dry — mounted 
 the third rocket. `.\RunTests.ps1` green: 320 units (+2 new `SessionSpec` tests for `--ammo=`
 parsing and the mutual-exclusivity order rule), 14 in-engine suites, 13/13 goldens hash-identical
 (unchanged, as expected — `--det` does not imply `--ammo`).
+
+## 2026-08-01 — A2 `BL-029`: colour world objects by class
+
+Added `src/UI/ClassOverlay.cs`, a standalone overlay (key X, `--debug-classoverlay` scripts it) in
+the same mode set as `ColliderOverlay` — `--freecam`/`--anim-lab`/`--fly`/`--stunt` — rather than
+extending the Node Lab as the plan's approach suggested first: the Node Lab's tree/destructibles
+view is built only where `SelectionService` exists (`--freecam`/`--anim-lab`), and the user asked
+for this to also work in `--fly` like the collider wireframes. Classification reuses only mechanisms
+a hit already uses, never a guess: destructible is `DestructibleRegistry.Resolve` (the exact climb a
+weapon hit takes — so BL-009's C2 SeaHangar doors, which have no `HEALTH > 0` anchor anywhere, read
+as scenery, the correct finding); facade is `SceneBuilder.ClassifyBillboard` on the source
+`GameZMesh`, resolved back through the built node's `AnimRuntime.IndexMeta`; clutter is structural —
+every `MultiMeshInstance3D` under the world root is `ClutterBuilder`'s output and nothing else in
+this codebase parents one there. Deliberately not keyed on `SceneBuilder.SurfaceMeta` (trap (b) in
+the plan item: that tag answers "what does a bullet do here", not "what is this object"). Rebuilt on
+every X press rather than cached once, so a destructible's death (which swaps its subtree for wreck
+pieces) never leaves a tint on a freed node. `docs/cli.md` flag index/count 95 → 96.
+
+**How verified.** `RunProbe.ps1 --freecam --chapter=C2 --debug-classoverlay` at the golden `c2-city`
+pose (`analysis/goldens/manifest.json`) and a closer-in pose: destructible (red), clutter (green,
+city-block instancing) and scenery (blue, terrain/water/backlot props) render as visibly distinct
+colours with the legend and per-class counts on screen; facade count is non-zero (147 in C2) though
+not framed in either shot. Swept all 8 chapters with `--debug-classoverlay --screenshot=`: exit 0,
+zero engine errors in every log (one pre-existing, unrelated `SOUND_NODE`-after-build warning under
+`--mute`). `.\RunTests.ps1` green: 320 units, 14 in-engine suites, 13/13 goldens hash-identical
+(debug-only path, opt-in, adds no nodes when off).

@@ -1425,6 +1425,14 @@ public partial class GameSession : Node3D
                 Planes = planeColliders,
             });
             Log.Info("world", $"collider overlay ready (C){(BuildsCollision ? "" : " — but this mode built NO collision; relaunch with --collision")}");
+
+            // Colour-by-class overlay (X): same mode set as the collider overlay, since it reads
+            // the same live world — a findable-targets view, not a collision one.
+            _worldRoot!.AddChild(new UI.ClassOverlay(_plane, state.Gamez, state.WorldRuntime)
+            {
+                DebugShow = _spec.ShowClassOverlay,
+            });
+            Log.Info("world", $"class overlay ready (X)");
         }
         else if (_spec.ForceCollision && _spec.WorldMode)
         {

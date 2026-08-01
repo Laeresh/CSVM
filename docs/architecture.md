@@ -114,6 +114,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/LiveryLab.cs` — the `--viewer` livery editor (L): squadron/colour/decal steppers, live `Repaint`, copy-CLI-args.
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
+- `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W): guns from gun groups, hardpoints from pylons, at a stand-in target; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
@@ -1163,6 +1164,23 @@ node-backed shapes + 10k–14k clutter placements.
   the wireframe by 0.25% of position — ~20 m at a map corner, invisible near the origin (BL-198).
 ⚠ Cost with it up (C4, `--perf --no-vsync`): draws 2,181 → 2,532, prims 217k → 257k, `render_cpu`
   1.05 → 1.42 ms, memory 225 → 266 MB. Read those, never `fps`/`frame_ms` (PERF-11).
+
+## src/UI/ClassOverlay.cs
+The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as
+`ColliderOverlay` (`--freecam`/`--anim-lab`/`--fly`/`--stunt`), a findable-targets view rather than a
+collision one (`BL-029`). Tints every drawn mesh's `MaterialOverride` flat by class: destructible
+(red, via `DestructibleRegistry.Resolve` — the exact climb a weapon hit takes), facade (pink, via
+`SceneBuilder.ClassifyBillboard` on the source `GameZMesh`, resolved back through the built node's
+`AnimRuntime.IndexMeta`), clutter (green, every `MultiMeshInstance3D` under the world root —
+nothing else in this codebase parents one there), everything else scenery (blue). Rebuilt on every
+X press rather than cached, restoring each tinted node's original `MaterialOverride` first.
+⚠ **Deliberately NOT keyed on `SceneBuilder.SurfaceMeta`** — that tag answers "what does a bullet do
+  here" (water/buildings/default, for impact-effect selection), not "what is this object"; two
+  unrelated objects can share a surface tag.
+⚠ **A door that only LOOKS breakable reads as scenery, and that is the correct finding, not a bug**
+  — `Resolve` requires a registered `HEALTH > 0` anchor (BL-009's C2 SeaHangar doors have none).
+⚠ No gamez world to classify (`--stage=empty`) prints the same "nothing to draw" notice
+  `ColliderOverlay` prints for no collision built, rather than a silently empty overlay.
 
 ## src/UI/NodeLab.cs
 The node lab (N) in `--freecam`/`--anim-lab`: the world's `cs_name` tree, a search box, per-node

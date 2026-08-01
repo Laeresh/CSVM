@@ -84,7 +84,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — test affordances (these unblock the rest)
 
 1. ☑ `BL-028` `--ammo=N` low-ammo start knob (+ the stale-backlog-row sweep)
-2. ☐ `BL-029` Colour world objects by class — a findable-targets overlay
+2. ☑ `BL-029` Colour world objects by class — a findable-targets overlay
 
 ### Wave B — impact and damage feedback the data already ships
 
@@ -159,7 +159,7 @@ capping only the load would desync the gauge, and diverging between guns and pyl
 not a fix for it. (d) Land the stale-backlog-row sweep (`BL-014`/`BL-026`/`BL-044`/`BL-159`, and
 `BL-062`'s pending-merge note) in this item's commit.
 
-## A2 ☐ `BL-029` Colour world objects by class
+## A2 ☑ `BL-029` Colour world objects by class
 
 **Goal.** A debug overlay tints world objects by class — destructible / facade / tower / clutter /
 plain scenery — so a target named in a backlog item can actually be found at the controls. The user

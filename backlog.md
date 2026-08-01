@@ -99,10 +99,6 @@ work is below.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
 **Test / debug affordances (findings 6, 14).**
-19. `BL-029` **Debug: colour world objects by type / class.** The user couldn't locate a C2 water tower or the
-    storefront facades (found filmset panels instead). A "colour by object class" overlay (destructible /
-    facade / tower / clutter) would make targets findable at the controls. Cross-ref `docs/plans/PLAN-testing.md`
-    **D32 Node Lab** (destructibles view) — extend it with a colour-by-class mode, or a standalone overlay.
 20. `BL-142` **Re-tune `IndicatorLowFrac` for guns on its own merits, not the pylon coincidence.**
     The 0.34 threshold (`GaugeCluster.cs:76`) was picked so a 3-round rocket pylon steps
     green(3/2)→yellow(1)→red(0) — exactly the case that must now show NO yellow (see `BL-024`). Once
