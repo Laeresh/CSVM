@@ -1104,14 +1104,6 @@ public sealed partial class ProjectilePool : Node3D
         // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
         // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
         var orient = SurfaceBasis(normal);
-        // Verification breadcrumb: the first few impacts confirm hit detection + surface
-        // classification (B15) without needing a lucky screenshot; then it goes quiet.
-        if (_impactsLogged < 8)
-        {
-            _impactsLogged++;
-            GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface} at " +
-                     $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}");
-        }
         // The per-surface IMPACT binding: the struck surface's entry, else the weapon's `default`.
         if (!weapon.Impact.TryGetValue(surface, out var effect))
             weapon.Impact.TryGetValue(SurfaceClass.Default, out effect);
@@ -1121,6 +1113,18 @@ public sealed partial class ProjectilePool : Node3D
         // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
         // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE is D32).
         var fxName = effect != null ? (effect.Animation ?? effect.SurfaceAnimation) : null;
+        // Verification breadcrumb: the first few impacts confirm hit detection, surface
+        // classification (B15) and which per-surface IMPACT entry the classification selected,
+        // without needing a lucky screenshot; then it goes quiet. `fx=`/`snd=` are what makes a
+        // "these two surfaces look the same" report answerable — the effect and sound the data
+        // chose, before anything renders.
+        if (_impactsLogged < 8)
+        {
+            _impactsLogged++;
+            GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface} at " +
+                     $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
+                     $" fx={fxName ?? "-"} snd={effect?.Sound ?? "-"}");
+        }
         bool showedModel = fxName != null && SpawnImpactModel(fxName, point);
         // The puffer half (D32): when the effect is not a gamez model, hand its name to the
         // world-effects runtime, which builds the smoke/fireball at the hit. Rockets/ordnance only

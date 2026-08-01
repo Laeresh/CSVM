@@ -662,7 +662,10 @@ round has actually flown.
 player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model rocket impact effects;
 `ClassifySurface` is `public static` — the ONE surface classifier, shared with the airframe's
-graze reaction so a round and a wingtip never disagree about what they hit; rockets fly
+graze reaction so a round and a wingtip never disagree about what they hit; the first 8 impacts log
+a breadcrumb carrying the class AND the `fx=`/`snd=` the class selected out of the weapon's
+`IMPACT` table, which is what makes a "these two surfaces look the same" report answerable without
+a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
 `AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,

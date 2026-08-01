@@ -448,6 +448,14 @@ cite these IDs.
   a definition anchored on a node the build skipped **fails silently — no error, no event**,
   so measure the anchor set, not the play call; and when a probe answers one channel, name the
   channel it does NOT answer before trusting a pass.
+- **WORLD-20** — **A class that covers a fraction of a percent of the map is not "unreachable"
+  because a random probe never hit it — aim at named geometry, and census the map first.**
+  `buildings`-classed surface is 0.07 % of C1's and C2's collidable area, ~0.00 % of C3's and
+  C4's, and **absent outright from C1C and C2B**; only C5 (5.85 %) is easy to hit by accident.
+  Rockets fired down a heading logged 8/8 `-> Default` and looked like proof the classifier
+  was broken, while a shot at C1's `g306` hangar wall — located offline with
+  `analysis/surface-classification/class_area_share.py` and `--destroy`'s world-centre line —
+  logged `Buildings` first try.
 
 ## SHELL — Windows, PowerShell & processes
 
@@ -529,6 +537,14 @@ cite these IDs.
   lines enable the bundle. When a general rule would make an observer change what it
   observes, the observer is the exception — state it at the observer, keep the rule's own
   expression clean.
+
+- **INSTR-5** — **A breadcrumb that logs the input to a lookup but not its output cannot
+  falsify "the lookup collapsed" — log the resolved value.** The impact breadcrumb reported
+  the surface class and not the effect the class selected, so `BL-019` sat as an
+  unfalsifiable "the per-surface lookup isn't differentiating" for two milestones; adding
+  `fx=`/`snd=` answered it in one probe (it differentiates, and the *data* makes dirt a
+  superset of buildings). Whenever a report is going to be "these two cases behave the same",
+  the instrument must print what each case selected, not what each case was.
 
 ## SRC — sources & documents
 

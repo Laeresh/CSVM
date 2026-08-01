@@ -9799,3 +9799,57 @@ before/after (`.scratch/damage_panel_before.png` / `_after3.png`): before, a ~30
 between the pool rows and the debris line; after, one compact block ending right at the
 instructions line. Full `.\RunTests.ps1`: 320 units, 14/14 in-engine suites, 13/13 goldens
 hash-identical (no golden frames the panel).
+
+## 2026-08-01 — B7 `BL-019` closed ❌: the HE rocket's dirt burst CONTAINS its building burst
+
+`BL-019` claimed the per-surface `IMPACT` lookup wasn't differentiating, on the belief that the
+original pairs `large_fireball` (buildings) against a light flash with no puff (dirt). Both halves
+are false, and the item closes as a disproof with no behaviour change — the plan's B7 was budgeted
+for exactly this outcome ("leads only").
+
+**Step 1 — the data.** `wep_06`/`wep_24` BOOM (the stock rocket on all 11 planes) **does** carry
+distinct entries: `buildings` → `ANIMATION large_fireball`, `default` → `SURFACE_ANIMATION
+he_ground_effect`. Note the `default` entry occupies the `SURFACE_ANIMATION` slot — a reader that
+read only `ANIMATION` would see nothing there; `WeaponDef` already keeps both, and `Projectile`
+already falls through `Animation ?? SurfaceAnimation`.
+
+**Step 2 — the lookup.** It does not collapse. Measured in C1 with the impact breadcrumb extended
+to carry the resolved binding: a hit on the `g306` hangar wall at `(-4262,172,-6401)` logs
+`-> Buildings … fx=large_fireball`, a terrain hit 60 m away logs `-> Default … fx=he_ground_effect`.
+Both names resolve and build puffers (`--effects-test`: 33/33 resolved, `large_fireball` 1 puffer,
+`he_ground_effect` 5), so trap (c) is cleared too.
+
+**Step 3 — why they still read alike.** `he_ground_effect` (`he_control.zrd.json`)
+**`CALL_ANIMATION`s `large_fireball` itself**, at `AT_NODE he_ring, 0, 12, 0` — plus `call_he_ring`,
+`call_he_ring1`, two `call_hetrails_up` columns, a `he_light`/`he_light1` flash pair and a
+`FBFX_COLOR_FROM_TO` screen flash. Confirmed at runtime by `--debug-anim` on a dirt impact, which
+retargets all four calls onto `he_ring`. Dirt is a **superset** of buildings: the same fireball is
+the dominant visual in both, which is what a player reads as "identical". Producing the asymmetry
+`BL-019` asked for would mean deleting a call the data makes — the plan's trap (a).
+
+Two side findings, both recorded rather than acted on: the `materials.json` `soil` enum is a
+MechWarrior-3 leftover with no `buildings` value (1–3 `Water` materials per chapter against
+hundreds of water polygons) and is **not** the surface source; and `buildings`-classed surface is
+0.07 % of C1/C2's collidable area, ~0.00 % of C3/C4's, **absent from C1C and C2B**, and only 5.85 %
+in C5 — so a probe sampling random terrain measures the map, not the classifier.
+
+**Landed.** The `fx=`/`snd=` fields on `ProjectilePool.Impact`'s first-8 breadcrumb (the instrument
+whose absence kept this unfalsifiable); the finding in `docs/formats/weapon-effects.md`;
+`analysis/surface-classification/class_area_share.py` + its per-chapter class-area table in that
+directory's `FINDINGS.md`; `verification.md` INSTR-5 and WORLD-20.
+
+**How verified.** Matched `--det --no-fog --screenshot` pairs from one pose, `--fire-rockets` into
+C1's `g306` hangar wall vs terrain (`.scratch/b7_buildings.png` / `b7_dirt.png`, and the
+close-range 24-frame bursts `b7b_*` / `b7d_*`): at comparable range the building hit is the bare
+fireball, the dirt hit that fireball plus the rising trail column and ring — visibly different, and
+different in the direction the *data* specifies rather than the one the report expected. Full
+`.\RunTests.ps1`: 320 units, 14/14 in-engine suites, 13/13 goldens hash-identical (no golden frames
+a rocket impact).
+
+**Found during this item's playtest, not caused by it** (both reproduce identically with the
+breadcrumb change stashed): `BL-219` — an HE impact launches five extra `fly_trailN` smoke columns
+at the world origin, because `he_trails`/`ap_trails`/`carnage_trails` all declare `fly_trail1`–`5`
+and are staged side by side, so the callee's global name fallback launches every copy; and
+`BL-224` — a rocket explosion's puffers are only torn down by the 32 s runtime TTL or by the next
+rocket re-starting the def, so an explosion appears to end only when you fire again. Both filed in
+`backlog.md` with their traces and traps.

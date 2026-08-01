@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-219`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-225`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -84,13 +84,6 @@ work is below.
    2026-08-01):** does the original splash when gun rounds range-expire over water? Needs a CAP of the
    original (fire out to sea from altitude, watch the 1000 m expiry point). Until answered, our rounds
    expire silently, which METHOD-18 documents as correct-per-data.
-9. `BL-019` **Building vs dirt impacts are identical (both a fireball puff).** Original: buildings → `large_fireball`;
-   dirt (HE) → `he_ground_effect` (a light flash, no puff). The per-surface lookup exists
-   (`Projectile.cs:490`) but isn't differentiating. *Investigate:* does the HE rocket's `weapon.Impact`
-   carry distinct `buildings` vs `default` entries, and does terrain tag so dirt classifies `Default`
-   while a building classifies `buildings` (`ClassifySurface`, `Projectile.cs:544`)?
-   *Playtest after fix:* look for buildings giving a fireball and dirt (HE) a light flash — the two
-   visibly telling apart. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 **Destruction & doors (findings 12, 13).**
 12. `BL-022` **Debris trajectory is wrong, not merely slow.** In-flight kills throw pieces "but not in the correct
     trajectory." Fold into the "Break-apart debris barely moves" larger item above (world objects inherit
@@ -301,6 +294,50 @@ rotations, the focus-loss mute and the C2 Seaplane Hangar objective are all sche
 with the diagnosis that verification pass produced. **Do not re-add them here**; if one is closed
 without landing, its record goes to `docs/HISTORY.md`. What remains below is what is still
 unscheduled.
+
+### Rocket impact effects — two live bugs found at the controls (2026-08-01)
+
+Both reported during the `BL-019` playtest; both **pre-date and are independent of** `BL-019`'s
+breadcrumb change (reproduced identically with that edit stashed). Same subsystem, so read both
+before touching either: the world-effects runtime (`WorldEffectsFactory`, `AnimRuntime`), not
+`Projectile.cs`. `BL-224` is the more visible of the two; `BL-219` is the more severe.
+
+- `BL-219` **An HE impact launches FIVE extra smoke trails at the world origin.** Firing one rocket
+  puts a second and third copy of the `he_trails` column set — `fly_trail1`–`fly_trail5`, hence the
+  "5 duplicates" — into the air **around (0,0,0)**, arcing and trailing `spurtpuffer` smoke, starting
+  the moment the real rocket explodes. *Cause, traced:* `fly_trail1`–`5` is **not a unique name** —
+  `he_trails`, `ap_trails` and `carnage_trails` each declare their own set (`pd_trails` too, unstaged),
+  and `WorldEffectsFactory.EffectStageRoots` stages all three side by side under one `world_effects`
+  node. `he_ground_effect` calls `call_hetrails_up` with `AT_NODE he_ring`, so the callee starts with
+  **anchor = `he_ring`**, whose subtree holds no `fly_trailN`; `AnimRuntime.Targets` then falls through
+  `NameResolveFallback` → `ResolvePath` → a **global** `FindAll`, which returns **every** copy and
+  launches all of them. Only `he_trails`'s copy was relocated onto the impact by `PlaceTemplateAt`;
+  the other two are still parked at the stage origin, which is the world origin. *Measured:*
+  `--debug-anim` on one C1 impact lists three live motions per `fly_trailN` — one at the hit point,
+  two near `(0,0,0)` and moving (`(62.8, 14.8, 6.8)` → `(129.4, 28.4, 12.4)` in one second).
+  ⚠ **Traps.** (a) `NameResolveFallback`'s in-code rationale — "its index has one node per name" — is
+  true for the per-player crash rig and **false for the world-effects stage**; do not fix this by
+  turning the flag off for both, the crash def's node ptrs are non-portable and need it. (b) Do not
+  fix it by dropping roots from `EffectStageRoots`: a root left out leaves every def anchored on it
+  playing nothing, silently — that is WORLD-19 and it cost the per-type rings a whole milestone.
+  (c) The visible half is the **puffers**, which go TopLevel at world level, so a node that logs
+  `HIDDEN` still shows its smoke — do not conclude from a visibility flag that a duplicate is inert.
+
+- `BL-224` **A rocket explosion's emitters never stop; the next rocket is what clears them.** After a
+  single HE impact the world-effects runtime still reports **6–7 active puffers / ~200 live particles
+  with no live motions**, 20+ s later and to the end of a 25 s run. Nothing authored tears them down
+  on the engine's side: `PlayEffectAt` only calls `Stop` for an `INPUT_NODE`-governed def, so the sole
+  teardown paths are the **32 s `WorldEffectsFactory.EffectRuntimeTtl`** and a **re-`Start` of the same
+  def** — which is exactly why firing the next rocket ends the previous explosion. The TTL exists for
+  `large_30sec_fire` and is far too long for an impact burst. *Fix shape (undecided):* a per-effect
+  lifetime rather than one runtime-wide TTL, sized from the def's own authored run (the fireball's
+  `STOP_SEQUENCE` at 0.3 s already works — `--run-tests=stop-sequence` is green — so this is the
+  puffers the trails/rings leave behind, not the fireball).
+  ⚠ **Traps.** (a) Not a `STOP_SEQUENCE` regression: that suite passes; the trail puffers have no
+  authored `ACTIVE_STATE 0` to honour in the first place. (b) Do not shorten `EffectRuntimeTtl`
+  globally — `large_30sec_fire` needs its 30 s and shares the runtime.
+  *Playtest after fix:* fire one rocket at dirt, watch the smoke finish on its own without firing
+  again. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 
 ### Test infrastructure
 

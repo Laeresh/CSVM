@@ -92,7 +92,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ `BL-090` item 2 Per-impact spark burst via the `injure_anims` 0.99 entry
 5. ☑ `BL-090` item 1 `damaged_engine_sound` — the second engine loop nothing reads
 6. ☑ `BL-045` World damage panel is oversized, with a gap above the debris line
-7. ☐ `BL-019` HE rocket: buildings and dirt give identical impact effects
+7. ❌ `BL-019` HE rocket: buildings and dirt give identical impact effects — **disproven**: the
+   lookup differentiates, and `he_ground_effect` (dirt) *calls* `large_fireball` (buildings) itself
 
 ### Wave C — fidelity with a settled mechanism
 
@@ -313,7 +314,7 @@ no gap. A `--det` screenshot before/after for the record. `.\RunTests.ps1` green
 content comprehensible, so any content change is unrequested scope and loses the one signal this
 item has.
 
-## B7 ☐ `BL-019` HE rocket: buildings vs dirt impacts are identical
+## B7 ❌ `BL-019` HE rocket: buildings vs dirt impacts are identical — disproven
 
 **Goal.** An HE rocket hitting a building gives a fireball; hitting dirt gives the light flash — the
 two visibly telling apart, as in the original.
@@ -344,6 +345,20 @@ not differentiate, that is the answer. (b) `BL-019` is explicitly a *separate* i
 `PLAN-m3-polish-2`'s impact work and from `BL-203`'s gun-impact looks; do not re-open either. (c) An
 effect name outside the world-effects runtime's bound set starts, logs and draws nothing
 (`BL-046`/WORLD-12) — confirm a `Puffer` was built before concluding the lookup is at fault.
+
+**Outcome (2026-08-01): ❌ closed as a disproof — no behaviour change.** Step (1) answered against
+the item: `wep_06`'s `IMPACT` **does** carry distinct entries (`buildings` → `ANIMATION
+large_fireball`, `default` → `SURFACE_ANIMATION he_ground_effect`), and step (2) found the lookup
+does not collapse either — a C1 hit on the `g306` hangar wall logs `-> Buildings … fx=large_fireball`
+and a terrain hit 60 m away logs `-> Default … fx=he_ground_effect`. The premise that dies is the
+*expected* difference: `he_ground_effect` **`CALL_ANIMATION`s `large_fireball` itself** at
+`AT_NODE he_ring, 0, 12, 0`, plus the ring stack, two trail columns, two flash lights and a
+framebuffer flash. Dirt is a **superset** of buildings, not the lighter alternative `BL-019`
+assumed, so "both a fireball puff" is the authored behaviour and the requested asymmetry could only
+be produced by deleting a call the data makes — trap (a). Landed: the `fx=`/`snd=` fields on the
+impact breadcrumb (the missing instrument, INSTR-5), `docs/formats/weapon-effects.md`'s finding,
+`analysis/surface-classification/class_area_share.py` + the per-chapter class-area table, and
+WORLD-20. `.\RunTests.ps1` green (320 units, 14 suites, 13 goldens hash-identical).
 
 ---
 

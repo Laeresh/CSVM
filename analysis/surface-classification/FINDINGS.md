@@ -127,3 +127,27 @@ to `buildings`; nothing else can drift. `classify()` here and `SceneBuilder.Clas
 gained `empire*`/`chrysler*`. Post-change the same probe logs 8/8 `-> Buildings` on
 `nycity/col_buildings`. Still-unclassified residual on `nycity`, accepted as before: `tankerdeck`
 (a ship deck), `aphagar01/05`, `woodsupport*`, `oldroad1`, signage (~18 k area total).
+
+## 2026-08-01 — how much of each chapter is `buildings` at all (`BL-019` disproof)
+
+`class_area_share.py <CHAPTER…>` runs the shipped classifier over every polygon of a chapter's
+extracted gamez and reports polygon counts, triangulated area share per class, and the building
+texture histogram. It answers the question a "buildings and dirt look identical" report raises
+first: **is the buildings class reachable in the map you were flying over?**
+
+| | C1 | C1B | C1C | C2 | C2B | C3 | C4 | C5 |
+|---|---|---|---|---|---|---|---|---|
+| `buildings` polys | 1197 | 99 | **0** | 490 | **0** | 332 | 558 | 4238 |
+| `buildings` area share | 0.07 % | 0.00 % | — | 0.07 % | — | 0.00 % | 0.01 % | 5.85 % |
+| `water` area share | 1.99 % | 4.16 % | 8.56 % | 6.33 % | 8.25 % | 32.55 % | 0.18 % | 2.46 % |
+
+**C1C and C2B carry no building-classed geometry at all** — open-water/mountain maps — and
+everywhere but C5 the class is well under a percent of the collidable surface. So a probe that
+sprays rockets at random terrain and reports "always `Default`" has measured the map, not the
+classifier. Aim at named geometry: C1's `g306` hangar wall at ≈ `(-4258, 172, -6405)` logs
+`-> Buildings` on `g306/col_buildings` every time.
+
+⚠ **The material `soil` enum is not this classification.** `materials.json` carries a per-material
+`soil` (`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) — a MechWarrior-3 leftover: it has
+no `buildings` value at all, and its `Water` count is 1–3 materials per chapter against the
+hundreds of water polygons the texture-name rule finds. Do not re-chase it as the "real" source.

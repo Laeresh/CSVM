@@ -148,6 +148,42 @@ IMPACT closure needs cost the per-type explosion rings below, all four smoke-tra
 (`ap_trails`/`he_trails`/`flak_trails`/`carnage_trails`), the sonic puff clusters and the torpedo
 ripple; `--effects-test` reported it only as `PufferState(no host node)×20`.
 
+### The HE rocket's dirt burst CONTAINS its building burst — they are not alternatives
+
+`BL-019` reported that an HE rocket (`wep_06`/`wep_24` BOOM, the stock rocket on all 11 planes)
+gives "identical fireball puffs" on a building and on dirt, on the belief that the original pairs
+`large_fireball` (buildings) against a light flash with no puff (dirt). **The data says the
+opposite, and the shared fireball is authored, not a lookup collapse.** Measured, in order:
+
+1. The `IMPACT` table **does** carry distinct entries — `buildings` → `ANIMATION large_fireball`,
+   `default` → `SURFACE_ANIMATION he_ground_effect` (`--dump-weapons=wep_06`). The `default` entry
+   uses the `SURFACE_ANIMATION` slot, not `ANIMATION`; a reader that reads only `ANIMATION` would
+   see nothing there, which is why `WeaponDef` keeps both slots.
+2. The engine's per-surface lookup **does** differentiate. The `impact:` breadcrumb reports the
+   resolved name: a C1 hit on the `g306` hangar wall logs `-> Buildings … fx=large_fireball`, a hit
+   on terrain 60 m away logs `-> Default … fx=he_ground_effect`.
+3. `he_ground_effect` (`he_control.zrd.json`) `CALL_ANIMATION`s **`large_fireball` itself**, at
+   `AT_NODE he_ring, 0, 12, 0` — plus `call_he_ring`, `call_he_ring1`, two `call_hetrails_up`
+   columns, a `he_light`/`he_light1` flash pair and a `FBFX_COLOR_FROM_TO` screen flash.
+
+So dirt is a **superset** of buildings: same fireball, plus the ring stack, the trail columns and
+the light flashes. Both surfaces are *supposed* to show the same fireball, and it is the dominant
+visual — which is exactly what makes them read as "identical" in the air. Making dirt a light flash
+would mean deleting the fireball the data calls, i.e. inventing content.
+
+⚠ **The material `soil` field is not the surface class.** `materials.json` carries a `soil` enum
+(`Default`/`Grass`/`Water`/`Silt`/`NoSlip`/`Fire`/`Mech`) — a MechWarrior-3 leftover with no
+`buildings` value, and only 1–3 `Water` materials per chapter against the hundreds of water
+polygons the texture-name classifier finds. Surface class comes from the polygon's **texture name**
+(`SceneBuilder.ClassifySurface`), and nothing else.
+
+⚠ **`buildings`-classed geometry is rare, so most hits are legitimately `Default`.** Per-chapter
+share of collidable polygon area (`analysis/surface-classification/class_area_share.py`):
+C5 5.85 %, C1/C2 0.07 %, C3/C4 ~0.00 %, and **C1C and C2B have none at all** — those two are
+open-water/mountain maps. A run that never finds a building is the map's content, not a bug; aim at
+a named hangar (C1 `g306` ≈ `(-4258, 172, -6405)`) rather than sampling terrain and concluding the
+class is unreachable.
+
 ### Explosion rings — the per-type ground decals
 
 Each ordnance type's ground burst carries a **ring mesh**, not a particle: a flat 8.4 m quad the def
