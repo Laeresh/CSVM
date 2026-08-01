@@ -1010,11 +1010,17 @@ feeds the HUD DMG line.
 Visible damage driven purely by data thresholds: as a part's HP fraction crosses an injure_anims
 entry it shows the torn pdpN panel, hides the healthy skin, and assigns a discrete-puff fire trail
 from the emitter pool; def-level player_smoketrail starts the nose smoke/fire pair. UpdateStatic
-burns the trails in place at StaticBurnSpeed for the parked damage lab.
+burns the trails in place at StaticBurnSpeed for the parked damage lab. A `<part>_damage_effects`
+entry (the 0.99 one) goes out through `DamageEffectSink` to the player's own rig runtime, which
+sparks at a `pdpN` panel — **authored on `player_pfighter` alone**, so the other 10 aircraft reach
+this branch never (B4). The same effect's general home is the weapons.json `player` IMPACT surface,
+blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" the asymmetry.
 ⚠ PairHealthySkins pairs torn↔healthy by merged mesh-AABB position, never by name (the _h
   numbering is crossed on three models — docs/formats/gamez.md) and never by node origin (the
   placement is baked into mesh space); unpaired _h skins are never hidden.
-⚠ player_fuelleak and the *_damage_green/yellow/red cockpit cycle stay unwired (no cockpit).
+⚠ player_fuelleak, got_hit_anim's nosedamage blink and the *_damage_green/yellow/red cockpit cycle
+  stay unwired (no cockpit; GaugeCluster.OnPartDamage approximates the blink by hand — do not merge
+  the two, different data and different surface).
 ⚠ These smoke/fire puffers are built directly via Puffer.MakePuffer — NOT through the world-effects
   runtime's fixed name set. Fixing the world-destructible puffer gap does not touch this path, or
   vice versa; diagnose them separately.
@@ -1555,7 +1561,11 @@ caller's build summary.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
-`BuildFlightCrashRuntime`. `EffectAnimNames` binds impact + death effects **and** the
+`BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: the
+crash def's closure **plus** `PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
+`random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
+`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live puffer factory.
+`EffectAnimNames` binds impact + death effects **and** the
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
 `partial_damage_obj`, staged via `EffectStageRoots`) **and** the airframe's three graze reactions
 (`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`

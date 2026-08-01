@@ -38,6 +38,13 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed class DamageVisuals
 {
+    /// <summary>Plays a named anim def on this player's own plane-scoped runtime (the crash rig) —
+    /// the `&lt;part&gt;_damage_effects` shim a part's 0.99 injure_anims entry names, whose closure
+    /// sparks at a `pdpN` panel. Set after the rig's runtime exists, which is later than this object
+    /// is built; null leaves the spark burst unplayed, which is also the case for the 10 aircraft
+    /// whose data carries no 0.99 entry at all.</summary>
+    public Action<string>? DamageEffectSink;
+
     private const float NoseOffset = 3.5f; // m ahead of center — the data emits the trail
                                            // at prop1 (the nose engine); TUNE per plane
 
@@ -113,8 +120,18 @@ public sealed class DamageVisuals
                         foreach (var healthy in healthySkins)
                             healthy.Visible = false;
                 }
-                // else: *_damage_green/yellow/red cockpit indicator, *_damage_effects,
-                // got-hit sparks — unwired (no cockpit / effect-call playback yet)
+                else if (anim.EndsWith("_damage_effects", StringComparison.OrdinalIgnoreCase))
+                {
+                    // The per-impact spark burst. The authored chain discards the part: all four
+                    // <part>_damage_effects defs are the same one-event shim calling
+                    // random_gun_impact, which picks pdp1 (40%) or pdp2 (40%) and ALWAYS also
+                    // sparks pdp4 — so a hit can light one panel or two, never none.
+                    DamageEffectSink?.Invoke(anim);
+                    GD.Print($"damage sparks: {anim} on ({partName} {fraction * 100f:0}%)"
+                             + (DamageEffectSink == null ? " — no rig runtime, not played" : ""));
+                }
+                // else: *_damage_green/yellow/red cockpit indicator and got_hit_anim's nosedamage
+                // blink — unwired (no cockpit; GaugeCluster.OnPartDamage approximates the latter)
             }
 
         // whole-plane thresholds (any part qualifies — see PlaneStats.VehicleInjureAnims)

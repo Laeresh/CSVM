@@ -9699,3 +9699,51 @@ clean. **4 of 13 goldens re-pinned** — `c1-waterfall`, `c3-island`, `c1-destro
 global sprite-size change should leave. The waterfall's mist at the cliff base goes from a sparse
 speck field to a billowing cloud (`.scratch/goldens/c1-waterfall.png` at regen time). The graze site
 is confirmed back at the contact point by the flight log's `contact=… site=…` pair reading equal.
+
+## 2026-08-01 — B4 `BL-090` item 2: the per-impact spark burst
+
+A part crossing its 0.99 `injure_anims` threshold now plays the authored spark burst. The chain,
+traced in the compiled defs before any code: `<part>_damage_effects` → `random_gun_impact` →
+`yellow_sparks_follow` at a `pdpN` panel. `DamageVisuals` stops skipping the entry and routes it
+through a new `DamageEffectSink` to the player's own rig runtime — the one `BuildFlightCrashRuntime`
+builds, which is the only runtime that has what this chain needs: the `player` anim root
+(`random_gun_impact`'s), the plane's own `pdpN` panels to resolve as INPUT_NODEs, and a live puffer
+factory (the world-effects runtime deliberately excludes `random_gun_impact` because its generic
+`player` root would mis-anchor). So that runtime's bound set becomes "every def that plays ON this
+aircraft": `player_crash_dirt` plus the four `PlaneDamageEffectAnims` shims, still a `Subset`
+closure and never the whole world program. `EffectTemplateRoots` gains `yellow_spark_02` (a single
+parentless root in every chapter gamez). The dice are the crash rig's existing seeded stream, so
+`--det` reproduces the panel choice with no new RNG.
+
+**Two corrections to the item's stated evidence, both measured, both now in `docs/formats/vehicle.md`.**
+(1) **Only `player_pfighter` ships the 0.99 entries** — exactly 4 occurrences install-wide, all
+scoped to that one def, while each of the 11 planes spells its own `got_hit_anim`. The Devastator is
+the only aircraft that sparks; the plan's "anchor it at the randomly chosen `pdpN`" reads as a
+general mechanism and is not one. (2) The choice is not a single random panel: it is `pdp1` at 40%,
+else `pdp2` at 40%, **plus an unconditional third call at `pdp4`** — one panel or two, never none.
+The formats page had `_damage_effects` filed under the cockpit `_green/_yellow/_red` texture cycle,
+which the 0.99 neighbour thresholds make an easy misread; that entry is corrected.
+
+**A third finding, from the user asking whether the sparks were a cockpit or a mission effect
+(neither).** They are exterior — the chain targets `pdp1`/`pdp2`/`pdp4`, the torn-skin panels, while
+the cockpit damage nodes are `pcdp4`/`pcdp6` and `nosedamage` and it touches none of them; and the
+entry is in the Devastator's own vehicle def, not mission data. But the question turned up
+`random_gun_impact`'s **other** consumer: it is the `player` **IMPACT surface animation** in
+`weapons.json` for `wep_03` (60slug) — what a bullet does when it hits the player's aircraft. That
+is the general mechanism B4's goal actually describes, it is authored on 44 of 48 weapons, and it is
+untriggerable until an enemy can shoot the player. Filed as `BL-222` (blocked on M4), with the
+leftover reading of the Devastator entry recorded as an explicit hypothesis in
+`docs/formats/vehicle.md` and the class documented in `docs/formats/weapons.md`.
+
+**How verified.** A scripted `--det` Devastator graze
+(`--chapter=C1 --plane=player_pfighter "--pos=-6500,8,-1500" "--direction=1,-0.012,0"`) logs
+`damage sparks anim=rightwing_damage_effects started=1`, `--debug-anim` shows
+`retarget 'yellow_sparks_follow' onto 'pdp4' [caller random_gun_impact]`, and the rig runtime's
+cumulative `PuffersBuilt` reads **2** by the next event — `trailpuffer2` + `chippuffer1`, the
+WORLD-12 check that emitters were built and not merely that a def started. A `--view=4` flank burst
+separates the spark plume at the airframe from B3's splash at the waterline, so neither is being
+mistaken for the other. ⚠ **The instrument lied once and the fix is worth keeping:** a
+`PuffersBuilt` delta sampled inline right after `Play` reads 0 no matter what renders, because the
+def's `PufferState` events dispatch on the runtime's *next* tick — the count has to be sampled
+later. `.\RunTests.ps1` green: 320 units, 14 in-engine suites, 13/13 goldens hash-identical (the
+goldens fly `player_bhawk`, which carries no 0.99 entry, and the extra staged template is hidden).

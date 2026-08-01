@@ -57,7 +57,15 @@ public sealed class WorldEffectsFactory
     // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
     // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
     private static readonly string[] EffectTemplateRoots =
-        { "yellow_spark_01", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
+        { "yellow_spark_01", "yellow_spark_02", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
+
+    // The per-player rig's non-crash defs (B4): the four `<part>_damage_effects` shims the
+    // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
+    // exactly what the crash rig already has — the `player` anim root, the plane's own `pdpN`
+    // panels as INPUT_NODEs, and a live puffer factory. Each is a one-event shim calling
+    // `random_gun_impact`, which the closure pulls in with `yellow_sparks_follow` under it.
+    private static readonly string[] PlaneDamageEffectAnims =
+        { "nose_damage_effects", "tail_damage_effects", "leftwing_damage_effects", "rightwing_damage_effects" };
 
     // The gamez template roots those effects' meshes and puffers ride — staged under the
     // world-effects stage so a PlayEffectAt relocates one onto the hit/death point. This is the
@@ -278,10 +286,13 @@ public sealed class WorldEffectsFactory
         // splitscreen crashes differ from each other but repeat run to run.
         var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash), _worldRoot,
             st => Puffer.Create(st, textures, sustained: true), _spec.DebugAnim);
-        // Bind only the crash def's transitive CALL_ANIMATION closure (Subset), not the whole world
-        // program: the full 800+ defs include ~150 generic-named world defs that would mis-anchor
-        // onto this plane's parts and run their reset states on the aircraft.
-        crashRuntime.Bind(controller, crashProgram.Subset("player_crash_dirt"));
+        // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
+        // world program: the full 800+ defs include ~150 generic-named world defs that would
+        // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set is
+        // the crash def plus the damage-effect shims — every def that plays ON this aircraft.
+        var rigAnims = new List<string> { "player_crash_dirt" };
+        rigAnims.AddRange(PlaneDamageEffectAnims);
+        crashRuntime.Bind(controller, crashProgram.Subset(rigAnims));
         controller.AddChild(crashRuntime);
         controller.CrashRuntime = crashRuntime;
         controller.CrashAnchor = crashRoot;

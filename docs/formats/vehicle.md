@@ -99,8 +99,33 @@ A list of part entries:
   flag may still drive something (sound, effects) the design text does not cover.
 - `injure_anims`: **descending HP fractions**; when the part's HP fraction crosses one,
   the named anim runs. Two families interleave:
-  - `<part>_damage_effects` (0.99) / `_green` (0.72) / `_yellow` (0.46) / `_red` (0.20) —
-    the cockpit damage-indicator texture cycle (unwired until a cockpit exists).
+  - `<part>_damage_green` (0.72) / `_yellow` (0.46) / `_red` (0.20) — the cockpit
+    damage-indicator texture cycle (unwired until a cockpit exists).
+  - `<part>_damage_effects` (0.99) — **not part of that cycle, despite the neighbouring
+    thresholds: this is the per-impact spark burst.** All four (`nose`/`tail`/`leftwing`/
+    `rightwing`) are one-event shims calling `random_gun_impact` (anim root `player`) with no
+    parameters, so the part identity is discarded by the data itself. `random_gun_impact` is an
+    IF/ELSEIF `RANDOM_WEIGHT 0.4` / `0.4` pair choosing `yellow_sparks_follow WITH_NODE pdp1` or
+    `pdp2`, **followed by an unconditional third call at `pdp4`** — so a hit sparks one panel or
+    two, never none. `yellow_sparks_follow` (root `yellow_spark_02`) emits `trailpuffer2` +
+    `chippuffer1` at its INPUT_NODE (the chosen panel) under a 50/50 pick between two
+    `snd_ricochet1–4` sequences. ⚠ **Only `player_pfighter` ships the 0.99 entries** — measured
+    install-wide, exactly 4 occurrences, all in the def whose `nodename` is `player_pfighter`
+    (`title MSG_VEH_DEVASTATOR`), while each of the 11 planes spells its own `got_hit_anim`.
+    Inheritance does not spread it: all 22 defs carrying `destroyable_parts` (11 `player_*`
+    flyables + 11 lowercase AI variants) are `kind_of` a base that carries no parts list of its
+    own. The other 10 aircraft have no per-impact spark at all.
+    At 0.99 it fires on the *first scratch*, which is authored, not a threshold to retune.
+
+    ⚠ **`random_gun_impact`'s real home is `weapons.json`, not here — read this entry as a probable
+    authoring leftover (hypothesis, 2026-08-01).** It is the `player` **IMPACT surface animation**
+    for `wep_03` (60slug) — "what a bullet does when it hits the player's aircraft"
+    ([weapons.md](weapons.md)), the counterpart of the `enemy` and `default`/`buildings` classes.
+    That is a general mechanism gated on being shot at, which nothing can do in M3. One plane of
+    eleven ALSO firing it off a damage threshold fits a leftover better than a per-aircraft
+    feature — but no capture of the original settles it, so it is a reading, not a finding, and the
+    entry is shipped data either way. Do not "fix" the other ten planes by adding the entry to them;
+    that would be inventing content.
   - `pdpanelN` — flips the exterior torn-skin panel `pdpN` (planes.zbd nodes; the anims
     live in the plane's own reader, e.g. player-1.json). Left wing: pdpanel5 @0.5,
     pdpanel4 @0.3, pdpanel3 @0.15; right wing: pdpanel6 @0.4, pdpanel1 @0.3,

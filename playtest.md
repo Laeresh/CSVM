@@ -265,6 +265,20 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   spawn), `--chapter=C2` for walls. ⚠ The `C` collider overlay you wanted for picking surfaces is
   broken — `BL-220`.
 
+- `PT-25` **Per-impact spark burst — Devastator only (`BL-090` item 2 landed 2026-08-01).** Taking
+  any damage now sparks at a `pdpN` panel. ⚠ **Fly `--plane=player_pfighter`**: measured
+  install-wide, it is the *only* aircraft whose data carries the 0.99 `injure_anims` entry, so on
+  the other ten this is correctly silent and testing them proves nothing. Scrape something lightly —
+  the threshold is 0.99, so the first scratch fires it. *Look for:* (a) sparks visible **on the
+  airframe** at a panel, distinct from the graze reaction's smoke at the contact point (`PT-24`) —
+  the two fire together on a scrape and a flank view (numpad 4/6) separates them; (b) whether it
+  reads as **sparks** at all — the emitters are `trailpuffer2`/`chippuffer1` at the new 4× size
+  scale, and a scripted flank capture reads more like a pale plume than a bright spark shower, which
+  would mean the graze needs a smaller scale than the destruction fires (same open question as
+  `PT-24` (a)); (c) the ricochet sounds under it (`snd_ricochet1–4`, a 50/50 pick between two
+  sequences). *Not a bug:* one hit lighting **two** panels — the data always sparks `pdp4` on top of
+  its 40/40 pick between `pdp1` and `pdp2`. `./RunGame.ps1 --plane=player_pfighter --chapter=C1`.
+
 ---
 
 ## Everything else

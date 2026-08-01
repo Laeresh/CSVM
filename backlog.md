@@ -138,6 +138,24 @@ its symptom and traps.
 
 ## Blocked / deferred
 
+- `BL-222` **The `player` IMPACT surface class — the general got-shot feedback on your own airframe,
+  authored on 44 of 48 weapons and untriggerable until something shoots back (found 2026-08-01
+  while landing `BL-090` item 2).** `weapons.json`'s `IMPACT` block is keyed by surface class, and
+  `player` ("the struck surface is the player's aircraft") is populated on 44 entries: most name the
+  caliber's own `*_gunhit`, several name `f18sparks2`, and `wep_03` (60slug) names
+  `SURFACE_ANIMATION: random_gun_impact` — the spark burst at a `pdpN` panel that B4 wired.
+  `SurfaceClass.Player` already parses (`WeaponDefs.cs`) and `ProjectilePool` already classifies
+  surfaces; what is missing is a shooter. **Blocked on M4's enemy aircraft**, not on data or decode.
+  This is the *general* mechanism B4's goal described — B4 reaches it only through the Devastator's
+  one-off 0.99 `injure_anims` entry, which is plausibly an authoring leftover
+  (`docs/formats/vehicle.md`).
+  ⚠ **Traps.** (a) `ProjectilePool`'s hit detection is a world raycast against a body-less plane —
+  a round never hits an aircraft at all today, so this needs the aircraft to become a hittable body
+  first; it is not a matter of adding a switch case. (b) Do not reach it early by firing the
+  `player` effect off our own collision path — that is what B4's Devastator entry already does, and
+  conflating "I was shot" with "I scraped a wall" would make both wrong. (c) `f18sparks2` is
+  undecoded — check it resolves in the effect readers before assuming the class is fully wireable.
+
 - `BL-030` **`docs/SCOPING-M4-ai.md` still names `PlaneViewer.cs:<line>`.** The C11 final sweep
   (PLAN-planeviewer-split) re-pointed the three `docs/formats/` hits to their real post-split
   owners (`WeatherRig.Build`, `WorldEffectsFactory.BuildWorldEffectsRuntime`) but deliberately left
@@ -928,8 +946,9 @@ the document alone, it says so and marks the value TUNE.
   data port. (`rof/ui_strings.json` carries "NITRO-BOOST: %4!s!" on the purchase screen and the
   buyable engines come in plain and "… nitro" variants, so the engine choice is what grants it.)
 
-- `BL-090` **Small per-impact feedback gaps — three (item 4, shell ejection, landed as C22
-  2026-07-31; item 3, the glancing-collision reaction, landed 2026-08-01), all
+- `BL-090` **Small per-impact feedback gaps — two (item 4, shell ejection, landed as C22
+  2026-07-31; items 3 and 2, the glancing-collision reaction and the per-impact spark burst,
+  landed 2026-08-01), all
   with the data already shipped.** Grouped because each
   is a few lines of wiring against an authored def and they share one theme: the moment something
   hits the plane, or the plane touches something, is under-communicated.
@@ -938,13 +957,6 @@ the document alone, it says so and marks the value TUNE.
      (`RANGE [130,420]`) — a second engine loop to blend in as the airframe takes damage.
      `PlaneStats` reads `engine_sound` (`PlaneStats.cs:190`) and not this one. The two trailing
      floats are unlabelled and undecoded (plausibly a health-fraction fade window).
-  2. **The per-impact spark burst — but it is *not* `got_hit_anim`.** `got_hit_anim` is parsed and
-     unread (`PlaneStats.cs:36,232`), but the defs it names only blink a `nosedamage` node eight
-     times — a cockpit indicator, which `GaugeCluster.OnPartDamage` already approximates by hand.
-     The real impact effect is the **`injure_anims` 0.99 entry**: `<part>_damage_effects` →
-     `random_gun_impact` → `yellow_sparks_follow` at a randomly chosen `pdpN` panel.
-     `DamageVisuals.cs:194-195` explicitly skips both. Now wireable — the D32 world-effects runtime
-     that plays a named effect at a point exists.
   5. **`snd_dangerzone_camera` is a data-orphan with a ready trigger.** `dangerzone_camera.wav`,
      SFX, non-3D; in no `SOUND_GROUPS` entry and named by no world data. `StuntMission.Complete` is
      the obvious hook. ⚠ Confirm against the original that it is the zone-cleared cue and not a

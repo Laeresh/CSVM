@@ -314,6 +314,23 @@ public sealed class FlightRigAssembler
         {
             _worldEffects.BuildFlightCrashRuntime(controller, planeBuilder, planeName, _in.Gamez,
                 _in.WorldScene, _in.Textures, _in.CrashProgram, verbose);
+            // B4: that runtime also carries the <part>_damage_effects shims, so a part crossing its
+            // 0.99 injure_anims threshold can spark at a pdpN panel. Wired here because the runtime
+            // is built after the controller joins the tree, later than DamageVisuals itself.
+            if (controller.Visuals != null && controller.CrashRuntime is { } rigRuntime)
+            {
+                controller.Visuals.DamageEffectSink = anim =>
+                {
+                    // applyReset:false for the same reason the crash trigger passes it — a reset
+                    // here would re-pose nodes the damage state owns, not just the effect's.
+                    int started = rigRuntime.Play(anim, applyReset: false).Count;
+                    // ⚠ started is instances, NOT emitters — the def's PufferState events dispatch on
+                    // the runtime's NEXT tick, so a puffer-count delta taken here reads 0 no matter
+                    // what renders (verification.md WORLD-12 needs the count sampled later, which is
+                    // what the rig's cumulative total below does).
+                    Log.Info("anim", $"damage sparks anim={anim} started={started} rig_puffers_total={rigRuntime.PuffersBuilt}");
+                };
+            }
         }
     }
 

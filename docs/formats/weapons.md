@@ -208,6 +208,12 @@ Each class value is again an alternating dict over `ANIMATION` / `SURFACE_ANIMAT
 `SURFACE_ANIMATION` is the surface-oriented variant of `ANIMATION`. **Hit-testing must
 classify the struck surface** to select the right variant.
 
+The **`player` class is where the got-shot feedback on your own airframe is authored** — the 44
+entries carrying it name the caliber's own `*_gunhit`, or `f18sparks2`, or (on `wep_03`, 60slug,
+whose `enemy` class draws `5060slug_gunhit`) `SURFACE_ANIMATION: random_gun_impact` — the spark
+burst at a `pdpN` panel documented in [vehicle.md](vehicle.md). Unreachable while nothing shoots
+back: it needs an enemy aircraft firing at the player, so the whole class is untriggered in M3.
+
 ```json
 "IMPACT": [
   "default", ["ANIMATION", ["3040slug_gunhit"], "SOUND", ["snd_grnd_bullet"]],
