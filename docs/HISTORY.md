@@ -9853,3 +9853,44 @@ and are staged side by side, so the callee's global name fallback launches every
 `BL-224` — a rocket explosion's puffers are only torn down by the 32 s runtime TTL or by the next
 rocket re-starting the def, so an explosion appears to end only when you fire again. Both filed in
 `backlog.md` with their traces and traps.
+
+## 2026-08-01 — `BL-219`/`BL-224`: the rocket explosion's duplicates at the world origin, and why it never ended
+
+Two playtest reports, one cause. Fixed together because the second fix cannot work without the
+first.
+
+**One name, three roots.** `fly_trail1`–`fly_trail5` is declared by `he_trails`, `ap_trails` **and**
+`carnage_trails` (`pd_trails` too, unstaged), and `WorldEffectsFactory.EffectStageRoots` stages all
+three side by side under one `world_effects` node. `he_ground_effect` calls `call_hetrails_up` with
+`AT_NODE he_ring`, so the callee starts anchored on the **call site**, whose subtree holds no
+`fly_trailN` — and both name→node routes then fell through to a **global** match. `Targets`
+(motions) returned every copy and launched all of them; only `he_trails`' set had been relocated
+onto the impact by `PlaceTemplateAt`, so the other two arced away from the stage origin, i.e. the
+world origin, trailing `spurtpuffer` smoke. That is `BL-219`, and the "5 duplicates" the report
+counted is exactly the five trail nodes.
+
+**And the two routes disagreed.** `ResolveOne` (the puffer host, `AT_NODE fly_trailN`) took a
+different path to the same name than `Targets` (the `OBJECT_ACTIVE_STATE` target), so even once the
+motions were right the emitter sat on one copy and its stop fired on another. Both now route through
+one `ResolveScoped`: call anchor → the definition's **own** template root → global, in that order.
+
+**The authored stop nothing was honouring.** `he_trails`' spurt columns carry no `ACTIVE_STATE 0`.
+What the data turns off is the **host** — `OBJECT_ACTIVE_STATE fly_trailN false`, sequenced after the
+2.5 s launch — and `TickPuffers` never consulted it, so the emitters ran until the 32 s runtime TTL
+or until the next rocket re-started the def. That is `BL-224`, and it is why an explosion appeared to
+end only when you fired again. `EndSustainedOn` now ends sustained emission under a deactivated node;
+live particles finish their lifetimes and a later `PUFFER_STATE 1` still revives the emitter, which
+the `puffit` sputter loop depends on. **Not** implemented as an `IsVisibleInTree` gate (the rule
+`TickLights` uses for lights): the effects stage keeps template roots hidden on purpose and their
+world-space particles still show, so that gate would silence every staged impact effect.
+
+**How verified.** `--debug-anim` on one C1 HE impact: before, three live motions per `fly_trailN`,
+two of them near `(0,0,0)` and moving (`(62.8, 14.8, 6.8)` → `(129.4, 28.4, 12.4)` in a second);
+after, one set, all at the hit point. Emitter lifetime on an airborne single-rocket run (no graze
+skid, which otherwise keeps replaying `touchdown_dirt` and confounds the count): the effects
+runtime's active-puffer count now falls 6 → 5 → 1 → **0** within seconds of the last impact and
+stays there, where before it held 6–7 puffers / ~200 particles to the end of a 25 s run. The world
+runtime's 4 ambient emitters are untouched. `.\RunTests.ps1`: 320 units, 14/14 suites, 12 of 13
+goldens hash-identical; **`c1-crash` re-pinned** — 0.65 % of pixels, max delta 18, confined to one
+73×124 px patch, a crash emitter now stopping at its authored `OBJECT_ACTIVE_STATE false` instead of
+running on (the manifest entry records it). `verification.md` gained WORLD-21 and WORLD-22.

@@ -478,11 +478,17 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 `Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
 anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
 meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).
+Every name→node lookup routes through `ResolveScoped` — call anchor, then the def's OWN root, then
+global — because staged effect templates reuse node names (`fly_trail1`-`5` is `he_trails` AND
+`ap_trails` AND `carnage_trails`) and the unplaced copies sit at the stage origin (`BL-219`).
 Puffer emitters key `(name, host[, def])`: def-scoped only where `DefScopedPufferKeys` is set (the
 effects runtime — the two damage-stage sputters both declare `black_smoke`; on the world runtime the
 collapsed key de-dups C5's six same-node `m_crane_go` spark defs, measured via the c5 golden — see
 the `_puffers` field comment before changing this). A `PUFFER_STATE 1` re-assert REVIVES a
-SustainEnd'ed emitter (the `puffit` sputter loop cycles 0/1 forever); emission sits at the host's
+SustainEnd'ed emitter (the `puffit` sputter loop cycles 0/1 forever), and `OBJECT_ACTIVE_STATE false`
+ends emission under that node (`EndSustainedOn`) — the only authored stop a stop-less `PUFFER_STATE`
+has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
+effects stage keeps template roots hidden while their world-space particles show; emission sits at the host's
 mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
 WORLD-15 — zero offset, byte-identical, otherwise). `PlayEffectAt(name, point, inputNode)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`

@@ -98,8 +98,8 @@
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "ff50560f7b816d9735b683839190fe4f",
-      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Re-pinned when the world gained backface culling (2026-08-01): 18.0 % - the same, cloud banks behind the fireball",
+      "hash": "26a0f5daf82c4ac7fa099564a3746bdf",
+      "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Re-pinned when the world gained backface culling (2026-08-01): 18.0 % - the same, cloud banks behind the fireball. Re-pinned for BL-224 (2026-08-01): 0.65 % of pixels, max delta 18, in one 73x124 px patch - a crash emitter now stops at its authored OBJECT_ACTIVE_STATE false instead of running on",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }
   ]

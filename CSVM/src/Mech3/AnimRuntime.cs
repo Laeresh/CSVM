@@ -1776,7 +1776,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 }
                 foreach (var t in Targets(ev, def, anchor))
                 {
-                    SetSubtreeActive(t, ev.Data.Bool("state"));
+                    bool active = ev.Data.Bool("state");
+                    SetSubtreeActive(t, active);
+                    if (!active)
+                        EndSustainedOn(t);
                     _opsApplied++;
                 }
                 return true;
@@ -2170,6 +2173,44 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         PuffersBuilt++;
     }
 
+    /// <summary>Ends sustained emission for every emitter hosted on <paramref name="root"/> or
+    /// inside its subtree — the authored stop for a stop-less <c>PUFFER_STATE</c>. `he_trails`'
+    /// five spurt columns carry no <c>ACTIVE_STATE 0</c>; what the data turns off is the HOST
+    /// (<c>OBJECT_ACTIVE_STATE fly_trailN false</c>, sequenced after the 2.5 s launch that threw
+    /// it), and until this was honoured the emitters ran on, so a rocket's smoke ended only at the
+    /// 32 s runtime TTL or when the next rocket re-started the def.
+    ///
+    /// <para>Live particles finish their lifetimes (<c>SustainEnd</c>, not a teardown), and the
+    /// <c>_puffers</c> entry stays so a later <c>PUFFER_STATE 1</c> revives it — the sputter loop
+    /// cycles 0/1 forever and relies on that. The emitter must leave <c>_activePuffers</c> though:
+    /// <c>SustainAt</c> re-arms <c>_sustaining</c> on its own, so a still-ticked emitter would
+    /// resume on the very next frame.</para>
+    ///
+    /// <para>⚠ Visibility is NOT the test here, unlike <see cref="TickLights"/>. The world-effects
+    /// stage keeps every template root hidden deliberately and its puffers still show, because
+    /// particles go TopLevel into world space — gating emission on <c>IsVisibleInTree</c> would
+    /// silence every staged impact effect. Only an explicit deactivation of the host counts.</para>
+    /// </summary>
+    private void EndSustainedOn(Node3D root)
+    {
+        for (int i = _activePuffers.Count - 1; i >= 0; i--)
+        {
+            var (puffer, node) = _activePuffers[i];
+            if (!IsInstanceValid(puffer) || !IsInstanceValid(node))
+            {
+                _activePuffers.RemoveAt(i);
+                continue;
+            }
+            if (node != root && !root.IsAncestorOf(node))
+                continue;
+            puffer.SustainEnd();
+            _activePuffers.RemoveAt(i);
+            if (DebugMotions)
+                GD.Print($"anim: host '{NameOf(node)}' deactivated — emitter stopped "
+                         + $"({_activePuffers.Count} still emitting)");
+        }
+    }
+
     // Drives every running emitter from its host node's current world pose. Emitters follow
     // moving nodes (the train's smokestack travels the whole track loop), so this is per frame.
     private void TickPuffers(float dt)
@@ -2534,8 +2575,36 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         if (def.NodeRefs.TryGetValue(name, out int idx) && _byIndex.TryGetValue(idx, out var bound))
             return bound;
-        var found = ResolvePath(new List<string> { name }, anchor, def.LocalNodesOnly);
+        var found = ResolveScoped(new List<string> { name }, def, anchor);
         return found.Count > 0 ? found[0] : null;
+    }
+
+    /// <summary>Resolves a name path for one definition, narrowest scope first: the call anchor's
+    /// subtree, then the DEFINITION'S OWN template root(s), then — unless <c>LOCAL_NODES_ONLY</c> —
+    /// the whole index.
+    ///
+    /// <para>The middle step exists because the anchor is not always where the def's own nodes
+    /// live: an effect callee is re-anchored onto the CALL SITE (`call_hetrails_up` onto `he_ring`)
+    /// while its nodes ride its own template root, which <see cref="PlaceTemplateAt"/> relocated to
+    /// that site. Effect templates staged side by side reuse node names — `fly_trail1`-`5` belongs
+    /// to `he_trails`, `ap_trails` AND `carnage_trails` — so falling straight to the global index
+    /// animated every copy, two of them still parked at the stage origin, i.e. the world origin.</para>
+    ///
+    /// <para>⚠ Every consumer must resolve through THIS, not through <see cref="ResolvePath"/>
+    /// directly. The motion targets and the puffer host used to take different routes to the same
+    /// name and land on different copies of it, which put the emitter on one node and the authored
+    /// <c>OBJECT_ACTIVE_STATE</c> stop on another — so the stop never reached the emitter.</para>
+    /// </summary>
+    private List<Node3D> ResolveScoped(List<string> path, AnimDefinition def, Node3D? anchor)
+    {
+        if (anchor == null || !IsInstanceValid(anchor))
+            return ResolvePath(path, null, localOnly: true);
+        var found = ResolvePath(path, anchor, localOnly: true);
+        if (found.Count == 0)
+            found = ResolveInOwnRoot(path, def);
+        if (found.Count == 0 && !def.LocalNodesOnly)
+            found = ResolvePath(path, null, localOnly: true);
+        return found;
     }
 
     /// <summary>
@@ -3031,13 +3100,30 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         if (path.Count == 0)
             return new List<Node3D>();
-        var targets = ResolvePath(path, anchor, def.LocalNodesOnly);
+        var targets = ResolveScoped(path, def, anchor);
         if (targets.Count == 0)
         {
             _opsUnresolved++;
             RecordMissingTarget(def, string.Join("/", path), "name-no-match");
         }
         return targets;
+    }
+
+    /// <summary>Resolves a name path inside the definition's own anchor root(s) — the same set
+    /// <see cref="PlaceTemplateAt"/> moves onto a call site, so this is "the copy of the template
+    /// that was placed for me" rather than "some same-named node elsewhere in the stage". Uses
+    /// <see cref="FindAll"/> directly rather than <see cref="Anchors"/>: this runs per event, and
+    /// Anchors records a per-definition anchoring census that must not be re-entered here.</summary>
+    private List<Node3D> ResolveInOwnRoot(List<string> path, AnimDefinition def)
+    {
+        var found = new List<Node3D>();
+        if (string.IsNullOrEmpty(def.Name))
+            return found;
+        foreach (var root in FindAll(def.Name, null))
+            foreach (var node in ResolvePath(path, root, localOnly: true))
+                if (!found.Contains(node))
+                    found.Add(node);
+        return found;
     }
 
     // NAME paths: resolve the first element in scope (falling back to global for

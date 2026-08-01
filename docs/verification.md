@@ -456,6 +456,22 @@ cite these IDs.
   was broken, while a shot at C1's `g306` hangar wall — located offline with
   `analysis/surface-classification/class_area_share.py` and `--destroy`'s world-centre line —
   logged `Buildings` first try.
+- **WORLD-21** — **When a name resolves through two code paths, they will disagree, and the
+  symptom is not "unresolved" — it is one half of a mechanism acting on a different copy of
+  the object than the other half.** `fly_trail1`–`5` exists under `he_trails`, `ap_trails` AND
+  `carnage_trails`, all staged side by side. `Targets` (motions) and `ResolveOne` (puffer hosts)
+  each fell through to a **global** match, so an HE impact animated every copy — two of them
+  still parked at the stage origin — while the emitter sat on one node and the authored
+  `OBJECT_ACTIVE_STATE` stop fired on another, so the stop never reached it. Both bugs read as
+  separate reports ("duplicates at 0,0,0", "the explosion never ends") and were one cause. Check
+  for a **duplicate name across staged templates before trusting any name-keyed fix**, and route
+  every lookup through one function.
+- **WORLD-22** — **Do not read `IsVisibleInTree` as "is this running" in a subsystem that hides
+  its hosts on purpose.** The world-effects stage keeps every template root hidden and its
+  puffers still render, because particles go TopLevel into world space — so a `HIDDEN` line in
+  `--debug-anim` says nothing about whether that node's emitter is emitting, and a visibility
+  gate on emission (the rule `TickLights` correctly uses for lights) would silence every staged
+  impact effect. Use the explicit state the data sets, not the flag it happens to share.
 
 ## SHELL — Windows, PowerShell & processes
 
