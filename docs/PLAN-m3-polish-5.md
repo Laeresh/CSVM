@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — the instruments, and two measurements that may close their own entries
 
-1. ☐ `BL-220` The `C` collider overlay crashes on a freed mesh (and loses its legend to the same throw)
+1. ☑ `BL-220` The `C` collider overlay crashes on a freed mesh (and loses its legend to the same throw)
 2. ☐ `BL-052` Re-measure zero-separation coplanar pairs now the subface fix has landed
 3. ☐ `BL-063` `wait_for_completion` — decode the 92 non-null events, or disprove the index reading
 
@@ -174,7 +174,7 @@ read once `A1`'s overlay works.
 
 # Wave A — the instruments, and two measurements that may close their own entries
 
-## A1 ☐ `BL-220` The `C` collider overlay crashes on a freed mesh
+## A1 ☑ `BL-220` The `C` collider overlay crashes on a freed mesh
 
 **Goal.** Pressing `C` toggles the collider wireframes without throwing, in a world where
 destructibles have died and swapped their subtrees — and the class legend appears with it.

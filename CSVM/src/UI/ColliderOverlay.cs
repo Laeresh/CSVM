@@ -76,7 +76,7 @@ public sealed partial class ColliderOverlay : Node
     private readonly List<Entry> _entries = new();
     private readonly List<MeshInstance3D> _unswitched = new();
 
-    private bool _built, _shown, _debugDone;
+    private bool _shown, _debugDone;
     private double _sinceSync;
     private int _lastOn = -1, _lastOff = -1;
     private CanvasLayer? _hudLayer;
@@ -135,8 +135,8 @@ public sealed partial class ColliderOverlay : Node
         GetViewport().SetInputAsHandled();
     }
 
-    /// <summary>C: show or hide the wireframes. The first show walks the tree and builds them; every
-    /// later one is a visibility flip.</summary>
+    /// <summary>C: show or hide the wireframes. Each show walks the current tree so a destructible
+    /// swap cannot leave the overlay holding drawings parented to freed nodes.</summary>
     public void Toggle()
     {
         if (!_collisionBuilt)
@@ -149,27 +149,18 @@ public sealed partial class ColliderOverlay : Node
                        + "Relaunch with --collision to build and draw them.");
             return;
         }
-        if (!_built)
-        {
-            Build();
-        }
-        _shown = !_shown;
-        foreach (var e in _entries)
-        {
-            e.Draw.Visible = _shown && !e.Shape.Disabled;
-        }
-        foreach (var draw in _unswitched)
-        {
-            draw.Visible = _shown;
-        }
         if (_shown)
         {
-            SyncEnabled(report: false);
-            ShowNotice(_summary, showLegend: true);
+            HideNotice();
+            Clear();
+            _shown = false;
         }
         else
         {
-            HideNotice();
+            Build();
+            _shown = true;
+            SyncEnabled(report: false);
+            ShowNotice(_summary, showLegend: true);
         }
         // Two counts, never their difference: a death switches a healthy collider off and its
         // wreck's on, and the signed sum of that reads as death ADDING collision.
@@ -416,7 +407,6 @@ public sealed partial class ColliderOverlay : Node
 
     private void Build()
     {
-        _built = true;
         int lines = 0, boxed = 0, unknown = 0;
         var perClass = new Dictionary<string, int>();
 
@@ -492,6 +482,31 @@ public sealed partial class ColliderOverlay : Node
         Log.Info("world", $"collider overlay built: {_summary}");
     }
 
+    /// <summary>Releases this pass's drawings before the next show rebuilds from the live tree.
+    /// A source subtree may already have been freed by a destructible swap, so its drawing is
+    /// checked independently before it is queued.</summary>
+    private void Clear()
+    {
+        foreach (var e in _entries)
+        {
+            if (IsInstanceValid(e.Draw))
+            {
+                e.Draw.QueueFree();
+            }
+        }
+        foreach (var draw in _unswitched)
+        {
+            if (IsInstanceValid(draw))
+            {
+                draw.QueueFree();
+            }
+        }
+        _entries.Clear();
+        _unswitched.Clear();
+        _lastOn = -1;
+        _lastOff = -1;
+        _sinceSync = 0.0;
+    }
     private MeshInstance3D MakeDraw(ImmediateMesh mesh, Node3D parent, string name)
     {
         var draw = new MeshInstance3D

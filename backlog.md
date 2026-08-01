@@ -331,20 +331,6 @@ unscheduled.
   ⚠ Traps: don't attribute it to the concurrent-run collision — that failure mode is instant
   (0.9 s, LOG-13); this one died seconds in, with nothing else running.
 
-- `BL-220` **The `C` collider wireframe overlay crashes on a freed mesh and has lost its legend
-  (user, 2026-08-01, found while playtesting `PT-24`).** Pressing `C` throws
-  `ObjectDisposedException: 'Godot.MeshInstance3D'` from `ColliderOverlay.Toggle()`
-  (`ColliderOverlay.cs:159`, reached from `_UnhandledKeyInput` at `:134`) — the overlay holds
-  `MeshInstance3D` references to wireframes whose source nodes have since been freed (a destructible
-  dying and swapping its subtree is the obvious producer, the same lifetime problem `ClassOverlay`
-  avoids by rebuilding on every toggle). The on-screen legend the overlay used to print is also gone.
-  ⚠ Traps. (a) `Toggle` writing `Visible` on a stale reference is the *symptom*; the fix is
-  ownership — either rebuild the wireframe set per toggle (`ClassOverlay`'s approach) or drop
-  references on free, not an `IsInstanceValid` guard sprinkled at the write site, which would leave
-  the overlay silently missing whatever died. (b) The user reports `C` is the better tool than
-  `ClassOverlay`'s `X` for judging *surfaces*, so this is on the critical path for any further
-  per-surface work — don't treat it as a cosmetic debug-tool nit.
-
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
 - `BL-046` **Destruction stage visuals do not reach the world for every object.** A destroyed building shows

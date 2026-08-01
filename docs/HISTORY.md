@@ -10043,3 +10043,8 @@ goldens hash-identical. An absolute-path eight-chapter freecam sweep produced al
 with unchanged node/mesh counts and zero errors (the first relative-path attempt correctly was not
 credited after native stderr exposed SHOT-10). A deterministic C1 Bloodhawk run fired four BOOM
 rockets, logged four authored `he_ground_effect` impacts, and saved the targeted capture.
+## 2026-08-01 — M3 Wave A A1: collider overlay rebuilds after destructive swaps
+
+`BL-220`. The C collider overlay releases its current wireframes when hidden and rebuilds from the live tree whenever shown. A destructible swap can therefore neither leave a freed `MeshInstance3D` in its toggle list nor omit the wreck's current colliders; the existing class legend is shown by the normal successful path.
+
+**How verified.** A data-backed C2 freecam run destroyed `gate1` (one extracted object) before opening the overlay. It built and displayed the post-swap set — buildings 80, clutter 14,187, water 100, world 1,362 — and saved `.scratch/bl-220-c2-gate1.png` with no exception. `RunTests.ps1` passed: 320 units, 16/16 engine suites with zero engine errors, and all 13 golden hashes unchanged.

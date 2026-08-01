@@ -1202,8 +1202,7 @@ than under it (the anim lab's `--plane=` prop), each also capping its own ancest
 ## src/UI/ColliderOverlay.cs
 The collision wireframe overlay (key C, `--collision=show`/`--debug-colliders` script it) in
 `--freecam`/`--anim-lab`/`--fly`: one `ImmediateMesh` per collider host, colour-coded by owner class
-(world / water / buildings / clutter / plane / other), built once on the first toggle and
-`Visible`-flipped after. A colour→class legend (`BuildLegendText`, sourced from `ColorFor` alone so
+(world / water / buildings / clutter / plane / other), rebuilt from the live tree on every show. A colour→class legend (`BuildLegendText`, sourced from `ColorFor` alone so
 a palette change can't desync it) sits under the summary whenever wireframes are actually shown —
 never for the "no collision built" notice, an empty-legend echo of WORLD-9. Measured C2: 1,848
 node-backed shapes + 10k–14k clutter placements.
