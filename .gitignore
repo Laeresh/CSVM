@@ -66,3 +66,10 @@ __pycache__/
 #tmp
 HANDOFF*.md
 playtest-notes.md
+
+# Playtest evidence: captures staged for an at-the-controls A/B against the original,
+# one subfolder per playtest.md item (playtest/PT-23/...). These are renders of the
+# player's own game files, so they never go into version control -- see the asset rule
+# in CLAUDE.md. Unlike .scratch/ this is NOT swept by CleanScratch.ps1, so a capture
+# survives until the playtest item that owns it is closed.
+/playtest/

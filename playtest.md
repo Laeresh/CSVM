@@ -10,6 +10,10 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 
+**Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
+player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
+survive until the item that owns them closes. Delete the folder with the item.
+
 **How to launch.** `./RunGame.ps1` (no args) builds and opens the in-game launchscreen
 (Mode → Chapter → Plane, keyboard or pad). Any args bypass the menu and drop you straight in, e.g.
 `./RunGame.ps1 --plane=player_fury --chapter=C1`. Flight is the default. Full flag list:
@@ -232,10 +236,10 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   original. The reported symptom is settled — Hollywood's studio screens no longer z-fight — but
   the change also stopped the camera-anchored skydome's near wall drawing over things inside the
   dome, which **revealed distant geometry that was previously hidden**, and that half is unconfirmed
-  against the real game. Staged for you in `.scratch/ia-stunt/` (64 shots: 8 instant-action spawns
-  × the 6 chapters with a `stunt_flying` scenario, plus C1C/C2B on `dogfight_ace` — those two ship
-  no stunt scenario) and `.scratch/c1-above-cloud-deck-zone1-day.png` /
-  `-zone2-night.png`. *Look for:* (a) C4 — a far mountain range and the Chandler mesa are now
+  against the real game. Staged for you in **`playtest/PT-23/`**: 64 spawn shots
+  (`<chapter>-<scenario>-spawn<N>.png` — 8 instant-action spawns × the 6 chapters with a
+  `stunt_flying` scenario, plus C1C/C2B on `dogfight_ace`, since those two ship no stunt
+  scenario), plus `c1-above-cloud-deck-zone1-day.png` and `-zone2-night.png`. *Look for:* (a) C4 — a far mountain range and the Chandler mesa are now
   visible from the spawn; does the original show them or is the horizon meant to close there?
   (b) C1 above the deck — cloud banks and towers over the deck top; right density and draw
   distance? (c) any surface that is now **see-through from the wrong side**, which is what culling
