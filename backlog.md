@@ -333,22 +333,6 @@ unscheduled.
 
 ### Surfaces, colliders and inspect tools (from the Wave D playtest, 2026-07-25)
 
-- `BL-046` **Destruction stage visuals do not reach the world for every object.** A destroyed building shows
-  its burn effect, but some objects' effects are visible only in the panel and the log, which the
-  user found confusing. This is the known closure limit rather than a damage-lab defect: the
-  world-effects runtime binds a fixed 30-name set, and an effect name outside it starts, logs, and
-  draws nothing (verification WORLD-12). The progressive damage-stage pair (`sputter_*_obj`) was the
-  headline case and is bound since `BL-021` landed (2026-07-30); still outside the closure: any
-  death-effect name not in `EffectAnimNames`, C4 `train01`'s `b_steamtrail` damage stage (its anim
-  root is the live train, not a relocatable template — needs a different mechanism than
-  `PlayEffectAt`), and the template MESH halves (`BL-061` item 2).
-  ⚠ Traps: confirming a def *started* is not confirming it rendered — check that a `Puffer` was
-  built, or the measurement is of a no-op. Filed as an animation/visuals issue by the user's own
-  call, not as part of D34.
-  *Playtest after fix:* smoke should render at the damaged stage and fire at the destroyed stage, on the
-  object itself, for every destructible you can kill. `./RunGame.ps1 --freecam --chapter=C1`, **H**,
-  slide HP down and kill. *Blocks:* nothing here — an animation/visuals item, not a damage-lab one.
-
 ### HUD & audio
 
 - `BL-047` **Crash damage display blinks fully red.** `GaugeCluster.cs` blinks a zone for `DamageBlinkTime`

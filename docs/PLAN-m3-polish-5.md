@@ -133,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — effects and feedback whose data ships complete
 
-4. ☐ `BL-046` Census the install-wide death-effect call set against the world-effects closure
+4. ☑ `BL-046` Census the install-wide death-effect call set against the world-effects closure
 5. ☐ `BL-061` item 3 `biggun_flying_parts` builds no puffer — stage the `fly_trail*` sub-roots
 6. ☐ `BL-059` item 2 A sea dive plays the dirt crash — make `ClassifySurface` read the surface tag
 7. ☐ `BL-087` Incoming-fire near-miss cue — `bullet_warning_sg` and its shipped accumulator
@@ -292,7 +292,7 @@ authored states**; a decode that treats them as the same has not explained the d
 
 # Wave B — effects and feedback whose data ships complete
 
-## B4 ☐ `BL-046` Census the death-effect call set against the closure
+## B4 ☑ `BL-046` Census the death-effect call set against the closure
 
 **Goal.** Every effect name a death sequence calls either renders in the world or is documented as
 deliberately excluded with the reason — no name that starts, logs success and draws nothing.

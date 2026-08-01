@@ -10088,3 +10088,15 @@ deterministic freecam chapter captures exited 0 with the
 expected world counts and no Godot-format errors (five emitted the existing ObjectDB exit warning).
 `RunTests.ps1` passed: clean build, 320/320 units, 16/16 engine suites with zero engine errors, and
 all 13 golden hashes unchanged.
+
+## 2026-08-02 — M3 polish-5 B4: destruction-effect call closure censused
+
+`BL-046`. The new fail-closed compiled census found 2,360 destruction-slot calls to 30 targets:
+`EffectAnimNames`' transitive closure already handles 2,196 through eight targets, while the
+other 164 calls are 22 live-object choreography/wrappers that must remain local. No effect name
+or anchor root changed; the full classification is in `analysis/death-effect-closure/`.
+
+**How verified.** The census covered 14,963 definitions / 53 programs / eight chapters with no
+unclassified target. Eight freecam captures, a one-object C1 `ap_radiotwr.flt` targeted capture,
+and seeded `--effects-test` (33/33 resolved, 30 puffers) passed. `RunTests.ps1`: clean build,
+320/320 units, 16/16 engine suites with zero engine errors, and 13 unchanged golden hashes.

@@ -1599,8 +1599,8 @@ gun hit plays throttled and time-bounded (C8) — **and** the
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root
 `partial_damage_obj`, staged via `EffectStageRoots`) **and** the airframe's three graze reactions
 (`touchdown_default`/`_dirt`/`_water`, roots `spark_touchdown`/`dust_touchdown`/`splash_touchdown`
-+ `yellow_spark_01`, played by `FlightController.GrazeReaction`) — the install-wide stage-call closure except
-C4's train-anchored `b_steamtrail` (BL-046). Constructed once per session (`_worldEffectsFactory`, same lifetime as
++ `yellow_spark_01`, played by `FlightController.GrazeReaction`). Its `Subset` handles 8/30 destruction targets; 22 live-object choreography names remain local (`analysis/death-effect-closure/`).
+The stage-call closure excludes C4's train-anchored `b_steamtrail`. Constructed once per session (`_worldEffectsFactory`, same lifetime as
 `LiveryResolver`/`SpawnPicker`) from `(SessionSpec, Node3D worldRoot, Func<Vector3> playerPosition)`.
 The effects runtime's puffer factory passes `softParticles: false` for MIX-ramp states — these effects
 emit at ground-level sites, where the depth fade zeroes fresh dark puffs against the terrain (the

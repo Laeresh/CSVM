@@ -93,12 +93,15 @@ The two are different sequences with different jobs:
   node swap (`OBJECT_ACTIVE_STATE healthy INACTIVE` + `destroyed ACTIVE`), followed by debris
   and effect calls.
 
-Across the death sequences of the install, the call mix (2,360 `CallAnimation`s) is dominated by
-`ObjectActiveState` (2,028 — the swaps and hide-the-wreckage-pieces), `InvalidateAnimation`
-(1,286) and `StopAnimation` (1,260), with `Sound` (307), `PufferState` (148), `Loop` (86) and
-`ObjectMotion` (16) behind them. The most-called death effects are `large_30sec_fire` (1,035),
-`great_balls_of_fire` (432), `large_fireball` (307), `large_black_smokeball` (288) and
-`biggun_flying_parts` (84).
+The structurally distinct `unknown_seq` destruction slot carries **2,360 `CallAnimation`
+events to 30 names**. The live world-effects runtime handles 2,196 of them through eight names
+once its transitive call closure is counted: `large_30sec_fire` (1,035),
+`great_balls_of_fire` (432), `large_fireball` (307), `large_black_smokeball` (288),
+`biggun_flying_parts` (84), `dblcannon_flying_parts` (46), `big_splash` (3), and
+`big_ripple` (1). The other 164 calls target 22 live-object choreography definitions —
+zeppelin/aircraft/vehicle motion, node swaps, or wrappers into that handled set — and must
+remain on the world runtime rather than be relocated as effect templates. The exhaustive
+classification and per-target shapes are in `analysis/death-effect-closure/`.
 
 **`unknown_seq` is not the death sequence.** The compiled def carries one structurally-distinct
 trailing sequence slot the mech3ax fork surfaces as `unknown_seq` (see
