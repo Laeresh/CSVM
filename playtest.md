@@ -198,6 +198,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `./RunGame.ps1 --plane=player_bhawk --chapter=C2 --fire --infinite-ammo` (nycity + the coast in
   one flight). *Blocks:* closing PLAN-m3-polish-3 A2.
 
+- `PT-20` **Rocket sound re-test (D32 / `BL-211` landed 2026-08-01).** Fire a mix of rocket types at
+  open ground and at water: `--rocket=wep_04` (9M/incendiary — the one whose explosion sound was
+  previously silent on land), plus a couple of others (`wep_06` BOOM, `wep_08` SONIC). *Look for:*
+  (a) a launch bark now plays the instant each rocket leaves the rail; (b) 9M's ground/building
+  impact now plays an explosion sound (previously silent — only its water splash sound worked);
+  (c) whether what you now hear still "differs from the original" in some other way the survey
+  didn't find (no rocket has an authored in-flight/flyout loop sound in the data, so there is
+  nothing more to wire without a new lead — say what's still off, or request a capture).
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires). *Blocks:* closing
+  PLAN-m3-polish-3 D32.
+
 ---
 
 ## Everything else
@@ -206,6 +217,7 @@ Blocked on an unlanded fix, and tracked in [`backlog.md`](backlog.md) with its o
 `*Playtest after fix:*` line — the weapons re-tests (`BL-017`–`BL-028`), the inspect-tool
 follow-ups (`BL-042`–`BL-046`), the danger-zone gates (`BL-088`), the numpad camera rebuild
 (`BL-150`), graze pushback (`BL-172`) and the whole 2026-07-31 pass (`PT-05`–`PT-12`, retired —
-their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/PLAN-m3-polish-3.md`; `BL-199`/`BL-204`/
+their re-tests ride `BL-203`–`BL-211`, scheduled in `docs/plans/PLAN-m3-polish-3.md` (now
+`COMPLETE`); `BL-199`/`BL-204`/
 `BL-206`/`BL-207`/`BL-016`/`BL-203`/`BL-212` landed and came back as `PT-13`–`PT-19`). Do not
 re-add them here; the entry brings its own test when the fix lands.

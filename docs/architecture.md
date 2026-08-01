@@ -646,7 +646,11 @@ plus the sonic's authored 8.73 rad/s body roll (weapon-effects.md). Gun shots ad
 OBJECT_MOTION verbatim (per-shot nodes on purpose — a shared anchor under `CallAnimation`'s
 already-live gate drops gun-rate ejections), the authored muzzlepuffer smoke plus a hand-authored
 white eject-puff cluster on a gravity-free sprite pool, and a pooled `OmniLight3D` flash from the
-def's `3rdperson_lts` range/colour variants — stand-in magnitudes are `BL-200` TUNE.
+def's `3rdperson_lts` range/colour variants — stand-in magnitudes are `BL-200` TUNE. `PlaySound`
+(FIRE's launch bark, played once per `Spawn`; IMPACT's per-surface hit) resolves a `SOUND_GROUPS`
+name (e.g. the incendiary rocket's `ground_mixed_exp_sg` default impact) through `_soundGroups`
+first, same as `WorldSounds.PlayOneShot` — `FIRE.SOUND` is null for every cannon in the data
+(`LOOPED_SOUND_NAME` covers continuous gunfire instead), so the one-shot never doubles up (BL-211).
 ⚠ Hit detection is a per-step world raycast vs a body-less plane — a round never hits its own
   launcher, and `player`/`enemy` IMPACT classes are unreachable in M3.
 ⚠ `CANNON_SPREAD` jitter and the stand-in fireball draw from `Rng.Weapons` — a pinned run repeats

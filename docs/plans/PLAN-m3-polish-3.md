@@ -1,8 +1,6 @@
 # Milestone 3 polish, run 3 — make the landed combat feedback actually read
 
-**ACTIVE PLAN** (written 2026-07-31). It sits in `docs/`, which by this repo's convention makes it
-a live plan; CLAUDE.md's "Current status" names it. Move it to `docs/plans/` with a `COMPLETE`
-banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (written 2026-07-31, all 11 items landed 2026-08-01).
 
 Eleven items, all from the user's 2026-07-31 cockpit pass over the PLAN-m3-polish-2 landings
 (PT-05..PT-12, triaged into `backlog.md` `BL-203`–`BL-211` + the extended `BL-016`/`BL-199` the
@@ -104,7 +102,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — rockets
 
 31. ☑ `BL-016` Rocket explosion look: wire the authored per-type rings (`ring_ap/he/sonic`) (landed 2026-07-31 — the rings are authored meshes on 14 unstaged anchor roots, under a hidden stage; cockpit A/B vs the original = `PT-17`)
-32. ☐ `BL-211` Rocket sound: survey authored bindings vs playback, get the user's specifics
+32. ☑ `BL-211` Rocket sound: survey authored bindings vs playback, get the user's specifics (landed 2026-08-01 — two traced gaps fixed, cockpit re-test = `PT-20`)
 
 ## Dependency and parallelism notes
 
@@ -436,7 +434,7 @@ if no def references them, that's a finding to record, and the stand-in stays TU
 `BL-061`'s effect-census traps when counting what builds. (c) Explosion *sound* belongs to D32 —
 don't fold it in silently.
 
-## D32 ☐ `BL-211` Rocket sound: survey + user specifics
+## D32 ☑ `BL-211` Rocket sound: survey + user specifics
 
 **Goal.** The gap between the authored rocket fire/flyout sound and what we play is named — what
 the data binds, what we select, and what the user hears as wrong — ending either in a contained

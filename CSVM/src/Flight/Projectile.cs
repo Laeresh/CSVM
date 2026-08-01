@@ -206,6 +206,10 @@ public sealed partial class ProjectilePool : Node3D
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
     private readonly IReadOnlyDictionary<string, SoundDef>? _soundDefs;
+    private readonly IReadOnlyDictionary<string, SoundGroup>? _soundGroups;
+    // PlaySound resolves a SOUND_GROUPS name through this, same subsystem as _rng but its own
+    // System.Random stream — SoundGroup.Pick's signature (docs/formats/sounds.md).
+    private readonly System.Random _soundGroupRng = Rng.NewSystemRandom(Rng.Weapons);
 
     // The FLYOUT MODEL body (B14): rockets fly the original's own projectile mesh, instanced from a
     // chapter-gamez prototype root (`he_rocket`, `ap_rocket`, …) via the world's SceneBuilder — the
@@ -283,11 +287,13 @@ public sealed partial class ProjectilePool : Node3D
 
     public ProjectilePool(TextureArchive textures, SoundArchive? sounds,
         IReadOnlyDictionary<string, SoundDef>? soundDefs,
-        GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null, AnimProgram? flyoutAnims = null)
+        GameZ? flyoutGamez = null, SceneBuilder? flyoutScene = null, AnimProgram? flyoutAnims = null,
+        IReadOnlyDictionary<string, SoundGroup>? soundGroups = null)
     {
         _textures = textures;
         _sounds = sounds;
         _soundDefs = soundDefs;
+        _soundGroups = soundGroups;
         _flyoutGamez = flyoutGamez;
         _flyoutScene = flyoutScene;
         _flyoutAnims = flyoutAnims;
@@ -338,6 +344,11 @@ public sealed partial class ProjectilePool : Node3D
     /// momentarily full (a soft cap, never a crash).</summary>
     public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel)
     {
+        // The launch bark (BL-211): only rockets/ordnance carry a FIRE.SOUND — every cannon's is
+        // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
+        // one-shot with no double-up risk.
+        if (weapon.Fire?.Sound is { } fireSnd)
+            PlaySound(fireSnd);
         var forward = -muzzle.Basis.Z.Normalized();
         forward = ApplySpread(forward, weapon.CannonSpread ?? 0f);
         float speed = weapon.Velocity ?? 500f;
@@ -1489,9 +1500,18 @@ public sealed partial class ProjectilePool : Node3D
 
     private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);
 
+    // A weapon's SOUND binding (FIRE/IMPACT) may name a SOUND_GROUPS entry (e.g. the incendiary
+    // rocket's ground_mixed_exp_sg default impact) rather than a plain sounds.json SETS def —
+    // resolve it through the group first, same as WorldSounds.PlayOneShot, or the lookup below
+    // misses and the call silently no-ops (BL-211).
     private void PlaySound(string sndName)
     {
-        if (_sounds == null || _soundDefs == null || !_soundDefs.TryGetValue(sndName, out var def))
+        if (_sounds == null || _soundDefs == null)
+            return;
+        string resolved = _soundGroups != null && _soundGroups.TryGetValue(sndName, out var group)
+            ? group.Pick(_soundGroupRng) ?? sndName
+            : sndName;
+        if (!_soundDefs.TryGetValue(resolved, out var def))
             return;
         var stream = _sounds.Find(def.WavName, looped: false);
         if (stream == null)

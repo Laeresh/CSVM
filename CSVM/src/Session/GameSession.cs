@@ -1189,7 +1189,8 @@ public partial class GameSession : Node3D
         // (cam_anim / missile_puffers), from which the pool builds each type's smoke trail (C21).
         // Null on the empty stage (no world program) — rockets there fly trail-less, like the body.
         var projectiles = new ProjectilePool(state.Textures, state.Sounds, state.SoundDefs,
-            flyoutGamez: state.Gamez, flyoutScene: state.WorldScene, flyoutAnims: state.CrashProgram)
+            flyoutGamez: state.Gamez, flyoutScene: state.WorldScene, flyoutAnims: state.CrashProgram,
+            soundGroups: state.SoundGroups)
         {
             Listener = _rigs.Count > 0 ? _rigs[0].Camera : _camera,
             // Route weapon hits to the world's destructibles (C23): the pool's raycast

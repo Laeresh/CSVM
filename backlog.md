@@ -138,7 +138,7 @@ work is below.
 The PT-05..PT-12 cockpit pass over the PLAN-m3-polish-2 landings. The common thread: **several items
 landed mechanically correct but perceptually near-nil** — the effect builds, the log says success,
 and the player sees nothing. All nine are scheduled into
-[`docs/PLAN-m3-polish-3.md`](docs/PLAN-m3-polish-3.md); each entry below is the record of record for
+[`docs/plans/PLAN-m3-polish-3.md`](docs/plans/PLAN-m3-polish-3.md) (now `COMPLETE`); each entry below is the record of record for
 its symptom and traps.
 
 **Impact feedback (PT-05).**
@@ -157,14 +157,6 @@ its symptom and traps.
   *Playtest after fix:* night-chapter effect meshes (rocket rings, splashes) read bright.
 
 **Rockets (PT-09).**
-
-- `BL-211` **Rocket sound differs from the original.** User note (2026-07-31), no further detail
-  yet — the owed first step is a survey: what the authored data binds for rocket fire/flyout sound
-  vs what we play, then ask the user what specifically reads wrong (launch bark, flyout loop,
-  both?) or get a capture. Cross-ref `BL-016` (explosion look/speed — the explosion *sound* may be
-  part of the same complaint).
-  *Playtest after fix:* rocket fire A/B against the original.
-  `./RunGame.ps1 --plane=player_bhawk --chapter=C1` (F fires).
 
 ## Blocked / deferred
 

@@ -9359,3 +9359,41 @@ both the "lingers far too long" and the "floats too high" symptoms are gone now 
 30 s stop actually ends `large_30sec_fire` (the high floating puff was the lingering emitter, not
 a separate anchor bug). `PT-19` removed from playtest.md; `BL-020` deleted from backlog.md — no
 follow-up work remains from either.
+
+## 2026-08-01 — D32 `BL-211`: rocket sound survey found two live bugs, both fixed
+
+Surveyed every rocket/ordnance weapon's `FIRE`/`FLYOUT`/`IMPACT` sound bindings in
+`extracted/zrdr/weapons.zrd.json` against what `ProjectilePool` actually plays. Two concrete,
+data-traced gaps fell out (not guesses — both visible directly in the JSON and the code):
+
+1. **The launch bark never played.** Every rocket type binds a `FIRE.SOUND` (`snd_missile_sm`/
+   `snd_missile_bg`); `WeaponDefs` parses `WeaponEffect.Sound` for it, but `Projectile.Spawn` never
+   read it — confirmed `FIRE.SOUND` is null for all 24 cannon entries and non-null for every
+   rocket/ordnance entry, so playing it unconditionally cannot double up with the guns' separate
+   `LOOPED_SOUND_NAME` mechanism.
+2. **The incendiary rocket's (`wep_04`/9M) default impact sound silently no-oped.** Its `IMPACT`
+   binds `ground_mixed_exp_sg` — a `SOUND_GROUPS` name, not a plain `sounds.json` SETS entry — but
+   `Projectile.PlaySound` only ever checked the flat `_soundDefs` dictionary, unlike
+   `WorldSounds.PlayOneShot`, which already resolves `SOUND_GROUPS` first. Every other rocket type's
+   impact sound is bound directly to a SETS name and was already working; this one type silently
+   dropped its explosion sound on any non-water surface.
+
+`FLYOUT.SOUND` (a looped in-flight sound, e.g. a torpedo's) is not authored for any of the 10
+rocket types in the data — confirmed by direct inspection of every `FLYOUT` block — so there is no
+missing-flyout-loop gap to fix; `BL-211`'s "flyout loop" possibility is closed as not applicable.
+
+Fix: `Projectile.Spawn` now plays `weapon.Fire?.Sound` once per shot; `Projectile.PlaySound`
+resolves a `SOUND_GROUPS` name through `_soundGroups` (new ctor param, wired from
+`GameSession`'s existing `state.SoundGroups`) before the `_soundDefs` lookup, mirroring
+`WorldSounds.PlayOneShot`'s group-pick — a new `System.Random` stream off `Rng.Weapons`
+(`Rng.NewSystemRandom`) feeds `SoundGroup.Pick`, since `Projectile`'s existing `_rng` is a Godot
+`RandomNumberGenerator`, not the `System.Random` the shared `SoundGroup.Pick` signature takes.
+
+Verified: `.\RunTests.ps1` green (318 units, 13/13 engine suites, all 13 goldens hash-identical —
+a pure audio-path addition changes no pixel). No headless audio-correctness instrument exists, so
+per the plan's Verify step this is A/B'd by the user at the controls, not measured here — recorded
+as `PT-20` in `playtest.md`. `docs/architecture.md`'s `Projectile.cs` entry updated in place (no new
+⚠, already at 3).
+
+Bookkeeping: `BL-211` deleted from backlog (both traced gaps landed, no open follow-up); cockpit
+re-test = `PT-20`.
