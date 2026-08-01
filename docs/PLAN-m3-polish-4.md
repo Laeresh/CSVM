@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — fidelity with a settled mechanism
 
 8. ☑ `BL-061` item 1 Gun-impact `gunhit` smoke — throttled plays, each bounded to 0.3 s
-9. ☐ `BL-088` Danger Zones score on the authored gate pair, not one sphere
+9. ☑ `BL-088` Danger Zones score on the authored gate pair, not one sphere
 
 ### Wave D — the last unimplemented weapons mechanic
 
@@ -414,7 +414,7 @@ t=3 s). `.\RunTests.ps1` green, 13 goldens hash-identical. New trap: WORLD-24 �
 
 ## C9 ☐ `BL-088` Danger Zones score on the gate pair
 
-**Goal.** A Danger Zone is cleared by crossing its two authored gate apertures in order — so flying
+**Goal.** A Danger Zone is cleared by crossing both authored gate apertures — so flying
 *around* the danger no longer scores, and a tangential clip cannot count.
 
 **Evidence (confidence: traced).** `StuntMission.Update` tests one point against `DzRadius` 15 m,
@@ -425,7 +425,7 @@ apertures** (C4: material index 427, solid red 243/0/0) and the odd one out is t
 user's hand-tuned value and is reported as too tight at some zones and too loose at others — which
 is the symptom a gate test removes rather than retunes.
 
-**Approach.** Replace the sphere test with an ordered pair of polygon-plane crossings, identifying
+**Approach.** Replace the sphere test with a pair of polygon-plane crossings, identifying
 the gate polygons **by material class, not by index** (the route is polygon 0 on only 2 of 15 C4
 zones). Keep the `dzN` marker as a HUD anchor only — `MarkerHud.cs:144,145,158,212` and the
 scoreboard still consume the marker point, and the 826 m C1-dz2 marker↔gate discrepancy **stops
@@ -444,8 +444,7 @@ scripted flight path through and beside a known zone, so the "flew around it" ca
 the gate test is what replaces the need for it. (b) Do not "fix" the `dzN` marker onto the gates; its
 consumers are listed above and it is hand-placed by design. (c) **Ordering across zones is a
 separate, unsupported case** — shipped `dzones` is a bare `[dzpathN, dzN]` pair list with no order
-field, so any mission-level ordering was engine-side; our model stays order-free *between* zones.
-The order this item adds is only entry-then-exit *within* one zone.
+field; the original does not require an order within a zone either — score after crossing both gates.
 
 ---
 

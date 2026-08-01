@@ -314,7 +314,10 @@ re-skins the flares; WingLightBlinker flashes them.
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
-(`BuildHorizon` makes the camera-anchored skydome), `fvol*`, `dzpaths`. Splits the overcast deck into
+(`BuildHorizon` makes the camera-anchored skydome), `fvol*`, `dzpaths`. `BuildDzPaths` is its
+debug-only custom renderer: material-matched gate polygons green/red at 50% alpha, route as an open
+white line strip (never a filled or closed polygon).
+Splits the overcast deck into
 `CloudDeck` (GameSession moves it with the player); hides origin-parked unplaced vehicles.
 `NoCollisionNode` exempts three rendered-but-not-solid classes, subtree-inherited: sky/cloud
 textures, billboards, and any node with gamez `intersect_surface` false — the original's own
@@ -741,11 +744,12 @@ mission types; a missing file yields an empty set. Schema: docs/formats/missions
   it as pairs, never through `ZrdrDict`.
 
 ## src/Flight/StuntMission.cs
-Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (positions via
-`GameZ.WorldTransformOf`, strings via MissionTargets + Messages; null when a mission has none →
-free flight); `Update` completes zones within `DzRadius` (15 m, TUNE), fires events, advances
-the target; clock/scoring via `Elapsed`/`CompletedAt`/`CompletionOrder`/`InCompletionOrder`;
-`ForAnotherPlayer()` clones an independent run so the archives parse once per session.
+Stunt Flying state: `Load` builds the ordered zone list from ia.json `dzones` (HUD positions via
+`GameZ.WorldTransformOf`, gate polygons from `dzpathN`; strings via MissionTargets + Messages; null
+when a mission has none → free flight); `Update` requires both polygon-plane crossings in either
+order, fires events, advances the target; clock/scoring via
+`Elapsed`/`CompletedAt`/`CompletionOrder`/`InCompletionOrder`; `ForAnotherPlayer()` clones an
+independent run so the archives parse once per session.
 ⚠ Ordinals lie here, twice: drive off the dzones LIST, never the gamez `dzN` nodes (numbering is
   non-contiguous, missions.md); and inside a `dzpathN` mesh tell the route from the gate pair by
   MATERIAL, not polygon index — the route is polygon 0 in only 2 of C4's 15 zones.

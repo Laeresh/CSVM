@@ -381,19 +381,19 @@ public sealed class WorldBuilder
     public Node3D? BuildDzPaths()
     {
         var dzpaths = _gamez.FindByName("dzpaths");
-        return dzpaths == null ? null
-            : _scene.BuildSubtree(dzpaths, collisionSkip: _ => true);
+        return dzpaths == null ? null : BuildDzPathTree(dzpaths);
     }
 
-    // Non-scenery world content: 'horizon' is the original skydome (built separately via
-    // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'
-    // are flight-boundary volumes, 'dzpaths' are colored path ribbons.
     // Internal: ClutterBuilder walks the same placed world with the same exclusions.
     internal static bool SkipWorldNode(GameZNode n) =>
         n.Name.Equals("horizon", StringComparison.OrdinalIgnoreCase)
         || n.Name.Equals("dzpaths", StringComparison.OrdinalIgnoreCase)
         || n.Name.StartsWith("fvol", StringComparison.OrdinalIgnoreCase);
 
+    // Non-scenery world content: 'horizon' is the original skydome (built separately via
+    // BuildHorizon — as part of the world it would swallow the scene), 'fvol1'..'fvol9'
+    // are flight-boundary volumes, 'dzpaths' are colored path ribbons.
+    // Internal: ClutterBuilder walks the same placed world with the same exclusions.
     // A cloud- or sky-textured surface. Node names are unreliable for spotting these
     // (cloud layers turn up under generic names like 'g27517'), so we classify by texture.
     // Three callers share this rule: the collision exemption (below), the cloud alpha-blend
@@ -576,6 +576,81 @@ public sealed class WorldBuilder
     // terrain/water/building is ever false, and no false node has a collidable-flagged mesh
     // descendant — so inheriting the exemption down the subtree (like the other two rules) is
     // safe.
+    private Node3D BuildDzPathTree(GameZNode node)
+    {
+        var built = new Node3D { Name = node.Name };
+        if (node.Local is { } local)
+            built.Transform = local;
+        if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count)
+        {
+            var mesh = _gamez.Meshes[node.MeshIndex];
+            var materialCounts = new Dictionary<int, int>();
+            foreach (var poly in mesh.Polygons)
+                materialCounts[poly.MaterialIndex] = materialCounts.TryGetValue(poly.MaterialIndex, out int count)
+                    ? count + 1 : 1;
+            int gateNumber = 0;
+            foreach (var poly in mesh.Polygons)
+            {
+                bool gate = materialCounts[poly.MaterialIndex] == 2;
+                Color color = gate
+                    ? ++gateNumber == 1 ? new Color(0f, 1f, 0f, 0.5f) : new Color(1f, 0f, 0f, 0.5f)
+                    : new Color(1f, 1f, 1f, 0.35f);
+                built.AddChild(new MeshInstance3D
+                {
+                    Name = gate ? gateNumber == 1 ? "gate_green" : "gate_red" : "route",
+                    Mesh = DebugPolygonMesh(mesh, poly, color, line: !gate),
+                    CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+                });
+            }
+        }
+        foreach (int childIndex in node.Children)
+        {
+            if (childIndex >= 0 && childIndex < _gamez.Nodes.Count)
+                built.AddChild(BuildDzPathTree(_gamez.Nodes[childIndex]));
+        }
+        return built;
+    }
+
+    private ArrayMesh DebugPolygonMesh(GameZMesh mesh, GameZPolygon poly, Color color, bool line)
+    {
+        var surface = new SurfaceTool();
+        surface.Begin(line ? Mesh.PrimitiveType.LineStrip : Mesh.PrimitiveType.Triangles);
+        if (line)
+        {
+            foreach (int index in poly.VertexIndices)
+                surface.AddVertex(mesh.Vertices[index]);
+        }
+        else
+        {
+            void AddTriangle(int a, int b, int c)
+            {
+                surface.AddVertex(mesh.Vertices[poly.VertexIndices[a]]);
+                surface.AddVertex(mesh.Vertices[poly.VertexIndices[b]]);
+                surface.AddVertex(mesh.Vertices[poly.VertexIndices[c]]);
+            }
+            if (poly.TriangleStrip)
+            {
+                for (int i = 0; i + 2 < poly.VertexIndices.Count; i++)
+                    if ((i & 1) == 0) AddTriangle(i, i + 1, i + 2); else AddTriangle(i, i + 2, i + 1);
+            }
+            else
+            {
+                for (int i = 1; i + 1 < poly.VertexIndices.Count; i++)
+                    AddTriangle(0, i, i + 1);
+            }
+        }
+        surface.SetMaterial(new StandardMaterial3D
+        {
+            AlbedoColor = color,
+            ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+            Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
+            CullMode = BaseMaterial3D.CullModeEnum.Disabled,
+        });
+        var result = new ArrayMesh();
+        surface.Commit(result);
+        return result;
+    }
+
     private bool NoCollisionNode(GameZNode n) =>
         !n.IntersectSurface || MeshUsesTexture(n, IsNonSolidSkyTexture) || IsBillboardNode(n);
 

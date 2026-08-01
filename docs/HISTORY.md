@@ -10009,3 +10009,19 @@ nothing, with every impact correctly resolved in the log — the puffer sits beh
 (`verification.md` WORLD-24). And a gun's `buildings` entry is `bld_damage.flt`, absent from the
 install, on every gun but `wep_02`: the `gunhit` family is reached through `default`, so gun-impact
 work is verified by strafing dirt, never a hangar.
+
+## 2026-08-01 — M3 Wave C C9: Danger Zones use their authored gate pair
+
+`BL-088`. Stunt scoring now reads each `dzpathN`'s two material-matched aperture polygons and
+requires an in-aperture crossing of both, in either order. The `dzN` point remains the marker HUD
+anchor; `DzRadius` was not retuned.
+
+**How verified.** The in-engine `stunt-gates` suite uses C4 `dzpath14`, where the route is polygon
+2, to prove material classification rather than index classification. It asserts one gate alone
+does not score, both gates score even red-to-green, and a crossing beside the aperture does not.
+`RunTests.ps1` passed: 320 units, 15/15 suites, a clean engine-error screen, and all 13 golden
+hashes unchanged. An eight-chapter freecam screenshot sweep also produced all eight captures with
+zero native errors.
+
+`--debug-dzpaths` now shows the two gate polygons green/red at 50% alpha and the AI route as an
+open white line strip, preserving its source vertex order without closing it into a polygon.

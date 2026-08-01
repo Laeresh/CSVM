@@ -10,15 +10,11 @@ namespace CSVM.Flight;
 /// whether the player has flown through it yet.</summary>
 public sealed class StuntZone
 {
-    public string DzName = "";        // dz1..dzN — the point marker (mesh_index -1) the sphere tests against
-    // dzpath1..dzpathN — never rendered (--debug-dzpaths). Decoded: NOT just a route
-    // ribbon. Each is a 3-polygon model — polygon 0 is the approach/exit polyline, polygons 1 and 2
-    // are the two *gate outlines*, i.e. the aperture rings the zone is flown through. Read by
-    // nothing yet; the obvious use is a per-zone extent to replace the one global DzRadius, but the
-    // gates are NOT the marker point (measured: dzN sits at the gate midpoint on only some zones —
-    // exact on C2 dz7/dz8/dz9 and C5 dz14/dz15, 826 m off on C1 dz2 — so markers are hand-placed).
-    public string PathName = "";
-    public Vector3 Position;          // world-space centre of the completion sphere
+    public string DzName = "";        // dz1..dzN — hand-placed marker/HUD anchor
+    public string PathName = "";      // dzpath1..dzpathN — route ribbon + gate pair
+    public Vector3 Position;           // world-space HUD marker position
+    public StuntGate GreenGate = null!;
+    public StuntGate RedGate = null!;
     public string Description = "";   // resolved, e.g. "Train Tunnel Mid"
     public string Category = "";      // resolved, e.g. "Danger Zone"
     public string Help = "";          // resolved action, e.g. "Fly Through"
@@ -48,10 +44,18 @@ public sealed class StuntZone
     }
 }
 
+/// <summary>An authored Danger Zone aperture: a planar polygon ring in world coordinates.</summary>
+public sealed class StuntGate
+{
+    public required Vector3[] Vertices { get; init; }
+    public required Vector3 Center { get; init; }
+    public required Vector3 Normal { get; init; }
+}
+
 /// <summary>
 /// The Stunt Flying instant-action mode. A stunt run's objective is to
-/// fly through every Danger Zone; each <c>dzN</c> marker completes when the plane passes within
-/// <see cref="DzRadius"/> of its point, order-free, and the run ends when all are done.
+/// fly through every Danger Zone by crossing both authored apertures, order-free within and
+/// between zones, and the run ends when all are done.
 ///
 /// The zone list is the mission ia.json's <c>dzones</c> (<c>[dzpathN, dzN]</c> pairs); each
 /// <c>dzN</c>'s world position comes straight from the chapter gamez (a point marker under the
@@ -60,8 +64,8 @@ public sealed class StuntZone
 /// </summary>
 public sealed class StuntMission
 {
-    /// <summary>Sphere radius, m, for "flew through" a danger zone (TUNE — the original has no
-    /// gate geometry; a single point + radius approximates the bridge/tunnel/hangar opening).</summary>
+    /// <summary>Legacy marker-radius tuning value, retained for existing config/UI consumers.
+    /// Danger Zone scoring uses authored gate geometry instead.</summary>
     public const float DzRadius = 15f;
 
     /// <summary>Prefix for this run's log lines ("P2 " in a splitscreen race). Empty in a
@@ -74,6 +78,9 @@ public sealed class StuntMission
     private const string IntroMsgKey = "MSG_BRF_IASF_OBJ2";
 
     private readonly List<StuntZone> _zones;
+    private readonly HashSet<StuntGate> _crossedGates = new();
+    private Vector3 _lastPlanePos;
+    private bool _haveLastPlanePos;
 
     private int _active = -1;
 
@@ -146,12 +153,19 @@ public sealed class StuntMission
                 unresolved.Add(dzName);
                 continue;
             }
+            if (!TryReadGates(worldGamez, pathName, out var green, out var red))
+            {
+                unresolved.Add(pathName);
+                continue;
+            }
             var t = targets.For(dzName);
             zones.Add(new StuntZone
             {
                 DzName = dzName,
                 PathName = pathName,
                 Position = GeometryAnchor(worldGamez, node) ?? worldGamez.WorldTransformOf(node).Origin,
+                GreenGate = green,
+                RedGate = red,
                 Description = messages.Get(t.Description),
                 Category = messages.Get(t.CategoryLabel),
                 Help = messages.Get(t.HelpLabel),
@@ -193,6 +207,8 @@ public sealed class StuntMission
                 DzName = z.DzName,
                 PathName = z.PathName,
                 Position = z.Position,
+                GreenGate = z.GreenGate,
+                RedGate = z.RedGate,
                 Description = z.Description,
                 Category = z.Category,
                 Help = z.Help,
@@ -206,10 +222,24 @@ public sealed class StuntMission
     {
         if (AllComplete)
             return;
-        float r2 = DzRadius * DzRadius;
+        if (!_haveLastPlanePos)
+        {
+            _lastPlanePos = planePos;
+            _haveLastPlanePos = true;
+            return;
+        }
         foreach (var z in _zones)
-            if (!z.Completed && planePos.DistanceSquaredTo(z.Position) <= r2)
+        {
+            if (z.Completed)
+                continue;
+            if (GateCrossing(_lastPlanePos, planePos, z.GreenGate, out _))
+                _crossedGates.Add(z.GreenGate);
+            if (GateCrossing(_lastPlanePos, planePos, z.RedGate, out _))
+                _crossedGates.Add(z.RedGate);
+            if (_crossedGates.Contains(z.GreenGate) && _crossedGates.Contains(z.RedGate))
                 Complete(z);
+        }
+        _lastPlanePos = planePos;
     }
 
     /// <summary>Advance the run clock one physics frame. Called every frame — including through
@@ -257,6 +287,8 @@ public sealed class StuntMission
         CompletedCount = 0;
         AllComplete = false;
         Elapsed = 0f;
+        _crossedGates.Clear();
+        _haveLastPlanePos = false;
         _active = -1;
         AdvanceActive();
     }
@@ -403,6 +435,105 @@ public sealed class StuntMission
                 CollectMeshBoxes(gz, child, worldXf * (child.Local ?? Transform3D.Identity), into);
             }
         }
+    }
+
+    private static bool TryReadGates(GameZ gz, string pathName, out StuntGate green, out StuntGate red)
+    {
+        green = null!;
+        red = null!;
+        var node = gz.FindByName(pathName);
+        if (node == null || node.MeshIndex < 0 || node.MeshIndex >= gz.Meshes.Count)
+            return false;
+        var mesh = gz.Meshes[node.MeshIndex];
+        if (mesh.Polygons.Count != 3)
+            return false;
+
+        // The two aperture outlines share their material; the route ribbon has the odd material.
+        var byMaterial = new Dictionary<int, List<GameZPolygon>>();
+        foreach (var poly in mesh.Polygons)
+        {
+            if (!byMaterial.TryGetValue(poly.MaterialIndex, out var group))
+            {
+                group = new List<GameZPolygon>();
+                byMaterial.Add(poly.MaterialIndex, group);
+            }
+            group.Add(poly);
+        }
+        GameZPolygon? route = null;
+        List<GameZPolygon>? gates = null;
+        foreach (var group in byMaterial.Values)
+        {
+            if (group.Count == 2)
+                gates = group;
+            else if (group.Count == 1)
+                route = group[0];
+        }
+        if (gates == null || route == null
+            || !TryMakeGate(gz, node, gates[0], out green)
+            || !TryMakeGate(gz, node, gates[1], out red))
+            return false;
+        return true;
+    }
+
+    private static bool TryMakeGate(GameZ gz, GameZNode node, GameZPolygon poly, out StuntGate gate)
+    {
+        gate = null!;
+        if (poly.VertexIndices.Count < 3)
+            return false;
+        var xf = gz.WorldTransformOf(node);
+        var mesh = gz.Meshes[node.MeshIndex];
+        var vertices = new Vector3[poly.VertexIndices.Count];
+        Vector3 center = Vector3.Zero;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            int index = poly.VertexIndices[i];
+            if (index < 0 || index >= mesh.Vertices.Count)
+                return false;
+            center += vertices[i] = xf * mesh.Vertices[index];
+        }
+        center /= vertices.Length;
+        Vector3 normal = Vector3.Zero;
+        for (int i = 0; i < vertices.Length; i++)
+        {
+            var a = vertices[i] - center;
+            var b = vertices[(i + 1) % vertices.Length] - center;
+            normal += a.Cross(b);
+        }
+        if (normal.LengthSquared() < 1e-6f)
+            return false;
+        gate = new StuntGate { Vertices = vertices, Center = center, Normal = normal.Normalized() };
+        return true;
+    }
+
+    private static bool GateCrossing(Vector3 from, Vector3 to, StuntGate gate, out float t)
+    {
+        t = 0f;
+        float fromDistance = gate.Normal.Dot(from - gate.Center);
+        float toDistance = gate.Normal.Dot(to - gate.Center);
+        if (fromDistance == 0f || toDistance == 0f || Mathf.Sign(fromDistance) == Mathf.Sign(toDistance))
+            return false;
+        t = fromDistance / (fromDistance - toDistance);
+        return PointInGate(from.Lerp(to, t), gate);
+    }
+
+    private static bool PointInGate(Vector3 point, StuntGate gate)
+    {
+        int dropAxis = Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Y)
+            ? (Mathf.Abs(gate.Normal.X) > Mathf.Abs(gate.Normal.Z) ? 0 : 2)
+            : (Mathf.Abs(gate.Normal.Y) > Mathf.Abs(gate.Normal.Z) ? 1 : 2);
+        Vector2 Project(Vector3 p) => dropAxis == 0 ? new Vector2(p.Y, p.Z)
+            : dropAxis == 1 ? new Vector2(p.X, p.Z) : new Vector2(p.X, p.Y);
+        var q = Project(point);
+        bool inside = false;
+        for (int i = 0, j = gate.Vertices.Length - 1; i < gate.Vertices.Length; j = i++)
+        {
+            var a = Project(gate.Vertices[i]);
+            var b = Project(gate.Vertices[j]);
+            if ((a.Y > q.Y) != (b.Y > q.Y)
+                && q.X < (b.X - a.X) * (q.Y - a.Y) / (b.Y - a.Y) + a.X)
+                inside = !inside;
+        }
+        return inside;
     }
 
     private void Complete(StuntZone z)

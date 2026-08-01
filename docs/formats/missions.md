@@ -53,8 +53,8 @@ score. The matched polygon pair is that entry/exit pair: the three-polygon shape
 data-confirmed, the entry/exit reading is design-informed and matches it exactly.
 
 Which polygon index is which is *not* fixed — the route is usually index 0 but not always
-(C4's `dzpath14` has the pair at indices 0 and 1). Classify by geometry — the two rings whose
-areas match — never by index.
+(C4's `dzpath14` has the pair at indices 0 and 1). Classify by **material**: the two gate
+outlines share one material and the route has the odd material; never use polygon index.
 
 **A dzone's node is not always a `dzN` point marker** — it may name real world *geometry*:
 C2/IA1's first dzone is `sghangar`, the Seaplane Hangar structure itself. Its gamez
@@ -79,16 +79,13 @@ falls back to free flight.
 ### Completion test
 
 **The original does have gate geometry** — the `dzpathN` entry/exit polygon pair above — and
-its completion rule is a crossing of both, in route order. The remake does **not** implement
-that: it completes a zone when the plane passes within a **sphere** of the `dzN` point (radius
-`DzRadius`, TUNE, 15 m — approximates the opening), which is a single-point approximation of a
-two-gate test. It is cheaper and order-free, and it scores a tangential clip the original would
-reject. Upgrading to the real test means reading the two matched polygons and requiring both
-crossings; the geometry for it is already in the data.
+its completion rule is a crossing of both. The remake reads the material-matched pair and requires
+a segment crossing inside each polygon, in either order. `dzN` remains the HUD anchor; `DzRadius`
+is retained for its existing non-scoring consumers. A tangential touch or a plane crossing outside
+the polygon aperture does not score.
 
 `help_label` distinguishes `MSG_OBJ_FLYTHROUGH` ("Fly Through") from `MSG_OBJ_FLYOVER` ("Fly
-Over"); the remake uses the same sphere test for both (revisit only if a real mission reads
-wrong).
+Over"); both use the same authored gate test (revisit only if a real mission reads wrong).
 
 ## `dzones.json` — the per-mission zone overrides
 
