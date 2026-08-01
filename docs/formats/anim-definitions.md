@@ -363,8 +363,32 @@ what lets one definition run concurrently on many sites — the `IsLive` check m
 unresolvable target falls back to the caller's anchor rather than dropping the call, so a node
 the builder skipped cannot make an effect vanish; the fallback is counted and reported.
 
-**There is no index form.** Animations are referenced by name string everywhere in this data —
-relevant because the four `fire.zrd.json` definitions are called by nothing (see below).
+**There is no alternate call-target index form.** Animations are dispatched by name string
+everywhere in this data — relevant because the four `fire.zrd.json` definitions are called by
+nothing (see below). The compiled wait index described next is symbol-table bookkeeping for that
+same named callee, not another way to choose the target.
+
+### `WAIT_FOR_COMPLETION` blocks on the named callee
+
+The reader's bare `WAIT_FOR_COMPLETION` token makes a call synchronous: the caller's sequence does
+not advance past the call until that callee completes. Compiled e24 stores flag `0x10` plus a
+zero-based index into the **caller's** `anim_refs` table. The index does not select a different
+connector: across all **3,731** flagged `CallAnimation` events, every index is in range and every
+indexed ref names the call's own `name` (including all 92 nonzero indices). Thus `0` and `null` are
+different authored states: `0` waits for ref zero; `null` has no wait flag and returns immediately.
+
+Install-wide compiled distribution: `null` ×53,019, `0` ×3,639, `1` ×32, `2` ×19, `5` ×16,
+`3` ×9, `4` ×8, `6` ×8. The reader sources carry the bare token on 147 `CALL_ANIMATION` bodies and
+33 local `CALL_SEQUENCE` bodies. The e24 slot also contains **unflagged stale values** in Crimson
+Skies; the fork exposes those separately as `wait_for_raw` (525 non-null events), and consumers
+must not treat them as waits. Census and the 92-row dump instrument:
+`analysis/wait-for-completion/`.
+
+CSVM does not yet schedule the cross-animation completion dependency. All flagged compiled owners
+are `OnCall` (2,844) or `WeaponHit` (887), never `OnStartup`; the clearest timing case is
+`player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`, but that path
+is unreachable until surface-aware crash selection lands. Calls therefore remain instantaneous to
+the caller until a reachable timing case can verify the dynamic wait.
 
 **Placing an effect template means moving its root.** An effect template hosts its puffers on
 its OWN root subtree — `small_yellow_sparks`' puffer `at_node` is `yellow_spark_01`,

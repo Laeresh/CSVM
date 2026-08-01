@@ -530,23 +530,6 @@ unscheduled.
   **hardpoint** or the game just drains them in pylon order; meaningful mixed-ordnance cycling arrives
   with the M4 configurator (mixed loadouts). See "Milestone 3 Polishing".
 
-- `BL-063` **`wait_for_completion` is decoded and read by nothing** (found 2026-07-22 while fixing the
-  sequence scheduler, polish-4 item 1; deliberately not folded into that fix — different
-  mechanism). It appears on **56,750 `CallAnimation` events** across the install and on **no other
-  event kind**. Value distribution: `null` ×53,019, `0` ×3,639, then `1` ×32, `2` ×19, `5` ×16,
-  `3` ×9, `4` ×8, `6` ×8. **That shape says index, not boolean** — the same family as the
-  `wait_for_raw` connector slots seen on `player_plane_destruct`'s per-piece
-  `CallAnimation large_firetrail WithNode pieceN` (`wait_for_raw` 0/1/2 = the three `local_lft`
-  `CallObjectConnector` refs). Working hypothesis to test first: it selects which of the def's
-  `anim_refs` connectors the call blocks on. **Nothing in `CSVM/src` references the field at all.**
-  ⚠ **This is the `spline_interp` shape** — a field the extraction decodes faithfully and the
-  runtime silently ignores — and that one was inert-looking right up until it was traced to a 1e29
-  transform blowup. Not evidence this one is harmful, but it is a reason to decode it rather than
-  leave it. Start by dumping the defs where the value is non-null and non-zero (92 events total,
-  small enough to read by hand) and checking whether their `anim_refs` arrays are long enough to
-  index. Note the scheduler now honours event offsets correctly, so any *timing* symptom this field
-  causes should be cleaner to see than it was before 2026-07-22.
-
 - `BL-064` **Better mission states.** There is still a lot of difference between our maps and the
   original's. May need a pipeline to diff them, or to crack the mission loading states properly.
   (`MissionSetup`'s interp boot script, landed 2026-07-22, closed the largest single gap and

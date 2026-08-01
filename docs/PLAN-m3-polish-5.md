@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ `BL-220` The `C` collider overlay crashes on a freed mesh (and loses its legend to the same throw)
 2. ☑ `BL-052` Re-measure zero-separation coplanar pairs now the subface fix has landed
-3. ☐ `BL-063` `wait_for_completion` — decode the 92 non-null events, or disprove the index reading
+3. ☑ `BL-063` `wait_for_completion` — decode the 92 non-null events, or disprove the index reading
 
 ### Wave B — effects and feedback whose data ships complete
 
@@ -249,7 +249,7 @@ it was **retired by `BL-054`** when the user ruled C1B's z-fighting faithful to 
 not raise `NodeOrderBias` — `BL-054` closed that with a stronger reason than tuning: the measured
 "improvement" was 1.4 points from erasing a faithful artifact.
 
-## A3 ☐ `BL-063` `wait_for_completion` — decode or disprove
+## A3 ☑ `BL-063` `wait_for_completion` — decode or disprove
 
 **Goal.** Either a decoded meaning for `wait_for_completion` with a `docs/formats/` entry, or a
 recorded disproof of the index hypothesis — so a field that the extraction decodes faithfully and the
@@ -409,7 +409,12 @@ in `BL-059` item 1 (`bounce_sequence` ground-rest) or the air variant — differ
 ground-rest half needs a physics ray. (c) The crash runtime is built with
 `SoundHandledElsewhere = true` (the `BL-005` fix); route the water sound the same way the ground boom
 is routed, or the "no audio session" warning comes back. (d) Do not re-open the debris magnitude while
-in here — it is decoded and censused, not a TUNE.
+in here — it is decoded and censused, not a TUNE. (e) **A3 makes this the first clean
+`WAIT_FOR_COMPLETION` timing case:** `player_crash_water`'s flagged `plane_big_splash` call means the
+original waits for that callee to finish before starting `large_steam_spray`; CSVM currently starts
+the successor immediately. Read
+[`anim-definitions.md`](formats/anim-definitions.md#wait_for_completion-blocks-on-the-named-callee),
+capture the transition, and do not call the variant faithful merely because both effects appeared.
 
 ## B7 ☐ `BL-087` Incoming-fire near-miss cue
 

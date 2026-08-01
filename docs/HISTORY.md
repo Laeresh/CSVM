@@ -10069,3 +10069,22 @@ rockets, logged four authored `he_ground_effect` impacts, and saved the targeted
   call to change the cap.
 - Removed BL-054 from `backlog.md` because it was already closed by the documented original-game
   ruling. The relevant evidence remains in history and `analysis/item9-depth-bias/`.
+
+## 2026-08-01 — M3 polish-5 A3: decoded `WAIT_FOR_COMPLETION`
+
+`BL-063`. The compiled `CallAnimation.wait_for_completion` value is a zero-based index into the
+caller's `anim_refs` table, enabled by flag `0x10`, and means that the caller waits for that same
+named callee to complete. The install-wide census reproduced all 56,750 calls: 53,019 unflagged,
+3,639 at index 0, and 92 at indices 1–6. All 3,731 flagged indices are valid and all 3,731 resolve
+to the call's own name, disproving the narrower hypothesis that the value selects some other
+connector. The adjacent unflagged stale slot remains separate as `wait_for_raw`. No scheduler code
+landed: the flagged owners are all `OnCall`/`WeaponHit`, and the clearest timing case is the
+surface-gated water-crash chain planned separately.
+
+**How verified.** `analysis/wait-for-completion/census.py` completed over all 17,568 extracted JSON
+files (16,173 top-level objects, including 14,963 compiled definitions), wrote the requested 92-row
+detail dump to `.scratch/wait-for-completion.json`, and its empty-input control exited 1. Eight sequential
+deterministic freecam chapter captures exited 0 with the
+expected world counts and no Godot-format errors (five emitted the existing ObjectDB exit warning).
+`RunTests.ps1` passed: clean build, 320/320 units, 16/16 engine suites with zero engine errors, and
+all 13 golden hashes unchanged.
