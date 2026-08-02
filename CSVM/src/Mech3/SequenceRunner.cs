@@ -260,7 +260,21 @@ public sealed class SequenceRunner
                     // time that overshot the frame we just spent into the next iteration, or the
                     // rate quantises to the render rate: a 144 Hz client needs 3 frames to reach
                     // 1/60 and would run every authored timer at 48 Hz, a 30 Hz one at half speed.
-                    float carry = instantIteration ? _clock - AnimFrame : 0f;
+                    //
+                    // A TIMED iteration carries the same way, against what it actually waited on:
+                    // _due, which at this point is still the Loop event's own gate (the while
+                    // condition above passed on it, and nothing between here and there rewrites
+                    // it). An authored period is SECONDS, so dropping the overshoot rounded every
+                    // iteration up to the next whole step — the same frame-rate dependence, one
+                    // level down. Measured over the install's 599 timed loops (`BL-237`): a 0.02 s
+                    // period cost 2 steps instead of 1.2 at 60 Hz, so the 126 loops carrying it
+                    // (`patrolboat`, `ptboat*`, `ftank_boom*`, `m_build0*`, `pass_plane0*`,
+                    // `sub_destruction`, `balloont_die*`, `refuel*`) ran at 60% speed; C3/M05's
+                    // `ww_balmoral1/2/3` (LOOP 1000 @ 0.01 s, authored 10 s) took 16.7 s at 60 Hz.
+                    // Even the periods that divide 1/60 exactly in real arithmetic paid one extra
+                    // step per iteration, because sixty float32 additions of 1/60 land just under
+                    // 1.0 and the gate is `>=`: 61 steps per second, forever, on every route loop.
+                    float carry = _clock - (instantIteration ? AnimFrame : _due);
                     _pc = 0;
                     _clock = carry > 0f ? carry : 0f;
                     _base = 0f;
@@ -386,7 +400,16 @@ public sealed class SequenceRunner
             "Animation" or "Sequence" => ev.StartTime,
             _ => _base + ev.StartTime,
         };
-        if (_due > _clock)
+        // "Did the DATA schedule time?" — an authored offset counts even when the clock has
+        // already run past it, which is the whole of BL-237. Testing only `_due > _clock` made
+        // that a question about the STEP: an absolute ("Animation"/"Sequence") period shorter
+        // than one step is already behind the clock by the time it is gated, so the iteration
+        // read as instantaneous and collected the AnimFrame floor meant for untimed poll loops.
+        // C3/M05's `ww_balmoral1/2/3` (LOOP 1000 @ Sequence 0.01 s, authored 10 s) took 16.7 s at
+        // 60 Hz and 10.0 s at 600 Hz for exactly that reason — the floor, reached by a route the
+        // floor's own comment says it cannot reach. An authored 0 still means "immediately after
+        // the previous event", so the untimed poll idiom keeps its pacing and its double-poll guard.
+        if (_due > _clock || ev.StartTime > 0f)
         {
             _iterScheduledTime = true;
         }

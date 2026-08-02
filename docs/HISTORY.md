@@ -10593,6 +10593,12 @@ period shorter than the sim step rounds up — `ww_balmoral*` (`LOOP 1000` @ 0.0
 runs 16.7 s at 60 Hz, 12.5 s at 240 Hz, 10.0 s at 600 Hz. Seven of the eight authored periods divide
 1/60 exactly, so those 3 defs are the whole visible scope; the fix is the same carry on the timed
 path, but it also moves every traffic route, so it is its own change.
+**Scope and mechanism both corrected when `BL-237` landed (2026-08-02, entry below — left standing
+here rather than edited away):** this census covered only the **68 finite** timed loops and none of
+the 531 infinite ones, 126 of which carry a 0.02 s period and ran at 60% speed; and the diagnosis
+above named the wrong mechanism — at a step coarser than the period it is the `AnimFrame` floor, not
+the dropped overshoot, that stretches these loops. Also wrong here and in the test comment:
+`ww_balmoral1/2/3` are **C3/M05**, not C1.
 
 **Scope check against the named-duration defs.** `large_30sec_fire` does NOT time itself with a
 loop count — it is `[PUFFER_STATE 1, LOOP {-1}]` (deliberately infinite) plus a separate
@@ -10965,3 +10971,64 @@ lower third): C1's 22 `gen_flare_yellow` defs each drove all 22 flare nodes, so 
 started 547 ON_STARTUP instances where 85 are authored; the city's lamps now light per building.
 User confirmed at the controls: "the fix is better, lights in the city are enabled", buildings all
 present.
+
+## 2026-08-02 — an authored PERIOD means seconds at any step (`BL-237`); 599 timed loops, not 3 defs
+
+The count path was rate-locked earlier today; the **period** path had the same disease one level
+down, and the entry that filed it (above) got both its scope and its mechanism wrong. Both are
+corrected here rather than edited out of that entry.
+
+**Scope, re-measured over the install.** A `Loop` event carrying a `START_TIME` is timed data — the
+offset is the per-iteration period in seconds. There are **599** such loops, not 68: the earlier
+census counted only the **finite** ones and never looked at the 531 infinite. **126 of them carry a
+0.02 s period** — `patrolboat` ×4, `ptboat1/2/3`, `sub_destruction`, `balloont_die1/2`,
+`ftank_boom1-4`, `m_build01-07`, `pass_plane01-04`, `refinery_fire_always`, `refuel1/2`. At 60 Hz
+0.02 s is 1.2 steps, so each iteration cost 2 and that whole set — destruction and boom sequences
+you look straight at — ran at **60% of authored speed**. The claim "nothing else moves" was an
+artefact of surveying half the data.
+
+**And the exact periods were not exact either.** Sixty float32 additions of `1/60` land just under
+`1.0f`, and the gate is `>=`, so a 1.0 s route loop needed a **61st** step — every iteration,
+forever, ~1.7% slow. Simulated at 60 Hz: 1.0 s took 61 steps (now 60), 2.5 s took 151 (now 150),
+0.02 s took 2 (now averages 1.2), 0.2 s took 12 either way. So this moves **all 599**, including the
+104 `Sequence 1.0` route loops behind the ground traffic.
+
+**The mechanism was misdiagnosed, and the test caught it.** The filing entry asserted the `AnimFrame`
+floor could not be involved "because these loops schedule time". That holds only when the step is
+*finer* than the period. `SetDue()` set `_iterScheduledTime` from `_due > _clock` — a proxy for "did
+the DATA schedule time?" that silently becomes a question about the STEP. `ww_balmoral1/2/3` carry
+`Sequence 0.01`, an **absolute** offset: at a 1/60 step the clock is already at 0.0167 > 0.01 when
+the Loop is gated, the flag stays false, the iteration reads as *instantaneous*, and it collects the
+frame floor meant for untimed poll loops — reached by the exact route the floor's own comment says
+it cannot be reached by. That is why it measured 16.7 s at 60 Hz and 10.0 s at 600 Hz. The carry
+alone changed nothing at 60 Hz; the new coarse-step case failed on the first run and said so.
+
+**Fix — two lines, both in `SequenceRunner`.** The timed rollover now carries its overshoot the way
+the instantaneous one does, against what it actually waited on:
+`carry = _clock - (instantIteration ? AnimFrame : _due)`. And `SetDue()` asks the question its own
+comment claims it asks: `_due > _clock || ev.StartTime > 0f`. An authored 0 still means "immediately
+after the previous event", so the untimed poll idiom keeps both its pacing and its double-poll guard.
+Catch-up is deliberately unclamped, matching the instantaneous path and bounded by the same 256-fire
+guard: a period shorter than the step fires more than once per `Advance` rather than running slow.
+
+**Verified.** `SequenceRunnerTests` gained two cases. An authored 0.01 s period now finishes its
+`LOOP 1000` in 10 s ± 3 steps at **1/30, 1/60, 1/144 and 1/600** — the pre-fix numbers were 16.7 s at
+60 Hz and 16.7 s at 30 Hz. A long-horizon case drives an **infinite** timed loop for 60 simulated
+seconds at 60 Hz and pins the fire count to `60/period ± 1` for periods 0.02, 1.0 and 2.5 s; it
+catches both failure directions — the old drop (1.7% slow indefinitely) and a carry applied twice
+(fast without bound). That case, not the goldens, is what covers the 26 ground-vehicle routes: every
+golden is captured at ≤2.00 s, which contains at most two 1.0 s rollovers. `.\RunTests.ps1` **PASS**:
+352 units, 17/17 suites, engine errors clean, **13 goldens hash-identical** — nothing needed
+re-pinning, and that is a statement about the shots' 2-second window, not evidence about traffic.
+
+**Playtest passed (2026-08-02, user):** "no artifacts, no jittering". The routes now run ~1.7% faster
+(one step per lap recovered) and the 0.02 s destruction loops 1.67× faster; both are corrections
+toward the authored data, and neither introduced visible stepping — which is the failure mode a
+catch-up-within-the-frame rollover would have shown. Not separately timed at the controls: whether a
+studebaker's lap now matches the original's, which needs an A/B against the original, not our own
+before/after.
+
+**Corrected in passing.** `ww_balmoral1/2/3` are **C3/M05** (`extracted/C3/M05/mis_anim/
+britbalmoral_*-ww_balmoral*.json`), not C1 — wrong in `backlog.md`, in the entry above, and in the
+test comment. `analysis/goldens/README.md` said "Eleven pinned captures" and "Five shots move" while
+`manifest.json` holds **13** and lists six frame-sensitive; both counts fixed.

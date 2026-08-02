@@ -1041,14 +1041,25 @@ are not visible from the byte format alone, each measured against this install.
   are the frames-denominated set (`LOOP 70` ≈ 1.2 s, `LOOP 200` ≈ 3.3 s at 1/60); 376 of them sit
   in `sequences`, the list the runtime executes, and 86 in the undecoded `unknown_seq`, which it
   does not. The other **68 carry a `START_TIME` on the `Loop` event itself — the per-iteration
-  period in SECONDS**, always frame-independent, never touched by any of the above
-  (`huge_fireball` 10 × 0.05 s, `sputter_fire_obj` 100 × 0.2 s, `shipsink` 7 × 2.5 s). Their
-  authored periods span 0.01–5.0 s, and **0.01 s is below a 1/60 frame** — so the timing layer is
-  real-valued seconds, not tick-quantised, whatever the tick turns out to be.
+  period in SECONDS** (`huge_fireball` 10 × 0.05 s, `sputter_fire_obj` 100 × 0.2 s, `shipsink`
+  7 × 2.5 s). Their authored periods span 0.01–5.0 s, and **0.01 s is below a 1/60 frame** — so the
+  timing layer is real-valued seconds, not tick-quantised, whatever the tick turns out to be.
+  **That 68 counts only the FINITE ones.** Install-wide there are **599** timed loops; the other 531
+  are infinite, and **126 of them carry a 0.02 s period** (`patrolboat`, `ptboat*`, `ftank_boom*`,
+  `m_build0*`, `pass_plane0*`, `sub_destruction`, `balloont_die*`, `refinery_fire_always`,
+  `refuel*`). 104 more carry `Sequence 1.0` and are the ground-vehicle routes.
   ⚠ **A remake must pace an untimed loop against SIM time, not its own frame rate**, or every
   authored timer scales with the client's hardware — at 240 Hz they run 4× fast and at 144 Hz they
   quantise to 48 Hz (3 render frames per 1/60 s pass). CSVM pins the pass rate to
-  `SequenceRunner.AnimFrame`; a loop that carries its own period is unaffected.
+  `SequenceRunner.AnimFrame`.
+  ⚠ **A loop that carries its own period is NOT automatically safe** — this doc said so until
+  `BL-237` (2026-08-02) measured otherwise. A period is only honoured if the rollover carries its
+  overshoot instead of resetting the clock, and if "did this iteration schedule time?" is asked of
+  the DATA rather than of `_due > _clock`, which becomes a question about the step as soon as the
+  step is coarser than the period. Missing either, a 0.02 s period costs 2 steps at 60 Hz instead of
+  1.2 (60% speed) and an absolute `Sequence 0.01` collects the untimed-loop frame floor (16.7 s for
+  an authored 10 s). Both are fixed in `SequenceRunner`; the traps are why the seconds/frames split
+  is not the whole story.
 - **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** mech3ax reads the
   file's `(w, x, y, z)` float order straight into a `#[repr(C)] struct Quaternion {x, y, z, w}`,
   so in the emitted JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real
