@@ -1,0 +1,17 @@
+{
+  "description": "Run dotnet format + a StyleCop-checked rebuild before tests/commits (mirrors .claude/settings.json).",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "powershell -NoProfile -ExecutionPolicy Bypass -File .codex/hooks/pre-tool-use.ps1",
+            "timeout": 300,
+            "statusMessage": "dotnet format before tests..."
+          }
+        ]
+      }
+    ]
+  }
+}
