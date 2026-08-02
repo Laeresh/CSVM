@@ -1,8 +1,7 @@
 # Milestone 3 — Polish run 5 (effect reachability, world-render fidelity, the instruments)
 
-**ACTIVE PLAN** (written 2026-08-01). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+**COMPLETE** (2026-08-02). Archived under `docs/plans/`; all ten items landed or were closed after
+verification (nine landed, one — `B5`/`BL-061` item 3 — disproven).
 
 Ten items drawn from `backlog.md` under the **same criteria polish-4 used**: open, M3-scoped, and
 judgeable **without the user at the controls or the original game open**. The shape is one

@@ -36,3 +36,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-m3-polish-2.md](PLAN-m3-polish-2.md) | M3 combat look & feel: anim triggers, impacts/surfaces, weapon secondary visuals, destruction bugs (14 items, Waves A–D; cockpit follow-ups → PLAN-m3-polish-3) | 2026-07-31 |
 | [PLAN-m3-polish-3.md](PLAN-m3-polish-3.md) | M3 polish run 3: the 2026-07-31 cockpit-pass follow-ups — imperceptible feedback, destructible behaviour, weapon visuals, rockets (11 items, Waves A–D) | 2026-08-01 |
 | [PLAN-m3-polish-4.md](PLAN-m3-polish-4.md) | M3 polish run 4: impact feedback, test affordances, blast radius (10 items; 1 disproven) | 2026-08-01 |
+| [PLAN-m3-polish-5.md](PLAN-m3-polish-5.md) | M3 polish run 5: effect reachability, world-render fidelity, the instruments (10 items; 1 disproven) | 2026-08-02 |
