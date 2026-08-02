@@ -1782,28 +1782,37 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             TearDownResourcesOf(def, anchor);
     }
 
-    /// <summary>A world-effect instance (<see cref="PlayEffectAt"/>) ends its sustained emitters
-    /// when its OWN sequences end â€” the authored stop for an effect def that ships none. Two of
-    /// the curated set do: <c>torpedo_ground_effect</c>'s <c>fire_n_smoke</c> and
-    /// <c>70slug_gunhit</c>'s <c>blacksmokepuffer</c> carry an <c>ACTIVE_STATE 1</c> and no 0
-    /// (every other effect authors its own stop, so this reaches nothing of theirs).
+    /// <summary>An instance ends its sustained emitters when its OWN sequences end â€” the authored
+    /// stop for a def that ships none. The data's stop paths are an <c>ACTIVE_STATE 0</c> on the
+    /// emitter (<see cref="HandlePufferState"/>'s off-branch) or a deactivated host
+    /// (<c>EndSustainedOn</c>); a def carrying an <c>ACTIVE_STATE 1</c> and neither has no other
+    /// way to stop, and before this rule existed such an emitter burned for the whole session.
     ///
-    /// <para>Until this existed the torpedo's ground fire burned for the whole session: the
-    /// def's sequences end ~1.2 s in (its <c>LOOP 70</c> runs one instantaneous pass per frame),
-    /// the instance leaves <c>_instances</c>, and the <see cref="EffectTtl"/> backstop then had
-    /// nothing to reach â€” <see cref="Stop"/> finds resources only THROUGH a live instance. The
-    /// gun hit hid the defect: its 0.3 s TTL expires while its ~1 s sequence is still running, so
-    /// there the Stop always landed.</para>
+    /// <para>Reached on both runtimes deliberately. On the effects runtime it is what stops
+    /// <c>torpedo_ground_effect</c>'s <c>fire_n_smoke</c>: the def's sequences end ~1.2 s in (its
+    /// <c>LOOP 70</c> runs one instantaneous pass per frame), the instance leaves
+    /// <c>_instances</c>, and the <see cref="EffectTtl"/> backstop then has nothing to reach â€”
+    /// <see cref="Stop"/> finds resources only THROUGH a live instance. On the world runtime it is
+    /// what stops the C1 refuel tanks' <c>fire_n_smoke</c> (<c>BL-236</c>): the tank's death
+    /// instance drains at ~5 s and the emitter outlived it by the session.</para>
     ///
-    /// <para>Scoped to instances the effect runtime itself started (they are the ones carrying a
-    /// TTL entry, which this consumes): a sequence that merely finishes leaving an emitter live is
-    /// the ambient data's own idiom (C1's waterfall) and keeps today's behaviour. Emission ends
+    /// <para>Instance-scoped, never sequence-scoped: <c>part1_trail</c> is a lone
+    /// <c>PufferState</c> in a sequence that ends on the same tick, so a sequence rule would kill
+    /// the debris trails that work. It cannot reach the ambient emitters either â€” of the 1,524
+    /// compiled defs asserting a <c>PUFFER_STATE ACTIVE</c>, the 619 carrying an infinite
+    /// <c>LOOP</c> (the waterfalls, <c>waterrapids01</c>, the sputters, every <c>*_trail</c>) never
+    /// finish, so their instances never arrive here; the 905 that terminate are the one-shots
+    /// (<c>large_fireball</c>, the <c>*_gunhit</c> family, <c>touchdown_dirt</c>,
+    /// <c>engine_start_smoke</c>) that should stop with their def. Emission ends
     /// (<c>SustainEnd</c>) rather than the emitter being torn down, so the live particles finish
     /// their authored <c>LIFETIME_RANGE</c> â€” the fire fades over its last 3-4 s instead of
     /// popping out â€” and a later replay on this same pool slot revives the entry.</para></summary>
     private void FinishEffectInstance(AnimDefinition def, Node3D? anchor)
     {
-        if (_effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor) == 0)
+        // Consumes the effects runtime's TTL entry when there is one (this got there first, so
+        // the sweep has nothing left to do); a world instance simply carries none.
+        _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
+        if (_puffers.Count == 0)
             return;
         foreach (var entry in _puffers.Values.Where(v => v.Def == def && v.Anchor == anchor).ToList())
         {

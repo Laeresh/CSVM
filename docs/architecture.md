@@ -509,8 +509,8 @@ effects runtime — the two damage-stage sputters both declare `black_smoke`; on
 collapsed key de-dups C5's six same-node `m_crane_go` spark defs, measured via the c5 golden — see
 the `_puffers` field comment before changing this). A `PUFFER_STATE 1` re-assert REVIVES a
 SustainEnd'ed emitter (the `puffit` sputter loop cycles 0/1 forever), and `OBJECT_ACTIVE_STATE false`
-ends emission under that node (`EndSustainedOn`) — the only authored stop a stop-less `PUFFER_STATE`
-has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
+ends emission under that node (`EndSustainedOn`) — the only *authored* stop a stop-less
+`PUFFER_STATE` has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
 effects stage keeps template roots hidden while their world-space particles show; emission sits at the host's
 mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
 WORLD-15 — zero offset, byte-identical, otherwise). Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
@@ -534,6 +534,13 @@ C8) and one deadline is kept per (def, anchor), so a replay's instance is not st
 previous one's deadline; a NodeActive-governed def gets no `EffectTtl` and tears its
 resources down when its loop exits (the death swap hides `healthy`), and `ResetDestructible` stops
 routed stage effects through `ExternalEffectStop` (a heal never flips `NodeActive`).
+An instance whose sequences END also stops the sustained emitters it started
+(`FinishEffectInstance`, off the `inst.Finished` branch) — on EVERY runtime since `BL-236`, not just
+the effects one; the TTL entry is consumed when there is one rather than being the ticket in. That
+is the stop for a def carrying an `ACTIVE_STATE 1` and neither authored stop (the torpedo's ground
+fire, C1's refuel tanks). It cannot reach the ambient emitters: theirs are the 619 defs whose
+`LOOP {-1}` means the instance never finishes. **Instance-scoped, never sequence-scoped** — a lone
+`PufferState` in a one-tick sequence (`part1_trail`) is the debris-trail idiom.
 `ShowPlacedTemplates` pairs a staged template root's visibility with the EFFECT's life, not its
 instance's: revealed after `Start`, hidden only on teardown (Stop/TTL), because the authored
 scale/opacity motions outlive the sequence that launched them — hiding on instance-finish would cut

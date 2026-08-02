@@ -10516,13 +10516,21 @@ spray, 1 live emitter → 11), `c4-snow` 20 px / 0.002 % (the `stack_puffer*` pl
 9 → 36). All three are ambient emitters that should always have been drawing; no shot lost anything.
 `.\RunTests.ps1` **PASS**: 336 units, 17/17 engine suites, engine errors clean, 13 goldens.
 
-**Found on the way, filed not fixed (`BL-236`):** with the factory alive, two world-runtime emitters
-never stop — `fire_n_smoke` (one `PUFFER_STATE` + `LOOP 200`, no authored `ACTIVE_STATE 0`, still
-burning at 40 s) and `trailpuffer3` (its `part3` ends on `BOUNCE_SEQUENCE`, not `RUN_TIME`, so the
-`OBJECT_ACTIVE_STATE` that `BL-224`'s `EndSustainedOn` needs never fires). The first is `BL-235`'s
-bug on a third runtime and turns on the same undecided question: whether a `LOOP n` counts frames or
-seconds. The rest of the settled plateau is legitimate ambient dust that was simply never able to
-build before.
+**Found on the way, filed not fixed (`BL-236`, `BL-240`):** with the factory alive, two
+world-runtime emitters never stop — `fire_n_smoke` (one `PUFFER_STATE` + `LOOP 200`, no authored
+`ACTIVE_STATE 0`, still burning at 40 s) and `trailpuffer3` (its `part3` ends on `BOUNCE_SEQUENCE`,
+not `RUN_TIME`, so the `OBJECT_ACTIVE_STATE` that `BL-224`'s `EndSustainedOn` needs never fires).
+The first is `BL-235`'s bug on a third runtime and turns on the same undecided question: whether a
+`LOOP n` counts frames or seconds. The rest of the settled plateau is legitimate ambient dust that
+was simply never able to build before.
+
+**Re-diagnosed against the compiled data later the same day**, which moved both halves. The second
+is not an effects bug at all and split out as `BL-240`: a bounce-terminated `OBJECT_MOTION` carries
+no `RUN_TIME`, our `ballTime <= 0f` branch poses it at rest, and `part3`/`part4` therefore never
+launch — 529 authored debris launches install-wide. The first is not downstream of `BL-235` either
+(`refuel*`'s instance drains at ~5 s, the crash def's `Loop{-1}` never does), and the claim that
+most of the plateau is ambient dust does not survive arithmetic: five defs × two leaked emitters is
+10 of the 12 above baseline.
 
 ## 2026-08-02 — a `LOOP` count is a timer in authored animation frames, paced against sim time instead of the render rate
 
@@ -10597,3 +10605,62 @@ still burns 30 s, as it always did.
 loop nor a mis-scaled count. `fire_n_smoke` on the refuel tanks ends its `LOOP 200` at ~3.3 s on any
 hardware, and the crash rig's fire has an authored 30 s stopper — so what is missing is that nothing
 stops the emitter when the sequence does. Both entries updated with the narrowed question.
+
+## 2026-08-02 — an instance ends its own sustained emitters, on every runtime (`BL-236`)
+
+`FinishEffectInstance` — the rule landed with the torpedo fix, "an instance whose sequences end
+stops the emitters it started" — was gated to the world-EFFECTS runtime by an early-out on
+`_effectTtls.RemoveAll(...) == 0`. **The gate is gone**; the rule now runs from the same
+`inst.Finished` branch for every runtime's instances, and the TTL entry is consumed when one exists
+rather than being the ticket in. That is the whole code change.
+
+**What it fixes.** With the world runtime's puffer factory alive (`BL-234`), five C1 refuel-tank
+kills left emitters running for the session: `refuel1`…`refuel5` each assert
+`PufferState(fire_n_smoke, 1)` and author **no `ACTIVE_STATE 0` anywhere**, and their host `dbase`
+is never deactivated — so neither existing stop path (`HandlePufferState`'s off-branch,
+`EndSustainedOn`) could ever fire. Their instances *do* drain, at ~5 s (`part1`'s `RUN_TIME 5.0`),
+so an instance-scoped stop reaches them.
+
+**Measured** — `.\RunProbe.ps1 --freecam --chapter=C1 --destroy=refuel --debug-anim --frames=2400
+--screenshot=…` (40 s of sim), reading the census **names**, not the count (three runtimes print
+that line; the `fierypuffer` rows are the effects runtime's):
+
+```
+before  16 steady at 40 s: splashpuffer1/2/3, steampuffer, fire_n_smoke, trailpuffer3,
+                           dust_puffer, dust_puffer1
+after    6 steady at 40 s: splashpuffer1/2/3, steampuffer, dust_puffer, dust_puffer1
+```
+
+`fire_n_smoke` and `trailpuffer3` are gone from the 5th census on (~5 s, the instance drain); the
+plateau is now ambient only — the waterfall splash/steam and the car dust, all of which run on
+`Loop{-1}` instances that never finish and are therefore out of this rule's reach by their own
+authoring. **The filing's own "most of the plateau is legitimate car dust" claim was wrong**, as its
+arithmetic suspected: 10 of the 12 emitters above baseline were the leak.
+
+**Why this is safe, censused over all 16,114 compiled defs.** Of the **1,524** defs asserting a
+`PUFFER_STATE ACTIVE`, **619 carry an infinite `LOOP`** — the waterfalls, `waterrapids01`, the
+sputters, every `*_trail`, `large_10sec_fire`/`large_30sec_fire` — so their instances never finish
+and an instance-end rule cannot touch them. The **905 that terminate** are `large_fireball`,
+`small_fireball`, the `*_gunhit` family, `flak`, `touchdown_dirt`, `engine_start_smoke`: the
+one-shots that should stop with their def. The ambient set is protected by its own authoring, which
+is why the old gate's stated justification ("the ambient data's own idiom (C1's waterfall)") did not
+actually rest on the TTL.
+
+**Scoped to the instance, never to the sequence**, though the sequence would give the prettier
+3.3 s: `part1_trail` is a lone `PufferState` in a sequence that ends on the same tick, so a
+sequence rule would kill the debris trails that work (the `BL-229` trap in a new place).
+
+`.\RunTests.ps1` **PASS**: 345 units, 17/17 engine suites, engine errors clean, **13 goldens
+hash-identical** — including `c1-destroy-effects` and `c1-crash`, whose shots land while the
+emitters are still inside their instance's life.
+
+**Filed on the way (`BL-241`):** no engine suite can guard any of this. `TestHarness.BuildWorld`
+owns its `TextureArchive` as a build-scope `using`, so a test world's runtime has its
+`PufferFactory` cleared — the `BL-234` condition, deliberately — and builds no emitters at all. The
+`stop-sequence` suite covers the dispatch side, which is why it passed through all three emitter
+bugs. The entry names the shape of a real guard.
+
+**Does not reach `BL-235`** (the un-respawned crash fire) and was never going to: that def is
+`[Puffer 1, Loop{-1}]` plus a separate 30 s stopper sequence, so its instance never finishes.
+`BL-240` (`part3`/`part4` never launch) is likewise untouched as a motion bug — its `trailpuffer3`
+now merely stops at 5 s instead of running for the session, at the wrong place either way.
