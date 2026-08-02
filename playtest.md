@@ -300,6 +300,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   `dum`/`ap` give a white-hot flash and `mag` adds fire (a different look, not a different bug).
   `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --infinite-ammo`.
 
+- `PT-28` **Night self-lit art (C9 / `BL-214` landed 2026-08-02).** The model `lighting` flag is now
+  honoured, so on a night map the cloud sprite cards, water splashes, beacons and effect meshes draw
+  at full brightness while the terrain and sea still dim with the mission SUNLIGHT. Fly C1B at night
+  and judge **the clouds specifically** — that is the one part with no matched capture of the
+  original. What to judge: (a) do the cloud cards read as moonlit at the right level, or as
+  blown-out white cut-outs against the dark sea; (b) do the gun splashes on the water read like
+  `OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` (they measure the same); (c) does
+  the skydome still meet the terrain in a grey band — the dome deliberately keeps its fog even
+  though the data says otherwise, and a hard horizon edge would mean that call is wrong.
+  `./RunGame.ps1 --plane=player_bhawk --chapter=C1B --infinite-ammo`.
+
 ---
 
 ## Everything else

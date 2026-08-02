@@ -422,6 +422,16 @@ public sealed class GameZ
                 mesh.ModelType = mt.GetString();
             if (m.TryGetProperty("facade_mode", out var fm) && fm.ValueKind == JsonValueKind.String)
                 mesh.FacadeMode = fm.GetString();
+            // The model's render flags. Both are serialized true on the overwhelming majority
+            // of models and false on authored self-lit/unfogged geometry; absent on a legacy
+            // tree, where the defaults keep every model lit and fogged.
+            if (m.TryGetProperty("flags", out var mfl) && mfl.ValueKind == JsonValueKind.Object)
+            {
+                if (mfl.TryGetProperty("lighting", out var lit))
+                    mesh.Lighting = lit.ValueKind != JsonValueKind.False;
+                if (mfl.TryGetProperty("fog", out var fog))
+                    mesh.Fog = fog.ValueKind != JsonValueKind.False;
+            }
             if (m.TryGetProperty("texture_scroll", out var sc) && sc.ValueKind == JsonValueKind.Object)
                 mesh.TextureScroll = new Vector2(
                     sc.TryGetProperty("u", out var su) ? su.GetSingle() : 0f,
@@ -533,6 +543,13 @@ public sealed class GameZMesh
     // textures do NOT scroll — their motion in the original is the splash puffers, not a
     // UV animation).
     public Vector2 TextureScroll;
+    // The model's own render flags. `lighting: false` = the original's D3D lighting is off for
+    // this model, so it draws at full texture × vertex-colour brightness instead of being
+    // modulated by the mission SUNLIGHT (the remake's csky_world_light) — self-lit effect
+    // geometry, billboards, glows, clutter cards. `fog: false` = exempt from distance fog.
+    // Absent (legacy v0.6.1 tree) → both true, i.e. the pre-BL-214 behaviour.
+    public bool Lighting = true;
+    public bool Fog = true;
 
     public List<Vector3> Vertices { get; } = new();
     public List<Vector3> Normals { get; } = new();

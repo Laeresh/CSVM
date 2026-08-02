@@ -178,6 +178,14 @@ lands 210→169). Applied before the fog mix, so `FOG_COLOR` is unaffected. Pair
 **gamma-space vertex modulate** (the other item-6 half — see `SceneBuilder.cs`), which fixes
 the terrain's washed-yellow → saturated-green hue independent of brightness.
 
+⚠ **It does not reach every surface, and that is the data's decision, not a special case.** Since
+2026-08-02 a model authored `flags.lighting: false` skips the multiply entirely — the original turns
+D3D lighting off for it, so it draws at full brightness ([gamez.md](gamez.md)). That is 3,003 models
+install-wide: the sprite cards, clutter trees, glows, effect meshes, lit signage and the whole
+skydome. Light-source glow flares were already exempt by a hand-rolled rule; the flag turns out to
+agree with it, and now covers the rest. The visible consequence is that a night mission's clouds,
+splashes and beacons stay bright while its terrain and water still dim.
+
 *Caveat:* `k` rests on the single C1 overcast reference; the night/day self-scaling is a
 principled prediction pending a matched C1B-night and a bright-day original to confirm/refine
 the constant.

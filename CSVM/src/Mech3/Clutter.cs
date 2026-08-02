@@ -67,57 +67,11 @@ public sealed class ClutterBuilder
     /// collected while bodies still point at them.</summary>
     public const string SharedShapeMeta = "csvm_clutter_shapes";
 
-    // Upright billboard: the quad spins about its planted point's vertical axis toward
-    // the camera (the source decorations are single one-sided cards — the original engine
-    // must face them too, or trees would vanish edge-on). Fullbright like the world, hard
-    // scissor cutout, and the same cylindrical distance fog as SceneBuilder's shader.
-    private const string ShaderCode = """
-        shader_type spatial;
-        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
-
-        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
-
-        // Fog globals + csky_world_light, and the DX7 gamma-space vertex modulate (trees share
-        // the world's baked-lighting model). Both were once duplicated verbatim from
-        // SceneBuilder; they are now single-sourced files.
-        #include "res://shaders/csky_atmosphere.gdshaderinc"
-        #include "res://shaders/csky_srgb.gdshaderinc"
-
-        // The shared ORDERED instance-uniform block. This shader reads only `csky_fog_on`, but
-        // it must declare the whole block in the canonical order: Godot assigns instance-uniform
-        // indices by declaration order within each shader and merges the mapping across every
-        // material on one GeometryInstance3D, so two shaders that disagree silently read each
-        // other's slots — the unfogged-hilltops bug, when `csky_fog_on` was index 0
-        // here and index 1 in SceneBuilder's bias shader.
-        //
-        // An earlier attempt hand-padded this shader with an unused `node_bias` and was dropped
-        // because it enforced nothing — the next shared uniform still had to be added to both
-        // shaders by hand. The include is that fix done structurally: there is one declaration
-        // site, so the orders cannot drift apart. Never declare an instance uniform below this.
-        #include "res://shaders/csky_instance_uniforms.gdshaderinc"
-
-        void vertex() {
-            vec3 origin = MODEL_MATRIX[3].xyz;
-            vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;
-            float len = length(to_cam);
-            vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
-            mat3 spin = mat3(
-                vec3(dir.y, 0.0, -dir.x),
-                vec3(0.0, 1.0, 0.0),
-                vec3(dir.x, 0.0, dir.y));
-            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX, 1.0)).xyz;
-        }
-
-        void fragment() {
-            vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
-            ALBEDO = col.rgb * csky_world_light;
-            vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
-            float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);
-            ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);
-            ALPHA = col.a;
-            ALPHA_SCISSOR_THRESHOLD = 0.5;
-        }
-        """;
+    // The sprite shader's distance-fog block, emitted only into the fogged variant.
+    private const string FogLines =
+        "    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;\n"
+        + "    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);\n"
+        + "    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);\n";
 
     // Steeper than ~75° (XZ footprint under a quarter of the true area) grows no trees —
     // an upright billboard on a near-cliff face floats off it.
@@ -155,10 +109,11 @@ public sealed class ClutterBuilder
     private readonly TextureArchive _textures;
     private readonly SceneBuilder? _scene;
 
+    // One sprite shader per (lit, fogged) pair the decoration models actually ask for.
+    private readonly Dictionary<int, Shader> _shaders = new();
+
     // Shared collision shapes of the last collidable Build, keyed by decoration MeshIndex.
     private Dictionary<int, ConcavePolygonShape3D>? _solidShapes;
-
-    private Shader? _shader;
 
     /// <param name="scene">The world's SceneBuilder, for the 3D-decoration path (its meshes
     /// and its fullbright world materials). Null disables that path and leaves only the
@@ -400,6 +355,60 @@ public sealed class ClutterBuilder
         return name.Length == 0 ? "clutter_kind" : name;
     }
 
+    // Upright billboard: the quad spins about its planted point's vertical axis toward
+    // the camera (the source decorations are single one-sided cards — the original engine
+    // must face them too, or trees would vanish edge-on). Fullbright like the world, hard
+    // scissor cutout, and the same cylindrical distance fog as SceneBuilder's shader.
+    // `lit`/`fogged` are the decoration model's own authored render flags (BL-214): every tree
+    // and bush card in this install is `lighting: false` — a camera-facing card has no
+    // meaningful normal to light — so the sprites stop being dimmed by the mission SUNLIGHT,
+    // exactly as the placed world's self-lit models now are. Emitted as shader VARIANTS, so a
+    // lit, fogged kind's code is byte-for-byte what it always was.
+    private static string ShaderCode(bool lit, bool fogged) => $$"""
+        shader_type spatial;
+        render_mode skip_vertex_transform, unshaded, cull_disabled, shadows_disabled;
+
+        uniform sampler2D albedo_tex : source_color, filter_linear_mipmap;
+
+        // Fog globals + csky_world_light, and the DX7 gamma-space vertex modulate (trees share
+        // the world's baked-lighting model). Both were once duplicated verbatim from
+        // SceneBuilder; they are now single-sourced files.
+        #include "res://shaders/csky_atmosphere.gdshaderinc"
+        #include "res://shaders/csky_srgb.gdshaderinc"
+
+        // The shared ORDERED instance-uniform block. This shader reads only `csky_fog_on`, but
+        // it must declare the whole block in the canonical order: Godot assigns instance-uniform
+        // indices by declaration order within each shader and merges the mapping across every
+        // material on one GeometryInstance3D, so two shaders that disagree silently read each
+        // other's slots — the unfogged-hilltops bug, when `csky_fog_on` was index 0
+        // here and index 1 in SceneBuilder's bias shader.
+        //
+        // An earlier attempt hand-padded this shader with an unused `node_bias` and was dropped
+        // because it enforced nothing — the next shared uniform still had to be added to both
+        // shaders by hand. The include is that fix done structurally: there is one declaration
+        // site, so the orders cannot drift apart. Never declare an instance uniform below this.
+        #include "res://shaders/csky_instance_uniforms.gdshaderinc"
+
+        void vertex() {
+            vec3 origin = MODEL_MATRIX[3].xyz;
+            vec2 to_cam = CAMERA_POSITION_WORLD.xz - origin.xz;
+            float len = length(to_cam);
+            vec2 dir = len > 1e-4 ? to_cam / len : vec2(0.0, 1.0);
+            mat3 spin = mat3(
+                vec3(dir.y, 0.0, -dir.x),
+                vec3(0.0, 1.0, 0.0),
+                vec3(dir.x, 0.0, dir.y));
+            VERTEX = (VIEW_MATRIX * vec4(origin + spin * VERTEX, 1.0)).xyz;
+        }
+
+        void fragment() {
+            vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
+            ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
+        {{(fogged ? FogLines : "")}}    ALPHA = col.a;
+            ALPHA_SCISSOR_THRESHOLD = 0.5;
+        }
+        """;
+
     // A template subtree: root → ground node (first descendant with a mesh; its texture
     // + quad size define what gets decorated and the tiling period) → decoration nodes
     // (a local translation each, sprite mesh on the child below).
@@ -451,6 +460,8 @@ public sealed class ClutterBuilder
                         Label = s.Texture,
                         Width = s.Width,
                         Height = s.Height,
+                        Lit = _gamez.Meshes[decoMesh.MeshIndex].Lighting,
+                        Fogged = _gamez.Meshes[decoMesh.MeshIndex].Fog,
                     };
                 }
                 else if (IsSolidDecoration(decoMesh.MeshIndex))
@@ -651,11 +662,19 @@ public sealed class ClutterBuilder
 
     // ---------------------------------------------------------------- rendering
 
+    private Shader SpriteShader(bool lit, bool fogged)
+    {
+        int key = (lit ? 1 : 0) | (fogged ? 2 : 0);
+        if (!_shaders.TryGetValue(key, out var shader))
+            _shaders[key] = shader = new Shader { Code = ShaderCode(lit, fogged) };
+        return shader;
+    }
+
     // All instances of one kind as a single MultiMesh draw call.
     private MultiMeshInstance3D BuildKindInstance(Kind kind)
     {
         var tex = _textures.Find(kind.Label);
-        var mat = new ShaderMaterial { Shader = _shader ??= new Shader { Code = ShaderCode } };
+        var mat = new ShaderMaterial { Shader = SpriteShader(kind.Lit, kind.Fogged) };
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);
 
@@ -853,6 +872,10 @@ public sealed class ClutterBuilder
         public string Label = "";                // texture (sprites) or node name (solids)
         public bool Solid;                       // a 3D decoration, not a billboard card
         public float Width, Height;              // sprite quad extents (sprites only)
+        // The decoration model's own render flags (sprites only — a solid decoration draws
+        // through SceneBuilder's materials, which read them themselves).
+        public bool Lit = true;
+        public bool Fogged = true;
     }
 
     private sealed class Template

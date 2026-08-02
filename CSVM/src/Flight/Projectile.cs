@@ -274,10 +274,6 @@ public sealed partial class ProjectilePool : Node3D
     private readonly Dictionary<string, GameZNode?> _impactNodes = new(); // impact anim name → prototype (cached)
     private readonly HashSet<string> _impactFxLogged = new();
     private readonly List<ImpactFx> _impactFx = new();
-    // Unshaded override materials for the splash instances (authored lighting/fog: false), one
-    // per distinct shared source material (OverrideUnlit).
-    private readonly Dictionary<Material, StandardMaterial3D> _impactFxUnlit = new();
-
     // Gun-impact effect throttle (C8): effect name → the sim time it last played. Keyed by name,
     // which is exactly "per firing group" — a group's rounds all carry one weapon and one
     // `<caliber><ammo>_gunhit`. Advanced by SimStep, so it follows the sim clock like everything
@@ -1104,19 +1100,11 @@ public sealed partial class ProjectilePool : Node3D
         var baseNode = FindChildByMetaSuffix(inst, "_base");
         var splashNode = FindChildByMetaSuffix(inst, "_splash");
         bool animated = baseNode != null || splashNode != null;
-        if (animated)
-        {
-            // The splash models are authored `lighting: false` + `fog: false` (self-lit effect
-            // geometry — the reference captures show white splashes at night), but the shared
-            // world materials multiply the mission SUNLIGHT (`csky_world_light`) into every
-            // surface, which dims the splash to invisibility on a night map. Honour the authored
-            // flags on these short-lived instances with an unshaded override; the column is a
-            // `Facade` (SphericalY) model, so it Y-billboards toward the camera.
-            if (baseNode != null)
-                OverrideUnlit(baseNode, billboardY: false);
-            if (splashNode != null)
-                OverrideUnlit(splashNode, billboardY: true);
-        }
+        // The splash models are authored `lighting: false` + `fog: false` (self-lit effect
+        // geometry — the reference captures show white splashes at night). SceneBuilder honours
+        // both flags on every model now, so the hand-rolled unshaded override this used to install
+        // is gone: the instance takes the shared world materials and comes out self-lit, unfogged
+        // and billboarded per its own `Facade` mode, from the data rather than from a guess.
         var fx = new ImpactFx
         {
             Model = inst,
@@ -1134,43 +1122,6 @@ public sealed partial class ProjectilePool : Node3D
             GD.Print($"impact effect '{animName}' instanced: {meshes} mesh(es)"
                      + (animated ? $" — splash curves driven (base {(baseNode != null ? "✓" : "–")}, column {(splashNode != null ? "✓" : "–")})" : ""));
         return true;
-    }
-
-    /// <summary>Replaces a splash child's shared world materials with unshaded (self-lit,
-    /// unfogged) overrides per the models' authored <c>lighting/fog: false</c> flags, keeping each
-    /// surface's own albedo texture. Overrides are cached per source material — the world's
-    /// materials are themselves shared, so each distinct one maps to one override.</summary>
-    private void OverrideUnlit(Node3D node, bool billboardY)
-    {
-        if (node is MeshInstance3D mi && mi.Mesh is { } mesh)
-        {
-            for (int s = 0; s < mesh.GetSurfaceCount(); s++)
-            {
-                var src = mi.GetActiveMaterial(s);
-                if (src == null)
-                    continue;
-                if (!_impactFxUnlit.TryGetValue(src, out var over))
-                {
-                    over = new StandardMaterial3D
-                    {
-                        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-                        AlbedoTexture = (src as ShaderMaterial)?.GetShaderParameter("albedo_tex").Obj as Texture2D,
-                        VertexColorUseAsAlbedo = true,
-                        Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
-                        CullMode = BaseMaterial3D.CullModeEnum.Disabled,
-                        BillboardMode = billboardY ? BaseMaterial3D.BillboardModeEnum.FixedY : BaseMaterial3D.BillboardModeEnum.Disabled,
-                        BillboardKeepScale = true, // the column's whole height is its node Y scale
-                    };
-                    _impactFxUnlit[src] = over;
-                }
-                mi.SetSurfaceOverrideMaterial(s, over);
-            }
-        }
-        foreach (var child in node.GetChildren())
-        {
-            if (child is Node3D c)
-                OverrideUnlit(c, billboardY);
-        }
     }
 
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal)

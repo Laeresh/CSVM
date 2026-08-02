@@ -10250,3 +10250,72 @@ the bright-pixel share that rises is the mip level's own, not the frame's). `c4-
 distance. `c2-city` a single-LSB shift, max delta 1 on under 0.01 % of pixels — C2 loads 10 authored
 levels but none reaches a mip band at that pose. **All three reproduce their pre-change hash
 bit-for-bit under `--mips=generated`**, which is the proof that the kept path is the old path.
+
+## 2026-08-02 — M3p5 Wave C C9 `BL-214`: the gamez model `lighting`/`fog` flags honoured world-wide
+
+**The data flag, not a per-effect exemption.** Every gamez model carries `flags.lighting` and
+`flags.fog`. `lighting: false` is the original turning D3D lighting off for that model — it draws at
+full texture × vertex-colour brightness instead of being modulated by the mission `SUNLIGHT_*`, which
+is exactly what the remake's `csky_world_light` scalar stands in for — and `fog: false` exempts it
+from distance fog. We multiplied SUNLIGHT into everything, so authored self-lit art dimmed toward
+invisibility on a night map. Censused install-wide over **17,139 models** (8 chapters + planes.zbd):
+**3,003 `lighting: false`**, **225 `fog: false`**, and unfogged is nearly a subset of unlit (197 both;
+28 lit-but-unfogged, 24 of them in C5). What carries the flags: every Facade sprite card (the
+`cloud1`/`cloud2` cloud sprites, lamp/beacon/flare glows, muzzle flashes), the clutter tree and bush
+cards, lit signage and lightpoles, effect meshes (`fire1`/`fire2`, `splash1`/`bsplsh`, `rabbit_blur`),
+and the whole `horizon` skydome subtree. In planes.zbd the 467 unlit models are cockpit instruments
+and wing flares, and **no plane model is `fog: false`** — so the aircraft build is untouched either
+way (the shaded path never applied `csky_world_light`).
+
+**Shader variants, not a uniform.** `GameZ` reads both flags onto `GameZMesh`; `SceneBuilder`
+threads them through the material cache keys into the bias, billboard and cylindrical-facade shader
+generators, and `Clutter`'s sprite shader takes the same pair. Emitting variants rather than gating a
+uniform is deliberate: a lit, fogged surface's shader text stays byte-for-byte what it was, so the
+overwhelming majority of the world cannot be perturbed by float rounding in a `mix()`. It also avoids
+touching the instance-uniform ordering contract at all, and keeps the opaque sprite variants off the
+per-instance buffer as before. The glow-flare path was already exempt from `csky_world_light` by a
+hand-rolled rule; the data agrees with it, so `lit` is normalised out of those keys instead of
+splitting them. New per-build log line: `model flags: N self-lit, M unfogged`.
+
+**Two decisions worth naming.** (1) **The skydome keeps its fog.** Every horizon model in every
+chapter is `fog: false` (3–6 meshed nodes each, all of them), but our dome is not the original's — it
+is camera-anchored, 2.5× scaled and ~22 km out — and its fogging is a decision taken with the
+cylindrical-fog remodel, which is what greys the horizon band toward the same wall as the terrain.
+`WorldBuilder.BuildHorizon` is the one caller of the new `SceneBuilder.ForceFogged`; the dome's
+`lighting: false` **is** honoured. (2) **`ProjectilePool.OverrideUnlit` is folded in and deleted.**
+The splash models are exactly the case the general path now covers, and they take their authored
+`Facade` billboard mode from the data instead of the override's guess. Verified by A/B on a C1B
+night water burst: the splash region is **pixel-identical** (2,584 px above luminance 150, p99 171,
+both builds), and the only whole-frame delta is distant cloud sprites.
+
+**How verified.** Baseline captured on the unmodified build first, then the same probes on the
+change. `.\RunTests.ps1` **PASS**: 326 units, 17/17 engine suites, engine errors clean, 13 goldens
+re-pinned once. 8-chapter `--freecam --det` regression: **0 errors**, every chapter logging its
+self-lit population (C1 309, C1B 113, C1C 300, C2 171, C2B 276, C3 46, C4 333, C5 123) — the check
+trap (a) asks for, since mesh/node counts cannot move (the flag reaches materials, not the build).
+`--effects-test --chapter=C1B` is unchanged before and after (**33/33 resolved, 30 built a puffer**),
+which is trap (b): the world-effects templates still reach the world, and now render self-lit.
+**Every changed pixel in every shot is brighter, never darker** — the invariant a ≤1 dimming multiply
+and a fog mix removal must satisfy.
+
+**The ten moved goldens, and the three that did not.** `c1b-night-sea` 15.6 % of pixels, max channel
+delta 197 — the largest move and the shot that names the fix: C1B's cloud sprite cards stop being
+dimmed by SUNLIGHT 0.43, and the headland beacon appears. `c1-flight` 27.4 % / max 33, `c1-crash`
+5.8 % / 14, `c1-destroy-effects` 4.0 % / 21, `c1-waterfall` 6.25 % / 42 (falls sheet, mist, ridge tree
+line) — all C1 at SUNLIGHT 0.80. `c1c-rain` 5.7 % / 6, entirely in the top 90 rows. `c2-city` 0.63 % /
+30, the clutter cards and backlot signage. Then the near-nulls, each explained by its zone's own
+SUNLIGHT rather than by the flag failing: `c3-island` 17 px / max 1 at SUNLIGHT 0.99, `c4-snow`
+105 px / 1 and `c5-city-night` 1 px / 1 at SUNLIGHT **1.00** — where the multiply was already an
+identity, so only rounding moves. (`c5-city-night` names the art, not the mission; the build logs 123
+self-lit models there, so the flag is read.) Unmoved: `c2b-rain` (no self-lit model in that pose),
+`viewer-bhawk` and `empty-stage` — the last two the proof the aircraft path is untouched.
+
+**⚠ Owed at the controls.** The cloud sprite cards are the one part with no matched original capture.
+`OriginalScreenshots/C1B IA1 Bloodhawk tracer and ejection.png` confirms the *principle* — self-lit
+effect puffs read near-white (max 172) over a night sea at ~38, while terrain and water stay dark —
+but its white clusters are transient effect geometry, not the cloud layer, so the cloud brightness
+itself is a data-faithful prediction, not a measured match. Filed as `PT-28`.
+
+Docs: `docs/formats/gamez.md` (the flag decode + census), `gotchas.md` (the SUNLIGHT bullet now names
+the opt-out), `weather.md` (SUNLIGHT no longer reaches every surface), `architecture.md`
+(`GameZ.cs`, `SceneBuilder.cs`, `WorldBuilder.cs`, `Clutter.cs`, `Projectile.cs`).

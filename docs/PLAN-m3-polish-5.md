@@ -141,7 +141,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave C — world-render fidelity with a measured cause
 
 8. ☑ `BL-055` Honour the authored `_1`/`_2` mip levels instead of box-filtering our own
-9. ☐ `BL-214` Honour the gamez model `lighting`/`fog` flags world-wide
+9. ☑ `BL-214` Honour the gamez model `lighting`/`fog` flags world-wide
 
 ### Wave D — the plan-sized mechanic
 
@@ -552,7 +552,7 @@ textures in their own right; they are mip levels, and registering them would mak
 surfaces. (c) Verify the sibling actually is half/quarter the base's dimensions before installing it —
 a name-convention match is a lead, not a guarantee.
 
-## C9 ☐ `BL-214` Honour the gamez model `lighting`/`fog` flags world-wide
+## C9 ☑ `BL-214` Honour the gamez model `lighting`/`fog` flags world-wide — **landed 2026-08-02**
 
 **Goal.** Authored self-lit geometry — explosion rings, splash models, effect meshes, lit signage —
 reads bright on night maps instead of being dimmed to invisibility by the mission sunlight.

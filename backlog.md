@@ -128,31 +128,6 @@ work is below.
     path; it does not re-examine whether 0.34 reads well for a gun belt, since nobody has watched one
     drain past that fraction with intent to judge the colour step.
 
-## Milestone 3 Polishing, pass 2 (playtest findings, 2026-07-31)
-
-The PT-05..PT-12 cockpit pass over the PLAN-m3-polish-2 landings. The common thread: **several items
-landed mechanically correct but perceptually near-nil** — the effect builds, the log says success,
-and the player sees nothing. All nine are scheduled into
-[`docs/plans/PLAN-m3-polish-3.md`](docs/plans/PLAN-m3-polish-3.md) (now `COMPLETE`); each entry below is the record of record for
-its symptom and traps.
-
-**Impact feedback (PT-05).**
-
-- `BL-214` **Honour the gamez model `lighting`/`fog` flags world-wide.** Found landing `BL-203`:
-  every chapter carries a small authored set of self-lit models (`lighting: false` — 25–31 per
-  chapter unfogged, ~270–390 more fogged-but-unlit), but the generated world materials multiply
-  the mission SUNLIGHT (`csky_world_light`) into everything, so authored self-lit effect geometry
-  (the splash models, plausibly the explosion rings and other effect meshes) dims to invisibility
-  on night maps. `BL-203` landed a narrow exemption for the projectile-instanced splash models
-  only (`ProjectilePool.OverrideUnlit`); the general fix is a per-model term in the shared shader
-  path. ⚠ Traps: (a) the flag moves ~300 models per chapter — expect golden churn on night
-  chapters; regenerate with the moved shots named, GOLD-1. (b) The world-effects stage templates
-  (rings, fireballs) render through the same dimmed path — check them under `--effects-test`
-  screenshots at night before assuming the flag fixes them.
-  *Playtest after fix:* night-chapter effect meshes (rocket rings, splashes) read bright.
-
-**Rockets (PT-09).**
-
 ## Blocked / deferred
 
 - `BL-222` **The `player` IMPACT surface class — the general got-shot feedback on your own airframe,

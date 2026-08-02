@@ -778,6 +778,10 @@ public partial class GameSession : Node3D
         // Read after the domes, since C1's daytime sky layer is a horizon child.
         if (builder.ScrollingModelCount > 0)
             GD.Print($"texture scroll: {builder.ScrollingModelCount} model(s) animating UVs");
+        // The evidence that the authored render flags reached the materials — a night chapter
+        // reporting 0 self-lit models means they did not (BL-214).
+        GD.Print($"model flags: {builder.UnlitModelCount} self-lit (lighting: false), "
+                 + $"{builder.UnfoggedModelCount} unfogged (fog: false)");
         state.What = $"chapter {_spec.Chapter} world";
 
         // The animation debugger (--anim-lab): the lab node owns the clock and the

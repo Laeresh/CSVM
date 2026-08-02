@@ -164,7 +164,11 @@ void fragment() {
     // Subface is part of the key for the same reason Priority is: it selects a different depth
     // bias, and one material legitimately skins both roles (C5's cblock1/2/3 appear 236/91/52
     // times as a plain face and 96/121/98 times as a subface over the cblock4/5/6 base).
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv), Material> _materialCache = new();
+    // Lit/Fogged are part of the key because they are the model's own render flags, not the
+    // material's: one texture legitimately skins both a lit world surface and a self-lit effect
+    // model (C1's `fire1` shares its flame texture with static refinery geometry), and the two
+    // need different shader variants — see BuildMesh.
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, bool Lit, bool Fogged), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -175,7 +179,7 @@ void fragment() {
     private readonly Dictionary<(float Size, float MaxPx, float Range), ShaderMaterial> _lightMaterialCache = new();
     // Billboard glow material for a flare sprite quad: always alpha-blended (the soft ramp
     // must never scissor into a hard star cutout), no night dimming (it's a light source).
-    private readonly Dictionary<int, Material> _glowMaterialCache = new();
+    private readonly Dictionary<(int Material, bool Fogged), Material> _glowMaterialCache = new();
     // Cylindrical (Y- or X-axis) billboard material: unlike glow flares this respects the
     // texture's own alpha classification (trees/cables are hard-edge cutouts — Clutter's
     // tiled trees already scissor, and these individually-placed Facade trees should read
@@ -184,7 +188,7 @@ void fragment() {
     // predicate — the same delegate the legacy spherical fallback uses, so one rule governs
     // every light-vs-scenery billboard in the renderer; WorldBuilder widened it
     // to also catch the refinery's own gas flame, fire101.tif, which isn't "*flare*"-named).
-    private readonly Dictionary<(int Material, int Axis), Material> _cylindricalMaterialCache = new();
+    private readonly Dictionary<(int Material, int Axis, bool Lit, bool Fogged), Material> _cylindricalMaterialCache = new();
     // Every textured material this builder made, paired with the texture name it resolved
     // from — the registry a live repaint needs (the viewer's livery lab re-runs the paint
     // and swaps each material's albedo in place, instead of rebuilding the whole aircraft
@@ -261,6 +265,22 @@ void fragment() {
 
     public int MeshInstanceCount { get; private set; }
     public int ColliderCount { get; private set; }
+
+    /// <summary>Build models as though every one were authored <c>fog: true</c>, ignoring the
+    /// model's own <c>fog</c> flag. Set only for the skydome: every horizon model in every
+    /// chapter is authored <c>fog: false</c>, but our dome is not the original's — it is
+    /// camera-anchored, 2.5x scaled and sitting ~22 km out — and it was a deliberate decision
+    /// (with the cylindrical-fog remodel) that it fogs, so the horizon band greys toward the
+    /// same wall as the terrain instead of meeting it as a crisp edge. See
+    /// <c>WorldBuilder.BuildHorizon</c>; the <c>lighting</c> flag is honoured there as
+    /// everywhere else.</summary>
+    public bool ForceFogged { get; set; }
+
+    /// <summary>Models built from an authored <c>lighting: false</c> / <c>fog: false</c> flag —
+    /// the one-line evidence that a chapter's self-lit and unfogged geometry was actually read
+    /// (a night chapter reporting zero means the flags are not reaching the materials).</summary>
+    public int UnlitModelCount { get; private set; }
+    public int UnfoggedModelCount { get; private set; }
 
     /// <summary>Models built with a non-zero UV scroll rate, from either source (the model's own
     /// <c>texture_scroll</c> or the boot script). Logged per world build: it is the one-line
@@ -816,6 +836,18 @@ void fragment() {
         if (scroll != Vector2.Zero)
             ScrollingModelCount++;
 
+        // The model's own authored render flags (BL-214). `lighting: false` is the original
+        // turning D3D lighting off for this model — it draws at full texture × vertex-colour
+        // brightness rather than dimmed by the mission SUNLIGHT — and `fog: false` exempts it
+        // from distance fog. Both flow into the material/shader keys, so one texture can skin a
+        // lit world surface and a self-lit effect model without either borrowing the other's look.
+        bool lit = mesh.Lighting;
+        bool fogged = mesh.Fog || ForceFogged;
+        if (!lit)
+            UnlitModelCount++;
+        if (!fogged)
+            UnfoggedModelCount++;
+
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
@@ -831,9 +863,9 @@ void fragment() {
             bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys);
             if (clampUv)
                 ClampedSurfaceTotal++;
-            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex)
-                : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis)
-                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv));
+            st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged)
+                : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged)
+                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -894,22 +926,25 @@ void fragment() {
         return tex != null && _glowTexture(tex);
     }
 
-    private Material GetGlowMaterial(int materialIndex)
+    // A glow flare is a light source: its shader never applied csky_world_light in the first
+    // place, so the model's `lighting` flag has no term to gate here and is not part of the key.
+    private Material GetGlowMaterial(int materialIndex, bool fogged)
     {
-        if (_glowMaterialCache.TryGetValue(materialIndex, out var cached))
+        var key = (materialIndex, fogged);
+        if (_glowMaterialCache.TryGetValue(key, out var cached))
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
         var tex = texName != null ? Resolve(texName) : null;
         Material mat = tex != null
-            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true)
-            : GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true);
-        _glowMaterialCache[materialIndex] = mat;
+            ? BillboardMaterial(tex, blend: true, scissor: false, glow: true, lit: true, fogged: fogged)
+            : GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true, lit: true, fogged: fogged);
+        _glowMaterialCache[key] = mat;
         return mat;
     }
 
-    private Material GetCylindricalMaterial(int materialIndex, CylAxis axis)
+    private Material GetCylindricalMaterial(int materialIndex, CylAxis axis, bool lit, bool fogged)
     {
-        var key = (materialIndex, (int)axis);
+        var key = (materialIndex, (int)axis, lit, fogged);
         if (_cylindricalMaterialCache.TryGetValue(key, out var cached))
             return cached;
         var texName = _gamez.Materials[materialIndex].TextureName;
@@ -920,24 +955,24 @@ void fragment() {
             bool blend = _textures.LastHadAlpha && _textures.LastAlphaIsSoft;
             bool scissor = _textures.LastHadAlpha && !blend;
             bool glow = texName != null && _glowTexture != null && _glowTexture(texName);
-            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow);
+            mat = CylindricalBillboardMaterial(tex, axis, blend, scissor, glow, lit, fogged);
         }
         else
         {
-            mat = GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true);
+            mat = GetMaterial(materialIndex, 0, 0, subface: false, doubleSided: true, lit: lit, fogged: fogged);
         }
         _cylindricalMaterialCache[key] = mat;
         return mat;
     }
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll = default, bool clampUv = false)
+        Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv);
+        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, lit, fogged);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv);
+        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged);
         _materialCache[key] = mat;
         return mat;
     }
@@ -977,7 +1012,7 @@ void fragment() {
     }
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll, bool clampUv = false)
+        Vector2 scroll, bool clampUv, bool lit, bool fogged)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -1009,15 +1044,16 @@ void fragment() {
             // branch here — their billboard treatment is per-MESH, see BuildMesh: the same
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
-                return BillboardMaterial(tex, blend, scissor);
-            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv);
+                return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged);
+            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
         }
 
         var color = src?.Color ?? Colors.White;
-        return BiasMaterial(priority, rank, subface, doubleSided, null, color, blend: color.A < 1f, scissor: false);
+        return BiasMaterial(priority, rank, subface, doubleSided, null, color, blend: color.A < 1f, scissor: false,
+            scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged);
     }
 
     private StandardMaterial3D NewStandard(Color? albedoColor = null)
@@ -1042,14 +1078,14 @@ void fragment() {
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool subface, bool doubleSided, ImageTexture? tex,
-        Color? color, bool blend, bool scissor, Vector2 scroll = default, bool clampUv = false)
+        Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
         var mat = new ShaderMaterial
         {
             Shader = GetBiasShader(shaded: !_fullbright, textured: tex != null, blend, scissor, doubleSided,
-                scrolls, clampUv && tex != null),
+                scrolls, clampUv && tex != null, lit, fogged),
         };
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (subface)
@@ -1064,11 +1100,15 @@ void fragment() {
         return mat;
     }
 
+    // `lit` / `fogged` are the model's own authored render flags. They select shader VARIANTS
+    // rather than driving a uniform on purpose: a lit, fogged surface then emits byte-for-byte
+    // the shader text it always did, so honouring the flags cannot perturb the overwhelming
+    // majority of the world through float rounding in a mix().
     private Shader GetBiasShader(bool shaded, bool textured, bool blend, bool scissor, bool doubleSided,
-        bool scroll = false, bool clampUv = false)
+        bool scroll, bool clampUv, bool lit, bool fogged)
     {
         int key = (shaded ? 1 : 0) | (textured ? 2 : 0) | (blend ? 4 : 0) | (scissor ? 8 : 0) | (doubleSided ? 16 : 0)
-            | (scroll ? 32 : 0) | (clampUv ? 64 : 0);
+            | (scroll ? 32 : 0) | (clampUv ? 64 : 0) | (lit ? 0 : 128) | (fogged ? 0 : 256);
         if (_biasShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1165,8 +1205,13 @@ void fragment() {{");
             : "    vec4 base_col = texture(albedo_tex, UV);");
         sb.AppendLine($"    vec4 col = {vcol} * base_col;");
         sb.AppendLine("    ALBEDO = col.rgb;");
-        if (!shaded)
-            sb.AppendLine("    ALBEDO *= csky_world_light;"); // per-mission SUNLIGHT dimming (world/deck/dome)
+        // Per-mission SUNLIGHT dimming (world/deck/clutter). Skipped for a model authored
+        // `lighting: false`: the original turned D3D lighting off for it, so it drew at full
+        // texture × vertex-colour brightness — self-lit effect geometry, lit signage, sprite
+        // cards whose camera-facing normals make lighting meaningless. The shaded (aircraft)
+        // path never applies csky_world_light at all, so the flag has nothing to gate there.
+        if (!shaded && lit)
+            sb.AppendLine("    ALBEDO *= csky_world_light;");
         if (shaded)
         {
             sb.AppendLine("    ROUGHNESS = 0.85;");
@@ -1177,7 +1222,10 @@ void fragment() {{");
         // position here (set in vertex() under skip_vertex_transform); INV_VIEW_MATRIX lifts it
         // back to world space for the horizontal camera distance + the fragment-altitude fade.
         // The aircraft is always within the near range at chase distance, so this is a no-op on it.
-        sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
+        // The fullbright path needs the world position for the light spill too, so an unfogged
+        // world surface still computes it; an unfogged SHADED surface has no other reader.
+        if (fogged || !shaded)
+            sb.AppendLine("    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;");
         // Animated point lights, before the fog mix so a lit surface still fogs out with
         // distance. Deliberately NOT scaled by csky_world_light: a lamp is a light source, so it
         // does not dim with the mission's SUNLIGHT — the same rule the glow-flare sprites follow.
@@ -1196,8 +1244,13 @@ void fragment() {{");
             sb.AppendLine("    vec3 light_n = normalize(-(INV_VIEW_MATRIX * vec4(NORMAL, 0.0)).xyz);");
             sb.AppendLine("    ALBEDO += base_col.rgb * csky_light_spill(fog_world, light_n);");
         }
-        sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-        sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+        // A model authored `fog: false` is exempt from distance fog entirely; the instance-level
+        // csky_fog_on stays the per-instance opt-out beside it (see the uniform block).
+        if (fogged)
+        {
+            sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
+            sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
+        }
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
@@ -1214,16 +1267,18 @@ void fragment() {{");
     // nothing coplanar to fight) but carries the identical cylindrical distance-fog term, so
     // distant sprites fade into the fog wall in step with the terrain they float over. blend /
     // scissor follow the alpha classification (cloud1/cloud2 are soft-alpha ⇒ blend).
-    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow = false)
+    private ShaderMaterial BillboardMaterial(ImageTexture tex, bool blend, bool scissor, bool glow, bool lit, bool fogged)
     {
-        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow) };
+        var mat = new ShaderMaterial { Shader = GetBillboardShader(blend, scissor, glow, lit, fogged) };
         mat.SetShaderParameter("albedo_tex", tex);
         return mat;
     }
 
-    private Shader GetBillboardShader(bool blend, bool scissor, bool glow = false)
+    private Shader GetBillboardShader(bool blend, bool scissor, bool glow, bool lit, bool fogged)
     {
-        int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0);
+        // A glow variant already ignores csky_world_light, so `lit` cannot split its key.
+        lit |= glow;
+        int key = (blend ? 1 : 0) | (scissor ? 2 : 0) | (glow ? 4 : 0) | (lit ? 0 : 8) | (fogged ? 0 : 16);
         if (_billboardShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1262,17 +1317,20 @@ void vertex() {
 }
 
 void fragment() {
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
-    // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
-    // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
-    // distance + the fragment-altitude fade.
-    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);");
+        // Cylindrical distance fog, identical to the world shader: VERTEX is the view-space
+        // position in fragment; INV_VIEW_MATRIX lifts it back to world for the horizontal camera
+        // distance + the fragment-altitude fade. A model authored `fog: false` skips it.
+        if (fogged)
+            sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
         // Glow flares are light sources: no SUNLIGHT night dimming (a lamp doesn't get
-        // darker at night — it's what lights the scene). Clouds ride the world brightness.
-        sb.AppendLine(glow
-            ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
-            : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
+        // darker at night — it's what lights the scene), and neither is a model the artists
+        // authored `lighting: false`. Clouds ride the world brightness.
+        string lightTerm = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        sb.AppendLine(fogged
+            ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
+            : $"    ALBEDO = {lightTerm};");
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
@@ -1291,16 +1349,19 @@ void fragment() {
     // proven tree-billboard shader (skip_vertex_transform + a hand-built spin matrix), kept
     // as its own generator rather than shared code because the two differ in fog/dim/
     // instancing details already (Clutter is a MultiMesh with no per-mesh pivot cache).
-    private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor, bool glow)
+    private ShaderMaterial CylindricalBillboardMaterial(ImageTexture tex, CylAxis axis, bool blend, bool scissor,
+        bool glow, bool lit, bool fogged)
     {
-        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow) };
+        var mat = new ShaderMaterial { Shader = GetCylindricalShader(axis, blend, scissor, glow, lit, fogged) };
         mat.SetShaderParameter("albedo_tex", tex);
         return mat;
     }
 
-    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow)
+    private Shader GetCylindricalShader(CylAxis axis, bool blend, bool scissor, bool glow, bool lit, bool fogged)
     {
-        int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0);
+        lit |= glow; // a glow variant already ignores csky_world_light — same key
+        int key = (axis == CylAxis.X ? 1 : 0) | (blend ? 2 : 0) | (scissor ? 4 : 0) | (glow ? 8 : 0)
+            | (lit ? 0 : 16) | (fogged ? 0 : 32);
         if (_cylindricalShaderCache.TryGetValue(key, out var cached))
             return cached;
 
@@ -1340,12 +1401,14 @@ void vertex() {{
 }}
 
 void fragment() {{
-    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
-    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
+    vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);");
+        if (fogged)
+            sb.AppendLine(@"    vec3 fog_world = (INV_VIEW_MATRIX * vec4(VERTEX, 1.0)).xyz;
     float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
-        sb.AppendLine(glow
-            ? "    ALBEDO = mix(col.rgb, csky_fog_color, fog_amt);"
-            : "    ALBEDO = mix(col.rgb * csky_world_light, csky_fog_color, fog_amt);");
+        string cylLight = glow || !lit ? "col.rgb" : "col.rgb * csky_world_light";
+        sb.AppendLine(fogged
+            ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
+            : $"    ALBEDO = {cylLight};");
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)

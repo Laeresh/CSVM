@@ -204,6 +204,8 @@ coloured untextured triangle — see docs/formats/world-structure.md); SceneBuil
 ⚠ GameZNode.Index is the flat list position, NEVER the unified JSON `index` (1-based, duplicated);
   child_indices are flat positions too — getting this wrong rebuilds the graph without erroring.
 ⚠ The unified transform `scale` is deliberately ignored (measured unit on every transformed node).
+Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
+the original's self-lit and unfogged marks, honoured by SceneBuilder's per-model shader variants.
 ⚠ ModelType/FacadeMode/TextureScroll are unified-only: null/zero on a legacy tree, SceneBuilder
   falls back to its texture-name heuristic. Reading both shapes keeps a v0.6.1 rollback data-only.
 
@@ -241,7 +243,9 @@ area-quorum vote it replaced gave real water polygons on it to `default` outrigh
 still built with its transform — animations attach puffers and sounds to those nodes by name.
 ⚠ Instance-uniform block is an ORDERING CONTRACT — every shader on one instance declares the same
   block (csky_instance_uniforms); a shader with NO instance uniform must not take the preamble
-  (16-vec4 per-instance buffer cost).
+  (16-vec4 per-instance buffer cost). The model's `lighting`/`fog` flags therefore select shader
+  VARIANTS (and join the material cache keys) rather than adding a uniform: a lit, fogged surface
+  keeps byte-identical shader text, so honouring the flags cannot perturb the rest of the world.
 ⚠ UV scroll reads the `csky_time` global, never Godot's `TIME` — it must keep TIME's 3600 s wrap
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
@@ -324,7 +328,10 @@ re-skins the flares; WingLightBlinker flashes them.
 
 ## src/Mech3/WorldBuilder.cs
 Builds a chapter world (fullbright): World children + partition-referenced subtrees; skips `horizon`
-(`BuildHorizon` makes the camera-anchored skydome), `fvol*`, `dzpaths`. `BuildDzPaths` is its
+(`BuildHorizon` makes the camera-anchored skydome, and is the ONE caller that sets
+`SceneBuilder.ForceFogged` — every horizon model in every chapter is authored `fog: false`, and
+honouring that on a dome that is 2.5x scaled ~22 km out would delete the horizon band; its
+`lighting: false` is honoured), `fvol*`, `dzpaths`. `BuildDzPaths` is its
 debug-only custom renderer: material-matched gate polygons green/red at 50% alpha, route as an open
 white line strip (never a filled or closed polygon).
 Splits the overcast deck into
@@ -355,6 +362,8 @@ clutter (grown from `ClutterBuilder.ExportedKinds`) continuing the world past th
 Stamps the boot-script clutter templates across placed polygons carrying the template's ground
 texture, on a fixed world-space X/Z grid of the template period; sprites → one fullbright Y-billboard
 MultiMesh per kind, solids → `SceneBuilder.SharedMesh`; the split is `SceneBuilder.ClassifyBillboard`.
+The sprite shader takes the decoration model's own `lighting`/`fog` flags as variants (every tree and
+bush card in the install is `lighting: false`, so clutter does not dim with the mission SUNLIGHT).
 ⚠ Sprites are NOT collidable — no tree-destruction anim exists in the install (`spruce_destroy*`
   is the Spruce Goose; docs/formats/clutter.md). Solid decorations ARE collidable.
 ⚠ Collision shapes are SHARED, never expanded per placement (that costs seconds of BVH build): one
@@ -650,9 +659,9 @@ muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impac
 water hit instances the authored splash model and plays its def's own scale curves for the 2 s run
 (`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the
 splash1/bsplsh zrd values verbatim; column *width* ×8 is TUNE — the authored quad is 5 cm wide,
-sub-pixel past ~30 m) under unshaded override materials honouring the models' authored
-`lighting/fog: false` (`OverrideUnlit`; the shared world materials multiply mission SUNLIGHT in,
-which blacked the splash out at night — the general flag pass is BL-214); a dirt
+sub-pixel past ~30 m) on the shared world materials, which honour the models' authored
+`lighting/fog: false` themselves since BL-214 — the hand-rolled `OverrideUnlit` this needed is
+gone, verified pixel-identical on a C1B night water burst; a dirt
 (unclassified-terrain) hit spawns tumbling chips (`SpawnDirtDebris`) drawn on the gunhit def's own
 `bit01–04` chip textures in alpha-blended per-texture pools (through the additive
 muzzle-flash-textured impact pool they read as a small flame — the BL-203 mechanism; the def's

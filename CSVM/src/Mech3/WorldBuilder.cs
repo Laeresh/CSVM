@@ -101,6 +101,11 @@ public sealed class WorldBuilder
     /// Read after Build (and after BuildHorizon, which is where C1's daytime sky layer is).</summary>
     public int ScrollingModelCount => _scene.ScrollingModelCount;
 
+    /// <summary>Models built from their authored <c>lighting: false</c> / <c>fog: false</c>
+    /// flags — see <see cref="SceneBuilder.UnlitModelCount"/>.</summary>
+    public int UnlitModelCount => _scene.UnlitModelCount;
+    public int UnfoggedModelCount => _scene.UnfoggedModelCount;
+
     /// <summary>The overcast deck as a separate node so the caller can make it follow the
     /// player (see GameSession): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its
@@ -360,7 +365,14 @@ public sealed class WorldBuilder
         bool SkipOtherZones(GameZNode n) =>
             n.Name.StartsWith("zone", StringComparison.OrdinalIgnoreCase)
             && !n.Name.Equals(zone, StringComparison.OrdinalIgnoreCase);
+        // Every horizon model in every chapter is authored `fog: false` (measured: 3-6 meshed
+        // dome nodes per chapter, all of them). Honouring that here would delete the horizon
+        // band — and the dome fogging is a deliberate decision taken with the cylindrical-fog
+        // remodel (see below), on a dome that is not the original's shape anyway. So the dome,
+        // and only the dome, builds as if fogged; its `lighting: false` is honoured normally.
+        _scene.ForceFogged = true;
         var built = _scene.BuildSubtree(horizon, SkipOtherZones, collisionSkip: _ => true);
+        _scene.ForceFogged = false;
         if (built == null)
             return null;
         DisableShadows(built);
