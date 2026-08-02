@@ -116,14 +116,12 @@ public sealed class SequenceRunner
 {
     /// <summary>One authored ANIMATION FRAME, in seconds — the unit a <c>LOOP</c> count is
     /// denominated in. A <c>LOOP n</c> over an instantaneous body can only advance one pass per
-    /// engine update, so it is a timer of n updates; 1/60 s is where we PUT that update, which is
-    /// a decision and not a decode of the original. The evidence is `ref_fueltanks`'
-    /// <c>fire_n_smoke</c> (<c>LOOP 200</c>) observed burning ~3 s in the original — but on modern
-    /// hardware, where it runs visibly fast or slow between sessions, so it may only be recording
-    /// that machine's 60 Hz vsync cap. It cannot tell a fixed ~60 Hz sequence tick from per-frame
-    /// ticking (under which the original had no single correct duration at all). 1/60 is right
-    /// either way as the rate the content was authored against — see
-    /// docs/formats/anim-definitions.md for the falsification that would settle it.
+    /// engine update, so it is a timer of n updates; 1/60 s is where that update sits — measured
+    /// against the original 2026-08-02, not assumed. `ref_fueltanks`' <c>fire_n_smoke</c>
+    /// (<c>LOOP 200</c>) burns ~3 s, giving 200/3 ≈ 60, and the same burn was then timed at 60 fps
+    /// and at 120 fps: it took the SAME time at both. Per-rendered-frame ticking would have halved
+    /// it at 120, so the original's sequence tick is decoupled from rendering and every untimed
+    /// count is a real authored duration. See docs/formats/anim-definitions.md.
     ///
     /// <para>⚠ Deliberately its OWN constant, not <see cref="Utils.GameClock.FixedDt"/>, though the
     /// two are equal today. That equality is what keeps every `--det` capture byte-identical

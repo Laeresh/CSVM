@@ -10546,7 +10546,9 @@ variable speed on modern hardware is evidence for that second reading. 1/60 is t
 either way, being the rate the content was authored against, but under the second it is our choice.
 **Falsification:** pin the original's frame rate at two values and time one untimed `LOOP`-counted
 effect at each — filed as `BL-238`, capture `CAP-19`. Recorded with that caveat in
-`docs/formats/anim-definitions.md`.
+`docs/formats/anim-definitions.md`. **(Settled later the same day — the capture was flown, the
+duration held at 60 vs 120 fps, and 1/60 is now a decode. See the entry below; the caveat this
+paragraph describes no longer applies.)**
 
 **Scope.** 530 positive counts install-wide, and they are two mechanisms: **462 carry no period**
 (376 in `sequences`, which the runtime executes, plus 86 in the undecoded `unknown_seq`, which it
@@ -11032,3 +11034,29 @@ before/after.
 britbalmoral_*-ww_balmoral*.json`), not C1 — wrong in `backlog.md`, in the entry above, and in the
 test comment. `analysis/goldens/README.md` said "Eleven pinned captures" and "Five shots move" while
 `manifest.json` holds **13** and lists six frame-sensitive; both counts fixed.
+
+## 2026-08-02 — `AnimFrame = 1/60` measured and settled: a `LOOP` count is NOT coupled to the render rate
+
+**`CAP-19` flown (user), `BL-238` closed.** The original was run twice on the same effect — the
+`ref_fueltanks` fuel-tank fire (`fire_n_smoke`, `[PUFFER_STATE, LOOP 200]`, the untimed set, as the
+capture spec required) — at **60 fps fullscreen** and **120 fps windowed**. The burn took **the same
+time in both**, and matched the ~3 s previously observed.
+
+**What that settles.** Under the per-rendered-frame reading, doubling the render rate halves every
+untimed `LOOP` duration — 120 fps would have burned the tank in ~1.5 s. It did not move. The
+sequence tick is therefore **decoupled from rendering**, `LOOP n` is a real authored duration, and
+1/60 is the original's own number rather than our choice. `SequenceRunner.AnimFrame = 1/60` stands,
+now as a decode.
+
+**The honest limit, and why it does not reopen anything.** Both test points were at or above 60 Hz —
+the user could not provoke a lower rate, and the run went through dgVoodoo, whose influence on the
+original's internal pacing is not characterised. So the one hypothesis the pair cannot exclude is a
+tick of `min(render rate, 60)`: capped at 60, coupled below it. That case is unreachable for us —
+we pace against SIM time at a fixed 1/60, so there is no rate below 60 to be coupled to — and it
+would in any event only describe a 1999 machine failing to keep up, not authored intent. The
+constant is unchanged either way. Not worth another capture.
+
+`CAP-19` is retired from `playtest.md` (IDs never reused). The caveat is struck from
+`docs/formats/anim-definitions.md` and from `SequenceRunner.AnimFrame`'s doc comment; the
+falsification note in both is replaced by the measurement that answered it. No code change, no
+goldens moved — the constant it confirms was already the one in the build.

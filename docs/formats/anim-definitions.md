@@ -1015,28 +1015,23 @@ are not visible from the byte format alone, each measured against this install.
   (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
 - **A positive `LOOP` count over an instantaneous body is a timer denominated in ANIMATION
-  FRAMES. CSVM sets the frame to 1/60 s — a decision (2026-08-02), not a decode.** The
+  FRAMES, and the frame is 1/60 s — measured against the original 2026-08-02.** The
   *denomination* is forced: a loop whose body schedules no time can only advance one pass per
   engine update, so `LOOP n` spends n updates and the counts are durations, not iteration budgets.
-  What the update RATE was is the open half.
-  **The evidence for 60, and what it cannot do.** `ref_fueltanks`' `fire_n_smoke`
-  (`[PUFFER_STATE, LOOP 200]`) was observed burning ~3 s in the original, so 200/3 ≈ 60.
-  ⚠ **That observation was taken on modern hardware, where the original does not run at period
-  speed** — it visibly runs fast or slow between sessions — so it plausibly records the measuring
-  machine's 60 Hz vsync cap rather than anything authored. Two readings both fit it and it cannot
-  separate them:
-  - a **fixed ~60 Hz sequence tick**, decoupled from rendering — then 1/60 is the original's own
-    number;
-  - **one pass per rendered frame** — then the original had no single correct duration at all:
-    `LOOP 200` ran ~3 s only on a machine holding 60 fps, and ~6.7 s at the 25–40 fps a 1999
-    terrain flier realistically sustained. The variable speed on modern hardware is itself
-    evidence for this reading.
-  1/60 is the right constant under either — it is the rate the content was authored against — but
-  under the second it is our choice rather than the original's behaviour, so do not cite this
-  bullet as a decode of the original engine. **Falsification (`BL-238`, capture `CAP-19`):** pin
-  the original's frame rate at two different values and time one *untimed* `LOOP`-counted effect at
-  each. Durations that move with the frame rate settle it as per-frame; durations that hold settle
-  the fixed tick and its value.
+  The update RATE was the open half until `CAP-19` closed it.
+  **The measurement.** `ref_fueltanks`' `fire_n_smoke` (`[PUFFER_STATE, LOOP 200]` — from the
+  *untimed* set, which is the only set that can answer this) burns ~3 s in the original, giving
+  200/3 ≈ 60. That figure alone could not tell a fixed ~60 Hz sequence tick from one pass per
+  *rendered* frame, since it was taken on modern hardware where the original visibly runs fast or
+  slow between sessions. The same effect was then timed twice, at **60 fps fullscreen and 120 fps
+  windowed**: the burn took **the same time in both**. Per-rendered-frame ticking would have halved
+  it at 120. **The sequence tick is decoupled from rendering, and 1/60 is the original's own
+  number** — every untimed count is a real authored duration.
+  ⚠ The one hypothesis those two points cannot exclude is a tick of `min(render rate, 60)` — capped
+  at 60, coupled below it — because no rate below 60 could be provoked (and the run went through
+  dgVoodoo). It changes nothing: CSVM paces against SIM time at a fixed 1/60, so there is no
+  sub-60 rate to couple to, and the case would describe a period machine failing to keep up rather
+  than authored intent.
   **Scope — the 530 positive counts are not one thing.** **462 carry no period of their own** and
   are the frames-denominated set (`LOOP 70` ≈ 1.2 s, `LOOP 200` ≈ 3.3 s at 1/60); 376 of them sit
   in `sequences`, the list the runtime executes, and 86 in the undecoded `unknown_seq`, which it

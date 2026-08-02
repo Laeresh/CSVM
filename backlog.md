@@ -391,43 +391,6 @@ unscheduled.
 
 ### World animation & effects
 
-- `BL-238` **`SequenceRunner.AnimFrame = 1/60` is a decision, not a decode — the measurement it
-  rests on cannot discriminate (filed 2026-08-02, on landing the rate-lock).** An untimed `LOOP n`
-  spends n engine updates; that half is forced by the data (an instantaneous body can only advance
-  one pass per update). **Where the update sits is not.** The supporting observation —
-  `ref_fueltanks`' `fire_n_smoke` (`[PUFFER_STATE, LOOP 200]`) burning ~3 s, so 200/3 ≈ 60 — was
-  taken on **modern hardware, where the original runs visibly fast or slow between sessions**, so
-  it plausibly records that machine's 60 Hz vsync cap and nothing authored. Two readings fit it
-  equally:
-  1. a **fixed ~60 Hz sequence tick** decoupled from rendering — 1/60 is then the original's own
-     number, and every untimed count is a real authored duration;
-  2. **one pass per rendered frame** — the original then had *no single correct duration*:
-     `LOOP 200` ran ~3 s only on a machine holding 60 fps, and ~6.7 s at the 25–40 fps a 1999
-     terrain flier realistically sustained. **The variable speed on modern hardware is evidence
-     for this one** — a game whose speed tracks the host is framerate-coupled somewhere.
-  *Why it is not urgent:* 1/60 is right under either reading (it is the rate the content was
-  authored against), and the rate-lock is strictly better than the render-rate coupling it replaced
-  regardless. Under reading 2 there is nothing to be more correct than.
-  *What moves if it resolves to another rate:* one constant, `SequenceRunner.AnimFrame` — kept
-  deliberately separate from `GameClock.FixedDt` for exactly this. At 30 Hz every untimed count
-  doubles (`LOOP 70` 1.17 → 2.33 s, `LOOP 200` 3.33 → 6.67 s, `sub_destruction`'s `LOOP 900` 15 →
-  30 s) across the 376 executed loops. Goldens would re-pin; the 68 timed loops would not move.
-  *Settle it:* `CAP-19` — run the original with its frame rate pinned at two clearly different
-  values and time one `LOOP`-counted effect at each. Durations that **move** with the frame rate
-  settle reading 2 (and close this as unanswerable-by-construction); durations that **hold** settle
-  reading 1 and fix the tick at whatever they hold at.
-  ⚠ Traps:
-  - **Do not time a `LOOP` that carries its own `START_TIME`** — those 68 are authored seconds and
-    are frame-independent under *both* readings, so they will hold at every frame rate and look
-    like proof of reading 1. Pick from the untimed set (`torpedo_ground_effect` `LOOP 70`,
-    `fire_n_smoke` `LOOP 200`); the census that separates them is in
-    `docs/formats/anim-definitions.md`.
-  - **A vsync cap is not a frame rate.** Capping at 60 on a machine that would render 400 proves
-    nothing about a machine that renders 30 — the two test points must be *actually* rendering at
-    different rates, verified with a counter, not merely configured differently.
-  - Our own `--det` runs cannot answer this: `FixedStep` at 1/60 is one pass per step by
-    construction, which is why the render-rate coupling never showed up in any scripted capture.
-
 - `BL-240` **A bounce-terminated `OBJECT_MOTION` carries no `RUN_TIME`, and we read that as
   "duration 0" — so 529 authored debris launches never move at all (split out of `BL-236`, now
   landed; censused 2026-08-02).** The data's idiom for "fly until you hit something" is to omit `RUN_TIME`
