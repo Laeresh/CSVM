@@ -52,4 +52,27 @@ blind to an effect's mesh half (`docs/verification.md` WORLD-19).
 | `ap_ground_effect` | puffer[2] | puffer[7] |
 | `torpedo_ground_effect` | started, no puffer | puffer[5] |
 
+## 2026-08-02 — the same question for the per-player crash rig (`BL-059` item 2)
+
+Run: `python analysis/effect-anchor-roots/anchor_roots.py extracted player_crash_dirt player_crash_water`
+
+The crash rig stages its own template copy per player (`WorldEffectsFactory.EffectTemplateRoots`),
+so it needs the same treatment. The two crash variants' closure is **16 definitions** anchored on
+**13 roots**; `player` and `player_pfighter` are the aircraft's own anchors (0 gamez occurrences —
+supplied by the crash root and the plane model), leaving **11 gamez template roots**:
+
+| | roots |
+|---|---|
+| shared / dirt only | `yellow_spark_01`, `flame_ball_01`, `black_smoke_ball_01`, `fire_here`, `carnage_trails`, `flydirt`, `apassengers` |
+| sea dive only | `huge_splash_model`, `hg_splash`, `ripple`, `white_water_impact` |
+
+The rig staged 7 before the water variant landed; the four sea-dive roots were the gap, and
+`white_water_impact` (`large_steam_spray`) is in **no** staged list anywhere — the world-effects
+runtime does not bind that name either. All eleven exist as a single parentless root in all 8
+chapters. `yellow_spark_02` is staged but is not in this closure; it is left alone.
+
+Measured after staging them (C1 sea dive, `--debug-anim`): `11 effect template(s)` at bind, every
+retarget resolves, 7 crash-rig puffers live (`fire_n_smoke`, `trailpuffer2`, `spurtpuffer1..5`) and
+the mesh half draws too (`splash_polys`, `ripple1..3`, `fly_trail1..5` all reported visible).
+
 No game data is stored here — the script reads the player's own `extracted/` tree.

@@ -450,16 +450,43 @@ unscheduled.
      pieces tumble to rest fine without it; the bounce is an embellishment. Also needs a real
      `SOUND_GROUPS` resolver for `air_mixed_exp_sg`/`ground_mixed_exp_sg` (`snd_exp_ground_a` already
      plays, hardcoded like `plane_destroy_sg`).
-  2. **The water and air variants** themselves. ⚠ Both are currently **unreachable**: `ClassifySurface`
-     (`FlightController.cs`) returns `CrashSurface.Ground` for every crash. **Water**
-     (`player_crash_water`: `plane_big_splash` + `large_steam_spray`, the `destroy_crash` sequence)
-     needs `ClassifySurface` to read the struck collider's `SceneBuilder.SurfaceMeta` tag instead of
-     returning Ground unconditionally — the sea IS collidable and `water`-tagged (measured 2026-07-30:
-     a C1B sea dive logs `CRASH into g28178/col` and plays the dirt crash; the signal is already on
-     the `hitBody` the sweep reports); note `snd_exp_water_a`. **Air** (`player_crash_default`, no-impact destruct, `destroyed=false`,
-     pieces arc away, per-piece `large_firetrail`) has **no trigger until weapons (M3)** can down a
-     plane mid-flight — a building crash is `_dirt`, not air. Data: `extracted/C1/cam_anim/`
-     (`player-player_crash_*.json` + the effect defs); full decode in `docs/HISTORY.md` (2026-07-23).
+  2. **The air variant.** `player_crash_default` — no-impact destruct, `destroyed=false`, pieces arc
+     away, per-piece `large_firetrail` — has **no trigger**: it fires when the plane is destroyed with
+     no impact at all, and nothing shoots the player down yet. A building crash is `_dirt`, not air, so
+     `CrashSurface.Air` is deliberately unreachable from `ClassifySurface`, which reads a *struck
+     body*. ⚠ Do not wire it off a low-HP test on the collision path — that is the ground crash with a
+     different def. Data: `extracted/C1/cam_anim/player-player_crash_default.json`; the water half
+     landed 2026-08-02 (`docs/HISTORY.md`), full decode there under 2026-07-23.
+- `BL-228` **Schedule the `WAIT_FOR_COMPLETION` dependency — there is finally a reachable case
+  (2026-08-02, from `BL-059` item 2).** The field is decoded (`docs/formats/anim-definitions.md`:
+  flag `0x10` + an index into the caller's own `anim_refs`, always naming the call's own `name`;
+  3,731 flagged events install-wide) and the runtime ignores it — every `CallAnimation` returns to
+  the caller immediately. The sea dive is now the clean case: `player_crash_water`'s `destroy_crash`
+  flags its `plane_big_splash` call and then calls `large_steam_spray`, and a capture shows both
+  retargeting on the **same tick**, where the splash's own choreography runs 3.0 s. Implementing it
+  means the sequence scheduler holds the caller until the callee's instance completes.
+  ⚠ **Traps.** (a) 3,731 flagged events install-wide, all `OnCall`/`WeaponHit` — turning the wait on
+  globally changes timing far beyond the crash and will move goldens; scope and measure before
+  believing a screenshot. (b) `0` and `null` are **different authored states** (3,639 vs 53,019) —
+  `0` waits on ref zero, `null` has no flag. (c) `wait_for_raw` is the fork's separate exposure of
+  **unflagged stale values** (525 events); it is not a wait and must not be read as one.
+  (d) "Completes" needs a definition for a def with no terminating event — decide it from the data,
+  not from what makes the crash look right.
+- `BL-229` **A splash emitter is killed on the tick it starts, by its own caller (2026-08-02, from
+  `BL-059` item 2).** `plane_big_splash`'s `plane_puff_splash1` is three offset-less events:
+  `ObjectActiveState sp_1 true` → `CallAnimation hg_splasher WithNode sp_1` → `ObjectActiveState
+  sp_1 false`. Our runtime runs all three in one tick and logs `host 'sp_1' deactivated — emitter
+  stopped`, so the `splasher` puffer emits nothing — yet `hg_splasher` authors a 0.5 s run
+  (`StopSequence` at `Animation+0.5`, plus a `PufferState active_state 0` at `Event+0.1`), which is
+  only reachable if the emitter survives its host's deactivation or the events do not share a tick.
+  So either the host-deactivation→stop rule is wrong for an already-emitting puffer, or same-tick
+  ordering is. The rest of the sea dive renders (splash mesh, ripples, steam, trails), so this is one
+  missing emitter, not a broken variant.
+  ⚠ **Traps.** (a) Do not "fix" it by dropping the host-deactivation stop wholesale — that rule is
+  what stops emitters when a destructible's subtree is swapped out. (b) The same shape may exist
+  elsewhere; census the offset-less activate/call/deactivate triple before choosing a rule, or the
+  fix is tuned to one def. (c) Related to but not the same as `BL-228` — these events carry **no**
+  `WAIT_FOR_COMPLETION` flag, so a wait would not explain them.
 - `BL-060` **Improve on the original crash — the bespoke "breaking apart" (branch `bespoke-crash-animation`).**
   User's call (2026-07-23): the retired bespoke `CrashBreakup` wreck-scatter looked *better* than the
   faithful data-driven crash, so it was preserved on that branch rather than deleted. **The A/B playtest

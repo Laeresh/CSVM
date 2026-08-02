@@ -386,9 +386,13 @@ must not treat them as waits. Census and the 92-row dump instrument:
 
 CSVM does not yet schedule the cross-animation completion dependency. All flagged compiled owners
 are `OnCall` (2,844) or `WeaponHit` (887), never `OnStartup`; the clearest timing case is
-`player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`, but that path
-is unreachable until surface-aware crash selection lands. Calls therefore remain instantaneous to
-the caller until a reachable timing case can verify the dynamic wait.
+`player_crash_water`, where flagged `plane_big_splash` precedes `large_steam_spray`. **That case is
+reachable as of 2026-08-02** (surface-aware crash selection), and a captured sea dive shows the
+divergence directly: `plane_big_splash` and `large_steam_spray` retarget on the *same tick*, so the
+steam spray starts with the splash instead of after it. The splash's own choreography runs 3.0 s
+(`plane_sp_polys`' scale + `plane_sp_polyfade`' opacity ramp), so a faithful wait would hold the
+spray that long. Calls remain instantaneous to the caller; the water crash is therefore correct in
+content and not yet in ordering.
 
 **Placing an effect template means moving its root.** An effect template hosts its puffers on
 its OWN root subtree — `small_yellow_sparks`' puffer `at_node` is `yellow_spark_01`,

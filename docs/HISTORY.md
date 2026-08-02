@@ -10119,3 +10119,44 @@ kept at item 2). Full trace: `analysis/death-effect-closure/biggun-flying-parts.
 line and the puffer-bucket classification. `grep -c RUN_TIME` on both source `.zrd.json` files
 confirmed 0 (a separate, unchased observation, noted in the analysis file). No runtime change, so
 no `RunTests.ps1`/regression run needed beyond the read-only probe.
+
+## 2026-08-02 — M3 polish-5 B6: `BL-059` item 2 — a sea dive plays `player_crash_water`
+
+`FlightController.ClassifySurface` was a two-line `=> CrashSurface.Ground`, so every crash — sea
+dives included — played `player_crash_dirt`. It now takes the struck **body** the sweep already
+reports and delegates to `ProjectilePool.ClassifySurface`, the one classifier the graze reaction and
+a round's impact already share; `water` → `CrashSurface.Water`, everything else Ground. `Crash()`
+plays `player_crash_water` on that arm and `FlightAudio.OnWaterExplosion` layers `snd_exp_water_a`
+where the ground arm layers `snd_exp_ground_a`. `CrashSurface.Air` stays unreachable by design — it
+is the no-impact destruct, not a surface.
+
+Two things the plan's evidence had slightly wrong, corrected against the JSON: the water def's
+sequence carries **no `Sound` event at all** — `snd_exp_water_a` lives one level down, in the
+`plane_big_splash` it calls — so routing it through `FlightAudio` (the crash runtime keeps
+`SoundHandledElsewhere`) is what reproduces it; and the variant is a different choreography, not a
+re-skin: `destroy_crash` leaves `destroyed` INACTIVE and flings no `pieceN`.
+
+The rig also had an anchor gap. `WorldEffectsFactory.EffectTemplateRoots` staged 7 roots — the dirt
+closure's — while the water closure needs four more (`huge_splash_model`, `hg_splash`, `ripple`,
+`white_water_impact`); a missing root plays nothing at all and says nothing about it. The
+`analysis/effect-anchor-roots/` instrument now takes the anim names as arguments and was re-run for
+both crash variants: 16 defs, 13 anchors, 11 of them gamez roots, each a single parentless root in
+all 8 chapters. Both variants are now bound in `rigAnims` (the surface is only known at impact).
+
+**⚠ Not faithful in ordering.** `player_crash_water` flags its `plane_big_splash` call with
+`WAIT_FOR_COMPLETION`, and this is the first reachable case of that field (`BL-063`, A3). The
+capture shows `plane_big_splash` and `large_steam_spray` retargeting on the same tick — the spray
+starts *with* the splash rather than after its 3.0 s run. Recorded in
+`docs/formats/anim-definitions.md`; scheduling the dependency is its own item, not this one.
+
+**How verified.** Scripted C1 sea dive (`--pos=-6500,400,-1500 --direction=1,-0.85,0
+--hold=0,0,0,0`, `--det` implied): `CRASH into g16226/col_water (fuselage) surface=Water`, the rig
+binds `11 effect template(s)`, every retarget resolves, and both output channels are present
+(WORLD-19) — 7 crash-rig puffers (`fire_n_smoke`, `trailpuffer2`, `spurtpuffer1..5`) and the mesh
+half visible (`splash_polys`, `ripple1..3`, `fly_trail1..5`). **Able-to-fail control:** the same
+dive over C1 terrain still logs `surface=Ground` with `fierypuffer` and no splash/ripple — the
+classifier is not inverted; the screenshots read grey splash vs orange fireball. `--crash` (no
+struck body) still forces dirt, so `c1-crash`'s golden is unmoved. `.\RunTests.ps1` PASS: 320/320
+units, 16/16 engine suites, engine errors clean, **13 golden hashes unchanged**. 8-chapter
+`--freecam` regression: 0 errors, per-chapter node/mesh counts unchanged (freecam builds no crash
+rig, and all 8 freecam goldens are hash-identical).

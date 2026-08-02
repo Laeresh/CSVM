@@ -135,7 +135,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 4. ☑ `BL-046` Census the install-wide death-effect call set against the world-effects closure
 5. ❌ `BL-061` item 3 `biggun_flying_parts` builds no puffer — stage the `fly_trail*` sub-roots
-6. ☐ `BL-059` item 2 A sea dive plays the dirt crash — make `ClassifySurface` read the surface tag
+6. ☑ `BL-059` item 2 A sea dive plays the dirt crash — make `ClassifySurface` read the surface tag
 7. ☐ `BL-087` Incoming-fire near-miss cue — `bullet_warning_sg` and its shipped accumulator
 
 ### Wave C — world-render fidelity with a measured cause
@@ -381,7 +381,19 @@ collapsed `(name, host)` key — def-scoping it stacked C5's six `m_crane_go` sp
 **moved the c5 golden**. Do not "unify" the two schemes. (c) Adding a root that is *not* parentless in
 some chapter changes what `WorldBuilder` skips — check all 8, not just C1.
 
-## B6 ☐ `BL-059` item 2 — the water crash variant
+## B6 ☑ `BL-059` item 2 — the water crash variant — **landed 2026-08-02**
+
+**Outcome.** `ClassifySurface` now takes the struck body and delegates to
+`ProjectilePool.ClassifySurface`; a `water`-tagged body plays `player_crash_water` with
+`snd_exp_water_a` layered from `FlightAudio.OnWaterExplosion`. Two corrections to the evidence
+below: the water def carries **no `Sound` event** — `snd_exp_water_a` sits in the
+`plane_big_splash` it calls — and the rig had an anchor gap, `EffectTemplateRoots` staging only the
+dirt closure's 7 roots where the water closure needs `huge_splash_model`/`hg_splash`/`ripple`/
+`white_water_impact` too. **Trap (e) confirmed, not fixed:** the flagged `plane_big_splash` and its
+successor `large_steam_spray` still retarget on the same tick, so the variant is faithful in content
+and not in ordering — recorded in `docs/formats/anim-definitions.md`, and the scheduling is its own
+item. Details in `docs/HISTORY.md` (2026-08-02); anchor re-run in
+`analysis/effect-anchor-roots/FINDINGS.md`.
 
 **Goal.** Diving into the sea plays `player_crash_water` — `plane_big_splash` + `large_steam_spray`,
 the `destroy_crash` sequence, `snd_exp_water_a` — instead of the dirt crash.

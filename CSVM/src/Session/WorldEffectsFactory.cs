@@ -59,8 +59,18 @@ public sealed class WorldEffectsFactory
     // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
     // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
     // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
+    // This is the FULL anchor-root set both crash variants' call closures need: the first seven are
+    // the dirt crash's, the last four the sea dive's (analysis/effect-anchor-roots/, re-run for
+    // player_crash_water — each a single parentless root in all 8 chapters). A root left out leaves
+    // every def anchored on it unanchored, so it plays nothing at all and says nothing about it.
     private static readonly string[] EffectTemplateRoots =
-        { "yellow_spark_01", "yellow_spark_02", "flame_ball_01", "black_smoke_ball_01", "fire_here", "carnage_trails", "flydirt" };
+    {
+        "yellow_spark_01", "yellow_spark_02", "flame_ball_01", "black_smoke_ball_01", "fire_here",
+        "carnage_trails", "flydirt",
+        // the sea dive: plane_big_splash's model, its hg_splasher puffer host and plane_big_ripple's
+        // ring set, plus large_steam_spray's own root
+        "huge_splash_model", "hg_splash", "ripple", "white_water_impact",
+    };
 
     // The per-player rig's non-crash defs (B4): the four `<part>_damage_effects` shims the
     // Devastator's 0.99 injure_anims entry names. Bound alongside the crash def because they need
@@ -281,10 +291,11 @@ public sealed class WorldEffectsFactory
         // left it drawn-but-unrendered (every particle correctly positioned, IsVisibleInTree true, yet
         // nothing on screen — measured). Parenting at world level, exactly like the world runtime's
         // own PufferFactory, renders it. Each crash runtime still makes its own emitter instances at
-        // its own crash site, so splitscreen crashes stay independent. The crash def's only SOUND
-        // (snd_exp_ground_a) is already played by FlightAudio via Crash() -> OnGroundExplosion(); this
-        // runtime has no audio session, so dispatching it here would only emit the "silent for the
-        // session" warning — render effects, not sound. The seed drives wreckage scatter and the
+        // its own crash site, so splitscreen crashes stay independent. The SOUND either variant
+        // reaches (snd_exp_ground_a on the dirt def itself, snd_exp_water_a inside the sea dive's
+        // plane_big_splash) is already played by FlightAudio from Crash(); this runtime has no audio
+        // session, so dispatching it here would only emit the "silent for the session" warning —
+        // render effects, not sound. The seed drives wreckage scatter and the
         // crash def's RANDOM_WEIGHT verdicts: one draw per player off the advancing crash stream, so
         // splitscreen crashes differ from each other but repeat run to run.
         var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash), _worldRoot,
@@ -292,8 +303,10 @@ public sealed class WorldEffectsFactory
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set is
-        // the crash def plus the damage-effect shims — every def that plays ON this aircraft.
-        var rigAnims = new List<string> { "player_crash_dirt" };
+        // the crash defs plus the damage-effect shims — every def that plays ON this aircraft.
+        // Both crash variants are bound because the surface is only known at the moment of impact
+        // (FlightController.ClassifySurface); Air stays out, having no trigger.
+        var rigAnims = new List<string> { "player_crash_dirt", "player_crash_water" };
         rigAnims.AddRange(PlaneDamageEffectAnims);
         crashRuntime.Bind(controller, crashProgram.Subset(rigAnims));
         controller.AddChild(crashRuntime);

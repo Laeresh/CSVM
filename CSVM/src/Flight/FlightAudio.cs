@@ -41,8 +41,8 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _engine, _whine, _rattle, _damagedEngine;
     private float _engineVol = 1f, _whineVol = 1f, _rattleVol = 1f, _damagedEngineVol = 1f; // sounds.json VOLUME base gain
     private AudioStreamPlayer? _crash;
-    private AudioStreamPlayer? _groundExp;
-    private float _groundExpVol = 1f;
+    private AudioStreamPlayer? _groundExp, _waterExp;
+    private float _groundExpVol = 1f, _waterExpVol = 1f;
     private AudioStreamPlayer? _grazeGround, _grazeWater;
     private float _grazeGroundVol = 1f, _grazeWaterVol = 1f;
     private AudioStreamPlayer? _propStart, _propStop;
@@ -97,9 +97,12 @@ public partial class FlightAudio : Node
 
         // The ground/dirt crash choreography layers snd_exp_ground_a — the
         // heavy earth-impact boom — over the plane_destroy_sg explosion above; the dirt anim
-        // def fires it as its Sound event. Air/water hits use their own sounds, so this stays
-        // gated on the surface in FlightController (OnGroundExplosion), not folded into OnCrash.
+        // def fires it as its Sound event. The sea dive's counterpart is snd_exp_water_a, which
+        // the water def does not carry directly: it sits in the plane_big_splash that
+        // player_crash_water's destroy_crash calls. Both stay gated on the surface in
+        // FlightController, not folded into OnCrash.
         _groundExp = MakeOneShot(archive, defs, "snd_exp_ground_a", out _groundExpVol);
+        _waterExp = MakeOneShot(archive, defs, "snd_exp_water_a", out _waterExpVol);
 
         // The graze reaction's authored sounds (touchdown.zrd): the touchdown_default/_dirt
         // sequences Sound snd_exp_ground_b, touchdown_water snd_exp_water_b — the lighter `_b`
@@ -212,8 +215,14 @@ public partial class FlightAudio : Node
 
     /// <summary>The ground/dirt crash's earth-impact boom (snd_exp_ground_a), layered over the
     /// plane explosion <see cref="OnCrash"/> already fired. Called only for a Ground surface
-    /// (FlightController.Crash), so it does not sound on a future air or water destruct.</summary>
+    /// (FlightController.Crash), so it does not sound on a sea dive or a future air destruct.</summary>
     public void OnGroundExplosion() => PlayOneShot(_groundExp, _groundExpVol);
+
+    /// <summary>The sea dive's counterpart (snd_exp_water_a — the `_a` pair, not the graze's
+    /// lighter `_b`), layered over the plane explosion the same way. Authored one level down, in
+    /// the plane_big_splash player_crash_water calls; the crash runtime renders effects only, so
+    /// the sound comes from here.</summary>
+    public void OnWaterExplosion() => PlayOneShot(_waterExp, _waterExpVol);
 
     /// <summary>The survivable scrape's authored bark, alongside the <c>touchdown_*</c> effect the
     /// world-effects runtime renders: snd_exp_water_b off water, snd_exp_ground_b off everything

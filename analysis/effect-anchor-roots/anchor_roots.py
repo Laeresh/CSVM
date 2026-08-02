@@ -9,7 +9,11 @@ so it plays nothing — nothing renders, nothing emits, and nothing reports an e
 
 Also checks each needed root exists as a single parentless root in all 8 chapters.
 
-    python analysis/effect-anchor-roots/anchor_roots.py [extracted_dir]
+    python analysis/effect-anchor-roots/anchor_roots.py [extracted_dir] [anim_name ...]
+
+With no anim names it answers the original D31 question (the rocket/ordnance IMPACT half of
+WorldEffectsFactory.EffectAnimNames). Name any definitions to ask the same question of another
+staged set — `player_crash_dirt player_crash_water` is the per-player crash rig's.
 """
 import collections
 import glob
@@ -75,7 +79,8 @@ def called_animations(node):
     return found
 
 
-def main(extracted):
+def main(extracted, roots=None):
+    root_names = list(roots) if roots else ROOT_NAMES
     by_anim = collections.defaultdict(list)
     for path in glob.glob(os.path.join(extracted, "zrdr", "*.zrd.json")):
         for kv in definitions(path):
@@ -83,7 +88,7 @@ def main(extracted):
             name = kv.get("NAME", [[None]])[0][0]
             by_anim[anim].append((os.path.basename(path), name, kv))
 
-    seen, queue = set(), list(ROOT_NAMES)
+    seen, queue = set(), list(root_names)
     anchors = collections.defaultdict(set)
     while queue:
         anim = queue.pop()
@@ -94,7 +99,8 @@ def main(extracted):
             anchors[name].add(anim)
             queue += called_animations([v for v in kv.values()])
 
-    print(f"{len(seen)} animation name(s) reachable from {len(ROOT_NAMES)} IMPACT root(s)")
+    print(f"{len(seen)} animation name(s) reachable from {len(root_names)} root(s): "
+          + ", ".join(root_names))
     print(f"{len(anchors)} distinct anchor root(s) needed:\n")
     for name in sorted(anchors):
         print(f"  {name:18s} {', '.join(sorted(anchors[name]))}")
@@ -105,10 +111,10 @@ def main(extracted):
         for ch in CHAPTERS:
             nodes = json.load(open(os.path.join(extracted, ch, "gamez", "nodes.json"), encoding="utf-8"))
             hits = [n for n in nodes if n["name"] == name]
-            roots = [n for n in hits if not n["parent_indices"]]
-            cells.append(f"{ch}:{len(hits)}/{len(roots)}")
+            parentless = [n for n in hits if not n["parent_indices"]]
+            cells.append(f"{ch}:{len(hits)}/{len(parentless)}")
         print(f"  {name:18s} " + "  ".join(cells))
 
 
 if __name__ == "__main__":
-    main(sys.argv[1] if len(sys.argv) > 1 else "extracted")
+    main(sys.argv[1] if len(sys.argv) > 1 else "extracted", sys.argv[2:])

@@ -870,7 +870,9 @@ trapezoid), `WIND`, and precipitation → `PrecipData`. Schema + colours + zone 
 Own-plane non-positional loops (engine with throttle-driven pitch, overspeed whine, rattle,
 damaged-engine blend keyed to `Update`'s `damageFrac` via `PlaneStats.DamagedEngineGain`) +
 one-shots: `StartEngine`/`EngineStartRamp` prop-start fade (re-fired via the loop-restart hook
-in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion` layering `snd_exp_ground_a`,
+in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion`/`OnWaterExplosion` layering the
+crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water_a` from the
+`plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound),
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
 (touchdown.zrd; rate-limited by `FlightController`, not here).
 ⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
@@ -1008,8 +1010,12 @@ PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
 FlightModel, Loadout + ProjectilePool (guns/rockets), `CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
+`Crash` reads the struck body through the same `ProjectilePool.ClassifySurface` (`ClassifySurface`
+here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
+`player_crash_water` + `snd_exp_water_a`, everything else `player_crash_dirt` + `snd_exp_ground_a`;
+`Air` is the no-impact destruct and has no trigger. `--crash` has no struck body, so it forces dirt.
 A survivable graze also plays touchdown.zrd's per-surface reaction (`GrazeReaction`): the struck
-collider classified through `ProjectilePool.ClassifySurface` picks `touchdown_default` (buildings,
+collider classified through the same call picks `touchdown_default` (buildings,
 sparks) / `touchdown_dirt` / `touchdown_water`, staged at the contact point via `GrazeEffectSink`
 (the world-effects runtime) with `FlightAudio.OnGraze` under it, one per `GrazeReactionInterval`.
 Where it stages is an open A/B — `graze.siteAtContact`, default the contact point (judged at the
@@ -1590,8 +1596,10 @@ caller's build summary.
 
 ## src/Session/WorldEffectsFactory.cs
 Builds the impact/destruction effect stages and the per-player crash runtime: the world-effects runtime (D32) and
-`BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: the
-crash def's closure **plus** `PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
+`BuildFlightCrashRuntime` — which despite the name binds every def that plays ON one aircraft: BOTH
+crash variants' closures (`player_crash_dirt` + `player_crash_water`; the surface is only known at
+impact, so both are bound and `FlightController.ClassifySurface` picks) **plus**
+`PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
 `player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live puffer factory.
 `EffectAnimNames` binds impact + death effects — including the 12 gun `*_gunhit` variants, which a
@@ -1608,10 +1616,11 @@ crash-smokeball lesson; the damage-stage smoke measured near-invisible with it o
 soft edge for additive fire. Templates build with collision suppressed and the stage is visible with
 each ROOT hidden (`AnimRuntime.ShowPlacedTemplates` reveals one while an effect plays on it), so a
 template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31).
-⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure — a def
-  anchors on the node its NAME names, so an omitted root leaves it unanchored and it plays nothing,
-  silently. Staging 19 of 28 cost the rings, all four trail columns, the sonic puffs and the torpedo
-  ripple; regenerate the list with `analysis/effect-anchor-roots/`, never by hand.
+⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure, and
+  `EffectTemplateRoots` the same for the crash rig's two variants — a def anchors on the node its
+  NAME names, so an omitted root leaves it unanchored and it plays nothing, silently. Staging 19 of
+  28 cost the rings, all four trail columns, the sonic puffs and the torpedo ripple; regenerate
+  either list with `analysis/effect-anchor-roots/` (it takes the anim names), never by hand.
 ⚠ **Runtime ownership stays split, by design.** The factory's own `_worldEffects` field is the ONE
   lazily-built world-effects runtime (`EnsureWorldEffects` builds it on first demand and caches it
   there); `GameSession` no longer mirrors that reference — the runtime node hangs under `_worldRoot`,

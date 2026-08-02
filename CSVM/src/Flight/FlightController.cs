@@ -10,9 +10,10 @@ namespace CSVM.Flight;
 /// <summary>Which crash variant the original would play for the surface just hit.
 /// The engine chooses natively from the impact surface — the three <c>player_crash_*</c> defs are
 /// never <c>CallAnimation</c>-referenced by name — so the choice is ours to reconstruct in
-/// <see cref="FlightController.ClassifySurface"/>. Every reachable crash today is a hard non-water
-/// surface (<see cref="Ground"/>); <see cref="Air"/> waits on a mid-air destruct trigger (M3) and
-/// <see cref="Water"/> on a sea-surface signal the collision system does not yet expose.</summary>
+/// <see cref="FlightController.ClassifySurface"/>, which reads the struck body's surface tag.
+/// <see cref="Water"/> is a sea dive, <see cref="Ground"/> everything else it can hit;
+/// <see cref="Air"/> stays unreachable — it is the no-impact destruct, and nothing shoots the
+/// player down yet, so there is no trigger for it.</summary>
 public enum CrashSurface { Air, Ground, Water }
 
 /// <summary>
@@ -158,9 +159,11 @@ public partial class FlightController : Node3D
     /// <summary>The data-driven crash: a per-player
     /// <see cref="AnimRuntime"/> bound to this plane's scoped crash subtree (the plane model's
     /// <c>healthy</c>, the built <c>destroyed</c> wreck, and the effect templates) that PLAYS the
-    /// compiled <c>player_crash_dirt</c> definition on a crash — the airframe hides, the wreck
-    /// breaks apart and the <c>pieceN</c> ballistics, sparks, fireball cluster, black smokeball,
-    /// dirt burst and burning-debris arcs all fire from the extracted data. It advances itself (its
+    /// compiled crash definition the struck surface selects — the airframe hides, and on
+    /// <c>player_crash_dirt</c> the wreck breaks apart with the <c>pieceN</c> ballistics, sparks,
+    /// fireball cluster, black smokeball, dirt burst and burning-debris arcs all firing from the
+    /// extracted data; on <c>player_crash_water</c> the splash, ripple and steam spray do instead.
+    /// It advances itself (its
     /// own <c>_Process</c>). The standard crash path (built by <c>GameSession</c> for every flown
     /// plane); null only when the crash program/scene were unavailable, and the plane then just
     /// hides on a crash.</summary>
@@ -543,13 +546,14 @@ public partial class FlightController : Node3D
     }
 
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
-    /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal
-    /// (<see cref="ClassifySurface"/> always resolves <see cref="CrashSurface.Ground"/> today); a
-    /// no-op once already crashed.</summary>
+    /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
+    /// there is no struck body, so <see cref="ClassifySurface"/> resolves
+    /// <see cref="CrashSurface.Ground"/> however the plane is posed — the water variant needs a real
+    /// dive into a <c>water</c>-tagged collider. A no-op once already crashed.</summary>
     public void DebugForceCrash()
     {
         if (!_crashed)
-            Crash(_model.Position, "debug-crash", "test");
+            Crash(_model.Position, "debug-crash", "test", null);
     }
 
     public override void _PhysicsProcess(double delta)
@@ -664,7 +668,7 @@ public partial class FlightController : Node3D
         }
         if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal, hitBody))
         {
-            Crash(impact, hitName, part);
+            Crash(impact, hitName, part, hitBody);
             return;
         }
 
@@ -917,16 +921,18 @@ public partial class FlightController : Node3D
         return pos;
     }
 
-    /// <summary>Which crash variant the original would play for the surface just hit. Every
-    /// reachable crash today is a collision with terrain or a city block — a hard non-water
-    /// surface, which is the <c>_dirt</c> (ground) variant; buildings are dirt too, since the
-    /// only alternative to a hard-surface impact is the <c>_default</c> (air) variant, and
-    /// that fires when the plane is destroyed with NO impact at all (shot down mid-flight),
-    /// which has no trigger until weapons (M3). Water needs a sea-surface signal the collision
-    /// system does not yet expose. So this is Ground for now — the seam is real, the other two
-    /// arms wait on their triggers.</summary>
-    private static CrashSurface ClassifySurface(string hitName) =>
-        CrashSurface.Ground;
+    /// <summary>Which crash variant the original would play for the surface just hit, from the
+    /// struck body's <see cref="SceneBuilder.SurfaceMeta"/> tag through
+    /// <see cref="ProjectilePool.ClassifySurface"/> — the one classifier the collision-consequence
+    /// paths share, so a crash, a graze and a round never disagree about what they hit. A
+    /// <c>water</c>-tagged body is the sea dive (<c>player_crash_water</c>); terrain and buildings
+    /// are alike the <c>_dirt</c> variant. <see cref="CrashSurface.Air"/> is not reachable from
+    /// here at all: it is the no-impact destruct, which needs a mid-air destruct trigger rather
+    /// than a struck body. A null body (the headless <c>--crash</c> force) reads Ground.</summary>
+    private static CrashSurface ClassifySurface(Node? hitBody) =>
+        ProjectilePool.ClassifySurface(hitBody) == SurfaceClass.Water
+            ? CrashSurface.Water
+            : CrashSurface.Ground;
 
     /// <summary>Deadzone + squared response for fine control around center.</summary>
     private static float StickCurve(float v)
@@ -1365,7 +1371,7 @@ public partial class FlightController : Node3D
         return true;
     }
 
-    private void Crash(Vector3 impact, string hitName, string part)
+    private void Crash(Vector3 impact, string hitName, string part, Node? hitBody)
     {
         _crashed = true;
         _autoRespawnIn = AutoRespawnDelay;
@@ -1379,10 +1385,16 @@ public partial class FlightController : Node3D
             _gunLoopOn = false;
             Audio?.StopGunLoop();
         }
-        var surface = ClassifySurface(hitName);
+        var surface = ClassifySurface(hitBody);
+        bool water = surface == CrashSurface.Water;
         Audio?.OnCrash();
-        if (surface == CrashSurface.Ground)
-            Audio?.OnGroundExplosion(); // snd_exp_ground_a, layered over the plane explosion
+        // The boom under the plane explosion, per variant: the dirt def Sounds snd_exp_ground_a
+        // itself, and the water def's snd_exp_water_a sits one level down, in the plane_big_splash
+        // it calls. Both runtimes treat SOUND as handled-elsewhere, so both come from here.
+        if (water)
+            Audio?.OnWaterExplosion();
+        else
+            Audio?.OnGroundExplosion();
         if (CrashRuntime != null)
         {
             // Data-driven crash: PLAY the compiled def on this plane's scoped crash
@@ -1393,10 +1405,15 @@ public partial class FlightController : Node3D
             // The wreck pieces inherit a fraction of the plane's impact velocity so they scatter
             // along its travel rather than just popping up (the authored launch is a small relative
             // pop); TUNE the fraction against the original.
+            //
+            // The water variant is a different sequence, not a re-skin: `destroy_crash` leaves the
+            // `destroyed` wreck INACTIVE and flings no pieces (the plane went under), and plays the
+            // splash, its ripple and the steam spray over the crash trails instead of the dirt
+            // burst and the fireball cluster.
             CrashRuntime.InheritedWorldVelocity = _model.VelocityDir * _model.Speed * WreckMomentum;
-            CrashRuntime.Play("player_crash_dirt", CrashAnchor, applyReset: false);
+            CrashRuntime.Play(water ? "player_crash_water" : "player_crash_dirt", CrashAnchor, applyReset: false);
         }
-        GD.Print($"CRASH into {hitName} ({part}) impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
+        GD.Print($"CRASH into {hitName} ({part}) surface={surface} impact=({impact.X:0},{impact.Y:0},{impact.Z:0}) " +
                  $"pos=({_model.Position.X:0},{_model.Position.Y:0},{_model.Position.Z:0}) " +
                  $"spd={_model.Speed:0} m/s — waiting for respawn");
     }
