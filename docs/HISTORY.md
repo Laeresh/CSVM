@@ -10805,3 +10805,63 @@ also why `BL-243` carries an explicit trap against using the log to explain away
 mission completion (destroy, abort without completing, restart, load the next mission), and a
 direct A/B separating the two flags (destroy a `PERSIST_LOG` object and a save-only one in one
 campaign mission, then load an IA — the first should carry, the second should not).
+
+## 2026-08-02 — the cloud deck forced double-sided: backface culling had eaten the overcast ceiling
+
+**User report, no backlog item:** the C1 clouddeck is visible from both sides in the original, but
+CSVM was rendering it from one. The cause is the 2026-08-01 switch from always-double-sided world
+geometry to data-driven culling (`WorldBuilder`'s `cullBackfaces: true`): all 144 deck tiles are
+authored `show_backface: false` — in **every** deck chapter, C1/C1C/C2B models 1004-1147 and C4's
+`g1720..g1863` — so under the new rule the deck lost a face.
+
+**Which face, measured rather than assumed.** Every tile's one polygon winds to a **+Y** normal, so
+the floor seen from *above* was never affected: a C1 freecam at y=1400 renders **bit-identical**
+with and without the fix. What vanished was the **underside** — the overcast ceiling, i.e. the
+ordinary in-flight view — and on C4 the deck was simply absent from below. Both the original plan
+and its handoff described this as "renders single-sided" without pinning the side; it is worth
+being specific, because the half that looked fine is the half nobody flies under.
+
+**Why the deck is a legitimate renderer-level exception, not a data fix.** `WeatherRig.Tick` pins
+the deck to the whiteout-band centre and re-anchors it in x/z only — it never re-orients it — so
+the player flies *through* the same quad and has to read it as a ceiling and then as a floor.
+
+**Implementation.** `SceneBuilder.BuildSubtree` gains a `forceDoubleSided` bool, threaded down the
+recursion (so it is inherited by a whole subtree) into `BuildMesh`, where the sidedness line
+becomes `forceDoubleSided || !_cullBackfaces || poly.ShowBackface`. `_meshCache` is re-keyed on
+`(model, force)` so a forced build cannot be handed back for the same model referenced normally —
+defence only, since no model in this install is referenced both ways. `WorldBuilder.Add` supplies
+it from the `_deckNodes` set it already computes to route tiles into `CloudDeck`, so the fix is
+keyed off the proven **structural** classifier, not the texture prefix (which misses C4's
+`Sky1.tif` deck entirely).
+
+**Rejected: keying off `IsCloudOrSkyTexture`** — texture-based, misses C4, and widening it to
+`sky*` drags in the `skywal*` building geometry. Same reasoning already recorded for the
+`CloudDeck` split itself.
+
+**A per-node flag signature nobody had looked at.** The deck tiles are the only world nodes flagged
+`terrain` **and** `!altitude_surface` **and** `!intersect_surface` — 144 in C1/C1C/C2B, C4's 144
+plus 20 model-less `g0` placeholders, and **zero** in the four deckless chapters. That reproduces
+`FindCloudDeck`'s verdict from the data alone. Not adopted (the structural classifier is proven and
+already computed) but recorded as independent corroboration, and as the fallback if the geometric
+heuristic ever misfires. Note the flag names are mech3ax's decoded labels, so the semantics are
+inferred.
+
+**An alternative mechanism, considered and left open.** The user asked whether the original instead
+*flips* the sheet to face the plane. Plausible — the flag signature above shows the engine does
+class the deck specially — and unfalsifiable from the shipped data. It changes nothing: a flip can
+only happen at the deck's own plane, where the quad is edge-on and covers no pixels, so a correct
+flip and double-siding produce the same pixels, differing only by a texture mirror invisible on a
+tiled overcast sheet. Double-siding needs no per-frame state and no threshold that can drift.
+
+**Verification — the goldens partition exactly along deck/deckless.** Pre-change captures were
+re-rendered with the change stashed and all seven reproduced the old manifest hashes, so the diffs
+are real: c1-waterfall 7.11 %, c1c-rain 8.56 %, c2b-rain 0.46 %, c4-snow 26.51 %, c1-flight
+29.52 %, c1-destroy-effects 7.21 %, c1-crash 12.11 %. The four unchanged chapters are exactly
+C1B/C2/C3/C5 — the ones with no deck — and **every** diff is confined to the top of the frame
+(rows 0-130 through 0-434, none touching the lower rows), which is the check that the change stays
+scoped: the Hollywood-backlot facade panels and the rest of the single-sided world still cull.
+Manifest re-pinned in the same commit with each move annotated, per `analysis/goldens/README.md`.
+
+**User-confirmed in flight (2026-08-02):** the ceiling→floor transition through the band looks
+right. That was the one thing the headless captures could not settle — they cover both sides
+statically, but not the crossing in motion.
