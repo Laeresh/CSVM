@@ -10412,3 +10412,66 @@ Docs: `architecture.md` (`AnimRuntime`'s pool paragraph + the not-a-third-key wa
 now holds two config files), `backlog.md` (`BL-225` deleted, `BL-231` TUNE rewritten around the file,
 `BL-232` added). No `docs/formats/` page: this is engine instancing and our own config, not a decode
 of the original.
+
+## 2026-08-02 — The torpedo's endless fireball: two bugs, one report (`BL-233` filed, `BL-235` found)
+
+**Reported:** firing a torpedo (`wep_14`) at ground or water produces a fireball that never ends
+(user let it run over a minute); it plays the *ground* explosion over C1B water too, and even when
+the torpedo detonates in mid-air. A prior session's handoff had confirmed the data half — the ground
+effect's `fire_n_smoke` really is a stop-less sustained puffer — and hypothesised a pooled-host key
+collapse behind the 32 s TTL's failure. That hypothesis was in the right area but named the wrong
+mechanism, and the "also on water" half turned out to be a **second, independent bug**.
+
+**Bug 1 — the `EffectTtl` sweep was a silent no-op for any effect that finishes.**
+`SweepEffectTtls` called `Stop(animName, anchor)`, and `Stop`→`RemoveInstances` reaches
+`TearDownResourcesOf` **only through a live instance**. `torpedo_ground_effect`'s sequences end
+~1.2 s after the hit (its `fire_n_smoke` is `PUFFER_STATE` + `LOOP 70`, one instantaneous pass per
+frame; `WAIT_FOR_COMPLETION` is not implemented, so the main runner does not wait either), the
+instance leaves `_instances`, and 30 s later the sweep found nothing to stop. The whole 32 s
+backstop only ever worked for defs that outlive their own deadline — which is why the **gun** hit
+hid the defect for so long: `GunEffectTtl` is 0.3 s against a ~1 s sequence, so there the Stop always
+landed. Fixed two ways, both kept: `FinishEffectInstance` ends a `PlayEffectAt` instance's sustained
+emitters when its own sequences end (the user's model — *the puffer stops when the animation stops*
+— and `SustainEnd`, not teardown, so live particles finish their authored `LIFETIME_RANGE` and the
+fire fades instead of popping out), and the sweep now also calls `TearDownResourcesOf` directly, so
+it is a real backstop for the `LOOP -1` defs that never finish.
+
+**Ownership had to move with it.** The first fix alone changed nothing, measured — because the
+handoff's collapse *is* real, just not causal on its own: three torpedo impacts take three pooled
+`torp_effects` anchors, but `fire_n_smoke`'s `AT_NODE` resolves through the def's own node index
+(`ResolveOne`'s `NodeRefs`/`_byIndex` short-circuit, before any anchor scoping), so all three land on
+one host and one `_puffers` entry. Calls 2 and 3 **revived** call 1's emitter through the
+re-assert branch and, since that branch never updated the stored `(Def, Anchor)`, owned nothing to
+stop when they ended. `HandlePufferState`'s revive branch now transfers ownership to the
+re-asserting instance, guarded on `existing.Def == def` so a name colliding across two defs on an
+un-def-scoped runtime (the "builds beside" case) never changes hands.
+
+**Bug 2 — the proximity fuse threw the struck collider away, so no weapon could reach its
+per-surface IMPACT entry.** `wep_14` *does* bind `water → torpedo_water_effect` + `snd_bsplash`, and
+C1B's sea *is* tagged (`wtr*`/`srf*`/`wakefront*` all hit `SceneBuilder.ClassifySurface`) — the
+classification was simply never asked for. Every hardpoint weapon carries a `DETONATION_DISTANCE`
+(15-50 m; the torpedo's 1 m), the fuse sphere-cast ran against **any** body, and in M3 the only
+bodies are terrain and buildings (the flying aircraft has no physics body), so it fired on every
+shot, before the raycast, and detonated with `Impact(weapon, point, null, …)`. `ClassifySurface(null)`
+is `Default`. The tell was in the handoff's own log all along: `impact: wep_14 (TORPDO) -> Default
+… on / fx=torpedo_ground_effect snd=-` — the empty `on ` field **is** the null collider. Turned off
+(`ProximityFuseEnabled`, `Projectile.cs`), branch intact and unreached; what `DETONATION_DISTANCE`
+means and which bodies may fuse a round is M4 work, filed as `BL-233` with the trap that a
+re-enabled fuse must carry its struck body into `Impact` or it re-breaks this the moment it returns.
+
+**Measured, same command as the repro** (`--chapter=C1 --rocket=wep_14 --fire-rockets --det
+--debug-anim`). Before: `1 active puffer(s), 193 live particle(s): fire_n_smoke` still at
+`sim_time=60`, steady-state, ~2× the 32 s bound. After, over the documented open-water case
+(`"--pos=-6500,300,-1500" "--direction=1,-0.25,0" "--hold=0,0,0,1"`):
+`impact: wep_14 (TORPDO) -> Water at (-5305,0,-1503) on g16226/col_water fx=torpedo_water_effect
+snd=snd_bsplash` — the water effect and its splash sound, selected for the first time. `fire_n_smoke`
+appears in 5 once-a-second reports across the whole run, ~2-3 s per impact, and the run ends on the
+four ambient world emitters alone. The one remaining `-> Default … on /` is the legitimate one: a
+torpedo self-destructing at its 1200 m range expiry, which genuinely has no struck surface.
+`.\RunTests.ps1` **PASS**: 336 units, 17/17 engine suites (`stop-sequence` included — the authored
+0.3 s stopper and 30 s halt are untouched), engine errors clean, **13 goldens hash-identical**.
+
+**Found on the way, filed not fixed:** an un-respawned player crash leaves the crash rig's
+`fire_n_smoke` emitting indefinitely (measured steady at 40 s). Same family, different runtime — a
+crash `AnimRuntime` has `EffectTtl = 0` by design, so neither the TTL nor `FinishEffectInstance`
+(which is scoped to instances carrying a TTL entry) reaches it. `BL-235`.

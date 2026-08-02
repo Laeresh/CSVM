@@ -122,6 +122,18 @@ Each selects a special behaviour; most are one bare flag or a tiny struct.
 | `DAMAGES_ZEPPELIN` | `wep_14`, `wep_28` | flag | may damage a zeppelin hull |
 | `SHAKES_CAMERA` | `wep_26` | flag | camera shake on fire/impact |
 
+**`TANGLER` — what it feels like in the original** (user recollection, 2026-08-02; **not decoded** —
+wants an original A/B before anything is built on it): *the choker stalls the hit plane
+essentially instantly — it drops the airframe to stall speed.* That is consistent with the struct
+rather than extra to it: `ENGINE_DEAD [5,13]` cuts thrust for 5-13 s, and with no thrust our
+`FlightModel` already bleeds speed on drag and drops the nose at the stall — so the felt "instant
+stall" is most likely the **symptom** of the engine cutout, not a separate authored effect. The M4
+implication is that the choker may need no bespoke flight-model hook at all, only a timed thrust
+cutout plus the `TIME [2]` entangle and `RADIUS [35]` catch. ⚠ "Essentially instantly" is the part
+to verify: a pure thrust cutout takes seconds to bleed a fast plane below stall speed, so if the
+original really stalls you at once there IS a second effect (a direct airspeed clamp) and this
+reading is wrong. `TanglerData` is parsed and unused — nothing is choked in M3 (`WeaponDefs.cs`).
+
 ### Bindings
 
 | Key | n | Meaning |

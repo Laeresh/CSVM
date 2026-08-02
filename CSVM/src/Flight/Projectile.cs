@@ -188,6 +188,19 @@ public sealed partial class ProjectilePool : Node3D
     // stays the authored curve.
     private const float SplashColumnWidthScale = 8f;
 
+    // The DETONATION_DISTANCE proximity fuse is OFF (BL-233). Read as a fuse radius against ANY
+    // body, it can only ever trip on world geometry in M3 — the flying aircraft carries no physics
+    // body (see the class remark), so terrain and buildings are the sole candidates. That detonated
+    // every rocket 15-50 m short of the surface it was aimed at (the torpedo's 1 m read as a normal
+    // ground hit, which is why it went unnoticed), and — because the fuse branch has no struck body
+    // to hand over — passed `Impact` a null collider, so EVERY hardpoint hit classified as
+    // `default` and no weapon could reach its `water`/`buildings`/`player` IMPACT entry: a torpedo
+    // in the sea played `torpedo_ground_effect` with no `snd_bsplash`. Off, a round flies on to the
+    // raycast and gets its real surface. What DETONATION_DISTANCE means (fuse radius vs blast
+    // radius) and which bodies may fuse a round is M4 work — see BL-233. NOT a const: the branch
+    // it guards must stay compiled and reachable.
+    private static readonly bool ProximityFuseEnabled = false;
+
     private static readonly Color RicochetTint = new(1f, 0.95f, 0.6f); // white-hot spark yellow
     private static readonly Color DirtTint = new(1f, 1f, 1f); // the bit textures carry the colour
     private static readonly Color MuzzleSmokeTint = new(0.85f, 0.85f, 0.85f);
@@ -597,7 +610,8 @@ public sealed partial class ProjectilePool : Node3D
 
             if (space != null && stepLen > 1e-5f)
             {
-                if (ProximityFuseTriggered(space, p.Weapon, prev, next, p.Vel, out var fusePoint))
+                if (ProximityFuseEnabled
+                    && ProximityFuseTriggered(space, p.Weapon, prev, next, p.Vel, out var fusePoint))
                 {
                     NearMissPass(prev, fusePoint, p.Shooter);
                     Impact(p.Weapon, fusePoint, null, Vector3.Zero);

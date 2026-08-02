@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-233`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-237`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -386,6 +386,113 @@ unscheduled.
   *Fix shape:* out of scope until a cockpit-audio or damage-audio feature is scheduled; recorded here
   so nobody has to re-derive from scratch that the *data* isn't the blocker.
 
+### World animation & effects
+
+- `BL-235` **An un-respawned player crash burns forever: the crash rig's `fire_n_smoke` never stops
+  (measured 2026-08-02, found while fixing the torpedo's).** Same family as the torpedo fireball,
+  different runtime. A crash `AnimRuntime` (`ForCrashRig`) leaves `EffectTtl` **0** deliberately —
+  "ambient/crash runtimes leave it 0 and are unbounded" (`AnimRuntime.cs:244`) — so it registers no
+  `_effectTtls` entry, and `FinishEffectInstance` is scoped to instances that carry one. Nothing
+  ends `player_crash_dirt`'s `large_10sec_fire`/`large_30sec_fire` emitters when their sequences do.
+  **Measured:** `.\RunProbe.ps1 --chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1"
+  --rocket=wep_14 --fire-rockets --det --debug-anim --frames=2400` (**no `--hold`** — that is the
+  whole trick: a `--hold` run auto-respawns, and the respawn's rig reset is what has been hiding
+  this) → `1 active puffer(s), ~200 live particle(s): fire_n_smoke` steady at `sim_time=40`, long
+  past the def's own 10 s/30 s name.
+  ⚠ Do **not** conclude the authored stop is broken: the `stop-sequence` engine suite asserts
+  `large_30sec_fire`'s 30 s halt and passes. Establish first whether the crash def's fire is reached
+  by that halt at all here, or whether the `LOOP` that times it runs one instantaneous pass per
+  *frame* (so a "30 sec" count is frame-rate-shaped, not 30 s) — the same loop semantics that make
+  the torpedo's `LOOP 70` last ~1.2 s.
+  *Fix shape:* the cheap version is to let `FinishEffectInstance` cover crash-rig instances too
+  (they are the same "an effect def that ships no stop" case), which needs a way to mark such an
+  instance other than "has a TTL entry". Weigh that against the deliberate unboundedness first —
+  a crash fire is *meant* to outlive its sequence for some seconds.
+
+- `BL-234` **No `PUFFER_STATE` the WORLD runtime reaches after the bootstrap ever builds — every
+  destructible death loses its fire streaks and its long-running fire (measured 2026-08-02).**
+  `WorldSession.Build` sets `animRuntime.PufferFactory = null` immediately after `Bind`
+  (`WorldSession.cs:245`, inside `if (!o.KeepArchivesOpen)`), so from that line on every
+  `PUFFER_STATE` the world runtime dispatches falls into the `PufferFactory == null` guard
+  (`AnimRuntime.cs:2216`), counts a `PufferState(after build)` and returns. Only the emitters the
+  bootstrap itself reaches — ON_STARTUP defs and startanims — ever exist. `--anim-lab` is the one
+  mode that passes `KeepArchivesOpen` (`GameSession.cs:625`), which is why the effect looks fine
+  there and nowhere else.
+  **Reported as** C1's harbour refuel tanks losing their fire streaks and their sustained fire while
+  the flying debris survives; debris is `OBJECT_MOTION`, which needs no texture archive, and the
+  fireballs are the world-effects runtime's meshes, which keeps its own live factory — so exactly
+  the puffer-shaped half of the death goes missing.
+  **Measured A/B, same build, same def, same sim frame** (`refuel*`, `extracted/C1/zrdr/ref_fueltanks.zrd.json`):
+  - `.\RunProbe.ps1 --freecam --chapter=C1 --destroy=refuel --debug-anim --frames=180 --screenshot=…`
+    → `4 active puffer(s): splashpuffer1, splashpuffer2, splashpuffer3, steampuffer` — the four
+    bootstrap emitters, unchanged 3 s after five kills. No fire in the shot, only the scorch decal
+    and the debris.
+  - `.\RunProbe.ps1 --anim-lab --chapter=C1 --play-anim=refuel1 --debug-anim --frames=180 --screenshot=…`
+    → `4 active puffer(s): fire_n_smoke, trailpuffer1, trailpuffer2, trailpuffer3`, and the shot is a
+    full fire column. Same runtime, same data; the only difference is the nulled factory.
+  **Blast radius is the whole install, not this def.** C1's chapter zrdr alone carries 66
+  `PUFFER_STATE` events over 25 distinct emitter names in 22 defs, of which exactly 4 build (the
+  three `waterfalls` splash puffers + `train`'s `steampuffer`). Install-wide: C1 66/25, C1B 2/1,
+  C1C 12/3, C2 99/35, C2B 14/3, C3 82/34, C4 84/52, C5 19/9 (events / distinct names). Everything
+  runtime-reached is dark — the death trails and sustained fires of `fuel_tanks`, `ref_fueltanks`,
+  `patrol_boat`, `fueltruck`, `lighthouse`, `barrel_fire`, `ap_h2otwr`, `ap_transmitter`,
+  `ap_radiotwr`, plus the ON_CALL ambient set (`cars_moving`/`trucks_moving` dust, the six
+  `firetruck*` squirts, `hauler1`'s exhaust, `train_smoke`, `speed_cue`).
+  *Fix shape:* stop nulling it in the modes where the archive genuinely outlives the build. It
+  already does in every game session — `GameSession.LoadArchives` hands the `TextureArchive` to
+  `_sessionTextures`, disposed only by `ReturnToMenu` (`GameSession.cs:493`, `:324`) — so the
+  `WorldSession` comment ("cleared right after the bootstrap so a later request is reported instead
+  of hitting a closed zip") describes a lifetime that stopped being true when the session took
+  ownership. The cheap version is for `GameSession` to re-arm `Runtime.PufferFactory` over
+  `_sessionTextures` after `WorldSession.Build` returns; the honest version is for the flag to
+  express *who owns the archive* rather than being an anim-lab special case. Either way the
+  bootstrap's own nulling must keep covering the callers that really do dispose at build scope
+  (`--run-tests`, the reader probes), so the fix is a lifetime decision per caller, not deleting
+  the line.
+  **The fix was prototyped and measured** (`if (false && !o.KeepArchivesOpen)`, reverted): the same
+  five-tank freecam kill goes from 4 active puffers to **24 = 4 bootstrap + 5 tanks × 4 emitters**
+  (`fire_n_smoke` + `trailpuffer1/2/3`), with the fire column rendering. So un-nulling is the whole
+  visual fix; what it also exposes is the two lifetime facts below.
+  *Sizing (measured over 40 s, `--frames=2400`):* 24 → 20 → 15 → a **plateau at 16 that never
+  returns to 4**. Most of that plateau is legitimate — `dust_puffer`/`dust_puffer1`, the moving
+  cars' dust, is ON_CALL ambient that should have been running since the world loaded. Two things
+  in it are not, and each is its own follow-up rather than a reason to hold the fix:
+  - `trailpuffer3` outlives its debris. `part3` ends on `BOUNCE_SEQUENCE sparkout3`, not the
+    `RUN_TIME` its siblings use, so if the bounce never lands the `OBJECT_ACTIVE_STATE part3
+    INACTIVE` that `BL-224`'s `EndSustainedOn` needs never fires. `trailpuffer1`/`2` do stop.
+  - `fire_n_smoke` still burns at 40 s. The sequence is one `PUFFER_STATE` + `LOOP 200` and
+    authors **no** `ACTIVE_STATE 0` — the loop count is the only bound, and 200 instantaneous
+    passes are gone in seconds while the emitter keeps going. **This is `BL-235`'s bug on a third
+    runtime** (same emitter name, same "effect def that ships no stop" shape, world runtime instead
+    of the crash rig / effects runtime), so settle the loop-period question there — whether a
+    `LOOP n` counts frames or seconds — before treating this one as separate work.
+  Re-measure with `--debug-anim`'s once-a-second `N active puffer(s), M live particle(s)` line —
+  and read the emitter NAMES, not just the count: that line is printed by every runtime in the
+  session, so a world-runtime census and an effects-runtime one (`fierypuffer`) interleave and a
+  count read alone looks like a collapse that never happened.
+  ⚠ Traps:
+  - **`--anim-lab` cannot see this bug** — it is the one mode with the factory alive. Every
+    verification has to run in `--fly`/`--freecam`. The same trap runs the other way for a fix:
+    proving it in the lab proves nothing.
+  - **The engine already counts the misses and you will never see the number.**
+    `Count("PufferState(after build)")` lands in the "event kind(s) not yet acted on" census, which
+    is printed once at the end of the bootstrap — i.e. always before the first death. The log looks
+    clean. Read the live `anim/debug: N active puffer(s)` line instead, or move the census.
+  - **Do not chase this in the world-effects runtime or the `BL-225` pool.** Both were suspects and
+    both are innocent: the effects runtime keeps its own live `PufferFactory`
+    (`WorldEffectsFactory`), and a build at `fa62408` (pre-polish-5) reproduces the missing trails
+    identically, so nothing in waves A–D caused it. `git log -S "PufferFactory = null"` shows the
+    line unchanged since the project rename — this has never worked, it is not a regression from
+    recent work.
+  - **`WorldSounds.Loader` is nulled by the same block** and would have the same hole, except the
+    prewarm pass ahead of it decodes every `SOUND_NODE` and one-shot name the program can ask for.
+    That mitigation has no puffer equivalent (a puffer bakes an atlas per authored state, not per
+    name), so don't "fix" this by prewarming.
+  *Playtest after fix:* shoot C1's harbour refuel tanks and the airfield fuel tanks from the
+  cockpit and confirm the streaked debris trails and the sustained ground fire; then fly a full C1
+  sortie watching the dust behind the cars/trucks and the firetruck squirts, which should appear at
+  the same time and are the ON_CALL half of the same fault.
+
 ## Feature backlog
 
 - `BL-059` **Data-driven crash — the remaining variants/follow-ups (PLAN-data-driven-crash COMPLETE for the
@@ -454,6 +561,48 @@ unscheduled.
   = travel distance over `run_time`), not a settled decode — the anchor is invisible, only the
   trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
   inverted flag (`has_interval_value` false, key off `interval_type`).
+
+- `BL-233` **The `DETONATION_DISTANCE` proximity fuse is DISABLED — decode it and re-target it in
+  M4 (turned off 2026-08-02).** `Projectile.cs`'s `ProximityFuseEnabled` is `false`; the branch and
+  `ProximityFuseTriggered` are intact and unreached. **Why it had to go now:** the fuse sphere-cast
+  ran against *any* body, and in M3 the only bodies are terrain and buildings (the flying aircraft
+  carries no physics body — `Projectile.cs` class remark), so it fired on **every** hardpoint shot,
+  15-50 m short of the surface for rockets and 1 m short for the torpedo. Worse, the fuse branch
+  calls `Impact(weapon, fusePoint, null, Vector3.Zero)` — a **null collider** — so
+  `ClassifySurface` returned `Default` for every rocket/torpedo hit and **no hardpoint weapon could
+  ever reach its `water`/`buildings`/`player` IMPACT entry.** Reported as "a torpedo in C1B water
+  plays the ground explosion"; `wep_14` does bind `water → torpedo_water_effect` + `snd_bsplash`,
+  and C1B's sea *is* tagged (`wtr*`/`srf*`/`wakefront*` all hit `SceneBuilder.ClassifySurface`) —
+  the classification was simply never asked. Measured, `.scratch/logs/probe-20260802-160502-14692.out`:
+  `impact: wep_14 (TORPDO) -> Default at (…) on / fx=torpedo_ground_effect snd=-` — the empty `on `
+  field IS the null collider.
+  **The two open questions for M4:**
+  1. ~~**What is `DETONATION_DISTANCE`?**~~ **Settled from the data 2026-08-02: it is the FUSE
+     TRIGGER distance, not the explosion radius** — so the current reading is right and only the
+     targeting is wrong. Three independent reasons, in order of strength:
+     (a) **`wep_12` CHOKER carries `DETONATION_DISTANCE` 35 and NO `IMPACT_PROXIMITY` at all**, with
+     `ARMOR_DAMAGE`/`HEALTH_DAMAGE` both 0 and a `TANGLER RADIUS` of **35.0** — the same number,
+     authored separately. The choker has no explosion, so a field meaning "explosion radius" on it
+     is incoherent; a trigger distance that fires a tangle whose radius is its own field is exactly
+     right. (b) **The torpedo runs backwards under the radius reading**: highest damage in the game
+     by 2× (200 vs BOOM's 100) paired with the file's *smallest* `DETONATION_DISTANCE` (1.0).
+     Biggest warhead + contact fuse holds; biggest warhead + smallest blast does not. (c) The whole
+     `DETONATION_*` family is triggers — `DETONATION_TIME` (flare, 2 s) and `DETONATION_DOT_PRODUCT`
+     (flare/flash/choker) are unambiguously "when does it go off", and the flare ships
+     `DETONATION_TIME` with **no** `DETONATION_DISTANCE`: same slot, timed condition instead of a
+     distance one. `IMPACT_PROXIMITY` is correspondingly the effect radius throughout, as
+     `ApplyDamage` already treats it — `wep_09` FLASH is `DAMAGE 0` with IP 450 (blind radius),
+     `wep_15` FLARE is `DAMAGE 0` with IP 500 (decoy-attraction radius).
+     ⚠ **Why this hid for so long:** on the six plain rockets the two are *equal* (ARMOR/BOOM/BEEPER/
+     SEEKER 15=15, SONIC 35=35) — "it goes off as soon as it is close enough to hurt you" — so the
+     wrong reading produced right-sized results there. Full census, IP vs DD: 9M 25/30 (**the only**
+     weapon where IP < DD), FLAK 22/20, FLAK 100/50, gb 155/15, FLASH 450/30, TORPDO 30/1,
+     CHOKER –/35, FLARE 500/–, FW 100/–.
+  2. **Which bodies may fuse a round?** The user's recollection is enemies only — aircraft and
+     zeppelins, never terrain. That needs a targetable-body layer the world colliders are not on,
+     which is M4 work (nothing else flies in M3).
+  **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
+  `null`, or it re-breaks per-surface effect selection the moment it is switched on.
 
 - `BL-232` **A flight session plus `--destroy` builds the world-effects runtime TWICE (found while
   landing `BL-225`, 2026-08-02).** `GameSession.cs:1217` calls `BuildWorldEffectsRuntime` directly and
@@ -764,6 +913,35 @@ zone hit points, the crash fireball's timing, and shell ejection's calibre gate 
 **So: take the mechanism from it, never the magnitudes or the art direction, and prefer extracted
 data or an `OriginalScreenshots/` capture wherever either exists.** Where an entry below rests on
 the document alone, it says so and marks the value TUNE.
+
+- `BL-236` **Blast falloff measures to a body's transform ORIGIN, not to the geometry the blast
+  actually went off against — so a big body soaks up less splash than a small one, or none
+  (found 2026-08-02 while reading `ApplyDamage` for `BL-233`).** `ProjectilePool.ApplyDamage` sweeps
+  a sphere of `IMPACT_PROXIMITY` around the detonation point, then scores each caught body by
+  `BlastDamage(full, radius, zonePoint.DistanceTo(point))` where `zonePoint` is
+  `DamageZonePosition(body, shapeIndex)` = `(GlobalTransform * ShapeOwnerGetTransform(owner)).Origin`
+  — a single point, the shape owner's transform origin. For a compact damage zone that reads right.
+  For a **large** body it does not: a rocket detonating against one end of a long mesh scores its
+  distance from that mesh's origin, which can be tens of metres away, so the body takes a fraction
+  of the damage it should — or falls outside the sphere entirely and takes **none**, despite the
+  blast going off on its skin.
+  **Two things keep it from being visible today**, and both are load-bearing to check before
+  believing a fix: (a) the **directly struck** body is exempt — it takes full `HEALTH_DAMAGE` and is
+  then excluded from the sweep (`body == struck` → `continue`), which is correct (the ray contact IS
+  the detonation centre) and means a plain aimed hit is unaffected; only *splash onto neighbours*
+  is wrong. (b) `MaxBlastBodies` is 4096 and the radii are 15-100 m, so nothing is being silently
+  dropped for capacity.
+  **Expected to bite on** zeppelin gasbags and the large chapter building/terrain meshes — exactly
+  where splash matters most and where `DAMAGES_ZEPPELIN` (`wep_14`/`wep_28`) points. Not measured
+  against a case yet: that is step one.
+  *Fix shape:* score against the nearest point on the body's collision shape rather than its origin
+  (Godot's `GetRestInfo`/`CollideShape` on the blast sphere returns contact points), or per damage
+  **zone** where a rig has them. ⚠ Do **not** just widen the radius to compensate — `IMPACT_PROXIMITY`
+  is authored data (and its falloff SHAPE is already the open TUNE `BL-227`); inflating it to paper
+  over a distance-measurement bug would corrupt both.
+  ⚠ Trap: the comment at `DamageZonePosition` explains why the *detonation centre* is the ray
+  contact rather than a collider origin — that reasoning is about the blast's own position and is
+  correct; it does not license using an origin for the RECEIVING side too.
 
 - `BL-085` **The armour layer is unimplemented, so 18 of 48 weapon entries are mis-modelled.**
   `WeaponDef.ArmorDamage` (`WeaponDefs.cs:78,239`) has exactly two consumers and both are display

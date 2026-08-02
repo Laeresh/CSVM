@@ -929,6 +929,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 _instances.RemoveAt(i);
                 FinishInputGoverned(inst.Def, inst.Anchor);
+                FinishEffectInstance(inst.Def, inst.Anchor);
                 OnInstanceFinished?.Invoke(inst.Def, inst.Anchor);
             }
         }
@@ -1772,6 +1773,36 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             TearDownResourcesOf(def, anchor);
     }
 
+    /// <summary>A world-effect instance (<see cref="PlayEffectAt"/>) ends its sustained emitters
+    /// when its OWN sequences end â€” the authored stop for an effect def that ships none. Two of
+    /// the curated set do: <c>torpedo_ground_effect</c>'s <c>fire_n_smoke</c> and
+    /// <c>70slug_gunhit</c>'s <c>blacksmokepuffer</c> carry an <c>ACTIVE_STATE 1</c> and no 0
+    /// (every other effect authors its own stop, so this reaches nothing of theirs).
+    ///
+    /// <para>Until this existed the torpedo's ground fire burned for the whole session: the
+    /// def's sequences end ~1.2 s in (its <c>LOOP 70</c> runs one instantaneous pass per frame),
+    /// the instance leaves <c>_instances</c>, and the <see cref="EffectTtl"/> backstop then had
+    /// nothing to reach â€” <see cref="Stop"/> finds resources only THROUGH a live instance. The
+    /// gun hit hid the defect: its 0.3 s TTL expires while its ~1 s sequence is still running, so
+    /// there the Stop always landed.</para>
+    ///
+    /// <para>Scoped to instances the effect runtime itself started (they are the ones carrying a
+    /// TTL entry, which this consumes): a sequence that merely finishes leaving an emitter live is
+    /// the ambient data's own idiom (C1's waterfall) and keeps today's behaviour. Emission ends
+    /// (<c>SustainEnd</c>) rather than the emitter being torn down, so the live particles finish
+    /// their authored <c>LIFETIME_RANGE</c> â€” the fire fades over its last 3-4 s instead of
+    /// popping out â€” and a later replay on this same pool slot revives the entry.</para></summary>
+    private void FinishEffectInstance(AnimDefinition def, Node3D? anchor)
+    {
+        if (_effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor) == 0)
+            return;
+        foreach (var entry in _puffers.Values.Where(v => v.Def == def && v.Anchor == anchor).ToList())
+        {
+            entry.Puffer.SustainEnd();
+            _activePuffers.RemoveAll(a => a.Puffer == entry.Puffer);
+        }
+    }
+
     /// <summary>Tears down every live resource a stopped instance created â€” its motions, puffers,
     /// lights and sounds â€” so nothing of the definition keeps running after <see cref="Stop"/>.
     /// Motions and puffers are attributed to the exact <c>(def, anchor)</c> that registered them
@@ -2211,6 +2242,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // sputter to at most one burst per stage.
             if (!_activePuffers.Any(a => a.Puffer == existing.Puffer))
                 _activePuffers.Add((existing.Puffer, host));
+            // The re-asserting instance TAKES OWNERSHIP (same def, later anchor). Ownership is
+            // what every teardown path resolves through — Stop, the TTL sweep and
+            // FinishEffectInstance all ask "which puffers does (def, anchor) own?" — so an
+            // emitter left attributed to the FIRST asserter outlives every later one: three
+            // torpedoes' `fire_n_smoke` share a host (their pooled `torp_effects` copies all
+            // resolve through the def's own node index), so calls 2 and 3 revived call 1's
+            // emitter, and when they ended they owned nothing to stop. Guarded on the def: a
+            // name colliding across two defs on an un-def-scoped runtime is the "builds beside"
+            // case below, not one def's own pool, and must not change hands.
+            if (existing.Def == def && existing.Anchor != anchor)
+                _puffers[key] = (existing.Puffer, def, anchor);
             return;
         }
 
@@ -2889,10 +2931,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             if (_effectClock < _effectTtls[i].Deadline)
                 continue;
+            var (def, anchor, _) = _effectTtls[i];
+            _effectTtls.RemoveAt(i);
             // Stop (not just drop the instance): tears down the sustained puffers this effect
             // created, so a stop-less emitter stops emitting and its live particles decay.
-            Stop(_effectTtls[i].Def.AnimName, _effectTtls[i].Anchor);
-            _effectTtls.RemoveAt(i);
+            Stop(def.AnimName, anchor);
+            // ...but Stop reaches resources only THROUGH a live instance, and an effect whose
+            // sequences already ended has none — which made this whole sweep a silent no-op for
+            // every effect that outlived nothing but its own emitters. Tear down by (def, anchor)
+            // directly as well; the second pass finds nothing when the Stop above already ran.
+            // FinishEffectInstance normally gets there first — this stays the backstop for the
+            // defs that never finish (the `LOOP -1` poll idiom).
+            TearDownResourcesOf(def, anchor);
         }
     }
 
