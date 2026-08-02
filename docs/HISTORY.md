@@ -10662,5 +10662,70 @@ bugs. The entry names the shape of a real guard.
 
 **Does not reach `BL-235`** (the un-respawned crash fire) and was never going to: that def is
 `[Puffer 1, Loop{-1}]` plus a separate 30 s stopper sequence, so its instance never finishes.
+> ⚠ **Wrong — corrected by measurement the same day; see the `BL-235` entry at the end of this
+> file.** This change *does* reach it. The stopper sequence is what makes the instance finish:
+> its `StopSequence` halts the looping runner, the runner set empties, and the rule below then
+> fires. The crash rig also calls `large_10sec_fire`, not the `large_30sec_fire` analysed here.
 `BL-240` (`part3`/`part4` never launch) is likewise untouched as a motion bug — its `trailpuffer3`
 now merely stops at 5 s instead of running for the session, at the wrong place either way.
+
+## 2026-08-02 — `BL-235` closed by measurement: the crash fire already stops, and the previous entry's "does not reach" was wrong
+
+**`BL-235` does not reproduce on `main` (`e44bfd2`). No code change was needed; the entry is
+deleted from `backlog.md`.** Three consecutive runs of the entry's own repro —
+
+```
+.\RunProbe.ps1 --chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1" `
+  --rocket=wep_14 --fire-rockets --det --debug-anim --frames=2400
+```
+
+— crash into `taged3/col` at 89 m/s, `player_crash_dirt`, **no respawn** (`waiting for respawn`
+in the log, which is the condition the entry says hides the bug) — put the crash runtime's
+`fire_n_smoke` census at `1 active puffer(s)` for **10 report ticks** and gone thereafter, with no
+fire for the remaining ~210 s of a 220 s session. The entry's measurement was a fire still burning
+at `sim_time=40`.
+
+**Ten seconds is the authored number, and it is the right def.** The entry (and the entry above
+this one) analysed `large_30sec_fire`. `player_crash_dirt` does not call it: the log says
+`retarget 'large_10sec_fire' onto 'destroyed' [caller player_crash_dirt]`, and
+`fire_here-large_10sec_fire.json` is the same two-sequence shape with the stopper at
+`START_TIME {Animation, 10.0}`. So the fire now ends exactly on its authored count.
+
+**What actually reached it: `BL-236`, which the previous entry ruled out on reasoning.** That
+entry's argument was "`[Puffer 1, Loop{-1}]` plus a separate stopper sequence, so its instance
+never finishes." The missing step is that the stopper is what *makes* it finish:
+`StopSequence(fire_n_smoke)` at 10 s halts the infinite-loop runner, at which point the instance
+has no live runner left, `inst.Finished` goes true, and `BL-236`'s instance-end rule
+(`FinishEffectInstance`) `SustainEnd`s the emitter it owns. The instance-end rule and the authored
+`LOOP -1` were never in conflict — the halt sits between them. **Lesson for this family: "the
+instance never finishes" is a claim about the runner set at a given moment, not a property of the
+def; a `StopSequence` aimed at the looping sequence changes the answer.**
+
+**Answers `BL-235`'s remaining question — "is the stop reached?" — and the answer is no.** A
+temporary `GD.Print` on every entry to `HandlePufferState` with `active_state 0`, over the full
+220 s probe, fired **zero times across every runtime in the session**. The `StopSequence` half of
+`stop_fire_n_smoke` demonstrably ran (the fire ends on its authored count); the `PUFFER_STATE 0`
+that follows it in the same sequence, with no `START_TIME` of its own, never dispatched. Filed as
+**`BL-242`** with the inference to check first (halting the last runner finishes the instance
+mid-dispatch, tearing down the stopper's own runner before it advances). Benign today — both
+routes end in `SustainEnd`, so the outcome is identical — and not benign for any stopper whose
+tail carries something the instance-end rule does not replay.
+
+**A second latent trap recorded in `BL-242` rather than fixed.** `large_10sec_fire` turns the
+emitter ON at `AT_NODE fire_here` (its own template root, resolved through `ResolveInOwnRoot`) and
+OFF with **no `AT_NODE` at all**, which resolves to the anchor — the wreck's `destroyed` node. The
+two halves therefore compute different `_puffers` keys, so the authored stop would miss *even if it
+were dispatched*. Note this is the exact suspect `BL-235` recorded as "eliminated, look elsewhere"
+— correctly eliminated for `large_30sec_fire`, whose ON event uses the `INPUT_NODE` sentinel and
+lands on the anchor like its OFF event does, but that def was never the one the crash rig calls.
+
+**A fix for the key mismatch was written and reverted, deliberately.** An ownership-scoped fallback
+in the `!on` branch (stop the same-named emitter this `(def, anchor)` owns when the exact host key
+misses) built clean and passed everything — 345 units, 17/17 engine suites, 13 goldens
+hash-identical. It was reverted because the trace above proves the branch it guards is never
+entered: the stop event does not dispatch, so the fallback is unexercised code justified by
+reasoning rather than measurement. It belongs *with* the `BL-242` dispatch fix, where a probe can
+show it doing something, and `BL-242` says so.
+
+`.\RunTests.ps1` **PASS** on the reverted tree (unchanged from `e44bfd2`): 345 units, 17/17 engine
+suites, engine errors clean, 13 goldens hash-identical.

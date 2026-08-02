@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-242`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-243`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -388,55 +388,31 @@ unscheduled.
 
 ### World animation & effects
 
-- `BL-235` **An un-respawned player crash burns forever: the crash rig's `fire_n_smoke` never stops
-  (measured 2026-08-02, found while fixing the torpedo's).** Same family as the torpedo fireball,
-  different runtime. A crash `AnimRuntime` (`ForCrashRig`) leaves `EffectTtl` **0** deliberately —
-  "ambient/crash runtimes leave it 0 and are unbounded" (`AnimRuntime.cs:244`) — so it registers no
-  `_effectTtls` entry. That gate is gone since `BL-236` landed (2026-08-02): `FinishEffectInstance`
-  now runs on every runtime's finished instance, and it still does not reach this def, for the
-  reason spelled out below — the instance never finishes. Nothing ends `player_crash_dirt`'s
-  `large_10sec_fire`/`large_30sec_fire` emitters when their sequences do.
-  **Measured:** `.\RunProbe.ps1 --chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1"
-  --rocket=wep_14 --fire-rockets --det --debug-anim --frames=2400` (**no `--hold`** — that is the
-  whole trick: a `--hold` run auto-respawns, and the respawn's rig reset is what has been hiding
-  this) → `1 active puffer(s), ~200 live particle(s): fire_n_smoke` steady at `sim_time=40`, long
-  past the def's own 10 s/30 s name.
-  ⚠ **The timing half of this is settled (2026-08-02); only "is the stop reached?" is left.**
-  `large_30sec_fire` does not time itself with a loop count at all — it is two sequences:
-  `fire_n_smoke` = `[PUFFER_STATE 1, LOOP {-1}]`, deliberately infinite, plus a separate
-  `stop_fire_n_smoke` = `StopSequence("fire_n_smoke")` at `START_TIME {Animation, 30.0}` then
-  `PUFFER_STATE 0`. That 30 is authored **seconds**, gated on the sequence clock, and has always
-  been frame-rate independent (`large_10sec_fire` is the same shape at 10). The separate
-  animation-frame decode — a `LOOP n` over an INSTANTANEOUS body is n × 1/60 s, now paced against
-  sim time — does not touch this shape, since `LOOP -1` counts nothing.
-  So a fire alive at 40 s is not a slow loop and not a mis-scaled count: **the stopper sequence is
-  not running, or its StopSequence/`PUFFER_STATE 0` is not reaching this runtime's emitter.** Start
-  by checking whether the crash rig ever starts `stop_fire_n_smoke` — the `stop-sequence` engine
-  suite proves the mechanism works on the runtime it tests, not that this runtime calls it.
-  ⚠ **The obvious fix has already landed and does NOT reach this def (`BL-236`, 2026-08-02).**
-  `FinishEffectInstance` covers crash-rig instances now — the TTL gate is gone and every runtime's
-  finished instance ends its own sustained emitters — and this fire still burns. `FinishEffectInstance` fires from the `inst.Finished` branch
-  (`AnimRuntime.cs:941`), and this instance never finishes: the compiled def
-  (`extracted/C1/cam_anim/fire_here-large_30sec_fire.json`) is two **Initial** sequences,
-  `fire_n_smoke` = `[Puffer(fire_n_smoke,1), Loop{-1}]` and `stop_fire_n_smoke` =
-  `[StopSequence(fire_n_smoke)@Animation+30.0, Puffer(fire_n_smoke,0)]`, so until the stopper runs
-  the `Loop{-1}` runner never drains. The `refuel*` def `BL-236` fixed drains at ~5 s and is
-  reachable that way; this one is not. **The two are the same symptom on different mechanisms — do
-  not assume one fix covers both.** Weigh any instance-independent stop against the deliberate
-  unboundedness first — a crash fire is *meant* to outlive its sequence for some seconds.
-  **Suspect eliminated (checked, not guessed):** the on/off `PUFFER_STATE` pair carries *different*
-  `AT_NODE`s — `INPUT_NODE` on the ACTIVE event, absent on the stop stub — which looked like a
-  `_puffers` key mismatch that would make the stop silently miss. It is not: `_inputNodes` is
-  populated only on the governed `PlayEffectAt` path (`AnimRuntime.cs:1052-1055`), this def
-  conditions on nothing so it is not governed, and the local `CALL_ANIMATION` path anchors the
-  callee on the site node itself (`:2170`). Both events therefore resolve `host = anchor`
-  (`:2227-2229`) and the key matches. **Look elsewhere.**
-  *Unverified lead worth trying first:* a repeated `CALL_ANIMATION` that RESTARTS the def resets the
-  stopper's 30 s clock. The live-instance guard at `AnimRuntime.cs:2159` is bypassed when
-  `PlaceCalledTemplates` is on and the call site has MOVED (`!TemplateIsAt(...)`) — and a crash
-  wreck's site moves while it slides. Every restart would re-assert the puffer and rewind
-  `stop_fire_n_smoke` to 0, which fits "burns forever" exactly. Test it by logging restarts of
-  `large_30sec_fire` on a no-`--hold` crash run before writing any fix.
+- `BL-242` **A stopper sequence's tail events are dropped: `PUFFER_STATE 0` never dispatches at all
+  (measured 2026-08-02 while closing `BL-235`).** `large_10sec_fire`'s `stop_fire_n_smoke` is
+  `[StopSequence(fire_n_smoke)@Animation+10.0, PufferState(fire_n_smoke, 0)]` — two events, no
+  `START_TIME` on the second, so both should run on the same tick. **Measured:** a `GD.Print` on
+  every entry to `HandlePufferState` with `active_state 0`, over a 220 s no-`--hold` crash probe
+  (`--chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1" --rocket=wep_14 --fire-rockets
+  --det --debug-anim`), fired **zero times** across every runtime in the session. The `StopSequence`
+  half demonstrably *did* run — the crash fire ends at 10.0 s ± one report tick, on the authored
+  count, in three consecutive runs — so the event *after* it in the same sequence was dropped.
+  *Inference, not yet measured:* halting the last live runner finishes the instance mid-dispatch,
+  and the stopper's own runner is torn down before it advances past the `StopSequence`.
+  **Benign today, which is why it is a backlog item and not a bug fix:** both routes end in
+  `SustainEnd`, so the authored stop and `BL-236`'s instance-end rule produce the identical
+  outcome — the fire fades over its `LIFETIME_RANGE` either way. It stops being benign for any
+  stopper whose tail carries something the instance-end rule does *not* replay (a `SOUND`, an
+  `OBJECT_ACTIVE_STATE`, a second puffer the def does not own).
+  *Fix shape:* let a runner finish dispatching its current sequence's remaining instantaneous
+  events before the instance-finish sweep runs, rather than tearing down at the halt.
+  ⚠ Do not "fix" this by reviving the authored `PUFFER_STATE 0` path alone — it carries its own
+  latent trap: this def turns the emitter **ON** at `AT_NODE fire_here` (its own template root) and
+  **OFF** with no `AT_NODE` at all (which resolves to the anchor, the wreck's `destroyed` node), so
+  the two halves compute different `_puffers` keys and the stop would miss even once dispatched.
+  Whatever lands has to resolve the stop through the instance's OWNERSHIP — the identity
+  `FinishEffectInstance` and `TearDownResourcesOf` already use — not through the host key.
+  *Verify with:* the probe above; `BL-241`'s harness fix is what would let a suite guard it.
 
 - `BL-237` **An authored LOOP period shorter than the sim step is quantised up, so those loops are
   still frame-rate-dependent (measured 2026-08-02, found while rate-locking the untimed loops).**
@@ -552,7 +528,8 @@ unscheduled.
   as a `using` local and does not set `WorldSession.Options.TexturesOutliveBuild`, so the harness's
   world runtime has its `PufferFactory` cleared after the bootstrap (`WorldSession.cs:249`) —
   exactly the `BL-234` condition, here on purpose. Every emitter bug in this family
-  (`BL-233`/`BL-235`/`BL-236`) therefore has to be verified by a `--debug-anim` probe read by hand;
+  (`BL-233`/`BL-235`/`BL-236`, and now `BL-242`) therefore has to be verified by a `--debug-anim`
+  probe read by hand;
   none of them is guarded by a suite, and a regression would be caught only by somebody re-running
   the probe. The `stop-sequence` suite covers the *dispatch* side (which events fire, when), which
   is why it passed throughout all three bugs.
