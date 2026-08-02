@@ -36,18 +36,21 @@ table outlive the landing.
 ### Larger items — documented, not fixed
 
 - `BL-008` **Break-apart debris barely moves — "parts only move a short way."** The piece launch is
-  `MotionRuntime` (`AnimRuntime.cs`), and three things combine — **none of them the FROM_TO
-  dropped-delta bug** (that is a different event kind; the debris `translation.delta` *is* mapped):
+  `MotionRuntime` (`CSVM/src/Mech3/Anim/MotionRuntime.cs`), and two things combine — **neither of
+  them the FROM_TO dropped-delta bug** (that is a different event kind; the debris
+  `translation.delta` *is* mapped):
   1. **World destructibles inherit no momentum.** `InheritedWorldVelocity` is set **only** by the
-     plane crash (`FlightController.cs:971`); the shared world `AnimRuntime` never assigns it, so a
+     plane crash (`FlightController.cs:1433`); the shared world `AnimRuntime` never assigns it, so a
      world piece gets only the small authored launch — a 5–10 m/s straight-up pop, which is exactly
      "the pieces barely drift."
-  2. **Ground-rest / bounce is deferred.** `do_intersections` + `bounce_sequence` are not simulated,
-     so a piece integrates freely over `run_time` then **holds its final pose** — translate a little,
-     stop.
-  3. **The magnitude decode is unsettled TUNE**, not settled data: `translation.initial` is read as a
-     velocity and `translation_range` xz/y as distance ÷ run_time, with the range's own
-     `initial`/`delta` sub-fields unmapped.
+  2. **Ground-rest / bounce is deferred.** `do_intersections` + `bounce_sequence` are not simulated
+     (counted deferred at `AnimRuntime.cs:2034`), so a piece integrates freely over `run_time` then
+     **holds its final pose** — translate a little, stop.
+  ⚠ A third cause once listed here — "the magnitude decode is unsettled TUNE", `translation_range`
+  xz/y read as distance ÷ run_time with `initial`/`delta` unmapped — is **settled and no longer a
+  cause**: xz/y are an azimuth/elevation in degrees and `initial` the launch speed, `delta` a speed
+  ramp (`docs/HISTORY.md` 2026-08-01, census of all 1,217 events). Do not re-open it. How much
+  limpness is left after that fix is itself worth a look before this item is scheduled.
   **LARGER:** there is no single correct number — livelier world debris means either a world-object
   launch multiplier (a TUNE mirroring the crash's `WreckMomentum`) or implementing `bounce_sequence`
   ground-rest (the deferred Layer-1.5 physics-ray work). Both need an original-game A/B. Cross-ref the
