@@ -11021,9 +11021,12 @@ golden is captured at ≤2.00 s, which contains at most two 1.0 s rollovers. `.\
 352 units, 17/17 suites, engine errors clean, **13 goldens hash-identical** — nothing needed
 re-pinning, and that is a statement about the shots' 2-second window, not evidence about traffic.
 
-**Still owed at the controls:** watch C2's studebakers and C1's police car for a lap. The routes now
-run ~1.7% faster (one step per lap recovered) and the 0.02 s destruction loops 1.67× faster; both are
-corrections toward the authored data, but the boom sequences are the visible change.
+**Playtest passed (2026-08-02, user):** "no artifacts, no jittering". The routes now run ~1.7% faster
+(one step per lap recovered) and the 0.02 s destruction loops 1.67× faster; both are corrections
+toward the authored data, and neither introduced visible stepping — which is the failure mode a
+catch-up-within-the-frame rollover would have shown. Not separately timed at the controls: whether a
+studebaker's lap now matches the original's, which needs an A/B against the original, not our own
+before/after.
 
 **Corrected in passing.** `ww_balmoral1/2/3` are **C3/M05** (`extracted/C3/M05/mis_anim/
 britbalmoral_*-ww_balmoral*.json`), not C1 — wrong in `backlog.md`, in the entry above, and in the
