@@ -23,6 +23,10 @@ namespace CSVM.Flight;
 /// </summary>
 public sealed partial class ProjectilePool : Node3D
 {
+    /// <summary>The <c>shooterId</c> of a round nobody owns — the weapon lab's, and the default.
+    /// It matches no player, so such a round can still warn every aircraft it passes.</summary>
+    public const int NoShooter = -1;
+
     /// <summary>Where a hit's damage goes (C23): given the struck collider and the weapon's
     /// <c>HEALTH_DAMAGE</c>, apply it to the destructible that collider belongs to. Wired to
     /// <c>AnimRuntime.DamageAt</c> in flight; null when there is no destructible system (the static
@@ -334,6 +338,11 @@ public sealed partial class ProjectilePool : Node3D
     /// Tracers still render in every pane; only the streak's screen-space direction uses this.</summary>
     public Camera3D? Listener { get => _listener; set => _listener = value; }
 
+    /// <summary>The aircraft each round's swept step is measured against for the near-miss cue
+    /// (BL-087), one per flight rig. Empty in every build that has no player aircraft (the weapon
+    /// lab, the dump probes), which costs the scan nothing.</summary>
+    public List<NearMissTarget> NearMissTargets { get; } = new();
+
     /// <summary>Whether an authored effect radius is also a positive-health damage blast.</summary>
     public static bool HasBlastDamage(WeaponDef weapon) =>
         weapon.HealthDamage is > 0f && weapon.ImpactProximity is > 0f;
@@ -407,8 +416,13 @@ public sealed partial class ProjectilePool : Node3D
     /// <summary>Fires one round of <paramref name="weapon"/> from the world muzzle transform,
     /// inheriting the launch platform's velocity, with a random offset inside the weapon's
     /// <c>CANNON_SPREAD</c> cone. Also flashes the muzzle. Silently drops the round if the pool is
-    /// momentarily full (a soft cap, never a crash).</summary>
-    public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel)
+    /// momentarily full (a soft cap, never a crash).
+    ///
+    /// <para><paramref name="shooterId"/> is who fired — a <c>FlightController.PlayerIndex</c>, or
+    /// <see cref="NoShooter"/> for a round nobody owns (the weapon lab). It exists for the
+    /// near-miss cue's self-exclusion, so a pilot flying through their own line of fire never
+    /// warns themselves; identity, not weapon, is what excludes (BL-087).</para></summary>
+    public void Spawn(WeaponDef weapon, Transform3D muzzle, Vector3 inheritVel, int shooterId = NoShooter)
     {
         // The launch bark (BL-211): only rockets/ordnance carry a FIRE.SOUND — every cannon's is
         // null in the data (LOOPED_SOUND_NAME covers continuous gunfire instead), so this is a
@@ -469,6 +483,7 @@ public sealed partial class ProjectilePool : Node3D
                 Model = model,
                 Trails = trails,
                 RollRate = rollRate,
+                Shooter = shooterId,
             };
             if (slot >= _projHigh)
                 _projHigh = slot + 1;
@@ -588,6 +603,7 @@ public sealed partial class ProjectilePool : Node3D
             {
                 if (ProximityFuseTriggered(space, p.Weapon, prev, next, p.Vel, out var fusePoint))
                 {
+                    NearMissPass(prev, fusePoint, p.Shooter);
                     Impact(p.Weapon, fusePoint, null, Vector3.Zero);
                     p.Alive = false;
                     KillModel(ref p);
@@ -599,13 +615,16 @@ public sealed partial class ProjectilePool : Node3D
                 var hit = space.IntersectRay(_ray);
                 if (hit.Count > 0)
                 {
-                    Impact(p.Weapon, (Vector3)hit["position"], hit["collider"].Obj as Node, (Vector3)hit["normal"]);
+                    var hitPoint = (Vector3)hit["position"];
+                    NearMissPass(prev, hitPoint, p.Shooter);
+                    Impact(p.Weapon, hitPoint, hit["collider"].Obj as Node, (Vector3)hit["normal"]);
                     p.Alive = false;
                     KillModel(ref p);
                     ReleaseTrails(ref p);
                     continue;
                 }
             }
+            NearMissPass(prev, next, p.Shooter);
             p.Pos = next;
             p.Age += dt;
             // The FLYOUT smoke trail rides the round: one authored puff per DISTANCE_INTERVAL
@@ -1664,6 +1683,27 @@ public sealed partial class ProjectilePool : Node3D
         return null;
     }
 
+    // The incoming-fire near-miss cue (BL-087): the round's ACTUAL travelled segment this step —
+    // muzzle-ward end to wherever it ended up, including a hit or fuse point — measured against
+    // every registered aircraft. A round is silent for the pilot who fired it: exclusion is by
+    // shooter IDENTITY, not by weapon, so flying through your own line of fire (a hard turn into a
+    // burst you just sent) still warns nobody, which is the intended reading of "your own rounds".
+    // The radius is a TUNE, not data — see WarningShotCue.PassRadius.
+    private void NearMissPass(Vector3 from, Vector3 to, int shooter)
+    {
+        if (NearMissTargets.Count == 0)
+            return;
+        float radius = Config.GetFloat("weapons.warningShotRadius", WarningShotCue.PassRadius);
+        foreach (var t in NearMissTargets)
+        {
+            if (t.ShooterId == shooter)
+                continue;
+            float d = WarningShotCue.SegmentPointDistance(from, to, t.Position());
+            if (d <= radius)
+                t.OnPass(d);
+        }
+    }
+
     private float RandRange(float a, float b) => a + _rng.Randf() * (b - a);
 
     // A weapon's SOUND binding (FIRE/IMPACT) may name a SOUND_GROUPS entry (e.g. the incendiary
@@ -1796,6 +1836,7 @@ public sealed partial class ProjectilePool : Node3D
         public TrailEmitter[]? Trails; // the FLYOUT MODEL_ANIMATION smoke-trail emitters (C21)
         public float RollRate;   // rad/s about the nose axis (the sonic spinner); 0 = no roll
         public float Age;        // s since launch — drives the roll angle
+        public int Shooter;      // who fired it (PlayerIndex); NoShooter when nobody owns it
     }
 
     private struct Sprite
@@ -1834,6 +1875,17 @@ public sealed partial class ProjectilePool : Node3D
 
     // One reusable trail emitter: a Puffer built for one authored PUFFER_STATE, owned by the pool
     // and lent to one live round at a time (see AcquireTrails).
+    /// <summary>One aircraft the near-miss cue tests rounds against. The rig supplies its own live
+    /// position (the plane is a moving sim value, not a node transform the pool could cache) and
+    /// takes the pass distance in metres; <see cref="ShooterId"/> is the identity whose own rounds
+    /// never warn it.</summary>
+    public sealed class NearMissTarget
+    {
+        public int ShooterId;
+        public System.Func<Vector3> Position = null!;
+        public System.Action<float> OnPass = null!;
+    }
+
     private sealed class TrailEmitter
     {
         public Puffer Puffer = null!;

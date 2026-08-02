@@ -215,7 +215,8 @@ public partial class FlightController : Node3D
     /// work). Invoked when a player presses R on the shared results board.</summary>
     public Action? RestartRace;
 
-    /// <summary>0-based player index — this plane's seat in the race and its pane.</summary>
+    /// <summary>0-based player index — this plane's seat in the race and its pane, and the
+    /// identity a round it fired carries (<c>ProjectilePool.Spawn</c>'s shooter id).</summary>
     public int PlayerIndex;
 
     /// <summary>Draw the collision probe — the swept ray plus the airframe boxes the
@@ -343,6 +344,7 @@ public partial class FlightController : Node3D
     private float _throttle;
     private double _sinceTelemetry;
     private bool _crashed;                       // frozen at the impact point, waiting for respawn
+    private WarningShotCue? _warningShots;       // the near-miss cue's shipped accumulator (BL-087)
     private FlightInput _lastInput;              // this physics frame's stick input (drives the surfaces)
     private float _autoRespawnIn;                // s until auto-respawn (HoldSegments runs only)
     private float _autoRestartIn = AutoRespawnDelay; // s until auto-rematch on a finished race (HoldSegments runs only)
@@ -392,8 +394,22 @@ public partial class FlightController : Node3D
         _camera = camera;
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
+        _warningShots = new WarningShotCue(model.Stats.WarningShotMax,
+            model.Stats.WarningShotDissipation, model.Stats.WarningShotInterval);
         Respawn();
     }
+
+    /// <summary>Registers this aircraft with the shared pool as a near-miss cue target (BL-087):
+    /// any round not fired by this pilot that passes inside <see cref="WarningShotCue.PassRadius"/>
+    /// sounds <c>bullet_warning_sg</c> here, rate-limited by the shipped accumulator. Call after
+    /// <see cref="PlayerIndex"/> is set — the index IS the self-exclusion identity.</summary>
+    public void AttachWarningShotCue(ProjectilePool pool) =>
+        pool.NearMissTargets.Add(new ProjectilePool.NearMissTarget
+        {
+            ShooterId = PlayerIndex,
+            Position = () => _model.Position,
+            OnPass = OnNearMiss,
+        });
 
     public override void _Ready()
     {
@@ -575,6 +591,10 @@ public partial class FlightController : Node3D
         // clock never stops (a deliberate rule); it stops only at AllComplete (inside Tick). A
         // halted GameClock stops the calls entirely, so the timer freezes with the rest of the sim.
         Stunt?.Tick(dt);
+
+        // The near-miss accumulator drains on the sim clock like everything else here; the pool
+        // registers passes into it earlier in the same step (GameSession.DriveSimSteps order).
+        _warningShots?.Tick(dt);
 
         // Debug: force-complete the run so the results board renders for a deterministic
         // screenshot. In a race the players finish STAGGERED by index (and their totals padded by
@@ -1168,7 +1188,7 @@ public partial class FlightController : Node3D
                 {
                     var muzzle = g.Muzzles[st.NextMuzzle % g.Muzzles.Count];
                     st.NextMuzzle++;
-                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel);
+                    Projectiles.Spawn(g.Weapon, muzzle.GlobalTransform, inheritVel, PlayerIndex);
                     if (!InfiniteAmmo)
                     {
                         g.Ammo--;
@@ -1259,7 +1279,7 @@ public partial class FlightController : Node3D
         }
         _rocketDryWarned = false;
         var inheritVel = _model.VelocityDir * _model.Speed;
-        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel);
+        Projectiles.Spawn(hp.Weapon, hp.Pylon.GlobalTransform, inheritVel, PlayerIndex);
         if (!InfiniteAmmo)
         {
             hp.Ammo--;
@@ -1617,6 +1637,19 @@ public partial class FlightController : Node3D
             }
         }
         return true;
+    }
+
+    /// <summary>One round passed close. The accumulator decides whether it is heard: intensity
+    /// accrues here and the cue re-triggers no faster than the shipped interval, so a burst walking
+    /// past the canopy is one warning, not thirty.</summary>
+    private void OnNearMiss(float distance)
+    {
+        if (_crashed || _warningShots == null || !_warningShots.Register())
+            return;
+        string? variant = Audio?.OnWarningShot();
+        // The breadcrumb the cue otherwise leaves only in the speakers: which pilot, how close, and
+        // which of the three pass samples drew — an at-the-controls report is judgeable from it.
+        Log.Info("weapons", $"near miss P{PlayerIndex + 1} at {distance:0.0} m intensity={_warningShots.Intensity:0.00} snd={variant ?? "none"}");
     }
 
     /// <summary>The survivable scrape's authored per-surface reaction (B3): the struck collider's

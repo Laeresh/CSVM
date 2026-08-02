@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-226`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-231`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -831,25 +831,23 @@ the document alone, it says so and marks the value TUNE.
   (`armor_damage_range`/`health_damage_range`/`bounce_factor`) is unconsumed on **every** axis —
   weapons, grazes, and crashes alike. See `BL-172` for the pushback half of the same block.
 
-- `BL-087` **Incoming-fire audio: the cue set ships complete and nothing can trigger it.** `bullet_warning_sg`
-  (= `snd_bulletpass1-3`, 3D, `RANGE [20,200]`) is bound in `player.json` as `warning_shot_sound`,
-  and the whole near-miss accumulator ships with it: `warning_shot_max 2.0`,
-  `warning_shot_dissipation 2.0`, `warning_shot_interval 1.0`. `bullet_hit_sg`
-  (= `snd_ricochet1-4`) is `bullet_hit_sound` in the same file **and** a `static_sound` on the five
-  `player_pfighter-bulletN` canopy-hole defs (the `bullethole_anims` of `docs/formats/vehicle.md`,
-  10 files per chapter × 8), which also carry `window_hit_sg` (= `snd_windowhit1-3`, non-3D).
-  **No caller in `CSVM/src` for any of it.** The design's rule is that incoming-fire intensity is
-  how the player reads a shooter's distance, calibre and ammo type — with that accumulator as the
-  rate/loudness term. Implementation is a near-miss test in `Projectile.cs` against each player rig.
-  ⚠ **Traps.** These are *not* "referenced by no world data" — `window_hit_sg`/`bullet_hit_sg` sit
-  on 80 shipped defs; only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
-  named nowhere). **The blocking dependency is that nothing can shoot an aircraft:** a plane exists
-  in physics only as a `CastMotion` query shape (`PlaneCollider`, used at
-  `FlightController.cs:1376`), never as a body, so a projectile raycast can never strike one — own
-  plane or another player's. The **near-miss cue does not need that** (segment-to-point distance
-  against each `PlayerRig`), so `bullet_warning_sg` is buildable today and would sound in 2–4P
-  splitscreen; `bullet_hit_sg` waits on aircraft bodies and `window_hit_sg` on a cockpit view (the
-  bullet defs are `PlayerFirstPerson`-gated). Single-player hears none of it until M4 AI shoots back.
+- `BL-226` **The incoming-fire cue set's other two halves are blocked on things that do not exist
+  yet.** The near-miss third landed (`BL-087`, 2026-08-02); `bullet_hit_sg` (= `snd_ricochet1-4`,
+  `player.json`'s `bullet_hit_sound`) and `window_hit_sg` (= `snd_windowhit1-3`, non-3D) did not.
+  Both sit on the five `player_pfighter-bulletN` canopy-hole defs (the `bullethole_anims` of
+  `docs/formats/vehicle.md`, 10 files per chapter × 8), so they are shipped and referenced, not
+  orphans. The design's rule is that incoming-fire intensity is how the player reads a shooter's
+  distance, calibre and ammo type; the accumulator that rates it is now decoded and running
+  (`WarningShotCue`), so both cues can hang off it once their blockers clear.
+  ⚠ **Traps.** (a) **The blocker for `bullet_hit_sg` is that nothing can shoot an aircraft:** a plane
+  exists in physics only as a `CastMotion` query shape (`PlaneCollider`), never as a body, so a
+  projectile raycast can never strike one — own plane or another player's. Giving aircraft real
+  bodies is the prerequisite, and it is not a small change (every round currently passes through
+  every plane, including the firer's own). (b) `window_hit_sg` additionally needs a cockpit view —
+  the bullet defs are `PlayerFirstPerson`-gated. (c) **Do not fake either off our collision path**:
+  firing the hit cue on a wall scrape conflates "I was shot" with "I hit something", the trap
+  `BL-222` records. (d) Only `snd_warningshot1-3` are true orphans (in no `SOUND_GROUPS` entry and
+  named nowhere) — do not conflate the four groups.
 
 - `BL-088` **Danger Zone scoring uses one sphere where the original used two gate volumes.**
   `StuntMission.Update` tests one point against `DzRadius` 15 m, order-free
@@ -1254,6 +1252,16 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-230` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
+  the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
+  the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the
+  sound def's `RANGE [20,200]` is the 3D falloff window, not a trigger radius. Judge it at the
+  controls — `--incoming=<metres>` walks a burst past at a chosen distance, and
+  `weapons.warningShotRadius` moves the threshold without a rebuild (config.json, so **not** under
+  `--det`).
+  ⚠ Traps: `CANNON_SPREAD` scatters each round several metres over any real firing range, so the
+  achieved distance is a distribution — judge over a burst, never off one pass. Raising it far enough
+  that a round crossing the sky sounds is the failure mode, not a louder cue.
 - `BL-227` **Rocket blast falloff + knockback magnitude (D10, 2026-08-01).** The radius and full
   health damage are authored (`IMPACT_PROXIMITY`, `HEALTH_DAMAGE`), but the shipped data does not
   encode a falloff curve or impulse. D10 uses linear falloff to zero at the edge and

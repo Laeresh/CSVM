@@ -68,6 +68,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
+- `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
+- `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable before anything in the world shoots back.
 - `src/Flight/SpawnPoints.cs` — flight spawn from the mission's own zrdr: ia.json `spawn_points`, or objectives.json PLAYER_INIT as fallback.
 - `src/Flight/MissionTargets.cs` — mission `targets.json` loader: world-node name → objective display keys, resolved through `Messages`.
 - `src/Flight/StuntMission.cs` — Stunt Flying state: ia.json `dzones` → a danger-zone run with completion, clock and splits, one per pilot.
@@ -676,8 +678,11 @@ against `weapons.tracerMinPixels` via `MinWorldSizeForPixels` (inverts the liste
 FOV/viewport-height projection), so a round far enough out still reads as a fleck instead of
 shrinking under a pixel — floored *before* the muzzle-growth cap, so it never outgrows how far the
 round has actually flown.
-`Spawn(weapon, worldMuzzle, inheritVel)` fires one round; one pool per session, fed by every
-player's guns. `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
+`Spawn(weapon, worldMuzzle, inheritVel, shooterId)` fires one round; one pool per session, fed by
+every player's guns — `shooterId` is the firing `PlayerIndex` (`NoShooter` for the lab's), carried on
+the round so the near-miss cue can exclude its own. `NearMissTargets` is that cue's registry (BL-087):
+each step measures the round's ACTUAL travelled segment — hit/fuse point included — against every
+registered aircraft but its shooter's, and reports the pass distance (`WarningShotCue`). `DamageSink` (→ `AnimRuntime.DamageAt`) turns a hit into destructible damage;
 `EffectSink` (→ `AnimRuntime.PlayEffectAt`) plays the non-model impact effects — rockets on the
 runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family's longest authored
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
@@ -714,13 +719,42 @@ contact point through `DETONATION_DOT_PRODUCT`. The linear curve and 1 N·s/HP i
   fallback when a chapter lacks the rocket's prototype model; the empty stage (no world program)
   flies trail-less.
 
+## src/Flight/WarningShotCue.cs
+The incoming-fire near-miss cue's shipped accumulator (player.json `warning_shot_max` 2.0 /
+`_dissipation` 2.0 / `_interval` 1.0), plus the swept-segment-to-point distance a round's step is
+measured with — lifted out of `FlightController` so both unit-test without a live node, the same
+split `WeaponCursor` uses. One pass accrues 1.0, saturating at max, draining at dissipation/s; the
+cue re-triggers no faster than the interval.
+⚠ The three values ship but their UNITS do not — this reading is chosen. With the shipped numbers
+  the interval is the only term a pilot hears (one pass drains in 0.5 s); the meter's wider purpose
+  is likely the battle state the neighbouring `pre_battle_sound`/`in_battle_sound` keys drive.
+⚠ `PassRadius` 15 m is **not in the data** (TUNE `BL-230`, `weapons.warningShotRadius`). The sound
+  def's `RANGE [20,200]` is the 3D falloff window, NOT a trigger radius — do not read one as the other.
+⚠ The whole swept segment must be tested, never the endpoints: a gun round covers ~8 m per 60 Hz
+  frame, so a per-frame point test misses most passes outright.
+
+## src/Flight/IncomingFire.cs
+`--incoming[=metres[,wep_id]]` — the near-miss test rig: a phantom shooter 120 m on each player's
+six, alternating sides, firing the target's own gun (or the named weapon) into the shared pool under
+a shooter identity no player holds. Exists because nothing in the world shoots back until M4 AI, so
+the cue would otherwise need a second pilot in splitscreen. Aims along the target's own nose with a
+lateral offset, so the round overtakes on a parallel track and the pass distance holds without lead
+maths.
+⚠ **Near misses only — a hit cannot be simulated by any rig.** An aircraft exists to the projectile
+  raycast as nothing at all (collision is the swept `PlaneCollider` query boxes, not a body), which
+  is why `bullet_hit_sg` stays unbuildable (`BL-226`).
+⚠ Standoff is short on purpose: `CANNON_SPREAD` grows with range and past ~200 m throws rounds clean
+  outside the trigger radius, which would read as a broken cue. The achieved distance still scatters
+  a few metres around the requested one — judge over a burst, never one pass.
+
 ## src/Flight/PhysicsConstants.cs
 `PhysicsConstants.NomGravity` — the single 20 m/s² player.json `nom_gravity` value, shared by
 `PlaneStats.Gravity`'s default and `ProjectilePool.WorldGravity` so the two can't drift apart.
 
 ## src/Flight/PlaneStats.cs
 Typed per-plane stats: vehicle.json `dynamics` (resolved through the `kind_of` def chain) +
-engines.json stock engine power + player.json globals, the `engine_sound` def name with its
+engines.json stock engine power + player.json globals (the flight constants and the near-miss cue's
+`warning_shot_*` block), the `engine_sound` def name with its
 volume/pitch `SoundCurve`s (clamped two-point ramps), `destroyable_parts` → `DestroyablePart`
 records (name, max HP, `critical`/`engine` flags, `got_hit_anim`, per-part `injure_anims`), and
 the def-level `VehicleInjureAnims`. Schema: docs/formats/vehicle.md.
@@ -874,7 +908,9 @@ in `Update`), `OnCrash` → `snd_exp_plane1..4`, `OnGroundExplosion`/`OnWaterExp
 crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water_a` from the
 `plane_big_splash` inside the sea dive — the crash runtime renders effects, never sound),
 `OnGraze(water)` → the survivable scrape's authored `snd_exp_water_b`/`snd_exp_ground_b`
-(touchdown.zrd; rate-limited by `FlightController`, not here).
+(touchdown.zrd; rate-limited by `FlightController`, not here). `OnWarningShot` draws one
+`bullet_warning_sg` variant per near miss (player.json `warning_shot_sound` is a SOUND_GROUPS name, so
+`Setup` takes the group table too; rate-limited by `FlightController`'s `WarningShotCue`, same split).
 ⚠ `WhineMixGain` 0.12 (TUNE), `Config`-wired (`flightAudio.whineMixGain`): don't raise it back —
   reader "volume" is not a linear mix gain (the original's whine sits 12–18 dB below the raw curve
   cap); re-derive from a new reference. `DamagedEngineMixGain` 1.0 is the same shape
@@ -1020,6 +1056,10 @@ sparks) / `touchdown_dirt` / `touchdown_water`, staged at the contact point via 
 (the world-effects runtime) with `FlightAudio.OnGraze` under it, one per `GrazeReactionInterval`.
 Where it stages is an open A/B — `graze.siteAtContact`, default the contact point (judged at the
 controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE` offsets assume.
+`AttachWarningShotCue` registers the aircraft on the pool as a near-miss target and `OnNearMiss`
+rates the passes through `WarningShotCue` into `FlightAudio.OnWarningShot`; `PlayerIndex` is both
+the pane seat and the identity every round this pilot fires carries, so it must be set before the
+registration (the assembler sets it at construction, not in the stunt block).
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt (inverted flight renders upside
   down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
   distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones

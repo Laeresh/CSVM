@@ -203,6 +203,12 @@ public sealed record SessionSpec
     public int? AmmoCap { get; private set; }
     public bool AutoFire { get; private set; }
     public bool AutoFireRockets { get; private set; }
+    /// <summary><c>--incoming[=metres[,wep_id]]</c>: the near-miss test rig — a phantom shooter on
+    /// each player's six walking bursts past the canopy, so the incoming-fire cue is reachable
+    /// before there is anything in the world that shoots back. Null when the flag was absent.</summary>
+    public float? IncomingPass { get; private set; }
+    /// <summary>Which weapon <c>--incoming</c> fires; null takes the target's own first gun.</summary>
+    public string? IncomingWeapon { get; private set; }
     public (FlightInput, float)[][]? HoldSets { get; private set; }
     /// <summary>The <c>--damage=</c> preset pairs (part, fraction 0–1); null when <c>--damage</c>
     /// carried no value.</summary>
@@ -522,6 +528,14 @@ public sealed record SessionSpec
                     notes.Add(new Note("weapons", "--ammo= overrides the earlier --infinite-ammo; using the capped load"));
                     s.InfiniteAmmo = false;
                 }
+            }
+            else if (arg == "--incoming") { s.IncomingPass = IncomingFire.DefaultPass; }
+            else if (arg.StartsWith("--incoming="))
+            {
+                var parts = arg["--incoming=".Length..].Split(',');
+                s.IncomingPass = parts[0].Length > 0 ? Flt(parts[0]) : IncomingFire.DefaultPass;
+                if (parts.Length > 1 && parts[1].Length > 0)
+                    s.IncomingWeapon = parts[1];
             }
             else if (arg == "--fire") { s.AutoFire = true; }
             else if (arg == "--fire-rockets") { s.AutoFireRockets = true; }

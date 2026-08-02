@@ -10160,3 +10160,47 @@ struck body) still forces dirt, so `c1-crash`'s golden is unmoved. `.\RunTests.p
 units, 16/16 engine suites, engine errors clean, **13 golden hashes unchanged**. 8-chapter
 `--freecam` regression: 0 errors, per-chapter node/mesh counts unchanged (freecam builds no crash
 rig, and all 8 freecam goldens are hash-identical).
+
+## 2026-08-02 — M3 polish-5 B7: `BL-087` incoming-fire near-miss cue
+
+`bullet_warning_sg` now sounds when someone else's round passes close. The whole cue set shipped and
+nothing called it: `player.json` binds `warning_shot_sound` = `bullet_warning_sg` (= `snd_bulletpass1-3`,
+3D, `RANGE [20,200]`) beside `warning_shot_max 2.0` / `_dissipation 2.0` / `_interval 1.0`.
+
+`ProjectilePool` now carries a `shooterId` per round (`FlightController.PlayerIndex`; `NoShooter` for
+the weapon lab) and a `NearMissTargets` registry: every step measures each round's **actually
+travelled** segment — hit and fuse points included — against every registered aircraft but its
+shooter's. The swept segment is the point: a gun round covers ~8 m per 60 Hz frame, so a per-frame
+point test would miss most passes. `WarningShotCue` holds the shipped accumulator and the geometry,
+engine-free (the `WeaponCursor` split), and `FlightAudio.OnWarningShot` draws one of the group's three
+variants — own-ship and non-positional like every other per-player cue, since in splitscreen only the
+pilot who was nearly hit may hear it.
+
+**What is data and what is chosen.** The three values ship; their units do not. The reading
+implemented is 1.0 accrued per pass, saturating at `max`, draining at `dissipation`/s, re-triggering
+no faster than `interval` — which makes the interval the term a pilot actually hears. The **trigger
+distance is not in the data at all**: `PassRadius` 15 m is a TUNE (`BL-230`,
+`weapons.warningShotRadius`), and the sound def's `RANGE [20,200]` is the 3D falloff window, not a
+radius. Only the near-miss third of the cue set was buildable — `bullet_hit_sg` needs aircraft to be
+bodies and `window_hit_sg` a cockpit; both moved to `BL-226` with their blockers named rather than
+being faked off our wall-collision path.
+
+**A latent bug this exposed.** `FlightRigAssembler` set `PlayerIndex` only inside the `--stunt`
+block, so every free-flight pilot was index 0. Self-exclusion depends on that index, so it now sets
+at construction.
+
+**How verified.** `.\RunTests.ps1` **PASS** — 326 units (6 new `WarningShotCueTests`), 17/17 engine
+suites including the new `warning-shot` (another pilot's round registers a pass; the same round under
+the target's own identity registers none; a round 100 m wide registers none), engine errors clean, 13
+golden hashes unchanged (audio-only, and `--incoming` is off by default). Live, on the empty stage:
+`--incoming` logged three passes at 13.9 / 11.7 / 12.2 m drawing `snd_bulletpass1`, `2`, `3` in turn
+(the group's recency draw working); **able-to-fail both ways** — `--incoming=200` fired four rounds
+and registered nothing, and a 10 s `--fire --infinite-ammo` run of the pilot's own guns registered
+nothing.
+
+**The test rig.** `--incoming[=metres[,wep_id]]` parks a phantom shooter 120 m on each player's six
+firing the target's own gun into the shared pool under an identity no player holds, so the cue is
+reachable in single player. The standoff is short deliberately: `CANNON_SPREAD` grows with range and
+past ~200 m throws rounds outside the trigger radius, which would read as a broken cue rather than as
+scatter. It cannot simulate a **hit** — an aircraft is not a body to the projectile raycast, which is
+the same blocker `BL-226` records.

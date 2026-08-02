@@ -128,6 +128,7 @@ public partial class GameSession : Node3D
     // The physics-stepped consumers this node drives itself when the clock is not realtime, in
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
+    private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
     private UI.WeaponLab? _weaponLabNode;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
@@ -1286,6 +1287,7 @@ public partial class GameSession : Node3D
                 CrashProgram = state.CrashProgram,
                 Sounds = state.Sounds,
                 SoundDefs = state.SoundDefs,
+                SoundGroups = state.SoundGroups,
                 DebugCollision = state.DebugCollision,
             });
         for (int pi = 0; pi < _rigs.Count; pi++)
@@ -1311,6 +1313,20 @@ public partial class GameSession : Node3D
                     rig.Controller.RestartRace = () => RestartRace(race);
             GD.Print($"stunt race: {_rigs.Count} pilots over {stuntZones!.TotalCount} danger zones, " +
                      "own progress + clock each, shared ranked board");
+        }
+
+        // --incoming: the near-miss test rig — a phantom shooter on every pilot's six, so the
+        // incoming-fire cue is reachable with one player and nothing in the world that shoots back.
+        if (_spec.IncomingPass is float incomingPass)
+        {
+            var incoming = new IncomingFire(projectiles, weaponDefs, incomingPass, _spec.IncomingWeapon);
+            foreach (var rig in _rigs)
+                if (rig.Controller != null)
+                    incoming.AddTarget(rig.Controller);
+            _worldRoot!.AddChild(incoming);
+            _incomingFire = incoming;
+            GD.Print($"--incoming: rounds passing {incomingPass:0.0} m from every player" +
+                     (_spec.IncomingWeapon != null ? $" ({_spec.IncomingWeapon})" : " (their own gun)"));
         }
 
         if (_rigs.Count > 1)
@@ -1593,6 +1609,7 @@ public partial class GameSession : Node3D
         for (int i = 0; i < clock.Steps; i++)
         {
             float dt = clock.Dt;
+            _incomingFire?.SimStep(dt);   // fires into the pool, so it steps before it
             _projectiles?.SimStep(dt);
             foreach (var rig in _rigs)
             {

@@ -69,6 +69,14 @@ public sealed class PlaneStats
     public float Gravity = PhysicsConstants.NomGravity; // nom_gravity — the game's arcade gravity, m/s²
     public float StallMag = 1.25f;
 
+    // The near-miss cue's shipped accumulator (warning_shot_*) — see WarningShotCue for the units
+    // question. The sound is a SOUND_GROUPS name (bullet_warning_sg → snd_bulletpass1-3), not a
+    // sounds.json def, so it resolves through the group table like every other one.
+    public float WarningShotMax = 2f;
+    public float WarningShotDissipation = 2f;   // intensity per second
+    public float WarningShotInterval = 1f;      // s between cues
+    public string WarningShotSound = "bullet_warning_sg";
+
     // sound (vehicle.json 'engine_sound' name + player.json curve blocks).
     // Engine curves run on throttle [0..1]; whine (the 'prop_sound' block — only
     // audible past fd_speed, i.e. a dive) and rattle run on speed/fd_speed.
@@ -282,6 +290,10 @@ public sealed class PlaneStats
             var player = ZrdrDict.FromAlternating(playerList);
             stats.Gravity = player.Float("nom_gravity", stats.Gravity);
             stats.StallMag = player.Float("stall_mag", stats.StallMag);
+            stats.WarningShotMax = player.Float("warning_shot_max", stats.WarningShotMax);
+            stats.WarningShotDissipation = player.Float("warning_shot_dissipation", stats.WarningShotDissipation);
+            stats.WarningShotInterval = player.Float("warning_shot_interval", stats.WarningShotInterval);
+            stats.WarningShotSound = player.Str("warning_shot_sound") ?? stats.WarningShotSound;
 
             // curve blocks hold (x, y) pairs: min_* = ramp start, max_* = ramp end
             static SoundCurve Curve(ZrdrDict d, string minKey, string maxKey, SoundCurve fb) =>

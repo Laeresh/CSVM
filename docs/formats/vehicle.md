@@ -53,14 +53,15 @@ One shared reader, flat alternating `KEY, [values…]`, ~45 top-level keys. Flig
 (`nom_gravity`, `maxAOA`, `liftAOAs`, `highGs`/`lowGs`, the `yaw_*`/`turn_*` fade curves,
 `stall_mag`, `drag_factor`) feed `PlaneStats`; the sound curve blocks (`engine_sound`,
 `prop_sound`, `rattle`) are in [sounds.md](sounds.md). Three whole subsystems in it are
-**undocumented elsewhere and unimplemented** — key names and values are data-confirmed, the
-meanings are read off the names and are **inferred**. None appears in the original design
+**undocumented elsewhere** — key names and values are data-confirmed, the meanings are read off the
+names and are **inferred**; one of the three (the near-miss counter) is now implemented on that
+inferred reading, the other two are not. None appears in the original design
 document, so they are shipped-only features.
 
 | Keys | Values | Reading |
 |---|---|---|
 | `sticky_bullet_catchup_rate` `_inaccuracy` `_forget_interval` `_dist_factor` | 5.0 / 1.0 / 1.5 / 0.0 | **Bullet magnetism / aim assist.** Rounds already in flight are steered toward a tracked target at `catchup_rate`, within `inaccuracy`, dropped `forget_interval` seconds after the lock is lost; `dist_factor` 0 disables any range scaling. |
-| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback.** A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, sampled every `interval`, playing a sound group when it trips. Pairs with `bullet_hit_sound`. |
+| `warning_shot_max` `_dissipation` `_interval` `_sound` | 2.0 / 2.0 / 1.0 / `bullet_warning_sg` | **Near-miss feedback — implemented** (`WarningShotCue`, 2026-08-02). A counter of rounds passing close by, capped at `max`, decaying at `dissipation` per second, with the sound group re-triggering no faster than `interval`. **The units are not in the data**: the remake accrues 1.0 per pass, which makes `interval` the term a pilot hears. **Nor is the trigger distance** — nothing here says how close is close, and the sound def's `RANGE [20,200]` is the 3D falloff window, not a radius. Pairs with `bullet_hit_sound`, still unbuildable (nothing can strike an aircraft). |
 | `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,

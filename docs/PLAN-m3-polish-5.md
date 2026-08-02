@@ -136,7 +136,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 4. ☑ `BL-046` Census the install-wide death-effect call set against the world-effects closure
 5. ❌ `BL-061` item 3 `biggun_flying_parts` builds no puffer — stage the `fly_trail*` sub-roots
 6. ☑ `BL-059` item 2 A sea dive plays the dirt crash — make `ClassifySurface` read the surface tag
-7. ☐ `BL-087` Incoming-fire near-miss cue — `bullet_warning_sg` and its shipped accumulator
+7. ☑ `BL-087` Incoming-fire near-miss cue — `bullet_warning_sg` and its shipped accumulator
 
 ### Wave C — world-render fidelity with a measured cause
 
@@ -440,7 +440,7 @@ the successor immediately. Read
 [`anim-definitions.md`](formats/anim-definitions.md#wait_for_completion-blocks-on-the-named-callee),
 capture the transition, and do not call the variant faithful merely because both effects appeared.
 
-## B7 ☐ `BL-087` Incoming-fire near-miss cue
+## B7 ☑ `BL-087` Incoming-fire near-miss cue — **landed 2026-08-02**
 
 **Goal.** A round passing close to a player's aircraft plays `bullet_warning_sg`, rate-limited by the
 shipped accumulator — so in 2–4-player splitscreen you can hear how close that was.
@@ -471,6 +471,19 @@ invented; getting the split between "what the data says" and "what I chose" righ
 your own rounds (self-exclusion is the obvious bug). Take an able-to-fail baseline: with the threshold
 set to 0, nothing sounds; at an absurd threshold, every round sounds. `.\RunTests.ps1` green; goldens
 unchanged (audio-only, and splitscreen is not a golden surface).
+
+**Landed 2026-08-02.** `WarningShotCue` (the shipped accumulator + swept-segment distance, unit-tested
+off-engine), a `NearMissTargets` registry and a per-round `shooterId` on `ProjectilePool`,
+`FlightAudio.OnWarningShot` drawing the group's three variants, and `--incoming[=metres[,wep_id]]` —
+a phantom shooter on each player's six — because the plan's 2-player verify needs a second pilot and
+nothing in the world shoots back yet. Trigger radius **15 m** is the item's TUNE (`BL-230`,
+`weapons.warningShotRadius`); the accumulator's units are the item's other judgement call, recorded
+in `docs/formats/vehicle.md`. Verified: `.\RunTests.ps1` PASS (326 units incl. 6 new, 17/17 suites
+incl. the new `warning-shot`, 13 goldens hash-identical) plus three live probes — `--incoming` sounds
+three passes at 5.9–13.9 m through all three `snd_bulletpass` variants, `--incoming=200` fires four
+rounds and sounds none, and a 10 s `--fire --infinite-ammo` run of the pilot's own guns sounds none.
+`PlayerIndex` was set only inside the stunt block, so every free-flight pilot was index 0 — fixed at
+construction, which self-exclusion depends on.
 
 **⚠ Traps.** (a) **Do not exclude your own rounds by weapon owner alone** if a player can fly through
 their own line of fire — exclude by shooter identity, and say which you did. (b) These are **not**

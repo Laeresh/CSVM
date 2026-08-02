@@ -76,6 +76,9 @@ public sealed class FlightRigAssembler
             HoldSegments = _spec.HoldSets == null ? null
                 : _spec.HoldSets[Math.Min(pi, _spec.HoldSets.Length - 1)],
             DebugCollision = _in.DebugCollision,
+            // Set here, not in the stunt block below (where it used to live): the index is this
+            // pilot's identity for the rounds they fire, so free flight needs it too.
+            PlayerIndex = pi,
             PlaneModel = planeModel,
             Props = PropAnimator.Build(planeModel), // spin the propeller/rotor blur discs
             WingLights = WingLightBlinker.Build(planeBuilder.WingFlares), // blink the wingtip flares
@@ -251,7 +254,7 @@ public sealed class FlightRigAssembler
         if (_in.Sounds != null && _in.SoundDefs != null)
         {
             var audio = new FlightAudio { MixGain = _in.MixGain };
-            audio.Setup(_in.Sounds, _in.SoundDefs, stats);
+            audio.Setup(_in.Sounds, _in.SoundDefs, stats, _in.SoundGroups);
             controller.Audio = audio;
             controller.AddChild(audio);
             if (verbose)
@@ -265,7 +268,6 @@ public sealed class FlightRigAssembler
         {
             controller.Stunt = pi == 0 ? _in.StuntZones : _in.StuntZones.ForAnotherPlayer();
             controller.Stunt.LogTag = tag; // "P2 " in a race — one shared world, four runs
-            controller.PlayerIndex = pi;
             controller.DebugCompleteStunt = _spec.DebugScoreboard;
             // The objective marker HUD, one per pane: projects that player's
             // active danger zone through THEIR camera, with the edge arrow + clock
@@ -301,6 +303,10 @@ public sealed class FlightRigAssembler
 
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
         controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
+        // The incoming-fire near-miss cue (BL-087): this aircraft becomes a target every OTHER
+        // pilot's rounds are measured against. After Setup — the target reads the live flight
+        // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.
+        controller.AttachWarningShotCue(_in.Projectiles);
         controller.Name = $"player{pi + 1}";
         rig.Controller = controller;
         _worldRoot.AddChild(controller);
@@ -381,6 +387,9 @@ public sealed class FlightRigAssembler
         public AnimProgram? CrashProgram;
         public SoundArchive? Sounds;
         public Dictionary<string, SoundDef>? SoundDefs;
+        /// The SOUND_GROUPS table, for the own-ship cues whose sound is a group name rather than a
+        /// def — the near-miss warning (player.json warning_shot_sound = bullet_warning_sg).
+        public Dictionary<string, SoundGroup>? SoundGroups;
         public bool DebugCollision;
     }
 }

@@ -59,7 +59,16 @@ public partial class FlightAudio : Node
     private AudioStreamPlayer? _emptyClip;
     private float _emptyClipVol = 1f;
 
-    public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats)
+    // The near-miss cue (BL-087): warning_shot_sound names a SOUND_GROUPS entry
+    // (bullet_warning_sg → snd_bulletpass1-3), so the variant is picked per pass through the
+    // group's own weighted-recency draw rather than fixed at Setup. One player, restreamed —
+    // two passes closer together than the wav is long is exactly what the interval prevents.
+    private SoundGroup? _warningShotGroup;
+    private AudioStreamPlayer? _warningShot;
+    private System.Random? _warningShotRng;
+
+    public void Setup(SoundArchive archive, Dictionary<string, SoundDef> defs, PlaneStats stats,
+        IReadOnlyDictionary<string, SoundGroup>? groups = null)
     {
         _stats = stats;
         _archive = archive;
@@ -109,6 +118,23 @@ public partial class FlightAudio : Node
         // pair, not the crash's `_a`.
         _grazeGround = MakeOneShot(archive, defs, "snd_exp_ground_b", out _grazeGroundVol);
         _grazeWater = MakeOneShot(archive, defs, "snd_exp_water_b", out _grazeWaterVol);
+
+        // The near-miss cue's group (player.json warning_shot_sound). Own-ship and non-positional
+        // like everything else here: the def is 3D with RANGE [20,200], but a pass close enough to
+        // trigger is well inside that inner radius, i.e. full volume — and in splitscreen only the
+        // pilot who was nearly hit may hear it, which a world emitter on one shared listener cannot
+        // do. A silent group (no such name, or no WAVs) simply leaves the cue unbuilt.
+        if (groups != null && groups.TryGetValue(stats.WarningShotSound, out var warningGroup))
+        {
+            _warningShotGroup = warningGroup;
+            _warningShotRng = Rng.NewSystemRandom(Rng.Weapons);
+            _warningShot = new AudioStreamPlayer();
+            AddChild(_warningShot);
+        }
+        else
+        {
+            GD.PushWarning($"sound group not found in sounds.json: {stats.WarningShotSound}");
+        }
     }
 
     /// <summary>Start (or keep playing) the gun firing loop for the given <c>LOOPED_SOUND_NAME</c>.
@@ -230,6 +256,24 @@ public partial class FlightAudio : Node
     /// otherwise re-fire it every physics frame.</summary>
     public void OnGraze(bool water) => PlayOneShot(water ? _grazeWater : _grazeGround,
         (water ? _grazeWaterVol : _grazeGroundVol) * MixGain);
+
+    /// <summary>A round passed close enough to hear (BL-087): one draw from the warning-shot group,
+    /// already rate-limited by <see cref="WarningShotCue"/> in FlightController — same split as
+    /// <see cref="OnGraze"/>. Returns the variant that played, or null when the cue is unbuilt.</summary>
+    public string? OnWarningShot()
+    {
+        if (_warningShot == null || _warningShotGroup == null || _archive == null || _defs == null)
+            return null;
+        string? name = _warningShotGroup.Pick(_warningShotRng!);
+        if (name == null || !_defs.TryGetValue(name, out var def))
+            return null;
+        var stream = _archive.Find(def.WavName, looped: false);
+        if (stream == null)
+            return null;
+        _warningShot.Stream = stream;
+        PlayOneShot(_warningShot, def.Volume * 0.2f * MixGain);
+        return name;
+    }
 
     /// <summary>Graceful engine wind-down (future landing/parking): plays snd_propstop and
     /// kills the loops. NOT called on crash — the explosion one-shot already covers that

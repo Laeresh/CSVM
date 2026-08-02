@@ -65,6 +65,8 @@ public static class Suites
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
             "all 48 weapons mount and fire from a built plane", WeaponsFire));
+        into.Add(new TestHarness.Suite("warning-shot",
+            "the incoming-fire near-miss cue fires on another pilot's round, never on your own", WarningShot));
         into.Add(new TestHarness.Suite("damage-stages",
             "each DAMAGE_SEQUENCE def fires its stage effects across an HP sweep", DamageStages));
         into.Add(new TestHarness.Suite("damage-hd",
@@ -308,6 +310,76 @@ public static class Suites
     /// <summary>Exports a built plane to a temp <c>.glb</c> and asserts the file lands and re-imports
     /// with at least one textured mesh — the round trip the viewer's <c>--export-gltf=</c>/F10 path
     /// relies on, including that the shader skins convert to a glTF-serializable material.</summary>
+    /// <summary>The incoming-fire near-miss cue's wiring (BL-087), with its able-to-fail baseline:
+    /// a real round from another pilot flying past registers a pass, the SAME round fired by the
+    /// target's own identity registers none, and a round on a track a hundred metres wide of the
+    /// aircraft registers none either — so a pass count of 1 means the geometry, not a threshold
+    /// wide enough to catch anything. The accumulator's own arithmetic is unit-tested off-engine
+    /// (WarningShotCueTests); this is the pool half, on real ballistics.</summary>
+    private static void WarningShot(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"weapon definitions");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, null);
+        if (!weapons.TryGet("wep_01", out var gun))
+        {
+            ctx.Check(false, $"wep_01 definition loads");
+            return;
+        }
+        var textures = new TextureArchive(texturesPath);
+        ProjectilePool? pool = null;
+        try
+        {
+            var live = new ProjectilePool(textures, null, null);
+            pool = live;
+            ctx.Host.AddChild(live);
+            var target = new Vector3(0f, 500f, 0f);
+            int passes = 0;
+            float closest = float.MaxValue;
+            live.NearMissTargets.Add(new ProjectilePool.NearMissTarget
+            {
+                ShooterId = 0,
+                Position = () => target,
+                OnPass = d =>
+                {
+                    passes++;
+                    closest = Mathf.Min(closest, d);
+                },
+            });
+
+            // A round overtaking the aircraft 3 m abeam, fired 60 m astern along +Z. Short enough
+            // that the weapon's own 6° CANNON_SPREAD cone cannot throw it past the trigger radius.
+            void FireBy(int shooter, float abeam)
+            {
+                var origin = target + new Vector3(abeam, 0f, -60f);
+                live.Spawn(gun, new Transform3D(Basis.LookingAt(Vector3.Back, Vector3.Up), origin),
+                    Vector3.Zero, shooter);
+                for (int i = 0; i < 60; i++)
+                    live.SimStep(1f / 60f);
+                live.Clear();
+            }
+
+            FireBy(shooter: 1, abeam: 3f);
+            ctx.Check(passes > 0, $"another pilot's round registers a pass passes={passes}");
+            ctx.Check(closest <= WarningShotCue.PassRadius,
+                $"the pass is measured, not assumed closest={(closest < float.MaxValue ? closest : -1f):0.0} m");
+
+            passes = 0;
+            FireBy(shooter: 0, abeam: 3f);
+            ctx.Same(0, passes, $"the target's OWN round never warns it");
+
+            passes = 0;
+            FireBy(shooter: 1, abeam: 100f);
+            ctx.Same(0, passes, $"a round 100 m wide registers nothing");
+        }
+        finally
+        {
+            pool?.Free();
+            textures.Dispose();
+        }
+    }
+
     private static void GltfExport(TestContext ctx)
     {
         ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
