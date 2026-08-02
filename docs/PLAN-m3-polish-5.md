@@ -140,7 +140,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — world-render fidelity with a measured cause
 
-8. ☐ `BL-055` Honour the authored `_1`/`_2` mip levels instead of box-filtering our own
+8. ☑ `BL-055` Honour the authored `_1`/`_2` mip levels instead of box-filtering our own
 9. ☐ `BL-214` Honour the gamez model `lighting`/`fog` flags world-wide
 
 ### Wave D — the plan-sized mechanic
@@ -497,7 +497,7 @@ none of this until M4 AI shoots back; that is correct, not a failed implementati
 
 # Wave C — world-render fidelity with a measured cause
 
-## C8 ☐ `BL-055` Honour the authored `_1`/`_2` mip levels
+## C8 ☑ `BL-055` Honour the authored `_1`/`_2` mip levels — **landed 2026-08-02**
 
 **Goal.** Distant city blocks keep the street lights the artist drew into the half- and
 quarter-resolution levels, instead of averaging them into the dark with our own box filter.
@@ -525,6 +525,23 @@ alpha/mip ordering around the insertion point is already documented as load-bear
 "looks right" without a failing baseline proves nothing. Then a `--det --screenshot` of a C5 city
 block at distance, before/after. 8-chapter `--freecam` regression: zero errors, unchanged mesh/node
 counts. **Goldens will move** — name the moved shots and explain them; do not regenerate silently.
+
+**Landed 2026-08-02.** `TextureArchive.MipSource` with `Mips`/`--mips=authored|generated` (default
+authored): one `Build` path installs the archive's `_1`/`_2` siblings over the already-generated
+chain, refusing any whose size disagrees with the level it claims, and `GameSession` prints the
+per-chapter adoption. `--mips=generated` keeps the box filter and **reproduces the pre-change hash of
+all three moved goldens bit-for-bit**, so nothing was removed. Two instruments landed with it:
+`analysis/item9-depth-bias/mip_census.py` (the shipped data — 542 authored levels across the install,
+every one exactly half/quarter its base, zero referenced by any material) and `--dump-mips`, which
+measures the chain the archive actually installed. Verified: baseline `--dump-mips --mips=generated`
+on C5 reports 2/102 levels matching the artwork and `cblock1_1` at **0.000 %** above luminance 128
+(mean 15.63) where the artwork is 0.385 % (mean 4.41); the default reports **102/102** and the
+artwork's own numbers. All 8 chapters install every level they load with zero refusals. The 8-chapter
+`--freecam` regression is 0 errors with node/mesh counts identical under both policies, and pixels
+differ in exactly C2/C4/C5 — the three chapters whose goldens moved. A C5 city-at-distance capture
+goes darker overall while the bright pixels rise (mean 29.86 → 28.76, px>128 0.198 % → 0.294 %): the
+lit street grid appears where a grey mush was. `.\RunTests.ps1` PASS (326 units, 17/17 suites, 13
+goldens with the 3 named re-pins). Docs: `docs/formats/gamez.md` gained the authored-mip decode.
 
 **⚠ Traps.** (a) **`LastAlphaIsSoft` is read from raw pixels *before* mipmaps** (`:750`, with the
 comment saying so) and the surrounding docs record that the alpha channel and mip chain are treated

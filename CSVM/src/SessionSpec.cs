@@ -128,7 +128,7 @@ public sealed record SessionSpec
     public string ModeName =>
         Mode == SessionMode.AnimLab ? "anim-lab"
         : DamageTest || EffectsTest || WeaponTest || RunTests ? "test"
-        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig ? "dump"
+        : DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips ? "dump"
         : Mode == SessionMode.Freecam ? "freecam"
         : Mode == SessionMode.Viewer ? "viewer"
         : Stunt ? "stunt"
@@ -141,7 +141,7 @@ public sealed record SessionSpec
     /// <c>--dump-flight</c> run turns the bundle on yet still asks for focus.</summary>
     public bool IsScripted =>
         NoFocus || ScreenshotPath != null || ExportGltfPath != null || RunTests
-        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig
+        || DumpMarkers || DumpWeapons || DumpLoadout || DumpConfig || DumpMips
         || DamageTest || EffectsTest || WeaponTest;
 
     /// <summary><b>Resolved.</b> The chapter world is built instead of a single parked plane.</summary>
@@ -174,6 +174,10 @@ public sealed record SessionSpec
     public string SkyZone { get; private set; } = "zone2";
     public bool SkyZoneExplicit { get; private set; }
     public bool NoFog { get; private set; }
+    /// <summary><c>--mips=authored|generated</c>: whether a texture's levels 1 and 2 come from the
+    /// archive's hand-authored <c>_1</c>/<c>_2</c> siblings (the default) or are box-filtered from
+    /// the base like every level below them. See <see cref="Mech3.TextureArchive.MipSource"/>.</summary>
+    public TextureArchive.MipSource Mips { get; private set; } = TextureArchive.MipSource.Authored;
     public int AnimLod { get; private set; } = AnimRuntime.HighLod;
     public string? DestroyName { get; private set; }
     /// <summary><c>--crash[=frame]</c>: the fixed sim frame (<see cref="Utils.GameClock.Frame"/>)
@@ -234,6 +238,7 @@ public sealed record SessionSpec
         : DumpLoadout ? "--dump-loadout"
         : DumpFlight ? "--dump-flight"
         : DumpConfig ? "--dump-config"
+        : DumpMips ? "--dump-mips"
         : DamageTest ? "--damage-test"
         : EffectsTest ? "--effects-test"
         : WeaponTest ? "--weapon-test"
@@ -322,6 +327,8 @@ public sealed record SessionSpec
     public bool DumpFlight { get; private set; }
     public string DumpFlightPlane { get; private set; } = "";
     public bool DumpConfig { get; private set; }
+    public bool DumpMips { get; private set; }
+    public string DumpMipsFilter { get; private set; } = "";
     public bool DamageTest { get; private set; }
     public string DamageTestFilter { get; private set; } = "";
     public float DamageHd { get; private set; }
@@ -564,6 +571,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--sounds=")) { s.Sounds = arg["--sounds=".Length..]; }
             else if (arg.StartsWith("--messages=")) { s.Messages = arg["--messages=".Length..]; }
             else if (arg == "--no-fog") { s.NoFog = true; }
+            else if (arg.StartsWith("--mips=")) { s.SetMips(arg["--mips=".Length..]); }
+            else if (arg == "--dump-mips") { s.DumpMips = true; }
+            else if (arg.StartsWith("--dump-mips=")) { s.DumpMips = true; s.DumpMipsFilter = arg["--dump-mips=".Length..]; }
             else if (arg.StartsWith("--tex-override=")) { texOverrides.Add(arg["--tex-override=".Length..]); }
             else if (arg == "--tex-census") { s.TexCensus = true; }
             else if (arg.StartsWith("--tex-census=")) { s.TexCensus = true; s.TexCensusFilter = arg["--tex-census=".Length..]; }
@@ -977,6 +987,22 @@ public sealed record SessionSpec
             Warn("ui", $"{what} '{token}' {wanted} — ignoring it");
         }
         return kept;
+    }
+
+    /// <summary>Reads <c>--mips=</c>. An unreadable value keeps the current policy rather than
+    /// quietly falling back to one of them — a run whose mip source is not what was asked for is a
+    /// run whose pixel evidence means nothing.</summary>
+    private void SetMips(string value)
+    {
+        if (Enum.TryParse<TextureArchive.MipSource>(value, ignoreCase: true, out var source))
+        {
+            Mips = source;
+        }
+        else
+        {
+            Warn("world", $"--mips='{value}' is neither 'authored' nor 'generated' — "
+                          + $"keeping {Mips.ToString().ToLowerInvariant()}");
+        }
     }
 
     private void Warn(string category, string message) => _notes.Add(new Note(category, message));

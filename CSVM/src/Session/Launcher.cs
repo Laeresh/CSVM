@@ -199,6 +199,9 @@ public partial class Launcher : Node3D
             TextureDropIn.SetScratchDir(_repoRoot);
             TextureDropIn.EnableCensus(_spec.TexCensusFilter);
         }
+        // Read by every archive built afterwards, for the same reason the drop-in's state is a
+        // static: it settles once per launch and no consumer chooses it.
+        TextureArchive.Mips = _spec.Mips;
         // A connected pad with stick drift steers the free camera and nudges the flight model,
         // which quietly makes a "deterministic" scripted run not one. SDL's hints don't help
         // (Godot 4.7 enumerates the pad regardless), so the switch is ours.
@@ -372,6 +375,13 @@ public partial class Launcher : Node3D
         if (_spec.DumpFlight)
         {
             GetTree().Quit(_probeRunner.DumpFlight(_spec) ? 0 : 1);
+            return;
+        }
+        // --dump-mips: what the texture archive's mip chains actually hold, level by level, beside
+        // the authored levels they should be — the before/after instrument for --mips=.
+        if (_spec.DumpMips)
+        {
+            GetTree().Quit(_probeRunner.DumpMips(_spec) ? 0 : 1);
             return;
         }
 

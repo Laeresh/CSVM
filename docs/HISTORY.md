@@ -10204,3 +10204,49 @@ reachable in single player. The standoff is short deliberately: `CANNON_SPREAD` 
 past ~200 m throws rounds outside the trigger radius, which would read as a broken cue rather than as
 scatter. It cannot simulate a **hit** — an aircraft is not a body to the projectile raycast, which is
 the same blocker `BL-226` records.
+
+## 2026-08-02 — M3 polish-5 C8: `BL-055` the authored `_1`/`_2` mip levels
+
+**What landed.** `TextureArchive` installs a texture's hand-authored `_1`/`_2` siblings as mip levels
+1 and 2 instead of box-filtering its own. The whole install ships **542 such levels** (53–103 per
+chapter, on 52–91 base textures), every one exactly half or quarter its base's size and **referenced
+by no gamez material in any chapter** — they are the original's mip chain, not textures. They are not
+downsamples: the artists dropped the overall level and kept the point lights punchy, so
+`Image.GenerateMipmaps()` erased precisely what they were drawn for.
+
+`Find` and the new `BuildMipped` now share one `Build` path — decode, classify alpha, apply the
+drop-in, build the chain — so the probe measures the construction a material's lookup runs rather
+than a re-derivation. Levels are installed **over** an already-generated chain, so levels 3 and below
+keep the box filter and a texture with no sibling is bit-identical to before; a sibling whose size
+disagrees with the level it claims is refused with a warning (zero refusals across the install, but
+the name convention is a lead, not a guarantee). `GameSession` prints the per-chapter adoption.
+
+**The built-in filter is kept, not replaced.** `--mips=generated` (`TextureArchive.MipSource`)
+restores `GenerateMipmaps()` all the way down, so the two are A/B-able in one build.
+
+**Instruments.** `analysis/item9-depth-bias/mip_census.py` censuses the shipped data (counts, sizes,
+material references, authored-vs-box luminance) per chapter. `--dump-mips[=name]` reports the chain
+the archive actually installed, level by level, beside the authored artwork.
+
+**How verified.** Baseline first, on the same binary: `--dump-mips --mips=generated` on C5 reports
+**2/102** levels matching the artwork, with `cblock1_1` at mean 15.63 / **0.000 %** above luminance
+128 where the artwork is 4.41 / **0.385 %** and `cblock1_2` at 15.72 / 0.000 % against 6.77 /
+**1.123 %** — reproducing `analysis/item9-depth-bias/CBLOCK-LOD.md` §1b exactly, from the engine this
+time. The default policy then reports **102/102** and the artwork's own numbers. All 8 chapters:
+every authored level they load installs, zero mismatched, zero refused, counts agreeing with the
+independent Python census. The 8-chapter `--freecam --det` regression is **0 errors** with gamez-node
+and mesh-instance counts **identical under both policies**, and captured pixels differ in exactly
+C2/C4/C5 — the three chapters whose goldens moved and nowhere else. A C5 city-block-at-distance
+capture moves 9.22 % of its pixels: frame mean 29.86 → 28.76 and px>64 4.70 % → 3.77 % (darker
+overall) while px>128 rises 0.198 % → 0.294 % — the lit street grid appears where a grey mush was,
+which is the user's report of the original reproduced. `.\RunTests.ps1` **PASS**: 326 units, 17/17
+engine suites, engine errors clean, 13 goldens with 3 re-pinned.
+
+**The three moved goldens.** `c5-city-night` 21.8 % of pixels, max channel delta 217 — the shot that
+names the fix: the facade sheets go dark with punchy lit windows instead of an averaged grey mush
+(frame mean 14.55 → 8.79, and the frame-wide px>128 *falls* 0.853 % → 0.210 %, which is the point —
+the bright-pixel share that rises is the mip level's own, not the frame's). `c4-snow` 14.1 %, max 76
+— the `cliff01/03`, `srock1`, `terpat01` terrain sheets and the `jim_wall*`/`jim_roof*` structures at
+distance. `c2-city` a single-LSB shift, max delta 1 on under 0.01 % of pixels — C2 loads 10 authored
+levels but none reaches a mip band at that pose. **All three reproduce their pre-change hash
+bit-for-bit under `--mips=generated`**, which is the proof that the kept path is the old path.

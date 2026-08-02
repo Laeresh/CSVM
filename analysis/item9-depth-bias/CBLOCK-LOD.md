@@ -80,10 +80,17 @@ The user's observed progression is real and is a **separate finding from the z-f
   The artists dropped the overall level *and kept the street lights punchy*. A box filter averages
   every single light away (0.00% bright pixels at every level). The chain is also non-monotone
   (15.62 → 4.41 → 6.77), which no filter produces.
-- `TextureArchive.cs:100` calls `img.GenerateMipmaps()` on the base PNG and never looks for the
+- `TextureArchive` calls `img.GenerateMipmaps()` on the base PNG and never looks for the
   `_N` siblings. So we render box-filtered mips where the original renders authored ones.
   **[inferred]** That is precisely "completely dark with some points" (authored far level) versus
-  our grey mush.
+  our grey mush. (The line number this paragraph originally carried, `:100`, was already stale when
+  written and misdirected `BL-055` once — cite the call, not a line.)
+
+> **Closed 2026-08-02 by `BL-055`.** `TextureArchive` now installs the authored levels
+> (`--mips=authored`, the default; `--mips=generated` restores this box filter). The measurement
+> above is repeatable two ways: `mip_census.py` in this directory censuses the shipped PNGs per
+> chapter, and `--dump-mips` reports the chain the engine installed. See `docs/HISTORY.md`
+> 2026-08-02 and the `_1`/`_2` bullet in `docs/formats/gamez.md`.
 - Name resolution is safe: `Retrieve` takes the exact match first, so `cblock1.tif` can never
   resolve to `cblock1_1.png`. **[measured, code]**
 

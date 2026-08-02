@@ -660,6 +660,13 @@ public static class TextureDropIn
 /// Material texture names come from fixed-width 20-char fields in planes.zbd, so
 /// "blo_fusalagebottom.t" must still find "blo_fusalagebottom.png" — hence the
 /// prefix fallback.
+///
+/// <para><b>Mip levels.</b> 52–91 base textures per chapter ship hand-authored half- and
+/// quarter-resolution siblings (<c>cblock1</c>, <c>cblock1_1</c>, <c>cblock1_2</c>) that no gamez
+/// material references — they are a mip chain the artists drew, not textures in their own right.
+/// They are not downsamples: the artists dropped the overall level and kept the street lights
+/// punchy, so a box filter averages away every bright pixel the authored level keeps. See
+/// <see cref="Mips"/> for the two policies and docs/formats/gamez.md for the measurement.</para>
 /// </summary>
 public sealed class TextureArchive : IDisposable
 {
@@ -683,6 +690,8 @@ public sealed class TextureArchive : IDisposable
     private readonly Dictionary<string, (bool HasAlpha, bool Soft)> _alphaInfo = new(StringComparer.OrdinalIgnoreCase);
     // Distinct texture names this archive failed to resolve, each already logged once.
     private readonly HashSet<string> _reportedMissing = new(StringComparer.OrdinalIgnoreCase);
+    // Authored _N siblings whose dimensions disagreed with the level they claim, logged once each.
+    private readonly HashSet<string> _reportedOddMips = new(StringComparer.OrdinalIgnoreCase);
 
     public TextureArchive(string path)
     {
@@ -699,14 +708,64 @@ public sealed class TextureArchive : IDisposable
                 if (entry.Name.EndsWith(".png", StringComparison.OrdinalIgnoreCase))
                     _byBaseName[Path.GetFileNameWithoutExtension(entry.Name)] = entry.FullName;
         }
+        // Every (base, level) pair the archive ships, counted once up front so the adoption log can
+        // say "N of the M this chapter ships" — a bare adopted count cannot show a level was missed.
+        var bases = new SortedSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var name in _byBaseName.Keys)
+        {
+            if (MipLevelOf(name) is > 0 && _byBaseName.ContainsKey(name[..^2]))
+            {
+                AuthoredMipsAvailable++;
+                bases.Add(name[..^2]);
+            }
+        }
+        AuthoredMipBases = new List<string>(bases);
         // An override naming a texture this archive does not hold would silently colour nothing,
         // which reads exactly like "the object is not drawing" — the answer the flag exists to give.
         TextureDropIn.CheckNames(path, _byBaseName.Keys);
     }
 
+    /// <summary>Where a texture's upper mip levels come from.</summary>
+    public enum MipSource
+    {
+        /// <summary>Levels 1 and 2 are the archive's own <c>_N</c> siblings wherever one exists and
+        /// is exactly half/quarter the base's size; everything below is box-filtered as before, and
+        /// a texture with no sibling is untouched.</summary>
+        Authored,
+
+        /// <summary>Every level is box-filtered from the base by <c>Image.GenerateMipmaps()</c> —
+        /// the pre-<c>BL-055</c> path, kept as <c>--mips=generated</c> so the two are A/B-able in
+        /// one build and the goldens of either can be reproduced.</summary>
+        Generated,
+    }
+
+    /// <summary>Which mip policy every archive built afterwards follows (<c>--mips=</c>). A static
+    /// for the same reason <see cref="TextureDropIn"/>'s state is: it is a launch setting read
+    /// during a build, not a per-archive property anyone chooses.</summary>
+    public static MipSource Mips { get; set; } = MipSource.Authored;
+
     /// <summary>Distinct texture names this archive could not resolve, for an end-of-build
     /// summary line. Each was already reported once (one line, no stack trace) by Find.</summary>
     public IReadOnlyCollection<string> MissingTextures => _reportedMissing;
+
+    /// <summary>Authored <c>_1</c>/<c>_2</c> levels this archive ships whose base is present too —
+    /// the denominator of the adoption count, known before anything is loaded.</summary>
+    public int AuthoredMipsAvailable { get; private set; }
+
+    /// <summary>The base textures those levels belong to, sorted — what <c>--dump-mips</c> sweeps.</summary>
+    public IReadOnlyList<string> AuthoredMipBases { get; } = Array.Empty<string>();
+
+    /// <summary>Authored levels actually installed this session, and the base textures they were
+    /// installed on. Below <see cref="AuthoredMipsAvailable"/> by however many of those textures no
+    /// material asked for — a chapter never loads its whole archive.</summary>
+    public int AuthoredMipsInstalled { get; private set; }
+
+    /// <inheritdoc cref="AuthoredMipsInstalled"/>
+    public int AuthoredMipTextures { get; private set; }
+
+    /// <summary>Authored levels refused because the sibling was not exactly half/quarter the base's
+    /// size. A name-convention match is a lead, not a guarantee; each refusal is logged.</summary>
+    public int AuthoredMipsRefused { get; private set; }
 
     /// <summary>True if the last texture returned by Find had an alpha channel.</summary>
     public bool LastHadAlpha { get; private set; }
@@ -736,30 +795,9 @@ public sealed class TextureArchive : IDisposable
             return cached;
         }
 
-        var name = Resolve(baseName);
-        var bytes = name != null ? ReadBytes(name) : null;
-        ImageTexture? tex = null;
-        LastHadAlpha = false;
-        LastAlphaIsSoft = false;
-        if (bytes != null)
-        {
-            var img = new Image();
-            if (img.LoadPngFromBuffer(bytes) == Error.Ok)
-            {
-                LastHadAlpha = ImageHasAlpha(img);
-                LastAlphaIsSoft = LastHadAlpha && AlphaIsSoft(img); // before mipmaps: raw pixels only
-                // The drop-in instruments repaint the RGB flat and keep everything else — size,
-                // format, alpha channel — so the alpha class read just above (and with it the
-                // blend/scissor choice, the cutout silhouette and the mip chain) is unchanged.
-                if (TextureDropIn.ColorFor(Path.GetFileNameWithoutExtension(name!), baseName) is { } flat)
-                {
-                    TextureDropIn.Flatten(img, flat);
-                }
-                img.GenerateMipmaps();
-                tex = ImageTexture.CreateFromImage(img);
-            }
-        }
-        else if (_reportedMissing.Add(baseName))
+        var img = Build(baseName, out bool resolved, out _);
+        ImageTexture? tex = img != null ? ImageTexture.CreateFromImage(img) : null;
+        if (!resolved && _reportedMissing.Add(baseName))
         {
             // Report each distinct miss once. Log.Warn is a plain line — GD.PushWarning would
             // print a full managed stack trace per call in Godot .NET, burying real errors.
@@ -776,6 +814,14 @@ public sealed class TextureArchive : IDisposable
         _alphaInfo[baseName] = (LastHadAlpha, LastAlphaIsSoft);
         return tex;
     }
+
+    /// <summary>The exact <see cref="Image"/> <see cref="Find"/> installs — freshly decoded, alpha
+    /// classified, drop-in applied and mip chain built — handed back un-cached so an instrument
+    /// measures the chain the renderer got rather than a re-derivation of it. Reports how many of
+    /// its levels came from authored siblings. Not for render code: it rebuilds every call, and it
+    /// moves <see cref="LastHadAlpha"/> and the adoption counters exactly as a lookup would.</summary>
+    public Image? BuildMipped(string materialTextureName, out int authoredLevels) =>
+        Build(Path.GetFileNameWithoutExtension(materialTextureName), out _, out authoredLevels);
 
     /// <summary>The raw PNG as a fresh, un-mipmapped <see cref="Image"/> — the source
     /// <see cref="PlanePainter"/> recolours. Deliberately NOT the ImageTexture cache: that
@@ -809,6 +855,13 @@ public sealed class TextureArchive : IDisposable
 
     public void Dispose() => _zip?.Dispose();
 
+    // The level an archive name claims by its `_N` suffix, or 0 for a base texture. Only 1 and 2
+    // ship; anything else is a texture whose real name happens to end in a digit.
+    private static int MipLevelOf(string archiveBaseName) =>
+        archiveBaseName.Length > 2 && archiveBaseName[^2] == '_' && archiveBaseName[^1] is '1' or '2'
+            ? archiveBaseName[^1] - '0'
+            : 0;
+
     // Classifies the alpha channel (see LastAlphaIsSoft). Soft when scissoring at 0.5
     // would show (almost) nothing — max alpha below ~140/255 — or when partial alpha
     // dominates and nearly-opaque texels are rare (soft sprites like clouds and smoke,
@@ -839,6 +892,131 @@ public sealed class TextureArchive : IDisposable
 
     private static bool ImageHasAlpha(Image img) =>
         img.GetFormat() is Image.Format.Rgba8 or Image.Format.La8 or Image.Format.Rgba4444 && img.DetectAlpha() != Image.AlphaMode.None;
+
+    // Decodes one texture and builds its whole mip chain. `resolved` says whether the name found a
+    // PNG at all, so a decode failure is not reported as a missing texture.
+    private Image? Build(string baseName, out bool resolved, out int authoredLevels)
+    {
+        authoredLevels = 0;
+        LastHadAlpha = false;
+        LastAlphaIsSoft = false;
+        var name = Resolve(baseName);
+        var bytes = name != null ? ReadBytes(name) : null;
+        resolved = bytes != null;
+        if (bytes == null)
+        {
+            return null;
+        }
+        var img = new Image();
+        if (img.LoadPngFromBuffer(bytes) != Error.Ok)
+        {
+            Log.Warn("world", $"texture png would not decode texture={name}");
+            return null;
+        }
+        LastHadAlpha = ImageHasAlpha(img);
+        LastAlphaIsSoft = LastHadAlpha && AlphaIsSoft(img); // before mipmaps: raw pixels only
+        // The drop-in instruments repaint the RGB flat and keep everything else — size, format,
+        // alpha channel — so the alpha class read just above (and with it the blend/scissor choice
+        // and the cutout silhouette) is unchanged.
+        var flat = TextureDropIn.ColorFor(Path.GetFileNameWithoutExtension(name!), baseName);
+        if (flat is { } color)
+        {
+            TextureDropIn.Flatten(img, color);
+        }
+        // Box-filter the whole chain first either way: it allocates the levels and fixes their
+        // offsets, and levels 3-and-below have no authored sibling to take their place.
+        img.GenerateMipmaps();
+        if (Mips == MipSource.Authored)
+        {
+            authoredLevels = InstallAuthoredMips(img, Path.GetFileNameWithoutExtension(name!), flat);
+            if (authoredLevels > 0)
+            {
+                AuthoredMipsInstalled += authoredLevels;
+                AuthoredMipTextures++;
+            }
+        }
+        return img;
+    }
+
+    // Overwrites levels 1 and 2 with the archive's authored `_1`/`_2` siblings where they exist.
+    // Runs on the already-generated chain, so a level with no sibling — and every level below 2 —
+    // keeps its box filter, and a texture with no siblings at all is bit-identical to before.
+    private int InstallAuthoredMips(Image img, string archiveBaseName, Color? flat)
+    {
+        // A level image is not itself a base: `cblock1_1` has no `cblock1_1_1`, and asking would
+        // only cost a dictionary probe per texture.
+        if (MipLevelOf(archiveBaseName) > 0)
+        {
+            return 0;
+        }
+        int mipCount = img.GetMipmapCount();
+        if (mipCount < 1)
+        {
+            return 0;
+        }
+        var format = img.GetFormat();
+        int baseW = img.GetWidth(), baseH = img.GetHeight();
+        byte[]? data = null;
+        int installed = 0;
+        for (int level = 1; level <= 2 && level <= mipCount; level++)
+        {
+            if (!_byBaseName.TryGetValue($"{archiveBaseName}_{level}", out var retrieval))
+            {
+                continue;
+            }
+            var bytes = ReadBytes(retrieval);
+            var sibling = new Image();
+            if (bytes == null || sibling.LoadPngFromBuffer(bytes) != Error.Ok)
+            {
+                Refuse(level, "png would not decode");
+                continue;
+            }
+            // The name convention is a lead; the dimensions decide. A sibling that is not exactly
+            // this level's size is some other texture that happens to be spelled like one.
+            int wantW = Mathf.Max(1, baseW >> level), wantH = Mathf.Max(1, baseH >> level);
+            if (sibling.GetWidth() != wantW || sibling.GetHeight() != wantH)
+            {
+                Refuse(level, $"{sibling.GetWidth()}x{sibling.GetHeight()}, level {level} of "
+                              + $"{baseW}x{baseH} wants {wantW}x{wantH}");
+                continue;
+            }
+            if (sibling.GetFormat() != format)
+            {
+                sibling.Convert(format);
+            }
+            // An instrument that repainted the base and not its authored levels would report the
+            // distance a texture painted in some other texture's colour.
+            if (flat is { } color)
+            {
+                TextureDropIn.Flatten(sibling, color);
+            }
+            data ??= img.GetData();
+            long offset = img.GetMipmapOffset(level);
+            long end = level + 1 <= mipCount ? img.GetMipmapOffset(level + 1) : data.Length;
+            var src = sibling.GetData();
+            if (src.Length != end - offset)
+            {
+                Refuse(level, $"{src.Length} bytes where the level holds {end - offset}");
+                continue;
+            }
+            Buffer.BlockCopy(src, 0, data, (int)offset, src.Length);
+            installed++;
+        }
+        if (installed > 0)
+        {
+            img.SetData(baseW, baseH, true, format, data!);
+        }
+        return installed;
+
+        void Refuse(int level, string why)
+        {
+            AuthoredMipsRefused++;
+            if (_reportedOddMips.Add($"{archiveBaseName}_{level}"))
+            {
+                Log.Warn("world", $"authored mip level refused texture={archiveBaseName}_{level} reason={why}");
+            }
+        }
+    }
 
     private string? Resolve(string baseName)
     {
@@ -887,4 +1065,5 @@ public sealed class TextureArchive : IDisposable
         s.CopyTo(ms);
         return ms.ToArray();
     }
+
 }

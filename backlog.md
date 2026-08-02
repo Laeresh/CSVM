@@ -389,14 +389,6 @@ unscheduled.
   cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
   rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
   (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
-- `BL-055` **Authored `_1`/`_2` mip levels are ignored; we box-filter our own instead.** 52–91 base textures
-  per chapter ship hand-authored half- and quarter-resolution levels (`cblock1`, `cblock1_1`,
-  `cblock1_2`), referenced by **no gamez material**, and `TextureArchive.cs:100` generates its own
-  mips by box filter. The authored levels keep **0.35–1.12% of pixels above luminance 128** where a
-  box filter keeps **0.00%** — i.e. the artist preserved the street lights at distance and our
-  filter averages them into the dark. This is precisely the user's observation of the original
-  going "dark with some points → brighter illuminated street" with distance (2026-07-22).
-  Measured 2026-07-23, `analysis/item9-depth-bias/CBLOCK-LOD.md` §1b.
 - `BL-056` **`materials` is a per-polygon LIST and `SceneBuilder` reads only `[0]`.** 352 C5 polygons carry
   a **second textured pass** with its own independent UVs: `z3_foggrad`/`foggrad8x64` fog gradients
   (142), `buildingspotlighted` (34), `fadedsign01-03`, `nypd`, `clock`, and plane logos. A whole

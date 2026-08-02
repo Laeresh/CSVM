@@ -212,13 +212,21 @@ Texture lookup over an unzbd texture zip or unpacked PNG dir; absorbs the stored
 (20-char truncation prefix match, legacy `.-N` renames, the fork's trailing doubled period — see
 docs/formats/gamez.md) and classifies each texture's alpha channel via LastHadAlpha /
 LastAlphaIsSoft ("soft" = a 0.5 scissor cutout would erase or shred it; drives blend-vs-scissor).
+`Build` is the one construction path — decode, classify, drop-in, mip chain — and `Find` caches
+its result; `BuildMipped` hands the same Image to `--dump-mips` un-cached.
 ⚠ Unresolved names are reported ONCE via plain GD.Print (MissingTextures), never GD.PushWarning —
   Godot .NET prints a full managed stack trace per PushWarning call and buries real errors.
+⚠ **Mip levels 1/2 are the archive's authored `_1`/`_2` siblings** (`Mips`, `--mips=`), installed
+  over an already-generated chain — so ordering is load-bearing: the alpha-softness read needs raw
+  base pixels and runs BEFORE any of it, and a sibling is refused unless it is exactly half/quarter
+  the base's size. `MipSource.Generated` restores the pure box filter bit-for-bit (verified: it
+  reproduces the pre-2026-08-02 hashes of all three goldens the change moved).
 ⚠ `TextureDropIn` (the `--tex-override`/`--tex-census` hook, at Find because it is the one resolve
-  point) swaps **RGB bytes only** — size, format, alpha and mips stay the original's, so alpha
-  class / blend-vs-scissor / silhouette match a normal run (measured: 114,820 px on and off).
-⚠ Census colours are a pure hash of the name, never assignment order; ~0.5 % of names collide —
-  warn per collision, never nudge. Counts are chromaticity-based LOWER bounds (docs/cli.md).
+  point) swaps **RGB bytes only** — size, format and alpha stay the original's, so alpha class /
+  blend-vs-scissor / silhouette match a normal run (measured: 114,820 px on and off); authored mip
+  levels are flattened with the same colour. Census colours are a pure hash of the name, never
+  assignment order; ~0.5 % collide — warn per collision, never nudge. Counts are chromaticity-based
+  LOWER bounds (docs/cli.md).
 
 ## src/Mech3/SceneBuilder.cs
 Shared GameZ-subtree → MeshInstance3D builder: triangulation, material/mesh
@@ -1473,7 +1481,7 @@ The session's randomness policy: one master seed and ten named subsystem generat
 
 ## src/Testing/Probes.cs
 The assertion cores behind the `--dump-markers` / `--dump-weapons` / `--dump-loadout` /
-`--dump-flight` / `--damage-test` inspection reports. Each probe does the work
+`--dump-flight` / `--dump-mips` / `--damage-test` inspection reports. Each probe does the work
 once and returns both halves: the report text the flag prints and writes, and a structured verdict
 (counts, per-row booleans, failure strings) a `--run-tests` suite asserts on.
 ⚠ `FlightEnvelope` steps a throwaway `FlightModel` through the manoeuvres the ORIGINAL was
@@ -1518,7 +1526,7 @@ line and compares against `analysis/goldens/manifest.json`.
   call and never yield a frame, so no in-engine suite can photograph anything.
 
 ## src/Testing/ProbeRunner.cs
-The `--dump-markers`/`--dump-weapons`/`--dump-flight`/`--dump-loadout`/`--run-tests`/
+The `--dump-markers`/`--dump-weapons`/`--dump-flight`/`--dump-loadout`/`--dump-mips`/`--run-tests`/
 `--effects-test`/`--damage-test`/`--destroy=` probe wrappers,
 constructed once in `Launcher._Ready` after the base paths settle (B7) — the Launcher dispatches
 the `--dump-*`/`--run-tests` early quits itself and hands the runner to each session node.

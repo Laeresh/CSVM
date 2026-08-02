@@ -1392,6 +1392,19 @@ public partial class GameSession : Node3D
                          $"deck={(rig.Deck != null ? "own" : "none")} " +
                          $"puffs={(rig.Puffs != null ? "own" : "none")} " +
                          $"whiteout={(rig.Whiteout != null ? "own" : "none")}");
+        // The authored-mip coverage, said out loud per chapter: a chapter never loads its whole
+        // archive, so "installed N" alone cannot show whether a level was missed or simply unused.
+        var tex = state.Textures;
+        if (tex.AuthoredMipsAvailable > 0)
+        {
+            string refused = tex.AuthoredMipsRefused > 0 ? $", {tex.AuthoredMipsRefused} REFUSED" : "";
+            GD.Print(Mech3.TextureArchive.Mips == Mech3.TextureArchive.MipSource.Authored
+                ? $"[textures] authored mip levels: {tex.AuthoredMipsInstalled} installed on "
+                  + $"{tex.AuthoredMipTextures} texture(s), of {tex.AuthoredMipsAvailable} this "
+                  + $"archive ships{refused}"
+                : $"[textures] authored mip levels: off (--mips=generated); this archive ships "
+                  + $"{tex.AuthoredMipsAvailable}");
+        }
         if (state.Textures.MissingTextures.Count > 0)
             GD.Print($"[textures] {state.Textures.MissingTextures.Count} referenced texture(s) absent from this install: " +
                      string.Join(", ", state.Textures.MissingTextures));

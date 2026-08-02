@@ -304,6 +304,29 @@ public sealed class ProbeRunner
         return true;
     }
 
+    /// <summary>--dump-mips[=name]: for every base texture in the chapter's archive that ships an
+    /// authored <c>_1</c>/<c>_2</c> level, report the mip chain the texture archive built — level
+    /// size, mean luminance and the share of pixels above 128 — beside the authored artwork, and
+    /// say whether the installed level IS that artwork. Writes to stdout and
+    /// <c>./.scratch/mips_dump.txt</c>, then quits. Run it once per <c>--mips=</c> policy: the
+    /// generated chain averages the bright pixels away, the authored one keeps them.</summary>
+    /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
+    public bool DumpMips(SessionSpec spec)
+    {
+        DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
+        var r = Probes.MipChains(SessionPaths.ChapterTextures(_dataRoot, spec.Chapter),
+            spec.Chapter, spec.DumpMipsFilter);
+        if (r.Error != null)
+        {
+            GD.PrintErr($"--dump-mips: {r.Error}");
+            return false;
+        }
+        GD.Print(r.Text);
+        WriteScratch("mips_dump.txt", r.Text);
+        GD.Print($"{r.Summary} → ./.scratch/mips_dump.txt");
+        return r.Ok;
+    }
+
     /// <summary>The D32 headless verify: play every impact/destruction effect through the
     /// world-effects runtime at the camera point and report whether each RESOLVES (its def is bound)
     /// and whether it BUILDS a puffer (WORLD-12 — a started def whose factory/textures are missing

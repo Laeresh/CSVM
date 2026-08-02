@@ -294,6 +294,95 @@ public static class Probes
         return r;
     }
 
+    // ---- mip chains ----------------------------------------------------------------------------
+
+    /// <summary>What a chapter's texture archive actually installed as levels 1 and 2, beside the
+    /// authored <c>_1</c>/<c>_2</c> siblings the chapter ships — one row per level, with the
+    /// measurement <c>BL-055</c> turns on: mean luminance, and the share of pixels above 128 (the
+    /// street lights the artists kept and a box filter averages away).
+    ///
+    /// <para>The chain is built through <see cref="TextureArchive.BuildMipped"/>, i.e. the code a
+    /// material's lookup runs, under whatever <c>--mips=</c> policy this run set — so the
+    /// <c>installed == authored</c> column is an able-to-fail check on the policy actually taking
+    /// effect, not on the levels merely existing on disk.</para></summary>
+    public static MipResult MipChains(string texturesPath, string chapter, string filter)
+    {
+        System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
+        var r = new MipResult();
+        TextureArchive textures;
+        try
+        {
+            textures = new TextureArchive(texturesPath);
+        }
+        catch (Exception e)
+        {
+            r.Error = $"could not open the texture archive ({texturesPath}): {e.Message}";
+            r.Summary = $"mips dump: {r.Error}";
+            return r;
+        }
+
+        var sb = new StringBuilder();
+        sb.AppendLine($"# Texture mip chains — {chapter}, {texturesPath}");
+        sb.AppendLine($"# policy: --mips={TextureArchive.Mips.ToString().ToLowerInvariant()}");
+        sb.AppendLine($"# {textures.AuthoredMipBases.Count} base texture(s) ship an authored level; "
+                      + $"{textures.AuthoredMipsAvailable} level(s) in all.");
+        sb.AppendLine("# 'px>128' is the share of pixels above luminance 128 — what the artists kept "
+                      + "and a box filter averages away.");
+        sb.AppendLine();
+
+        using (textures)
+        {
+            foreach (var name in textures.AuthoredMipBases)
+            {
+                if (filter.Length > 0 && !name.Contains(filter, StringComparison.OrdinalIgnoreCase))
+                {
+                    continue;
+                }
+                var img = textures.BuildMipped(name, out int authored);
+                if (img == null)
+                {
+                    r.Failures.Add($"{name}: the archive holds it but it would not build");
+                    sb.AppendLine($"{name}: FAILED TO BUILD").AppendLine();
+                    continue;
+                }
+                r.Textures++;
+                r.LevelsInstalled += authored;
+                sb.AppendLine($"=== {name} {img.GetWidth()}x{img.GetHeight()}, "
+                              + $"{img.GetMipmapCount()} mip level(s), {authored} authored");
+                sb.AppendLine($"  L0            {Luma(MipLevel(img, 0))}");
+                for (int level = 1; level <= 2 && level <= img.GetMipmapCount(); level++)
+                {
+                    var sibling = textures.FindImage($"{name}_{level}");
+                    if (sibling == null)
+                    {
+                        sb.AppendLine($"  L{level}            {Luma(MipLevel(img, level))}   (no authored level)");
+                        continue;
+                    }
+                    r.LevelsShipped++;
+                    var installed = MipLevel(img, level);
+                    bool same = SameLuma(installed, sibling);
+                    if (same)
+                    {
+                        r.LevelsMatching++;
+                    }
+                    else
+                    {
+                        r.Mismatched.Add($"{name}_{level}");
+                    }
+                    sb.AppendLine($"  L{level} installed  {Luma(installed)}   {(same ? "== authored" : "!= AUTHORED")}");
+                    sb.AppendLine($"  L{level} authored   {Luma(sibling)}");
+                }
+                sb.AppendLine();
+            }
+        }
+        r.Text = sb.ToString();
+        r.Summary = r.Failures.Count > 0
+            ? $"mips dump: {r.Textures} texture(s), {r.Failures.Count} FAILED to build"
+            : $"mips dump: {r.Textures} texture(s), {r.LevelsMatching}/{r.LevelsShipped} level(s) "
+              + $"match the authored artwork ({r.LevelsInstalled} installed as authored)";
+        return r;
+    }
+
     // ---- destructible damage -----------------------------------------------------------------
 
     /// <summary>Every enabled collision shape under a subtree. SceneBuilder attaches a
@@ -892,6 +981,68 @@ public static class Probes
         return limit;
     }
 
+    /// <summary>One level of a mip chain as a standalone image. Godot stores the chain as one buffer
+    /// with the levels end to end, so a level is a slice at its own offset.</summary>
+    private static Image MipLevel(Image img, int level)
+    {
+        if (level == 0)
+        {
+            return img.GetMipmapCount() == 0 ? img
+                : Image.CreateFromData(img.GetWidth(), img.GetHeight(), false, img.GetFormat(),
+                    img.GetData()[..(int)img.GetMipmapOffset(1)]);
+        }
+        var data = img.GetData();
+        int start = (int)img.GetMipmapOffset(level);
+        int end = level + 1 <= img.GetMipmapCount() ? (int)img.GetMipmapOffset(level + 1) : data.Length;
+        return Image.CreateFromData(Mathf.Max(1, img.GetWidth() >> level),
+            Mathf.Max(1, img.GetHeight() >> level), false, img.GetFormat(), data[start..end]);
+    }
+
+    /// <summary>Mean luminance and the share of pixels above 128, formatted as one column pair.
+    /// Rec.601 luma, the weighting <c>analysis/item9-depth-bias/CBLOCK-LOD.md</c> §1b measured with,
+    /// so the two numbers are comparable to the ones in that file.</summary>
+    private static string Luma(Image image)
+    {
+        var (mean, bright) = LumaStats(image);
+        return $"{image.GetWidth(),4}x{image.GetHeight(),-4} mean {mean,6:0.00}  px>128 {bright,6:0.000}%";
+    }
+
+    private static (double Mean, double Bright) LumaStats(Image image)
+    {
+        var img = image;
+        if (img.GetFormat() != Image.Format.Rgb8 && img.GetFormat() != Image.Format.Rgba8)
+        {
+            img = (Image)image.Duplicate();
+            img.Convert(Image.Format.Rgb8);
+        }
+        int stride = img.GetFormat() == Image.Format.Rgba8 ? 4 : 3;
+        var data = img.GetData();
+        double sum = 0;
+        int bright = 0, n = 0;
+        for (int i = 0; i + stride <= data.Length; i += stride)
+        {
+            double y = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+            sum += y;
+            if (y > 128.0)
+            {
+                bright++;
+            }
+            n++;
+        }
+        return n == 0 ? (0, 0) : (sum / n, bright * 100.0 / n);
+    }
+
+    // Whether an installed level carries the authored artwork. Compared on the two numbers the
+    // report prints rather than on bytes: the level is stored in the base's pixel format, so an
+    // authored PNG that decoded to another format is converted on the way in and byte equality
+    // would fail on a chain that is nonetheless exactly the artwork.
+    private static bool SameLuma(Image installed, Image authored)
+    {
+        var a = LumaStats(installed);
+        var b = LumaStats(authored);
+        return Math.Abs(a.Mean - b.Mean) < 0.005 && Math.Abs(a.Bright - b.Bright) < 0.0005;
+    }
+
     /// <summary>Predicate that integrates the body roll rate and trips at a full turn — the rate is
     /// what the stopwatch and the video's bank readout both timed, and nothing else is commanded.</summary>
     private static Func<bool> RollAccum(FlightModel m)
@@ -962,6 +1113,27 @@ public static class Probes
         public int UnhandledTotal;
         public string? EmptyClipSound;
         public bool Ok => Error == null && Shown > 0 && UnhandledTotal == 0;
+    }
+
+    /// <summary>What a chapter's mip chains hold against what its archive ships: how many authored
+    /// levels were installed, how many of the shipped levels the installed chain actually carries,
+    /// and which ones it does not.</summary>
+    public sealed class MipResult
+    {
+        public readonly List<string> Mismatched = new();
+        public readonly List<string> Failures = new();
+        public string Text = "";
+        public string Summary = "";
+        public string? Error;
+        /// <summary>Base textures swept — those shipping at least one authored level.</summary>
+        public int Textures;
+        /// <summary>Authored levels the archive holds for the swept textures.</summary>
+        public int LevelsShipped;
+        /// <summary>Levels the archive reported installing from authored artwork.</summary>
+        public int LevelsInstalled;
+        /// <summary>Shipped levels whose installed pixels are the authored ones.</summary>
+        public int LevelsMatching;
+        public bool Ok => Error == null && Failures.Count == 0 && Textures > 0;
     }
 
     /// <summary>Stock loadouts bound to their built models: how many bound and every binding

@@ -125,7 +125,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the damage / livery / mesh labs live. `--fly` is accepted but redundant. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day 28 of 97 — 97 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
+The day-to-day 28 of 99 — 99 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
 ⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right — the index is one file away.
 
@@ -189,7 +189,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan:** [`docs/PLAN-m3-polish-5.md`](docs/PLAN-m3-polish-5.md), Wave C. **Next:** `C8`
-(`BL-055`); owed cockpit re-tests (`PT-13`–`PT-26`) remain in [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
+**Active plan:** [`docs/PLAN-m3-polish-5.md`](docs/PLAN-m3-polish-5.md), Wave C. **Next:** `C9`
+(`BL-214`); owed cockpit re-tests (`PT-13`–`PT-26`) remain in [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
