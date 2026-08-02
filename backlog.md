@@ -388,31 +388,41 @@ unscheduled.
 
 ### World animation & effects
 
-- `BL-242` **A stopper sequence's tail events are dropped: `PUFFER_STATE 0` never dispatches at all
-  (measured 2026-08-02 while closing `BL-235`).** `large_10sec_fire`'s `stop_fire_n_smoke` is
-  `[StopSequence(fire_n_smoke)@Animation+10.0, PufferState(fire_n_smoke, 0)]` — two events, no
-  `START_TIME` on the second, so both should run on the same tick. **Measured:** a `GD.Print` on
-  every entry to `HandlePufferState` with `active_state 0`, over a 220 s no-`--hold` crash probe
-  (`--chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1" --rocket=wep_14 --fire-rockets
-  --det --debug-anim`), fired **zero times** across every runtime in the session. The `StopSequence`
-  half demonstrably *did* run — the crash fire ends at 10.0 s ± one report tick, on the authored
-  count, in three consecutive runs — so the event *after* it in the same sequence was dropped.
-  *Inference, not yet measured:* halting the last live runner finishes the instance mid-dispatch,
-  and the stopper's own runner is torn down before it advances past the `StopSequence`.
-  **Benign today, which is why it is a backlog item and not a bug fix:** both routes end in
-  `SustainEnd`, so the authored stop and `BL-236`'s instance-end rule produce the identical
-  outcome — the fire fades over its `LIFETIME_RANGE` either way. It stops being benign for any
-  stopper whose tail carries something the instance-end rule does *not* replay (a `SOUND`, an
-  `OBJECT_ACTIVE_STATE`, a second puffer the def does not own).
-  *Fix shape:* let a runner finish dispatching its current sequence's remaining instantaneous
-  events before the instance-finish sweep runs, rather than tearing down at the halt.
-  ⚠ Do not "fix" this by reviving the authored `PUFFER_STATE 0` path alone — it carries its own
-  latent trap: this def turns the emitter **ON** at `AT_NODE fire_here` (its own template root) and
-  **OFF** with no `AT_NODE` at all (which resolves to the anchor, the wreck's `destroyed` node), so
-  the two halves compute different `_puffers` keys and the stop would miss even once dispatched.
-  Whatever lands has to resolve the stop through the instance's OWNERSHIP — the identity
-  `FinishEffectInstance` and `TearDownResourcesOf` already use — not through the host key.
-  *Verify with:* the probe above; `BL-241`'s harness fix is what would let a suite guard it.
+- `BL-242` **`large_10sec_fire`'s authored `PUFFER_STATE 0` cannot reach its own emitter: the ON and
+  OFF halves compute different `_puffers` keys (read from the data + code 2026-08-02, while closing
+  `BL-235`).** ⚠ **UNMEASURED — read this trap first.** An earlier version of this entry claimed, as
+  a measurement, that `PUFFER_STATE 0` never dispatches at all. **That claim was invalid and is
+  retracted:** `RunProbe.ps1` does **not** build (it says so at `RunProbe.ps1:17`), so the probe that
+  "measured" it ran a binary that never contained the instrumenting `GD.Print`. Zero output meant
+  zero instrumentation, not zero dispatches. **Nothing below is measured; it is a static read.**
+  `large_10sec_fire`'s `stop_fire_n_smoke` is
+  `[StopSequence(fire_n_smoke)@Animation+10.0, PufferState(fire_n_smoke, 0)]`. The def turns the
+  emitter **ON** at `AT_NODE fire_here` — its own template root, which `ResolveOne` reaches through
+  `ResolveInOwnRoot` — and **OFF** with no `AT_NODE` at all, which falls to the anchor: the wreck's
+  `destroyed` node, since `player_crash_dirt` calls this def `WithNode: destroyed`. Two different
+  hosts, so `HandlePufferState` writes one `_puffers` key and looks up another, and the off-branch
+  returns silently. Note this is the same suspect `BL-235` recorded as "eliminated, look elsewhere"
+  — correctly eliminated for `large_30sec_fire`, whose ON event uses the `INPUT_NODE` sentinel and
+  lands on the anchor like its OFF event does, but that def is **not** the one the crash rig calls.
+  **Benign today, which is why it is a backlog item and not a bug fix:** `BL-236`'s instance-end
+  rule reaches the emitter by ownership instead, and both routes end in `SustainEnd`, so the fire
+  fades over its `LIFETIME_RANGE` on the authored count either way (measured: 10.0 s ± one report
+  tick). It stops being benign for any authored stop whose effect the instance-end rule does *not*
+  replay.
+  *Fix shape:* resolve a stop through the instance's OWNERSHIP — the `(def, anchor)` identity
+  `FinishEffectInstance` and `TearDownResourcesOf` already use — when the exact host key misses,
+  narrowed on the puffer name. Such a fallback was written and reverted on 2026-08-02 (it built
+  clean and passed the full suite); it was reverted only because the evidence for it was the bogus
+  measurement above, not because it was shown wrong.
+  ⚠ **Measure before fixing, and `dotnet build CSVM/CSVM.sln` before every probe.** Two questions
+  are open and the first one gates the second: **(a)** does the `PUFFER_STATE 0` dispatch at all, or
+  does halting the last live runner finish the instance mid-dispatch and tear down the stopper's own
+  runner before it advances past the `StopSequence`? **(b)** if it does dispatch, does it miss, as
+  the key read above predicts? A `GD.Print` in `HandlePufferState`'s `!on` branch answers both in
+  one run — *on a freshly built binary*.
+  *Verify with:* `RunProbe.ps1 --chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1"
+  --rocket=wep_14 --fire-rockets --det --debug-anim --frames=2400` (no `--hold`);
+  `BL-241`'s harness fix is what would let a suite guard it.
 
 - `BL-237` **An authored LOOP period shorter than the sim step is quantised up, so those loops are
   still frame-rate-dependent (measured 2026-08-02, found while rate-locking the untimed loops).**

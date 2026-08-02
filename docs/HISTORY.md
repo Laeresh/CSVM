@@ -10701,31 +10701,45 @@ has no live runner left, `inst.Finished` goes true, and `BL-236`'s instance-end 
 instance never finishes" is a claim about the runner set at a given moment, not a property of the
 def; a `StopSequence` aimed at the looping sequence changes the answer.**
 
-**Answers `BL-235`'s remaining question — "is the stop reached?" — and the answer is no.** A
-temporary `GD.Print` on every entry to `HandlePufferState` with `active_state 0`, over the full
-220 s probe, fired **zero times across every runtime in the session**. The `StopSequence` half of
-`stop_fire_n_smoke` demonstrably ran (the fire ends on its authored count); the `PUFFER_STATE 0`
-that follows it in the same sequence, with no `START_TIME` of its own, never dispatched. Filed as
-**`BL-242`** with the inference to check first (halting the last runner finishes the instance
-mid-dispatch, tearing down the stopper's own runner before it advances). Benign today — both
-routes end in `SustainEnd`, so the outcome is identical — and not benign for any stopper whose
-tail carries something the instance-end rule does not replay.
+**`BL-235`'s remaining question — "is the stop reached?" — is still open, and the first answer
+given here was produced by a broken instrument.** ⚠ **Retracted the same day, before push.** This
+entry originally reported, as a measurement, that a `GD.Print` on every `HandlePufferState` entry
+carrying `active_state 0` fired zero times across the full 220 s probe, and concluded the authored
+`PUFFER_STATE 0` never dispatches. **The instrument was never in the binary.** `RunProbe.ps1` does
+not build — it says so in its own header (`RunProbe.ps1:17`, "Does NOT build — run `dotnet build
+CSVM/CSVM.sln` first if the code changed") — and the probe was launched straight after the edit.
+Zero output measured zero instrumentation. The same mistake invalidates the run before it, which
+"saw" no output from a second diagnostic added the same way. **Both are withdrawn; neither
+supports anything.**
 
-**A second latent trap recorded in `BL-242` rather than fixed.** `large_10sec_fire` turns the
-emitter ON at `AT_NODE fire_here` (its own template root, resolved through `ResolveInOwnRoot`) and
-OFF with **no `AT_NODE` at all**, which resolves to the anchor — the wreck's `destroyed` node. The
-two halves therefore compute different `_puffers` keys, so the authored stop would miss *even if it
-were dispatched*. Note this is the exact suspect `BL-235` recorded as "eliminated, look elsewhere"
-— correctly eliminated for `large_30sec_fire`, whose ON event uses the `INPUT_NODE` sentinel and
-lands on the anchor like its OFF event does, but that def was never the one the crash rig calls.
+**Standing rule this cost us: `dotnet build CSVM/CSVM.sln` before every `RunProbe.ps1` run that is
+meant to observe a code change.** `RunTests.ps1` builds and `RunProbe.ps1` does not, which is easy
+to carry over wrongly between the two. The failure mode is the nasty direction — a *silent* probe
+reads as a clean negative result, so the instrument's absence looks exactly like the phenomenon
+being absent. Any probe whose conclusion rests on output NOT appearing has to show the instrument
+firing somewhere first, or it is not evidence.
 
-**A fix for the key mismatch was written and reverted, deliberately.** An ownership-scoped fallback
-in the `!on` branch (stop the same-named emitter this `(def, anchor)` owns when the exact host key
-misses) built clean and passed everything — 345 units, 17/17 engine suites, 13 goldens
-hash-identical. It was reverted because the trace above proves the branch it guards is never
-entered: the stop event does not dispatch, so the fallback is unexercised code justified by
-reasoning rather than measurement. It belongs *with* the `BL-242` dispatch fix, where a probe can
-show it doing something, and `BL-242` says so.
+**What survives the retraction.** The `BL-235` closure itself is unaffected: the fire-stops-at-10 s
+measurement is census output from the *stock* build, needing no instrumentation of mine, and the
+first of the three runs used the unmodified tree. What does not survive is any claim about whether
+`PUFFER_STATE 0` dispatches.
+
+**`BL-242` is therefore filed as a static read, explicitly unmeasured.** From the data and the
+resolver: `large_10sec_fire` turns the emitter ON at `AT_NODE fire_here` (its own template root, via
+`ResolveInOwnRoot`) and OFF with **no `AT_NODE` at all**, which falls to the anchor — the wreck's
+`destroyed` node, since `player_crash_dirt` calls it `WithNode: destroyed`. Two hosts, two
+`_puffers` keys, so the authored stop cannot reach its own emitter. This is the exact suspect
+`BL-235` recorded as "eliminated, look elsewhere" — correctly eliminated for `large_30sec_fire`,
+whose ON event uses the `INPUT_NODE` sentinel and lands on the anchor like its OFF event does, but
+that def is not the one the crash rig calls. Benign today because `BL-236`'s instance-end rule
+reaches the emitter by ownership and both routes end in `SustainEnd`.
+
+**A fix for the key mismatch was written and reverted.** An ownership-scoped fallback in the `!on`
+branch (stop the same-named emitter this `(def, anchor)` owns when the exact host key misses) built
+clean and passed everything — 345 units, 17/17 engine suites, 13 goldens hash-identical. It was
+reverted for a reason that has itself now been retracted, so `BL-242` records it as written-and-
+available rather than as rejected: it should land with a measurement that shows it doing something,
+which is what `BL-242`'s open questions (a) and (b) exist to produce.
 
 `.\RunTests.ps1` **PASS** on the reverted tree (unchanged from `e44bfd2`): 345 units, 17/17 engine
 suites, engine errors clean, 13 goldens hash-identical.
