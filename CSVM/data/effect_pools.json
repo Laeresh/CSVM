@@ -1,0 +1,37 @@
+{
+  "_about": "How many copies of each world-effects template the stage builds — the effect-template pool (BL-225). Each PlayEffectAt call takes the next copy, so that many overlapping calls to one effect keep their own trails/smoke at their own sites instead of collapsing onto the last one. Hand-authored engine config, NOT extracted game data: the original instances a fresh copy per CALL_ANIMATION and has no such number, so every value here is our finite approximation of 'unbounded'. Consumed by src/Session/EffectPools.cs (M3 polish-5 D10).",
+  "_references": "The mechanism and its traps: docs/architecture.md (AnimRuntime's pool paragraph, WorldEffectsFactory). The tuning entry: backlog.md BL-231. The root names are WorldEffectsFactory.EffectStageRoots — a name here that is not a stage root is reported, never guessed.",
+  "_sizing": "slots = min(maxSlots, base + perExtraPlayer x (players - 1)). Splitscreen/multiplayer multiplies the sources: every extra aircraft is another gun and another rocket at its own site, so the per-player term is what keeps a 4-player or 16-player session from collapsing back onto one copy. maxSlots is the memory guard — each slot is one more copy of that root's subtree.",
+  "_instrument": "AnimRuntime.PoolRecycles counts every call that wrapped onto a still-live slot, and the runtime names the first wrap per effect ('anim: effect pool for <name> recycled slot N of M'). A scripted run that logs none had enough pool; raise the root that logs one, not the default.",
+
+  "maxSlots": 16,
+
+  "default": {
+    "base": 4,
+    "perExtraPlayer": 1,
+    "why": "Sized against rocket concurrency: FIRE_RATE 1/s against ~2.5 s of authored trail motion means at most 3 overlapping blasts per aircraft, plus one spare. Measured: a 9-rocket burst at 1/s logged zero recycles."
+  },
+
+  "roots": {
+    "gunhit": {
+      "base": 1,
+      "perExtraPlayer": 0,
+      "why": "The gun-impact family stays SHARED on purpose (C8): gun hits are throttled to one play per 0.1 s per effect name and each instance is bounded to 0.3 s, so consecutive hits reuse one relocated copy by design at ten hits a second. Raising this without removing that throttle buys copies nothing will use. Removing the throttle is its own step, with its own emitter-count check."
+    },
+    "dum_gunhit": {
+      "base": 1,
+      "perExtraPlayer": 0,
+      "why": "As gunhit — the dum/ap variants' template root."
+    },
+    "mag_gunhit": {
+      "base": 1,
+      "perExtraPlayer": 0,
+      "why": "As gunhit — the magnesium variants' template root."
+    },
+    "partial_damage_obj": {
+      "base": 8,
+      "perExtraPlayer": 1,
+      "why": "The two DAMAGE_SEQUENCE sputters (sputter_black_smoke_obj / sputter_fire_smoke_obj) live here, and damage-stage smoke is the genuinely many-at-once case: one salvo into a cluster damages several objects in the same frame, each wanting its own emitter on its own object. Measured — five simultaneous ap_h2otwr kills wrapped a 4-slot pool exactly once."
+    }
+  }
+}

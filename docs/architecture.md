@@ -163,6 +163,7 @@ clusters they delegate to.
 - `src/Session/LiveryResolver.cs` — resolves each player's livery against a `SessionSpec`: the paint catalog, the pattern-mask library, and the per-player scheme pick.
 - `src/Session/SpawnPicker.cs` — resolves each player's flight spawn against a `SessionSpec`: the shared spawn-list index and the per-player point (or the `--spawn-at=` override).
 - `src/Session/PlaneRoster.cs` — pure lookups over a `SessionSpec`'s plane roster: which plane a player flies, and its display name.
+- `src/Session/EffectPools.cs` — the `data/effect_pools.json` reader: how many copies of each effect template the stage builds, per ROOT, scaled by player count.
 - `src/Session/FlightRigAssembler.cs` — assembles one player's flight rig: painted plane, `FlightController`, loadout/ordnance, HUD instruments, damage visuals, audio, stunt run, spawn, crash runtime.
 
 ### Session root and tests
@@ -512,7 +513,21 @@ ends emission under that node (`EndSustainedOn`) — the only authored stop a st
 has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
 effects stage keeps template roots hidden while their world-space particles show; emission sits at the host's
 mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
-WORLD-15 — zero offset, byte-identical, otherwise). `PlayEffectAt(name, point, inputNode, ttl)` carries
+WORLD-15 — zero offset, byte-identical, otherwise). Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
+`WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
+`PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`, cursor per template
+ROOT name, not per anim name — two defs on one root must not both be handed slot 0). Everything
+template-shaped is then slot-scoped through `TemplateRootsFor(def, node)`: which copy is placed
+(`PlaceTemplateAt`/`PlaceTemplateOn`), revealed (`ShowTemplate`), tested for a move (`TemplateIsAt`)
+and searched for the def's own names (`ResolveInOwnRoot`) — all off the slot the CALL's anchor sits
+in, so a nested CALL_ANIMATION stays inside its caller's copy instead of driving all four
+`fly_trail*` sets. The cursor wraps: past the pool a call recycles a still-live slot, which is the
+old shared-template collapse, counted in `PoolRecycles` and named once per effect.
+⚠ The pool is NOT a third keying scheme — puffer keys are unchanged (`DefScopedPufferKeys` on the
+  effects runtime, the collapsed `(name, host)` on the WORLD runtime, which has no pool at all: its
+  templates are the world's own nodes). Distinct emitters per call fall out of the host node being a
+  different node per slot; do not add slot to a key.
+`PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
 loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
 C8) and one deadline is kept per (def, anchor), so a replay's instance is not stopped on the
@@ -1632,6 +1647,26 @@ Static, spec-free lookups over a `SessionSpec`'s plane roster: `PlaneFor(spec, i
 No session state — every call takes the `SessionSpec` explicitly rather than caching one, since
 these are pure over their arguments.
 
+## src/Session/EffectPools.cs
+The `CSVM/data/effect_pools.json` reader — how many copies of each effect-template ROOT the
+world-effects stage builds (`BL-225`; the numbers are `BL-231` in the TUNE list). Hand-authored
+engine config, in a file rather than a `const` precisely because it is **invented**: the original
+copies its template per CALL_ANIMATION and has no such number, so any finite pool is our
+approximation and the user must be able to move it without a rebuild.
+`SlotsFor(root, players) = clamp(base + perExtraPlayer × (players − 1), 1, maxSlots)` — the
+per-player term is what keeps splitscreen/multiplayer from collapsing back onto one copy, since every
+extra aircraft is another gun and another rocket landing somewhere else. `DepthFor` is the deepest
+root = how many slot containers the stage needs; `UnknownRoots` names an authored root that is not in
+`WorldEffectsFactory.EffectStageRootNames`, since a typo would otherwise size nothing silently
+(asserted in `EffectPoolsTests` against the live table).
+⚠ `Parse` (bytes → sizes) is deliberately separate from `Load` (file IO + engine warnings): the
+  sizing decision is pure and unit-tested without a session, and a missing or malformed file warns
+  and falls back to `EffectPools.Fallback` rather than failing the launch — the same policy `Config`'s
+  `const` defaults have. Keep the fallback values in step with the shipped file.
+⚠ The three gun-impact roots are sized **1** on purpose (C8 throttles the family to one play per
+  0.1 s per name and bounds each to 0.3 s): pooling them buys copies nothing uses. Raising them
+  belongs with removing that throttle, which is its own step with its own emitter-count check.
+
 ## src/Session/FlightRigAssembler.cs
 Assembles one player's flight rig: the painted plane model, the `FlightController` and everything hung
 on it — loadout/ordnance, compass, gauges, HUD font test/weapon readout/reticle, damage visuals,
@@ -1673,6 +1708,15 @@ crash-smokeball lesson; the damage-stage smoke measured near-invisible with it o
 soft edge for additive fire. Templates build with collision suppressed and the stage is visible with
 each ROOT hidden (`AnimRuntime.ShowPlacedTemplates` reveals one while an effect plays on it), so a
 template's meshes render — the rocket's per-type explosion rings, the fireball facades (D31).
+The world-effects stage is built in **pool slots** (`BL-225`): each root is staged in as many copies as
+`EffectPools` sizes it for this session, one copy per `pool<N>` container stamped with
+`AnimRuntime.PoolSlotMeta`, so overlapping calls to one effect each get their own copy (see
+`AnimRuntime`'s pool paragraph for how a call picks its slot). The containers carry no `cs_name` and
+are invisible to name resolution. Sizes are **per root and per player count**, so the deeper slots
+hold only the roots sized that deep and a def whose root has no copy in its slot falls back to one
+that exists (`TemplateRootsFor` picks by modulo — never "all of them", which would be the collapse
+again). The build line names the sizes, not just the total, because a bare count cannot say whether a
+root someone just re-sized actually got its copies.
 ⚠ `EffectStageRoots` must stay the WHOLE anchor-root set of `EffectAnimNames`' call closure, and
   `EffectTemplateRoots` the same for the crash rig's two variants — a def anchors on the node its
   NAME names, so an omitted root leaves it unanchored and it plays nothing, silently. Staging 19 of

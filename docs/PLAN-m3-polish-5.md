@@ -145,7 +145,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — the plan-sized mechanic
 
-10. ☐ `BL-225` One effect-template instance per call, instead of one shared copy relocated
+10. ☑ `BL-225` One effect-template instance per call, instead of one shared copy relocated
 
 ## Dependency and parallelism notes
 
@@ -594,7 +594,7 @@ which mechanism owns the splash models and say so.
 
 # Wave D — the plan-sized mechanic
 
-## D10 ☐ `BL-225` One effect-template instance per call
+## D10 ☑ `BL-225` One effect-template instance per call
 
 **Goal.** Two overlapping effect calls each keep their own instance: two rockets landing within one
 explosion's run keep their own trails, at their own sites, instead of the first blast's trails jumping

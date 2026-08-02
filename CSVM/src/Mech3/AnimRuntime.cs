@@ -43,6 +43,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="AnimDefinition.NodeRefs"/>).</summary>
     public const string IndexMeta = "cs_index";
 
+    /// <summary>Pool-slot metadata key the effect-template pool stamps on each slot container
+    /// (<c>WorldEffectsFactory.BuildWorldEffectsRuntime</c>): every staged template copy lives
+    /// under exactly one of them, and the slot is what keeps one call's copy of a template apart
+    /// from another call's (see <see cref="PooledTemplates"/>). Never on a template node itself,
+    /// so name resolution is blind to it.</summary>
+    public const string PoolSlotMeta = "cs_pool_slot";
+
     /// <summary>The reader's <c>ANIMATION_LOD HIGH</c> â€” see <see cref="QualityLod"/>.</summary>
     public const int HighLod = 2;
 
@@ -171,6 +178,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// their defs turn them on). Off everywhere else, where the stage is visible anyway.</summary>
     public bool ShowPlacedTemplates;
 
+    /// <summary>The staged effect templates exist in more than one copy, one per pool slot
+    /// (<see cref="PoolSlotMeta"/>), and each call takes the next copy instead of relocating the one
+    /// shared original (`BL-225`). Set on the WORLD-EFFECTS runtime only: two rockets landing a
+    /// second apart then keep their own trails at their own sites, where a single copy made the
+    /// first blast's trails jump to the second's. Everything template-shaped becomes slot-scoped
+    /// under it — which copy a call places (<see cref="PlaceTemplateAt"/>), reveals
+    /// (<see cref="ShowTemplate"/>), tests for a move (<see cref="TemplateIsAt"/>) and resolves its
+    /// own node names in (<see cref="ResolveInOwnRoot"/>) — all keyed off the slot the call's anchor
+    /// lives in, so a nested CALL_ANIMATION stays inside its caller's slot.
+    ///
+    /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
+    /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
+    /// <see cref="DefScopedPufferKeys"/> and the <see cref="_puffers"/> remark) — the world's
+    /// templates are the world's own nodes, not staged copies, and there is nothing to pool. A
+    /// pooled call gets distinct emitters for free, because each slot's host node is a different
+    /// node.</para></summary>
+    public bool PooledTemplates;
+
     /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see the
     /// <see cref="_puffers"/> remark. Set on the world-effects runtime, where distinct effect defs
     /// declaring same-named puffers are distinct emitters (the damage-stage sputters); off on the
@@ -250,6 +275,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// started effect whose factory is torn down or whose textures are missing builds nothing and
     /// renders nothing (verification.md WORLD-12).</summary>
     public int PuffersBuilt;
+
+    /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
+    /// was still live â€” the pool being smaller than the concurrency it met, so those two calls
+    /// share a template copy exactly as every call did before <see cref="PooledTemplates"/>. Zero
+    /// is "the pool covered everything asked of it"; a growing count is the number to size against
+    /// (the pool size itself is a TUNE, `WorldEffectsFactory.EffectPoolSlots`).</summary>
+    public int PoolRecycles;
 
     // ---- SOUND_NODE (+ the sound half of OBJECT_ADD_CHILD) ----
     /// <summary>The world's ambient 3D emitters. Null in a muted or soundless session, in which
@@ -383,6 +415,23 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly Dictionary<(string Name, Node3D? Anchor), AnimLight> _lights = new();
 
     private readonly List<(AnimDefinition Def, Node3D? Anchor, float Deadline)> _effectTtls = new();
+
+    // ---- the effect-template pool (BL-225) ----
+    // Which slot each PlayEffectAt call takes next, per template ROOT name (def.Name), not per
+    // anim name: two effect defs that anchor on the same root must not both be handed slot 0 and
+    // collapse onto one copy again. Advances once per call and wraps, so a burst longer than the
+    // pool recycles its oldest slot â€” the shared-template behaviour, but only at the wrap.
+    private readonly Dictionary<string, int> _poolCursor = new(StringComparer.OrdinalIgnoreCase);
+
+    // Node â†’ its pool slot (-1 = outside the pool), memoized on the same terms as _findCache:
+    // slot containers are built before Bind and nothing is ever reparented. TemplateIsAt asks per
+    // event on a poll loop, so the ancestor walk must not be repeated.
+    private readonly Dictionary<ulong, int> _slotOfNode = new();
+
+    // Named once per effect, not per wrap: a pool that recycles a slot whose instance is still
+    // live is the pool being too small for the concurrency, which is a tuning fact worth seeing
+    // and not an error. PoolRecycles counts every one of them.
+    private readonly HashSet<string> _poolRecyclesLogged = new(StringComparer.OrdinalIgnoreCase);
 
     // ---- IF/ELSEIF conditions ----
     // Per condition kind: how often it evaluated true / false. Reported after the bootstrap
@@ -981,10 +1030,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         bool matched = false;
         foreach (var def in _program.ByAnimName(animName))
         {
-            PlaceTemplateAt(def, worldPoint);
             // Anchor the instance on the def's own template root when it resolves (its at_node/
             // motion targets live under that root); fall back to null (global name resolution).
-            var anchor = Anchors(def).FirstOrDefault(a => a != null && IsInstanceValid(a));
+            // Pooled, that root is the NEXT copy in the pool — this call's own — and only that
+            // copy is moved onto the site (BL-225).
+            var roots = NextPooledAnchors(def);
+            PlaceTemplateOn(roots, worldPoint);
+            var anchor = roots.FirstOrDefault();
             bool governed = inputNode != null && IsInstanceValid(inputNode)
                             && DefConditionsOnInputNode(def);
             if (governed)
@@ -995,7 +1047,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             Start(def, anchor);
             // After Start, not with the placement: a governed def's Stop above hides the root
             // again, and this must be the last word on it for the instance now running.
-            ShowTemplate(def, visible: true);
+            ShowTemplate(def, anchor, visible: true);
             matched = true;
             if (!governed && bound > 0f)
             {
@@ -1700,7 +1752,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 TearDownResourcesOf(inst.Def, inst.Anchor);
                 _inputNodes.Remove((inst.Def, inst.Anchor));
-                ShowTemplate(inst.Def, visible: false);
+                ShowTemplate(inst.Def, inst.Anchor, visible: false);
             }
             // Start's seamless restart (tearDown false) keeps the entry, exactly as it keeps
             // the resources the new instance re-asserts.
@@ -2057,9 +2109,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // A placed template called at a DIFFERENT site restarts even while live:
                         // one shared template can only be in one place, so a second rocket landing
                         // inside the first explosion's 2.5 s run was skipped by the live guard and
-                        // showed no trails at all. Restarting collapses the first call onto the new
-                        // site (the documented shared-template limitation — per-call instancing is
-                        // the real answer), which still beats the second blast having nothing.
+                        // showed no trails at all. On a pooled runtime the two calls hold two
+                        // different copies (BL-225) and "a different site" is asked of the caller's
+                        // OWN copy, so this is the wrap case only; unpooled it still collapses the
+                        // first call onto the new site, which beats the second blast having nothing.
                         // Gated on the site actually having moved, so the data's poll idiom
                         // (`If … CallAnimation; Endif; Loop{-1}`) keeps hitting the guard and does
                         // not restart its callee every frame.
@@ -2625,7 +2678,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return ResolvePath(path, null, localOnly: true);
         var found = ResolvePath(path, anchor, localOnly: true);
         if (found.Count == 0)
-            found = ResolveInOwnRoot(path, def);
+            found = ResolveInOwnRoot(path, def, anchor);
         if (found.Count == 0 && !def.LocalNodesOnly)
             found = ResolvePath(path, null, localOnly: true);
         return found;
@@ -2676,28 +2729,120 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         return (resolved, offset);
     }
 
+    /// <summary>The pool slot a node lives in â€” the slot container above it carrying
+    /// <see cref="PoolSlotMeta"/> â€” or -1 for anything outside the pool (every node on a
+    /// non-pooled runtime, and the runtime's own logic nodes). This is what makes "my slot" a
+    /// property of the CALL rather than of the effect: a nested CALL_ANIMATION anchors on a node
+    /// inside its caller's copy, so its own template resolves to the copy beside it.</summary>
+    private int SlotOf(Node3D? node)
+    {
+        if (node == null || !IsInstanceValid(node))
+            return -1;
+        ulong id = node.GetInstanceId();
+        if (_slotOfNode.TryGetValue(id, out int cached))
+            return cached;
+        int slot = -1;
+        for (Node? n = node; n != null; n = n.GetParent())
+            if (n.HasMeta(PoolSlotMeta))
+            {
+                slot = (int)n.GetMeta(PoolSlotMeta);
+                break;
+            }
+        return _slotOfNode[id] = slot;
+    }
+
+    /// <summary>The copies of a definition's own template root(s) that belong with
+    /// <paramref name="inSlotOf"/> â€” the one pool slot that call is running in. Off the pool (or
+    /// for a def whose root is staged in a single copy, like the shared gun family's, which C8
+    /// relocates on purpose) this is every match, exactly as before. Resolved through
+    /// <see cref="FindAll"/> rather than <see cref="Anchors"/>: the callers run per event, and
+    /// Anchors records a per-definition anchoring census that must not be re-entered.
+    ///
+    /// <para>Pool sizes are per ROOT (<c>data/effect_pools.json</c>), so a callee can be staged
+    /// shallower than its caller's slot â€” a slot-5 blast calling a template with only 4 copies.
+    /// That picks one copy by modulo rather than falling back to "all of them": every branch here
+    /// must return ONE call's copies, or a nested call would drive every slot's nodes at once,
+    /// which is the collapse the pool exists to end.</para></summary>
+    private List<Node3D> TemplateRootsFor(AnimDefinition callee, Node3D? inSlotOf)
+    {
+        var roots = FindAll(callee.Name, null);
+        if (!PooledTemplates || roots.Count <= 1)
+            return roots;
+        int slot = SlotOf(inSlotOf);
+        if (slot < 0)
+            return roots;
+        var staged = roots.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
+        if (staged.Count == 0)
+            return roots;
+        int want = staged.Contains(slot) ? slot : staged[((slot % staged.Count) + staged.Count) % staged.Count];
+        var mine = roots.Where(r => SlotOf(r) == want).ToList();
+        return mine.Count > 0 ? mine : roots;
+    }
+
+    /// <summary>Takes the next pool slot for one <see cref="PlayEffectAt"/> call and returns that
+    /// slot's copy of the definition's template root(s) â€” the anchor the new instance runs on, so
+    /// two overlapping calls to one effect animate two different copies at two different sites.
+    /// Empty (and unpooled) runtimes return every anchor, which is the pre-pool behaviour.
+    ///
+    /// <para>The cursor wraps: a burst deeper than the pool recycles its oldest slot, relocating
+    /// and restarting a copy that may still be live â€” the shared-template collapse, now bounded to
+    /// the wrap instead of every call. That is the exhaustion signal, so it is counted and named
+    /// once (<see cref="PoolRecycles"/>).</para></summary>
+    private List<Node3D?> NextPooledAnchors(AnimDefinition def)
+    {
+        var anchors = Anchors(def).Where(a => a != null && IsInstanceValid(a)).ToList();
+        if (!PooledTemplates || anchors.Count <= 1 || string.IsNullOrEmpty(def.Name))
+            return anchors;
+        // The distinct slots this def's roots are staged in, in slot order â€” its pool size. A
+        // root staged shared (gun family) has one slot and never cycles.
+        var slots = anchors.Select(SlotOf).Where(s => s >= 0).Distinct().OrderBy(s => s).ToList();
+        if (slots.Count <= 1)
+            return anchors;
+        int next = _poolCursor.TryGetValue(def.Name, out int cur) ? cur : 0;
+        _poolCursor[def.Name] = (next + 1) % slots.Count;
+        int slot = slots[next % slots.Count];
+        var mine = anchors.Where(a => SlotOf(a) == slot).ToList();
+        if (mine.Count == 0)
+            return anchors;
+        if (IsLive(def, mine[0]))
+        {
+            PoolRecycles++;
+            if (_poolRecyclesLogged.Add(def.AnimName ?? def.Name))
+                GD.Print($"anim: effect pool for '{def.AnimName ?? def.Name}' recycled slot {slot} of "
+                         + $"{slots.Count} while it was still live â€” overlapping calls beyond the "
+                         + "pool size share a copy again");
+        }
+        return mine.Cast<Node3D?>().ToList();
+    }
+
     /// <summary>Moves an effect template's own root(s) to a call site so its puffers â€” which
     /// ride that root (<c>yellow_spark_01</c>, <c>fly_trailN</c>, â€¦), NOT the caller's anchor â€”
     /// emit there instead of at the template's gamez origin. This is the template-instancing the
-    /// original does by copying the template mesh per call; here the single shared template is
-    /// relocated, so overlapping calls to the same template collapse onto the last site (the
-    /// staggered-cluster nuance is a fidelity follow-up). Only the world position is set â€” the
-    /// puffers key off the host origin â€” and the offset is applied in the site's own frame.</summary>
+    /// original does by copying the template mesh per call; on a pooled runtime
+    /// (<see cref="PooledTemplates"/>) it moves only the copy in the CALL'S OWN slot, so a second
+    /// call elsewhere leaves the first blast's copy where it is. Unpooled, the one shared template
+    /// is relocated and overlapping calls collapse onto the last site. Only the world position is
+    /// set â€” the puffers key off the host origin â€” and the offset is applied in the site's own
+    /// frame.</summary>
     private void PlaceTemplateAt(AnimDefinition callee, Node3D site, Vector3 offset) =>
-        PlaceTemplateAt(callee, site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset);
+        PlaceTemplateOn(TemplateRootsFor(callee, site),
+            site.GlobalTransform.Origin + site.GlobalTransform.Basis * offset);
 
-    /// <summary>Moves an effect template's own root(s) to an absolute world point â€” the
-    /// <see cref="PlayEffectAt"/> path, where the site is a hit/death coordinate rather than a
-    /// world node.</summary>
     /// <summary>Shows or hides the effect-template root(s) a definition anchors on, when this
     /// runtime stages its templates hidden (<see cref="ShowPlacedTemplates"/>). Paired with the
     /// effect's life, not its instance: hiding on instance-finish would cut the ring off mid-flight,
-    /// because the authored scale/opacity motions outlive the sequence that launched them.</summary>
-    private void ShowTemplate(AnimDefinition def, bool visible)
+    /// because the authored scale/opacity motions outlive the sequence that launched them.
+    /// <paramref name="anchor"/> is the instance's own anchor, so on a pooled runtime only THAT
+    /// call's copy is revealed or hidden â€” hiding the whole set would blank a sibling blast that
+    /// is still burning.</summary>
+    private void ShowTemplate(AnimDefinition def, Node3D? anchor, bool visible)
     {
         if (!ShowPlacedTemplates)
             return;
-        foreach (var root in Anchors(def))
+        var roots = PooledTemplates && SlotOf(anchor) >= 0
+            ? TemplateRootsFor(def, anchor).Cast<Node3D?>()
+            : Anchors(def);
+        foreach (var root in roots)
             if (root != null && IsInstanceValid(root))
                 root.Visible = visible;
     }
@@ -2708,22 +2853,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// distinct impacts are metres apart, and an exact compare on kilometre-scale world
     /// coordinates would call a float round-trip a move. Resolves the roots the way
     /// <see cref="ResolveInOwnRoot"/> does — this runs per event, and <see cref="Anchors"/> would
-    /// re-enter its per-definition anchoring census on every frame of a poll loop.</summary>
+    /// re-enter its per-definition anchoring census on every frame of a poll loop. Pooled, the
+    /// question is asked of the copy in the CALL's slot: another slot's copy sitting at another
+    /// blast site is not this call being re-issued from somewhere new.</summary>
     private bool TemplateIsAt(AnimDefinition callee, Node3D site, Vector3 offset)
     {
         if (string.IsNullOrEmpty(callee.Name))
             return true;
         var xf = site.GlobalTransform;
         var want = xf.Origin + xf.Basis * offset;
-        foreach (var root in FindAll(callee.Name, null))
+        foreach (var root in TemplateRootsFor(callee, site))
             if (IsInstanceValid(root) && root.GlobalTransform.Origin.DistanceSquaredTo(want) > 0.25f)
                 return false;
         return true;
     }
 
-    private void PlaceTemplateAt(AnimDefinition callee, Vector3 origin)
+    private void PlaceTemplateOn(IEnumerable<Node3D?> roots, Vector3 origin)
     {
-        foreach (var root in Anchors(callee))
+        foreach (var root in roots)
         {
             if (root == null || !IsInstanceValid(root))
                 continue;
@@ -3162,13 +3309,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <see cref="PlaceTemplateAt"/> moves onto a call site, so this is "the copy of the template
     /// that was placed for me" rather than "some same-named node elsewhere in the stage". Uses
     /// <see cref="FindAll"/> directly rather than <see cref="Anchors"/>: this runs per event, and
-    /// Anchors records a per-definition anchoring census that must not be re-entered here.</summary>
-    private List<Node3D> ResolveInOwnRoot(List<string> path, AnimDefinition def)
+    /// Anchors records a per-definition anchoring census that must not be re-entered here.
+    /// <paramref name="anchor"/> narrows it further on a pooled runtime: a nested effect callee is
+    /// re-anchored onto a node inside its CALLER's pool slot, so "my own root" is the copy staged
+    /// beside it â€” without that one blast's <c>call_hetrails_up</c> would drive every slot's
+    /// <c>fly_trail*</c>, including copies parked at the stage origin or serving another site.</summary>
+    private List<Node3D> ResolveInOwnRoot(List<string> path, AnimDefinition def, Node3D? anchor)
     {
         var found = new List<Node3D>();
         if (string.IsNullOrEmpty(def.Name))
             return found;
-        foreach (var root in FindAll(def.Name, null))
+        foreach (var root in TemplateRootsFor(def, anchor))
             foreach (var node in ResolvePath(path, root, localOnly: true))
                 if (!found.Contains(node))
                     found.Add(node);

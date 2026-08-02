@@ -179,9 +179,10 @@ internal sealed class MotionRuntime : IAnimMotion
 
         // A ballistic launch starts from the node's AUTHORED rest pose, not from wherever the last
         // launch left it. The original instances a fresh copy of an effect template per call; we
-        // relocate one shared copy (PlaceTemplateAt), and its children — `fly_trailN` and friends —
-        // are never re-homed, so seeding from the live pose made every repeat explosion start its
-        // trails further from the blast than the one before. The two readings agree everywhere a
+        // relocate a POOLED copy (PlaceTemplateAt — one per slot since BL-225, still finite), and
+        // its children — `fly_trailN` and friends — are never re-homed, so seeding from the live
+        // pose made every repeat explosion on that copy start its trails further from the blast
+        // than the one before. The two readings agree everywhere a
         // launch is re-homed by something else (the crash's CrashRestPoses, ResetDestructible), so
         // this only changes the case nothing was resetting.
         if (m._hasBallistic)

@@ -10319,3 +10319,96 @@ itself is a data-faithful prediction, not a measured match. Filed as `PT-28`.
 Docs: `docs/formats/gamez.md` (the flag decode + census), `gotchas.md` (the SUNLIGHT bullet now names
 the opt-out), `weather.md` (SUNLIGHT no longer reaches every surface), `architecture.md`
 (`GameZ.cs`, `SceneBuilder.cs`, `WorldBuilder.cs`, `Clutter.cs`, `Projectile.cs`).
+
+## 2026-08-02 — M3 Wave D D10: one effect-template instance per call (a pool of them)
+
+`BL-225`, the plan's one plan-sized mechanic. Two rockets landing a second apart now each keep their
+own trails at their own sites, instead of the first blast's trails jumping to the second's.
+
+**The mechanism, and where it does NOT apply.** The original instances a fresh copy of an effect
+template (`he_trails`, `flame_ball_01`, …) per `CALL_ANIMATION`; we relocated a **single shared copy**
+per template, so every overlapping call collapsed onto the last site. What landed is a **pool**: each
+effect template is staged in several copies, one per `pool<N>` container stamped with
+`AnimRuntime.PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`). The
+cursor is keyed by template ROOT name, not by anim name — two defs sharing a root must not both be
+handed slot 0 and collapse again. Everything template-shaped is then **slot-scoped** through one
+helper (`TemplateRootsFor(def, node)`): which copy a call places, reveals, tests for a move
+(`TemplateIsAt`) and resolves its own node names in (`ResolveInOwnRoot`) — all off the slot the CALL's
+anchor sits in, so a nested `CALL_ANIMATION` (`call_hetrails_up` onto `he_ring`) stays inside its
+caller's copy instead of driving every `fly_trail*` set, most of them parked at the stage origin.
+
+**The sizes are config, not a `const` — per root, per player count.** They live in
+`CSVM/data/effect_pools.json` (`EffectPools`, beside `stock_loadouts.json`), because the number is
+**invented**: the original copies per call and has no such value, so any finite pool is our
+approximation and the user has to be able to move it without a rebuild — especially for splitscreen
+and multiplayer, where every extra aircraft is another gun and another rocket landing somewhere else.
+`slots = clamp(base + perExtraPlayer × (players − 1), 1, maxSlots)`. Shipped: default **4 +1/player**,
+`partial_damage_obj` **8 +1** (the measured many-at-once case), the three gun roots **1 +0** (C8's
+throttle owns them), ceiling **16**. That makes a solo session 147 template subtrees over 8 slots and
+a 4-player one 252 over 11 — the build line prints the sizes actually staged, not just a total, since
+a bare count cannot say whether a root someone re-sized got its copies. `Parse` is split from `Load`
+so the sizing is unit-tested with no session (10 new units); a missing or malformed file warns and
+falls back to built-in defaults rather than failing the launch. A root named in the file that is not a
+stage root is reported — and a unit test asserts the shipped file names only real roots, so a rename
+on either side fails in the suite instead of silently sizing nothing.
+
+Trap (c), answered explicitly: **the pool is the world-EFFECTS runtime's alone** (`PooledTemplates`,
+set beside `ShowPlacedTemplates` at the one site that builds the slots). The WORLD runtime keeps the
+collapsed `(name, host)` puffer key and has no pool at all — its "templates" are the world's own
+nodes, and def-scoping its keys is what stacked C5's six `m_crane_go` spark defs on one node and moved
+the c5 golden. Nor is the slot a third keying scheme: puffer keys are untouched, and distinct emitters
+per call fall out of each slot's host being a different node. Trap (b) is preserved by construction —
+the local `CALL_ANIMATION` live-guard and its has-the-site-MOVED gate are unchanged, only the roots
+they ask about are now the caller's own. Trap (a): the restart was not dropped. Trap (e): every pooled
+instance keeps the same per-`(def, anchor)` `EffectTtl` discipline, which is what makes the pool bounded
+rather than a leak with extra steps. Trap (d): the template MESH half (`BL-061` item 2) is untouched.
+
+**Deliberately left in place: C8's gun-impact throttle.** The three gun roots (`gunhit`/`dum_gunhit`/
+`mag_gunhit`) are staged in slot 0 only and stay shared, because C8 throttles that family to one play
+per 0.1 s per name and bounds each to 0.3 s on purpose. Letting the throttle go is the follow-up step
+with its own emitter-count check, exactly as the plan sequenced it — so their entry in the pool file
+is `base 1, perExtraPlayer 0`, and a 16-player session still stages one.
+
+**How verified — the leak baseline first, because a leak is the failure mode.** Pre-change control on
+the unchanged build (METHOD-3/METHOD-9): `--plane=player_bhawk --chapter=C1 --fire-rockets --ammo=3
+--debug-anim --det`, 900 frames — 9 impacts about a second apart, then 8 quiet seconds. Before: the
+effects runtime holds a flat **6 active puffers** through the whole burst and the log shows exactly
+**five** `fly_trail*` nodes, all jumping ~70 m together to each new impact — the bug, in one line.
+After: the same run peaks at **16 active puffers** (four slots' worth) with **several `fly_trail*` sets
+live at once, tens of metres apart** — the acceptance test, read headlessly — and then decays
+16 → 10 → 5 → 1 → 0 within 8 s of the last impact, with the world runtime's 4 ambient emitters
+untouched throughout. The able-to-fail control is that decay: a leak would leave the count growing
+after the last impact, which is exactly what C8's own `GunEffectTtl` 60 s perturbation produced.
+`PoolRecycles` stayed 0 there — 4 covered a 1/s rocket burst.
+
+Seeded `--effects-test` census, C1 before and after: **byte-identical** (33/33 resolved, 30 built a
+puffer, same per-name puffer counts) — the count did not fall, which is what the plan asks. C5 the
+same (33/33, 30), with the same 147/147 templates staged in both. `.\RunTests.ps1` **PASS**: 336 units, 17/17
+engine suites, engine errors clean, and **13 goldens hash-identical — no golden movement to explain**.
+That is the expected result and it is load-bearing rather than lucky: `c1-destroy-effects` is a single
+kill, which takes slot 0, an exact copy of the template that used to be the only one. 8-chapter
+`--freecam --mute` regression: **0 engine errors**, world build counts unchanged (C1 7064/3431 … C5
+11438/4721) — invariant by construction, since a plane-less freecam builds no world-effects runtime at
+all (confirmed: no `world-effects runtime:` line in any of the eight logs).
+
+**The pool's own exhaustion signal — measured, then sized against.** `--destroy=h2otwr` kills five
+`ap_h2otwr` towers in one frame, five simultaneous damage-stage sputters. Against a uniform 4-slot pool
+that logged exactly one `anim: effect pool for 'sputter_fire_smoke_obj' recycled slot 0 of 4 while it
+was still live` — four objects keeping their own smoke and the fifth sharing, where before all five
+collapsed onto one. **That measurement is what sized `partial_damage_obj` at 8 in the pool file**, and
+the same run against the shipped sizes logs **zero** recycles. That is `BL-061`'s "one live instance
+per effect def" face of the same bug, closed for the concurrency the data actually produces. Player
+scaling verified end to end: a `--players=4` session stages **252 templates over 11 slots** (7 per
+default root) against a solo session's 147 over 8, from the same file.
+
+**Found on the way, filed not fixed:** a flight session plus `--destroy` builds the world-effects
+runtime **twice** — `GameSession.cs:1217` builds directly without populating the factory's
+`_worldEffects` cache, so `ApplyDestroyOverride`'s `EnsureWorldEffects` builds a second. Harmless to
+the picture (the golden is identical either way) but a debug-path waste the pool now multiplies;
+`BL-232`.
+
+Docs: `architecture.md` (`AnimRuntime`'s pool paragraph + the not-a-third-key warning,
+`WorldEffectsFactory`'s slot layout, a new `EffectPools` entry), `PROJECT_CONTEXT.md` (`CSVM/data/`
+now holds two config files), `backlog.md` (`BL-225` deleted, `BL-231` TUNE rewritten around the file,
+`BL-232` added). No `docs/formats/` page: this is engine instancing and our own config, not a decode
+of the original.

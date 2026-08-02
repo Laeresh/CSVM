@@ -56,6 +56,17 @@ public sealed class WorldEffectsFactory
     // fire, so it completes), then tears its puffers down.
     private const float EffectRuntimeTtl = 32f;
 
+    // How many copies of each effect template the stage holds, one per pool slot, so overlapping
+    // calls to one effect each keep their own (BL-225 — before this, the one copy was relocated
+    // and the first blast's trails jumped to the second's site). A call takes the next slot and
+    // the cursor wraps, so this is the concurrency the pool covers before two calls share a copy
+    // again.
+    // ⚠ INVENTED, not decoded — the original copies its templates per call and has no such
+    // number. Which is exactly why the sizes live in `CSVM/data/effect_pools.json` (EffectPools)
+    // rather than in a const here: per ROOT, scaled by the session's player count, editable
+    // without a rebuild. Recorded in backlog.md's TUNE list; the runtime counts (and names once)
+    // every call that wraps onto a live slot — AnimRuntime.PoolRecycles is what to size against.
+
     // The crash/effect template roots (world-gamez nodes WorldBuilder skips, because the world
     // never renders them ambiently — they exist to be instanced onto a kill/crash site). Built into
     // the anim lab's stage so a played effect def resolves the puffer host that rides its own root.
@@ -117,6 +128,11 @@ public sealed class WorldEffectsFactory
     private readonly SessionSpec _spec;
     private readonly Node3D _worldRoot;
     private readonly Func<Vector3> _playerPosition;
+
+    // The authored per-root pool sizes (see the EffectPoolSlots remark above). Read once per
+    // session, like the rest of this factory's inputs.
+    private readonly EffectPools _pools = EffectPools.Load();
+
     private AnimRuntime? _worldEffects;
 
     public WorldEffectsFactory(SessionSpec spec, Node3D worldRoot, Func<Vector3> playerPosition)
@@ -125,6 +141,12 @@ public sealed class WorldEffectsFactory
         _worldRoot = worldRoot;
         _playerPosition = playerPosition;
     }
+
+    /// <summary>The effect-template ROOT names the world-effects stage builds — the set
+    /// <see cref="EffectPools"/> sizes, exposed read-only so the committed pool config can be
+    /// checked against the live table (a root renamed on one side and not the other would
+    /// otherwise size nothing, silently).</summary>
+    public static IReadOnlyList<string> EffectStageRootNames => EffectStageRoots;
 
     /// <summary>Builds the <see cref="EffectTemplateRoots"/> from the world gamez as children of
     /// <paramref name="parent"/> (the lab stage), each reset to sit at the stage origin — a
@@ -189,10 +211,28 @@ public sealed class WorldEffectsFactory
     {
         var stage = new Node3D { Name = "world_effects" };
         _worldRoot.AddChild(stage);
-        int staged = BuildEffectStage(gamez, worldScene, stage, EffectStageRoots);
-        foreach (var child in stage.GetChildren())
-            if (child is Node3D root)
-                root.Visible = false;
+        // The pool (BL-225): each root staged in as many copies as effect_pools.json sizes it for
+        // THIS session's player count, one copy per slot container, and AnimRuntime hands the next
+        // slot to each call. The containers carry only the slot meta and no cs_name, so they are
+        // invisible to name resolution — what keeps the copies apart is the slot, read off the
+        // anchor a call runs on. Sizes differ per root, so the deeper slots hold only the roots
+        // sized that deep (the shared gun family lives in slot 0 alone); a def whose root has no
+        // copy in its slot falls back to one that exists.
+        int players = Math.Max(1, _spec.Players);
+        int depth = _pools.DepthFor(EffectStageRoots, players);
+        int staged = 0;
+        for (int slot = 0; slot < depth; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            stage.AddChild(pool);
+            int at = slot;
+            staged += BuildEffectStage(gamez, worldScene, pool,
+                Array.FindAll(EffectStageRoots, r => _pools.SlotsFor(r, players) > at));
+            foreach (var child in pool.GetChildren())
+                if (child is Node3D root)
+                    root.Visible = false;
+        }
         // The impact/death SOUND an effect def carries is already played by the projectile pool
         // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
         // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
@@ -207,10 +247,31 @@ public sealed class WorldEffectsFactory
         // templates and not to the world's or the crash roots' same-named nodes — but parent the
         // runtime node itself under the visible world root, a plain logic node that self-ticks.
         effects.ShowPlacedTemplates = true;
+        effects.PooledTemplates = true;
         effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
         _worldRoot.AddChild(effects);
-        GD.Print($"world-effects runtime: {staged}/{EffectStageRoots.Length} effect template(s) staged, "
+        int wanted = 0;
+        foreach (var r in EffectStageRoots)
+            wanted += _pools.SlotsFor(r, players);
+        // Name the sizes, not just the total: "143 staged" cannot say whether a root the tester
+        // just re-sized actually got its copies. Grouped by size so the line stays one line.
+        var bySize = new SortedDictionary<int, List<string>>();
+        foreach (var r in EffectStageRoots)
+            bySize.TryAdd(_pools.SlotsFor(r, players), new List<string>());
+        foreach (var r in EffectStageRoots)
+            bySize[_pools.SlotsFor(r, players)].Add(r);
+        var sizes = new List<string>();
+        foreach (var (size, names) in bySize)
+        {
+            sizes.Add(names.Count > 4
+                ? $"{size}× {names.Count} root(s)"
+                : $"{size}× {string.Join("/", names)}");
+        }
+        GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
+                 + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
                  + $"{EffectAnimNames.Length} effect name(s) bound");
+        foreach (var unknown in _pools.UnknownRoots(EffectStageRoots))
+            Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
         return effects;
     }
 

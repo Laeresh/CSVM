@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-231`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-233`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -98,23 +98,6 @@ work is below.
     — that reading was considered and disproven by the same census.
     *Playtest after fix:* look for wreck pieces arcing along a correct trajectory, not just moving
     further. `./RunGame.ps1 --plane=player_pfighter --chapter=C1 --fire`.
-13. `BL-225` **One effect template per call, instead of one shared copy relocated.** The original instances a
-    fresh copy of an effect template (`he_trails`, `flame_ball_01`, …) per `CALL_ANIMATION`; we relocate a
-    single shared copy, so overlapping calls collapse onto the last site. Two rockets landing within one
-    explosion's run share one set of trails: since 2026-08-01 the second call relocates and **restarts** the
-    template (before that it was skipped by the live-instance guard and drew nothing), so the second blast
-    is served — but the first blast's in-flight trails jump to the new site with it.
-    *Fix shape:* a small pool of template copies per effect root, cycled per call, with motions and puffers
-    keyed by instance. The gun-impact smoke (C8, landed 2026-08-01) is the same problem at a much higher
-    event rate and does **not** solve it — it throttles plays to one per 0.1 s per effect name and bounds
-    each instance to 0.3 s, so consecutive hits reuse the one relocated template deliberately. A pool here
-    would let the throttle go.
-    ⚠ **Traps.** (a) Do not "fix" it by dropping the restart — that regresses to the second explosion
-    showing nothing. (b) The restart is gated on the call site having MOVED; a poll-idiom call
-    (`If … CallAnimation; Endif; Loop{-1}`) must keep hitting the live guard or its callee restarts every
-    frame and never progresses.
-    *Playtest after fix:* fire two rockets a half-second apart at separate targets — both explosions keep
-    their own trails. `./RunGame.ps1 --plane=player_bhawk --chapter=C1 --fire-rockets`.
 **Test / debug affordances (findings 6, 14).**
 20. `BL-142` **Re-tune `IndicatorLowFrac` for guns on its own merits, not the pylon coincidence.**
     The 0.34 threshold (`GaugeCluster.cs:76`) was picked so a 3-round rocket pylon steps
@@ -472,6 +455,19 @@ unscheduled.
   trail shows, so the arc shape is TUNE, not fidelity; and the DISTANCE interval hides behind an
   inverted flag (`has_interval_value` false, key off `interval_type`).
 
+- `BL-232` **A flight session plus `--destroy` builds the world-effects runtime TWICE (found while
+  landing `BL-225`, 2026-08-02).** `GameSession.cs:1217` calls `BuildWorldEffectsRuntime` directly and
+  does **not** populate the factory's `_worldEffects` cache, so `ApplyDestroyOverride`'s
+  `EnsureWorldEffects` (`:1364`) finds it null and builds a second one — two stages, two runtimes,
+  both live (`world-effects runtime: …` prints twice in `--plane=… --destroy=…` logs). Harmless to
+  the picture today (`c1-destroy-effects` is hash-identical either way, and only the wired runtime
+  receives calls), but it is a debug-path waste that the template pool multiplies: each stage is now
+  `EffectPoolSlots` × ~38 template subtrees. *Fix shape:* route `:1217` through `EnsureWorldEffects`
+  so there is one cache and one runtime, as `docs/architecture.md` already says there is.
+  ⚠ Trap: `:1217` wires the projectile pool's `EffectSink` and the world runtime's `ExternalEffect`
+  in one place and `EnsureWorldEffects` only wires the latter (and only if unset) — check the
+  ordering against a `--fly --destroy` run before assuming the two are interchangeable.
+
 - `BL-061` **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
   (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; one thread
   still open (numbering kept — other entries cite `item 2`; **item 3 disproven, M3 polish-5 B5,
@@ -493,9 +489,11 @@ unscheduled.
   runtime keys emitters per-def (`DefScopedPufferKeys`), which unmasked 7 gun-variant builds
   (census 18 → 25 of 30); the WORLD runtime deliberately keeps the collapsed `(name, host)` key
   (see the `_puffers` field comment — def-scoping it stacked C5's six `m_crane_go` spark defs on
-  one node and moved the c5 golden). Related limitation, same per-call-instancing family as
-  `BL-225`: **one live instance per effect def** — a second damaged object's sputter restarts the
-  shared def, so simultaneous damage-stage smoke collapses onto the latest object.
+  one node and moved the c5 golden). The related "one live instance per effect def" limitation —
+  a second damaged object's sputter restarting the shared def — **is closed for up to
+  `EffectPoolSlots` (4) concurrent objects** by the template pool (`BL-225`, landed 2026-08-02,
+  measured: 5 simultaneous `ap_h2otwr` kills serve 4 and recycle the 5th, which the runtime names).
+  Beyond the pool the old collapse returns; the size is `BL-231` in the TUNE list.
 
 - `BL-062` **Rocket firing order — drain the selected hardpoint, not round-robin (M3 polish, user
   2026-07-24) — the round-robin fix merged as `bea7947`.** The original fires **only the
@@ -1219,6 +1217,30 @@ The live list (moved here from CLAUDE.md 2026-07-22). Each is a hand-tuned const
 plausible but unvalidated against the original — they need the user in the cockpit, not another
 scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.md).**
 
+- `BL-231` **Effect-template pool sizes (D10, 2026-08-02).** `CSVM/data/effect_pools.json` — how many
+  copies of each effect template the world-effects stage holds, so that many overlapping calls to one
+  effect each keep their own (`BL-225`). **Invented, and the data cannot settle it**: the original
+  copies its template per call and has no such number, so any finite pool is our approximation of
+  "unbounded" — which is why it is an editable file and not a `const`. Shipped: default **4 base
+  +1 per extra player**, `partial_damage_obj` **8 +1**, the three gun roots **1 +0**, ceiling
+  **16**. The default came from rocket concurrency (`FIRE_RATE` 1/s against ~2.5 s of authored trail
+  motion → at most 3 overlapping blasts) plus a spare; the sputter root from measurement (five
+  simultaneous `ap_h2otwr` kills wrapped a 4-slot pool exactly once, and do not wrap an 8).
+  Judge it where concurrency is highest — a rocket burst into a cluster of destructibles, and
+  splitscreen/multiplayer, where each extra aircraft is another source. **The per-player term and
+  the ceiling are the two knobs a many-player build should re-judge**: at 16 players the default
+  root wants 19 and gets 16.
+  The instrument is in the build: `AnimRuntime.PoolRecycles` counts every call that wrapped onto a
+  still-live slot and the runtime names the first per effect (`anim: effect pool for '<name>'
+  recycled slot …`); the world-effects build line prints the sizes actually staged. A scripted run
+  that logs no recycle had enough pool — raise the root that logs one, not the default.
+  ⚠ Traps: it is not free — each slot is one more copy of that root's subtree (1 player: 147
+  templates; 4 players: 252), so raising the default multiplies world-build cost and memory for
+  effects that are mostly not concurrent. The three gun-impact roots stay at **1** deliberately: C8
+  throttles the gun family to one play per 0.1 s per name, so pooling them buys copies nothing uses;
+  raising them belongs with removing that throttle (its own step, its own emitter-count check).
+  Sizing a root **0** is not a way to disable pooling — it clamps to 1, because staging no template
+  at all reads in-game as a broken effect.
 - `BL-230` **Near-miss trigger distance (B7, 2026-08-02).** `WarningShotCue.PassRadius` = **15 m**,
   the distance a round's swept step must pass within to sound `bullet_warning_sg`. Chosen, not read:
   the shipped `warning_shot_*` block rates the cue but says nothing about how close is close, and the

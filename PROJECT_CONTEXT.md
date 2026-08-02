@@ -70,7 +70,7 @@ One line each — **the extraction pipeline, the launch scripts and the mech3ax 
 
 - `CSVM/` — the Godot 4 .NET project (the actual remake; committed). See "Godot project" below.
 - `CSVM/shaders/` — shared `.gdshaderinc` blocks `#include`d by the generated shaders (instance-uniform order, sRGB, fog, lights, clock).
-- `CSVM/data/` — **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`).
+- `CSVM/data/` — **committed** hand-authored engine config (not extracted assets), loaded via `res://`. Holds `stock_loadouts.json` (the 11 planes' stock weapon fit; see `docs/formats/loadouts.md`) and `effect_pools.json` (per-root effect-template pool sizes; see `docs/architecture.md` on `EffectPools`).
 - `CSVM.Tests/` — the xUnit project (`dotnet test`): reader units on hand-authored fixtures + `extracted/` golden counts, skipped when absent.
 - `CrimsonSkiesGame/` — the user's retail install (git-ignored): ZBD archives in `CrimsonSkiesGame/ZBD/` as chapters `C1`–`C5`, each with `IA1` / `M0x` / `MP1`–`3`; cutscenes are plain MPGs in `CrimsonSkiesGame/GOSDATA/ASSETS/GRAPHICS/MPG/`.
 - `extracted/` — extraction output workdir (git-ignored), mirroring the game's ZBD structure. Loaders prefer an unpacked sibling folder over its `.zip`. Layout + what is deliberately not loaded: `docs/tooling.md`.
@@ -189,7 +189,8 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan:** [`docs/PLAN-m3-polish-5.md`](docs/PLAN-m3-polish-5.md), Wave D. **Next:** `D10`
-(`BL-225`); owed cockpit re-tests (`PT-13`–`PT-28`) remain in [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
+**Active plan:** [`docs/PLAN-m3-polish-5.md`](docs/PLAN-m3-polish-5.md), Wave D landed — all ten items
+resolved. **Next:** archive it to `docs/plans/` with its `plans.md` row, then pick the next plan; owed
+cockpit re-tests (`PT-13`–`PT-28`) remain in [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) before measuring anything.
 
 Everything else unscheduled — known issues, deferred items, fidelity questions, the TUNE list — is in `backlog.md`; keep it updated as items land or get scheduled.
