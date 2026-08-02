@@ -7,6 +7,18 @@
           {
             "type": "command",
             "shell": "powershell",
+            "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; $c = $j.tool_input.command; if (-not $c) { exit 0 }; $q = [char]39; if ($j.tool_name -eq 'Bash' -and ($c -match ('@' + $q + '\\r?\\n')) -and ($c -match ('(^|\\n)' + $q + '@'))) { [Console]::Error.WriteLine('BLOCKED: PowerShell here-string (@' + $q + ' ... ' + $q + '@) in the Bash tool, which takes a heredoc. Bash treats the @ lines as literal text instead of failing, so the content lands corrupted (this has silently mangled commit messages). Use a heredoc: cmd <<' + $q + 'EOF' + $q + ' ... EOF. For a multi-line commit message prefer Write to a file, then: git commit -F <file>.'); exit 2 }; if ($j.tool_name -eq 'PowerShell' -and (($c -match ('<<-?\\s*' + $q + '?[A-Za-z_]')) -or $c.Contains('/dev/null'))) { [Console]::Error.WriteLine('BLOCKED: bash syntax (heredoc or /dev/null) in the PowerShell tool. Use a here-string @' + $q + ' ... ' + $q + '@ with the closing delimiter at column 0, and $null instead of /dev/null.'); exit 2 }; exit 0",
+            "timeout": 15,
+            "statusMessage": "shell-syntax check..."
+          }
+        ]
+      },
+      {
+        "matcher": "Bash|PowerShell",
+        "hooks": [
+          {
+            "type": "command",
+            "shell": "powershell",
             "command": "$j = [Console]::In.ReadToEnd() | ConvertFrom-Json; if ($j.tool_input.command -match 'RunTests\\.ps1|dotnet\\s+test|git\\s+commit') { dotnet format 'CSVM/CSVM.csproj' --verbosity quiet; $buildOutput = dotnet build 'CSVM/CSVM.csproj' --verbosity quiet --nologo -t:Rebuild 2>&1; $remaining = $buildOutput | Select-String -Pattern 'SA\\d{4}' | Where-Object { $_.Line -notmatch 'SA0001' }; if ($remaining) { $remaining | ForEach-Object { [Console]::Error.WriteLine($_.Line) }; [Console]::Error.WriteLine('StyleCop warnings dotnet format could not auto-fix remain above (SA0001 excluded) - fix them by hand, then retry.'); exit 2 } }; exit 0",
             "timeout": 300,
             "statusMessage": "dotnet format before tests..."
