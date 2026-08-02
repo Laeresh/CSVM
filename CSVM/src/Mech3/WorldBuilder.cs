@@ -46,6 +46,26 @@ public sealed class WorldBuilder
     // A 10x margin either side of the 0.5 threshold. C1B and C3 have no flat-tile bucket at all
     // and correctly resolve no deck. Note the deck is NOT identifiable by sitting above the
     // world: C4's tallest non-tile root reaches y=1490, well over its own deck at 1050.
+    //
+    // Deck tiles are the ONE exception to the backface culling below: they build
+    // forceDoubleSided (see Add). Every one of the 144 tiles carries show_backface: false in both
+    // C1 (models 1004-1147) and C4, yet the player flies THROUGH the deck — Tick pins it to the
+    // whiteout-band centre and never re-orients it (WeatherRig.cs:86-97), so the same quad has to
+    // read as a ceiling from below and a floor from above.
+    //
+    // The side culling lost is the UNDERSIDE: every tile's authored face points +Y, so the floor
+    // seen from above was unaffected (a C1 camera at y=1400 renders bit-identical with and
+    // without this) while the overcast CEILING — the ordinary in-flight view — vanished
+    // completely. That is what the goldens caught: the four deck chapters moved, the four
+    // deckless ones did not, and each diff is confined to the top of the frame.
+    //
+    // (The original may instead flip the sheet to face the plane. That can only happen at the
+    // deck's own plane, where the quad is edge-on and covers no pixels, so the two are visually
+    // identical — double-siding just needs no per-frame state or threshold.)
+    //
+    // Corroborating the structural classifier: the deck tiles are also the only world nodes
+    // flagged terrain AND !altitude_surface AND !intersect_surface — 144 in C1/C1C/C2B, the 144
+    // C4 tiles plus 20 model-less g0 placeholders, and zero in the four deckless chapters.
     private const float DeckCoverageFraction = 0.5f;
 
     private readonly GameZ _gamez;
@@ -793,14 +813,16 @@ public sealed class WorldBuilder
         if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
             return;
         var node = _gamez.Nodes[nodeIndex];
-        var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode);
+        bool isDeck = _deckNodes.Contains(nodeIndex);
+        var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
+            forceDoubleSided: isDeck);
         if (built != null)
         {
             if (IsParkedAtOrigin(node, built))
             {
                 _parkedAtOrigin.Add((node, built));
             }
-            (_deckNodes.Contains(nodeIndex) ? deck : root).AddChild(built);
+            (isDeck ? deck : root).AddChild(built);
         }
     }
 

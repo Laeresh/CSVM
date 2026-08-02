@@ -172,7 +172,11 @@ void fragment() {
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
-    private readonly Dictionary<int, ArrayMesh?> _meshCache = new();
+    // Keyed by (model index, force-double-sided): sidedness is baked into the built surfaces, so
+    // a deck tile's forced build must not be handed back for the same model referenced normally.
+    // No model in this install is referenced both ways (the deck's 144 tiles have exclusive model
+    // indices in every chapter that has a deck), so this is defence, not a live case.
+    private readonly Dictionary<(int Model, bool Force), ArrayMesh?> _meshCache = new();
     private readonly Dictionary<int, Vector3> _meshPivotCache = new(); // billboard meshes only: local quad center
     private readonly Dictionary<int, ArrayMesh> _lightMeshCache = new();
     private readonly Dictionary<int, List<(string? Surface, ConcavePolygonShape3D Shape)>> _colliderCache = new();
@@ -332,9 +336,12 @@ void fragment() {
     /// <param name="skip">Subtrees to drop entirely (not rendered, no collision).</param>
     /// <param name="collisionSkip">Subtrees to render but exempt from collision (e.g. clouds);
     /// the exemption applies to the node and all its descendants.</param>
+    /// <param name="forceDoubleSided">Render this subtree's polygons from both sides whatever
+    /// their SHOW_BACKFACE flag says — the cloud deck's exception to <c>cullBackfaces</c>, see
+    /// <see cref="WorldBuilder"/>. Inherited by all descendants.</param>
     public Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip = null,
-        Predicate<GameZNode>? collisionSkip = null) =>
-        BuildSubtree(node, skip, collisionSkip, _generateCollision);
+        Predicate<GameZNode>? collisionSkip = null, bool forceDoubleSided = false) =>
+        BuildSubtree(node, skip, collisionSkip, _generateCollision, forceDoubleSided);
 
     /// <summary>Re-resolves every textured material through the current substitution hook and
     /// writes the result back into the live material. Used by the viewer's livery lab: the
@@ -566,7 +573,7 @@ void fragment() {
     }
 
     private Node3D? BuildSubtree(GameZNode node, Predicate<GameZNode>? skip,
-        Predicate<GameZNode>? collisionSkip, bool collidable)
+        Predicate<GameZNode>? collisionSkip, bool collidable, bool forceDoubleSided)
     {
         if (skip != null && skip(node))
             return null;
@@ -591,7 +598,7 @@ void fragment() {
         if (node.MeshIndex >= 0 && node.MeshIndex < _gamez.Meshes.Count
             && !_gamez.IsMarkerGizmo(node.MeshIndex))
         {
-            var mesh = GetMesh(node.MeshIndex);
+            var mesh = GetMesh(node.MeshIndex, forceDoubleSided);
             if (mesh != null)
             {
                 var mi = new MeshInstance3D { Mesh = mesh, Name = "mesh" };
@@ -625,7 +632,8 @@ void fragment() {
         {
             if (childIndex < 0 || childIndex >= _gamez.Nodes.Count)
                 continue;
-            var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable);
+            var child = BuildSubtree(_gamez.Nodes[childIndex], skip, collisionSkip, collidable,
+                forceDoubleSided);
             if (child != null)
                 n3d.AddChild(child);
         }
@@ -765,16 +773,16 @@ void fragment() {
         return mesh;
     }
 
-    private ArrayMesh? GetMesh(int meshIndex)
+    private ArrayMesh? GetMesh(int meshIndex, bool forceDoubleSided = false)
     {
-        if (_meshCache.TryGetValue(meshIndex, out var cached))
+        if (_meshCache.TryGetValue((meshIndex, forceDoubleSided), out var cached))
             return cached;
-        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex);
-        _meshCache[meshIndex] = mesh;
+        var mesh = BuildMesh(_gamez.Meshes[meshIndex], meshIndex, forceDoubleSided);
+        _meshCache[(meshIndex, forceDoubleSided)] = mesh;
         return mesh;
     }
 
-    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex)
+    private ArrayMesh? BuildMesh(GameZMesh mesh, int meshIndex, bool forceDoubleSided)
     {
         if (mesh.Polygons.Count == 0)
             return null;
@@ -818,7 +826,7 @@ void fragment() {
         var groupIndex = new Dictionary<(int, int, bool, bool), int>();
         foreach (var poly in mesh.Polygons)
         {
-            bool doubleSided = !_cullBackfaces || poly.ShowBackface;
+            bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
             var key = (poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided);
             if (!groupIndex.TryGetValue(key, out int gi))
             {
