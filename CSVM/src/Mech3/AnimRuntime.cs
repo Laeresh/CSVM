@@ -2249,7 +2249,47 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             {
                 running.Puffer.SustainEnd();
                 _activePuffers.RemoveAll(a => a.Puffer == running.Puffer);
+                return;
             }
+            // The two halves of an authored on/off pair do not always name the same host, so the
+            // exact key can miss an emitter this very instance is running. Measured on a C1 crash
+            // (BL-242): all four defs whose stop missed start the emitter at their OWN template
+            // root and stop it with no AT_NODE at all, which falls to the anchor —
+            // `large_10sec_fire` ON at `fire_here` / OFF at `destroyed`, `large_fireball` ON at
+            // `flame_ball_01` / OFF at `healthy`, likewise `small_yellow_sparks` and
+            // `large_black_smokeball`. Two keys, one emitter: the stop looked up a key nothing
+            // ever wrote and returned silently.
+            //
+            // Fall back to the same-named emitter THIS instance OWNS — the `(def, anchor)`
+            // identity every other teardown path resolves through (FinishEffectInstance,
+            // TearDownResourcesOf). That is exactly what `PUFFER_STATE <name> 0` asks for: stop
+            // MY puffer called <name>. Narrowed on the name as well as the owner, so a def
+            // running several emitters (`he_trails`' five spurt columns) still stops only the
+            // one the event names.
+            var owned = _puffers
+                .Where(kv => kv.Key.Name == pufferName
+                             && kv.Value.Def == def && kv.Value.Anchor == anchor)
+                .Select(kv => kv.Value.Puffer)
+                .ToList();
+            foreach (var stray in owned)
+            {
+                stray.SustainEnd();
+                _activePuffers.RemoveAll(a => a.Puffer == stray);
+            }
+            // Say it out loud. A stop reaching nothing is how this stayed invisible: every one of
+            // the four was masked by a backstop that happened to fire at the authored moment —
+            // three by the `OBJECT_ACTIVE_STATE false` sitting next to them in the same stopper
+            // (EndSustainedOn), `large_10sec_fire` by BL-236's instance-end rule. A future def
+            // without that luck would just leak.
+            Count(owned.Count > 0
+                ? $"PufferState(stop matched by owner, not host: {pufferName})"
+                : $"PufferState(stop reached no emitter: {pufferName})");
+            if (DebugMotions)
+                GD.Print($"anim: PUFFER_STATE 0 '{pufferName}' missed its host '{NameOf(host)}' "
+                         + $"[def {def.AnimName}] — "
+                         + (owned.Count > 0
+                             ? $"stopped {owned.Count} emitter(s) this instance owns instead"
+                             : "this instance owns no emitter of that name"));
             return;
         }
         if (_puffers.TryGetValue(key, out var existing))

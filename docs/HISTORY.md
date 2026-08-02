@@ -10865,3 +10865,59 @@ Manifest re-pinned in the same commit with each move annotated, per `analysis/go
 **User-confirmed in flight (2026-08-02):** the ceiling→floor transition through the band looks
 right. That was the one thing the headless captures could not settle — they cover both sides
 statically, but not the crossing in motion.
+
+## 2026-08-02 — `BL-242`: an authored `PUFFER_STATE 0` could not reach its own emitter; four defs, all masked
+
+**The retracted claim was wrong in substance too, and this time the instrument was in the binary.**
+The earlier "measurement" said the authored `PUFFER_STATE 0` never dispatches. Re-run properly —
+`dotnet build CSVM/CSVM.sln` first, binary timestamp checked against the run — it dispatches **25
+times** in one C1 crash probe, against a positive control of **40,427** `on=True` lines from the
+same `GD.Print`. The positive control is the point: it proves the build carries the instrument, so
+a zero would have meant something. The earlier zero meant only that nothing was compiled in.
+
+**The real defect: the two halves of an authored on/off pair resolve different hosts.** Of the 25
+stops, 21 hit and **4 missed**, and the four are one pattern — each starts its emitter at the def's
+OWN template root and stops it with no `AT_NODE` at all, which falls to the anchor:
+
+| def | ON host | OFF host (= anchor) | key hit? |
+|---|---|---|---|
+| `large_10sec_fire` | `fire_here` | `destroyed` | **no** |
+| `large_fireball` | `flame_ball_01` | `healthy` | **no** |
+| `small_yellow_sparks` | `yellow_spark_01` | `healthy` | **no** |
+| `large_black_smokeball` | `black_smoke_ball_01` | `healthy` | **no** |
+
+`_puffers` is keyed on `(name, host, def)`, so the stop looked up a key nothing ever wrote and
+returned silently.
+
+**Every one of the four was masked, by two different backstops that happened to coincide with the
+authored moment.** Three of them (`large_fireball`, `small_yellow_sparks`,
+`large_black_smokeball`) carry an `OBJECT_ACTIVE_STATE <host> false` as the very next event in the
+same stopper sequence, and that path runs `EndSustainedOn` (`AnimRuntime.cs:1896`), which ends
+emitters hosted anywhere under the node — the same host the `PUFFER_STATE 1` used. So the emitter
+did stop, on time, by the *other* half of the stopper. `large_10sec_fire` has no such event and was
+covered instead by `BL-236`'s instance-end rule, whose moment coincides with its authored 10 s
+because its stopper is what finishes the instance. **That is why this survived three emitter-bug
+investigations: the outcome was right every time, by luck, through a mechanism nobody was looking
+at.** A future def with a mid-life stop and no host deactivation would simply leak.
+
+**The fix is the ownership fallback, now earned.** When the exact host key misses, the `!on` branch
+stops the same-named emitter this `(def, anchor)` instance OWNS — the identity
+`FinishEffectInstance` and `TearDownResourcesOf` already resolve through, and exactly what
+`PUFFER_STATE <name> 0` asks for ("stop MY puffer called `<name>`"). Narrowed on the puffer name as
+well as the owner, so `he_trails`' five spurt columns still stop one at a time. The miss is now
+counted and, under `--debug-anim`, said out loud, so the next one is visible instead of silent.
+
+**Verified on a re-probe with the fix built in:** all four now report `stopped 1 emitter(s) this
+instance owns instead`, none reports `owns no emitter of that name`, and `large_10sec_fire`'s stop
+lands one line after the last `fire_n_smoke` census — the authored 10 s, the same moment the
+instance-end rule used to produce. Mechanism corrected, timing unchanged.
+
+`.\RunTests.ps1` **PASS**: 345 units, 17/17 engine suites, engine errors clean, **13 goldens
+hash-identical** — including `c1-crash` and `c1-destroy-effects`. Pixel-neutral, as expected: in
+all four measured cases the fallback stops the emitter at the moment a backstop already did.
+
+**Method note, carried from the retraction.** `RunTests.ps1` builds; `RunProbe.ps1` does **not**
+(`RunProbe.ps1:17`). Every probe here was preceded by an explicit `dotnet build` with the DLL
+timestamp checked, and every negative result was backed by a positive control in the same run.
+`BL-241` still stands as the real guard: no suite can observe emitter lifetime until the test
+harness keeps its texture archive open.

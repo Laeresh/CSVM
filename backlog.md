@@ -388,42 +388,6 @@ unscheduled.
 
 ### World animation & effects
 
-- `BL-242` **`large_10sec_fire`'s authored `PUFFER_STATE 0` cannot reach its own emitter: the ON and
-  OFF halves compute different `_puffers` keys (read from the data + code 2026-08-02, while closing
-  `BL-235`).** ⚠ **UNMEASURED — read this trap first.** An earlier version of this entry claimed, as
-  a measurement, that `PUFFER_STATE 0` never dispatches at all. **That claim was invalid and is
-  retracted:** `RunProbe.ps1` does **not** build (it says so at `RunProbe.ps1:17`), so the probe that
-  "measured" it ran a binary that never contained the instrumenting `GD.Print`. Zero output meant
-  zero instrumentation, not zero dispatches. **Nothing below is measured; it is a static read.**
-  `large_10sec_fire`'s `stop_fire_n_smoke` is
-  `[StopSequence(fire_n_smoke)@Animation+10.0, PufferState(fire_n_smoke, 0)]`. The def turns the
-  emitter **ON** at `AT_NODE fire_here` — its own template root, which `ResolveOne` reaches through
-  `ResolveInOwnRoot` — and **OFF** with no `AT_NODE` at all, which falls to the anchor: the wreck's
-  `destroyed` node, since `player_crash_dirt` calls this def `WithNode: destroyed`. Two different
-  hosts, so `HandlePufferState` writes one `_puffers` key and looks up another, and the off-branch
-  returns silently. Note this is the same suspect `BL-235` recorded as "eliminated, look elsewhere"
-  — correctly eliminated for `large_30sec_fire`, whose ON event uses the `INPUT_NODE` sentinel and
-  lands on the anchor like its OFF event does, but that def is **not** the one the crash rig calls.
-  **Benign today, which is why it is a backlog item and not a bug fix:** `BL-236`'s instance-end
-  rule reaches the emitter by ownership instead, and both routes end in `SustainEnd`, so the fire
-  fades over its `LIFETIME_RANGE` on the authored count either way (measured: 10.0 s ± one report
-  tick). It stops being benign for any authored stop whose effect the instance-end rule does *not*
-  replay.
-  *Fix shape:* resolve a stop through the instance's OWNERSHIP — the `(def, anchor)` identity
-  `FinishEffectInstance` and `TearDownResourcesOf` already use — when the exact host key misses,
-  narrowed on the puffer name. Such a fallback was written and reverted on 2026-08-02 (it built
-  clean and passed the full suite); it was reverted only because the evidence for it was the bogus
-  measurement above, not because it was shown wrong.
-  ⚠ **Measure before fixing, and `dotnet build CSVM/CSVM.sln` before every probe.** Two questions
-  are open and the first one gates the second: **(a)** does the `PUFFER_STATE 0` dispatch at all, or
-  does halting the last live runner finish the instance mid-dispatch and tear down the stopper's own
-  runner before it advances past the `StopSequence`? **(b)** if it does dispatch, does it miss, as
-  the key read above predicts? A `GD.Print` in `HandlePufferState`'s `!on` branch answers both in
-  one run — *on a freshly built binary*.
-  *Verify with:* `RunProbe.ps1 --chapter=C1 "--pos=-7600,150,-3150" "--direction=0,-0.75,-1"
-  --rocket=wep_14 --fire-rockets --det --debug-anim --frames=2400` (no `--hold`);
-  `BL-241`'s harness fix is what would let a suite guard it.
-
 - `BL-237` **An authored LOOP period shorter than the sim step is quantised up, so those loops are
   still frame-rate-dependent (measured 2026-08-02, found while rate-locking the untimed loops).**
   A finite `LOOP` that carries a `START_TIME` on the Loop event is timed data — the offset is the
@@ -538,11 +502,14 @@ unscheduled.
   as a `using` local and does not set `WorldSession.Options.TexturesOutliveBuild`, so the harness's
   world runtime has its `PufferFactory` cleared after the bootstrap (`WorldSession.cs:249`) —
   exactly the `BL-234` condition, here on purpose. Every emitter bug in this family
-  (`BL-233`/`BL-235`/`BL-236`, and now `BL-242`) therefore has to be verified by a `--debug-anim`
-  probe read by hand;
-  none of them is guarded by a suite, and a regression would be caught only by somebody re-running
-  the probe. The `stop-sequence` suite covers the *dispatch* side (which events fire, when), which
-  is why it passed throughout all three bugs.
+  (`BL-233`/`BL-235`/`BL-236`/`BL-242`) therefore has to be verified by a `--debug-anim` probe read
+  by hand; none of them is guarded by a suite, and a regression would be caught only by somebody
+  re-running the probe. The `stop-sequence` suite covers the *dispatch* side (which events fire,
+  when), which is why it passed throughout all four bugs — including `BL-242`, where the event it
+  asserts (the fireball's 0.3 s stopper) fired correctly and then failed to reach its emitter.
+  ⚠ **And build before you probe** (`dotnet build CSVM/CSVM.sln`): `RunProbe.ps1` does not, which
+  once turned a missing instrument into a fabricated "measurement". Any probe whose conclusion
+  rests on output NOT appearing must show the instrument firing somewhere first.
   *Fix shape:* let the harness own the archive for the world's lifetime (`TexturesOutliveBuild =
   true`, dispose in `TestWorld.Destroy`), then a suite can kill a `refuel*` tank through
   `DamageAt` and assert the emitter census returns to its pre-kill set — which needs one public
