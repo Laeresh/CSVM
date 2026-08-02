@@ -482,7 +482,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private bool _censusOpen;
 
-    private int _censusAnchored, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
+    private int _censusAnchored, _censusNarrowed, _censusLifted, _censusSuppressed, _censusUnanchored, _censusMissing;
 
     // Whether the ambient passes have already run â€” set when Bootstrap runs them inline
     // (AutoStart=true) or when StartAmbient runs them on demand, so StartAmbient is idempotent
@@ -672,8 +672,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             return lines;
         }
-        int defs = _censusAnchored + _censusLifted + _censusSuppressed + _censusUnanchored;
+        int defs = _censusAnchored + _censusNarrowed + _censusLifted + _censusSuppressed
+                   + _censusUnanchored;
         lines.Add($"bind census defs={defs} anchored_by_name={_censusAnchored} "
+                  + $"narrowed_by_symbol={_censusNarrowed} "
                   + $"anchored_by_root_lift={_censusLifted} root_lift_suppressed={_censusSuppressed} "
                   + $"unanchored={_censusUnanchored} target_missing_ops={_censusMissing}");
         if (_censusUnanchored > 0)
@@ -1588,6 +1590,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             case AnchorKind.ByName:
                 _censusAnchored++;
+                break;
+            case AnchorKind.BySymbol:
+                _censusNarrowed++;
                 break;
             case AnchorKind.ByRootLift:
                 _censusLifted++;
@@ -3343,6 +3348,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return new List<Node3D?>();
         var anchors = FindAll(def.Name, null).Cast<Node3D?>().ToList();
         var how = anchors.Count > 0 ? AnchorKind.ByName : AnchorKind.None;
+        if (NarrowToSymbolRoot(def, anchors) is { } only)
+        {
+            anchors = only;
+            how = AnchorKind.BySymbol;
+        }
         if (anchors.Count == 0 && def.RootName != null)
         {
             var roots = FindAll(def.RootName, null);
@@ -3365,6 +3375,34 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         RecordAnchoring(def, how);
         return anchors;
+    }
+
+    /// <summary>Picks the one instance a compiled definition actually belongs to, when its NAME
+    /// matches several. The compiler expands a multi-instance object into one def per instance but
+    /// leaves them all sharing a NAME — C1's two airfield hangars are both <c>air_gen</c>, telling
+    /// them apart only by their symbol tables (<c>air_gen</c> names the nodes under
+    /// <c>eairg32</c>, <c>air_gen#1</c> those under <c>eairg31</c>). Name matching hands BOTH defs
+    /// BOTH anchors, so the pair cross-binds: shooting one hangar resolved to the other def, whose
+    /// events then target its own hangar by exact index — destroy <c>eairg31</c> and
+    /// <c>eairg32</c> explodes.
+    ///
+    /// <para>So resolve the def's ANIMATION_ROOT_NAME through the symbol table — the same
+    /// authority <see cref="Targets"/> already prefers for every event — and keep only the
+    /// anchors containing that exact node. Returns null when it cannot decide: a reader def (no
+    /// symbol table), an index the builder never built, or a root outside every candidate — all of
+    /// which leave the name match standing. The scoped crash runtime gets null for free, since
+    /// <see cref="NameResolveFallback"/> leaves <see cref="_byIndex"/> empty.</para></summary>
+    private List<Node3D?>? NarrowToSymbolRoot(AnimDefinition def, List<Node3D?> anchors)
+    {
+        if (anchors.Count < 2
+            || def.RootName is not { } root
+            || !def.NodeRefs.TryGetValue(root, out int idx)
+            || !_byIndex.TryGetValue(idx, out var exact))
+        {
+            return null;
+        }
+        var kept = anchors.Where(a => a != null && (a == exact || a.IsAncestorOf(exact))).ToList();
+        return kept.Count > 0 && kept.Count < anchors.Count ? kept : null;
     }
 
     /// <summary>The world nodes one event targets. Reader-sourced events may carry a

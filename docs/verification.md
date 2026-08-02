@@ -127,6 +127,7 @@ and leave gaps when retiring old ones.
 - **WORLD-22** — **Use explicit subsystem state when hosts are hidden by design.**
 - **WORLD-23** — **Range-test decoded fields and corroborate their units.**
 - **WORLD-24** — **Read authored range and condition gates before placing a probe.**
+- **WORLD-25** — **A registry total counts bindings, not coverage: a larger census can mean one definition claimed objects it does not describe.** 
 
 ## SHELL — Windows, PowerShell, and processes
 

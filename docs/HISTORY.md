@@ -10921,3 +10921,47 @@ all four measured cases the fallback stops the emitter at the moment a backstop 
 timestamp checked, and every negative result was backed by a positive control in the same run.
 `BL-241` still stands as the real guard: no suite can observe emitter lifetime until the test
 harness keeps its texture archive open.
+
+## 2026-08-02 — A compiled def now binds only the instance its symbol table names (`eairg31`/`eairg32`)
+
+**Symptom (user-reported):** destroying the C1 hangar `eairg31` plays the death on `eairg32`.
+
+**Cause.** The compiler expands one object into a def per instance but leaves them sharing a
+`NAME`. Both C1 hangars are `NAME air_gen`, `ANIMATION_ROOT_NAME healthy`; they differ only in
+their symbol tables (`air_gen` → `eairg32`'s nodes 5058/5069/5080, `air_gen#1` → `eairg31`'s
+5027/5038/5049). `AnimRuntime.Anchors` matched by NAME alone, so **both** defs got **both**
+anchors, `DestructibleRegistry._authoritative` kept whichever registered first for each, and the
+death's `OBJECT_ACTIVE_STATE`s — which `Targets` resolves through the symbol table, by exact index
+— fired on the other hangar. Measured on the baseline: all three `air_gen`-matching defs resolved
+to `/air_gen/eairg32`, so `air_gen#1` never ran and `eairg31` could not be destroyed at all.
+
+**Fix.** `NarrowToSymbolRoot` narrows a multi-match NAME to the anchors containing the def's
+symbol-table ROOT node — the same authority `Targets` already prefers. It only ever narrows: a
+reader def (no symbol table), an unbuilt index, or a root outside every candidate leaves the name
+match standing, and the crash runtime gets the old behaviour free because `NameResolveFallback`
+leaves `_byIndex` empty.
+
+**Verified.** `--damage-test=air_gen --damage-hd=60` on C1/IA1, both builds, with the resolved
+anchor's ancestry printed: baseline ran `air_gen` three times at `/air_gen/eairg32`; fixed runs
+`air_gen` at `eairg32` and `air_gen#1` at `eairg31`, each swapping its own healthy→destroyed with
+`col[off 2, on 11]` and 10/11 debris pieces. `RunTests.ps1` green — 345 units, 17 suites, 13
+goldens.
+
+**Scope beyond the hangars.** The same collision covers every zeppelin: each mission's turret and
+engine defs are `ctur1`…`leng42` on every airship, and a chapter's gamez carries up to nine, so
+C4/M05's four zeppelins' defs all bound all four. 5,697 defs across the install were multi-matching
+with a symbol table naming exactly one instance.
+
+**The census shrank, and that is the fix, not a loss.** C1 267→214 instances / 196→145 node
+groups (all 8 chapters re-pinned in `Suites.Census`). Every group removed is on a zeppelin the
+loaded mission authors no def for — under the old binding, shooting one registered damage and then
+played the death on a *different*, mission-hidden zeppelin. The honest metric is *visible* node
+groups, which is unchanged where the mission's own object is the visible one (C1 81→81, C2 97→97,
+C3 116→116, C4 34→34); C1C 51→0 and C5 107→84 drop exactly the `blackswanzep`/`piratezep`/
+`workersvoyagezep` parts that were never that mission's to destroy. Recorded as `WORLD-25`.
+
+**Golden `c1-flight` re-pinned** (0.61 % of pixels, max delta 54, all building lighting in the
+lower third): C1's 22 `gen_flare_yellow` defs each drove all 22 flare nodes, so the bootstrap
+started 547 ON_STARTUP instances where 85 are authored; the city's lamps now light per building.
+User confirmed at the controls: "the fix is better, lights in the city are enabled", buildings all
+present.

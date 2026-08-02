@@ -119,6 +119,13 @@ A destructible def anchors to scene nodes exactly like any animation definition 
 - **`NAME` is a wildcard, so one authored def serves many instances.** The water tower's
   `NAME` is `ap_h2otwr*`; in C1 that one reader definition compiles into four independent
   instances (`ap_h2otwr1`, `ap_h2otwr2`, `ap_h2otwr4`, `ap_h2otwr5`), each with its own HP.
+  - ⚠ **The compiler does NOT always give the expanded instances distinct names, so `NAME` alone
+    cannot identify one.** C1's two airfield hangars are both `NAME air_gen` with
+    `ANIMATION_ROOT_NAME healthy`; the only thing separating them is the symbol table, where
+    `air_gen` names `eairg32`'s nodes and `air_gen#1` names `eairg31`'s. The same holds at scale
+    for zeppelins: every mission's turret/engine defs are `ctur1`…`leng42` on every airship, and
+    a chapter's gamez carries up to nine of them. **Bind a compiled def through its symbol table,
+    never its `NAME`** — matching by name gives each twin all the anchors and they cross-bind.
 - **`ANIMATION_ROOT_NAME` names the node the anim attaches to inside each instance**, and the
   destructible convention is a paired `healthy`/`destroyed` node group. The tower roots on
   `h2twr_healthy` and its death sequence toggles `h2twr_healthy`↔`h2twr_destroyed`. This

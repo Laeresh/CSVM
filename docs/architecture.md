@@ -501,6 +501,12 @@ satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispat
 `Targets` prefers the compiled symbol table; an index the build skipped falls back to a strictly
 anchor-scoped name match (never global) — how a re-anchored exploder template (`genx12`) binds its
 meshless `pt*` parameter nodes onto the call-site wreck's same-named pieces (D31).
+`Anchors` obeys that same authority: a multi-match NAME narrows to the instance holding the def's
+symbol-table ROOT node (`NarrowToSymbolRoot`). The compiler expands one object into a def per
+instance but leaves them sharing a NAME — C1's two hangars are both `air_gen`, telling themselves
+apart only by their symbol tables — so name matching alone hands every twin every anchor and they
+cross-bind, which is how destroying `eairg31` used to explode `eairg32`. It narrows only: a reader
+def, an unbuilt index or a root outside every candidate leaves the name match standing.
 Every name→node lookup routes through `ResolveScoped` — call anchor, then the def's OWN root, then
 global — because staged effect templates reuse node names (`fly_trail1`-`5` is `he_trails` AND
 `ap_trails` AND `carnage_trails`) and the unplaced copies sit at the stage origin (`BL-219`).
