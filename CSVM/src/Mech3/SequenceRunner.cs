@@ -114,6 +114,25 @@ public sealed class AnimInstance
 /// </summary>
 public sealed class SequenceRunner
 {
+    /// <summary>One authored ANIMATION FRAME, in seconds — the unit a <c>LOOP</c> count is
+    /// denominated in. A <c>LOOP n</c> over an instantaneous body can only advance one pass per
+    /// engine update, so it is a timer of n updates; 1/60 s is where we PUT that update, which is
+    /// a decision and not a decode of the original. The evidence is `ref_fueltanks`'
+    /// <c>fire_n_smoke</c> (<c>LOOP 200</c>) observed burning ~3 s in the original — but on modern
+    /// hardware, where it runs visibly fast or slow between sessions, so it may only be recording
+    /// that machine's 60 Hz vsync cap. It cannot tell a fixed ~60 Hz sequence tick from per-frame
+    /// ticking (under which the original had no single correct duration at all). 1/60 is right
+    /// either way as the rate the content was authored against — see
+    /// docs/formats/anim-definitions.md for the falsification that would settle it.
+    ///
+    /// <para>⚠ Deliberately its OWN constant, not <see cref="Utils.GameClock.FixedDt"/>, though the
+    /// two are equal today. That equality is what keeps every `--det` capture byte-identical
+    /// (one pass per fixed step, exactly as before this was rate-locked) — but "the rate the
+    /// original's artists counted frames at" and "the rate we step the simulation at" are
+    /// independent facts. Re-stepping the sim at 1/120 for physics reasons must NOT halve every
+    /// authored animation timer.</para></summary>
+    public const float AnimFrame = 1f / 60f;
+
     private readonly AnimSequence _seq;
     // One entry per open IF: has any branch of that chain already run? An ELSEIF/ELSE
     // reached with the flag set is the *fall-through* off the end of a taken branch and
@@ -130,6 +149,10 @@ public sealed class SequenceRunner
     // Did the current loop iteration schedule any time? Decides whether reaching the
     // LOOP starts the next iteration at once or yields to the next frame.
     private bool _iterScheduledTime;
+    // Set when a LOOP rolled over an instantaneous iteration: the next pass is gated one
+    // AnimFrame out, applied at the foot of the advance loop so the trailing SetDue() cannot
+    // overwrite it. Distinct from _iterScheduledTime, which asks whether the DATA scheduled time.
+    private bool _frameGatePending;
 
     public SequenceRunner(AnimSequence seq)
     {
@@ -219,26 +242,37 @@ public sealed class SequenceRunner
                     // animation alive" idiom (C1's waterfall is [PufferState ×3, Loop{-1}],
                     // whose emitters run on their own TIME_INTERVAL; the poll idiom
                     // `If … CallAnimation; Endif; Loop{-1}` is the other shape). Left
-                    // unchecked it spins as fast as the per-frame guard allows; yield to
-                    // the next frame instead, so such a loop polls exactly once a frame.
-                    // Loops whose body takes time are unaffected — they are already
-                    // waiting on _due, and must start their next iteration immediately.
+                    // unchecked it spins as fast as the per-frame guard allows; it is paced
+                    // to one pass per AnimFrame of SIM time instead — the rate the counts
+                    // were authored against. Loops whose body takes time are unaffected —
+                    // they are already waiting on _due, and must start their next iteration
+                    // immediately.
                     //
                     // The test is "did this iteration schedule any time?", NOT "is the
-                    // clock zero": the clock is reset to 0 here, so on the NEXT frame it
-                    // reads dt at this point and an instantaneous body ran a second time
-                    // before yielding — every poll loop in the chapter costing double.
+                    // clock zero": the clock is reset here, so a clock-zero test would read
+                    // dt at this point on the next pass and let an instantaneous body run a
+                    // second time before yielding — every poll loop in the chapter costing
+                    // double. That measured bug is why the flag exists; keep it.
                     bool instantIteration = !_iterScheduledTime;
+                    // An instantaneous iteration costs exactly one authored ANIMATION FRAME
+                    // (AnimFrame), not "one rendered frame" — that is what makes a LOOP count a
+                    // duration instead of a function of the client's frame rate. Carry the sim
+                    // time that overshot the frame we just spent into the next iteration, or the
+                    // rate quantises to the render rate: a 144 Hz client needs 3 frames to reach
+                    // 1/60 and would run every authored timer at 48 Hz, a 30 Hz one at half speed.
+                    float carry = instantIteration ? _clock - AnimFrame : 0f;
                     _pc = 0;
-                    _clock = 0f;
+                    _clock = carry > 0f ? carry : 0f;
                     _base = 0f;
                     _iterScheduledTime = false;
                     _branchTaken.Clear(); // a new iteration re-tests every condition
                     SetDue();
-                    if (instantIteration)
-                    {
-                        return;
-                    }
+                    // The gate itself is applied after the trailing SetDue() at the foot of this
+                    // loop body — that call re-gates on whatever event control flow landed on and
+                    // would silently overwrite a _due written here. The pre-rate-lock code
+                    // sidestepped it with an early `return`, and THAT is what made the pass rate
+                    // the render rate; dropping the return is the whole change.
+                    _frameGatePending = instantIteration;
                     break;
                 case "If":
                     _branchTaken.Add(false);
@@ -284,6 +318,20 @@ public sealed class SequenceRunner
             // sign's trailing `Loop {Event 1.2}` is its inter-cycle pause, and that
             // offset used to be discarded).
             SetDue();
+            if (_frameGatePending)
+            {
+                _frameGatePending = false;
+                // An instantaneous loop pass costs one authored animation frame. The authored
+                // offset still wins whenever it is the longer wait (the bowl sign's 1.2 s pause):
+                // a body that asks for real time has already paid for its frame, so this is a
+                // floor, not an addition. _iterScheduledTime is deliberately NOT set — a frame
+                // gate is not the body scheduling time, and treating it as such would make the
+                // NEXT pass read as timed and spin ungated.
+                if (_due < AnimFrame)
+                {
+                    _due = AnimFrame;
+                }
+            }
         }
         if (_pc >= _seq.Events.Count)
         {

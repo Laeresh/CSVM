@@ -20,13 +20,17 @@ namespace CSVM.Mech3;
 /// <see cref="Options.EffectsParent"/> exactly as before.</para>
 ///
 /// <para><b>Disposal-lifetime contract (semantics, not incidental).</b> A puffer bakes its atlas
-/// at construction and world-sound streams decode on demand, but the <see cref="TextureArchive"/>
-/// and <see cref="SoundArchive"/> passed in are the caller's <c>using</c> locals — their zip
-/// handles die when the caller's build scope ends. So after the bootstrap this clears the
-/// <c>PufferFactory</c> and the sound <c>Loader</c>, and prewarms every sound the program can name
-/// while the archive is still open. A caller that keeps its archives open for the whole session
-/// (the lab, to build puffers/decals interactively) passes <see cref="Options.KeepArchivesOpen"/>
-/// = true to skip both clears.</para>
+/// at construction and world-sound streams decode on demand, so both the <c>PufferFactory</c> and
+/// the sound <c>Loader</c> outlive this build holding a reference to an archive whose zip handle
+/// the caller may close. Each is therefore cleared after the bootstrap **unless the caller says it
+/// owns that archive for longer** — <see cref="Options.TexturesOutliveBuild"/> and
+/// <see cref="Options.SoundsOutliveBuild"/>. The two are separate because the two lifetimes are:
+/// a game session hands the <see cref="TextureArchive"/> to the session (freed on return-to-menu)
+/// while its <see cref="SoundArchive"/> stays a <c>using</c> local of the build, and only the lab
+/// keeps both. Sounds are also prewarmed while the archive is open regardless, which is what makes
+/// clearing the loader survivable; puffers have no equivalent, since a puffer bakes per authored
+/// state rather than per name — so a cleared factory is silently no fire, no dust, no smoke for
+/// every <c>PUFFER_STATE</c> reached after the bootstrap (`BL-234`).</para>
 ///
 /// <para><b>The <c>--node=</c> stage is the same pipeline with three steps switched off.</b>
 /// <see cref="Options.NodeSubtree"/> replaces the world build with one named gamez subtree
@@ -189,9 +193,9 @@ public sealed class WorldSession
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
         // The runtime builds PUFFER_STATE emitters through this factory rather than holding the
-        // TextureArchive: a puffer bakes its atlas at construction, and `textures` is disposed when
-        // the caller's build scope ends. Cleared right after the bootstrap so a later request is
-        // reported instead of hitting a closed zip (unless the caller keeps its archives open).
+        // TextureArchive: a puffer bakes its atlas at construction. Cleared right after the
+        // bootstrap only when `textures` dies with the caller's build scope — see
+        // Options.TexturesOutliveBuild.
         var lights = new WorldLights();
         s.Lights = lights;
         var animRuntime = new AnimRuntime
@@ -242,7 +246,7 @@ public sealed class WorldSession
         {
             Log.Info("anim", $"{line}");
         }
-        if (!o.KeepArchivesOpen)
+        if (!o.TexturesOutliveBuild)
         {
             animRuntime.PufferFactory = null;
         }
@@ -265,7 +269,7 @@ public sealed class WorldSession
             {
                 GD.Print($"anim: prewarmed {prewarmed} sound stream(s) before the archive closed");
             }
-            if (!o.KeepArchivesOpen)
+            if (!o.SoundsOutliveBuild)
             {
                 builtSounds.Loader = null;
             }
@@ -310,10 +314,25 @@ public sealed class WorldSession
         public int AnimLod { get; init; } = AnimRuntime.HighLod;
         public bool DebugDzPaths { get; init; }
 
-        /// <summary>Keep the caller's archives open past the build: skip nulling the
-        /// <c>PufferFactory</c> and sound <c>Loader</c> after the bootstrap, so puffers/decals can
-        /// be built interactively later (the lab). Default false = the viewer/flight contract.</summary>
-        public bool KeepArchivesOpen { get; init; }
+        /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so the runtime
+        /// keeps its <c>PufferFactory</c> and every <c>PUFFER_STATE</c> reached at RUNTIME — a
+        /// destructible's death trails and sustained fire, the ON_CALL ambient dust and smoke —
+        /// can still bake its atlas. True in every game session (the archive belongs to the
+        /// session, freed on return-to-menu); false only where it is genuinely a <c>using</c> local
+        /// of the build, i.e. the test harness.
+        /// <para>⚠ Default false is the SAFE answer, not the common one. Left false by a caller
+        /// that does own its archive, every runtime-reached puffer in the world silently builds
+        /// nothing and the log stays clean (`BL-234`) — the miss is counted as
+        /// <c>PufferState(after build)</c> into a census printed at the end of the bootstrap, which
+        /// is before the first death can happen.</para></summary>
+        public bool TexturesOutliveBuild { get; init; }
+
+        /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
+        /// <c>WorldSounds.Loader</c> stays live for names the prewarm did not reach. Separate from
+        /// <see cref="TexturesOutliveBuild"/> because the lifetimes are separate: a game session
+        /// scopes the sound archive to the build (the prewarm is what makes that survivable) while
+        /// its texture archive lasts the session. Only the lab keeps both.</summary>
+        public bool SoundsOutliveBuild { get; init; }
 
         /// <summary>Whether the bootstrap runs the ambient-playback passes (ON_STARTUP defs +
         /// startanims). True — the default — in every game/viewer/flight session; the animation

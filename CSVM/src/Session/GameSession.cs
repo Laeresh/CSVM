@@ -279,11 +279,11 @@ public partial class GameSession : Node3D
         {
             sw = Stopwatch.StartNew();
             LoadArchives(state);
-            // The anim lab keeps the session archives open past this build scope
-            // (WorldSession.Options.KeepArchivesOpen): the AnimLab node owns their disposal so
-            // puffers/decals can build at any playhead time. Until that node exists, a failed lab
-            // build must close them from the catch below — in every other mode they are `using`
-            // scoped to this whole try, as before.
+            // The SOUND archive is scoped to this build everywhere but the lab, where the AnimLab
+            // node owns its disposal so effects can build at any playhead time; until that node
+            // exists a failed lab build must close it from the catch below. The TEXTURE archive is
+            // not here at all — LoadArchives gives it to the session in every mode, which is what
+            // lets the world runtime keep baking puffers all session (BL-234).
             using var soundsScope = _spec.AnimLab ? null : state.Sounds;
             if (!ResolveNodeSubtree(state))
                 return false;
@@ -620,9 +620,14 @@ public partial class GameSession : Node3D
                 DebugAnim = _spec.DebugAnim,
                 AnimLod = _spec.AnimLod,
                 DebugDzPaths = _spec.DebugDzPaths,
-                // The lab: quiet stage (ambient playback deferred to its A toggle),
-                // archives kept open for interactive effect builds.
-                KeepArchivesOpen = _spec.AnimLab,
+                // The texture archive belongs to the SESSION in every mode (LoadArchives hands it
+                // to _sessionTextures, or to the lab node), not to this build scope — so the world
+                // runtime keeps a live PufferFactory and a death's fire/trails, or a car's dust,
+                // still bakes when it is first reached (BL-234). The sound archive does NOT: it is
+                // a `using` of this build below except in the lab, and the prewarm covers it.
+                TexturesOutliveBuild = true,
+                SoundsOutliveBuild = _spec.AnimLab,
+                // The lab: quiet stage, ambient playback deferred to its A toggle.
                 AutoStart = !_spec.AnimLab,
                 // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
                 // scatter — in every mode, not just the lab.

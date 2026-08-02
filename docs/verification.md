@@ -110,6 +110,7 @@ and leave gaps when retiring old ones.
 - **LOG-13** — **Do not overlap engine probes.**
 - **LOG-14** — **Read every field in a multi-metric row.**
 - **LOG-15** — **When an error lacks identity, log candidate state at the failure boundary.**
+- **LOG-16** — **A census printed at the end of setup cannot report a runtime miss** 
 
 ## WORLD — world data and runtime traps
 

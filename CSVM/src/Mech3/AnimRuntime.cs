@@ -502,6 +502,15 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Reported once per name, not per event: snd_fire1 alone has 363 sites.</summary>
     private bool _soundCensusPrinted;
 
+    /// <summary>Set once the "a PUFFER_STATE arrived after <see cref="PufferFactory"/> was
+    /// released" warning has been said. The puffer half of <see cref="_soundCensusPrinted"/>'s
+    /// lesson, and it cost more: the bootstrap census cannot distinguish "no def ever asked" from
+    /// "every def asked and none built", so a world with no fire, no dust and no smoke read as a
+    /// clean log for the project's whole life (`BL-234`). Once per runtime, not per name â€” unlike
+    /// a missing sound, the condition is one build-time contract rather than one datum per
+    /// emitter, so the first miss says everything the thousandth would.</summary>
+    private bool _reportedPufferFactoryGone;
+
     private float _effectClock;
 
     private int _damagesLogged;
@@ -2258,7 +2267,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
         if (PufferFactory == null)
         {
+            // Say it out loud, exactly as a late SOUND_NODE miss does. The census this counter
+            // feeds prints at the end of the bootstrap — before any death, ON_CALL sequence or
+            // range-deferred def can reach a PUFFER_STATE — so on its own it reported a world with
+            // no fire, trails or dust as a clean log. A build whose textures really do die with it
+            // (the test harness) says this once and moves on.
             Count("PufferState(after build)");
+            if (!_reportedPufferFactoryGone)
+            {
+                _reportedPufferFactoryGone = true;
+                Log.Warn("anim", $"puffer '{pufferName}' asked for after the texture archive was released — this runtime builds no further PUFFER_STATE emitters (WorldSession.Options.TexturesOutliveBuild)");
+            }
             return;
         }
         var state = Effects.PufferState.FromAnimEvent(ev.Data);

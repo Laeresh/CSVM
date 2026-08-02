@@ -948,6 +948,41 @@ are not visible from the byte format alone, each measured against this install.
   **The reader (`zrdr`) scope never uses it** — 703 `LOOP` events there, `LOOP_COUNT` ∈ {`-1`
   (575), positive N}, zero zeros. (An earlier note claimed the reader scope has *no* `LOOP` events
   at all; it has 703. The usable fact is the absence of `0`, not the absence of `LOOP`.)
+- **A positive `LOOP` count over an instantaneous body is a timer denominated in ANIMATION
+  FRAMES. CSVM sets the frame to 1/60 s — a decision (2026-08-02), not a decode.** The
+  *denomination* is forced: a loop whose body schedules no time can only advance one pass per
+  engine update, so `LOOP n` spends n updates and the counts are durations, not iteration budgets.
+  What the update RATE was is the open half.
+  **The evidence for 60, and what it cannot do.** `ref_fueltanks`' `fire_n_smoke`
+  (`[PUFFER_STATE, LOOP 200]`) was observed burning ~3 s in the original, so 200/3 ≈ 60.
+  ⚠ **That observation was taken on modern hardware, where the original does not run at period
+  speed** — it visibly runs fast or slow between sessions — so it plausibly records the measuring
+  machine's 60 Hz vsync cap rather than anything authored. Two readings both fit it and it cannot
+  separate them:
+  - a **fixed ~60 Hz sequence tick**, decoupled from rendering — then 1/60 is the original's own
+    number;
+  - **one pass per rendered frame** — then the original had no single correct duration at all:
+    `LOOP 200` ran ~3 s only on a machine holding 60 fps, and ~6.7 s at the 25–40 fps a 1999
+    terrain flier realistically sustained. The variable speed on modern hardware is itself
+    evidence for this reading.
+  1/60 is the right constant under either — it is the rate the content was authored against — but
+  under the second it is our choice rather than the original's behaviour, so do not cite this
+  bullet as a decode of the original engine. **Falsification (`BL-238`, capture `CAP-19`):** pin
+  the original's frame rate at two different values and time one *untimed* `LOOP`-counted effect at
+  each. Durations that move with the frame rate settle it as per-frame; durations that hold settle
+  the fixed tick and its value.
+  **Scope — the 530 positive counts are not one thing.** **462 carry no period of their own** and
+  are the frames-denominated set (`LOOP 70` ≈ 1.2 s, `LOOP 200` ≈ 3.3 s at 1/60); 376 of them sit
+  in `sequences`, the list the runtime executes, and 86 in the undecoded `unknown_seq`, which it
+  does not. The other **68 carry a `START_TIME` on the `Loop` event itself — the per-iteration
+  period in SECONDS**, always frame-independent, never touched by any of the above
+  (`huge_fireball` 10 × 0.05 s, `sputter_fire_obj` 100 × 0.2 s, `shipsink` 7 × 2.5 s). Their
+  authored periods span 0.01–5.0 s, and **0.01 s is below a 1/60 frame** — so the timing layer is
+  real-valued seconds, not tick-quantised, whatever the tick turns out to be.
+  ⚠ **A remake must pace an untimed loop against SIM time, not its own frame rate**, or every
+  authored timer scales with the client's hardware — at 240 Hz they run 4× fast and at 144 Hz they
+  quantise to 48 Hz (3 render frames per 1/60 s pass). CSVM pins the pass rate to
+  `SequenceRunner.AnimFrame`; a loop that carries its own period is unaffected.
 - **JSON-layer trap: the `.zan` rotate quaternion's field labels are shifted.** mech3ax reads the
   file's `(w, x, y, z)` float order straight into a `#[repr(C)] struct Quaternion {x, y, z, w}`,
   so in the emitted JSON **real `w` = json `x`, real `x` = json `y`, real `y` = json `z`, real

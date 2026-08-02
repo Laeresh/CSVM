@@ -76,8 +76,10 @@ public sealed partial class AnimLab : Node
     private readonly string? _playOnLaunch;   // --play-anim=<name>
     private readonly bool _autoFrame;         // no --pos/--direction: frame the played def
     // The session archives, kept open for the whole lab session (WorldSession.Options
-    // .KeepArchivesOpen) so puffers/decals can be built at any playhead time. The lab owns
-    // their disposal — every other mode closes them when the build scope ends.
+    // .TexturesOutliveBuild + .SoundsOutliveBuild) so puffers/decals can be built at any playhead
+    // time. The lab owns their disposal; it is the only mode that owns the SOUND archive that far
+    // — every other mode closes that one when the build scope ends, textures being session-owned
+    // everywhere.
     private readonly TextureArchive _textures;
     private readonly SoundArchive? _sounds;
     // ItemList row → index into _program.Defs (the filtered view).

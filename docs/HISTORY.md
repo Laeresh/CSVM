@@ -10475,3 +10475,125 @@ torpedo self-destructing at its 1200 m range expiry, which genuinely has no stru
 `fire_n_smoke` emitting indefinitely (measured steady at 40 s). Same family, different runtime — a
 crash `AnimRuntime` has `EffectTtl = 0` by design, so neither the TTL nor `FinishEffectInstance`
 (which is scoped to instances carrying a TTL entry) reaches it. `BL-235`.
+
+## 2026-08-02 — `BL-234`: the world runtime lost its puffer factory after the bootstrap, so no runtime-reached `PUFFER_STATE` ever built
+
+**Reported as** C1's harbour refuel tanks losing their fire streaks and their sustained fire on a
+kill while the flying debris survived. It was neither a regression nor an effects-pool problem:
+`git log -S "PufferFactory = null"` shows the line unchanged since the project rename, and a build
+at `fa62408` (pre-polish-5) reproduces the missing trails identically. Debris is `OBJECT_MOTION`
+(no textures) and the fireballs are the world-EFFECTS runtime's meshes (which keeps its own live
+factory), so exactly the puffer-shaped half of every death went missing — which is why enriching
+the effects half through M3 made it read as something newly broken.
+
+**Cause.** `WorldSession.Build` cleared `animRuntime.PufferFactory` right after `Bind` for every
+caller but the anim lab, on a disposal contract that had stopped being true: `GameSession` hands the
+`TextureArchive` to `_sessionTextures` and frees it only on return-to-menu. So from that line on
+every `PUFFER_STATE` the world runtime dispatched — every destructible death trail and fire, every
+ON_CALL and `EXECUTION_BY_RANGE`-deferred ambient emitter — hit the `PufferFactory == null` guard
+and returned. Only what the bootstrap itself reached ever existed: 4 emitters of C1's 66
+`PUFFER_STATE` events over 25 names (install-wide C2 99/35, C3 82/34, C4 84/52).
+
+**Fix.** The single `Options.KeepArchivesOpen` became `TexturesOutliveBuild` + `SoundsOutliveBuild`,
+because the two lifetimes are genuinely different and conflating them is what made the flag read as
+an anim-lab special case. A game session sets textures true (session-owned) and sounds false (a
+`using` of the build, which the prewarm makes survivable); the lab sets both; the test harness sets
+neither, since there its archives really are build-scope `using` locals. A cleared factory now warns
+**once** at the first late `PUFFER_STATE` — the counter alone fed a census printed at the end of the
+bootstrap, i.e. before any death can happen, which is how a world with no fire, trails or dust read
+as a clean log for the project's whole life. Filed as `LOG-16`.
+
+**Measured.** Same repro, same build: `--freecam --chapter=C1 --destroy=refuel --debug-anim` goes
+from `4 active puffer(s)` (the bootstrap four, unchanged 3 s after five kills) to **24 = 4 + 5 tanks
+× 4** (`fire_n_smoke` + `trailpuffer1/2/3`), and the shot goes from bare scorch decals to five
+burning tanks. The isolating A/B was the anim lab, the one mode that already kept the factory:
+identical def, identical data, emitters present there and absent everywhere else.
+
+**Three goldens re-pinned, each A/B'd against a build with the flag flipped back** (both captures
+reproduced the moved hashes exactly): `c3-island` 147 px / 0.016 % (shoreline surf and rapids
+spray, 1 live emitter → 11), `c4-snow` 20 px / 0.002 % (the `stack_puffer*` plume, 9 → 15),
+`c5-city-night` 147 px / 0.016 % (four `torch_puffer*` flames plus `smoke_puffer1`/`train_puffer1`,
+9 → 36). All three are ambient emitters that should always have been drawing; no shot lost anything.
+`.\RunTests.ps1` **PASS**: 336 units, 17/17 engine suites, engine errors clean, 13 goldens.
+
+**Found on the way, filed not fixed (`BL-236`):** with the factory alive, two world-runtime emitters
+never stop — `fire_n_smoke` (one `PUFFER_STATE` + `LOOP 200`, no authored `ACTIVE_STATE 0`, still
+burning at 40 s) and `trailpuffer3` (its `part3` ends on `BOUNCE_SEQUENCE`, not `RUN_TIME`, so the
+`OBJECT_ACTIVE_STATE` that `BL-224`'s `EndSustainedOn` needs never fires). The first is `BL-235`'s
+bug on a third runtime and turns on the same undecided question: whether a `LOOP n` counts frames or
+seconds. The rest of the settled plateau is legitimate ambient dust that was simply never able to
+build before.
+
+## 2026-08-02 — a `LOOP` count is a timer in authored animation frames, paced against sim time instead of the render rate
+
+**Decision (user's call), not a decode.** A `LOOP n` over an instantaneous body counts engine
+updates — that half is forced, since such a body can only advance one pass per update — and CSVM
+fixes the update at 1/60 s. The supporting observation, `ref_fueltanks`' `fire_n_smoke`
+(`[PUFFER_STATE, LOOP 200]`) burning ~3 s in the original so 200/3 ≈ 60, was taken **on modern
+hardware, where the original runs visibly fast or slow between sessions**; it plausibly records the
+measuring machine's 60 Hz vsync cap. It cannot separate "the original had a fixed ~60 Hz sequence
+tick" from "the original ticked per rendered frame and therefore had no single correct duration" —
+at the 25–40 fps a 1999 terrain flier realistically held, `LOOP 200` would have run ~6.7 s, and the
+variable speed on modern hardware is evidence for that second reading. 1/60 is the right constant
+either way, being the rate the content was authored against, but under the second it is our choice.
+**Falsification:** pin the original's frame rate at two values and time one untimed `LOOP`-counted
+effect at each — filed as `BL-238`, capture `CAP-19`. Recorded with that caveat in
+`docs/formats/anim-definitions.md`.
+
+**Scope.** 530 positive counts install-wide, and they are two mechanisms: **462 carry no period**
+(376 in `sequences`, which the runtime executes, plus 86 in the undecoded `unknown_seq`, which it
+does not) and are the frames-denominated set this rate-locks — `LOOP 70` ≈ 1.2 s, `LOOP 200`
+≈ 3.3 s; the other **68 carry a `START_TIME` on the `Loop` event**, an authored per-iteration period
+in seconds, and were always frame-independent.
+
+**Why it mattered.** `GameClock` runs `RunMode.Realtime` in normal play — `Dt = wallDelta`,
+`Steps = 1` — so the interpreter got the raw frame delta, and its instant-loop path yielded one pass
+per *rendered* frame. Every authored timer therefore scaled with the player's hardware: 4× fast at
+240 Hz, and quantised to 48 Hz at 144 Hz (three render frames per 1/60 s pass). `--det` is
+`FixedStep` at 1/60, which is why nothing scripted ever showed it.
+
+**Fix.** An instantaneous pass now costs one `SequenceRunner.AnimFrame` of SIM time, with the
+overshoot carried into the next pass so the rate does not quantise to the step. The gate is applied
+at the FOOT of the advance loop (`_frameGatePending`), not in the LOOP case: the trailing `SetDue()`
+there re-gates on whatever event control flow landed on and silently overwrote a `_due` written
+earlier — which is exactly why the old code reached for an early `return`, and that `return` *was*
+the frame lock. Dropping it is the whole change; below 60 Hz the loop now catches up within the
+frame, bounded by the same 256-fire guard, so a long hitch falls behind rather than spinning.
+`AnimFrame` is deliberately its own constant rather than `GameClock.FixedDt`, though the two are
+equal today: re-stepping the sim for physics reasons must not halve every authored animation timer.
+
+**Verified.** `SequenceRunnerTests` gained rate-independence cases driving the real
+`AnimInstance`/`SequenceRunner` at **1/30, 1/60, 1/144 and 1/240**: an infinite instant loop fires
+60 ± 1 times per simulated second at every step, and `[PUFFER_STATE, LOOP 200]` finishes in
+200 × 1/60 s ± 3 steps at every step. The original double-poll guard is kept as its own case, now
+driven at `AnimFrame` — the exact condition of the shipped bug. `.\RunTests.ps1` **PASS**: 345
+units, 17/17 suites, engine errors clean, **13 goldens hash-identical** (the fixed-step path is one
+pass per step exactly as before). 8-chapter `--freecam`: 0 errors; a `--no-det` wall-clock kill run
+behaves as the `--det` one.
+
+**Census cross-check (a parallel session, reproduced here over 16,053 compiled defs).** A finite
+`LOOP` carrying a `START_TIME` on the Loop event is TIMED data — that offset is the per-iteration
+period in seconds — and 68 finite loops use it (`huge_fireball` 10 x 0.05 s, `sputter_fire_obj`
+100 x 0.2 s, `shipsink` 7 x 2.5 s). Those were always frame-independent and this change leaves them
+alone: the frame floor applies only when the iteration scheduled no time. **376 executed finite
+loops carry no period** (462 counting the undecoded `unknown_seq`, which the runtime never plays) —
+`torpedo_ground_effect` `LOOP 70`, `fire_n_smoke` `LOOP 200`, the camshakes — and they are exactly
+the set this rate-locks. A regression case pins the boundary: an authored period of
+0.01 s (C1's `ww_balmoral*`) must NOT be stretched to an animation frame, and is not.
+**Found doing that (`BL-237`, filed not fixed):** the timed rollover path carries no overshoot, so a
+period shorter than the sim step rounds up — `ww_balmoral*` (`LOOP 1000` @ 0.01 s, authored 10 s)
+runs 16.7 s at 60 Hz, 12.5 s at 240 Hz, 10.0 s at 600 Hz. Seven of the eight authored periods divide
+1/60 exactly, so those 3 defs are the whole visible scope; the fix is the same carry on the timed
+path, but it also moves every traffic route, so it is its own change.
+
+**Scope check against the named-duration defs.** `large_30sec_fire` does NOT time itself with a
+loop count — it is `[PUFFER_STATE 1, LOOP {-1}]` (deliberately infinite) plus a separate
+`stop_fire_n_smoke` sequence carrying `START_TIME {Animation, 30.0}`, i.e. authored **seconds** on
+the sequence clock. Same shape at 10 for `large_10sec_fire`. So the two mechanisms are independent:
+a count is frames, an authored `START_TIME` is seconds, and this change touches only the first. It
+still burns 30 s, as it always did.
+
+**Settles an open question in `BL-235`/`BL-236`:** a fire still burning at 40 s is neither a slow
+loop nor a mis-scaled count. `fire_n_smoke` on the refuel tanks ends its `LOOP 200` at ~3.3 s on any
+hardware, and the crash rig's fire has an authored 30 s stopper — so what is missing is that nothing
+stops the emitter when the sequence does. Both entries updated with the narrowed question.

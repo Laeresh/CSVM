@@ -78,6 +78,23 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*
 
+### Animation timing — the same effect filmed at two frame rates
+
+| ID | Capture | What must be in frame | Unblocks |
+|---|---|---|---|
+| `CAP-19` | One `LOOP`-counted effect, timed at two **actually different** frame rates | The same destructible fire or torpedo ground effect, start to stop, filmed twice with the original rendering at two clearly different rates (and a frame counter or known-good timing reference in each). Does the effect's **duration change with the frame rate**? | `BL-238` |
+
+⚠ **Three ways this capture comes back useless.** (a) A *vsync cap* is not a frame rate — both takes
+must actually render at different rates, verified, not merely be configured differently. (b) Pick the
+effect from the **untimed** set (`torpedo_ground_effect` `LOOP 70`, a destructible's `fire_n_smoke`
+`LOOP 200`): the 68 loops that carry their own `START_TIME` are authored seconds and hold at every
+frame rate under *both* hypotheses, so filming one of those looks like a result and is not.
+(c) Duration must be timed against wall clock, not counted in frames — frames are the variable.
+
+*A duration that **moves** with the frame rate says the original was framerate-coupled and had no
+single correct value, closing `BL-238` as unanswerable rather than answering it. One that **holds**
+fixes the sequence tick at whatever rate it holds at.*
+
 ### Audio
 
 | ID | Capture | What must be audible | Unblocks |

@@ -65,23 +65,101 @@ public class SequenceRunnerTests
         Assert.True(host.Fired.Count > 10, $"expected many fires, got {host.Fired.Count}");
     }
 
-    // ---- 3. an instant-iteration loop yields exactly once per frame (the double-poll waterfall) ----
+    // ---- 3. an instant-iteration loop runs one pass per AUTHORED ANIMATION FRAME ----
 
     [Fact]
-    public void InstantIterationLoopFiresExactlyOncePerFrame()
+    public void InstantIterationLoopFiresExactlyOncePerAnimFrame()
     {
         // The waterfall/poll idiom [instant body, Loop{-1}] keeps an animation alive. Its body takes
-        // no time, so the loop must yield to the next frame — polling once a frame. The measured bug
-        // tested "clock == 0" instead of "did this iteration schedule time?", so the reset-to-0 clock
-        // let the body run a SECOND time before yielding: every poll loop cost double.
+        // no time, so the loop is paced to one pass per SequenceRunner.AnimFrame. Driven AT that
+        // rate this is the original double-poll guard unchanged: the measured bug tested "clock == 0"
+        // instead of "did this iteration schedule time?", so the reset-to-0 clock let the body run a
+        // SECOND time before yielding, and every poll loop in the chapter cost double.
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("mist"), Loop(-1)));
 
-        var t = RunSteps(inst, host, 0.5f, 8);
+        var t = RunSteps(inst, host, SequenceRunner.AnimFrame, 8);
 
         foreach (var step in t)
-            Assert.Single(step);           // exactly one poll per frame — never two
+            Assert.Single(step);           // exactly one poll per step — never two
         Assert.Equal(8, host.Fired.Count);
+    }
+
+    [Theory]
+    [InlineData(1f / 30f)]     // below the authored rate: catches up within the frame
+    [InlineData(1f / 60f)]     // the authored rate itself
+    [InlineData(1f / 144f)]    // not a multiple of it — the case that quantised to 48 Hz
+    [InlineData(1f / 240f)]
+    public void InstantIterationLoopRateIsIndependentOfTheStep(float dt)
+    {
+        // A LOOP count is a count of authored animation frames, so its RATE must be 60 Hz of sim
+        // time whatever the client renders at. Before this was rate-locked the loop ran one pass per
+        // rendered frame: 240 Hz ran every authored timer 4x fast, 144 Hz quantised to 48 Hz (3
+        // steps per pass), 30 Hz ran at half speed.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Swap("mist"), Loop(-1)));
+
+        int steps = (int)MathF.Round(2f / dt);          // 2 s of sim time at this step
+        RunSteps(inst, host, dt, steps);
+
+        // 2 s x 60 Hz, within one pass for the phase of the first fire.
+        Assert.InRange(host.Fired.Count, 119, 121);
+    }
+
+    [Theory]
+    [InlineData(1f / 30f)]
+    [InlineData(1f / 60f)]
+    [InlineData(1f / 144f)]
+    [InlineData(1f / 240f)]
+    public void CountedInstantLoopTakesItsAuthoredFramesInSeconds(float dt)
+    {
+        // The case that named this: `ref_fueltanks`' fire_n_smoke is [PufferState, LOOP 200] and
+        // burns ~3 s in the original — 200 frames at 60 Hz. The count must therefore spend
+        // 200 x AnimFrame of SIM time before the sequence finishes, at every step size.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Swap("fire"), Loop(200)));
+
+        float elapsed = 0f;
+        for (int i = 0; i < 10000 && !inst.Finished; i++)
+        {
+            inst.Advance(host, dt);
+            elapsed += dt;
+        }
+
+        // 200 frames of sim time, give or take the step the last pass quantises onto — the
+        // residual is bounded by the step size, never by the count, which is the whole property.
+        float want = 200f * SequenceRunner.AnimFrame;
+        Assert.True(inst.Finished, "a counted loop must terminate");
+        Assert.InRange(elapsed, want - 3f * dt, want + 3f * dt);
+    }
+
+    [Fact]
+    public void AuthoredPeriodShorterThanAnAnimFrameIsNotStretchedToOne()
+    {
+        // C1's `ww_balmoral1/2/3` are LOOP 1000 with the period on the Loop event itself — an
+        // authored 0.01 s, BELOW SequenceRunner.AnimFrame (0.0167). A loop that carries its own
+        // period is timed data, not a tick counter, so the animation-frame pacing must not touch
+        // it: floored to a frame these three would run 16.7 s instead of their authored 10 s.
+        // The mechanism that keeps them out of it is _iterScheduledTime — SetDue() sets it when
+        // the Loop's own offset gates arrival at the Loop, so the iteration reads as timed.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
+
+        // Stepped finer than the authored period, so the period itself is what is under test
+        // rather than the step it quantises onto (a period shorter than the step cannot be
+        // honoured without carry — see BL-237, a separate pre-existing limit on the timed path).
+        float dt = 1f / 600f, elapsed = 0f;
+        for (int i = 0; i < 20000 && !inst.Finished; i++)
+        {
+            inst.Advance(host, dt);
+            elapsed += dt;
+        }
+
+        Assert.True(inst.Finished, "a counted loop must terminate");
+        // 1000 x 0.01 s = 10 s, plus the opening pass's own gate. The band is wide enough not to
+        // pin that phase and narrow enough to be nowhere near the 16.7 s an AnimFrame floor gives —
+        // discriminating between the two readings is the whole point of the case.
+        Assert.InRange(elapsed, 9.9f, 10.2f);
     }
 
     // ---- 4. a loop whose body takes time restarts its next iteration immediately ----

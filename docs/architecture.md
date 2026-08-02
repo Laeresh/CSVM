@@ -587,6 +587,14 @@ interpreter never dereferences them.
   256-fires-per-frame guard all LOOK refactorable and are all load-bearing (each a shipped, measured
   bug: the bowl sign's 38% blank frames, frozen traffic loops, the double-polling waterfall). The
   comments carry the measured evidence; do not trim them.
+⚠ **An instantaneous LOOP pass costs one `AnimFrame` (1/60 s) of SIM time, never one rendered
+  frame** — a `LOOP n` is an authored timer of n frames, so pacing it per frame made every such
+  timer scale with the client's hardware. The gate is applied at the FOOT of the advance loop
+  (`_frameGatePending`), because the trailing `SetDue()` there re-gates on whatever event control
+  flow landed on and silently overwrites a `_due` written in the LOOP case — which is why the
+  pre-fix code reached for an early `return`, and that return *was* the frame lock. Below 60 Hz the
+  loop catches up within the frame (the 256 guard bounds it); at 1/60 it is one pass per step,
+  bit-identical, which is why no `--det` capture moved.
 ⚠ `OnEventDispatched` is a get-only nullable delegate on the seam ON PURPOSE — the null-conditional
   at the fire site short-circuits the `EventDispatch` construction when no debugger is attached, the
   documented zero-cost contract on the hot dispatch path. Making it a method breaks that.
@@ -1398,8 +1406,12 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
-⚠ Disposal contract: `textures`/`sounds` stay the caller's `using` locals — nulls `PufferFactory` +
-  the sound loader after bootstrap (prewarming first) unless `Options.KeepArchivesOpen` (the lab).
+⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: nulls `PufferFactory`
+  unless `Options.TexturesOutliveBuild` and the sound loader (prewarming first) unless
+  `SoundsOutliveBuild`. A game session owns the TEXTURE archive all session (so this is always true
+  there — a false left the world with no runtime fire, trails or dust, `BL-234`) and scopes the SOUND
+  archive to the build; only the lab owns both. A cleared factory now warns once at the first late
+  `PUFFER_STATE` — the bootstrap census cannot report a runtime miss.
 ⚠ **The phase boundaries are a reported contract** (`StartupProfile` spans zrdr/world/clutter/anim/
   bind/prewarm): move a step, move its `Record` — a dropped phase reads as a growing `rest`, not as
   missing. Keep them leaves.
