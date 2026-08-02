@@ -391,32 +391,6 @@ unscheduled.
 
 ### World animation & effects
 
-- `BL-237` **An authored LOOP period shorter than the sim step is quantised up, so those loops are
-  still frame-rate-dependent (measured 2026-08-02, found while rate-locking the untimed loops).**
-  A finite `LOOP` that carries a `START_TIME` on the Loop event is timed data — the offset is the
-  per-iteration period in seconds, and 68 of the install's finite loops use it (periods 0.01, 0.05,
-  0.2, 0.25, 1.0, 2.5, 3.5, 5.0 s). Seven of those eight values are exact multiples of 1/60 and are
-  therefore honoured exactly. **0.01 s is not**, and the timed rollover path carries no overshoot
-  (`_clock` resets to 0), so each pass rounds up to the next whole step: C1's `ww_balmoral1/2/3`
-  (`LOOP 1000` @ 0.01 s, authored 10 s) measure **16.7 s at 60 Hz, 12.5 s at 240 Hz, 10.0 s at
-  600 Hz** — the exact frame-rate dependence `AnimFrame` removed from the *untimed* loops, still
-  present on the timed ones.
-  *Scope:* 3 defs at 60 Hz. Every other authored period divides 1/60 evenly, so nothing else moves
-  until the sim step changes — which is precisely what makes this easy to miss later.
-  *Fix shape:* carry the overshoot (`_clock - _due`) into the next iteration on the TIMED rollover
-  path too, the way the instantaneous path now does. One line in the same place.
-  ⚠ Traps:
-  - **This is NOT the `AnimFrame` floor and must not be "fixed" by removing it.** Measured: the
-    floor only applies when the iteration scheduled no time, and these loops schedule time (their
-    Loop offset gates arrival at the Loop, which sets `_iterScheduledTime`). At 600 Hz they already
-    hit 10.0 s with the floor in place — the quantisation is the step, not the frame.
-  - **Much wider blast radius than the 3 defs suggest.** The timed rollover path also carries every
-    infinite timed loop — all 26 ground-vehicle route animations (`police_car`, the ten
-    `studebaker*`, the nine `stude_move*`) — so a carry changes where every car sits on every lap.
-    Re-pin goldens deliberately and check the traffic, not just `ww_balmoral`.
-  - Verify at a step FINER than the period under test, or the instrument quantises the same way the
-    bug does and reports a pass.
-
 - `BL-238` **`SequenceRunner.AnimFrame = 1/60` is a decision, not a decode — the measurement it
   rests on cannot discriminate (filed 2026-08-02, on landing the rate-lock).** An untimed `LOOP n`
   spends n engine updates; that half is forced by the data (an instantaneous body can only advance

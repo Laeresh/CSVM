@@ -136,7 +136,7 @@ public class SequenceRunnerTests
     [Fact]
     public void AuthoredPeriodShorterThanAnAnimFrameIsNotStretchedToOne()
     {
-        // C1's `ww_balmoral1/2/3` are LOOP 1000 with the period on the Loop event itself — an
+        // C3/M05's `ww_balmoral1/2/3` are LOOP 1000 with the period on the Loop event itself — an
         // authored 0.01 s, BELOW SequenceRunner.AnimFrame (0.0167). A loop that carries its own
         // period is timed data, not a tick counter, so the animation-frame pacing must not touch
         // it: floored to a frame these three would run 16.7 s instead of their authored 10 s.
@@ -145,9 +145,9 @@ public class SequenceRunnerTests
         var host = new RecordingHost();
         var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
 
-        // Stepped finer than the authored period, so the period itself is what is under test
-        // rather than the step it quantises onto (a period shorter than the step cannot be
-        // honoured without carry — see BL-237, a separate pre-existing limit on the timed path).
+        // Stepped finer than the authored period, so the period itself is under test rather than
+        // the step it quantises onto. The COARSE-step case is its own test below (BL-237): before
+        // the timed path carried its overshoot, this passed at 1/600 and failed at 1/60.
         float dt = 1f / 600f, elapsed = 0f;
         for (int i = 0; i < 20000 && !inst.Finished; i++)
         {
@@ -160,6 +160,62 @@ public class SequenceRunnerTests
         // pin that phase and narrow enough to be nowhere near the 16.7 s an AnimFrame floor gives —
         // discriminating between the two readings is the whole point of the case.
         Assert.InRange(elapsed, 9.9f, 10.2f);
+    }
+
+    // ---- 3b. an authored PERIOD is seconds at every step, including one coarser than it (BL-237) ----
+
+    [Theory]
+    [InlineData(1f / 30f)]     // coarser than either period under test
+    [InlineData(1f / 60f)]     // the shipped case: 0.01 s is 0.6 of a step, 0.02 s is 1.2
+    [InlineData(1f / 144f)]
+    [InlineData(1f / 600f)]
+    public void AuthoredPeriodIsHonouredAtStepsCoarserThanItself(float dt)
+    {
+        // The timed rollover used to reset the clock to zero, so a period that did not land on a
+        // whole step rounded UP to the next one — every iteration, forever. `ww_balmoral1/2/3`
+        // (LOOP 1000 @ 0.01 s, authored 10 s) measured 16.7 s at 60 Hz, 12.5 s at 240 Hz and only
+        // reached 10.0 s at 600 Hz: the exact frame-rate dependence the count path had removed,
+        // still sitting on the period path. Carrying `_clock - _due` is what makes an authored
+        // period mean seconds at any step; the residual is bounded by one step, never by the count.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Swap("wing"), Loop(1000, "Sequence", 0.01f)));
+
+        float elapsed = 0f;
+        for (int i = 0; i < 100000 && !inst.Finished; i++)
+        {
+            inst.Advance(host, dt);
+            elapsed += dt;
+        }
+
+        Assert.True(inst.Finished, "a counted loop must terminate");
+        // 1000 x 0.01 s = 10 s, plus the opening iteration's own gate (one period) and the step
+        // the last pass lands on. The band is nowhere near the 16.7 s this measured at 60 Hz
+        // before the fix, which is the discrimination the case exists to make.
+        Assert.InRange(elapsed, 10f - 3f * dt, 10f + 0.01f + 3f * dt);
+    }
+
+    [Theory]
+    [InlineData(0.02f)]        // 1.2 steps at 60 Hz — the 126-loop set (patrolboat, ftank_boom, ...)
+    [InlineData(1.0f)]         // 60 steps in real arithmetic, 61 in float32 without the carry
+    [InlineData(2.5f)]         // 150 steps; shipsink's period
+    public void AnInfiniteTimedLoopHoldsItsPeriodOverManyIterations(float period)
+    {
+        // The long-horizon pin, and the one that covers the 26 ground-vehicle route animations:
+        // the carry must not merely fix the first iteration, it must not COMPOUND over hundreds of
+        // them. Two failure directions are both caught here — the pre-carry drop lost up to a step
+        // per iteration (a 1.0 s route loop cost 61 steps, so a car ran 1.7% slow indefinitely),
+        // and a carry applied twice would run fast without bound.
+        var host = new RecordingHost();
+        var inst = Instance(Seq(Swap("route"), Loop(-1, "Sequence", period)));
+
+        const float Dt = 1f / 60f;
+        const float Seconds = 60f;
+        for (int i = 0; i < (int)(Seconds / Dt); i++)
+            inst.Advance(host, Dt);
+
+        // 60 s of sim time at one fire per period, within a single iteration for the opening phase.
+        int want = (int)(Seconds / period);
+        Assert.InRange(host.Fired.Count, want - 1, want + 1);
     }
 
     // ---- 4. a loop whose body takes time restarts its next iteration immediately ----
