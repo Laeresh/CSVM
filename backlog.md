@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-243`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-244`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -1256,6 +1256,34 @@ needs one of them to move needs a new measurement first.
   different axis, and pitch's own coupling to speed (`BL-092`'s induced-drag gap) makes conflating the
   two easy to get wrong.
 
+- `BL-243` **The original carries destruction across missions in a state log; CSVM has no log, so a
+  warm instant action starts clean where the original does not.** Decoded 2026-08-02 out of
+  `BL-099` — the mechanism, the user's five-step A/B in the original, and the 62-definition
+  `PERSIST_LOG` list are written up in `docs/formats/anim-definitions.md` ("`SAVE_LOG` /
+  `PERSIST_LOG` are the cross-mission state log"); read that before touching this. The rule:
+  **every mission load applies the log, only campaign missions write it, and it commits to the save
+  and survives a process restart.** `SAVE_LOG ON` (568 defs) puts a definition in the log at all;
+  `PERSIST_LOG ON` (62 defs, a strict subset, all fixed world scenery) additionally carries it
+  across mission boundaries.
+  **Scope of the divergence is narrow.** CSVM builds every session from the bootstrap, so we match
+  the original for campaign missions and for a cold instant action; we differ only for an instant
+  action loaded after a campaign mission **in the same process** — the exact case that produced
+  `BL-099`'s burning fuel depot. There is no campaign flow yet, so today this is unobservable in
+  practice.
+  **What implementing it would take:** a chapter-scoped store of `PERSIST_LOG` definition states
+  that outlives `Launcher.ReturnToMenu`'s teardown (which currently QueueFrees the whole session
+  subtree), applied after the `RESET_STATE` bootstrap and before `zepstate`/`startanims`/the `.gw`,
+  written only on a campaign-mission exit. Because `fuelboxconnect*` is a persisted def, the stored
+  state cannot be just a destroyed/healthy flag — a *running* looping animation is part of what the
+  original carries.
+  ⚠ **Traps.** (a) **Do not use this to explain away a rendering difference.** It is the reason a
+  screenshot of the original is not evidence about the shipped data, which makes it an equally good
+  way to hand-wave a real bug; anything blamed on the log needs the mission sequence that produced
+  it. (b) Two facts are still untested and would change the design: whether the commit happens at
+  damage time or at mission completion, and a direct A/B separating the two flags (destroy a
+  `PERSIST_LOG` object and a save-only one in one campaign mission, then load an IA — the first
+  should carry, the second should not).
+
 ## Open fidelity questions (answerable by testing the original)
 
 - `BL-221` **Which axis order does an anim-def `AT_NODE` *position* use? The graze reaction is the
@@ -1290,64 +1318,52 @@ needs one of them to move needs a new measurement first.
   (code-verifiable-only criteria) — land it in a later look-and-feel pass, after `BL-024`/`BL-025`
   so the gauge draw path has stopped moving.
 
-- `BL-099` **C1's fuel depot: what did you actually see, and in which mission?** **⚠ NEEDS A FURTHER
-  TEST BY THE USER — scheduled into polish run 4 as item 3 on 2026-07-22, then moved back here the
-  same day when the investigation could not close it.** Report: in the original, the depot's state
-  varies between loads — sometimes all tanks intact, sometimes **the two middle (east–west) tanks
-  already destroyed at spawn** plus **blinking lights on a pipeline tower**. Original capture:
-  `OriginalScreenshots/C1 IA1 Burning Fuel Tanks.png` (user-confirmed the tanks were **already
-  alight at mission start, not shot**). Ours, annotated: `Screenshots/C1 IA1 Fuel tanks
-  annotated.png` (freecam `x -4709 y 270 z -5809`; **yellow** = the varying tanks, **red** = the
-  blinking element). Both folders are gitignored, so those citations resolve only locally.
+- `BL-099` **C1's fuel depot: what did you actually see, and in which mission? — ANSWERED
+  2026-08-02, nothing to implement.** The report was: in the original, C1 IA1's depot sometimes
+  spawns with tanks already alight and a pipeline tower blinking, while the shipped data says IA1's
+  depot **cannot burn and cannot blink** (`ia1.gw` deactivates `fuel_truck01`/`02`, `nodes.json`
+  ships both `active: false`, and the only caller of `trucktodepot1` is a C1/M02 script). That
+  contradiction is now explained, and it is not about C1 at all.
 
-  **CSVM is not misbehaving — do not "fix" this.** Verified from code: both `healthy` and
-  `destroyed` ship `active: true` in the gamez, bootstrap pass 1 resolves them correctly via each
-  `ftank0N` def's `RESET_STATE`, and we render **intact tanks, dark lights, static — every run**.
-  That is what the shipped data specifies for IA1. Forcing any other state would harden a guess.
+  **The answer: the original carries destruction across mission boundaries in a state log**, and a
+  mission's rendered world is `RESET_STATE` + `zepstate` + `startanims` + its `.gw` **plus that
+  log**. Every mission load applies it; only campaign missions write it; it commits to the save and
+  survives a process restart. The per-definition opt-in is the `SAVE_LOG` / `PERSIST_LOG` pair,
+  previously documented as undecoded engine bookkeeping — **the full decode, the user's five-step
+  A/B in the original, and the 62-definition `PERSIST_LOG` list are in
+  `docs/formats/anim-definitions.md`** ("`SAVE_LOG` / `PERSIST_LOG` are the cross-mission state
+  log"). So the depot the user saw was destroyed in **C1/M02**, where the whole route is reachable,
+  and C1 IA1 inherited it.
 
-  **The mechanism, fully traced (2026-07-22) — do not re-derive it:**
-  - **The ONLY route to a destroyed tank is weapon damage.** `fuel_truck01-truck_destroy01.json`
-    (`activation: WeaponHit`, `health: 20.0`) → `chainreaction` → `StopAnimation fuelboxconnect1`
-    → `CallAnimation chainreaction_fueldepot1` → burn crawl → `ftank_boom4`, then `ftank_boom3`.
-    `chainreaction_fueldepot2` mirrors it with `ftank_boom1`, `ftank_boom2`. Each `ftank_boomN`
-    flips `healthy`→inactive, `destroyed`→active.
-  - **No randomness exists on that path.** The authored-random idiom in this data is
-    `If {RandomWeight: w}` → state → `StopSequence` (see `gen_zep-random_prop.json`, event kind
-    `If`, opcode 4537). Checked clean: `fuel_tanks.zrd.json`, `ref_fueltanks.zrd.json`,
-    `fueltruck.zrd.json` (its only `RandomWeight` picks how a truck *chassis tumbles*), all 47 C1
-    `cam_anim` files carrying `RandomWeight`, all 13 in `C1/IA1/mis_anim`, and `ia1.gw` — **which
-    has no conditional or branching construct at all.**
-  - **The blinking is a WORKING indicator, not damage.** `fuelbox1-fuelboxconnect1.json` `OnCall`,
-    sequence `flashthelights`: lights on → +0.1 s off → +0.2 s `Loop {-1}`, alongside `scale_hose`
-    rocking the `rockerarm` — a pump station refuelling. Its damaged counterpart `fuelboxbreaks1`
-    turns those lights off permanently. **So blinking and destroyed tanks are anti-correlated
-    within a chain**; seeing both means one chain ran and the other did not (one side wrecked while
-    the other pump still works).
-  - **⚠ The anomaly that blocks closure.** "The two middle, east–west" = `{ftank02, ftank04}` by
-    world X (01 −4722.8, 02 −4691.2, 04 −4682.8, 03 −4618.2). **No chain produces that pair** —
-    the chains partition `{01,02}` and `{04,03}`, and no partial-timing cut gives it either. Caveat:
-    `ftank02` sits ~52 m north of the other three, so the visual "row of four" from that freecam
-    pose may not match the X ordering.
+  **Both of this item's loose ends fall out of that.** `ftank0*` *and* `fuelbox*` — for both
+  `fuelboxconnect*` (the blinking pump) and `fuelboxbreaks*` — are on the `PERSIST_LOG` list, so a
+  *running* pump animation is part of what carries, which is what the blinking needed and a static
+  flag could not give. And the `{ftank02, ftank04}` "middle two" pair no longer has to be
+  producible by a clean chain: IA1 shows whatever M02 was left in, including a burn crawl caught
+  mid-flight, on top of the noted caveat that `ftank02` sits ~52 m north so the freecam "row of
+  four" need not match the X ordering.
 
-  **Why it cannot be actioned yet.** In IA1 the whole route is unreachable: `ia1.gw` deactivates
-  `fuel_truck01`/`02`, `nodes.json` ships both `active: false`, and the only caller of
-  `trucktodepot1` anywhere in the tree is a **C1/M02** script. **User-confirmed 2026-07-22: the
-  trucks are only in M02.** So per the shipped data C1 IA1's depot **cannot burn and cannot blink**
-  — which contradicts the report and means one of these is true, undiscriminated by the files:
-  1. **The observation was C1/M02, not IA1** — the one mission where trucks drive, pumps blink and
-     the trucks are shootable. **Now the leading explanation**, given the trucks are M02-only.
-  2. **IA scenario selection lives in the exe** — `ia.zrd.json` carries `disallow_missions` and
-     `dogfight_ace`/`dogfight_squadron` spawn sets, so instant action has multiple scenario types
-     and per-scenario setup could re-activate the trucks. Nothing in the extraction shows this.
-  3. **The exe drives it directly** — the `fire2`-trigger class, i.e. not recoverable from files.
+  **CSVM is not misbehaving, and this stays true — do not "fix" the depot.** Both `healthy` and
+  `destroyed` ship `active: true` in the gamez, bootstrap pass 1 resolves them via each `ftank0N`
+  def's `RESET_STATE`, and we render intact tanks, dark lights, static — every run. That is what
+  the shipped data specifies for a cold IA1, and it is what the original renders for one too.
 
-  **What the user needs to test, in order:** (a) re-run **C1/M02** in the original and see whether
-  that is where the burning depot and blinking pumps appear; (b) if it really is IA1, note whether
-  the **fuel trucks are visible** — our data says they are off there, so seeing them breaks the
-  model at its root; (c) if IA1 and no trucks, record **which** tanks burn across several loads, to
-  test the `{ftank02, ftank04}` anomaly against the chains' `{01,02}` / `{04,03}` partition.
-  Until (a)–(c) come back, **there is nothing to implement** — and if the answer is (2) or (3) this
-  closes as blocked, alongside the `fire2` trigger and the weather-zone selection.
+  **Do not re-derive the chain analysis** (traced 2026-07-22, and still correct): the only route to
+  a destroyed tank is weapon damage on `fuel_truck01`-`truck_destroy01` (`WeaponHit`, `health 20`)
+  → `chainreaction` → `StopAnimation fuelboxconnect1` → `CallAnimation chainreaction_fueldepot1` →
+  burn crawl → `ftank_boom4` then `ftank_boom3`; `chainreaction_fueldepot2` mirrors it with
+  `ftank_boom1`, `ftank_boom2`; each `ftank_boomN` flips `healthy`→inactive, `destroyed`→active. No
+  randomness exists anywhere on that path (the authored-random idiom is `If {RandomWeight: w}` →
+  state → `StopSequence`, and `fuel_tanks.zrd.json`, `ref_fueltanks.zrd.json`, `fueltruck.zrd.json`,
+  all 47 C1 `cam_anim` files carrying `RandomWeight`, all 13 in `C1/IA1/mis_anim` and `ia1.gw` were
+  all checked clean). The blinking is a *working* pump indicator (`flashthelights`: on → +0.1 s off
+  → +0.2 s `Loop {-1}`, with `scale_hose` rocking the `rockerarm`), and `fuelboxbreaks1` kills those
+  lights permanently — so blinking and destroyed tanks are anti-correlated **within a chain**, and
+  seeing both means one chain ran and the other did not.
+
+  **The general lesson, worth more than this item:** a screenshot of the original is not by itself
+  evidence about the shipped data, because the world you are looking at may carry state no file
+  describes. Reproducing the log itself is `BL-243`.
 
 - `BL-100` **Which weather/sky zone do C1–C4 actually use?** **C5 is answered — `zone1`** (user A/B
   2026-07-22; landed as polish-3 item 2, see `docs/formats/weather.md` and `Weather.ResolveZone`).

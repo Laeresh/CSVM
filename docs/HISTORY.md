@@ -10729,3 +10729,65 @@ show it doing something, and `BL-242` says so.
 
 `.\RunTests.ps1` **PASS** on the reverted tree (unchanged from `e44bfd2`): 345 units, 17/17 engine
 suites, engine errors clean, 13 goldens hash-identical.
+## 2026-08-02 — `SAVE_LOG` / `PERSIST_LOG` decoded: the original carries destruction across missions, which answers `BL-099`
+
+**The user found the mechanism by playing the original, not by reading files.** Report: destroy the
+C3 suspension bridge in `M01`, load `C3/IA1` — the bridge is still destroyed. That is a mission
+where nothing could have destroyed it, which is the same shape as `BL-099`'s C1 fuel depot
+(user-reported burning tanks in an IA1 whose shipped data deactivates the trucks, deactivates the
+chain's only trigger, and whose only `trucktodepot1` caller is a C1/M02 script). The investigation
+had stalled there since 2026-07-22 with three undiscriminated explanations, two of them
+unrecoverable-from-files.
+
+**The user's own A/B pinned the rule, and the third step is the one that mattered.** M01 destroy →
+IA1 destroyed; M01 again → whole; quit → IA1 → whole; **IA1 destroy → quit → IA1 → reset**; alt+F4,
+restart, `M02` → bridge destroyed. The fourth row killed the first model tried in the discussion (a
+resident chapter world reused by instant action, which would have persisted IA→IA too). What
+survives all five: **every mission load applies a state log, only campaign missions write it, and it
+commits to the save and survives a process restart.** The last row is not authored — `support\c3\m02.gw`
+names no bridge node at all, and `susp_bridge` appears in no `M02` reader; it appears in
+`C3/M01/zrdr/objectives.zrd.json`, i.e. destroying it is an M01 objective whose result M02 inherits.
+
+**The flags were sitting in the files the whole time, marked undecoded.**
+`C3/zrdr/susp_bridge.zrd.json` opens `SAVE_LOG ON, PERSIST_LOG ON, NETWORK_LOG ON` — and
+`docs/formats/anim-definitions.md` listed both as "Engine bookkeeping, undecoded detail". Counting
+across all 1533 reader `ANIMATION_DEFINITION`s in the install: 962 have no `SAVE_LOG`, 506 have
+`SAVE_LOG ON` alone, **62 have both**, and 3 have `SAVE_LOG OFF`. `PERSIST_LOG` is a **strict
+subset** of `SAVE_LOG` — nothing persists without also being saved — so the pair reads as a
+hierarchy, not two switches. The 3 `SAVE_LOG OFF` defs are pure cosmetic loops with no state worth
+recording (`hotelsign_loop`, `refinery_fire_always`, `chuteman`), which is a good sanity check on
+the reading.
+
+**The 62 are a curated list of fixed world scenery** — bridges, water/radio/guard towers, the
+generic `s_build`/`m_build` templates, boats and yachts, grass huts, the Hollywood sign, studio
+gates, trains, mineshack, sluice, airdock, AA guns, army trucks. **And they include exactly the two
+objects `BL-099` was stuck on:** `ftank0*` (`C1/zrdr/fuel_tanks.zrd.json`) and `fuelbox*` for both
+`fuelboxconnect*` and `fuelboxbreaks*` (`C1/zrdr/fueltruck.zrd.json`). The 506 save-only defs are
+the transient layer: zeppelin turrets, gasbags, nacelles, balloons, player cockpit panels.
+
+**That closes `BL-099`'s two loose ends without any new C1 evidence.** The blinking pipeline tower
+needed a *live* `Loop {-1}`, which a persisted destroyed/healthy flag cannot produce — but
+`fuelboxconnect*` is itself a persisted def, so a running pump animation is part of what carries.
+And the `{ftank02, ftank04}` "middle two" pair no longer has to be producible by a clean chain,
+since IA1 shows whatever M02 was left in, including a burn crawl caught mid-flight. The depot was
+destroyed in **C1/M02**, where the whole route is reachable, and IA1 inherited it. The 2026-07-22
+chain analysis stands unchanged and is still not to be re-derived.
+
+**Landed as documentation only — no code changed.** The decode, the A/B table, the counts and the
+`PERSIST_LOG` roster are now a section in `docs/formats/anim-definitions.md`; the two flag rows in
+that file's field table are no longer "undecoded"; `BL-099` is rewritten as ANSWERED with the
+chain analysis preserved as a do-not-re-derive note; and reproducing the log in CSVM is filed as
+**`BL-243`**. CSVM builds every session from the bootstrap and has no log, so it matches the
+original for campaign missions and for a cold instant action and diverges only for an instant
+action loaded after a campaign mission in the same process — unobservable today, since there is no
+campaign flow.
+
+**The lesson worth carrying past this item:** a mission's rendered world is `RESET_STATE` +
+`zepstate` + `startanims` + its `.gw` **plus session/save state that no file describes**. A
+screenshot of the original is therefore not by itself evidence about the shipped data — which is
+also why `BL-243` carries an explicit trap against using the log to explain away a real bug.
+
+**Still untested, and recorded in both places:** whether the log commits at damage time or at
+mission completion (destroy, abort without completing, restart, load the next mission), and a
+direct A/B separating the two flags (destroy a `PERSIST_LOG` object and a save-only one in one
+campaign mission, then load an IA — the first should carry, the second should not).

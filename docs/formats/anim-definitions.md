@@ -56,7 +56,9 @@ bare flag (`LOCAL_NODES_ONLY`).
 | `RESET_STATE` | op list | The object's **base state**, applied at load: healthy variants ACTIVE, `destroyed` variants INACTIVE, doors at rest pose. This is what fixes the destroyed-over-healthy coplanar flicker. |
 | `SEQUENCE_DEFINITION` | op list (repeatable) | One timeline of ops; optional `NAME`, optional `ACTIVATION`. |
 | `HEALTH`, `DAMAGE_SEQUENCE` | | Destructible-object HP + damage-threshold script (`IF ANIM_HEALTH n … CALL_ANIMATION sputter_fire_smoke_obj …`). |
-| `SAVE_LOG`, `PERSIST_LOG`, `EXECUTION_PRIORITY`, `AUTO_RESET_NODE_STATES`, `AUTO_ADD_TO_WORLD` | | Engine bookkeeping, undecoded detail. |
+| `SAVE_LOG` | `ON` \| `OFF` | The def's state goes into the engine's **state log** — the record that survives a mission reload and a save/restore. See "`SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log". |
+| `PERSIST_LOG` | `ON` | The def's state **additionally crosses mission boundaries**: a later mission in the same chapter loads with it applied. A strict subset of `SAVE_LOG ON` (62 defs, all of them fixed world scenery). Same section. |
+| `EXECUTION_PRIORITY`, `AUTO_RESET_NODE_STATES`, `AUTO_ADD_TO_WORLD` | | Engine bookkeeping, undecoded detail. |
 
 ## State ops (the part-1 subset)
 
@@ -672,6 +674,70 @@ Ordinary ANIMATION_DEFINITIONs, `ACTIVATION ON_STARTUP`, whose sequences hold on
 deactivates `dliner1` (the passenger zeppelin in the shed) and `cargotrain`. The
 chapter gamez contains *every* mission's objects; without applying these states,
 phantom zeppelins/trains render in every mission.
+
+## `SAVE_LOG` / `PERSIST_LOG` are the cross-mission state log (decoded 2026-08-02)
+
+A mission does not always start from `RESET_STATE`. The engine keeps a **state log** of
+flagged definitions, and a mission load applies it on top of the bootstrap — which is how the
+original shows scenery already destroyed in a mission where nothing could have destroyed it.
+
+**User A/B in the original (C3, the `susp_bridge` suspension bridge — destroying it is an
+`M01` objective, see `C3/M01/zrdr/objectives.zrd.json`):**
+
+| sequence | result | what it shows |
+|---|---|---|
+| M01, destroy bridge → IA1 | destroyed | a campaign mission **writes** the log; IA **reads** it |
+| → M01 again | whole | a campaign load **restores the baseline at the start of that mission** |
+| → quit → IA1 | whole | IA applied the restored baseline |
+| IA1, destroy something → quit → IA1 | reset | **IA never writes** to the log |
+| alt+F4, restart, load M02 | bridge destroyed | the log **commits to the save** and M02's baseline includes M01's result |
+
+So: **every mission load applies the log; only campaign missions write it; the commit survives
+a process restart.** Note the last row is not authored into M02 — `support\c3\m02.gw` names no
+bridge node at all, and the bridge appears in no `M02` reader.
+
+**The flags are the per-definition opt-in.** `C3/zrdr/susp_bridge.zrd.json` opens
+`NAME susp_bridge, SAVE_LOG ON, PERSIST_LOG ON, NETWORK_LOG ON, ANIMATION_NAME rope1burn,
+ANIMATION_ROOT_NAME rope1, HEALTH 7`. Counted across all 1533 reader
+`ANIMATION_DEFINITION`s in the install:
+
+| | count |
+|---|---|
+| `SAVE_LOG` absent (default off) | 962 |
+| `SAVE_LOG ON`, no `PERSIST_LOG` | 506 |
+| `SAVE_LOG ON` **and** `PERSIST_LOG ON` | 62 |
+| `SAVE_LOG OFF` | 3 |
+
+`PERSIST_LOG` is a **strict subset** of `SAVE_LOG` — nothing persists without also being saved,
+which is why the two read as a hierarchy rather than two independent switches. The three
+`SAVE_LOG OFF` defs are pure cosmetic loops with no state worth recording (`hotelsign_loop`,
+`refinery_fire_always`, `chuteman`).
+
+**The 62 `PERSIST_LOG` defs are a curated list of fixed world scenery**, i.e. exactly the things
+whose destruction a later mission should remember: `susp_bridge`, water/radio towers
+(`ap_h2otwr`, `ap_radiotwr`, `ap_transmitter`, `col_tower#`), guard towers (`g_tower*`), the
+generic building templates (`s_build**`, `m_build**`), boats and yachts (`leasure*`, `sailboat*`,
+`yacht*`), grass huts, the Hollywood sign, `ramses`, the studio gates, trains (`train01/02`),
+`mineshack`, `sluice`, `shaft`, `airdock2`, AA guns (`aagun**`, `maagun**`), army/fuel trucks,
+and C1's fuel depot — `ftank0*` (`fuel_tanks.zrd.json`) plus `fuelbox*` for **both**
+`fuelboxconnect*` and `fuelboxbreaks*` (`fueltruck.zrd.json`). The 506 save-only defs are the
+transient layer: zeppelin turrets, gasbags, engine nacelles, balloons, player cockpit panels.
+
+**Consequences worth keeping.**
+- A mission's rendered world is `RESET_STATE` + `zepstate` + `startanims` + its `.gw` **+ the
+  log**. Only the first four are recoverable from files; the fifth is session/save state, so a
+  screenshot of the original is not by itself evidence about the shipped data (this is what
+  `BL-099`'s C1 fuel depot turned out to be).
+- Because `fuelboxconnect*` is itself a persisted def, a *running* pump animation is part of what
+  carries — persisted state is not limited to a static destroyed/healthy flag.
+- CSVM builds every session from the bootstrap and has no log, so it matches the original for
+  campaign missions and for a cold instant action, and diverges only for an instant action loaded
+  after a campaign mission in the same run (`BL-243`).
+
+**Not yet pinned:** whether the commit happens at damage time or at mission completion (destroy,
+abort without completing, restart, load the next mission), and a direct A/B separating the two
+flags (destroy a `PERSIST_LOG` object and a save-only one in the same campaign mission, then load
+an IA — the first should carry, the second should not).
 
 ## Scenario dimension (analyzed 2026-07-18 — negative)
 
