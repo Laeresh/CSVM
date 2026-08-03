@@ -76,7 +76,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — surfaces: what the builders drop
 
 1. ☑ A1 `BL-051` — honour the gamez node `active` flag
-2. ☐ A2 `BL-056` — render the per-polygon second material pass
+2. ☑ A2 `BL-056` — render the per-polygon second material pass
 3. ☐ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
 4. ☐ A4 `BL-053` — dense cross-node conflict rank for the depth bias
 5. ☐ A5 `BL-057` — parse + census `zone_set`, document it
@@ -109,7 +109,7 @@ can interleave anywhere. Within a wave, listed order is the intended order.
 
 # Wave A — surfaces: what the builders drop
 
-## A1 ☐ `BL-051` — honour the gamez node `active` flag
+## A1 ☑ `BL-051` — honour the gamez node `active` flag
 
 **Goal.** A node the gamez ships `active: false` is built hidden (or not built), matching the
 original's own record of the build script's `NodeSetActive off` — instead of today's
@@ -150,7 +150,7 @@ predicted and was rebaselined (C1 214→210/145→143, C3 228→221/151→147). 
 isolated the whole effect to `piratezep` (383 mesh instances, matching its own subtree size);
 C5's `piratezep` (`active: true`) confirmed unaffected. Full record: `docs/HISTORY.md` 2026-08-04.
 
-## A2 ☐ `BL-056` — render the per-polygon second material pass
+## A2 ☑ `BL-056` — render the per-polygon second material pass
 
 **Goal.** The 352 C5 polygons that ship a second textured material with its own UVs — fog
 gradients (`z3_foggrad`/`foggrad8x64`, 142), `buildingspotlighted` (34), `fadedsign01-03`, `nypd`,
@@ -180,6 +180,17 @@ visible across C5.
 not conflate this with A4's bias ordering — a second pass that only looks right because a bias
 happens to order it is the masked-effect failure `docs/verification.md` warns about; verify the
 pass renders with A4 unlanded or explicitly note the interaction.
+
+**Landed 2026-08-04.** The dropped read was in the **reader** (`GameZ.ParseMeshes`' `materials[0]`),
+not `SceneBuilder`; the fix spans `GameZPolygon.OverlayPasses` + a per-pass surface in `BuildMesh`
+ordered by a new `OverlayPassBias` (rank cannot carry it — 97 of 307 overlay-bearing models are
+already at `SurfaceRankCap`). Census: 619 polygons carry a second pass and 7 a third, none in
+planes.zbd; every overlay texture has alpha, so the existing blend/scissor classification was
+already correct and no semantics were invented. `RunTests.ps1` clean; 6 of 13 goldens moved
+(the C1/C2/C5 world shots only — the two plane shots cannot move) and were rebaselined. Verified
+by git-stash A/B: the C5 **NYPD** sign now renders (1,550 px, bbox on the sign alone) where the
+control shows blank steel. All captures taken with A4 unlanded. Full record: `docs/HISTORY.md`
+2026-08-04.
 
 ## A3 ☐ `BL-058` — answer the C5 doubled-buildings question
 

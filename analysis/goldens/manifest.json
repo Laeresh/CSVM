@@ -14,7 +14,7 @@
     {
       "name": "c1-waterfall",
       "frame": 120,
-      "hash": "81b7098695c0a9fbd9b77bb3da812742",
+      "hash": "b6094f1476a799a972ec9c6b09ec15f0",
       "exercises": "UV scroll on the falls sheet + the mist puffer; frame-sensitive 1.28 % at 120 vs 121. Re-pinned when TEXTURE_SEQUENCE times became lifetime fractions: 0.01 % of pixels, the mist's flipbook column. Re-pinned when the world gained backface culling (2026-08-01): the skydome stops drawing its near wall over the far shore. Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 6.25 % of pixels, max delta 42 - the falls sheet, its mist and the ridge tree line stop being dimmed by SUNLIGHT 0.80. Re-pinned when the cloud deck was forced double-sided (2026-08-02): 7.11 % of pixels, max delta 79, all in the top 130 rows - every deck tile is authored show_backface: false and its one face points +Y, so backface culling had removed the overcast CEILING; the floor seen from above is unchanged (a C1 camera at y=1400 is bit-identical). The four deckless chapters (C1B/C2/C3/C5) did not move",
       "args": ["--freecam", "--chapter=C1", "--pos=-7720,60,-3380", "--lookat=-7868,40,-3449", "--det", "--mute"]
     },
@@ -35,7 +35,7 @@
     {
       "name": "c2-city",
       "frame": 120,
-      "hash": "4df625841cc5c2ba5be83b42e081e412",
+      "hash": "309e948fa1c9a4e54ba1d6395b6805f2",
       "exercises": "C2's solid 3D city blocks, billboard clutter, backlot geometry, daylight fog; near-static, 51 px at 120 vs 121. Re-pinned when the world gained backface culling (2026-08-01): 2.0 % - the shot that names the fix, the backlot facade panels stop z-fighting. Re-pinned when the authored _1/_2 mip levels replaced our box filter (2026-08-02): a single-LSB shift, max channel delta 1 on <0.01 % of pixels - C2 loads 10 authored levels but none reaches a mip band at this pose. Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 0.63 % of pixels, max delta 30 - the clutter tree cards and the self-lit backlot signage in the lower half",
       "args": ["--freecam", "--chapter=C2", "--pos=-5722,186,-3457", "--direction=-0.438,-0.15,-0.899", "--det", "--mute"]
     },
@@ -63,7 +63,7 @@
     {
       "name": "c5-city-night",
       "frame": 120,
-      "hash": "f52f20bcefed29559507b39ce5b6117b",
+      "hash": "d52855f81cb23fa9d1fc600af6aaee42",
       "exercises": "the night city: LIGHT_STATE point lights packed into csky_light_data, lit window skins, moon and stars; static, 11 px at 120 vs 360. Re-pinned when the world gained backface culling (2026-08-01): 0.2 % - the 172 back-to-back panel pairs plus the skydome wall. Re-pinned when the authored _1/_2 mip levels replaced our box filter (2026-08-02): 21.8 % of pixels, max delta 217 - the shot that names the fix, the facade sheets go dark with punchy lit windows instead of an averaged grey mush (frame mean 14.55 -> 8.79). Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 1 pixel, max delta 1 - `city-night` names the art, not the mission: this zone's SUNLIGHT is 1.00, so gating it changes essentially nothing (the flags ARE read here - the build logs 123 self-lit models) Re-pinned when the world runtime kept its puffer factory past the bootstrap (2026-08-02, BL-234): 147 pixels (0.016 %), max delta 149 - four `torch_puffer*` flames light up in the night city, plus `smoke_puffer1`/`train_puffer1`; 9 live emitters to 36.",
       "args": ["--freecam", "--chapter=C5", "--pos=-9256,178,-3155", "--direction=-0.588,-0.1,-0.809", "--det", "--mute"]
     },
@@ -84,21 +84,21 @@
     {
       "name": "c1-flight",
       "frame": 120,
-      "hash": "232be1b63d34d9b870b4a9783b65a22b",
+      "hash": "0134acc50e6b26fbc7482de6abed1b66",
       "exercises": "a flying plane: chase camera on the sim clock, prop and control-surface animators, gauges, compass tape, weapon readout, impact reticle; frame-sensitive 34.52 %, the strongest tripwire here. Re-pinned when the world gained backface culling (2026-08-01): 29.6 % - the cloud banks stop being hidden by the skydome wall. Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 27.4 % of pixels, max delta 33 - the cloud sprite field and clutter cards across the whole frame at SUNLIGHT 0.80. Re-pinned when the cloud deck was forced double-sided (2026-08-02): 29.52 % of pixels, max delta 83, all in the top 434 rows - the chase camera looks up into it - every deck tile is authored show_backface: false and its one face points +Y, so backface culling had removed the overcast CEILING; the floor seen from above is unchanged (a C1 camera at y=1400 is bit-identical). The four deckless chapters (C1B/C2/C3/C5) did not move. Re-pinned when a compiled def stopped binding every same-named instance (2026-08-02): 0.61 % of pixels, max delta 54, all of it building lighting in the lower third - C1's 22 `gen_flare_yellow` defs each drove all 22 flare nodes, so the bootstrap started 547 ON_STARTUP instances where 85 are authored and one set of buildings took every lamp; now each def lights its own",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--hold=0.2,0.1,0,1", "--det", "--mute"]
     },
     {
       "name": "c1-destroy-effects",
       "frame": 120,
-      "hash": "6120c534af8c324e866c67e221c0c787",
+      "hash": "dd7bf6c62510bdf4aaec72a58044b303",
       "exercises": "the world-effects runtime (ForEffects/D32) built and rendering a puffer: a flight-session kill of the single ap_radiotwr instance CALL_ANIMATIONs great_balls_of_fire onto the world-effects stage; frame-sensitive (distinct hashes at 119/120/121), and moves off its Rng.Effects seed (PLAN-animruntime-role-factories A1). Re-pinned when STOP_SEQUENCE landed (BL-212): the kill's large_fireball now dies at its authored 0.3 s, so frame 120 no longer shows its emitter. Re-pinned again for the TEXTURE_SEQUENCE lifetime-fraction fix: 0.26 % of pixels, the ground puffers' flipbook columns. Re-pinned when the world gained backface culling (2026-08-01): 7.3 % - the same skydome wall behind the kill. Re-pinned for the translation_range decode (2026-08-01): 0.08 % of pixels but the whole point of the shot - the kill's fireballs were strung in a line hundreds of metres up the runway (xz read as a distance) and now sit compact at the tower. Re-pinned for the SCALE-is-an-offset fix (2026-08-01): 0.02 % - the radio tower's `upper` section carries SCALE initial -0.1, which as an absolute was a negative scale (invisible) and as an offset is a 0.9 shrink, so the killed section is actually drawn. Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 4.0 % of pixels, max delta 21 - the cloud sprites above the horizon; the destructible's own effect meshes are self-lit too. Re-pinned when the cloud deck was forced double-sided (2026-08-02): 7.21 % of pixels, max delta 79, all in the top 85 rows - every deck tile is authored show_backface: false and its one face points +Y, so backface culling had removed the overcast CEILING; the floor seen from above is unchanged (a C1 camera at y=1400 is bit-identical). The four deckless chapters (C1B/C2/C3/C5) did not move",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--destroy=radiotwr.flt", "--pos=-6350,250,-4144", "--direction=1,-0.1,0", "--hold=0,0,0,0.5", "--det", "--mute"]
     },
     {
       "name": "c1-crash",
       "frame": 20,
-      "hash": "4a982f4a6e04ff4652e5e3220883b40e",
+      "hash": "031379676267cc4307c2991feef95c8d",
       "exercises": "the per-player crash rig (ForCrashRig/D32) constructing and playing player_crash_dirt: --crash=5 forces FlightController.Crash() at a fixed sim frame, the only headless trigger for this path (PLAN-animruntime-role-factories A2); moves off its Rng.Crash draw. The set's biggest puffer surface, so the TEXTURE_SEQUENCE lifetime-fraction fix moved 26.55 % of its pixels: the fireball holds its mid flipbook frames instead of the blown-out last one. Re-pinned when the world gained backface culling (2026-08-01): 18.0 % - the same, cloud banks behind the fireball. Re-pinned for BL-224 (2026-08-01): 0.65 % of pixels, max delta 18, in one 73x124 px patch - a crash emitter now stops at its authored OBJECT_ACTIVE_STATE false instead of running on. Re-pinned again for the translation_range decode (2026-08-01): 18.8 % - the camera sits inside the fireball at frame 20, so re-aimed debris/sparks repaint most of it; the fireball itself is unchanged in extent. Re-pinned again for the SCALE-is-an-offset fix (2026-08-01): 8.9 %, max delta 37 - the crash's `flydirt` dust ramps from (4.5,11,4.5) instead of (3.5,10,3.5), a slightly larger cloud seen from inside. Re-pinned when the authored model `lighting`/`fog` flags were honoured world-wide (2026-08-02, BL-214): 5.8 % of pixels, max delta 14 - cloud sprites and the shore tree line at SUNLIGHT 0.80. Re-pinned when the cloud deck was forced double-sided (2026-08-02): 12.11 % of pixels, max delta 43, all in the top 195 rows - every deck tile is authored show_backface: false and its one face points +Y, so backface culling had removed the overcast CEILING; the floor seen from above is unchanged (a C1 camera at y=1400 is bit-identical). The four deckless chapters (C1B/C2/C3/C5) did not move",
       "args": ["--chapter=C1", "--plane=player_bhawk", "--crash=5", "--hold=0,0,0,0.6", "--det", "--mute"]
     }

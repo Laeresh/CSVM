@@ -368,15 +368,34 @@ public sealed class GameZ
                             vc.GetProperty("g").GetSingle() / 255f,
                             vc.GetProperty("b").GetSingle() / 255f));
                 }
-                if (p.TryGetProperty("materials", out var pms) && pms.GetArrayLength() > 0)
+                // `materials` is a LIST: element 0 is the polygon's base skin, and every element
+                // after it is an overlay pass drawn on the same triangles with its OWN UVs (the
+                // original's multi-texture decals — terrain transition blends, fog gradients, lit
+                // building windows, signage, zeppelin logos). 619 polygons install-wide carry a
+                // second entry and 7 a third; every one of them ships uv_coords of its own.
+                if (p.TryGetProperty("materials", out var pms))
                 {
-                    var pm = pms[0];
-                    poly.MaterialIndex = pm.GetProperty("material_index").GetInt32();
-                    if (pm.TryGetProperty("uv_coords", out var uvs) && uvs.ValueKind == JsonValueKind.Array)
+                    for (int pass = 0; pass < pms.GetArrayLength(); pass++)
                     {
-                        poly.UvCoords = new List<Vector2>();
-                        foreach (var uv in uvs.EnumerateArray())
-                            poly.UvCoords.Add(new Vector2(uv.GetProperty("u").GetSingle(), uv.GetProperty("v").GetSingle()));
+                        var pm = pms[pass];
+                        int material = pm.GetProperty("material_index").GetInt32();
+                        List<Vector2>? uv = null;
+                        if (pm.TryGetProperty("uv_coords", out var uvs) && uvs.ValueKind == JsonValueKind.Array)
+                        {
+                            uv = new List<Vector2>();
+                            foreach (var c in uvs.EnumerateArray())
+                                uv.Add(new Vector2(c.GetProperty("u").GetSingle(), c.GetProperty("v").GetSingle()));
+                        }
+                        if (pass == 0)
+                        {
+                            poly.MaterialIndex = material;
+                            poly.UvCoords = uv;
+                        }
+                        else
+                        {
+                            (poly.OverlayPasses ??= new List<GameZPolygonPass>())
+                                .Add(new GameZPolygonPass { MaterialIndex = material, UvCoords = uv });
+                        }
                     }
                 }
                 mesh.Polygons.Add(poly);
@@ -569,6 +588,14 @@ public sealed class GameZPolygon
 {
     public List<int>? NormalIndices;
     public List<Vector2>? UvCoords;
+
+    /// <summary>The polygon's overlay passes — <c>materials[1..]</c>, each a second textured
+    /// material drawn on these same triangles with its own UVs, on top of the base skin
+    /// (<see cref="MaterialIndex"/>/<see cref="UvCoords"/>, which are <c>materials[0]</c>). Null
+    /// for the overwhelming majority. Every overlay texture in this install carries an alpha
+    /// channel, so the pass composites rather than replacing what is under it; SceneBuilder
+    /// builds each as its own surface with its own draw-order bias.</summary>
+    public List<GameZPolygonPass>? OverlayPasses;
     public List<Color>? VertexColors; // baked per-corner lighting, parallel to VertexIndices
     public int MaterialIndex = -1;
     public bool TriangleStrip;
@@ -588,6 +615,17 @@ public sealed class GameZPolygon
     public bool Subface;
 
     public List<int> VertexIndices { get; } = new();
+}
+
+/// <summary>One overlay pass of a polygon (an entry of <c>materials</c> past the first): the
+/// material to skin the polygon's triangles with, and the UVs to skin them by. The UVs are
+/// independent of the base pass's — a fog gradient runs its own 8×64 ramp across a face whose
+/// base skin tiles a wall texture — which is why the pass cannot be folded into the base
+/// surface and gets its own.</summary>
+public sealed class GameZPolygonPass
+{
+    public int MaterialIndex = -1;
+    public List<Vector2>? UvCoords;
 }
 
 public sealed class GameZMaterial

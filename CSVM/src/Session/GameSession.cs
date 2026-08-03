@@ -799,6 +799,11 @@ public partial class GameSession : Node3D
         // reporting 0 self-lit models means they did not (BL-214).
         GD.Print($"model flags: {builder.UnlitModelCount} self-lit (lighting: false), "
                  + $"{builder.UnfoggedModelCount} unfogged (fog: false)");
+        // The per-polygon second material pass (BL-056). A declined count above zero means a
+        // sprite/facade mesh carried one and it was dropped — never observed in this install.
+        if (builder.OverlayPassSurfaceCount > 0 || builder.OverlayPassDeclinedCount > 0)
+            GD.Print($"overlay passes: {builder.OverlayPassSurfaceCount} surface(s) built, "
+                     + $"{builder.OverlayPassDeclinedCount} polygon(s) declined");
         state.What = $"chapter {_spec.Chapter} world";
 
         // The animation debugger (--anim-lab): the lab node owns the clock and the

@@ -221,6 +221,9 @@ coloured untextured triangle — see docs/formats/world-structure.md); SceneBuil
 ⚠ The unified transform `scale` is deliberately ignored (measured unit on every transformed node).
 Carries each model's `flags.lighting`/`flags.fog` as `GameZMesh.Lighting`/`Fog` (default true) —
 the original's self-lit and unfogged marks, honoured by SceneBuilder's per-model shader variants.
+Parses the WHOLE per-polygon `materials` list: element 0 is the base skin, the rest become
+`GameZPolygon.OverlayPasses` (`GameZPolygonPass`: material + its own UVs), which SceneBuilder draws
+as extra surfaces — 619 polygons install-wide, none in planes.zbd (docs/formats/gamez.md).
 ⚠ ModelType/FacadeMode/TextureScroll are unified-only: null/zero on a legacy tree, SceneBuilder
   falls back to its texture-name heuristic. Reading both shapes keeps a v0.6.1 rollback data-only.
 
@@ -265,6 +268,11 @@ still built with its transform — animations attach puffers and sounds to those
   because every install rate (0.07/0.4/0.5/0.7/1.0) × 3600 is a whole number of texture repeats.
 ⚠ `BuildSubtree` sets the built root's transform from the node's OWN `Local` — a caller slicing a
   nested node must overwrite it with `GameZ.WorldTransformOf` or it lands at its parent's origin.
+⚠ A polygon's overlay passes become their own surfaces, appended after every base group, ordered by
+  `OverlayPassBias` and NOT by surface rank — 97 of the 307 overlay-bearing models are already at
+  the rank cap, where an appended group would share its base's rank and z-fight it. Declined on
+  sprite/facade meshes (no biasable material); `OverlayPassDeclinedCount` is the tripwire and is 0
+  across the install.
 
 ## src/Mech3/WorldCollision.cs
 Owns every `SceneBuilder`-built collider's `Disabled` flag and derives it: enabled exactly while the

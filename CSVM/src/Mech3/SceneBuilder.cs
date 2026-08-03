@@ -163,6 +163,14 @@ void fragment() {
     // 1.0 of a level resolve identically (25,732,146 m² front / 120,999 behind either way), so
     // the smaller offset is free. Still 50x SurfaceRankBias and 2000x NodeOrderBias.
     private const float SubfaceBias = DepthBiasPerLevel * 0.5f;
+    // Overlay passes (GameZPolygon.OverlayPasses) draw on the SAME triangles as their base pass
+    // and must land in front of it. Surface rank cannot carry that: 97 of the 307 overlay-bearing
+    // models already have SurfaceRankCap or more base groups, so an overlay group appended after
+    // them would share its base's capped rank and z-fight it. Hence a term of its own — a tenth
+    // of a level is 2x the entire rank budget (5 × SurfaceRankBias = 0.05 level) so it always
+    // out-ranks within-mesh order, and 5x below SubfaceBias so two stacked overlays (the deepest
+    // in this install, 7 polygons) still sit below a real subface.
+    private const float OverlayPassBias = DepthBiasPerLevel * 0.1f;
 
     private readonly GameZ _gamez;
     private readonly TextureArchive _textures;
@@ -189,7 +197,11 @@ void fragment() {
     // material's: one texture legitimately skins both a lit world surface and a self-lit effect
     // model (C1's `fire1` shares its flame texture with static refinery geometry), and the two
     // need different shader variants — see BuildMesh.
-    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, bool Lit, bool Fogged), Material> _materialCache = new();
+    // Pass is part of the key because the same material can skin a base surface and an overlay
+    // pass (both would otherwise share a cached material at the base's bias, putting the overlay
+    // back where it z-fights): C5's fadedsign01 is a base skin on one wall and an overlay on
+    // another.
+    private readonly Dictionary<(int Material, int Priority, int Rank, bool Subface, bool DoubleSided, float ScrollU, float ScrollV, bool ClampUv, bool Lit, bool Fogged, int Pass), Material> _materialCache = new();
     private readonly Dictionary<int, Shader> _biasShaderCache = new(); // keyed by feature bits
     private readonly Dictionary<int, Shader> _billboardShaderCache = new(); // cloud sprites, keyed by blend/scissor bits
     private readonly Dictionary<int, Shader> _cylindricalShaderCache = new(); // Y/X-axis facades, keyed by axis/blend/scissor/glow bits
@@ -311,6 +323,15 @@ void fragment() {
     /// <c>texture_scroll</c> or the boot script). Logged per world build: it is the one-line
     /// evidence that a chapter animates exactly the surfaces the data says and no others.</summary>
     public int ScrollingModelCount { get; private set; }
+
+    /// <summary>Surfaces built from a polygon's overlay passes (<c>materials[1..]</c>), and the
+    /// overlay polygons declined because their mesh renders as a camera-facing sprite or a
+    /// cylindrical facade, whose materials carry no depth bias to order a pass with. Logged per
+    /// world build: the one-line evidence that the second pass reached the mesh, and the tripwire
+    /// if the declined count ever stops being zero.</summary>
+    public int OverlayPassSurfaceCount { get; private set; }
+
+    public int OverlayPassDeclinedCount { get; private set; }
 
     /// <summary>The textured materials built here, each with its source texture name, so a
     /// caller can re-resolve and swap them without a rebuild. See <see cref="Repaint"/>.</summary>
@@ -451,14 +472,14 @@ void fragment() {
     /// forcing clamp on them changes 80% of the C5 city pose.
     /// </para>
     /// </summary>
-    private static bool UvsWithinUnitSquare(List<GameZPolygon> polys)
+    private static bool UvsWithinUnitSquare(List<GameZPolygon> polys, int pass)
     {
         bool any = false;
         foreach (var poly in polys)
         {
-            if (poly.UvCoords == null)
+            if (PassUvs(poly, pass) is not { } uvs)
                 continue;
-            foreach (var uv in poly.UvCoords)
+            foreach (var uv in uvs)
             {
                 any = true;
                 if (uv.X < -UvEpsilon || uv.X > 1f + UvEpsilon ||
@@ -476,7 +497,17 @@ void fragment() {
         _ => CylAxis.None,
     };
 
-    private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset)
+    /// <summary>The UVs one pass of a polygon is skinned by: pass 0 is the base
+    /// <see cref="GameZPolygon.UvCoords"/>, pass N the Nth <see cref="GameZPolygon.OverlayPasses"/>
+    /// entry's own — they are independent mappings of the same triangles.</summary>
+    private static List<Vector2>? PassUvs(GameZPolygon poly, int pass) =>
+        pass == 0 ? poly.UvCoords
+            : poly.OverlayPasses != null && pass - 1 < poly.OverlayPasses.Count
+                ? poly.OverlayPasses[pass - 1].UvCoords
+                : null;
+
+    private static void EmitPolygon(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, Vector3 offset,
+        List<Vector2>? uvs)
     {
         int n = poly.VertexIndices.Count;
         if (n < 3)
@@ -487,19 +518,20 @@ void fragment() {
             {
                 // alternate winding so all triangles of the strip face the same way
                 if ((i & 1) == 0)
-                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset);
+                    EmitTriangle(st, mesh, poly, i, i + 1, i + 2, offset, uvs);
                 else
-                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset);
+                    EmitTriangle(st, mesh, poly, i, i + 2, i + 1, offset, uvs);
             }
         }
         else
         {
             for (int i = 1; i + 1 < n; i++)
-                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset);
+                EmitTriangle(st, mesh, poly, 0, i, i + 1, offset, uvs);
         }
     }
 
-    private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c, Vector3 offset)
+    private static void EmitTriangle(SurfaceTool st, GameZMesh mesh, GameZPolygon poly, int a, int b, int c,
+        Vector3 offset, List<Vector2>? uvs)
     {
         Vector3 Pos(int corner) => mesh.Vertices[poly.VertexIndices[corner]] - offset;
         // flat normal fallback for polygons without normal data
@@ -519,8 +551,8 @@ void fragment() {
             st.SetColor(poly.VertexColors != null && corner < poly.VertexColors.Count
                 ? poly.VertexColors[corner]
                 : Colors.White);
-            if (poly.UvCoords != null && corner < poly.UvCoords.Count)
-                st.SetUV(poly.UvCoords[corner]);
+            if (uvs != null && corner < uvs.Count)
+                st.SetUV(uvs[corner]);
             st.AddVertex(Pos(corner));
         }
     }
@@ -843,18 +875,54 @@ void fragment() {
         // = the original's within-mesh draw order; the group's rank is the
         // equal-priority tie-break (later polygons drew over earlier ones — e.g. the
         // tile meshes' roads and shoreline blends over their base grass).
-        var groups = new List<(int Material, int Priority, bool Subface, bool DoubleSided, List<GameZPolygon> Polys)>();
-        var groupIndex = new Dictionary<(int, int, bool, bool), int>();
+        //
+        // Overlay passes (materials[1..]) become further groups AFTER every base group, one per
+        // overlay level, so a mesh's whole base skin is committed before anything drawn on top of
+        // it. Their ordering over their own base is OverlayPassBias, not rank — see the constant.
+        var groups = new List<(int Material, int Priority, bool Subface, bool DoubleSided, int Pass, List<GameZPolygon> Polys)>();
+        var groupIndex = new Dictionary<(int, int, bool, bool, int), int>();
+        int overlayLevels = 0;
         foreach (var poly in mesh.Polygons)
         {
             bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
-            var key = (poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided);
+            var key = (poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, 0);
             if (!groupIndex.TryGetValue(key, out int gi))
             {
                 groupIndex[key] = gi = groups.Count;
-                groups.Add((poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, new List<GameZPolygon>()));
+                groups.Add((poly.MaterialIndex, poly.Priority, poly.Subface, doubleSided, 0, new List<GameZPolygon>()));
             }
             groups[gi].Polys.Add(poly);
+            if (poly.OverlayPasses != null)
+                overlayLevels = Math.Max(overlayLevels, poly.OverlayPasses.Count);
+        }
+
+        // A sprite or facade mesh takes a billboard/cylindrical material, which has no depth-bias
+        // parameter to order a pass with — declining the overlay there leaves such a mesh exactly
+        // as it built before. Measured zero across all 8 chapters and planes.zbd; counted so it
+        // stays that way.
+        if (overlayLevels > 0 && (glowSprite || cylAxis != CylAxis.None))
+        {
+            foreach (var poly in mesh.Polygons)
+                OverlayPassDeclinedCount += poly.OverlayPasses?.Count ?? 0;
+            overlayLevels = 0;
+        }
+
+        for (int pass = 1; pass <= overlayLevels; pass++)
+        {
+            foreach (var poly in mesh.Polygons)
+            {
+                if (poly.OverlayPasses == null || poly.OverlayPasses.Count < pass)
+                    continue;
+                bool doubleSided = forceDoubleSided || !_cullBackfaces || poly.ShowBackface;
+                var key = (poly.OverlayPasses[pass - 1].MaterialIndex, poly.Priority, poly.Subface, doubleSided, pass);
+                if (!groupIndex.TryGetValue(key, out int gi))
+                {
+                    groupIndex[key] = gi = groups.Count;
+                    groups.Add((key.Item1, poly.Priority, poly.Subface, doubleSided, pass, new List<GameZPolygon>()));
+                    OverlayPassSurfaceCount++;
+                }
+                groups[gi].Polys.Add(poly);
+            }
         }
 
         // The model's UV animation, if it has one — the boot script's rate where a mission set
@@ -880,21 +948,21 @@ void fragment() {
         var arrayMesh = new ArrayMesh();
         for (int rank = 0; rank < groups.Count; rank++)
         {
-            var (materialIndex, priority, subface, doubleSided, polys) = groups[rank];
+            var (materialIndex, priority, subface, doubleSided, pass, polys) = groups[rank];
             var st = new SurfaceTool();
             st.Begin(Mesh.PrimitiveType.Triangles);
             foreach (var poly in polys)
-                EmitPolygon(st, mesh, poly, offset);
+                EmitPolygon(st, mesh, poly, offset, PassUvs(poly, pass));
             // A surface whose UVs never leave the unit square never needs the sampler to wrap,
             // and wrapping it is what produces the hairline seams (see UvsWithinUnitSquare).
             // A scrolling surface is excluded: its UVs deliberately run past 1 and rely on
             // repeat to come back round.
-            bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys);
+            bool clampUv = scroll == Vector2.Zero && UvsWithinUnitSquare(polys, pass);
             if (clampUv)
                 ClampedSurfaceTotal++;
             st.SetMaterial(glowSprite ? GetGlowMaterial(materialIndex, fogged)
                 : cylAxis != CylAxis.None ? GetCylindricalMaterial(materialIndex, cylAxis, lit, fogged)
-                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged));
+                : GetMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass));
             st.Commit(arrayMesh);
         }
         return arrayMesh;
@@ -995,13 +1063,13 @@ void fragment() {
     }
 
     private Material GetMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true)
+        Vector2 scroll = default, bool clampUv = false, bool lit = true, bool fogged = true, int pass = 0)
     {
         rank = Math.Min(rank, SurfaceRankCap);
-        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, lit, fogged);
+        var key = (materialIndex, priority, rank, subface, doubleSided, scroll.X, scroll.Y, clampUv, lit, fogged, pass);
         if (_materialCache.TryGetValue(key, out var cached))
             return cached;
-        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged);
+        var mat = BuildMaterial(materialIndex, priority, rank, subface, doubleSided, scroll, clampUv, lit, fogged, pass);
         _materialCache[key] = mat;
         return mat;
     }
@@ -1041,7 +1109,7 @@ void fragment() {
     }
 
     private Material BuildMaterial(int materialIndex, int priority, int rank, bool subface, bool doubleSided,
-        Vector2 scroll, bool clampUv, bool lit, bool fogged)
+        Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass)
     {
         var src = materialIndex >= 0 && materialIndex < _gamez.Materials.Count
             ? _gamez.Materials[materialIndex]
@@ -1074,7 +1142,7 @@ void fragment() {
             // flare texture also skins polys inside regular geometry, which must stay put.)
             if (_billboardTexture != null && _billboardTexture(texName))
                 return BillboardMaterial(tex, blend, scissor, glow: false, lit: lit, fogged: fogged);
-            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged);
+            var textured = BiasMaterial(priority, rank, subface, doubleSided, tex, null, blend, scissor, scroll, clampUv, lit, fogged, pass);
             _texturedMaterials.Add((textured, texName)); // for a live repaint, see Repaint()
             RegisterCycle(src, textured);
             return textured;
@@ -1082,7 +1150,7 @@ void fragment() {
 
         var color = src?.Color ?? Colors.White;
         return BiasMaterial(priority, rank, subface, doubleSided, null, color, blend: color.A < 1f, scissor: false,
-            scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged);
+            scroll: Vector2.Zero, clampUv: false, lit: lit, fogged: fogged, pass: pass);
     }
 
     private StandardMaterial3D NewStandard(Color? albedoColor = null)
@@ -1107,7 +1175,7 @@ void fragment() {
     // eye (or pushes it away, negative priority) by a fraction of its view distance.
     // The per-node draw-order term is added at instance level (see BuildSubtree).
     private ShaderMaterial BiasMaterial(int priority, int rank, bool subface, bool doubleSided, ImageTexture? tex,
-        Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged)
+        Color? color, bool blend, bool scissor, Vector2 scroll, bool clampUv, bool lit, bool fogged, int pass = 0)
     {
         // Only a textured surface can scroll its UVs (a Colored material has no sampler).
         bool scrolls = tex != null && scroll != Vector2.Zero;
@@ -1119,6 +1187,9 @@ void fragment() {
         float bias = Mathf.Clamp(priority * DepthBiasPerLevel, -0.05f, 0.05f) + rank * SurfaceRankBias;
         if (subface)
             bias += SubfaceBias;
+        // An overlay pass shares its base's priority and subface flag by construction — it is the
+        // same polygon — so this term is the whole of what puts it in front (OverlayPassBias).
+        bias += pass * OverlayPassBias;
         mat.SetShaderParameter("depth_bias", bias);
         if (tex != null)
             mat.SetShaderParameter("albedo_tex", tex);

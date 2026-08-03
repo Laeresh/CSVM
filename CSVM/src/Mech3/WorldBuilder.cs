@@ -126,6 +126,11 @@ public sealed class WorldBuilder
     public int UnlitModelCount => _scene.UnlitModelCount;
     public int UnfoggedModelCount => _scene.UnfoggedModelCount;
 
+    /// <summary>Overlay-pass surfaces built, and overlay polygons declined for want of a biasable
+    /// material — see <see cref="SceneBuilder.OverlayPassSurfaceCount"/>.</summary>
+    public int OverlayPassSurfaceCount => _scene.OverlayPassSurfaceCount;
+    public int OverlayPassDeclinedCount => _scene.OverlayPassDeclinedCount;
+
     /// <summary>The overcast deck as a separate node so the caller can make it follow the
     /// player (see GameSession): the opaque overcast sheet tracks the plane and flips
     /// above/below at the cloud band, as in the original. A child of the world root at its

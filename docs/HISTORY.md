@@ -12859,6 +12859,62 @@ surfaces, exactly matching `piratezep`'s own subtree size measured via `--viewer
 origin-parked heuristic. C5's `piratezep` (`active: true`) was confirmed unaffected: still built, and
 still switched off only by the pre-existing `HideUnplacedEntities` origin heuristic, not by this item.
 
+## 2026-08-04 — M3 polish-6 A2
+
+**M3 polish-6 A2: the per-polygon second material pass renders (2026-08-04).** A polygon's gamez
+`materials` is a LIST — element 0 the base skin, later elements overlay passes with their own UVs —
+and `GameZ.ParseMeshes` read only element 0, dropping the whole feature. It now parses the full list
+into `GameZPolygon.OverlayPasses` (`GameZPolygonPass`: material index + its own UV list), and
+`SceneBuilder.BuildMesh` builds each pass as its own Godot surface, appended after every base group
+so a mesh's whole base skin commits before anything drawn on top of it. `EmitPolygon`/
+`UvsWithinUnitSquare` take the pass's UVs rather than reading `poly.UvCoords`; the material cache
+gains `Pass` (the same material legitimately skins a base surface on one wall and an overlay on
+another, and they need different biases).
+
+**The census earned two design decisions.** 619 polygons install-wide carry a second entry and 7 a
+third — C1 385+5, C1B 8, C1C 10, C2 204+2, C2B 8, C3 16, C4 16, C5 352, and **zero in planes.zbd**
+(the backlog's "plane logos" are the world's zeppelins, `fhunter_logo4` over `piratezepskin2`). (1)
+**Blend semantics needed no invention**: all 626 extra entries ship `uv_coords`, none repeats its
+base's material, and every overlay texture in the install carries an alpha channel (measured on the
+decoded PNGs), so the existing pixel-derived blend/scissor classification in `BuildMaterial` is
+already the right treatment — a soft gradient blends, a hard-cutout logo scissors, decided by the
+data as everywhere else. (2) **Surface rank could not order the passes**: 97 of the 307
+overlay-bearing models already have `SurfaceRankCap` (5) or more base groups, so an appended overlay
+group would share its base's capped rank and z-fight it. Hence `OverlayPassBias` = 0.1 of a priority
+level — 2× the entire rank budget (5 × `SurfaceRankBias` = 0.05 level) so it always out-ranks
+within-mesh order, and 5× below `SubfaceBias` so even two stacked overlays stay under a real
+subface. Overlay passes are declined on sprite/facade meshes, whose billboard materials carry no
+depth-bias parameter; `OverlayPassDeclinedCount` is logged per world build and is **0** across all 8
+chapters.
+
+**Verified.** `.\RunTests.ps1`: build/units/engine clean, 22/22 suites, 0 error lines. 8-chapter
+`--freecam` regression: no errors, mesh/node counts unchanged, overlay surfaces built C1 132 /
+C1B 8 / C1C 10 / C2 112 / C2B 8 / C3 12 / C4 12 / C5 147, declined 0 everywhere. **Targeted, both
+against a git-stash A/B of the same pose:** on `--chapter=C5 --node=gyrobuild` the **NYPD** sign
+appears on the police-gyro dock's steel panel where the control renders blank steel — 1,550 px
+changed, bounding box (579,246)-(620,322), i.e. the sign panel and nothing else in the frame; with
+`--tex-override=nypd` that same pass paints 1,387 px against **0** in the control (the archive
+reported `tex override coloured nothing` there, since no material resolved the name at all). At the
+`c5-city-night` pose with `--no-fog`, overriding the fog-gradient family paints 833 px against 115 in
+the control, the diff confined to the horizon band (30,260)-(1249,327).
+
+**Goldens: 6 of 13 moved, and which ones is the evidence** (GOLD-5). Moved: `c1-waterfall`,
+`c1-flight`, `c1-destroy-effects`, `c1-crash`, `c2-city`, `c5-city-night` — exactly the world shots
+in the three chapters with a real overlay population. Unmoved: `viewer-bhawk` and `empty-stage`
+(planes.zbd has no overlay passes at all, so they *cannot* move), plus `c1b-night-sea`, `c1c-rain`,
+`c2b-rain`, `c3-island`, `c4-snow`, whose only overlays are zeppelin-hull logos that are off-camera
+or on an unplaced hull. Largest mover inspected against a re-rendered pre-change baseline
+(GOLD-3): `c1-waterfall` 30,633 px (3.3 %), and the visible change is the **shoreline transition
+blend** — the flat waterline against the cliff and the waterfall's plunge pool gain their
+`water1_trans1/2` band, which is what those overlays are for. `c1-flight` 12,503 px and `c1-crash`
+7,737 px are C1 terrain-transition patches; `c5-city-night` moved on just 4 px, because its fog
+gradients sit at the horizon where the chapter's own fog already covers them (which is why the
+targeted C5 capture above runs `--no-fog`). Rebaselined with `-RegenGoldens`.
+
+**A4 is not implicated** (the item's own trap (b)): every capture above was taken with `BL-053`'s
+dense conflict rank unlanded, so the passes are ordered by their own term and not by a bias that
+happens to fall the right way.
+
 ## 2026-08-04 — `CAP-06` decoded: the stall warning ramps by blink RATE, on a threshold above the stall
 
 Two clips (`CAP-06.mp4` 22.8 s, `CAP-06 2.mp4` 31.5 s; Bloodhawk, 2560×1440), both gating rigid —

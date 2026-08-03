@@ -370,10 +370,6 @@ unscheduled.
   cross-node conflicting pairs already resolve the wrong way round**, because within-mesh surface
   rank can out-bid the cross-node term. A dense conflict rank would fix this as a side effect
   (28 × 5e-6 = 1.4e-4 = 0.7 levels). Measured 2026-07-22, `analysis/item9-depth-bias/`.
-- `BL-056` **`materials` is a per-polygon LIST and `SceneBuilder` reads only `[0]`.** 352 C5 polygons carry
-  a **second textured pass** with its own independent UVs: `z3_foggrad`/`foggrad8x64` fog gradients
-  (142), `buildingspotlighted` (34), `fadedsign01-03`, `nypd`, `clock`, and plane logos. A whole
-  second-texture-pass feature is silently dropped. Measured 2026-07-23, same report §3.
 - `BL-057` **`zone_set` is parsed by nothing** (`grep zone_set CSVM/src` → 0 hits). It is a **per-polygon**
   weather-zone membership list (C5 uses 1 and 3). Not a ground selector — that was checked and
   ruled out — but a real unparsed field, and the per-polygon granularity is interesting given
