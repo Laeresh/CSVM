@@ -855,7 +855,8 @@ the document alone, it says so and marks the value TUNE.
 
 - `BL-085` **The armour layer is unimplemented, so 18 of 48 weapon entries are mis-modelled.**
   `WeaponDef.ArmorDamage` (`WeaponDefs.cs:78,239`) has exactly two consumers and both are display
-  strings — `--dump-weapons` (`PlaneViewer.cs:2792`) and the weapon lab (`WeaponLab.cs:572`). The
+  strings — `--dump-weapons` (`Probes.Weapons`) and the weapon lab's panel readout
+  (`WeaponLab.WeaponSummary`, the `dmg h…/a…` field). The
   receiving side is one pool: `PlaneDamage.PartState` is a single `float Hp` and `Apply` a flat
   subtract (`PlaneDamage.cs:21,54-60`). Consequence, measured: **18 `BALLISTICS` entries carry
   `ARMOR_DAMAGE != HEALTH_DAMAGE`**, and that split *is* the player ammo-type system

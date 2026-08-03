@@ -275,7 +275,7 @@ still detached, where visibility writes emit nothing. `SetFaded` is the second i
   colliders across the 8 chapters when it is off, measured); `--run-tests=collision-visibility` is
   the tripwire.
 ⚠ Scoped to world colliders on purpose: deliberately invisible-but-solid bodies built elsewhere
-  (the weapon lab's target, plane hitboxes, `EmptyStage`'s ground) are untracked and keep working.
+  (plane hitboxes, `EmptyStage`'s ground) are untracked and keep working.
 
 ## src/Mech3/PlaneBuilder.cs
 Builds one aircraft from its GameZ subtree (shaded, cullBackfaces: true — interior lattice must be
@@ -1740,8 +1740,9 @@ when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuil
   (no double-free after a failed build) and race-free (menu relaunch is a frame later).
 ⚠ **The weapon lab is built in `BuildFlightRigs`, not the viewer path** (A3): it needs the session's
   `ProjectilePool` + world-effects wiring and player 1's held controller, all of which exist only
-  there. The viewer path keeps exactly one weapon-lab construction — the `--weapon-test` self-check on
-  a parked plane, which quits the session. `DriveSimSteps` no longer steps a lab or a second pool.
+  there. The viewer path builds **no** lab node at all: `--weapon-test` is `WeaponBench.Run` over a
+  parked plane and a scene-less pool, and quits the session (D9). `DriveSimSteps` no longer steps a
+  lab or a second pool.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** (`ResolvePlacement`): flight gets
   `_spawnAt`/`_spawnDir`, everything else `_camPos`/`_camDir`. **Never fold `_camDir` into
   `_lookAt`** — `--lookat` is a POINT, `--direction` a vector; only flight converts one to the other.

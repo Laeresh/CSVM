@@ -1,8 +1,11 @@
 # Weapon lab — fire it like the world does
 
-**ACTIVE** (written 2026-08-02, line citations refreshed and scheduled 2026-08-03). Move it to
-`docs/plans/` with a `COMPLETE` banner and add its row to [`plans.md`](plans/plans.md) when every
-item lands.
+**COMPLETE** (written 2026-08-02, scheduled 2026-08-03, all 10 items landed 2026-08-03). The lab is
+a flight mode: a held aircraft in a real chapter world, a panel that arms its live loadout, click-to
+-place on real surfaces, an orbit/free-camera switch, and a scripted twin for every interactive
+action. `--weapon-test` kept its world-less 48-weapon pass check, now `Flight/WeaponBench.cs`'s.
+What no script covers — flying it at the controls — is owed as `PT-30` in
+[`playtest.md`](../../playtest.md).
 
 **2026-08-03 refresh.** A day of M3 Wave A–F landings shifted every line citation below by 20–60
 lines (no content moved or changed) and one citation was already wrong at draft time
@@ -86,9 +89,11 @@ already exercised by `--fly`.
 - **`PROJECT_CONTEXT.md` + `docs/architecture.md` / `docs/formats/` are updated in the same turn**
   as each landed item; a landed item gets a dated `docs/HISTORY.md` entry.
 - **Read `docs/verification.md` before measuring anything.**
-- **Read the module's entry in `docs/architecture.md` before modifying it** — `src/UI/WeaponLab.cs`
-  (line 1415), `src/Flight/Projectile.cs` (804), `src/Flight/PylonOrdnance.cs` (1207),
-  `src/Session/GameSession.cs` (1614), `src/Session/WorldEffectsFactory.cs` (1936).
+- **Read the module's entry in `docs/architecture.md` before modifying it** — `src/UI/WeaponLab.cs`,
+  `src/Flight/WeaponBench.cs`, `src/Flight/Projectile.cs`, `src/Flight/PylonOrdnance.cs`,
+  `src/Flight/Loadout.cs`, `src/Flight/FlightController.cs`, `src/Session/GameSession.cs`,
+  `src/Session/WorldEffectsFactory.cs`. (Grep the `## <path>` heading — line numbers are not cited
+  here on purpose: every wave of this plan moved them.)
 - **Verify with `.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
   code) and drive probes through `RunProbe.ps1`, never the Godot exe directly.
 
@@ -116,7 +121,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 8. ☑ D8 — orbit ↔ free camera switch in the lab
 9. ☑ D9 — `WeaponBench`: the 48-weapon pass check, split off the lab node
-10. ☐ D10 — docs: `cli.md`, `controls.md`, `architecture.md`, `HISTORY.md`, `PROJECT_CONTEXT.md`
+10. ☑ D10 — docs: `cli.md`, `controls.md`, `architecture.md`, `HISTORY.md`, `PROJECT_CONTEXT.md`
 
 ## Dependency and parallelism notes
 
@@ -383,7 +388,7 @@ one.
 mount count, update the assertion deliberately, and keep `Skipped` asserted at 0: it is the
 success-looking outcome the existing comment warns about.
 
-## D10 ☐ Docs
+## D10 ☑ Docs
 
 **Approach.** Rewrite `docs/cli.md`'s `--weapon-lab` / `--weapon-mount` / `--weapon-fire` bullets
 (they currently describe the viewer lab and its stand-ins at length, `cli.md:170-172`) and add

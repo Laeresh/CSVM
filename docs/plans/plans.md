@@ -39,3 +39,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-m3-polish-5.md](PLAN-m3-polish-5.md) | M3 polish run 5: effect reachability, world-render fidelity, the instruments (10 items; 1 disproven) | 2026-08-02 |
 | [PLAN-bounce-launch.md](PLAN-bounce-launch.md) | Bounce-terminated launches: solve + fly + land the 150 upward `BL-240` debris pieces (6 items, Wave A; falls split out as `BL-245`) | 2026-08-03 |
 | [PLAN-deepening.md](PLAN-deepening.md) | Seven-module deepening: extract seams, move invariant enforcement from caller to module (Waves A–G; G18/G19 as design decisions) | 2026-08-03 |
+| [PLAN-weapon-lab.md](PLAN-weapon-lab.md) | Weapon lab as a flight mode: held aircraft in a real world, full-rig loadout, click-to-place targeting, camera switch, `WeaponBench` (10 items, Waves A–D) | 2026-08-03 |

@@ -12510,3 +12510,26 @@ only its presence is checked). `--weapon-test --plane=player_bhawk`: 48/48, 0 er
 firing from `[g1 Inner Wing Guns, g2 Outer Wing Guns, g3 Gun Group 3, g4 Gun Group 4]` and 8
 pylons — 8 rounds per gun where it used to be 2, from one group. `--plane=player_kestrel`: same
 verdict from its centreline rig, including the `g4 Rear Turret` group stock marks inert.
+
+## 2026-08-03 — `PLAN-weapon-lab` closes: the docs sweep, and the flag index reconciled at 106 (`PLAN-weapon-lab` D10)
+
+The plan's last item was written as a docs rewrite, but waves A–D9 each landed their own doc edits
+as they went, so what was left was a sweep for what those edits missed. Three stale claims survived
+and are now gone: `SceneBuilder`'s visibility warning still listed "the weapon lab's target" among
+the deliberately invisible-but-solid bodies (B5 deleted the target wall); `GameSession`'s warning
+still said the viewer path keeps one weapon-lab construction for `--weapon-test` (D9 removed it —
+that path builds no lab node at all); and the plan's own ground rules cited `WeaponLab.cs:1415` and
+four sibling line numbers that six commits had moved, now replaced with the `## <path>` headings to
+grep for. `backlog.md`'s `BL-085` lost its two dead line citations the same way.
+
+The plan's Verify step was the flag-count reconciliation, and it holds by the contract `cli.md`
+states: **106 index entries == 106 flags `SessionSpec` accepts**, and 107 bullet lines − 3 doubled
++ 2 shared == 106. The stated total (stale at 100, predating this plan's six new `--weapon-*`
+flags) now reads 106 with the date it was reconciled. No doc still says the lab is a `--viewer`
+mode, has no world, owns a target wall, builds its own pool, or is toggled with `W`; `controls.md`'s
+`--viewer` table carries no weapon-lab row.
+
+**Verified.** `.\RunTests.ps1` PASS — 413 units, 22 suites, 13 goldens hash-identical (no code
+changed in this item). The plan moves to `docs/plans/` with a COMPLETE banner and a `plans.md` row;
+`PROJECT_CONTEXT.md` has no active plan again. The one thing no script covers — flying the lab at
+the controls, the plan's own verification step 2 — is owed as `PT-30` in `playtest.md`.

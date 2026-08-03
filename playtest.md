@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-20` and `PT-30`.**
+it from this counter and bump it here: **next free IDs `CAP-20` and `PT-31`.**
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -151,6 +151,17 @@ speed, and `BL-248`(a) is disproved rather than implemented — a correct dispro
   stutter. Note that zeroing a critical part does **not** down the plane on its own — death is
   decided on the next impact (`FlightController.SurviveHit`), which is the intended behaviour, not a
   bug to report. *Blocks:* the interactive half of `BL-130`.
+
+- `PT-30` **The weapon lab at the controls (`PLAN-weapon-lab`, landed 2026-08-03).** The whole plan
+  was verified by scripted twin and log line — every interactive action has one — but nobody has
+  flown it. `./RunGame.ps1 --weapon-lab --plane=player_bhawk --chapter=C2`, then **B** for the
+  panel. *Look for:* (a) click the bay, fire guns (Space), watch the splash; click a warehouse, fire
+  a rocket (`F`), watch it break — the impact should be the chapter's authored one, not a stand-in;
+  (b) step the hardpoint bank and watch the wing models change with the selection; (c) the mount
+  stepper's group is the one that flashes when you fire; (d) **V** out to the impact point and back
+  — the view must not jump in either direction; (e) the stand-off slider and re-parking feel usable
+  at both ends (15 m and 1100 m). *Blocks:* the interactive half of `PLAN-weapon-lab`'s end-to-end
+  verification (step 2), the only step no script covers.
 
 - `PT-13` **Damage-stage smoke/fire re-test (A1 / `BL-199` landed 2026-07-31).** Hold a
   destructible in its stages with gunfire: black smoke should sputter at ≤60 % HP, black smoke +
