@@ -108,12 +108,19 @@ def fit(texname, c0, m0, box, rmax=1.02, verbose=True):
 
 
 if __name__ == "__main__":
+    # Start points and search boxes are the dial centres measured off pool_std's
+    # needle-sweep fans (`pool.py` writes it), not guesses - the optimiser has no
+    # basin to climb if the box clips the dial, and it fails at NCC ~0 rather than
+    # loudly.  The two flat dials must reach NCC ~0.98 with mirror-symmetric shear
+    # (-6.54 / +6.67 px); anything less means the fit did not lock.
     res = {}
-    res["altimeter"] = fit("altimeter", (44.0, 198.0), [[45.0, 0.0], [0.0, 45.0]],
-                           (0, 145, 105, 260))
-    res["speedometer"] = fit("speedometer", (580.0, 205.0), [[43.0, 0.0], [0.0, 45.0]],
-                             (530, 148, 630, 265))
-    res["horizonindicator"] = fit("horizonindicator", (310.0, 267.0), [[46.0, 0.0], [0.0, 50.0]],
-                                  (250, 205, 375, 340))
+    res["altimeter"] = fit("altimeter", (78.0, 214.0), [[46.0, 0.0], [0.0, 46.0]],
+                           (20, 155, 140, 275))
+    res["speedometer"] = fit("speedometer", (612.0, 216.0), [[46.0, 0.0], [0.0, 46.0]],
+                             (550, 155, 675, 275))
+    # The ADI is a gyro *ball*, so a flat-quad affine tops out near NCC 0.65 - this
+    # fit supplies the aperture only; attitude comes from adi.py's area fraction.
+    res["horizonindicator"] = fit("horizonindicator", (348.0, 270.0), [[46.0, 0.0], [0.0, 50.0]],
+                                  (285, 210, 410, 335))
     np.save(f"{CACHE}/dial_affines.npy",
             np.array([res[k][0] for k in ["altimeter", "speedometer", "horizonindicator"]]))

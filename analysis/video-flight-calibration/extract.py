@@ -1,8 +1,19 @@
-"""Pull the cockpit-panel strip out of each FlightModel clip into a .npy cache.
+"""Pull the cockpit-panel strip out of each clip into a .npy cache.
 
-The capture is 2560x720 with the game pillarboxed into x 640..1919 (1280x720).
-Everything we read lives in the bottom-centre panel, so we keep one grayscale
-box per frame and work from that.
+The game always renders 16:9; only the *capture region* around it varies by
+session, so every clip is normalised to canonical game (1280x720) coords here
+and nothing downstream ever sees the capture geometry:
+
+  2560x720  (32:9) - game pillarboxed into x 640..1919 at 1:1.  The 2026-07
+                     FlightModel session and CAP-09/10/14.
+  2560x1440 (16:9) - game fills the frame at 2x.  The 2026-08-03 CAP session.
+
+The 2x case block-mean downscales to 1280x720, which lands the panel on the
+*same pixels* as the 1:1 session - phase correlation of the two panel ROIs
+peaks at dx=dy=0 (peak 0.64), so the pooled median, the ROI and the fitted dial
+ellipses all carry over unchanged.  Re-run that check (see `checkclip.report`)
+before trusting a third capture geometry; FINDINGS.md's "pooled median is only
+usable because the panel is pixel-locked" trap applies to every new session.
 """
 import os
 import sys
@@ -10,23 +21,51 @@ import sys
 import imageio_ffmpeg as iio
 import numpy as np
 
-VID = "OriginalScreenshots/Videos/FlightModel"
+VID = "OriginalScreenshots/Videos"
 OUT = ".scratch/vidcal/cache"
-GAME_X0 = 640  # pillarbox left edge
 
 # panel strip in game (1280x720) coords: compass tape down to the frame bottom
 ROI = (295, 355, 985, 720)  # x0, y0, x1, y1
 
-CLIPS = {
-    "pitch": "Bloodhawk Pitch.mp4",
-    "roll": "Bloodhawk Roll.mp4",
-    "yaw": "Bloodhawk Yaw.mp4",
-    "dive": "Bloodhawk Dive, screenshake so no exakt hud positions.mp4",
-    "accel": "Bloodhawk Accelate 1-8 to 8-8.mp4",
-    "decel": "Bloodhawk Deccelarate 8-8 to 1-8.mp4",
-    "ceiling": "Bloodhawk Ceiling.mp4",
-    "dive2": "Bloodhawk Dive 2.mp4",
+# capture (w, h) -> game rect origin + integer downscale to reach 1280x720.
+# Unknown geometry is an error, not a guess: a wrong origin decodes silently.
+LAYOUTS = {
+    (2560, 720): (640, 0, 1),
+    (2560, 1440): (0, 0, 2),
 }
+
+CLIPS = {
+    # 2026-07 session, 32:9 - what pinned the clock (FINDINGS.md)
+    "pitch": "FlightModel/Bloodhawk Pitch.mp4",
+    "roll": "FlightModel/Bloodhawk Roll.mp4",
+    "yaw": "FlightModel/Bloodhawk Yaw.mp4",
+    "dive": "FlightModel/Bloodhawk Dive, screenshake so no exakt hud positions.mp4",
+    "accel": "FlightModel/Bloodhawk Accelate 1-8 to 8-8.mp4",
+    "decel": "FlightModel/Bloodhawk Deccelarate 8-8 to 1-8.mp4",
+    "ceiling": "FlightModel/Bloodhawk Ceiling.mp4",
+    "dive2": "FlightModel/Bloodhawk Dive 2.mp4",
+    # 2026-08-03 session, 16:9 - the owed captures (playtest.md 0)
+    "cap01": "CAP-01.mp4",                              # banked max-pull turn
+    "cap04": "CAP-04.mp4",                              # ~45 deg pitch trace
+    "cap04b": "CAP-04 2.mp4",
+    "cap05knife": "CAP-05 Knife Edge.mp4",
+    "cap05knife2": "CAP-05 2 Knife Edge.mp4",
+    "cap05stall0": "CAP-05 Stall 0% Thrust no input.mp4",
+    "cap05stall50": "CAP-05  Stall 50% thrust climb.mp4",
+    "cap06": "CAP-06.mp4",                              # stall-warning approach
+    "cap06b": "CAP-06 2.mp4",
+    "cap10": "CAP-10 2.mp4",                            # engine note through a dive
+}
+
+
+def layout(w, h):
+    """Capture size -> (game x origin, game y origin, downscale factor)."""
+    if (w, h) not in LAYOUTS:
+        raise SystemExit(
+            f"unknown capture geometry {w}x{h}; add it to LAYOUTS after checking "
+            f"the panel still registers against the pooled median"
+        )
+    return LAYOUTS[(w, h)]
 
 
 def extract(short, fname):
@@ -34,19 +73,25 @@ def extract(short, fname):
     g = iio.read_frames(p)
     meta = next(g)
     w, h = meta["size"]
+    gx, gy, k = layout(w, h)
     x0, y0, x1, y1 = ROI
+    # crop in capture coords, then block-mean down to canonical game coords
+    cx0, cy0, cx1, cy1 = gx + x0 * k, gy + y0 * k, gx + x1 * k, gy + y1 * k
     frames = []
     for buf in g:
         fr = np.frombuffer(buf, np.uint8).reshape(h, w, 3)
-        sub = fr[y0:y1, GAME_X0 + x0:GAME_X0 + x1]
+        sub = fr[cy0:cy1, cx0:cx1]
         # Rec.601 luma, kept in uint8
         lum = (sub[:, :, 0] * 0.299 + sub[:, :, 1] * 0.587 + sub[:, :, 2] * 0.114)
+        if k > 1:
+            r, c = lum.shape
+            lum = lum.reshape(r // k, k, c // k, k).mean(axis=(1, 3))
         frames.append(lum.astype(np.uint8))
     g.close()
     a = np.stack(frames)
     np.save(f"{OUT}/{short}_lum.npy", a)
     np.save(f"{OUT}/{short}_meta.npy", np.array([meta["fps"], meta["duration"], len(a)]))
-    print(f"{short:6s} {a.shape} fps={meta['fps']:.3f} dur={meta['duration']:.2f}")
+    print(f"{short:12s} {a.shape} {w}x{h}/{k}x fps={meta['fps']:.3f} dur={meta['duration']:.2f}")
     return a
 
 

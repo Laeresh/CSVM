@@ -66,7 +66,15 @@ def report(clip, step=10, dx_tol=2.0, peak_floor=0.15):
     print(f"  |dx(ALT) - dx(MPH)|: mean {dxspread.mean():.2f} max {dxspread.max():.0f} px "
           f"(rigid view keeps this ~0)")
     print(f"  registration peak: min {peaks.min():.2f} median {np.median(peaks):.2f}")
-    bad_dx = dxspread.max() > dx_tol
+    # The signature is the SIGN, not the size. Head turn foreshortens the two dials
+    # in opposite directions, so their dx anti-correlates; screen shake translates
+    # the whole panel, so dx correlates positively however large the excursion. The
+    # spread alone cannot tell them apart - a hard dive trips a bare |dx| threshold
+    # while staying perfectly decodable (shake.py exists for exactly that clip).
+    dxcorr = float(np.corrcoef(r[:, 1], r[:, 4])[0, 1]) if r[:, 1].std() > 0 else 1.0
+    print(f"  corr dx(ALT), dx(MPH): {dxcorr:+.2f} "
+          f"(shake keeps this ~+1; head turn drives it negative)")
+    bad_dx = dxspread.max() > dx_tol and dxcorr < 0.5
     bad_pk = np.median(peaks) < peak_floor
     if bad_dx or bad_pk:
         why = []
@@ -77,6 +85,10 @@ def report(clip, step=10, dx_tol=2.0, peak_floor=0.15):
         print(f"  VERDICT: REJECT — {', and '.join(why)}. "
               f"Consistent with auto head turn; re-record with it off.")
         return False
+    if dxspread.max() > dx_tol:
+        print(f"  VERDICT: OK — panel translates as one ({dxcorr:+.2f}), so the "
+              f"{dxspread.max():.0f} px excursion is shake, not head turn. Run shake.py.")
+        return True
     print("  VERDICT: OK — view is rigid, translation registration is valid.")
     return True
 

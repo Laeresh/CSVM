@@ -129,11 +129,14 @@ a coincidence.
 
 ## Running it
 
-From the repo root, in order (each writes into `.scratch/vidcal/cache/`):
+From the repo root, in order (each writes into `.scratch/vidcal/cache/`). `.scratch` is swept
+by `CleanScratch.ps1`, so this is the cold-start order — **`extract` and `pool` first**, since
+everything after them differences against the pooled median:
 
 ```
-python analysis/video-flight-calibration/checkclip.py   # GATE a new clip before decoding it
 python analysis/video-flight-calibration/extract.py     # video -> panel-strip .npy cache
+python analysis/video-flight-calibration/pool.py        # pooled median + std (2,529 frames)
+python analysis/video-flight-calibration/checkclip.py   # GATE a new clip before decoding it
 python analysis/video-flight-calibration/shake.py       # global panel translation per frame
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import fitdial"
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import run2;run2.main()"
@@ -286,6 +289,23 @@ physics-derived `k·sin γ` runs ±1.4. It also shows hysteresis against vertica
 angle of attack separates them at low speed). So the ADI gives bank well and pitch only in
 its unsaturated middle; it cannot measure the vertical crossings of a loop.
 
+**Capture aspect ratio does not have to match, but it must be declared.** The 2026-07 set is
+32:9 (2560×720) with the game pillarboxed into x 640..1919; the 2026-08-03 CAP set is 16:9
+(2560×1440) with the game filling the frame. The game renders 16:9 either way, so the second is
+exactly 2× the first — `extract.py`'s `LAYOUTS` table block-mean downscales it into the same
+canonical 1280×720 game coords, after which the panel lands on **the same pixels**: every clip
+of both sessions phase-correlates to the pooled median at dx = dy = 0 (peaks 0.75–0.88). So the
+ROI, the fitted dial affines and the median itself all carry over, and nothing downstream of
+`extract.py` knows the capture geometry. An unlisted resolution raises rather than guessing an
+origin — a wrong origin decodes silently.
+
+**A big shake trips a bare `|dx|` threshold; only the sign separates it from head turn.**
+`checkclip`'s original rule rejected any clip whose two dials disagreed in dx by more than 2 px,
+which fails on a hard dive: `CAP-10 2` shears 3 px and is perfectly decodable. Head turn
+foreshortens the dials in *opposite* directions (dx anti-correlates) while shake translates the
+whole panel (dx correlates at +0.95 on that clip). The correlation is now the discriminator and
+the spread only a trigger for computing it.
+
 ## Capture spec, for any further recording
 
 - **Cockpit view, clear air, fixed throttle, and name the aircraft in the filename.**
@@ -302,7 +322,7 @@ its unsaturated middle; it cannot measure the vertical crossings of a loop.
 |---|---|---|
 | 1 | Vertical dive to terminal | ✅ `Dive 2` is vertical; `Dive` is ~70° but holds a 5 s plateau |
 | 2 | Full loop from level | ✅ this is what pinned the clock |
-| 3 | Sustained level turn, max pull | ❌ owed — the yaw clip is a wings-level *rudder* turn, so a banked max-pull turn is still missing (and it is the one that would measure induced drag) |
+| 3 | Sustained level turn, max pull | ✅ **filmed 2026-08-03** as `CAP-01.mp4` (23.7 s, gate OK) — undecoded; this is the one that measures induced drag (`BL-092`) |
 | 4 | 360° aileron roll | ✅ |
 | 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
 | 6 | Level top speed at 5500 / 6000 / 6500 / 6800 ft | ❌ owed — settles what enforces the ~2065 m limit |
