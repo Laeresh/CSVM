@@ -11,6 +11,13 @@ The sibling skill for `backlog.md` entries is [`/backlog`](../backlog/SKILL.md) 
 The explanation phase is **read-only**: no builds, no `RunTests.ps1`, no `--freecam` runs. Once the
 user picks *start it here*, that restriction lifts — that is the work.
 
+⚠ **Output rule: text written between tool calls is not shown in chat.** The explanation is this
+skill's entire deliverable, so it must be the **final message after the last tool call** — do all the
+reading of §1–§3 first, then emit §4 and §5 together as one message and stop. Do **not** call
+`AskUserQuestion` (or any other tool) to pose §5's choice: that turns the explanation into
+between-calls text and the user sees only the question. §5's three options are plain text at the end
+of that message.
+
 ## 1. Resolve the plan
 
 The **active plan only**, resolved from `PROJECT_CONTEXT.md`'s "Current status / next step" section.
@@ -99,7 +106,9 @@ If the item looks stale, already landed, or self-contradictory, say so under **S
 
 ## 5. Offer the handoff
 
-Close by asking (**AskUserQuestion**) what to do. **Take no action until the answer comes back.**
+End the same message with the three options below as plain text — numbered, one line each, naming the
+default. No tool call (see the output rule at the top; an `AskUserQuestion` here hides §4 entirely).
+**Take no action until the user answers.**
 
 ### Option 1 — start it here *(the default)*
 
