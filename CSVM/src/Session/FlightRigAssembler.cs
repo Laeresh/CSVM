@@ -303,6 +303,16 @@ public sealed class FlightRigAssembler
 
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
         controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
+        // --weapon-lab (A2): the lab is a flight session whose aircraft is pinned at the spawn pose
+        // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
+        // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held
+        // sim step, so it takes the spawn pose Setup just wrote.
+        if (_spec.WeaponLab)
+        {
+            controller.Held = true;
+            if (verbose)
+                GD.Print($"weapon lab: P{pi + 1} held at the spawn pose (world sim running)");
+        }
         // The incoming-fire near-miss cue (BL-087): this aircraft becomes a target every OTHER
         // pilot's rounds are measured against. After Setup — the target reads the live flight
         // model — and after PlayerIndex, the identity that excludes this pilot's own rounds.

@@ -1248,6 +1248,18 @@ controls); false stages on the aircraft, which is what the def's `MAIN_ROOT_NODE
 rates the passes through `WarningShotCue` into `FlightAudio.OnWarningShot`; `PlayerIndex` is both
 the pane seat and the identity every round this pilot fires carries, so it must be set before the
 registration (the assembler sets it at construction, not in the stunt block).
+`Held` (the weapon lab) pins this ONE airframe while the session runs on: the sim step skips input,
+`FlightModel.Step` and the whole collision sweep and re-applies the pinned pose through
+`FlightModel.Reset(pos, attitude, 0, 0)` instead — everything from the pose commit down (weapon
+selectors, guns, rockets, ordnance, gauges, telemetry) runs exactly as in free flight, which is what
+makes the lab fire through the real path. `PlaceHeld(pos, lookAt)` moves the pin (C6/C7's re-park)
+through the same `Reset` + `SnapCamera` pair `Respawn` uses; `SelectGunGroup`/`SelectPylon` are the
+programmatic twins of G/H for the lab panel.
+⚠ Held is NOT `GameClock.Halted` — the point is that the world keeps running while one plane stops.
+  The pose goes back in through the MODEL, never by writing GlobalTransform behind it, so every
+  `_model` reader stays consistent; and because a held plane sits at 0 m/s (below every stall speed)
+  and may legally be parked under `UnderMapY`, the stall gauge/HUD line and the under-map respawn
+  backstop are explicitly exempt while held.
 ⚠ The chase camera slerps its BASIS, never a re-derived LookAt (inverted flight renders upside
   down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
   distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones
@@ -1921,7 +1933,8 @@ audio, this player's stunt run + marker/scoreboard/race entry, the spawn placeme
 runtime built after the controller joins the tree. Constructed once per session build from
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
-caller's build summary.
+caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
+(which places the plane) — the pin is captured at the first held sim step, so it takes the spawn pose.
 ⚠ **Call it in ascending player order.** `Inputs.PaintRng` and `SpawnBase` are shared streams — the
   livery draw and the spawn index wrap are order-dependent, so reordering or parallelising the rigs
   silently repaints and respawns the whole field.

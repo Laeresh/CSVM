@@ -12125,3 +12125,33 @@ goldens hash-identical — the mode is additive, nothing built by another sessio
 **Note.** The lab does not yet actually build under `--weapon-lab` alone (no `--viewer`) — that is
 expected until A3 relocates its construction into the flight path; A1 only settles which mode the
 flag asks for.
+
+**PLAN-weapon-lab A2: `FlightController.Held` — the airframe holds its pose while the world sim runs
+(2026-08-03).** `SimStep` grew one branch above the pose commit: a held plane skips `ReadKeyboard`/
+`NextHoldInput`, `FlightModel.Step` and the entire collision sweep, and re-asserts its pinned pose
+through `_model.Reset(pos, attitude, 0f, 0f)` instead. Everything from `_simPrev = _simCurr` down —
+`CycleWeaponSelectors`, `UpdateGuns`, `UpdateRockets`, `Ordnance.Update`, the AGL ray, the telemetry
+line — runs unchanged, which is the whole point: the lab fires through the real flight path. The pin
+is captured at the first held step (so the setter can be called before the model exists) and re-taken
+whenever `Held` goes false→true; `PlaceHeld(pos, lookAt)` moves it through the same `Reset` +
+`SnapCamera` pair `Respawn` uses (for C6/C7). `SelectGunGroup(int)`/`SelectPylon(int)` expose
+`_gunSel`/`_selectedPylon` for B5 — previously only settable at `_Ready` via `InitialGunSelect`.
+`FlightRigAssembler` sets `Held = true` on every rig under `--weapon-lab`, after `Setup` places the
+plane. Two exemptions the trap list predicted are real and explicit: a held plane sits at 0 m/s,
+below every stall speed, so `Gauges.Stalled` and the HUD `STALLED` line skip it; and it may legally be
+parked below `UnderMapY`, so the under-map respawn backstop skips it too. Deliberately not
+`GameClock.Halted` — the world keeps running.
+
+**Verified.** `RunProbe.ps1 --weapon-lab --plane=player_bhawk --fire --frames=300
+--screenshot=.scratch/held.png --log=weapons`: all five telemetry lines read
+`pos=(-7066,326,-5519) spd=0.0 m/s thr=0.00 rates=(0.00,0.00,0.00)` — identical across the run —
+while the log shows `weapon lab: P1 held at the spawn pose (world sim running)`, `gun group 1 (Inner
+Wing Guns, 40-cal wep_40) firing` and `gun casings: 12 live simultaneously`. The screenshot shows the
+plane parked over Sea Haven with muzzle smoke at both wing roots, the ammo belt down to 2360, and no
+stall warning. Regression: `.\RunTests.ps1` PASS — 395/395 units, 21/21 engine suites, 13/13 goldens
+hash-identical, including the `c1-flight` `--fly` capture (`Held` defaults false, so the flight path
+is byte-for-byte what it was).
+
+**Note.** A2 only pins the plane; `--weapon-lab` still builds no lab node (A3 relocates its
+construction into the flight path), so the held session is a flight session with nothing at the
+controls.

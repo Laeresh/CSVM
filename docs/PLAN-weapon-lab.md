@@ -99,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave A — the lab becomes a flight mode
 
 1. ☑ A1 — `--weapon-lab` routes to flight, not the viewer (`SessionSpec`)
-2. ☐ A2 — `FlightController.Held`: the airframe holds its pose while the world sim runs
+2. ☑ A2 — `FlightController.Held`: the airframe holds its pose while the world sim runs
 3. ☐ A3 — `GameSession` builds the lab in the flight path, off the shared pool/effects wiring
 
 ### Wave B — the full-rig loadout
@@ -156,7 +156,7 @@ logs the viewer subject. `dotnet test` (`SessionSpecTests`).
 reorder the block. `--weapon-lab --viewer` must now report the contradiction rather than silently
 half-building.
 
-## A2 ☐ `FlightController.Held`: the airframe holds its pose while the world sim runs
+## A2 ☑ `FlightController.Held`: the airframe holds its pose while the world sim runs
 
 **Goal.** A held aircraft does not move, does not stall, does not fall, and does not collide — but
 its props spin, its guns fire, its rounds fly and the world keeps running. This is *not* the P

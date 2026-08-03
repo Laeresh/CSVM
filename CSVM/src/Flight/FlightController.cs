@@ -371,6 +371,10 @@ public partial class FlightController : Node3D
     private int _gunSel;                         // gun selector: 0-based firable group that fires (only ONE at a time)
     private bool _gunSelPrev;                    // edge detection for the gun-selector button
     private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector (H) button
+    private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
+    private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
+    private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
+    private Basis _heldAttitude;                 // the pinned attitude, ditto
 
     // The gungauge / missilegauge HUD state (E35), pushed to GaugeCluster each frame. Persistent
     // objects mutated in place (the belt-fraction lists too) so the HUD readout costs no per-frame
@@ -387,6 +391,26 @@ public partial class FlightController : Node3D
     private Transform3D _simPrev = Transform3D.Identity;
     private Transform3D _simCurr = Transform3D.Identity;
     private Transform3D _renderPose = Transform3D.Identity; // the pose actually drawn this frame
+
+    /// <summary>The weapon lab (A2): the airframe holds the pose it had when this was set — it does
+    /// not fly, stall, fall or collide — while everything else in the session keeps running. The
+    /// props still spin, the guns still fire through the normal trigger, the rounds still fly and
+    /// the world sim is untouched. Deliberately NOT the P halt (<see cref="GameClock.Halted"/>),
+    /// which stops the whole clock: the point here is that the world keeps going while only this
+    /// plane is pinned. Clearing it un-pins the airframe at zero speed (it will drop) and re-pins
+    /// the CURRENT pose when set again. <see cref="PlaceHeld"/> moves the pin.</summary>
+    public bool Held
+    {
+        get => _held;
+        set
+        {
+            _held = value;
+            if (!value)
+            {
+                _heldPinned = false;   // a later re-hold pins wherever the plane is then
+            }
+        }
+    }
 
     public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
     {
@@ -561,6 +585,51 @@ public partial class FlightController : Node3D
             SnapCamera();
     }
 
+    /// <summary>Weapon lab (A2): pin the held airframe at <paramref name="pos"/> with its nose on
+    /// <paramref name="lookAt"/>, at zero speed — the lab's re-park (click-to-place, C6, and the
+    /// scripted <c>--weapon-target=</c> twin, C7). Goes in through the same
+    /// <see cref="FlightModel.Reset"/> + <see cref="SnapCamera"/> pair <see cref="Respawn"/> uses,
+    /// so the sim pose, the drawn pose and the chase camera all land together with nothing left to
+    /// interpolate from. Sets the pin whether or not <see cref="Held"/> is on; on a free-flying
+    /// plane it is simply a teleport to a standstill.</summary>
+    public void PlaceHeld(Vector3 pos, Vector3 lookAt)
+    {
+        var dir = lookAt - pos;
+        // A zero-length aim (clicked the plane's own position) would make LookingAt throw — keep
+        // the attitude the plane already has rather than fail the placement.
+        _heldAttitude = dir.LengthSquared() > 1e-6f
+            ? Basis.LookingAt(dir.Normalized(), Vector3.Up)
+            : _model.Attitude;
+        _heldPos = pos;
+        _heldPinned = true;
+        _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
+        _throttle = 0f;
+        _simPrev = _simCurr = _renderPose = new Transform3D(_model.Attitude, _model.Position);
+        GlobalTransform = _simCurr;
+        if (_camera != null && IsInsideTree())
+            SnapCamera();
+    }
+
+    /// <summary>Weapon lab (B5): point the gun selector at a firable gun group (0-based, clamped) —
+    /// the programmatic twin of G / D-pad Left, which only cycles. Interactively that cycle still
+    /// wins the next time it is pressed; <see cref="InitialGunSelect"/> is the _Ready-time
+    /// equivalent and cannot be re-applied once the rig is built.</summary>
+    public void SelectGunGroup(int index)
+    {
+        int n = _firableGuns.Length;
+        _gunSel = n > 0 ? Mathf.Clamp(index, 0, n - 1) : 0;
+    }
+
+    /// <summary>Weapon lab (B5): point the hardpoint selector at a pylon (0-based, clamped) — the
+    /// programmatic twin of H. Unlike H this lands on an EMPTY pylon too (the lab picks a mount to
+    /// look at, not a mount to fire); the firing path's own
+    /// <see cref="NextArmedHardpoint"/> scan still advances off it when the trigger is pulled.</summary>
+    public void SelectPylon(int index)
+    {
+        int n = Loadout?.Hardpoints.Count ?? 0;
+        _selectedPylon = n > 0 ? Mathf.Clamp(index, 0, n - 1) : 0;
+    }
+
     /// <summary>--crash[=frame]: forces this player's crash outside any live collision — the only
     /// headless trigger for the per-player crash rig. <c>hitName</c>/<c>part</c> are nominal and
     /// there is no struck body, so <see cref="ClassifySurface"/> resolves
@@ -644,52 +713,74 @@ public partial class FlightController : Node3D
             return;
         }
 
-        var prev = _model.Position;          // committed position from last frame
-        var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
-        _lastInput = input;
-        _damageCooldown -= dt;
-        _grazeReactionCooldown -= dt;
-        _model.Step(input, dt);
-
-        // Crash when the frame's flight path runs into solid world geometry (terrain,
-        // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
-        // the frame's motion so a wingtip or tail fin collides, not just the center
-        // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
-        // fallback keeps the old nose margin on the ray — with real boxes it would fire
-        // ~6 m before the fuselage box reaches the wall.
-        var to = _model.Position;
-        var step = to - prev;
-        float len = step.Length();
-        float margin = Collider == null ? CollisionMargin : 0f;
-        var probeEnd = len > 1e-4f ? to + step / len * margin : to;
-        bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
-            out var normal, out float stopFrac, out var hitBody);
-        if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
+        // Weapon lab (A2): a HELD airframe skips input, the flight model and the whole collision
+        // sweep, and re-asserts its pinned pose instead — but only those. Everything from the pose
+        // commit down (weapons, gauges, telemetry) runs exactly as it does in flight, which is the
+        // whole point: the lab fires through the same code path free flight does. The pose goes
+        // back in through _model.Reset, never by writing GlobalTransform behind the model's back,
+        // so every reader of _model (the stall gauge, the telemetry line, the AGL ray, the reticle
+        // march) sees one consistent stationary state.
+        if (_held)
         {
-            hit = true;
-            part = "center";
-            normal = len > 1e-4f ? -step / len : Vector3.Up;
-            stopFrac = 1f;
-        }
-        if (_probe != null)
-            DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
-        // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
-        // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
-        // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
-        // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
-        if (hit && CollideDamageSink != null)
-        {
-            var cv = _model.VelocityDir * _model.Speed;
-            float cvn = Mathf.Abs(cv.Dot(normal));
-            if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+            if (!_heldPinned)
             {
-                hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+                _heldPos = _model.Position;
+                _heldAttitude = _model.Attitude;
+                _heldPinned = true;
             }
+            _model.Reset(_heldPos, _heldAttitude, 0f, 0f);
+            _throttle = 0f;      // the throttle ramp is input-driven and no input is read while held
+            _lastInput = default; // control surfaces sit neutral
         }
-        if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal, hitBody))
+        else
         {
-            Crash(impact, hitName, part, hitBody);
-            return;
+            var prev = _model.Position;          // committed position from last frame
+            var input = HoldSegments != null ? NextHoldInput(dt) : ReadKeyboard(dt);
+            _lastInput = input;
+            _damageCooldown -= dt;
+            _grazeReactionCooldown -= dt;
+            _model.Step(input, dt);
+
+            // Crash when the frame's flight path runs into solid world geometry (terrain,
+            // buildings, trees). The airframe boxes (fuselage/wings/tail) are swept along
+            // the frame's motion so a wingtip or tail fin collides, not just the center
+            // line; the center ray stays as an anti-tunnelling backstop. Only the shapeless
+            // fallback keeps the old nose margin on the ray — with real boxes it would fire
+            // ~6 m before the fuselage box reaches the wall.
+            var to = _model.Position;
+            var step = to - prev;
+            float len = step.Length();
+            float margin = Collider == null ? CollisionMargin : 0f;
+            var probeEnd = len > 1e-4f ? to + step / len * margin : to;
+            bool hit = SweepAirframe(prev, step, out var impact, out var hitName, out var part,
+                out var normal, out float stopFrac, out var hitBody);
+            if (!hit && HitWorld(prev, probeEnd, out impact, out hitName, out hitBody))
+            {
+                hit = true;
+                part = "center";
+                normal = len > 1e-4f ? -step / len : Vector3.Up;
+                stopFrac = 1f;
+            }
+            if (_probe != null)
+                DrawProbe(prev, probeEnd, prev + step * stopFrac, hit);
+            // C27: a collision with a WeaponOrCollideHit destructible (the 44 facades/windows/agyrobus)
+            // breaks IT and the plane flies through — apply severity-scaled damage and clear the hit.
+            // Every other object (WeaponHit towers/gates, plain geometry) stays solid and falls through
+            // to the crash/graze below (decision 6: the 0.01 health marks these as fly-through set dressing).
+            if (hit && CollideDamageSink != null)
+            {
+                var cv = _model.VelocityDir * _model.Speed;
+                float cvn = Mathf.Abs(cv.Dot(normal));
+                if (CollideDamageSink(hitBody, cvn * CollideDamagePerVn))
+                {
+                    hit = false;   // set-dressing shattered; the plane keeps its full-motion pose
+                }
+            }
+            if (hit && !SurviveHit(prev, step, stopFrac, impact, hitName, part, normal, hitBody))
+            {
+                Crash(impact, hitName, part, hitBody);
+                return;
+            }
         }
 
         _simPrev = _simCurr;
@@ -714,7 +805,10 @@ public partial class FlightController : Node3D
                 ? _model.Position.Y - ground.Y
                 : float.MaxValue;
 
-        if (_model.Position.Y < UnderMapY)   // backstop if the swept ray ever misses
+        // Backstop if the swept ray ever misses. A HELD plane is exempt: it is exactly where the lab
+        // parked it (below the map is a legal place to hold), and a respawn would fling it away from
+        // the target it was aimed at.
+        if (!_held && _model.Position.Y < UnderMapY)
             Respawn();
 
         _sinceTelemetry += dt;
@@ -819,7 +913,9 @@ public partial class FlightController : Node3D
         {
             Gauges.SpeedMph = mph;
             Gauges.AltitudeFt = ft;
-            Gauges.Stalled = !_crashed && !halted && _model.isStalled();
+            // A held plane sits at 0 m/s, which is below every stall speed — but it is pinned, not
+            // stalling, so the gauge (and the HUD line below) stay quiet in the lab.
+            Gauges.Stalled = !_crashed && !halted && !_held && _model.isStalled();
         }
         // Feeds the E35 gauges (if built) and the E36 readout (if built) — both draw from the live
         // loadout, so this runs whenever there is one, independent of the dial cluster.
@@ -842,7 +938,7 @@ public partial class FlightController : Node3D
         string speedAlt = $"SPD {mph,4:0} MPH   ALT {ft,5:0} FT";
         string throttle = $"THR {_model.Throttle * 100,3:0}%";
         _hud.Text = paneFactor < 1f ? $"{speedAlt}\n{throttle}" : $"{speedAlt}   {throttle}";
-        if (_model.isStalled())
+        if (!_held && _model.isStalled())
             _hud.Text += "\n⚠ STALLED - SPEED UP";
         if (!halted && !_crashed && _damageFlash > 0f)
         {
