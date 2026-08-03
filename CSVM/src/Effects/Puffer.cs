@@ -439,7 +439,10 @@ public sealed partial class Puffer : Node3D
     public void Burst(Vector3 worldPosition)
     {
         TopLevel = true; // ignore parent transform: the fireball stays put in world space
-        GlobalPosition = worldPosition;
+        // Toggling TopLevel PRESERVES the node's global transform (Godot 4), so the parent's
+        // rotation at this moment would silently stick as this node's basis and skew every
+        // local-space particle — set the whole transform, never just the position.
+        GlobalTransform = new Transform3D(Basis.Identity, worldPosition);
         _liveCount = 0;
         _sinceStart = 0f;
         _burstsSpawned = 0;
@@ -473,7 +476,11 @@ public sealed partial class Puffer : Node3D
         if (!_trailing)
         {
             TopLevel = true;             // particles live in world space, left behind the plane
-            GlobalPosition = Vector3.Zero;
+            // Toggling TopLevel PRESERVES the global transform (Godot 4): a flying parent's
+            // attitude would stick as this node's basis and yaw every "world-space" puff
+            // around the world origin — kilometres off at a far-from-origin mission spawn
+            // (the fly-mode damage-trail bug). Identity transform, not just zero position.
+            GlobalTransform = Transform3D.Identity;
             _trailing = true;
             _trailPrev = worldPos;
             _trailCarry = 0f;
@@ -513,7 +520,7 @@ public sealed partial class Puffer : Node3D
         if (!_trailing)
         {
             TopLevel = true;
-            GlobalPosition = Vector3.Zero;
+            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
             _trailing = true;
             _trailPrev = worldPos;
             _trailCarry = 0f;
@@ -542,7 +549,7 @@ public sealed partial class Puffer : Node3D
         if (!_sustaining)
         {
             TopLevel = true;                 // world-space particles, like the trail mode
-            GlobalPosition = Vector3.Zero;
+            GlobalTransform = Transform3D.Identity; // see TrailAdvance: TopLevel keeps the global basis
             _sustaining = true;
             _active = true;
             Visible = true;

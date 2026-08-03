@@ -102,6 +102,8 @@ public static class Suites
             "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
         into.Add(new TestHarness.Suite("stunt-gates",
             "C4 Danger Zones require their authored entry and exit apertures, not a marker sphere", StuntGates));
+        into.Add(new TestHarness.Suite("trail-world-anchor",
+            "a trail emitter under a rotated carrier anchors at world identity and drops puffs where it is fed", TrailWorldAnchor));
     }
 
     // ---- BL-241: emitter lifetime is observable with no GPU -------------------------------------
@@ -401,6 +403,68 @@ public static class Suites
         {
             lab?.Free();
             plane?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>The fly-mode damage-trail regression: Godot's <c>TopLevel</c> toggle PRESERVES the
+    /// node's global transform, so a trail emitter parented under a flying plane kept the plane's
+    /// attitude-at-first-puff as its basis — and every "world-space" puff position was yawed around
+    /// the world origin, kilometres off at a real mission spawn (invisible at any heading except the
+    /// identity -Z, which is why the parked viewer and every scripted -Z dive looked fine). The
+    /// suite feeds a trail under a carrier rotated to the C1 spawn heading and parked at the C1
+    /// spawn coordinates, then asserts the emitter re-anchored to world identity and the rendered
+    /// instance sits at the fed segment, not swung around the origin.</summary>
+    private static void TrailWorldAnchor(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+        var textures = new TextureArchive(texturesPath);
+        Node3D? carrier = null;
+        try
+        {
+            // A flying plane stand-in: the C1 default spawn's pose (heading well off -Z, 9 km
+            // from the world origin) — the exact conditions that made the bug invisible to every
+            // earlier -Z-heading check.
+            var pose = new Transform3D(new Basis(Vector3.Up, Mathf.DegToRad(132f)),
+                new Vector3(-7065f, 326f, -5519f));
+            carrier = new Node3D();
+            ctx.Host.AddChild(carrier);
+            carrier.GlobalTransform = pose;
+
+            var trail = Effects.Puffer.MakePuffer(ctx.ZrdrPath, textures, carrier, "pufftrails.json", "firepuffer");
+            ctx.Check(trail != null, $"dense_firetrail firepuffer builds from pufftrails.json");
+            if (trail == null)
+                return;
+
+            var a = pose.Origin;
+            var b = a + new Vector3(3f, 0f, -2f); // several DISTANCE_INTERVALs of motion
+            trail.TrailAdvance(a);
+            trail.TrailAdvance(b);
+            ctx.Check(trail.LiveCount > 0, $"puffs spawned over {a.DistanceTo(b):0.0} m of motion live={trail.LiveCount}");
+            ctx.Check(trail.GlobalTransform.Basis.IsEqualApprox(Basis.Identity),
+                $"emitter basis is world identity under the rotated carrier basis={trail.GlobalTransform.Basis}");
+            ctx.Check(trail.GlobalTransform.Origin.IsEqualApprox(Vector3.Zero),
+                $"emitter origin is the world origin origin={trail.GlobalTransform.Origin}");
+
+            // One manual tick lands the CPU particles in the MultiMesh buffer; the rendered
+            // instance must sit on the fed segment (walk-back spawning plus deviation jitter
+            // keeps every puff within an interval of it), not rotated kilometres away.
+            trail._Process(1.0 / 60.0);
+            var mmi = trail.GetChildren().OfType<MultiMeshInstance3D>().FirstOrDefault();
+            ctx.Check(mmi != null, $"trail emitter carries a MultiMeshInstance3D");
+            if (mmi != null)
+            {
+                var inst = (mmi.GlobalTransform * mmi.Multimesh.GetInstanceTransform(0)).Origin;
+                float offSegment = inst.DistanceTo(a) + inst.DistanceTo(b) - a.DistanceTo(b);
+                ctx.Check(offSegment < 1f,
+                    $"first rendered puff sits on the fed segment inst=({inst.X:0.0},{inst.Y:0.0},{inst.Z:0.0}) off={offSegment:0.00} m");
+            }
+        }
+        finally
+        {
+            carrier?.Free();
             textures.Dispose();
         }
     }

@@ -1544,10 +1544,24 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
 - `BL-120` **Collision feel** — behaviour against building corners.
 - `BL-121` **Damage (Run-2 item 10)** — `CrashSpeed` 25, graze friction + attitude kick,
   `GrazeStopSpeed`, breakup scatter, and whether the 10c panel-flip and smoke-trail look right in
-  real flight (both the panel-flip and the smoke/fire trail have been confirmed to render in real
-  flight, `docs/HISTORY.md` 2026-07-31 — this item is a magnitude/feel judgement, not a mechanism
-  question). Tree softness is retired dead code (`docs/HISTORY.md` 2026-07-23), not a TUNE — do
-  not re-add it here.
+  real flight. ⚠ The 2026-07-31 "confirmed to render in real flight" claim (`BL-174`) was
+  narrower than it read: every dive in that test flew the identity -Z heading near the world
+  origin, the one pose where the emitter's world-anchoring bug was invisible — at any real
+  mission spawn and heading the trail rendered kilometres away until the `TopLevel` anchor fix
+  (`docs/HISTORY.md` 2026-08-03, `trail-world-anchor` suite). Rendering at real spawns is now
+  verified; this item is back to a magnitude/feel judgement. Tree softness is retired dead code
+  (`docs/HISTORY.md` 2026-07-23), not a TUNE — do not re-add it here.
+- `BL-246` **Smoke/fire trail is effectively unreachable from organic gameplay** (found while
+  fixing the trail-anchor bug, 2026-08-03). The whole-plane `player_smoketrail` needs a part at
+  ≤ 0.10 HP fraction (`DamageVisuals.cs`), but the only in-game damage source is a terrain graze:
+  `GrazeMaxDamage` 18 behind `_damageCooldown` (`FlightController.cs`) against 15–25 HP parts, and
+  a critical part reaching 0 crashes the plane outright — so hitting the 0.10 window without dying
+  takes several survivable grazes on the *same* part, which normal play never produces. The F5 lab
+  (or `--damage=`) is currently the only practical way to see the trail. Design/tuning question,
+  deliberately split from the render fix: candidate shapes are weapon fire damaging planes (no
+  enemy-fire path exists at all today), a lower smoke threshold, or accepting it as a
+  near-death-only effect like the original. Decide against the original at the controls
+  (`CAP-15`'s look-half owes the same footage).
 - `BL-122` **Data-driven crash (PLAN-data-driven-crash, default since Wave 4)** — several playtest-gated TUNEs,
   all needing the original at the controls: `WreckMomentum` **0.4** (`FlightController.cs` — the
   fraction of impact velocity the wreck pieces inherit, so they scatter along travel vs. pop straight

@@ -44,6 +44,9 @@ and leave gaps when retiring old ones.
 - **DIAG-16** — **Prevent unrelated lifecycle events from clearing the effect.**
 - **DIAG-17** — **Distinguish “never reached” from “reached but invisible.”**
 - **DIAG-18** — **Test code-derived explanations at runtime.**
+- **DIAG-19** — **Scripted repros inherit identity defaults (-Z heading, near-origin spawn); a
+  pose-dependent symptom needs an off-axis heading AND a far-from-origin placement in the matrix,
+  and a repro that works where the report fails means the poses differ, not that the report is wrong.**
 
 ## SHOT — screenshots and pixel evidence
 

@@ -11791,3 +11791,55 @@ tests, **19/19 engine suites**, **13/13 goldens hash-identical**, engine errors 
 subsection. The four bugs this family shipped (`BL-233`/`BL-235`/`BL-236`/`BL-242`) still have no
 regression guard of their own, but the seam and the first suite over it now exist for the next one
 to extend.
+
+## 2026-08-03 — fly-mode damage trail invisible at real spawns: `TopLevel` keeps the global basis
+
+**User report:** the parked `--viewer` shows a damaged plane's smoke and flames, but in `--fly`
+the panels flip and no fire/smoke trail ever appears — neither from the F5 lab's sliders nor
+from gameplay grazes. (The viewer's trails "staying at one point" is a separate non-bug: the
+authored `dense_firetrail` states carry min=max random velocity `(-0.1,-0.1,-0.1)` at friction 1,
+so the burn-in-place fire reads via 2.45× growth and the colour ramp, not motion — as designed.)
+
+**The diagnosis kept passing where the report failed, and the confounder was the pose.** The
+`BL-174` dive (2026-07-31, "the low-HP trail already renders in flight, reproduced over C1")
+and every `--pos`/`--direction` matrix here — empty stage, C1 world, near origin, 9 km out —
+rendered the trail... and every single one flew the identity heading (`0,0,-1`, level). The
+C1 *default spawn* run rendered nothing, and the discriminating pair was two runs at the same
+coordinates differing only in `--direction`: `(0,0,-1)` drew, the spawn's real `(0.74,0,-0.67)`
+did not (even with the fragment shader forced to opaque magenta — the geometry itself was
+elsewhere). Weather, fog, authored mips, transparent sort order, render priority and culling were
+all eliminated by direct test first; CPU state was healthy throughout (`live≈260`, correct
+world positions, tight `GetAabb()`).
+
+**Root cause: Godot's `TopLevel` toggle PRESERVES the node's global transform.** `Puffer`'s
+world-space modes (`TrailAdvance`, `TrailBurnAt`, `SustainAt`, `Burst`) set `TopLevel = true` on
+first emission and then only `GlobalPosition = Vector3.Zero` — but the toggle had already baked
+the parent's global transform into the node, so a trail emitter parented under the flying
+`FlightController` kept the plane's attitude-at-first-puff as its basis (measured:
+`nodeBasis = [X:(0.671,0,0.741) …]`, the spawn yaw). Every "world-space" instance transform is
+premultiplied by that basis, so the whole trail is yawed around the *world origin*: at the C1
+spawn 9 km out it rendered kilometres away (invisible), near the origin it merely skewed —
+which is exactly why the parked viewer (identity attitude), the `BL-174` dives (identity
+heading, near origin) and all 13 goldens never showed it.
+
+**Fix (`Puffer.cs`, four sites):** set the full `GlobalTransform` — `Transform3D.Identity` for
+the three world-space emit modes, `new Transform3D(Basis.Identity, worldPosition)` for `Burst` —
+never just the position. Verified: the two previously-failing scenarios
+(`--fly --chapter=C1 --damage=nose:0.05` at the default spawn; empty stage at heading
+`0.74,0,-0.67`) both stream the full nose fire + smoke and panel trails.
+
+**Guard: `trail-world-anchor` suite** (`Suites.cs`) — a `firepuffer` trail under a carrier posed
+at the C1 spawn (132° yaw, 9 km out) must re-anchor to world identity and land its first rendered
+puff on the fed segment (one manual `_Process` tick flushes the CPU particles into the
+`MultiMesh` so the assertion reads the instance buffer, not private state). Able-to-fail: with
+the old `GlobalPosition`-only line restored, the suite fails on the basis, origin and segment
+checks. `verification.md` gains `DIAG-19` (scripted repros inherit identity defaults; sweep pose
+axes) — this bug survived `DIAG-18`'s "fly it before trusting it" because every flight flown was
+the one pose that hid it.
+
+**`.\RunTests.ps1` full pass:** 393 unit tests, 20/20 engine suites (new one included),
+**13/13 goldens hash-identical** — the fix is behaviourally inert for every existing capture,
+all of which fly identity poses. Docs: `BL-121`'s "confirmed to render in real flight" caveat
+corrected (that confirmation was pose-narrow); `BL-246` filed for the separate *reachability*
+gap (smoke needs ≤ 10 % HP; grazes cap at 18 dmg behind a cooldown and 0 HP crashes — organic
+play never shows the trail; the F5 lab is currently the only practical trigger).
