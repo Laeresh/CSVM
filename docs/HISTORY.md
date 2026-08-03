@@ -12246,3 +12246,32 @@ its frame is unchanged).
 (B4/B5), and the mount stepper does not yet drive the controller's selectors, though A2 exposed
 `SelectGunGroup`/`SelectPylon` for exactly that. `docs/cli.md` + `docs/controls.md` were corrected in
 this turn (W moved from the `--viewer` table to the flight one); D10 is still the full doc pass.
+
+**PLAN-weapon-lab B4: `Loadout.ForRig` — every firepoint and pylon, seeded from stock (2026-08-03).**
+`Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` synthesizes a lab `LoadoutDef` naming the airframe's
+**whole** marker rig instead of only what `stock_loadouts.json` binds: the 4 gun-group slots the
+reverse-index rule seats (`docs/formats/markers.md` — W1→fp(9−2n),(10−2n)), each populated with
+whichever of its firepoint pair the rig actually has (the Kestrel's W1 resolves to the lone
+centreline `firepoint7`, a one-muzzle group), plus one hardpoint per `pylonN` present. A slot stock
+does name keeps its weapon/mount/caliber; one it doesn't defaults to the stock's first gun weapon
+(`wep_30` if the plane carries none at all) under a generic "Gun Group N" label. Every synthesized
+group is `IsTurret = false` — deliberately fireable even on a slot stock marks a turret, the lab-only
+difference the plan calls for. The synthesized def runs through the existing `Bind`, so there is
+still exactly one bind path and a marker the rig genuinely lacks still throws loudly, never a silent
+skip. `stock_loadouts.json` itself is untouched — it stays the description of the original fit.
+
+**Verified.** New `loadout-forrig` suite (`Suites.cs`, alongside `loadout-bind`): for all 11 player
+airframes, `ForRig` yields exactly 4 gun groups, every one fireable, no firepoint bound to two
+groups, every rig firepoint covered, and one hardpoint per rig pylon — `.\RunTests.ps1` PASS,
+22/22 engine suites (was 21), 395/395 units. `--dump-loadout --weapon-lab=bhawk` now lists all 4
+gun groups (`Inner Wing Guns`, `Outer Wing Guns`, the stock-omitted `Gun Group 3`/`Gun Group 4`) and
+all 8 pylons — 24 rockets total vs. stock's 2 groups / 3 pylons / 9 rockets; plain `--dump-loadout`
+(no `--weapon-lab`) is unchanged, confirming the mode is additive (`Probes.Loadouts` gained a
+`forRig` parameter, threaded from `ProbeRunner.DumpLoadout` off `spec.WeaponLab`).
+
+**Note.** B4 does not build the "every individual firepoint as its own single-muzzle mount" reading
+of the plan's Decision 6 table — that phrasing is reconciled with the item's own Approach/Verify
+text (which only ever describes 4 groups + pylons, and calls the Kestrel's incomplete pair "one
+single-muzzle group") as describing the degenerate case, not a fifth mount category; `WeaponLab`'s
+existing raw-marker fallback already offers per-firepoint mounts at the UI layer when B5 needs finer
+granularity than a W-group. B5 (the panel driving this live loadout) is next.

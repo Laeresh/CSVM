@@ -155,7 +155,7 @@ instead.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
-- `src/Testing/Suites.cs` — the 20 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
+- `src/Testing/Suites.cs` — the 22 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -740,11 +740,25 @@ Two layers over `CSVM/data/stock_loadouts.json`. `StockLoadouts.Load` parses the
 each gun slot's markers to live muzzle `Node3D`s and its caliber+ammo to a `WeaponDef` (via
 `GunWeaponId` = `wep_{N+k}`), and each hardpoint to its `pylon`, yielding `GunGroup`s (independent
 ammo counters from `CLUSTER_SIZE`) + `Hardpoint`s. Turret slots bind but `IsTurret` (inert, M4).
-Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout`.
+Schema: docs/formats/loadouts.md. Verify/inspect with `--dump-loadout` (add `--weapon-lab` to bind
+the full-rig loadout below instead of the stock one).
 ⚠ A missing marker is a LOUD throw naming plane/slot/marker — never a silent skip (a silent one
   fires a gun from nowhere). Markers resolve by `cs_name` meta from the built tree, like MarkerOverlay.
 ⚠ Gun ammo is per group (Balmoral's two .50s carry 2000 each); rocket ammo is per pylon
   (`CLUSTER_SIZE` each, total = pylons × that) — A9. Config lives at `res://`, NOT under `--data-root`.
+
+`Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` (M3 B4) synthesizes a lab loadout covering the
+airframe's **whole** rig rather than only what stock names: the 4 gun-group slots the reverse-index
+rule seats (`docs/formats/markers.md` "Slot → firepoint binding" — W1→fp(9−2n),(10−2n)), each
+populated with whichever of its firepoint pair the rig actually has (the Kestrel's W1 resolves to
+the lone centreline `firepoint7`), plus one hardpoint per `pylonN` present — then runs the
+synthesized `LoadoutDef` through the same `Bind`, so there is still exactly one bind path. A slot
+stock does name keeps its weapon/mount/caliber; one it doesn't defaults to the stock's first gun
+weapon (`wep_30` if the plane has no stock guns at all) under a generic mount label ("Gun Group N").
+⚠ Every synthesized group is `IsTurret = false`, even a slot stock marks a turret — deliberately
+  making all four fireable in the lab; stock's inert-turret behaviour is untouched.
+⚠ Never assumes 8 firepoints/pylons — it discovers the rig same as `Bind`'s own marker walk and
+  only synthesizes a slot when at least one of its pair actually exists.
 
 ## src/Flight/WeaponCursor.cs
 The ammo-slot selector as pure index math, shared by rocket hardpoints (H, `_selectedPylon`) and
@@ -1784,8 +1798,9 @@ the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replac
 emitter's own MODES are. Neither covers the other's job.
 
 ## src/Testing/Suites.cs
-The 20 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
-flight envelope, plane/loadout bindings, live weapon fire, destructible stages/death/census, animation
+The 22 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+flight envelope, plane/loadout bindings (stock and, since M3 B4, the full-rig `Loadout.ForRig`),
+live weapon fire, destructible stages/death/census, animation
 stops and bounce-terminated launches, emitter lifetime and the emitter's own modes, texture
 flattening, glTF round trips, collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so

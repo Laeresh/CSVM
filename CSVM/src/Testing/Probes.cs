@@ -186,7 +186,7 @@ public static class Probes
     // ---- loadouts ----------------------------------------------------------------------------
 
     public static LoadoutResult Loadouts(string zrdrPath, string messagesPath, string planesGamezPath,
-        string dataRoot, string filter, string? loadoutOverride)
+        string dataRoot, string filter, string? loadoutOverride, bool forRig = false)
     {
         System.Threading.Thread.CurrentThread.CurrentCulture = CultureInfo.InvariantCulture;
         var r = new LoadoutResult();
@@ -210,7 +210,9 @@ public static class Probes
         }
 
         var sb = new StringBuilder();
-        sb.AppendLine("# Stock loadouts bound to models — CSVM/data/stock_loadouts.json");
+        sb.AppendLine(forRig
+            ? "# Full-rig lab loadouts (Loadout.ForRig) — every firepoint/pylon, seeded from stock_loadouts.json"
+            : "# Stock loadouts bound to models — CSVM/data/stock_loadouts.json");
         if (loadoutOverride != null)
         {
             sb.AppendLine($"# --loadout override: binding every plane to '{loadoutOverride}'");
@@ -243,7 +245,7 @@ public static class Probes
                 try
                 {
                     plane = new PlaneBuilder(planesGamez, textures).Build(def.Model);
-                    var loadout = Loadout.Bind(bindDef, plane, weapons);
+                    var loadout = forRig ? Loadout.ForRig(plane, weapons, bindDef) : Loadout.Bind(bindDef, plane, weapons);
                     sb.Append("\n  guns:");
                     foreach (var g in loadout.Guns)
                     {

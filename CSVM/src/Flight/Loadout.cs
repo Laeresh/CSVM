@@ -227,6 +227,101 @@ public sealed class Loadout
         return new Loadout(def, guns, hardpoints);
     }
 
+    /// <summary>Synthesizes a lab loadout covering the airframe's <b>whole</b> marker rig — the
+    /// four gun-group slots the reverse-index rule names (W1→firepoint(9−2n),(10−2n) for
+    /// n=1..4 — <see href="../../docs/formats/markers.md">markers.md</see>, "Slot → firepoint
+    /// binding"), each populated with whichever of its pair the airframe actually has (the
+    /// Kestrel's W1 resolves to the lone centreline <c>firepoint7</c>), and one hardpoint per
+    /// <c>pylonN</c> the rig carries — regardless of how few of either the stock fit binds. A slot
+    /// the stock fit does name keeps its weapon, mount name and caliber; a slot it does not
+    /// defaults to the stock's first gun weapon (<c>wep_30</c> when the plane has no stock guns at
+    /// all) under a generic mount label. Every synthesized group is fireable (<c>IsTurret</c> is
+    /// always false here, even for a slot stock marks as a turret) — a deliberate lab-only
+    /// difference from stock, where the turret slot stays inert until M4. Runs the synthesized def
+    /// through the same <see cref="Bind"/> every other loadout uses, so there stays exactly one
+    /// bind path (and a marker the rig lacks still throws, never a silent skip).</summary>
+    public static Loadout ForRig(Node3D plane, WeaponDefs weapons, LoadoutDef? stock)
+    {
+        var markerNodes = CollectMarkers(plane);
+        var firepoints = new SortedSet<int>();
+        var pylons = new SortedSet<int>();
+        foreach (var name in markerNodes.Keys)
+        {
+            if (MarkerRig.Classify(name, out var kind, out int ord))
+            {
+                if (kind == MarkerRig.MarkerKind.Firepoint)
+                {
+                    firepoints.Add(ord);
+                }
+                else if (kind == MarkerRig.MarkerKind.Pylon)
+                {
+                    pylons.Add(ord);
+                }
+            }
+        }
+
+        GunSpec? firstStockGun = stock != null && stock.Guns.Count > 0 ? stock.Guns[0] : null;
+
+        var def = new LoadoutDef
+        {
+            Def = stock?.Def ?? "",
+            Model = stock?.Model ?? "",
+            Display = stock?.Display ?? "",
+        };
+
+        for (int slot = 1; slot <= 4; slot++)
+        {
+            int lo = 9 - 2 * slot;   // slot1->7, slot2->5, slot3->3, slot4->1
+            int hi = 10 - 2 * slot;  // slot1->8, slot2->6, slot3->4, slot4->2
+            var markers = new List<string>();
+            if (firepoints.Contains(lo))
+            {
+                markers.Add($"firepoint{lo}");
+            }
+            if (firepoints.Contains(hi))
+            {
+                markers.Add($"firepoint{hi}");
+            }
+            if (markers.Count == 0)
+            {
+                // Neither half of this slot's pair exists on the rig — nothing to synthesize.
+                continue;
+            }
+            GunSpec? stockSpec = null;
+            foreach (var g in stock?.Guns ?? new List<GunSpec>())
+            {
+                if (g.Slot == slot)
+                {
+                    stockSpec = g;
+                    break;
+                }
+            }
+            def.Guns.Add(new GunSpec
+            {
+                Slot = slot,
+                Mount = stockSpec?.Mount ?? $"Gun Group {slot}",
+                Caliber = stockSpec?.Caliber ?? firstStockGun?.Caliber ?? 30,
+                Ammo = stockSpec?.Ammo ?? firstStockGun?.Ammo ?? "slug",
+                Markers = markers,
+                Turret = false,
+            });
+        }
+
+        if (pylons.Count > 0)
+        {
+            // "wep_06" is the stock rocket every one of the 11 planes' hardpoints block names
+            // (CSVM/data/stock_loadouts.json) — the fallback for the (never observed) case of a
+            // plane with pylons but no stock hardpoints block at all.
+            def.Hardpoints = new HardpointSpec
+            {
+                Count = pylons.Count,
+                Stock = stock?.Hardpoints?.Stock is { Length: > 0 } s ? s : "wep_06",
+            };
+        }
+
+        return Bind(def, plane, weapons);
+    }
+
     private static Node3D Resolve(Dictionary<string, Node3D> markers, string name, LoadoutDef def, string where)
     {
         if (markers.TryGetValue(name, out var node))
