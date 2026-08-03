@@ -88,6 +88,12 @@ internal sealed class MotionRuntime : IAnimMotion
 
     public bool Finished => _t >= _runTime;
 
+    /// <summary>The flight time this body actually runs for: the authored <c>RUN_TIME</c>, or —
+    /// for a bounce-terminated launch, which carries none — the time its own parabola takes to
+    /// return to launch height. The caller reads it back rather than trusting the authored value,
+    /// since only <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
+    public float RunTime => _runTime;
+
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
     {
         var rest = rt.RestOf(target); // records the authored pose; the fallback for a bad live basis
@@ -122,16 +128,20 @@ internal sealed class MotionRuntime : IAnimMotion
             return parentBasis.Inverse() * rt.InheritedWorldVelocity;
         }
 
+        // The velocity ramp is a change spread OVER the run time, so it cannot be divided out
+        // until the run time is known — and a bounce-terminated launch does not know its own
+        // until the parabola is solved below. Collected here, folded in after that.
+        var rampTotal = Vector3.Zero;
+
         if (data.Obj("translation") is { } tr)
         {
             var v0 = tr.Vec3("initial");
             var rnd = tr.Vec3("rnd_xz");
             v0 += new Vector3(RandSym() * rnd.X, RandSym() * rnd.Y, RandSym() * rnd.Z);
-            var delta = tr.Vec3("delta");
             // delta ramps velocity over run_time → a constant acceleration of delta/run_time.
-            var rampAccel = rtSafe > 0f ? delta / rtSafe : Vector3.Zero;
+            rampTotal = tr.Vec3("delta");
             m._v0 = v0 + InheritedLocal();
-            m._accel = rampAccel + new Vector3(0f, gravity, 0f);
+            m._accel = new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
         }
         else if (data.Obj("translation_range") is { } range)
@@ -158,7 +168,8 @@ internal sealed class MotionRuntime : IAnimMotion
             m._v0 = dir * speed + InheritedLocal();
             // delta ramps the launch speed over run_time, along the same direction — the same
             // shape `translation.delta` has, and 0 on 984 of the 1,217 events.
-            m._accel = dir * (rtSafe > 0f ? speedRamp / rtSafe : 0f) + new Vector3(0f, gravity, 0f);
+            rampTotal = dir * speedRamp;
+            m._accel = new Vector3(0f, gravity, 0f);
             m._hasBallistic = true;
         }
 
@@ -168,6 +179,35 @@ internal sealed class MotionRuntime : IAnimMotion
             m._scaleDelta = sc.Vec3("delta");
             m._hasScale = m._scaleInit.LengthSquared() > 1e-9f;
         }
+
+        // A bounce-terminated launch: the data's idiom for "fly until you hit something" omits
+        // RUN_TIME entirely and names a BOUNCE_SEQUENCE for the landing instead, so there is no
+        // authored duration to run for and the old `run_time ?? 0` read it as "duration 0" —
+        // posing 150 reachable pieces at rest on the wreck they should have left (BL-240).
+        //
+        // ⚠ Ending it when the parabola returns to LAUNCH HEIGHT is a CHOICE, not a decode. The
+        // original tested real ground through `do_intersections`; this agrees wherever the ground
+        // under the object is flat, which is every reachable case here — debris thrown off a
+        // ground-sitting structure. A down-ray replaces it, and must, for the 379 events that
+        // FALL rather than launch (a shot-down zeppelin, a parachutist): those have no apex, this
+        // solve declines them, and they stay posed at rest until BL-245 lands the ray.
+        //
+        // Solved in the node's PARENT frame, the same frame the launch and gravity already live
+        // in. Absent-RUN_TIME is read from the data, not from `runTime <= 0`, so an authored 0
+        // keeps meaning zero.
+        if (m._hasBallistic && data.Num("run_time") is null && data.Has("bounce_sequence"))
+        {
+            float flight = FlightToLaunchHeight(m._v0.Y, m._accel.Y);
+            if (flight > 0f)
+            {
+                rtSafe = flight;
+                m._runTime = flight;
+            }
+        }
+
+        // Everything denominated in the run time, folded in once it is settled — including the
+        // solved flight above, or a bounce-terminated piece would fly without its authored tumble.
+        m._accel += rtSafe > 0f ? rampTotal / rtSafe : Vector3.Zero;
 
         // forward_rotation.Time.initial is a TOTAL angle over run_time (the `Time`
         // parameterization), not a rate: the crash pieces carry 5π and 4.44π (clean multiples of
@@ -239,5 +279,18 @@ internal sealed class MotionRuntime : IAnimMotion
         float el = Mathf.DegToRad(elevationDeg);
         float cosEl = Mathf.Cos(el);
         return new Vector3(cosEl * Mathf.Cos(az), Mathf.Sin(el), cosEl * Mathf.Sin(az));
+    }
+
+    /// <summary>Time for a launch to come back down to the height it left from:
+    /// <c>t = 2·v0y / -ay</c>, the non-zero root of <c>v0y·t + ½·ay·t² = 0</c>. Returns 0 for
+    /// anything with no apex — launched level or downward, or with no gravity to bring it back
+    /// (a <c>chuteman</c>'s constant descent) — which is the caller's signal to leave the body
+    /// alone rather than invent a landing.</summary>
+    private static float FlightToLaunchHeight(float v0y, float ay)
+    {
+        if (v0y <= 0f || ay >= 0f)
+            return 0f;
+        float t = 2f * v0y / -ay;
+        return float.IsFinite(t) ? t : 0f;
     }
 }

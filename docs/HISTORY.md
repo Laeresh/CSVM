@@ -11113,3 +11113,46 @@ silently inert — the run above spent six hours writing a 45 MB log before it w
 
 No code changed. `backlog.md` carries the re-scoped `BL-240`, the new `BL-245`, and the working
 probe in place of the unrunnable one.
+
+## 2026-08-03 — a bounce-terminated launch solves its own flight time, and 150 debris pieces leave the wreck (`PLAN-bounce-launch` A2)
+
+**`MotionRuntime.FlightToLaunchHeight(v0y, ay)` returns `2·v0y / -ay`** — the non-zero root of
+`v0y·t + ½·ay·t² = 0`, i.e. when the launch parabola comes back to the height it left from — and 0
+for anything with no apex (launched level or downward, or with no gravity to bring it back).
+`Create` calls it only when `data.Num("run_time") is null && data.Has("bounce_sequence")`, read from
+the data rather than from `runTime <= 0`, so an *authored* 0 keeps meaning zero. `AnimRuntime` now
+reads `motion.RunTime` back off each body instead of trusting the authored value — only `Create`
+knows the randomised launch the solve rests on — and reports the longest as the event's duration.
+
+**⚠ The landing rule is a CHOICE, not a decode**, recorded as such in `MotionRuntime`. The original
+tested real ground through `do_intersections`; return-to-launch-height agrees wherever the ground
+under the object is flat, which is every reachable case here — debris thrown off a ground-sitting
+structure. It declines the 379 events that *fall* rather than launch (`BL-245`), which is why those
+stay posed at rest until a down-ray lands.
+
+**The ordering trap the plan missed.** Three channels were already divided by `rtSafe` before the
+solve could run: both velocity ramps and, critically, `_tumbleRate = fwdTotal / rtSafe`. At
+`rtSafe == 0` all three collapse to zero, so solving the flight naively would have thrown the debris
+without its authored tumble. The launch is now collected into a `rampTotal` local and everything
+denominated in the run time is folded in after the flight time settles.
+
+**Measured, with an able-to-fail control.** `--freecam --chapter=C1 --destroy=refuel --debug-anim`,
+five tank kills: **20** ballistic launches with the solve on versus **10** with it disabled behind a
+temporary `false &&` and rebuilt — exactly +2 per tank (`part3`, `part4`). The arc reads as a
+parabola with tumble: `part4` at `(-6466,1, 23,8, -3433,4) rot (5,8,…)` then
+`(-6481,2, 15,7, -3452,3) rot (8,7,…)`, descending past apex while travelling and turning.
+`.\RunTests.ps1` **PASS**: 352 units, 17/17 engine suites, engine errors clean, **13/13 goldens
+hash-identical** — including `c1-destroy-effects`, confirming the predicted zero blast radius (its
+`radiotwr` target carries no `bounce_sequence`, and `Create` was already called before the branch so
+the seeded `_rng` draw count never moved). Eight-chapter `--freecam` sweep clean, exit 0 each.
+
+**Instrument fixed on the way — `LOG-5` in practice.** `LogMotions` prints at most 12 motions and
+five kills put **34** in flight at once, so `part3` sat past the cap and the truncated list read
+exactly like "it never launched"; that misreading was believed for several minutes before the
+`… and 22 more` line was noticed. The per-second line now leads with
+`N live motion(s), M ballistic launch(es) so far` — cumulative, uncapped, and the only headless
+answer to whether a launch happened at all.
+
+**Still open in this family:** the `BOUNCE_SEQUENCE` does not yet fire (A3) and the instance still
+ends the frame its last event dispatches (A4), so `sparkout3`/`sparkout4` stay unreached and
+`trailpuffer3` still stops on `BL-236`'s instance cap instead of at the landing.

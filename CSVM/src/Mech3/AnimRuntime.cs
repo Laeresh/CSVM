@@ -2011,13 +2011,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // The full rigid-body simulation: a ballistic translate/launch, a scale ramp
                         // and a tumble (plus any steady XYZ_ROTATION), all on one node over run_time.
                         // See MotionRuntime for the semantics and the TUNE caveats.
-                        float ballTime = ev.Data.Num("run_time") ?? 0f;
+                        float authored = ev.Data.Num("run_time") ?? 0f;
+                        // The duration this event reports. A bounce-terminated launch carries no
+                        // authored time and solves its own from the parabola it just drew, so the
+                        // flight is read BACK off each body rather than assumed here — and the
+                        // longest of them is what the sequence waits on (BL-240).
+                        float ballTime = authored;
                         foreach (var t in Targets(ev, def, anchor))
                         {
-                            var motion = MotionRuntime.Create(this, t, ev.Data, ballTime);
+                            var motion = MotionRuntime.Create(this, t, ev.Data, authored);
                             if (motion == null)
                                 continue;
-                            if (instant || ballTime <= 0f)
+                            float flight = motion.RunTime;
+                            if (instant || flight <= 0f)
                             {
                                 motion.Seek(0f); // RESET_STATE / zero-length: pose the launch start (rest)
                             }
@@ -2025,6 +2031,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             {
                                 AddMotion(motion, def, anchor);
                                 BallisticMotionsLaunched++;
+                                ballTime = Mathf.Max(ballTime, flight);
                             }
                             _opsApplied++;
                         }
@@ -3284,9 +3291,14 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             GD.Print($"anim/debug: {_activePuffers.Count} active puffer(s), {live} live particle(s)"
                      + $": {string.Join(", ", which)}");
         }
+        // Totals BEFORE the list, which is capped at 12: a debris piece is routinely past the cap
+        // (five tank kills put 34 motions in flight at once), so reading "it never launched" out of
+        // the truncated list is LOG-5. BallisticMotionsLaunched is cumulative and uncapped, and is
+        // the only headless answer to "did the launch happen at all".
+        GD.Print($"anim/debug: {_motions.Count} live motion(s), "
+                 + $"{BallisticMotionsLaunched} ballistic launch(es) so far");
         if (_motions.Count == 0)
         {
-            GD.Print("anim/debug: no live motions");
             return;
         }
         foreach (var m in _motions.Take(12))

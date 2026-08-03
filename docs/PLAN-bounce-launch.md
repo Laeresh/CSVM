@@ -126,7 +126,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — the launch
 
 1. ☑ Baseline probe: confirm the branch these events actually take
-2. ☐ Solve the flight time in `MotionRuntime`
+2. ☑ Solve the flight time in `MotionRuntime`
 3. ☐ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
 4. ☐ Keep the instance alive while a bounce is pending
 5. ☐ Engine suite: motion launched, time in band, `sparkoutN` fired
@@ -207,7 +207,43 @@ than proceeding.
 NOT appearing must show the instrument firing somewhere first — this exact omission once turned a
 missing instrument into a fabricated measurement.
 
-## A2 ☐ Solve the flight time in `MotionRuntime`
+## A2 ☑ Solve the flight time in `MotionRuntime`
+
+**Landed (2026-08-03).** `MotionRuntime.FlightToLaunchHeight(v0y, ay)` returns `2·v0y / -ay` and 0
+for anything with no apex; `Create` calls it when `data.Num("run_time") is null &&
+data.Has("bounce_sequence")`, so an *authored* 0 still means zero. `AnimRuntime.cs:2020-2036` now
+reads `motion.RunTime` back per body instead of trusting the authored value, and reports the longest
+as the event's duration.
+
+**One thing the plan did not foresee, and it mattered.** Three channels were already divided by
+`rtSafe` *before* the solve could run — the `translation`/`translation_range` velocity ramps and,
+critically, `_tumbleRate = fwdTotal / rtSafe` (`MotionRuntime.cs:177`). At `rtSafe == 0` all three
+collapse to zero, so a naive solve would have made the debris fly without its authored tumble. The
+launch is now collected into a `rampTotal` local and everything run-time-denominated is folded in
+*after* the flight time settles. Confirmed in the arc: `part4` logs
+`(-6466,1, 23,8, -3433,4) rot (5,8,…)` → `(-6481,2, 15,7, -3452,3) rot (8,7,…)` — descending past
+apex, travelling in x/z, and turning.
+
+**Verified — with an able-to-fail control.** `--freecam --chapter=C1 --destroy=refuel --debug-anim`
+over five tank kills: **20** ballistic launches with the solve on, **10** with it disabled behind a
+temporary `false &&` and rebuilt. Exactly +2 per tank (`part3`, `part4`), and the number is one that
+can move. `.\RunTests.ps1` **PASS**: 352 units, 17/17 engine suites, engine errors clean, **13/13
+goldens hash-identical** — `c1-destroy-effects` included, confirming the predicted zero blast
+radius. Eight-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5): every one exit 0, zero
+errors; the goldens are the stronger unchanged-geometry evidence, being pixel-exact.
+
+**Instrument fixed on the way (`LOG-5`).** `LogMotions` prints at most 12 motions
+(`AnimRuntime.cs:3299`) and five tank kills put **34** in flight at once, so `part3` sat past the cap
+and the truncated list read exactly like "it never launched" — which I briefly believed. The
+per-second line now leads with `N live motion(s), M ballistic launch(es) so far`; the cumulative
+counter is uncapped and is the only headless answer to whether a launch happened. `part3`'s own
+position samples are still behind the cap; the counter A/B is what carries it.
+
+**Not done here:** the bounce sequence still does not fire (A3), and the instance still dies at t=0
+(A4), so `sparkout3`/`sparkout4` remain unreached and `trailpuffer3` still stops on `BL-236`'s
+instance cap rather than at the landing.
+
+### Original approach (kept for reference)
 
 **Goal.** A bounce-terminated launch reports a real duration instead of 0, and its piece leaves the
 wreck on its own parabola.
