@@ -55,6 +55,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
+- `src/Mech3/SessionArchives.cs` — `OpenFor(ArchiveIntent)` opens the five archives a chapter build needs and the matching `WorldSession.Options` lifetime flags, so `GameSession`, the anim lab and the test harness open the same five without hand-setting the flags.
 - `src/Mech3/EmptyStage.cs` — the `--stage=empty` test stage: a collidable ground plane under a code-generated grid, standing in for a chapter world.
 - `src/Mech3/WavFile.cs` — pure-C# WAV parser + MS ADPCM→PCM16 decoder (the game's format; Godot can't load it).
 - `src/Mech3/SoundArchive.cs` — WAV lookup over a sounds extraction → cached `AudioStreamWav` (forward loop when LOOPED).
@@ -1566,6 +1567,25 @@ where most `PUFFER_STATE`s fire.
   the one that switches the subject off (C1/IA1 hides `hk_zep`); a node stage shows the subtree in
   its gamez base state.
 
+## src/Mech3/SessionArchives.cs
+`OpenFor(ArchiveIntent, gamezPath, texturesPath, soundsPath, zrdrPath, mute)` opens the five
+archives one chapter build needs (gamez, textures, sounds, sound defs, sound groups) and returns
+them alongside the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild` pair
+`ArchiveIntent` implies — `Session`/`Lab` (textures outlive; sounds only in `Lab`) or `Suite`
+(neither). One seam replaces the two near-identical open sequences `GameSession.LoadArchives` and
+`TestHarness.BuildWorld` used to hand-write (`BL-241`'s own fix note: the harness forgot
+`TexturesOutliveBuild`). `StartupProfile.Mark`/`Record` calls are unconditional here, same as
+`WorldSession.Build`'s own phases — a no-op with no session under measurement, which is what lets
+the test harness drive the same code blind.
+⚠ **`OpenFor` chooses the flags, it does not collapse them** — `WorldSession.cs`'s own decision
+  ("one flag per archive because the two lifetimes differ") stands; `Session` and `Lab` still
+  disagree on `SoundsOutliveBuild`. Archive ownership past `OpenFor`'s return (`_sessionTextures`,
+  `LabTextures`/`LabSounds`, the `using` locals in `TestHarness.BuildWorld`) is still each caller's
+  own — `OpenFor` only opens the archives and states the two flags, it does not dispose anything.
+⚠ The sound archive is scoped to the build (`haveSounds` gates it on `!mute` and the file/directory
+  existing) and the texture archive never is — reproduce that asymmetry per intent; do not
+  normalise it away.
+
 ## src/Mech3/EmptyStage.cs
 The `--stage=empty` test stage: a flat collidable 20 km ground plane under a 100 m grid, standing in
 for a chapter world so flight/ballistics runs boot in ~2 s with nothing else in the frame.
@@ -1584,6 +1604,10 @@ and `StartupProfile`; delegates to the `src/Session/` clusters (LiveryResolver, 
 PlaneRoster, FlightRigAssembler, WorldEffectsFactory, WeatherRig) and to `Testing.ProbeRunner`/
 `CaptureDirector` on the Launcher — read `src/Session/Launcher.cs`'s entry too before touching the
 build's edges. `BuildsCollision` is the only spelling of "does this session build colliders".
+`LoadArchives` opens the five session archives through `SessionArchives.OpenFor` (`ArchiveIntent.Lab`
+when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuild`/
+`SoundsOutliveBuild` come from now — `BuildWorldStage`'s `WorldSession.Options` reads them off
+`BuildState`, it does not set them by hand.
 ⚠ **It parses no args and resolves nothing** — the Launcher hands it the one `SessionSpec` its
   session is built from; **a new flag is a SessionSpec change**. `_menuPads` is the deliberate
   exception: join-flow session state riding the `LauncherContext`, never the spec.
@@ -1686,7 +1710,10 @@ scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSessio
 PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `TestContext.
 EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
 for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
-default-chapter world built before the set is never reused in its place.
+default-chapter world built before the set is never reused in its place. `BuildWorld` opens its
+archives through `SessionArchives.OpenFor(ArchiveIntent.Suite, …)`, then `using`s the returned
+`Textures`/`Sounds` itself — `OpenFor` states the (both-false) lifetime flags, it does not own the
+disposal.
 ⚠ **In-engine is the smaller half.** Only checks that need a live Godot belong here; anything
   that runs without the engine goes in `CSVM.Tests` (`dotnet test`) instead.
 ⚠ **Engine-error policy.** Native `ERROR: …` lines are screened out of band against

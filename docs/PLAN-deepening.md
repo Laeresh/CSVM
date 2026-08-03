@@ -183,7 +183,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave F — invariants the caller no longer remembers
 
-16. ☐ `SessionArchives.OpenFor(intent)`
+16. ☑ `SessionArchives.OpenFor(intent)`
 17. ☐ Seal the raw effects builder (`BL-232`)
 
 ### Wave G — three runtimes, three interfaces
@@ -962,7 +962,7 @@ rather than by attrition.
 
 # Wave F — invariants the caller no longer remembers
 
-## F16 ☐ `SessionArchives.OpenFor(intent)`
+## F16 ☑ `SessionArchives.OpenFor(intent)`
 
 **Goal.** Opening the archives names an intent, and the lifetime flags come with it — no caller
 sets them by hand.

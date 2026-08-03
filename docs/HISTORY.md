@@ -11839,3 +11839,99 @@ clean.
 
 **Wave E is complete** (`E12`–`E15b`). Emitter lifetime and the emitter itself are both behind
 seams, both assertable without a GPU, and `BL-241` is closed. Wave F (`F16`/`F17`) is next.
+
+## 2026-08-03 — `SessionArchives.OpenFor(intent)` (`PLAN-deepening` F16)
+
+**The seam.** `GameSession.LoadArchives` and `TestHarness.BuildWorld` opened the same five archives
+(gamez, textures, sounds, sound defs, sound groups) with near-identical lines, and one of the two
+forgot a flag — `BL-241`'s own trap. `SessionArchives.OpenFor(ArchiveIntent, gamezPath, texturesPath,
+soundsPath, zrdrPath, mute)` (`src/Mech3/SessionArchives.cs`) is now the one place that opens them,
+returning the archives plus the `WorldSession.Options.TexturesOutliveBuild`/`SoundsOutliveBuild`
+pair the caller's `ArchiveIntent` (`Session`, `Lab`, `Suite`) implies, instead of each caller setting
+the flags by hand.
+
+**The flags per intent, kept apart on purpose.** `Session` and `Lab` both keep `TexturesOutliveBuild`
+true (the runtime keeps baking `PUFFER_STATE` atlases at RUNTIME, `BL-234`); only `Lab` also sets
+`SoundsOutliveBuild` — a game session still scopes its `SoundArchive` to the build (the prewarm
+covers it), only the lab node owns both past the bootstrap. `Suite` sets neither: `TestHarness.
+BuildWorld`'s archives stay `using` locals of the build, exactly as before. `OpenFor` *chooses* the
+flags per `WorldSession.cs`'s own decision ("one flag per archive because the two lifetimes
+differ") — it does not collapse them into one.
+
+**What moved and what didn't.** `GameSession.LoadArchives` now calls `OpenFor` with
+`ArchiveIntent.Lab` when `_spec.AnimLab`, else `.Session`, and `BuildState` carries the two returned
+flags through to `BuildWorldStage`'s `WorldSession.Options` instead of the `TexturesOutliveBuild =
+true, SoundsOutliveBuild = _spec.AnimLab` literals that lived there before. `TestHarness.BuildWorld`
+calls `OpenFor(ArchiveIntent.Suite, …)` and still `using`s the returned `Textures`/`Sounds` itself —
+archive *disposal* ownership (`_sessionTextures`, `LabTextures`/`LabSounds`, the harness's `using`
+locals) stays exactly where it was; `OpenFor` only opens the archives and states the two lifetime
+flags. `StartupProfile.Mark`/`Record` calls moved into `OpenFor` unconditionally, same as
+`WorldSession.Build`'s own phases — a no-op with no session under measurement, which is what already
+let the test harness drive the same build code blind.
+
+**No revisit from `E15`.** Decision 3's consequence for Wave F held: `E15`'s counting fake needed
+`TexturesOutliveBuild` in neither its record nor an archive-lifetime change, so `F16` had nothing to
+undo — it lands as originally scoped.
+
+**Verified.** `.\RunProbe.ps1 --freecam --chapter=C1 --screenshot=…` still prints every phase the
+contract names: `[perf] startup mode=freecam chapter=C1 total=3487.7 boot=1219.0 gamez=543.4
+textures=2.7 sounds=0.3 zrdr=16.5 world=684.9 clutter=30.0 anim=294.9 bind=359.5 prewarm=96.6
+edge=10.4 weather=38.7 rest=90.1 first_frame=100.7` — nothing folded into `rest`. `.\RunTests.ps1`
+full pass: 393 unit tests, **20/20 engine suites**, **13/13 goldens hash-identical**, engine errors
+clean. The 8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5): zero errors in all
+eight.
+
+## 2026-08-03 — the `destroyable_parts` pair is (hit points, armor), unblocking `BL-085`
+
+**Documentation only; no code changed.** A nine-day-old blocker cleared.
+
+**What settled it.** `docs/formats/vehicle.md` carried "the hp pair: armor + hit points" as a
+hypothesis with an explicit reason it could never be resolved: all 88 shipped pairs are *equal*,
+so no measurement over `extracted/` separates (armor, hp) from (hp, hp) or (max, current). The
+original's **armory** varies armor independently of health, which the data cannot. Its per-zone
+allocation is in units that are **armor points 1:1**, and a **stock** airframe reads the same
+per-zone numbers the zrdr def carries — a stock Bloodhawk shows ~20 units on each of its four
+zones against `pbloodhawk`'s 20/20/20/20. Observed at the controls by the user. The pairs are
+equal because they are *stock loadouts*, not because the number is duplicated.
+
+**Re-sourced off the design spec.** `vehicle.md`'s evidence item 4 appealed to the July-1999
+pre-release design document — the source `playtest.md` flags as "unreliable as a class" for
+HUD/damage material. It now rests on retail resources already in the install and previously cited
+nowhere: `rof/ui_strings.json` id 1039 "3) ADD ARMOR" with ids 1044–1047 Nose/Tail/Left Wing/Right
+Wing, id 1155's "Left and right wings must be balanced!" (and `leftwing == rightwing` in all 22
+defs), id 206's "the **default** armor … for this new airframe". Armour-first depletion, which
+`PLAN-M3-weapons.md` C23 derived from a dominance argument, is stated outright by id 3372: "AP
+rounds tend to punch clean through unarmored surfaces, inflicting very little damage."
+
+**Also corrected, from the same pass.** Magnesium is an *additive* offset — exactly slug **+0.5
+armor / −0.5 health** on all five calibers, not the `≈1.04–1.17×` range the page carried, and not
+an all-round upgrade over slug. Within a caliber all four ammo types share `FIRE_RATE`,
+`VELOCITY`, `RANGE` and `CLUSTER_SIZE`/`AMMO_LIMIT` — there is no rate-of-fire or magazine penalty
+on any type. `wep_05` (AP rocket) racks `CLUSTER_SIZE` **4** against HE's 3 on the same
+`IMPACT_PROXIMITY` 15. Both corrections refute claims in the community-sourced research document
+that prompted this pass; recorded so they are not re-imported.
+
+**New nuance recorded.** The whole-vehicle `armor`/`health` pair and the per-part pools are not
+alternatives — 11 `r*` AI variants resolve **both** (`rbloodhawk → bloodhawk` inherits `armor 64`
+while carrying its own 4×20/20 parts), while no `p*` player def resolves a whole-vehicle pair at
+all. Which one an AI combatant spends is undecided (`BL-102`).
+
+**Still open.** The `ARMOR: Standard (N/T/W)` airframe blurb (5 of 11 planes) is *not* the stock
+allocation — stock is ~20 — so it is most likely a per-zone cap. No linear map relates it to the
+zrdr numbers (triple ÷ part-sum = 13.75 / 16.7 / 12.0 / 21.7 / 16.7), and the armory's own
+constants are executable-resident. `CAP-19` reads the caps off the screen.
+
+**Outcome.** `BL-085` is unblocked and schedulable — **not scheduled**; it is plan-sized and wants
+its own wave, and `PLAN-deepening` forbids behaviour change. Its trap list now carries the two
+that matter: do not fold armour into hp (they are equal *at stock only*, and armour is
+purchasable), and the 2× effective HP a real armour pool gives is intended rather than a
+regression to tune away. `BL-173` is no longer blocked on an open question, only on `BL-085`
+landing. `PlaneStats.cs:249-256` still drops the second float — now a recorded gap, not an
+undecoded field. New rule `INSTR-7` in `docs/verification.md`: *"not decidable from this data" is
+a fact about the instrument, not the question.*
+
+**Verified.** No code touched, so `.\RunTests.ps1` is a regression check only: full pass, 393 unit
+tests, 20/20 engine suites, 13/13 goldens hash-identical. `analysis/gdd-cross-check/damage_pools.py`
+re-run read-only: numeric output unchanged (88 entries, 0 unequal, 46 weapons with both damage
+figures, 18 differing) — the finding came from outside the data, so the probe's verdict of
+"not decidable from this data" was correct and stays recorded as such.
