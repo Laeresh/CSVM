@@ -101,6 +101,11 @@ public sealed class FlightModel
     // inside the video's clock uncertainty. The video also settles what was an open question: the
     // original's pitch rate does NOT fall off with speed (37.9 / 33.7 / 30.7 / 36.5 °/s binned
     // over 120–280 mph round a loop, flat within the noise), so speed-independent pitch is right.
+    // ⚠ The STEADY rates above are pinned; the TRANSIENT shape is a known divergence. A square-wave
+    // pitch-cadence sweep of the original (2026-08-03, docs/HISTORY.md) rolls off 3.5× steeper than
+    // the τ → ∞ ceiling of the single first-order lag this integrator implements, so `1/damp` is the
+    // wrong shape for the original's pitch transient even though it gives the right steady rate.
+    // Open as BL-147; do not "fix" it by moving these Tune constants, which set the steady rate.
     private const float PitchTune = 0.75f;        // TUNE: pinned to the measurements above
     private const float YawTune = 1.32f;          // TUNE: pinned (at cruise eff)
     private const float RollTune = 2.12f;         // TUNE: pinned

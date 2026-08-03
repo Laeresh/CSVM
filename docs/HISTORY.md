@@ -12306,6 +12306,14 @@ exact form, so only the **upper bound τ ≲ 0.2 s sim** is real. Our held-stick
 demonstrable and `PitchTune` 0.75 is not implicated**, which now defends it twice over (sustained
 rate before, spin-up bound now).
 
+> ⚠ **SUPERSEDED the same day — see "`CAP-04` discharged: the original's pitch is not a single
+> first-order lag" at the bottom of this file.** The τ ≲ 0.2 s bound in this paragraph, and the
+> "no spin-up mismatch is demonstrable" that follows from it, are only meaningful *if* the response
+> is a single first-order lag. A square-wave cadence sweep across six periods showed it is not — the
+> roll-off is 3.5× steeper than that model's τ → ∞ ceiling — so the bound describes a shape the
+> original does not obey. The model-free parts of this paragraph (R = 26–31 °/sim-s, the 0.66 s sim
+> rise) stand, as does the `PitchTune` 0.75 defence, which rests on the *steady* rate.
+
 **Where the "sluggish" feel probably comes from.** At matched smoothing the held key reaches its rate
 in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s — 1.5× to 8× slower, and
 not reproducible between takes, which is a human hand rather than a flight model. The check that
@@ -12597,3 +12605,62 @@ terrain is), the after shot has an upright textured world under readable red/gre
 the clutter billboards tinted in place and facing the camera. `.\RunTests.ps1`: 22/22 engine suites,
 0 unexpected engine errors, all 13 goldens hash-identical — `mix(x, t, 0.0)` is exactly `x`, so
 carrying the line changes no pixel while the overlay is off.
+
+## 2026-08-03 — `CAP-04` discharged: the original's pitch is not a single first-order lag
+
+The capture retires; `BL-147` stays open. This entry **supersedes** the τ ≲ 0.2 s bound in the
+earlier `CAP-04` entry above (a pointer is stapled there), because that bound assumed the very model
+this measurement refutes.
+
+**How it was measured.** The original's pitch is a digital key, so a single step edge is ~4 frames at
+30 fps and unresolvable. Driving the arrow keys as a **square wave** instead turns the time constant
+into a ripple *amplitude* at a known frequency, which averages over hundreds of cycles. The driver is
+`analysis/video-flight-calibration/pitch_cadence.ahk` (AutoHotkey v2): it schedules every edge against
+an absolute `QueryPerformanceCounter` clock, busy-spins the last 25 ms, and logs every press and
+release. Verified before use with the sending stubbed — 230.000 ms measured, jitter sd 0.002 ms,
+cumulative drift 0.004 ms. The seven flown clips logged 1300.0 / 930.0 / 700.0 / 570.0 / 370.0 /
+230.0 ms at 0.002–0.535 ms jitter, so the input is measured rather than assumed. All seven gate
+`checkclip` **OK** and are the cleanest footage in the corpus: dial translation 0 px on six of them,
+second-difference noise 0.59–2.64 ft.
+
+**The result.** Ripple amplitudes were **26.31 ± 2.37 / 7.07 ± 0.21 / 3.09 ± 0.09 / 0.63 ± 0.13 ft**
+at 1300 / 930 / 700 / 570 ms; 370 and 230 ms sit at the noise floor. From 1300 → 570 ms the response
+falls **42×** over a frequency ratio of only 2.28. Double integration (rate → attitude → altitude)
+accounts for 5.2× of that, and a single first-order lag can add at most another 2.28× — the τ → ∞
+ceiling, not a fit. The steepest possible one-lag model therefore gives 12× against an observed 42×:
+**3.5× more roll-off than any single first-order lag permits.** Our rotation model is exactly one
+first-order lag (`BodyRates += (cmd - BodyRates*damp)*dt`), so on this axis it is the wrong shape.
+
+**What it rules out.** The obvious alternative — that the game simply drops short key presses, making
+the high-frequency nulls an input artefact — is excluded by the duty-mode control. Pulsing the pull
+key alone at a measured 0.507 duty (mean press 116.6 ms) produced a large sustained pull: the aircraft
+climbed 1775 → 4892 ft and went over the top with speed bleeding to 109 mph. 115 ms presses reach the
+game. The sliding-window amplitude plot shows the same thing independently — the four detections hold
+a flat amplitude across their whole clip while 370/230 sit in the noise throughout, so the cadence ran
+in every clip and the nulls are the aircraft's own roll-off.
+
+**The honest limit, and why it does not reopen the question.** This is *not* a fitted τ and must not
+be quoted as one. The clips are not at a common operating point: mean airspeed runs 206–259 mph and
+the ripple spans 0.6–26 ft, so the long periods are a large-amplitude manoeuvre and the short ones a
+small perturbation, and a transfer function fitted across that mixes regimes. But the refutation does
+not depend on the fit — it is a 3.5× margin against a hard ceiling, far outside the ±20% amplitude
+systematics and the ±12% airspeed spread. What remains unknown is the *right* shape, not whether ours
+is wrong.
+
+**Two methodological traps, both paid for here.** (1) High-passing altitude with a sliding quadratic
+before fitting the sinusoid has real gain at f₀ — the 930 ms amplitude moved 4.87 → 6.85 → 7.07 ft as
+the span changed, and an intermediate figure was published off the bad estimator before it was caught.
+Fit **polynomial + sin + cos simultaneously** inside a window of ≥8 periods instead; that is stable to
+3% on the strong clips. (2) The script beeps at start and stop as an alignment marker, and it is
+useless here: **Xbox Game Bar records game audio only**, so the beep is in none of the clips. Absence
+of the beep is not evidence the cadence did not run — a wrong inference that briefly cost two clips'
+worth of conclusions. The analysis finds the window by matched filter on altitude instead.
+
+**Nothing changed in the build and no goldens moved.** `PitchTune` 0.75 is still not implicated: it
+sets the *steady* rate, which continues to match at 33 °/sim-s. What is now owed on `BL-147` is a
+matched A/B — run the identical cadences through our own build via `--hold`, decode altitude the same
+way, and compare amplitude-for-amplitude. That reproduces the operating points and the nonlinearity,
+so the objection above disappears and no transfer function has to be assumed. It needs no further
+footage of the original, which is why the capture retires now. The user has deferred it into a planned
+flight-model run. Footage and logs are kept at `playtest/CAP-04/` (git-ignored, not swept) with the
+plot `cadence_response.png`, and are retained deliberately because `BL-147` is still open.

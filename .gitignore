@@ -76,3 +76,7 @@ playtest-notes.md
 # in CLAUDE.md. Unlike .scratch/ this is NOT swept by CleanScratch.ps1, so a capture
 # survives until the playtest item that owns it is closed.
 /playtest/
+
+# pitch_cadence.ahk writes its edge logs next to itself; the ones that belong to a
+# capture are kept with it under playtest/<ID>/, so this is scratch output only.
+/analysis/video-flight-calibration/cadence-logs/

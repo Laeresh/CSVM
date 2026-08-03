@@ -1191,8 +1191,9 @@ needs one of them to move needs a new measurement first.
   *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
   pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
 
-- `BL-147` **Pitch's spin-up: the premise was wrong, and what survives of it is consistent with our
-  0.2 s. Bounded 2026-08-03 from `CAP-04`, not closed.**
+- `BL-147` **Pitch's spin-up: the premise was wrong, and the original's response is NOT a single
+  first-order lag — which is exactly what we implement. Measured 2026-08-03 from `CAP-04`; the
+  capture is discharged and retired, the item stays open pending an A/B against our own build.**
   The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
   sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
   the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
@@ -1214,8 +1215,12 @@ needs one of them to move needs a new measurement first.
   **0.66 s sim**. The exponential **τ is not resolvable** — fitted τ tracks the smoothing window
   (0.73 → 0.19 s sim as the window tightens), so all the footage supports is an **upper bound
   τ ≲ 0.2 s sim**. Our model's held-stick spin-up is `1/ang_momentum_damp` = 1/5.0 = **0.2 s**
-  (`FlightModel.cs`, `return_rate` adds only on release), which sits exactly at that bound: **no
-  spin-up mismatch is demonstrable, and `PitchTune` 0.75 is not implicated.**
+  (`FlightModel.cs`, `return_rate` adds only on release), which sits exactly at that bound.
+  ⚠ **That "no mismatch is demonstrable" reading is SUPERSEDED by the cadence sweep below.** The
+  bound above is only meaningful *if* the response is a single first-order lag, and the sweep shows it
+  is not — so a τ derived from it describes a model the original does not obey. What survives from the
+  loop clip is the asymptote R = 26–31 °/sim-s and the 0.66 s sim rise, both model-free.
+  `PitchTune` 0.75 is still not implicated: it sets the steady rate, which continues to match.
   **The sluggishness is most likely the tap cadence, not the airframe.** At matched smoothing the held
   key reaches its rate in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s —
   1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
@@ -1239,8 +1244,51 @@ needs one of them to move needs a new measurement first.
   | 0.60 s | 18 | 6.99 ft | 10.22 / 6.99 / 5.06 |
   | 1.00 s | 30 | 26.3 ft | 32.5 / 26.3 / 20.9 |
 
-  Shorter periods discriminate τ harder, longer ones give more signal; **0.25–0.60 s is the band**, and
-  a 20 s run at each of ~0.25 / 0.40 / 0.60 / 1.00 s in one session is the measurement. **Fit the ratio
+  **FLOWN 2026-08-03 — seven clips, and the result is a refutation, not a τ.** Six alternating cadences
+  (1300 / 930 / 700 / 570 / 370 / 230 ms) plus a 230 ms duty control. All gate `checkclip` **OK** and
+  are the cleanest footage in the corpus (dial translation literally 0 px on the six; second-difference
+  noise 0.59–2.64 ft). Cadence logs measured **1300.0 / 930.0 / 700.0 / 570.0 / 370.0 / 230.0 ms** with
+  jitter sd 0.002–0.535 ms, so the input is known, not assumed.
+
+  | period | f₀ | ripple amplitude | operating point |
+  |---|---|---|---|
+  | 1300 ms | 0.769 Hz | **26.31 ± 2.37 ft** | 246 mph mean |
+  | 930 ms | 1.075 Hz | **7.07 ± 0.21 ft** | 206 mph |
+  | 700 ms | 1.429 Hz | **3.09 ± 0.09 ft** | 259 mph |
+  | 570 ms | 1.754 Hz | **0.63 ± 0.13 ft** | 213 mph |
+  | 370 ms | 2.703 Hz | 0.065 — at the floor | 221 mph |
+  | 230 ms | 4.348 Hz | 0.037 — at the floor | 227 mph |
+
+  **The headline: from 1300 → 570 ms the response falls 42×, over a frequency ratio of only 2.28.**
+  Double integration (rate → attitude → altitude) accounts for 5.2× of that. A single first-order lag
+  can add at most another 2.28× — that is the τ → ∞ limit, not a fit. So the steepest possible
+  one-lag model gives 12×, and the original delivers **42×: 3.5× more roll-off than any single
+  first-order lag permits.** That margin is far outside the ±20% amplitude systematics and the ±12%
+  spread in mean airspeed. **Our rotation model is exactly one first-order lag**
+  (`BodyRates += (cmd - BodyRates*damp)*dt`), so on this axis the original is not that shape.
+  **The duty control settles the alternative explanation.** 50% duty on the pull key alone (measured
+  duty fraction 0.507 from the log, mean press 116.6 ms against a nominal 115) produced a large
+  sustained pull — the aircraft climbed 1775 → 4892 ft and went over the top, speed bleeding to
+  109 mph. So **115 ms presses unquestionably reach the game**, and the 370/230 ms nulls are the
+  aircraft's own roll-off, not dropped input. The sliding-window amplitude plot shows this directly:
+  the four detections hold a flat amplitude across the whole clip while 370/230 sit in the noise
+  throughout — the cadence ran in every clip.
+  ⚠ **This is still not a fitted τ, and must not be quoted as one.** The clips are not at a common
+  operating point: mean airspeed runs 206–259 mph and the ripple itself spans 0.6–26 ft, so the low
+  frequencies are a large-amplitude manoeuvre and the high ones a small perturbation. A transfer
+  function fitted across that mixes regimes.
+  ⚠ **Trap, and it cost a wrong figure before it was caught.** High-passing altitude with a sliding
+  quadratic *before* fitting the sinusoid has real gain at f₀ — the 930 ms amplitude moved 4.87 → 6.85
+  → 7.07 ft as the span changed. The correct estimator fits **polynomial + sin + cos simultaneously**
+  inside a window of ≥8 periods, where a cubic can absorb almost none of the fundamental; that is
+  stable to 3% on the strong clips. Never detrend and then fit.
+  **Next, and it needs no new footage from the original:** run the identical cadences through our
+  build via `--hold`, decode altitude the same way, and compare amplitude-for-amplitude. Same input,
+  same measurement, same nonlinearity and same operating points — so the operating-point objection
+  above disappears and no transfer function has to be assumed. Plot: `playtest/CAP-04/cadence_response.png`.
+
+  *(Design notes from before the flight, kept because they are what made the measurement work.)*
+  Shorter periods discriminate τ harder, longer ones give more signal. **Fit the ratio
   across periods, not one period's absolute amplitude** — the ratio cancels the unknown gain from body
   rate to flight path, which is the one systematic we cannot otherwise pin.
   ⚠ Pick periods that are **not** an integer number of frames (0.40 s and 1.00 s are exactly 12 and 30
@@ -1257,12 +1305,34 @@ needs one of them to move needs a new measurement first.
   50%-duty single-key run must give mean 16.5 °/sim-s. If it doesn't, the game is quantising the key
   state and the input waveform is not what the macro thinks. Keyboard auto-repeat off, raw key
   down/up, fixed throttle.
+  **The driver is written: `analysis/video-flight-calibration/pitch_cadence.ahk`** (AutoHotkey v2).
+  **F13–F18** run the periods longest-first (1300/930/700/570/370/230), **F19/F20** the duty
+  self-checks, **F21** panics and releases both keys. Everything is on F13–F24 deliberately: AHK
+  hotkeys are global and *consume* the key, so a binding on any key a real keyboard emits would break
+  that key everywhere while the script runs — F13+ are legal virtual keys nothing else claims, and
+  Synapse can remap a physical key onto them. It schedules
+  every edge against an absolute `QueryPerformanceCounter` clock (so error never accumulates), raises
+  the Windows timer to 1 ms, busy-spins the last 2 ms, and sends **extended scan codes** `sc148`/`sc150`
+  — *not* `sc048`/`sc050`, which are numpad 8/2 and would drive the camera instead of the elevator.
+  It writes `cadence-logs/*.csv`, a timestamped log of every edge: **that log is the deliverable as
+  much as the video is**, because it makes the input waveform measured rather than assumed, and it
+  reports the run's true period and jitter sd when it stops. It beeps once at start and twice at stop —
+  ⚠ **useless as an alignment marker in practice: Xbox Game Bar records game audio only, so the beep
+  is in none of the clips.** Do not infer anything from its absence; find the cadence window by matched
+  filter on altitude instead, which is what the analysis does.
+  **Timing verified 2026-08-03** (sending stubbed so the test could not type into anything): 26 cycles
+  at a nominal 230 ms measured **230.000 ms, sd 0.002 ms**, worst half-step 0.011 ms off, cumulative
+  drift 0.004 ms — ~2 µs of jitter against a 33 ms frame interval. ⚠ The first cut slept to within
+  2 ms of each edge and landed **±12 ms** out, because Windows' ~15.6 ms scheduler quantum survives
+  `timeBeginPeriod(1)`; the fix is the 25 ms busy-spin window (`SPIN_MS`). Don't "optimise" it back.
   ⚠ **Traps.** (a) `PitchTune` **0.75 is a pinned measurement** (see this section's header warning) —
-  and it is now *doubly* defended: the sustained rate matched before, and the spin-up bound matches
-  now. It cannot move to fix a feel report. (b) **Do not quote a τ from `CAP-04` or from the loop
-  clip.** Every fitted τ here is smoothing-limited and falls monotonically as the window tightens —
-  `FINDINGS.md`'s "a peak found by differentiating a smoothed signal is a smoothing artifact", in its
-  exact form. Only the upper bound is real. (c) Don't fold this into `BL-097` — same shape of gap,
+  and the cadence sweep leaves it untouched: it sets the **steady** rate, which still matches, while
+  what the sweep refutes is the *transient shape*. It cannot move to fix a feel report — and it is
+  emphatically not the knob for the roll-off mismatch. (b) **Do not quote a τ from `CAP-04`, from the
+  loop clip, or from the cadence sweep.** The loop clip's fitted τ is smoothing-limited and falls
+  monotonically as the window tightens (`FINDINGS.md`'s "a peak found by differentiating a smoothed
+  signal is a smoothing artifact", in its exact form); the sweep's points are not at one operating
+  point. The sweep refutes a *shape*; it does not fit a constant. (c) Don't fold this into `BL-097` — same shape of gap,
   different axis, and pitch's own coupling to speed (`BL-092`'s induced-drag gap) makes conflating the
   two easy to get wrong. (d) The digital-input finding is not pitch-specific — it means **`BL-097`'s
   roll question has the same defect**: there is no partial aileron deflection either, so a "moderate

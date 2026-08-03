@@ -55,6 +55,18 @@ CLIPS = {
     "cap06": "CAP-06.mp4",                              # stall-warning approach
     "cap06b": "CAP-06 2.mp4",
     "cap10": "CAP-10 2.mp4",                            # engine note through a dive
+    # 2026-08-03 CAP-04 re-record: square-wave pitch cadence driven by
+    # pitch_cadence.ahk, one clip per period, each with its edge log alongside.
+    # tau comes from the ripple amplitude ACROSS these, not from any one of them.
+    "pt230": "playtest/CAP-04/Pitch Test 230ms.mp4",
+    "pt370": "playtest/CAP-04/Pitch Test 370ms.mp4",
+    "pt570": "playtest/CAP-04/Pitch Test 570ms.mp4",
+    "pt930": "playtest/CAP-04/Pitch Test 930ms.mp4",
+    "pt700": "playtest/CAP-04/Pitch Test 700ms.mp4",
+    "pt1300": "playtest/CAP-04/Pitch Test 1300ms.mp4",
+    # duty-mode control: pulses the pull key alone at 50%, so it measures a MEAN
+    # rate rather than a ripple - the test of whether short presses reach the game.
+    "pt230duty": "playtest/CAP-04/Pitch Test 230ms duty.mp4",
 }
 
 
@@ -69,7 +81,13 @@ def layout(w, h):
 
 
 def extract(short, fname):
+    # Normally a path under VID. A clip still staged in playtest/<ID>/ (captures
+    # owned by an open item, git-ignored and not swept) is given repo-relative
+    # instead, so it can be decoded without being moved in among the user's own
+    # game recordings.
     p = os.path.join(VID, fname)
+    if not os.path.exists(p) and os.path.exists(fname):
+        p = fname
     g = iio.read_frames(p)
     meta = next(g)
     w, h = meta["size"]
