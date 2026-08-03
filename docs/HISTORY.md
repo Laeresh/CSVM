@@ -11382,3 +11382,36 @@ PowerShell" note (written for `--direction=`/`--pos=`) applies equally to `--hol
 
 **`PROJECT_CONTEXT.md`'s "Current status" now names `PLAN-deepening`** (Wave A) as the active plan —
 it named no active plan before this item started.
+
+## 2026-08-03 — the reticle's integration step, settled by census, and `Ballistics`' first unit tests
+
+**What landed.** No behaviour change. `PLAN-deepening` `A2` asked which step size is correct for
+`Ballistics.March` — the reticle's hard-coded `1/120 s` or the sim `dt` the rounds are stepped with.
+The census of `extracted/zrdr/weapons.zrd.json` says the divergence is unreachable, so **the fixed
+step stays**, now as a recorded choice: of the 48 `BALLISTICS` entries exactly four carry a non-zero
+`ACCELERATION` (`wep_04` incendiary rocket, `wep_25` glide bomb, `wep_26` fake weapon, `wep_27` AA
+flak rocket, all 150 m/s²) and **none** carries a non-zero `GRAVITY` — the key is present on five
+entries, valued `0.0` on every one. None of the four is a gun (no `CANNON`, no `CALIBER`), and a gun
+group can only ever resolve caliber + ammo → `wep_30..73`, so no marched round can accelerate or
+fall. On a straight line the step size cannot move the endpoint, and a fixed step additionally keeps
+the reticle from twitching with the frame rate. `FlightController.cs`'s "guns are straight-line so it
+is moot" comment — true when written, unverified since — is replaced by that reasoning, and
+`docs/architecture.md`'s `src/Flight/Ballistics.cs` ⚠ now records the settled answer instead of an
+open question.
+
+**New:** `CSVM.Tests/BallisticsTests.cs`, the first coverage this model has ever had — 10 tests, all
+expectations computed by hand from the scheme rather than captured from the implementation. A
+straight-line march that lands at the asked-for distance *and is unchanged by halving the step*
+(the A2 claim, as an assertion); inherited plane velocity entering the model; a gravity drop of
+10.1 m over 100 × 0.01 s at 20 m/s², which is the semi-implicit sum `g·dt²·Σn`, one `g·dt²` above
+the continuous 10.0 m; a rocket motor covering 532.5 m in 10 × 0.1 s from 450 m/s at 150 m/s²; the
+range cap at `RANGE` rather than the asked-for distance, and a diving round still stopping exactly
+200 m down its path while it speeds up (the cap is on path length, not time); a zero-speed round
+marching nowhere. The census itself is two `[ExtractedDataFact]` tripwires, so a data or loadout
+change that makes an accelerating weapon gun-reachable fails rather than going unnoticed.
+
+**How verified.** `.\RunTests.ps1` **PASS** — 361 units (10 new), 18/18 engine suites, 13/13 goldens
+hash-identical. Able-to-fail controls, both watched failing and restored: halving the gravity term in
+`Ballistics.ApplyForces` failed the drop test (and only it); dropping the `RANGE` term from `March`'s
+`cap` failed both range-cap tests. Note the range-cap-under-gravity test is *not* sensitive to the
+gravity break — its endpoint is invariant by construction, which is the property it asserts.

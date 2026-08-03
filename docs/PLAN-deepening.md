@@ -54,6 +54,7 @@ prose disagrees with itself.
 | 6 | What counts as "verified" for a pure refactor? | **13/13 goldens hash-identical plus `.\RunTests.ps1` green — and at least one new assertion that has been seen able to fail.** An unchanged green proves nothing on its own; every wave lands a test that was watched failing first. |
 | 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
 | 8 | When do those sessions run? | **Whenever — they contend on nothing.** A grilling session lands no code, so it never blocks or is blocked by a wave in flight. Running `D8` and `E12` early is free, and means D and E start against a settled interface instead of designing from scratch. |
+| 9 (2026-08-03, `A2`) | Should `March` take the sim step, or keep its fixed `1/120 s`? | **Keep the fixed step.** Census of the 48 `BALLISTICS` entries: four carry a non-zero `ACCELERATION` (`wep_04`, `wep_25`, `wep_26`, `wep_27` — all 150 m/s²), **zero** carry a non-zero `GRAVITY`, and none of the four is a gun. A gun group resolves caliber + ammo → `wep_30..73` only, so the divergence disproven claim 4 predicted is **unreachable**: every marched round is a straight line, and the step size cannot move a straight line's endpoint. A fixed step also keeps the reticle from twitching with the frame rate. Guarded by two `[ExtractedDataFact]` tripwires in `CSVM.Tests/BallisticsTests.cs`, so the answer re-checks itself if the data or the loadouts change. |
 
 ## ⚠ Read this before implementing anything
 
@@ -62,7 +63,7 @@ prose disagrees with itself.
 | 1 | "Converting the nine plain classes' `GD.Print` calls to `Log.Info` makes them unit-testable." | `Log`'s own console sink calls `GD.Print` directly (`Log.cs:185`, `:219–227`), so the conversion moves the native call one frame down the stack and buys nothing. The seam has to go **inside** `Log`. This is why `C6` precedes `C7` and not the reverse. |
 | 2 | "`BL-241` is fixed by setting `TexturesOutliveBuild` in `TestHarness`." | That makes the harness build real emitters; it does not give a suite anything to read. `BL-241`'s own fix note concedes the rest: `_activePuffers` is private and the census is a `GD.Print`. Without `E13`'s census on the interface, the flag alone leaves the assertion unwritable. |
 | 3 | "`BL-232` is a one-line swap of `BuildWorldEffectsRuntime` for `EnsureWorldEffects`." | `BL-232`'s own trap: `GameSession.cs:1222` wires the projectile pool's `EffectSink` **and** the world runtime's `ExternalEffect` in one place, and `EnsureWorldEffects` wires only the latter, only if unset. The two are not interchangeable without moving the sink wiring. |
-| 4 | "The reticle and the rounds already agree, the duplication is cosmetic." | They integrate at different step sizes: `ProjectilePool.SimStep` uses the caller's sim `dt`, `FlightController.BallisticImpactPoint` hard-codes `1f/120f` (`:916`). For a straight-line player gun this is moot; for any weapon carrying `ACCELERATION`/`GRAVITY` it is not. `A2` settles which step is correct — that is a real question, not a formality. |
+| 4 | "The reticle and the rounds already agree, the duplication is cosmetic." | They integrate at different step sizes: `ProjectilePool.SimStep` uses the caller's sim `dt`, `FlightController.BallisticImpactPoint` hard-codes `1f/120f` (`:916`). For a straight-line player gun this is moot; for any weapon carrying `ACCELERATION`/`GRAVITY` it is not. `A2` settled it (Decision 9): no gun-reachable weapon carries either, so the fixed step stays. |
 
 | Confidence | Items | What that means for you |
 |---|---|---|
@@ -100,7 +101,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave A — one ballistic model
 
 1. ☑ Extract `Ballistics` and route both callers through it
-2. ☐ Settle the integration step, and unit-test the model
+2. ☑ Settle the integration step, and unit-test the model
 
 ### Wave B — deciding an impact, apart from performing it
 
@@ -196,7 +197,7 @@ that would move if the rounds changed. Then a targeted `--viewer --weapon-lab` c
 caller's current `dt` at this item so the change is provably inert. Changing the step *and* moving
 the code in one commit makes the golden evidence unreadable.
 
-## A2 ☐ Settle the integration step, and unit-test the model
+## A2 ☑ Settle the integration step, and unit-test the model
 
 **Goal.** A recorded answer to which step size is correct, and the first unit tests the ballistic
 model has ever had.

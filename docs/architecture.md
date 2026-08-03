@@ -697,7 +697,11 @@ walk — range cap and 4096-iteration bound included — called once per frame b
 `FlightController.BallisticImpactPoint` with its own fixed `dt`). Extracted so the two callers cannot
 silently diverge; each still owns its own step size.
 ⚠ Both callers integrate at a different `dt` — `SimStep` the caller's sim step, `March` a hard-coded
-  `1/120 s` — a deliberate, still-open question, not an oversight to "fix" in passing.
+  `1/120 s` — and that is settled, not an oversight to "fix" in passing: of the 48 weapons only
+  `wep_04`/`25`/`26`/`27` carry a non-zero `ACCELERATION`, none carries a non-zero `GRAVITY`, and no
+  gun group can resolve any of the four (a gun is caliber + ammo → `wep_30..73`). Every marched
+  round is therefore a straight line, on which the step size cannot move the endpoint, and a fixed
+  step keeps the reticle from twitching with the frame rate. `BallisticsTests` guards the census.
 
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated

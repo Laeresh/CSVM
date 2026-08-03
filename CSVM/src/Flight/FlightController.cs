@@ -904,7 +904,11 @@ public partial class FlightController : Node3D
     private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
         Vector3 inheritVel, float distance)
     {
-        const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
+        // A fixed integration step rather than the sim's: no weapon a gun group can resolve carries
+        // ACCELERATION or GRAVITY (the four accelerating defs of the 48 are rockets and a glide
+        // bomb), so every marched round is a straight line, on which the step size cannot move the
+        // endpoint — and a fixed step keeps the reticle from twitching with the frame rate.
+        const float dt = 1f / 120f;
         return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
