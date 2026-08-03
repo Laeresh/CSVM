@@ -177,7 +177,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 12. ☑ **Grill the `EmitterDirector` interface and the seam** — no code *(landed 2026-08-03; Decisions 9–18)*
 13. ☑ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
-14. ☐ The counting fake, and proof it is reachable
+14. ☑ The counting fake, and proof it is reachable
 15. ☐ The suite `BL-241` says cannot exist
 15b. ☐ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
 
@@ -821,7 +821,12 @@ selectors into one parameterised `End` — the two axes are provably independent
 and `TearDownResourcesOf` share a selector, differ in disposition), and every shipped bug in this
 family was a selector error, which a collapsed call site would re-enable (Decision 12).
 
-## E14 ☐ The counting fake, and proof it is reachable
+## E14 ☑ The counting fake, and proof it is reachable
+
+**Landed 2026-08-03.** As sketched, with one addition the sketch left implicit: `WorldSession.
+Options.EmitterFactory` is read exactly once, inside `Build`, and never reassigned afterward — the
+same "no post-build swap" rule `TexturesOutliveBuild` already carries, stated explicitly this time
+because a caller now has a second way to reach in.
 
 **Goal.** A suite can observe emitter lifetime with no GPU, no `TextureArchive` and no `Puffer` —
 the third implementation that makes the `E13` seam real rather than hypothetical.
@@ -842,9 +847,15 @@ cycles `ACTIVE_STATE` 0/1 and depends on the entry surviving — or `E15` assert
 
 **Model recommendation.** medium — a small type against an interface `E13` has already settled.
 
-**Verify.** 13/13 goldens hash-identical (nothing in a session's path changed). Then confirm the
-fake is actually reachable: a scratch suite that installs it and reads one emitter start, before
-`E15` depends on it.
+**Verified.** A scratch suite (`Suites.cs`, run then deleted — the permanent one is `E15`'s to write)
+installed the fake via `ctx.EmitterFactory`, built the default C1 world, and read it back:
+`Built.Count > 0` after the bootstrap (the waterfall mist, the train's steam, two truck dust plumes
+all reached the fake), then `Started > 0` on at least one fake emitter after one manual `Advance`
+(the per-frame `Tick` follow calling `SustainAt`). Both passed, engine errors clean, no
+`TextureArchive`/`MultiMesh`/GPU build anywhere in the path. Then `.\RunTests.ps1` full pass with the
+scratch suite removed: 393 units, 18/18 engine suites, **13/13 goldens hash-identical**, engine
+errors clean — nothing in any session's real path changed, since both `Options.EmitterFactory` and
+`TestContext.EmitterFactory` default null.
 
 **⚠ Traps.** Do not let the fake become the default anywhere outside a suite — a session that
 silently draws no emitters is `BL-234` again, and `BL-234` was found by a human noticing missing

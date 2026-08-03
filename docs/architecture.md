@@ -151,6 +151,7 @@ instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
+- `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
 - `src/Testing/Suites.cs` — the 18 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
@@ -1527,6 +1528,11 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
+`Options.EmitterFactory` (null → the real `Anim.PufferEmitterFactory` over this build's texture
+archive and `EffectsParent`) is read once, here, and never reassigned after `Build` returns — a
+caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.CountingEmitterFactory`
+is the one caller, through `TestContext.EmitterFactory`); a post-build swap would miss the bootstrap,
+where most `PUFFER_STATE`s fire.
 ⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: calls
   `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild`, and nulls the sound
   loader (prewarming first) unless `SoundsOutliveBuild`. A game session owns the TEXTURE archive all
@@ -1658,7 +1664,10 @@ once and returns both halves: the report text the flag prints and writes, and a 
 ## src/Testing/TestHarness.cs
 `--run-tests[=filter]`: the suite registry, `TestContext` (assert verbs, resolved data paths, a
 scene-tree host, and `WithWorld` — the chapter-world builder over `WorldSession`), the
-PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
+PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code. `TestContext.
+EmitterFactory` (mutable, default null) forwards straight into `WorldSession.Options.EmitterFactory`
+for the next `WithWorld` build — a suite sets it, on a chapter other than `Chapter` so a cached
+default-chapter world built before the set is never reused in its place.
 ⚠ **In-engine is the smaller half.** Only checks that need a live Godot belong here; anything
   that runs without the engine goes in `CSVM.Tests` (`dotnet test`) instead.
 ⚠ **Engine-error policy.** Native `ERROR: …` lines are screened out of band against
@@ -1666,6 +1675,17 @@ PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
   pass**. Unknown error → fail; over cap → fail; no log → SKIP, never PASS.
 ⚠ Run **windowed**: `--headless` compiles no shaders, so a clean error screen says nothing about
   them (LOG-8).
+
+## src/Testing/CountingEmitterFactory.cs
+`IEmitterFactory` for a suite: `Create` always succeeds and hands back a `CountingEmitter` — no
+`TextureArchive`, no `MultiMesh`, no Godot type anywhere in its own state, just `Started`/`Stopped`
+counts and whether it is sustaining now. Reached by installing it on `TestContext.EmitterFactory`
+before a `WithWorld` build (`WorldSession.cs`); `CountingEmitterFactory.Built` is the list a suite
+reads to confirm the fake was actually reached rather than a real `Puffer` — the seam `BL-241`'s
+own fix note asked for.
+⚠ Honest about `SustainEnd`-then-revive: `IsValid` stays true after a stop, same as a real `Puffer`
+  — `EmitterDirector` revives a stopped entry through its own dictionary, never by asking the
+  factory again, and a fake that went invalid on stop would assert against a lie.
 
 ## src/Testing/Suites.cs
 The 18 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's

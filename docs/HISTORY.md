@@ -11722,3 +11722,32 @@ intact â€” moved **two** goldens, `c5-city-night` (the measured C5 `m_crane
 `c3-island`, which the item did not predict. So the goldens do reach inside the extracted module, and
 an unchanged 13/13 is evidence rather than an absence of it. Restored â†’ 13/13 again. The wave's own
 new assertion is still owed: it is `E15`, which is what `BL-241` is waiting for.
+
+## 2026-08-03 — the counting fake, and proof it is reachable (`PLAN-deepening` E14)
+
+**What landed.** `CSVM/src/Testing/CountingEmitterFactory.cs`: an `IEmitterFactory` that always
+succeeds and hands back a `CountingEmitter` — a plain record holding no Godot type at all, just
+`Started`/`Stopped` counts and whether it is sustaining now. `WorldSession.Options` gains
+`EmitterFactory` (null → the real `Anim.PufferEmitterFactory`, read once inside `Build` and never
+reassigned after), and `TestContext` gains a mutable `EmitterFactory` that forwards into it — one
+argument in an options initialiser, exactly as Decision 18 predicted, and the whole of Wave E's edit
+to `TestHarness.cs`.
+
+**Proof of reachability.** A scratch suite (`ScratchEmitterFake`, added to `Suites.cs`, run, and then
+deleted — this item's deliverable is the production seam, not a permanent suite; that is `E15`)
+installed a `CountingEmitterFactory` through `ctx.EmitterFactory`, built the default C1 world, and
+read the fake back: `Built.Count > 0` after the bootstrap (the waterfall mist, the train's steam, the
+truck dust plumes all reached the fake instead of a real `Puffer`), then `Started > 0` on at least one
+fake emitter after one manual `Advance` (the per-frame `Tick` follow calls `SustainAt`). Both checks
+passed with the suite in place, engine errors clean, in 2.07s — no `TextureArchive`, no `MultiMesh`,
+no GPU build anywhere in the path. Removed before landing.
+
+**Full verify.** `.\RunTests.ps1` full pass with the scratch suite removed: 393 unit tests, 18/18
+engine suites, **13/13 goldens hash-identical**, engine errors clean. Nothing in any session's real
+path changed — `Options.EmitterFactory` defaults null everywhere except the harness, and the harness
+itself defaults its own field null too, so every existing suite still builds through the real
+`PufferEmitterFactory` exactly as before.
+
+**Consequence for `E15`.** The fake is proven reachable and honest about revive (`IsValid` stays true
+after `SustainEnd`, matching a real `Puffer`) — `E15` can now install it for the `refuel*` kill and
+assert the emitter census returns to its pre-kill set, closing `BL-241`.

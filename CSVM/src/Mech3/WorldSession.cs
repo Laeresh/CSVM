@@ -205,7 +205,7 @@ public sealed class WorldSession
             AutoStart = o.AutoStart,
             Seed = o.RuntimeSeed,
             Setup = missionSetup,
-            EmitterFactory = new Anim.PufferEmitterFactory(textures, o.EffectsParent),
+            EmitterFactory = o.EmitterFactory ?? new Anim.PufferEmitterFactory(textures, o.EffectsParent),
             // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the caller so a
             // teardown drops the previous world's lights.
             Lights = lights,
@@ -325,6 +325,15 @@ public sealed class WorldSession
         /// <c>PufferState(after build)</c> into a census printed at the end of the bootstrap, which
         /// is before the first death can happen.</para></summary>
         public bool TexturesOutliveBuild { get; init; }
+
+        /// <summary>The factory <see cref="AnimRuntime"/> builds <c>PUFFER_STATE</c> emitters
+        /// through. Null (the default) means the real <see cref="Anim.PufferEmitterFactory"/> over
+        /// this build's <see cref="TextureArchive"/> and <see cref="EffectsParent"/>; a caller
+        /// supplies its own — the test harness's <c>CountingEmitterFactory</c> — to observe emitter
+        /// lifetime with no GPU. A post-build swap would miss the bootstrap, where most
+        /// <c>PUFFER_STATE</c>s fire, so this is read once, here, not assigned after
+        /// <see cref="Build"/> returns.</summary>
+        public Anim.IEmitterFactory? EmitterFactory { get; init; }
 
         /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
         /// <c>WorldSounds.Loader</c> stays live for names the prewarm did not reach. Separate from

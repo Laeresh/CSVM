@@ -6,6 +6,7 @@ using System.Linq;
 using System.Text;
 using System.Text.RegularExpressions;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
 
@@ -460,6 +461,14 @@ public sealed class TestContext
     /// assertion.</summary>
     public string? LoadoutOverride { get; init; }
 
+    /// <summary>Installs a fake in place of the real <c>PufferEmitterFactory</c> for the next world
+    /// this builds — null (the default) leaves <see cref="WorldSession.Options.EmitterFactory"/> null
+    /// too, so a suite that never touches this gets the real adapter exactly as before. Mutable, not
+    /// <c>init</c>: a suite sets it right before its own <see cref="WithWorld"/> call, on a chapter
+    /// other than <see cref="Chapter"/> so the cached default-chapter world — built with whatever this
+    /// property held first — is never silently reused in its place.</summary>
+    public IEmitterFactory? EmitterFactory { get; set; }
+
     /// <summary>Where a suite parents anything that must be in the scene tree — a built plane whose
     /// markers are read by global transform, a chapter world whose death sequences are ticked.</summary>
     public required Node3D Host { get; init; }
@@ -598,6 +607,7 @@ public sealed class TestContext
                 PlayerPosition = () => Camera.GlobalPosition,
                 Collision = collision,
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
+                EmitterFactory = EmitterFactory,
             },
             gamez, textures, sounds, soundDefs, soundGroups);
         stage.AddChild(session.Root);
