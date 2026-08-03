@@ -125,7 +125,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 **Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both — F5 in `--viewer` drives a parked plane's visuals, F5 in `--fly` drives the flown plane's real HP — so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
-The day-to-day 28 of 99 — 99 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
+The day-to-day 29 of 100 — 100 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
 ⚠ **These rows are glosses, not the spec: a behaviour change edits the `cli.md` bullet, and a row here only when the gloss went wrong.**  Adding a row is rarely right — the index is one file away.
 
@@ -157,7 +157,8 @@ The day-to-day 28 of 99 — 99 is both the parser's accepted-flag count and `doc
 | `--tex-census[=names]` | every texture resolves to its own flat colour; map to `.scratch/tex_census.json`, per-texture pixel counts for a `--screenshot` beside it. **Pair with `--no-fog`**; counts are lower bounds — see [`docs/cli.md`](docs/cli.md) |
 | `--collision[=show]` | build the world's colliders in a mode that builds none (freecam/anim-lab/viewer); `=show` opens the **C** wireframe overlay — but only in freecam/anim-lab, since C in `--viewer` is the mesh lab's cull cycler |
 | `--no-pads` | ignore every gamepad — a drifting stick silently ruins a scripted run |
-| `--mute` | skip flight audio |
+| `--mute` | skip flight audio — a **load-time** switch, so nothing plays *and nothing is counted or logged*; a muted baseline is blind to sound errors |
+| `--volume=N` | master gain 0–1 (default 1). `--volume=0` is silent but **not** blind: audio still loads, plays, counts and logs, so a run is testable from `.scratch/logs/`. Also the `audio.volume` config key, which the flag beats |
 
 the player controls during development are in `docs/controls.md`. **change them if the player input changes**
 

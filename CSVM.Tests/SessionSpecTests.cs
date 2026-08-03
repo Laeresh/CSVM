@@ -610,6 +610,66 @@ public class SessionSpecTests
         Assert.Equal(new Vector3(1, 2, 3), S("--stage=empty", "--pos=1,2,3").SpawnAt);
     }
 
+    // ---- Audio ---------------------------------------------------------------------------------
+
+    /// <summary>Null when unset is the whole point: it is what leaves room for the `audio.volume`
+    /// config key underneath, so an absent flag is not the same as `--volume=1`.</summary>
+    [Fact]
+    public void TheVolumeIsAnOverrideValueNullWhenUnset()
+    {
+        Assert.Null(S("--fly").Volume);
+        Assert.Equal(0f, S("--volume=0").Volume);
+        Assert.Equal(0.5f, S("--volume=0.5").Volume);
+        Assert.Equal(1f, S("--volume=1").Volume);
+    }
+
+    /// <summary>Written with a decimal comma on a German machine, `0,5` parses as neither 0.5 nor a
+    /// number — the invariant culture is what keeps one command line meaning one thing everywhere.</summary>
+    [Fact]
+    public void TheVolumeIsReadInTheInvariantCulture()
+    {
+        Assert.Equal(0.5f, S("--volume=0.5").Volume);
+        Assert.Null(S("--volume=0,5").Volume);
+    }
+
+    [Fact]
+    public void AVolumeOutsideZeroToOneIsClampedLoudly()
+    {
+        var loud = S("--volume=4");
+        Assert.Equal(1f, loud.Volume);
+        Assert.Contains(loud.Warnings, w => w.Category == "core" && w.Message.Contains("outside 0-1"));
+
+        var negative = S("--volume=-2");
+        Assert.Equal(0f, negative.Volume);
+        Assert.Contains(negative.Warnings, w => w.Message.Contains("outside 0-1"));
+    }
+
+    /// <summary>A typo'd volume must not take the launch down: the run is still perfectly usable at
+    /// the default gain, so it says so and carries on.</summary>
+    [Fact]
+    public void AnUnreadableVolumeIsIgnoredLoudlyRatherThanThrowing()
+    {
+        var s = S("--fly", "--volume=loud");
+        Assert.Null(s.Volume);
+        Assert.Equal(SessionMode.Fly, s.Mode);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("not a number"));
+    }
+
+    /// <summary>The two audio flags are not variants of each other: `--mute` never builds the audio
+    /// subsystem, so a gain has nothing to attenuate. Neither is cleared — both spell silence — but
+    /// the combination loses the sounds the volume flag exists to keep audible in the log.</summary>
+    [Fact]
+    public void MuteAndVolumeTogetherAreCalledOut()
+    {
+        var s = S("--mute", "--volume=0");
+        Assert.True(s.Mute);
+        Assert.Equal(0f, s.Volume);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("--mute skips loading audio"));
+
+        Assert.Empty(S("--volume=0").Warnings);
+        Assert.Empty(S("--mute").Warnings);
+    }
+
     // ---- Parse conventions ---------------------------------------------------------------------
 
     [Fact]
@@ -617,6 +677,7 @@ public class SessionSpecTests
     {
         Assert.Equal("C5", S("--chapter=C1", "--chapter=C5").Chapter);
         Assert.Equal(7ul, S("--seed=1", "--seed=7").Seed);
+        Assert.Equal(0f, S("--volume=1", "--volume=0").Volume);
     }
 
     [Fact]

@@ -398,6 +398,15 @@ public sealed record SessionSpec
     // ---- Everything else ------------------------------------------------------------------------
 
     public bool Mute { get; private set; }
+
+    /// <summary>Master output gain, linear, 0 (silent) to 1 (unattenuated). Null when
+    /// <c>--volume=</c> was not given, which is what lets the <c>audio.volume</c> config key
+    /// supply the value instead — an explicit flag always beats the tuning file.
+    ///
+    /// <para>Unrelated to <see cref="Mute"/>, which skips loading the audio subsystem entirely.
+    /// At volume 0 every sound still loads, plays, counts and logs; it is simply inaudible.</para></summary>
+    public float? Volume { get; private set; }
+
     public bool NoVsync { get; private set; }
     public bool Perf { get; private set; }
     public bool NoFocus { get; private set; }
@@ -582,6 +591,25 @@ public sealed record SessionSpec
             else if (arg == "--no-focus") { s.NoFocus = true; }
             else if (arg == "--no-vsync") { s.NoVsync = true; }
             else if (arg == "--mute") { s.Mute = true; }
+            else if (arg.StartsWith("--volume="))
+            {
+                // TryParse rather than Flt: a typo in a volume must not take the launch down with a
+                // FormatException, and the run is still perfectly usable at the default gain.
+                string want = arg["--volume=".Length..];
+                if (!float.TryParse(want, NumberStyles.Float, CultureInfo.InvariantCulture, out float volume))
+                {
+                    notes.Add(new Note("core", $"--volume={want} is not a number (0-1) — leaving the volume alone"));
+                }
+                else if (volume is < 0f or > 1f)
+                {
+                    s.Volume = Math.Clamp(volume, 0f, 1f);
+                    notes.Add(new Note("core", $"--volume={want} is outside 0-1 — using {s.Volume}"));
+                }
+                else
+                {
+                    s.Volume = volume;
+                }
+            }
             else if (arg == "--debug-collision") { s.DebugCollision = true; }
             else if (arg.StartsWith("--players=")) { s.Players = int.Parse(arg["--players=".Length..]); s.PlayersExplicit = true; }
             else if (arg.StartsWith("--hold=")) { s.HoldSets = ParseHold(arg["--hold=".Length..]); }
@@ -902,6 +930,14 @@ public sealed record SessionSpec
         {
             Print("--damage is the plane lab (use --viewer --plane without --chapter); ignoring");
             DamageLab = false;
+        }
+
+        // --mute never builds the audio subsystem, so there is no bus carrying anything for a gain
+        // to attenuate. Neither flag is cleared — the result is silence either way — but a run
+        // asking for both wanted the sounds to still play, and would not get them.
+        if (Mute && Volume != null)
+        {
+            Warn("core", "--mute skips loading audio entirely, so --volume has nothing to attenuate; drop --mute to hear the sounds counted and logged");
         }
 
         // The --det bundle. Det/PadsDisabled/SeedPinned are computed from what is settled by now;
