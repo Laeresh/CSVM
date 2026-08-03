@@ -3977,6 +3977,13 @@ sloppiness. The constant was instead sized so the settled path lands on the −1
 records as the designed knife-edge sink — noting that in that record −10° was the *transient* and −6°
 the settled value, so this is a defensible reading, not a proven one.
 
+> **⚠ Superseded in part on 2026-08-04 — do not stop here.** `CAP-05` decoded the original's own
+> knife-edge: the **4° magnitude is confirmed** as the roll-in step, but the **bound is wrong** — the
+> original keeps sagging at 0.69–0.89 °/sim-s indefinitely and spirals in, which is the very outcome
+> the bound was reasoned into existence to prevent. The reasoning below is sound and the conclusion
+> does not hold for the original. See the 2026-08-04 entry at the bottom of this file; the rewrite is
+> `BL-247`, which absorbed these constants when `BL-124` closed.
+
 **⚠ It is not only a knife-edge term.** `knife = 1 − |up·Y|` grows with pure pitch at **zero bank**
 (0.5 at 60° pitch). A wings-level full-pull zoom loses ~11° of apex (+81° → +70°); the hands-off
 climb-forever artifact erodes at ~4.6°/s; loops still complete, 1.4% slower. The original commit
@@ -12720,3 +12727,106 @@ pipeline needed changing (the 2560×1440 layout was already known). The three re
 to 5492/6001/6520 ft against the user's own 5500/6000/6500 ft targets — a free confirmation of the
 1,000 ft band pick, which matters because `anchor.py`'s margins are soft on level clips (41×, 1.61×,
 2.46×, 1.66×) exactly as the `CAP-01` trap predicts. All times are sim seconds at k = 1.390 off PTS.
+
+## 2026-08-04 — `CAP-05` decoded: knife-edge is a departure, and the original's low-speed drag is 4–6× weaker than ours
+
+Four Bloodhawk clips (`CAP-05 Knife Edge`, `CAP-05 2 Knife Edge`, `CAP-05 Stall 0% Thrust no input`,
+`CAP-05  Stall 50% thrust climb`; 2560×1440, 17.9–33.8 s wall). All four pass the head-turn gate —
+`|dx(ALT)−dx(MPH)|` 0–1 px, dx correlation **+0.97 to +1.00**, registration peak 0.52–0.73. Three
+are pixel-locked; the first knife take shakes ±4 px and went through `shake.py`. `CAP-05` is
+discharged and its `playtest.md` row retired; `BL-115` and `BL-124` are unblocked, and the footage
+also settles a standing question on `BL-247` and breaks a deadlock on `BL-092`.
+
+**Knife-edge has no equilibrium — the entry's own worst case is what the original does.** `BL-124`
+modelled the sag as a *bound*, `KnifeNoseSag` 0.07 rad (4°), and its comment argued that an
+unbounded nose-down term "has no equilibrium at all — nose and path descend together … forever and
+the plane spirals in". The original spirals in. The nose takes an immediate **≈4° step** at roll-in
+(fitted intercepts −3.4° and −4.2°, so the 0.07 rad magnitude is right for the *step*) and then sags
+**linearly at 0.69 and 0.89 °/sim-s** with no sign of settling: at onset+36 s the nose is −27.0°, the
+path −18.7°, sink 93 ft/sim-s, still steepening, 1772 ft (540 m) gone in 38.9 sim s. Ours instead
+reaches a constant −4°/−10°/19.4 m/s within a second. Total altitude lost is comparable (540 vs
+634 m over ~36 s) — the *shape* is what is wrong, so this is a model change, not a retune. The two
+takes are at 143 and 300 mph and agree to ~13%, which says the sag is driven by time-since-roll-in
+and not by airspeed.
+
+**The decisive pairing with `CAP-01`, and it kills bank-keyed lift.** `CAP-01` holds +100° of bank
+at full back-stick, keeps altitude to 1.85 ft/sim-s and sweeps 18.95 °/sim-s of heading. `CAP-05`
+sits at +94…+104° — the same bank by the same ADI measure — at near-neutral stick, and falls out of
+the sky while turning only **0.68 / 1.13 °/sim-s**, 17–28× slower. A lift term keyed on bank alone
+must give these two the same answer. `BL-247`'s trap (a) had guessed pull/AoA as the carrier; this
+is the evidence. Heading came off the compass tape (track peak median 0.998) and cross-checks
+against the tape's own `S`→`SE`→`E` labels in the 7 s and 31 s stills at ~24°.
+
+**The stall break is gentle, clean and late.** Zero thrust, no input: the compass turns **0.0°**
+across 24.8 sim s — no wing drop. The nose holds **+4.2 ± 0.1°** through the entire deceleration,
+starts falling only at **76 mph = 0.25 fd** (minimum 69.8 mph = 0.232 fd), drops at **3.38 °/sim-s**
+to −21.2° and then *stops* at ≈−22° as speed rebuilds. Our `StallNoseRate` 1.0 rad/s toward
+world-down is ~17× too fast and aimed at the wrong target; `StallSpeedFrac` 0.30 also breaks earlier
+than the measured 0.25 (flagged onto `BL-148`, which owns that constant).
+
+**Low-speed drag, from the cleanest probe in the set.** The zero-thrust clip has no thrust term to
+assume, so `dV/dt` is drag plus gravity alone. Measured `D` is 0.36 / 1.11 / 2.82 / 3.74 m/s² at
+x = 0.25 / 0.35 / 0.46 / 0.50 against our blend's 7.69 / 12.13 / 17.91 / 20.25 — and the ratio
+survives every `(g, C)` pair the fit tolerates. Model-free: engine off at 152.6 mph in a +5° climb
+the original loses 6.24 m/s² where ours takes 21.6. Since full-throttle level flight pins
+`D(fd) = A`, a curve this weak at half speed and equal to `A` at fd has to be far steeper than
+quadratic below cruise — which reproduces `BL-092`'s `x^2.67` by a route with no thrust in it, and
+so resolves that entry's linear-thrust-vs-drag-shape fork in favour of drag shape.
+
+**What `CAP-05` could not do, recorded rather than glossed.** `ClimbGravityScale` is *not* settled.
+The four-parameter fit is degenerate — holding `g` and refitting leaves rms flat (0.218–0.280 m/s²)
+across `g` = 17…25 m/s², with `C` = 1.18 / 0.59 / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity`
+20.0 lands on `C` ≈ 0.6, our own value, is a consistency and not a measurement; `FINDINGS.md`
+already carries the trap about checks that confirm whatever you feed them, and this is one. The
+50%-throttle clip cannot rescue it: the climb is a zoom, the ADI **saturates** at sky fraction
+0.730, and above ~+30° the nose angle — and with it the along-path thrust — is unreadable. That gap
+is now `CAP-20` (throttle equilibria at 1/4 and 1/2, plus a *shallow* held climb that keeps the ADI
+off its stop), which also serves `BL-092`'s long-owed thrust-vs-throttle measurement.
+
+Method notes: no pipeline changes were needed — the four keys were already in `extract.py`'s
+`CLIPS` and the 2560×1440 layout already known, so the decode is `shake.py` → `run2` → `anchor` →
+`compass` over the `cap05*` keys, with PTS from the bundled ffmpeg. `anchor.py` band margins were
+3.88× / 5.13× / 7.31× and a soft **1.81×** on the stall clip; nothing quoted here depends on that
+clip's absolute altitude, only on changes in it. The ADI nose-angle calibration reproduced itself
+independently: the two knife clips' level segments decode to +0.15° and +0.25° using the −0.135
+level offset measured in the earlier sessions. All times are sim seconds at k = 1.390.
+
+## 2026-08-04 — `BL-124` closed answered: the knife-edge sag magnitude is confirmed, its bound is not
+
+Closed on the `CAP-05` decode above (user's call, same session). **Nothing in the build changed** —
+`KnifeNoseSag` 0.07 rad, `KnifeNoseRate` 0.2 rad/s and `KnifeAlignFloor` 0.35 all ship exactly as
+they landed on 2026-07-23, no goldens moved, and this is a docs-and-comments close.
+
+What the item asked was whether those constants' *magnitudes* were right, since only their presence
+and direction had ever been proven (by scripted test) and the entry recorded that magnitude "is not
+and cannot be" settled without the original at the controls. It is now settled, and the answer splits
+two ways. **The 4° is right**: the original's nose takes an immediate ≈4° step at roll-in, fitted
+intercepts −3.4° and −4.2° across two takes at 143 and 300 mph, so 0.07 rad is the correct size for
+the step and `KnifeNoseRate` 0.2 rad/s is the right order for how fast it gets there. **The bound is
+wrong**: the original does not stop at 4°, it keeps sagging linearly at 0.69–0.89 °/sim-s for as long
+as the footage runs, reaching −27° nose / −18.7° path / 28 m/s sink at +36 s and still steepening.
+That is the "spirals in" outcome the bound was reasoned into existence to prevent — the reasoning was
+sound, the conclusion simply is not what the original does.
+
+**What this rules out.** A retune. No value of a bounded sag reproduces a 36-second linear drift, and
+raising the bound to 27° would wreck the first three seconds — the part where the original holds
+altitude to 0.5 ft/sim-s and we are already worst. It also rules out judging this by feel on sink
+alone: total altitude lost over ~35 s is nearly identical (540 m original vs our 634 m), so a cockpit
+A/B on descent rate would have passed a model whose shape is wrong throughout.
+
+**The honest limit, and why it does not reopen the item.** Two takes are not a distribution, and the
+neutral-stick reading is inferred from the footage (0.68–1.13 °/sim-s of turn, monotone sag) rather
+than pilot-confirmed the way `CAP-01`'s full-back-stick is. Neither residue touches what closed the
+item: the two takes sit at 143 and 300 mph and agree to ~13%, which is what establishes the sag is
+driven by time-since-roll-in and not airspeed, and the *magnitude* question the item existed to
+answer does not depend on the stick position at all. The stick caveat matters to `BL-247`'s
+lift-keying argument instead, and is recorded there.
+
+**Where the work went.** `BL-247` inherits all three constants, because `knife = 1 − |up·Y|` is
+`1 − wingVert` — the same quantity `BL-247` already had to re-key on the lift side, so replacing one
+without the other is not possible. It carries the full trajectory table to fit against, the
+`KnifeAlignFloor` observable (path lags nose 4.8° → 8.3° over 36 s, with the warning that gravity is
+pulling on the path over the same interval so an align rate cannot be backed out of it), and the
+three owed cockpit judgements, which remain owed because the fix has not landed. `BL-115` keeps a
+pointer for the same reason. The 2026-07-23 entry above now carries a forward-pointer so a reader
+landing on the original bound-is-necessary argument does not stop there.

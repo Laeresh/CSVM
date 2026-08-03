@@ -122,6 +122,61 @@ they are 76–83% of the data's `flight_ceiling` 2500, so **the limit is not tha
 ⚠ Every apex above ~2003 m in that list is now read as ballistic overshoot of the clamp, so the
 "performance limit" signature was an artifact of measuring a clamp with zoom climbs.
 
+**Knife-edge is a departure, not an equilibrium, and the stall break is gentle — measured
+2026-08-04 from `CAP-05`.** Four 16:9 Bloodhawk clips, all gating rigid (dx corr +0.97 to +1.00).
+Two knife-edge takes at very different speeds agree, which is what makes the shape trustworthy:
+
+| clip | onset | at onset+3 s | +12 s | +24 s | +36 s |
+|---|---|---|---|---|---|
+| `CAP-05 2 Knife Edge` (143 mph) | bank +85° | nose −4.9°, sink 0.5 ft/s | −12.0°, 24 ft/s | −20.0°, 60 ft/s | −27.0°, 93 ft/s |
+| `CAP-05 Knife Edge` (300 mph) | bank +90° | nose −7.3°, sink 13 ft/s | −15.0°, 72 ft/s | — | — |
+
+The nose takes an immediate **≈4° step** at the roll-in (fitted intercepts −3.4° and −4.2°) and then
+keeps sagging **linearly at 0.69 and 0.89 °/sim-s** (0.012–0.016 rad/sim-s) for as long as the clip
+runs — it never finds a bound. The flight path follows about **5–8° behind the nose**, that lag
+growing slowly (−4.8° at +3 s, −7.2° at +24 s, −8.3° at +36 s). The long take loses **1772 ft
+(540 m) in 38.9 sim s** and is still steepening when the clip ends. Bank drifts +104° → +94° over
+the same span.
+
+⚠ **The decisive comparison is against `CAP-01` at the same bank.** `CAP-01` holds +100° of bank at
+full back-stick, keeps altitude to 1.85 ft/sim-s of sink, and sweeps **18.95 °/sim-s** of heading.
+`CAP-05` sits at +94…+104° at near-neutral stick and instead falls out of the sky while turning only
+**0.68 and 1.13 °/sim-s** — 17–28× slower, tracked off the compass tape (peak median 0.998, and the
+tape's own `S`→`SE`→`E` labels confirm ~24° between the 7 s and 31 s stills). Same bank, opposite
+outcome: **whatever carries the original's banked turn is a function of pull/AoA, not of bank.**
+
+**The stall break (`CAP-05 Stall 0% Thrust no input`).** Zero thrust, no input, wings level — the
+compass turns **0.0°** over the whole 24.8 sim s, so there is no wing drop and no departure. The
+nose sits rock-steady at **+4.2 ± 0.1°** through the entire deceleration and only begins to fall at
+**76 mph = 0.25 fd**, reaching a minimum speed of **69.8 mph = 0.232 fd**. It then drops at
+**3.38 °/sim-s (0.059 rad/sim-s)** from +4.1° to −21.2°, and *stops* at about **−22°** once speed
+rebuilds past 0.40 fd — it does not chase world-down.
+
+**Low-speed drag is 4–6× weaker than a `lerp(x², x, 0.35)` blend at `A` = 60 m/s².** The same
+zero-thrust clip is the cleanest drag probe in the whole set — no thrust term to assume. Fitting
+`dV/dt = −D(V) − g·sin γ·(C if climbing)` over its +5° climb and −15° dive:
+
+| x = V/fd | D measured (m/s²) | our blend | ratio |
+|---|---|---|---|
+| 0.25 (75 mph) | 0.36 | 7.69 | 21× |
+| 0.35 (105 mph) | 1.11 | 12.13 | 11× |
+| 0.46 (138 mph) | 2.82 | 17.91 | 6.4× |
+| 0.50 (150 mph) | 3.74 | 20.25 | 5.4× |
+
+The *ratio* is robust: across every `(g, C)` pair the fit tolerates, `D(x = 0.5)` lands in
+3.8–5.6 m/s² against our 20.25. The absolute deceleration is the model-free version — at 152.6 mph
+in a +5° climb with the engine off the original loses **6.24 m/s²**, where our curve would take
+21.6. This corroborates `BL-092`'s independent `x^2.67` from the 1/8-throttle equilibrium, by a
+route with no thrust in it at all.
+
+⚠ **The clip cannot split `g` from the climb-gravity scale `C`, and the fit that looks like it can
+is degenerate.** A free 4-parameter fit runs `C` to its bound; holding `g` and refitting gives rms
+0.218–0.280 m/s² flat over `g` = 17…25 m/s², so the residual chooses nothing. Along that valley
+`C` = 1.18 at `g` = 17, **0.59 at `g` = 20**, 0.00 at `g` = 25. That `nom_gravity` 20.0 lands on
+`C` ≈ 0.6, our own `ClimbGravityScale`, is a *consistency and not a measurement* — this is exactly
+the degeneracy trap below. The descent leg also flies at ~+7° AoA against the climb leg's ~0°, so
+any AoA-dependent drag is being absorbed into `g`/`C` as well.
+
 **`player.json` ships a physics block almost none of which is consumed** (units unverified;
 found while chasing the clock, alongside the already-used `nom_gravity 20.0` and
 `stall_mag 1.25`):
@@ -365,4 +420,7 @@ the spread only a trigger for computing it.
 | 3 | Sustained level turn, max pull | ✅ **decoded 2026-08-03** from `CAP-01.mp4` — 222.9 mph sustained against 299.0 level, at 18.95 °/sim-s and 100° bank (`BL-092`, `BL-247`) |
 | 4 | 360° aileron roll | ✅ |
 | 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
+| 7 | Sustained knife-edge | ✅ **decoded 2026-08-04** from the two `CAP-05` knife clips — a 4° nose step then an unbounded 0.7–0.9 °/sim-s sag, 540 m lost in 38.9 sim s, turning only 0.7–1.1 °/sim-s at 100° bank (`BL-247`; closed `BL-124`) |
+| 8 | Stall entry and recovery, engine off | ✅ **decoded 2026-08-04** from `CAP-05 Stall 0% Thrust no input` — break at 0.25 fd, nose drop 3.4 °/sim-s to a −22° floor, and the low-speed drag curve (`BL-115`, `BL-092`) |
+| 9 | Level runs at 1/4 and 1/2 throttle, held to equilibrium | ❌ owed — the thrust-vs-throttle curve. `CAP-05`'s 50%-throttle clip cannot serve: its ADI saturates in the climb, so the nose angle (and with it the along-path thrust) is unreadable |
 | 6 | Level top speed at 5500 / 6000 / 6500 ft, plus the cap | ✅ **decoded 2026-08-03** from the four `CAP-03` clips — flat 300 mph to 1988 m, then a hard altitude clamp at 2003 m (`BL-094`). 6800 ft is unreachable: the aircraft cannot be flown above the clamp |

@@ -20,7 +20,8 @@ public struct FlightInput
 /// sinks), and the arcade handling is the flight path chasing the nose
 /// (alignment lag). In a knife-edge the nose itself also sags to a bounded angle
 /// below the horizon, so the plane noses down as it sinks rather than descending
-/// wings-level-nosed. Below stall speed the nose is additionally pulled toward
+/// wings-level-nosed — ⚠ the original's sag is NOT bounded (CAP-05; the divergence
+/// and its replacement are BL-247). Below stall speed the nose is additionally pulled toward
 /// world-down and cannot be raised over the horizon. Thrust vs drag (quadratic
 /// + linear blend) gives the level-speed equilibrium at fd_speed. The torque/
 /// damping/inertia/speed numbers come straight from vehicle.json 'dynamics';
@@ -68,18 +69,23 @@ public sealed class FlightModel
     private const float KnifeAlignFloor = 0.35f;  // TUNE: fraction of the nose-chase that survives at 90°
                                                   // bank — the chase is the lift force turning the velocity,
                                                   // so it weakens with wing verticality (deeper knife-edge sag)
-    private const float KnifeNoseSag = 0.07f;     // TUNE: rad (≈4°) the NOSE settles below the horizon at full
-                                                  // knife-edge. This is a BOUND, not a rate, and it has to be:
-                                                  // the path chases the nose, so an unbounded nose-down term
-                                                  // (toward world-down, or weathervaning onto the path) has no
-                                                  // equilibrium at all — nose and path descend together at
-                                                  // (g/v)·K/(K+align) forever and the plane spirals in. Bounding
-                                                  // the nose bounds the path with it. The sag also carries into
-                                                  // the path roughly 1:1 for that same reason, so this value is
-                                                  // not free: 0.07 (4° nose) settles the path at exactly the
-                                                  // −10° `docs/HISTORY.md` records as the designed knife-edge
-                                                  // sink, where 0.14 (8° nose) took it to −13°.
-    private const float KnifeNoseRate = 0.2f;     // TUNE: rad/s toward that sag at full knife-edge, ×(1−wingVert)
+    private const float KnifeNoseSag = 0.07f;     // rad (≈4°) the NOSE settles below the horizon at full
+                                                  // knife-edge. The MAGNITUDE is measured — CAP-05 (2026-08-04)
+                                                  // decodes the original's roll-in as an immediate ≈4° step
+                                                  // (fitted intercepts −3.4°/−4.2° across two takes at 143 and
+                                                  // 300 mph) — but the BOUND is wrong: the original then keeps
+                                                  // sagging linearly at 0.69–0.89 °/sim-s with no equilibrium,
+                                                  // reaching −27° nose / −18.7° path / 28 m/s sink by +36 s and
+                                                  // still steepening. It spirals in, which is exactly what the
+                                                  // bound was introduced to avoid. Ours instead settles inside a
+                                                  // second at −4° nose / −10° path / 19.4 m/s.
+                                                  // ⚠ Do NOT retune this to close the gap — a bounded sag cannot
+                                                  // produce a 36-second linear drift, and raising the bound
+                                                  // destroys the first 3 s, where the original holds altitude to
+                                                  // 0.5 ft/sim-s and we do not. The shape needs replacing, with
+                                                  // the lift keying, under BL-247; the sag carries into the path
+                                                  // roughly 1:1 because the path chases the nose.
+    private const float KnifeNoseRate = 0.2f;     // rad/s toward that sag at full knife-edge, ×(1−wingVert)
                                                   // — exactly 0 wings-level or inverted, so cruise is untouched by
                                                   // construction. A RATE CAP, not an exponential approach: an
                                                   // exponential's rate scales with the displacement, which at a

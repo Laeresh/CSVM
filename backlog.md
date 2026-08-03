@@ -1116,15 +1116,62 @@ needs one of them to move needs a new measurement first.
   This is the same `player.json` angle-of-attack block `BL-092` (a) points at — `maxAOA 46`,
   `liftAOAs [5,9]`, `lift_accel_rate 0.75` — seen from the lift side rather than the drag side, and
   the two should be decoded together: `CAP-01` is one clip that constrains both.
+  **This entry also owns the knife-edge attitude terms** — `KnifeNoseSag` 0.07 rad, `KnifeNoseRate`
+  0.2 rad/s and `KnifeAlignFloor` 0.35, all `FlightModel.cs` — inherited when `BL-124` closed
+  answered on 2026-08-04 (`docs/HISTORY.md`). They are the same mechanism seen from the attitude
+  side: `knife = 1 − |up·Y|` is `1 − wingVert`, so whatever replaces the lift keying has to replace
+  these at the same time. The landed behaviour is nose −4°, path −10°, sink 19.4 m/s, 634 m lost in
+  35 s, reached within a second of roll-in.
   ⚠ **Traps.** (a) **Do not "fix" this by flattening `wingVert`.** The same quantity drives the
-  knife-edge nose-sag, whose *presence and direction* are proven by scripted test (`BL-124`), so a
+  knife-edge nose-sag, whose *presence and direction* are proven by scripted test, so a
   bank-independent lift term would reproduce this turn and break that. Whatever carries the turn
   has to vanish by 90° *without* being a function of bank alone — pull/AoA is the obvious
   candidate, since knife-edge is flown near neutral stick and this turn at full back.
-  **This is the same suspicion `BL-124` note (2) already records** from the other direction ("the
-  fix is gating on actual bank instead of `1−wingVert`"); `CAP-01` is the first hard evidence that
-  `wingVert` alone is wrong, and `CAP-05` — filmed but still undecoded — is the clip that would
-  pin the knife-edge end of the same curve. Decode `CAP-05` before designing the replacement.
+  **The knife-edge side had independently guessed the same fix** — "gate on actual bank instead of
+  `1−wingVert`", because `knife` grows with pure pitch at *zero* bank and a full-pull zoom therefore
+  loses ~11° of apex to a term that should not be firing at all. `CAP-01` is the first hard evidence
+  that `wingVert` alone is wrong.
+  **`CAP-05` (decoded 2026-08-04) now supplies the other end of the curve, and it confirms the
+  hypothesis in (a).** Its two knife-edge takes sit at **+94…+104° of bank — the same bank as
+  `CAP-01`, by the same ADI measure — but at near-neutral stick**, and the outcome is the opposite:
+  the aircraft falls out of the sky (nose sagging without bound, sink reaching 93 ft/sim-s, 540 m
+  lost in 38.9 sim s) while sweeping only **0.68 / 1.13 °/sim-s** of heading against `CAP-01`'s
+  **18.95** — 17–28× slower, tracked off the compass tape at peak median 0.998.
+  **So lift is not a function of bank.** A term keyed on bank alone must give these two clips the
+  same answer, and they differ by a factor of 25 in turn rate and by everything in altitude. What
+  carries the `CAP-01` turn has to be **pull / angle-of-attack**, exactly as (a) guessed — which
+  also promotes `player.json`'s `maxAOA 46` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` from
+  "candidate data" to the most likely home for the term. Design the replacement against **both**
+  clips: it must hold altitude at 100° bank under full pull, and must not at 100° bank with neutral
+  stick.
+  ⚠ One caveat on the pairing: the neutral-stick reading is inferred from the footage (the turn rate
+  and the monotone nose sag both say no pull was held), not pilot-confirmed the way `CAP-01`'s "stick
+  full back throughout" is. If it turns out the knife-edge takes carried some back pressure, the
+  factor-of-25 gap narrows but does not close.
+  **The knife-edge trajectory the replacement has to reproduce** (from `CAP-05`, both takes, at
+  143 mph and 300 mph, agreeing to ~13% — so it is driven by time-since-roll-in, *not* airspeed):
+
+  | time since roll-in | nose | path | sink |
+  |---|---|---|---|
+  | 0–3 s | −4° step, then drifting | ≈0° | **0.5 ft/sim-s — it genuinely holds altitude** |
+  | +12 s | −12.0° | −6.0° | 24 ft/sim-s |
+  | +24 s | −20.0° | −12.8° | 60 ft/sim-s |
+  | +36 s | −27.0° | −18.7° | 93 ft/sim-s, still steepening |
+
+  So the sag is an immediate **≈4° step** (fitted intercepts −3.4°/−4.2°, i.e. `KnifeNoseSag` 0.07 rad
+  is the right *magnitude*) followed by an **unbounded linear drift of 0.69–0.89 °/sim-s**. ⚠ **Do
+  not retune `KnifeNoseSag`/`KnifeNoseRate` to fit this — the shape is what is wrong.** A bounded sag
+  cannot produce a linear 36-second drift, and raising the bound to 27° would destroy the first three
+  seconds, which are the part we currently get *worst* and the original gets flat. Whatever replaces
+  it must be near-flat at roll-in and unbounded after. Total altitude lost is nearly the same either
+  way (540 m original vs our 634 m over ~35 s) — the shape is the whole difference, which is why a
+  feel A/B on sink alone would have passed a wrong model.
+  For `KnifeAlignFloor`: the observable is that the path lags the nose by **4.8° at +3 s, 7.2° at
+  +24 s, 8.3° at +36 s**. ⚠ Do not back an align rate out of that — gravity is pulling the path down
+  over the same interval and `CAP-05` cannot separate the two effects.
+  *Playtest after fix:* inherited from `BL-124` and still owed, because the fix has not landed — (1)
+  does the knife-edge sink feel like the original's; (2) does the full-pull zoom still feel nose-heavy
+  (the `knife`-at-zero-bank leak above); (3) stall-into-knife-edge recovery should not feel "doubled".
   (b) The bank is read from the ADI sky-region centroid, which measured the 360° roll and is
   trusted for bank, but 100° is past vertical where the aircraft symbol painted on the ball is
   least helpful — treat "past vertical" as solid and the exact 100° as ±4°.
@@ -1142,6 +1189,22 @@ needs one of them to move needs a new measurement first.
   detect a wrong shape here — the low-throttle end is the only place the shape is observable.
   (c) `LowSpeedDragBlend` 0.35 exists to answer a user report that a throttled-back plane barely
   decelerated; whatever lands here must not reintroduce that.
+  **`CAP-05` (2026-08-04) breaks trap (a)'s deadlock from the drag side, with no thrust term in it
+  at all.** `CAP-05 Stall 0% Thrust no input` is a zero-thrust deceleration from 159 to 70 mph, so
+  `dV/dt` is drag plus gravity and nothing else. Measured drag is **0.36 / 1.11 / 2.82 / 3.74 m/s²**
+  at x = 0.25 / 0.35 / 0.46 / 0.50, against our blend's **7.69 / 12.13 / 17.91 / 20.25** — 4–21×
+  less, and the ratio holds across every `(g, climb-scale)` pair the fit tolerates. Model-free
+  version: engine off at 152.6 mph in a +5° climb the original decelerates at **6.24 m/s²** where
+  ours takes 21.6. Because the full-throttle equilibrium pins `D(fd) = A` (trap (b)), a curve this
+  weak at x = 0.5 and equal to `A` at x = 1 **must be much steeper than quadratic below cruise** —
+  which is `x^2.67`, arrived at here by a completely independent route. So the fork is resolved in
+  favour of drag shape: the low-speed drag really is far weaker than ours, and thrust non-linearity
+  is no longer needed to explain the 1/8-throttle equilibrium (137.9 mph ⇒ thrust(1/8) ≈ 2.8–4.5
+  m/s², against 7.5 for a linear model — still sublinear, but only mildly).
+  ⚠ Trap (c) is now the binding constraint, not a footnote: whatever replaces the blend cuts
+  low-speed drag by a large factor, which is exactly the direction of the original user report. The
+  fix has to come from the *shape* (a steeper exponent, so drag still bites approaching fd) and be
+  re-playtested against that report specifically.
 
 - `BL-094` **No altitude limit at all, and the original's is a hard altitude clamp — not a
   performance ceiling and not `flight_ceiling`.** Settled by `CAP-03` (four clips, decoded
@@ -1689,8 +1752,36 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   are not TUNE knobs and a feel A/B cannot overrule them. **The owed errand — flying the calibrated
   values at the new speeds — is done (2026-07-30): confirmed feeling like the original, no
   collision/stunt-zone/chase-camera regressions.** What remains open here is
-  `StallNoseRate`/`KnifeAlignFloor`/`ClimbGravityScale`/`LowSpeedDragBlend` alone — needs video
-  (`CAP-05`).
+  `StallNoseRate`/`KnifeAlignFloor`/`ClimbGravityScale`/`LowSpeedDragBlend` alone.
+  **`CAP-05` decoded 2026-08-04** (four clips, all gating rigid) — three of the four are answered and
+  one is not:
+  - **`StallNoseRate` 1.0 rad/s is ~17× too fast.** In `CAP-05 Stall 0% Thrust no input` the nose
+    holds **+4.2 ± 0.1°** through the whole deceleration, starts falling only at **76 mph = 0.25 fd**
+    (minimum speed reached 69.8 mph = **0.232 fd**), then drops at **3.38 °/sim-s = 0.059 rad/sim-s**
+    from +4.1° to −21.2°, and **stops at ≈−22°** once speed rebuilds past 0.40 fd. It does not chase
+    world-down, so "rad/s toward world-down at full stall depth" is the wrong target as well as the
+    wrong rate. The break is wings-level and clean: the compass turns **0.0°** across the whole
+    24.8 sim s, no wing drop. ⚠ Note `StallSpeedFrac` **0.30** is implicated too — the original breaks
+    at 0.25 fd, not 0.30 — but that constant is outside this entry; raise it with `BL-148`.
+  - **`LowSpeedDragBlend` 0.35 gives 4–6× too much drag below cruise.** The same clip is a
+    thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at x = 0.25 / 0.35 /
+    0.46 / 0.50 against our **7.69 / 12.13 / 17.91 / 20.25**. The ratio survives every `(g, C)` pair
+    the fit tolerates. The model-free form: engine off at 152.6 mph in a +5° climb the original
+    decelerates at **6.24 m/s²** where ours would take 21.6. This is an independent confirmation of
+    `BL-092`'s `x^2.67` — see that entry, which owns the drag-law rewrite.
+  - **`KnifeAlignFloor` 0.35** — the footage gives the observable (path lags nose by 4.8° at +3 s,
+    7.2° at +24 s, 8.3° at +36 s of knife-edge) but *not* the constant, because gravity is pulling
+    the path down over the same interval and this clip cannot separate the two. **The constant now
+    lives on `BL-247`**, which inherited the knife-edge attitude terms when `BL-124` closed.
+  - **`ClimbGravityScale` 0.6 is NOT settled and `CAP-05` cannot settle it.** ⚠ The fit is
+    degenerate: holding `g` and refitting leaves rms flat (0.218–0.280 m/s²) over `g` = 17…25 m/s²,
+    with `C` = 1.18 / **0.59** / 0.00 at `g` = 17 / 20 / 25. That `nom_gravity` 20.0 lands on
+    `C` ≈ 0.6 is a consistency, not a measurement — precisely the "confirms whatever you feed it"
+    trap `FINDINGS.md` warns about. The 50%-throttle climb clip cannot help: its ADI **saturates**
+    (sky fraction pinned at 0.730), so the nose angle is unreadable above ~+30° and the along-path
+    thrust cannot be formed. *What would settle it:* an independent `g`, or a capture with a
+    **readable** nose angle in a sustained climb — i.e. a shallow, held climb at fixed throttle
+    rather than a zoom.
 - `BL-116` **Numpad camera views — superseded 2026-07-30.** The "layout is settled" claim this entry
   made is now contradicted by cockpit testing (8/2 swapped, 7/0 both underside-front, 1/3 both rear,
   and the original binds 0 which we don't), and the "distance is user-recall, not data" claim is now
@@ -1706,7 +1797,14 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   never rising as the stall approaches. The **[spec]** target wants a rising ramp. *Wanted:* a
   proximity fraction (e.g. margin above `stallSpeed`) driving blink rate or opacity before `Stalled`
   itself goes true.
-  *Blocked on `CAP-06`* (`playtest.md` §0).
+  *Blocked on `CAP-06`* (`playtest.md` §0) — for the *warning ramp*. **The threshold it ramps toward
+  is already measured: `CAP-05` (2026-08-04) puts the original's stall break at 0.25 fd, against our
+  `StallSpeedFrac` 0.30.** In `CAP-05 Stall 0% Thrust no input` the nose holds +4.2 ± 0.1° until
+  **76 mph = 0.25 fd** and the minimum speed reached is 69.8 mph = **0.232 fd**; we begin the
+  nose-drop at 0.30 fd = 90 mph, so we stall ~15 mph early. `StallSpeedFrac` is this entry's to move
+  because `isStalled()` is what both the nose-drop and the blink read — but ⚠ **do not move it
+  without `CAP-06`**: the same constant sets where the warning window lights, and `CAP-06` is the
+  clip that says whether the original's warning and its nose-drop share one threshold at all.
   ⚠ **Traps.** (a) This needs a code change before it needs a magnitude — do not treat it as a retune
   of `WarnBlinkPeriod` alone. *Playtest after fix:* once a ramp lands, A/B its rate against the
   original's stall-warning video (the same capture as the stall/knife-edge recording) before calling
@@ -1809,17 +1907,6 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (`FlightAudio.cs:145`). *Playtest after fix:* nudge `flightAudio.whineMixGain` up from 0.12 via
   `config.json`, re-A/B a dive, then delete the override (`docs/verification.md` DET-8 applies here
   too).
-- `BL-124` **Knife-edge nose sag (polish-4 item 6, landed 2026-07-23)** — `KnifeNoseSag` **0.07 rad (≈4°)**,
-  the bound the nose settles to at full knife-edge, and `KnifeNoseRate` **0.2 rad/s**, how fast it
-  gets there. Both `FlightModel.cs`. Presence and direction are proven by scripted test; **magnitude
-  is not and cannot be** — it needs the original at the controls. Measured at the landed values:
-  nose −0° → **−4°**, settled path −6° → **−10°**, sink 11.8 → **19.4 m/s**, 398 → **634 m** lost in
-  35 s. Three things to judge in the cockpit: (1) does a −4° nose / −10° path / ~19 m/s sink feel
-  like the original's knife-edge; (2) **steep wings-level climbs are also affected** — a full-pull
-  zoom loses ~11° of apex — because `knife = 1 − |up·Y|` grows with pure pitch at zero bank, so if
-  that nose-heaviness feels wrong the fix is **gating on actual bank instead of `1−wingVert`**, a
-  code change rather than a retune; (3) stall-into-knife-edge recovery should not feel "doubled".
-  *Blocked on `CAP-05`* (`playtest.md` §0).
 - `BL-125` **Stunt mode** — `DzRadius` **15 m — user-tuned by hand 2026-07-22, and this is the current
   value** (an earlier "30 m, tightened from 60" note here was stale; the source is right).
   **Still wanted: a per-zone radius from the data, because one global constant does not fit** —

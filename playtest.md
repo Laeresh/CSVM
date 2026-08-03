@@ -10,7 +10,7 @@ here means the work is queued, not forgotten. Deep evidence and traps live in
 Cite them from `backlog.md` and in conversation the way `BL-nnn` is cited. IDs are permanent: when
 an item closes its ID retires with it and is never reused, so numbering gaps are expected.
 Retired IDs disappear from this file, so never mint a new ID by scanning the entries below — take
-it from this counter and bump it here: **next free IDs `CAP-20` and `PT-31`.**
+it from this counter and bump it here: **next free IDs `CAP-22` and `PT-31`.**
 
 **Captures staged for an item live in `playtest/<ID>/`** — git-ignored (they are renders of the
 player's own game files) and, unlike `.scratch/`, **not swept by `CleanScratch.ps1`**, so they
@@ -59,8 +59,8 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
-| `CAP-05` | Stall & knife-edge recovery | A full stall entry and recovery, plus a sustained knife-edge | `BL-115`, `BL-124` |
 | `CAP-06` | Graded stall-warning reference | The airspeed dial's warning blink **through the approach to stall**, not only after it | `BL-148` |
+| `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`), `BL-092` |
 
 ### HUD — ammo gauge in frame
 
