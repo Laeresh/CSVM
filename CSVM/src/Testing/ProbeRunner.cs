@@ -286,13 +286,16 @@ public sealed class ProbeRunner
     /// if a marker doesn't resolve. Writes to stdout and <c>./.scratch/loadout_dump.txt</c>, then
     /// quits. <c>--loadout=&lt;def&gt;</c> binds that def's loadout instead of each plane's own (a
     /// cross-binding test — e.g. binding a def that wants <c>firepoint8</c> to the Kestrel proves
-    /// the missing-marker error fires). An optional value filters by def / model / display.</summary>
+    /// the missing-marker error fires). An optional value filters by def / model / display.
+    /// Combined with <c>--weapon-lab</c> (B4), binds each plane's <see cref="Flight.Loadout.ForRig"/>
+    /// full-rig loadout instead of the stock one, so the report lists mounts the stock file never
+    /// names.</summary>
     /// <returns>Whether the report was produced; the caller turns this into the exit code.</returns>
     public bool DumpLoadout(SessionSpec spec)
     {
         DisplayServer.WindowSetFlag(DisplayServer.WindowFlags.NoFocus, true);
         var r = Probes.Loadouts(_zrdrPath, _messagesPath, _planesGamezPath, _dataRoot,
-            spec.DumpLoadoutFilter, spec.LoadoutOverride);
+            spec.DumpLoadoutFilter, spec.LoadoutOverride, forRig: spec.WeaponLab);
         if (r.Error != null)
         {
             GD.PrintErr($"--dump-loadout: {r.Error}");

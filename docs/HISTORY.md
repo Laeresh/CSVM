@@ -12247,6 +12247,109 @@ its frame is unchanged).
 `SelectGunGroup`/`SelectPylon` for exactly that. `docs/cli.md` + `docs/controls.md` were corrected in
 this turn (W moved from the `--viewer` table to the flight one); D10 is still the full doc pass.
 
+**PLAN-weapon-lab B4: `Loadout.ForRig` — every firepoint and pylon, seeded from stock (2026-08-03).**
+`Loadout.ForRig(plane, WeaponDefs, LoadoutDef?)` synthesizes a lab `LoadoutDef` naming the airframe's
+**whole** marker rig instead of only what `stock_loadouts.json` binds: the 4 gun-group slots the
+reverse-index rule seats (`docs/formats/markers.md` — W1→fp(9−2n),(10−2n)), each populated with
+whichever of its firepoint pair the rig actually has (the Kestrel's W1 resolves to the lone
+centreline `firepoint7`, a one-muzzle group), plus one hardpoint per `pylonN` present. A slot stock
+does name keeps its weapon/mount/caliber; one it doesn't defaults to the stock's first gun weapon
+(`wep_30` if the plane carries none at all) under a generic "Gun Group N" label. Every synthesized
+group is `IsTurret = false` — deliberately fireable even on a slot stock marks a turret, the lab-only
+difference the plan calls for. The synthesized def runs through the existing `Bind`, so there is
+still exactly one bind path and a marker the rig genuinely lacks still throws loudly, never a silent
+skip. `stock_loadouts.json` itself is untouched — it stays the description of the original fit.
+
+**Verified.** New `loadout-forrig` suite (`Suites.cs`, alongside `loadout-bind`): for all 11 player
+airframes, `ForRig` yields exactly 4 gun groups, every one fireable, no firepoint bound to two
+groups, every rig firepoint covered, and one hardpoint per rig pylon — `.\RunTests.ps1` PASS,
+22/22 engine suites (was 21), 395/395 units. `--dump-loadout --weapon-lab=bhawk` now lists all 4
+gun groups (`Inner Wing Guns`, `Outer Wing Guns`, the stock-omitted `Gun Group 3`/`Gun Group 4`) and
+all 8 pylons — 24 rockets total vs. stock's 2 groups / 3 pylons / 9 rockets; plain `--dump-loadout`
+(no `--weapon-lab`) is unchanged, confirming the mode is additive (`Probes.Loadouts` gained a
+`forRig` parameter, threaded from `ProbeRunner.DumpLoadout` off `spec.WeaponLab`).
+
+**Note.** B4 does not build the "every individual firepoint as its own single-muzzle mount" reading
+of the plan's Decision 6 table — that phrasing is reconciled with the item's own Approach/Verify
+text (which only ever describes 4 groups + pylons, and calls the Kestrel's incomplete pair "one
+single-muzzle group") as describing the degenerate case, not a fifth mount category; `WeaponLab`'s
+existing raw-marker fallback already offers per-firepoint mounts at the UI layer when B5 needs finer
+granularity than a W-group. B5 (the panel driving this live loadout) is next.
+
+## 2026-08-03 — `CAP-04` flown: the original's pitch input is digital, so `BL-147`'s "moderate deflection" does not exist
+
+`CAP-04` was filmed to give `BL-147` a per-frame pitch trace from a ~45° (moderate) input, the twin
+of `BL-097`'s roll question. Both takes decode cleanly — `checkclip` `OK` on each (dx correlation
++0.95 / +1.00, so the panel shake is translation, not auto head turn), compass tape travel 0.17° and
+−0.22° over the whole clip so the manoeuvre really is wings-level pitch, altimeter band resolved at
+11.2× and 8.2× margin, second-difference noise 1.75 / 1.32 ft and 1.14 / 1.11 mph.
+
+**The item's premise turned out to be wrong, and that is the finding.** The user flies the
+original's pitch on the keyboard: every pitch command is full deflection, gated on and off by the
+key, so there is no sub-full-deflection input to spin up and a "~45° pull" is a *tap cadence*. (The
+numpad captures `CAP-07`/`CAP-08` are the *camera*, not the stick — an easy wrong inference.) The
+data agrees: the smoothed peak flight-path pitch rate over the four pull events is 8.5 / 9.8 / 9.4 /
+12.7 °/sim-s, i.e. 26–30% of the 33 °/sim-s full-deflection rate — a duty cycle — while the
+instantaneous rate climbs to 20–24 °/sim-s as the smoothing window tightens, which is the individual
+taps showing through. Neither take is a 45° pull by any reading: flight path peaks at **+33.5°** and
+**+28.0°**, and the pitch *attitude* is unreadable because the ADI ball saturates at its 0.730 sky
+ceiling once the flight path passes ~+10°.
+
+**The step response was already in footage we had.** The 2026-07 `Bloodhawk Pitch` loop was flown by
+*holding* the key: 4 s of dead-level 299.4 mph (the same entry condition as both `CAP-04` takes),
+key down at t = 4.10 s wall, rate rising to an asymptote **R = 26–31 °/sim-s** — consistent with the
+published sustained 33 — with a model-free 10–90% rise of **0.66 s sim**. The exponential τ is
+**not resolvable**: fitted τ falls monotonically with the smoothing window (0.73 → 0.19 s sim), which
+is `FINDINGS.md`'s "a peak found by differentiating a smoothed signal is a smoothing artifact" in its
+exact form, so only the **upper bound τ ≲ 0.2 s sim** is real. Our held-stick spin-up is
+`1/ang_momentum_damp` = 1/5.0 = **0.2 s**, sitting exactly at that bound — **no spin-up mismatch is
+demonstrable and `PitchTune` 0.75 is not implicated**, which now defends it twice over (sustained
+rate before, spin-up bound now).
+
+**Where the "sluggish" feel probably comes from.** At matched smoothing the held key reaches its rate
+in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s — 1.5× to 8× slower, and
+not reproducible between takes, which is a human hand rather than a flight model. The check that
+follows from it is our key-to-input path: if it ramps or filters where the original's is a bare
+on/off, that is the divergence, not the airframe constants.
+
+`BL-147` is bounded, not closed; `CAP-04`'s row stays, rewritten to ask for a **step** — hold the
+pitch key ~2 s from level and release cleanly — at **≥60 fps constant frame rate**, since τ ≲ 0.2 s
+sim is ~4 frames at the 30 fps these captures run at and cannot be resolved by construction. The
+same defect applies to `BL-097`: there is no partial aileron deflection either, so its "moderate roll
+input" clip cannot be flown and it should be re-read as a held-key step question. Trace plot kept at
+`playtest/CAP-04/cap04_pitch_trace.png`.
+
+## 2026-08-03 — the weapon lab's panel drives the live loadout (`PLAN-weapon-lab` B5)
+
+`WeaponLab` is now a panel and nothing else. Deleted: `FireVolley`, `SimStep`, the lab-owned
+`ProjectilePool`, the stand-in target wall with its surface tag and distance slider, `BuildScene`,
+`PlaceTarget`, `ApplySurfaceTag`, and the `Mount.NextNode` firing cursor — the duplicated firing loop
+`docs/architecture.md` had carried a ⚠ about since it was written. What replaces it: every stepper
+writes into the held `FlightController`'s bound `Loadout`. A gun goes onto the **selected** group with
+a full clip of its `CLUSTER_SIZE`; a hardpoint weapon re-arms every pylon (`ApplyRocketOverride`) and
+rebuilds `PylonOrdnance`; the mount stepper calls A2's `SelectGunGroup`/`SelectPylon`; the auto-fire
+toggle holds `AutoFire`/`AutoFireRockets` by bank; "reset to stock" restores the launch fit. The
+panel key moved **W → B** (`W` is pitch), and the lab session now binds B4's `Loadout.ForRig` instead
+of the stock fit, so all 4 gun groups and all 8 pylons are reachable on any airframe.
+
+Two supporting pieces the item needed. `PylonOrdnance.Unmount()` takes the mounted set off the pylons
+**immediately** (`RemoveChild` then `QueueFree`, not `QueueFree` alone) — rebuilding without it leaks
+one body per pylon per swap, and a deferred free would leave the old set beside the new for a frame.
+And `--weapon-cycle[=frames]` steps the bank's weapon list every N physics frames: the scripted twin
+of holding the panel's `>` down, without which the item's verify step needs a human at the controls.
+
+**Verified.** `--weapon-lab=wep_06 --plane=player_bhawk --chapter=C2 --weapon-cycle=4 --frames=1000
+--log=weapons:debug`: **130 swaps, every one `mounted=8 ordnance_nodes=8`** — the mounted-model count
+is exactly the count of ordnance bodies parented to the rig, so no swap leaks. All 13 distinct
+`FLYOUT` prototypes in the hardpoint bank instanced real geometry (`he_rocket`, `flak`, `sonic`,
+`a_torpedo` at 6 meshes, …) and the change is visible — small HE rockets
+against eight red torpedoes on the same wings (`analysis/weapon-lab-loadout/` records the
+captures; the renders themselves stay out of the repo, in the ignored `Screenshots/`). Guns:
+`--weapon-mount=g1..g4 --weapon-fire` each logged the lab's mount line, the arm line and
+`FlightController`'s own "gun group N firing" in agreement — group 1 → `firepoint7,8`, 2 → `5,6`,
+3 → `3,4`, 4 → `1,2`, the last two being mounts the Bloodhawk's stock fit never names.
+`.\RunTests.ps1` PASS: 395 units, 22 suites, 13 goldens hash-identical.
+
 
 ## 2026-08-03 — Per-plane camera: `CamParams` + `CameraController` (`BL-149`)
 

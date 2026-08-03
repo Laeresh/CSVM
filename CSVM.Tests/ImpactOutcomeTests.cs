@@ -23,9 +23,7 @@ public class ImpactOutcomeTests
     /// <c>ProjectilePool.ClassifySurface</c> (<c>Projectile.cs:380</c>) and the collider tagger
     /// behind it, <c>SceneBuilder.ClassifySurface(string?)</c> (<c>SceneBuilder.cs:389</c>), only
     /// ever stamp <c>"water"</c> or <c>"buildings"</c> and default everything else — including
-    /// quicksand terrain — to <c>Default</c>. <c>WeaponLab</c>'s own manual test rig agrees
-    /// (<c>SurfaceNames</c>, <c>WeaponLab.cs:48</c>: "the three surface classes a viewer target can
-    /// carry"). A weapon's <c>quicksand</c> IMPACT entry (e.g. <c>wep_04</c>'s) is real data the
+    /// quicksand terrain — to <c>Default</c>. A weapon's <c>quicksand</c> IMPACT entry (e.g. <c>wep_04</c>'s) is real data the
     /// reader must still parse correctly, but no code path ever asks <see cref="ImpactOutcome.Resolve"/>
     /// for it — a suite case for it would be invented coverage, the exact trap B3 named for
     /// <c>Player</c>/<c>Enemy</c>.</summary>

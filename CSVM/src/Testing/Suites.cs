@@ -84,6 +84,8 @@ public static class Suites
             "every stock loadout binds to its model with every marker resolved", LoadoutBind));
         into.Add(new TestHarness.Suite("weapons-fire",
             "all 48 weapons mount and fire from a built plane", WeaponsFire));
+        into.Add(new TestHarness.Suite("loadout-forrig",
+            "Loadout.ForRig covers every firepoint/pylon on all 11 airframes, seeded from stock", LoadoutForRig));
         into.Add(new TestHarness.Suite("warning-shot",
             "the incoming-fire near-miss cue fires on another pilot's round, never on your own", WarningShot));
         into.Add(new TestHarness.Suite("damage-stages",
@@ -540,11 +542,12 @@ public static class Suites
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
-        // The lab holds the archive past construction (it bakes the target material and the
-        // impact stand-ins), so it is disposed only after the self-test has run.
+        // The pool holds the archive past construction (it bakes the tracer and impact stand-ins),
+        // so it is disposed only after the self-test has run.
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         UI.WeaponLab? lab = null;
+        ProjectilePool? pool = null;
         try
         {
             plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -559,7 +562,9 @@ public static class Suites
                 }
             }
             ctx.Check(loadout != null, $"stock loadout found for plane={ctx.PlaneName}");
-            lab = new UI.WeaponLab(plane, weapons, loadout, textures, ctx.Camera, ctx.PlaneName);
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            lab = new UI.WeaponLab(plane, weapons, loadout, ctx.PlaneName, pool: pool);
             ctx.Host.AddChild(lab);
             var result = lab.SelfTest();
             ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the self-test");
@@ -572,7 +577,95 @@ public static class Suites
         finally
         {
             lab?.Free();
+            pool?.Free();
             plane?.Free();
+            textures.Dispose();
+        }
+    }
+
+    /// <summary>B4: <see cref="Loadout.ForRig"/> against all 11 player airframes — 4 gun groups
+    /// covering every <c>firepointN</c> the rig actually carries (the Kestrel's odd 7th), one
+    /// hardpoint per <c>pylonN</c>, no marker bound to two groups, and every synthesized group
+    /// fireable even where stock marks the slot a turret.</summary>
+    private static void LoadoutForRig(TestContext ctx)
+    {
+        ctx.RequireData(ctx.PlanesGamezPath, $"planes gamez");
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr archive");
+        string texturesPath = SessionPaths.ChapterTextures(ctx.DataRoot, "C1");
+        ctx.RequireData(texturesPath, $"C1 textures");
+
+        var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
+        var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
+        var stock = StockLoadouts.Load();
+        var textures = new TextureArchive(texturesPath);
+        try
+        {
+            foreach (var (model, display) in MarkerRig.PlayerAirframes)
+            {
+                var rig = MarkerRig.Extract(planesGamez, model);
+                ctx.Check(rig != null, $"{display}: marker rig extracted");
+                if (rig == null)
+                {
+                    continue;
+                }
+                LoadoutDef? stockDef = null;
+                foreach (var d in stock.All.Values)
+                {
+                    if (d.Model == model)
+                    {
+                        stockDef = d;
+                        break;
+                    }
+                }
+
+                Node3D? plane = null;
+                try
+                {
+                    plane = new PlaneBuilder(planesGamez, textures).Build(model);
+                    ctx.Host.AddChild(plane);
+                    var loadout = Loadout.ForRig(plane, weapons, stockDef);
+                    ctx.Same(4, loadout.Guns.Count, $"{display}: gun groups synthesized");
+
+                    var bound = new HashSet<string>();
+                    bool boundTwice = false;
+                    foreach (var g in loadout.Guns)
+                    {
+                        ctx.Check(!g.IsTurret, $"{display}: slot {g.Slot} fireable in the lab (never inert)");
+                        foreach (var m in g.Muzzles)
+                        {
+                            string name = m.HasMeta(AnimRuntime.NameMeta)
+                                ? m.GetMeta(AnimRuntime.NameMeta).AsString() : m.Name;
+                            if (!bound.Add(name))
+                            {
+                                boundTwice = true;
+                            }
+                        }
+                    }
+                    ctx.Check(!boundTwice, $"{display}: no firepoint bound to two groups");
+
+                    int rigFirepoints = 0, rigPylons = 0;
+                    foreach (var m in rig.Markers)
+                    {
+                        if (m.Kind == MarkerRig.MarkerKind.Firepoint)
+                        {
+                            rigFirepoints++;
+                        }
+                        else if (m.Kind == MarkerRig.MarkerKind.Pylon)
+                        {
+                            rigPylons++;
+                        }
+                    }
+                    ctx.Same(rigFirepoints, bound.Count, $"{display}: every rig firepoint covered");
+                    ctx.Same(rigPylons, loadout.Hardpoints.Count, $"{display}: one hardpoint per pylon");
+                }
+                finally
+                {
+                    plane?.Free();
+                }
+            }
+        }
+        finally
+        {
             textures.Dispose();
         }
     }

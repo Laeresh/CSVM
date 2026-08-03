@@ -368,6 +368,10 @@ public sealed record SessionSpec
     public string? WeaponSelect { get; private set; }
     public string? WeaponMount { get; private set; }
     public bool WeaponFire { get; private set; }
+    /// <summary><c>--weapon-cycle[=frames]</c>: in a weapon-lab session, step the current bank's
+    /// weapon list one entry every N physics frames — the scripted twin of the panel's weapon
+    /// stepper, so the arm/ordnance-rebuild path can be walked with nobody at the controls. 0 = off.</summary>
+    public int WeaponCycle { get; private set; }
 
     // ---- Collision ----------------------------------------------------------------------------
 
@@ -565,6 +569,8 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--weapon-lab=")) { s.WeaponLab = true; s.WeaponSelect = arg["--weapon-lab=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-mount=")) { s.WeaponMount = arg["--weapon-mount=".Length..]; s.HasContentArg = true; }
             else if (arg == "--weapon-fire") { s.WeaponFire = true; s.HasContentArg = true; }
+            else if (arg == "--weapon-cycle") { s.WeaponCycle = 30; s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-cycle=")) { s.WeaponCycle = Math.Max(1, int.Parse(arg["--weapon-cycle=".Length..])); s.HasContentArg = true; }
             else if (arg == "--weapon-test") { s.WeaponTest = true; s.HasContentArg = true; }
             else if (arg == "--run-tests") { s.RunTests = true; }
             else if (arg.StartsWith("--run-tests=")) { s.RunTests = true; s.RunTestsFilter = arg["--run-tests=".Length..]; }
@@ -873,9 +879,9 @@ public sealed record SessionSpec
         // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
         // anything that forced a non-flight mode wins the arbitration above, but that would
         // silently leave the lab half-built, so it is reported instead.
-        if ((WeaponLab || WeaponMount != null || WeaponFire) && !Fly)
+        if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0) && !Fly)
         {
-            Warn("core", "--weapon-lab/--weapon-mount/--weapon-fire need flight; another mode flag won this session, so the lab will not build");
+            Warn("core", "--weapon-lab/--weapon-mount/--weapon-fire/--weapon-cycle need flight; another mode flag won this session, so the lab will not build");
         }
         bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
         if (DebugSelect != null && !observing)

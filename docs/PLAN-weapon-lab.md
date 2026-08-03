@@ -104,8 +104,8 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave B — the full-rig loadout
 
-4. ☐ B4 — `Loadout.ForRig`: 4 gun groups over every firepoint + all 8 pylons, seeded from stock
-5. ☐ B5 — panel drives the live loadout (weapon/mount swap, ammo refill, ordnance rebuild)
+4. ☑ B4 — `Loadout.ForRig`: 4 gun groups over every firepoint + all 8 pylons, seeded from stock
+5. ☑ B5 — panel drives the live loadout (weapon/mount swap, ammo refill, ordnance rebuild)
 
 ### Wave C — targeting
 
@@ -220,7 +220,7 @@ flight build may change for a non-lab session.
 
 # Wave B — the full-rig loadout
 
-## B4 ☐ `Loadout.ForRig`: every firepoint and pylon, seeded from stock
+## B4 ☑ `Loadout.ForRig`: every firepoint and pylon, seeded from stock
 
 **Goal.** In the lab, the mount list is the airframe's **whole** marker rig — 4 gun groups
 (W1→`firepoint7,8`, W2→`fp5,6`, W3→`fp3,4`, W4→`fp1,2`, the authored rule from
@@ -254,7 +254,7 @@ twice and none missing. `--dump-loadout` for a lab session lists mounts the stoc
 real (`markers.md:221-235`); two groups sharing a point is correct, not a bug. Do not "fix"
 `stock_loadouts.json` — the stock fit stays the description of the original.
 
-## B5 ☐ The panel drives the live loadout
+## B5 ☑ The panel drives the live loadout
 
 **Goal.** The panel's bank / weapon / mount steppers change what is actually mounted: picking a gun
 assigns it to the selected group and refills ammo; picking a hardpoint weapon re-arms every pylon

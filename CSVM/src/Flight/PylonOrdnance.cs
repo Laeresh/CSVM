@@ -57,6 +57,20 @@ public sealed class PylonOrdnance
         return mounts.Count > 0 ? new PylonOrdnance(mounts) : null;
     }
 
+    /// <summary>Takes every mounted body back off the wings — detached from its pylon
+    /// <b>immediately</b> (not merely queued), so a caller that rebuilds in the same frame cannot
+    /// leave the old model hanging beside the new one. The weapon lab's hardpoint swap is the one
+    /// caller: rebuilding without this leaks a body per pylon per swap.</summary>
+    public void Unmount()
+    {
+        foreach (var m in _mounts)
+        {
+            m.Model.GetParent()?.RemoveChild(m.Model);
+            m.Model.QueueFree();
+        }
+        _mounts.Clear();
+    }
+
     /// <summary>Syncs each mounted body's visibility to its pylon's live ammo — shown while the pylon
     /// holds ordnance, hidden at zero. Cheap: writes <see cref="Node3D.Visible"/> only on a change.
     /// Driven each frame after the rocket-firing update; a respawn refill shows on the next frame.</summary>
