@@ -116,6 +116,33 @@ work is below.
 
 ## Blocked / deferred
 
+- `BL-245` **The other 379 bounce-terminated `OBJECT_MOTION`s are FALLS, not launches — no apex to
+  solve, and a live `water`/`lava` surface table to choose between (split out of `BL-240` when the
+  census separated them, 2026-08-02).** Same authored idiom as `BL-240` — no `RUN_TIME`, a
+  `BOUNCE_SEQUENCE` naming the landing — but these start at rest or head downward, so
+  `BL-240`'s return-to-launch-height solve yields `t = 0` for every one of them and leaves the bug
+  exactly as it is today. Three shapes, censused over all 17,568 extracted defs:
+  **335** `translation initial=(0,0,0)` with gravity −9.8 — a shot-down `gasbag1` or `cargozep1`'s
+  `crashnode1` sinking to the ground, bouncing into `hit_ground1` or `hit_water1`; **~17** thrown
+  downward at elevation −70…−90° (`lifesaver11`'s `lifeboat` → `boat_explode`/`boat_explode_water`,
+  `b_turret1`'s parts); and **8** `chuteman` at `translation (0,−3,0)` with **gravity 0** — a
+  constant 3 m/s descent, no parabola at all, ending in `deactivate_chuteman`.
+  **Blocked on a ground ray**, and blocked on it twice: the fall distance is unknowable without one,
+  and unlike `BL-240`'s 150 these carry populated `water`/`lava` branches, which need the struck
+  collider to select. The engine already has both halves of the second problem —
+  `ProjectilePool.ClassifySurface` (`Projectile.cs:377`) maps a collider's group to a
+  `SurfaceClass`, and `Projectile.cs:296/625` shows the reusable ray query — so this is wiring, not
+  decode, once something casts the ray.
+  ⚠ Traps:
+  - **Colliders are conditional.** `SessionSpec.cs:157` is
+    `BuildsCollision => Fly || DamageTest || ForceCollision || DebugDamage != null` — a `--freecam`
+    run and every golden-capture mode build **no world colliders at all**. A ray-based fix silently
+    does nothing there, so it needs a stated fallback, not an assumption of ground.
+  - **Do not give these a constant fall time.** Same trap `BL-240` carries: it would invent a
+    landing altitude for 335 zeppelins.
+  - `chuteman` has **zero gravity**. Any solve phrased as a parabola divides by zero on it; it is a
+    constant-velocity descent and needs the distance, nothing else.
+
 - `BL-222` **The `player` IMPACT surface class — the general got-shot feedback on your own airframe,
   authored on 44 of 48 weapons and untriggerable until something shoots back (found 2026-08-01
   while landing `BL-090` item 2).** `weapons.json`'s `IMPACT` block is keyed by surface class, and
@@ -392,11 +419,12 @@ unscheduled.
 ### World animation & effects
 
 - `BL-240` **A bounce-terminated `OBJECT_MOTION` carries no `RUN_TIME`, and we read that as
-  "duration 0" — so 529 authored debris launches never move at all (split out of `BL-236`, now
-  landed; censused 2026-08-02).** The data's idiom for "fly until you hit something" is to omit `RUN_TIME`
-  and name a `BOUNCE_SEQUENCE` for the landing. `AnimRuntime.cs:2000` reads `run_time ?? 0f` and
-  `:2006` sends `ballTime <= 0f` down the `motion.Seek(0f)` branch — **pose at the launch rest
-  position, add no motion**. The piece never leaves the wreck.
+  "duration 0" — so ~150 authored debris launches never move at all (split out of `BL-236`, now
+  landed; censused 2026-08-02, re-censused and re-scoped 2026-08-02).** The data's idiom for "fly
+  until you hit something" is to omit `RUN_TIME` and name a `BOUNCE_SEQUENCE` for the landing.
+  `AnimRuntime.cs:2014` reads `run_time ?? 0f` and `:2020` sends `ballTime <= 0f` down the
+  `motion.Seek(0f)` branch — **pose at the launch rest position, add no motion**. The piece never
+  leaves the wreck.
   **Measured on `refuel*`** (`extracted/C1/cam_anim/refuel1-refuel1-healthy.json`), which is the
   clean A/B inside a single def:
   ```
@@ -416,26 +444,78 @@ unscheduled.
   (measured: `trailpuffer3` gone from the census by 5 s), so what is left here is not an emitter
   leak — it is a motion bug wearing an effects bug's clothes: a trail drawn at the tank instead of
   behind a flying piece, and no debris.
-  **Scope, censused over all 16,114 compiled defs:** **733** `ObjectMotion` events carry a
-  `bounce_sequence` (185 def files); **529 of those carry no `RUN_TIME`** (151 def files) — every
-  one a piece that never launches today. Widening past the bounce set, **1,834 of 3,833**
-  launch-channel motions have no `RUN_TIME` at all; that larger number needs a reachability filter
-  before it is quoted, the bounce subset does not.
-  *Fix shape:* two independent pieces, in this order. (1) Give a bounce-terminated launch a real
-  flight: either an analytic time-to-ground from the launch parabola (no physics needed, and enough
-  to make the piece move) or a proper ground ray. (2) Dispatch `BOUNCE_SEQUENCE` on contact — it
-  names an ON_CALL sequence of the same def, so `CallSequence` already does the work once something
-  calls it; the `partN INACTIVE` inside it then stops the trail through `BL-224`'s existing
-  `EndSustainedOn` path, with no effects-side change.
+  **Scope, re-censused over all 17,568 extracted defs:** **733** `ObjectMotion` events carry a
+  `bounce_sequence`; **529 of those carry no `RUN_TIME`** (217 def files). ⚠ **Those 529 are two
+  populations, not one**, and only the first is this item:
+  | shape | count | example |
+  |---|---|---|
+  | upward launch, `translation_range` elev +60…+85°, gravity < 0 | **152** (150 in executed `sequences`) | `part3`/`part4` — `refuel`, `g_tower1`, `ftank01`, `m_build01` |
+  | free-fall from rest, `translation (0,0,0)`, gravity −9.8 | 335 | `gasbag1`, `crashnode1` (`cargozep1_crash`) |
+  | thrown downward, elev −70…−90° | ~17 | `lifesaver11`'s `lifeboat`, `b_turret1`'s parts |
+  | `translation (0,−3,0)`, **gravity 0** | 8 | `chuteman` → `deactivate_chuteman` |
+
+  The last three are falls, not launches: they have no apex, so no analytic solve exists for them,
+  and their `BOUNCE_SEQUENCE` tables carry live `water`/`lava` branches that need a struck collider
+  to choose between. **They are `BL-245`, blocked on a ground ray.** This item is the 150.
+  Widening past the bounce set, **1,834 of 3,833** launch-channel motions have no `RUN_TIME` at all;
+  that larger number needs a reachability filter before it is quoted, the bounce subset does not.
+  **What makes the 150 tractable:** 150 of 150 carry only the `default` branch (no `water`, no
+  `lava`), every one naming a sequence that exists in the same def (`sparkout3` ×125, `sparkout4`
+  ×24, `treasure_splash` ×1); none carries a `bounce_sound`; and every one is the **last event of
+  its sequence**, so returning a real duration pushes nothing later on the timeline.
+  *Fix shape:* four pieces.
+  (1) **Flight time.** `MotionRuntime.Create` solves `t = 2·v0.y / |accel.y|` — the moment the
+  parabola returns to launch height — from the launch it has just drawn, and `AnimRuntime.cs:2014`
+  reads it back where `run_time ?? 0f` sits today. It must live in `Create`: the launch velocity
+  comes from the seeded `_rng` there, so `AnimRuntime` cannot know it without duplicating the draw.
+  Corroboration: median solved flight **3.81 s** (p10 1.43, max 4.89) against `part1`/`part2`'s
+  *authored* `RUN_TIME` of 5.0 and 3.5 in the same def.
+  (2) **Bounce dispatch.** `MotionRuntime` carries a `PendingBounce`; `TickMotions`
+  (`AnimRuntime.cs:3327`) calls `CallSequence(Owner.Def, Owner.Anchor, name)` when it sweeps the
+  finished motion. `Owner` is already on `IAnimMotion`. The `partN INACTIVE` inside `sparkoutN` then
+  stops the trail through `BL-224`'s existing `EndSustainedOn` path, with no effects-side change.
+  (3) **Instance pin.** `CallSequence` (`AnimRuntime.cs:3029`) no-ops without a live instance, and
+  `SequenceRunner.cs:348-351` marks a runner `_done` the frame its last event fires *whatever
+  duration that event returned* — so with the launch always last, the instance dies at t=0 and the
+  landing finds nothing. `AnimInstance.Finished` must also require no live motion owing a bounce.
+  (4) **Guard.** An engine suite killing a `refuel*` via `DamageAt`: `BallisticMotionsLaunched`
+  rises by 2, the solved time falls in band, `sparkout3`/`sparkout4` fire before the instance ends.
+  `BL-241`'s no-puffer harness does **not** block this — none of those three assertions touches an
+  emitter.
   ⚠ Traps:
   - **`RUN_TIME` absent is not `RUN_TIME 0`.** Do not "fix" this by defaulting to some constant the
     way `Projectile.cs:1626` defaults its debris to 2 s — that is the projectile path's own choice,
-    and importing it here would silently invent a landing time for 529 events.
+    and importing it here would silently invent a landing time.
+  - **Return-to-launch-height is a CHOICE, not a decode.** The original tested real ground via
+    `do_intersections`. It agrees wherever the ground under the object is flat, which is every one
+    of the 150 reachable cases (debris off a ground-sitting structure); a down-ray replaces it.
+    Record it as ⚠ in `MotionRuntime`'s doc-comment and `docs/formats/destructibles.md:179/239`.
+  - **Do not pin the instance on *any* live motion.** `SpinMotion.cs:36` is
+    `_runTime > 0f && _t >= _runTime`, so an unbounded steady spin is never `Finished` — and there
+    are **2,181** of those across **1,037 def files**. A broad predicate would make every one of
+    those instances immortal and re-open `BL-236` install-wide. Pin only on a pending bounce.
+    `SequenceRunner.cs:179`'s "resources outlive their sequence" comment needs amending to say
+    instance end is now the exception.
   - **This is not `BL-008`** (debris barely moves). That is about launch magnitudes on pieces that
     *do* fly; this is pieces that never start.
-  - **Confirm before coding, one probe:** `--debug-anim` should already print
-    `ObjectMotion(bounce_sequence deferred)` five times on a `--destroy=refuel` run. If it does
-    not, the diagnosis is wrong about which branch the event takes.
+  - ⚠ **The obvious probe does not work — do not read its silence as evidence** (measured
+    2026-08-03). `Count("ObjectMotion(bounce_sequence deferred)")` lands in `_unhandled`, flushed
+    only by `ReportUnhandled()`, which runs once inside the *bootstrap* census
+    (`AnimRuntime.cs:1576-1577`). `--destroy` fires after that census closes, so the counter can
+    never print for a kill whatever branch the event takes — `verification.md` **LOG-16**.
+    **Use instead:** `--debug-anim`'s per-frame motion log. On
+    `.\RunProbe.ps1 --freecam --chapter=C1 --destroy=refuel --debug-anim --screenshot=<path> --frames=600`,
+    `part1` logs `anim/debug: part1 at (…)` at changing positions and `part3` logs none, while five
+    `retarget 'large_fireball' onto 'part3' [caller refuel1…5]` lines prove its sequence ran and
+    reached the motion. Sequence reached + motion absent is the confirmation. **Diagnosis confirmed
+    on this route 2026-08-03.**
+  - 2 of the 152 live outside executed `sequences` (in `unknown_seq`/`reset_state`) and may never
+    fire. Confirm, do not assume.
+  **Blast radius is measurably small:** `Create` is already called unconditionally *before* the
+  `ballTime <= 0f` branch, so the `_rng` draw count is unchanged and `--det` captures stay
+  byte-identical outside the affected defs; and the only kill-bearing golden,
+  `c1-destroy-effects` (`--destroy=radiotwr.flt`), targets a def carrying no `bounce_sequence`
+  at all.
 
 - `BL-241` **No engine suite can observe emitter lifetime — a test world builds no puffers at all
   (noted 2026-08-02 while landing `BL-236`).** `TestHarness.BuildWorld` owns its `TextureArchive`

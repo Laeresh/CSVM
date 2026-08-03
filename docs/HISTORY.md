@@ -11060,3 +11060,56 @@ constant is unchanged either way. Not worth another capture.
 `docs/formats/anim-definitions.md` and from `SequenceRunner.AnimFrame`'s doc comment; the
 falsification note in both is replaced by the measurement that answered it. No code change, no
 goldens moved — the constant it confirms was already the one in the build.
+
+## 2026-08-03 — `BL-240` re-censused and split; its own confirmation probe cannot work (`PLAN-bounce-launch` A1)
+
+**The entry's premise did not survive a re-census.** `BL-240` filed 529 bounce-terminated
+`OBJECT_MOTION` events as one population of debris launches that never move. Over all 17,568
+extracted defs the headline counts reproduce exactly — 7,458 `ObjectMotion`, **733** with a
+`bounce_sequence`, **529** of those with no `RUN_TIME` — but they are **two mechanisms**. Only
+**152** are upward launches with an apex (`translation_range` elevation +60…+85°, gravity < 0):
+`part3`/`part4` on `refuel`, `g_tower1`, `ftank01`, `m_build01`. The other **377** are *falls*:
+**335** starting at rest (`translation (0,0,0)`, gravity −9.8 — a shot-down `gasbag1`, `cargozep1`'s
+`crashnode1`), ~17 thrown downward at −70…−90°, and 8 `chuteman` at `translation (0,−3,0)` with
+**gravity 0**, which has no parabola at all. Any time-to-ground solved from the launch parabola
+returns 0 for every one of the 377 — i.e. today's bug, unchanged. `BL-240` is now the 152; the falls
+are `BL-245`, blocked on a ground ray, which they need for their populated `water`/`lava`
+`BOUNCE_SEQUENCE` branches regardless.
+
+**The 152 are tractable and the 377 are not, for the same reason.** 150 of 150 reachable events
+carry only the `default` branch — no `water`, no `lava`, no `bounce_sound` — each naming a sequence
+present in the same def (`sparkout3` ×125, `sparkout4` ×24, `treasure_splash` ×1). All 150 are also
+the **last event of their sequence**, so returning a real duration pushes nothing later on the
+timeline (`SequenceRunner.cs:202`). Solved flights come out at median **3.81 s** (p10 1.43, max
+4.89) against `part1`/`part2`'s *authored* `RUN_TIME` of 5.0 and 3.5 in the same def.
+
+**Two hazards found and recorded before any code.** (a) `AnimInstance.Finished` must not be widened
+to "no live motion": `SpinMotion.cs:36` is `_runTime > 0f && _t >= _runTime` and `AnimRuntime.cs:2059`
+builds spins with `run_time ?? 0f`, so an unbounded steady spin is **never** `Finished` — **2,181**
+of them across **1,037 def files** would become immortal instances and re-open `BL-236` install-wide.
+Pin on a pending bounce alone. (b) The only kill-bearing golden, `c1-destroy-effects`
+(`--destroy=radiotwr.flt`), targets a def with no `bounce_sequence`, and `MotionRuntime.Create` is
+already called before the `ballTime <= 0f` branch, so the seeded `_rng` draw count does not change
+and `--det` stays byte-identical outside the affected defs.
+
+**`BL-240`'s stated confirmation probe can never produce output** — it was written against an
+instrument that `verification.md` **LOG-16** already forbids. `Count("ObjectMotion(bounce_sequence
+deferred)")` lands in `_unhandled`, flushed only by `ReportUnhandled()`, called once inside the
+*bootstrap* census immediately before `_censusOpen = false` (`AnimRuntime.cs:1576-1577`).
+`--destroy` fires after that census closes, so the counter reads zero for a kill whatever branch the
+event takes; the "five times" the entry predicted was unreachable, and so was ten.
+
+**Confirmed instead by the per-frame motion log, and the diagnosis holds.**
+`--freecam --chapter=C1 --destroy=refuel --debug-anim` killed five tanks (`damage: -21 on
+refuel1..5 HP 20→0 DESTROYED — death sequence run`). `part1` logs `anim/debug: part1 at (…)` at
+changing positions and then `host 'part1' deactivated — emitter stopped`; `part3` logs **five**
+`retarget 'large_fireball' onto 'part3' [caller refuel1…5]` lines — that `CallAnimation` is the 2nd
+event of the same unnamed sequence whose 4th is the `ObjectMotion(part3)` — and never appears in the
+motion log at all. Sequence reached, motion absent: the `ballTime <= 0f` → `Seek(0f)` branch.
+
+**`SHELL-12` added to `docs/verification.md`:** `--frames=N` is `ScreenshotFrames`
+(`SessionSpec.cs:586`) and terminates a run only alongside `--screenshot`. Passed alone it is
+silently inert — the run above spent six hours writing a 45 MB log before it was killed.
+
+No code changed. `backlog.md` carries the re-scoped `BL-240`, the new `BL-245`, and the working
+probe in place of the unrunnable one.

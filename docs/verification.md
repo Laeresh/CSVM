@@ -138,6 +138,7 @@ and leave gaps when retiring old ones.
 - **SHELL-7** — **On PowerShell 5.1, read BOM-less UTF-8 through an explicit UTF-8 API.**
 - **SHELL-10** — **Launch scripted Godot probes through `RunProbe.ps1`.**
 - **SHELL-11** — **Assert exit codes, counts, and hashes are non-empty.**
+- **SHELL-12** — **Give every scripted probe an exit condition, and check the flag you chose actually is one.** `--frames=N` is `ScreenshotFrames` (`SessionSpec.cs:586`) — a warm-up counter that terminates the run only alongside `--screenshot`. Passed on its own it reads as valid, changes nothing, and the probe runs until killed: one `--debug-anim` run left this way spent six hours writing a 45 MB log.
 
 ## INSTR — building instruments
 
