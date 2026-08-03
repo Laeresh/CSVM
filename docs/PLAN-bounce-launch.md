@@ -129,7 +129,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 2. ☑ Solve the flight time in `MotionRuntime`
 3. ☑ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
 4. ☑ Keep the instance alive while a bounce is pending
-5. ☐ Engine suite: motion launched, time in band, `sparkoutN` fired
+5. ☑ Engine suite: motion launched, time in band, `sparkoutN` fired
 6. ☐ Record the choice and close `BL-240`
 
 ## Dependency and parallelism notes
@@ -409,7 +409,46 @@ confirm the negative: the emitter census for the `BL-236` regression set (`c3-is
 indefinitely. Pin on a pending bounce alone, which self-expires because `MotionRuntime` always
 finishes.
 
-## A5 ☐ Engine suite: motion launched, time in band, `sparkoutN` fired
+## A5 ☑ Engine suite: motion launched, time in band, `sparkoutN` fired
+
+**Landed (2026-08-03).** `bounce-launch` is the 18th registered suite (`Suites.cs`). It kills one
+`refuel*` tank via `AnimRuntime.DamageAt` and asserts on the `OnEventDispatched` timeline:
+
+- **4** ballistic launches on the death — measured, not assumed. `part1`/`part2` carry an authored
+  `RUN_TIME` and count too; the called fireball defs carry no ballistic motion of their own, so a
+  fifth would mean the death grew a launch nobody authored.
+- `sparkout3` and `sparkout4` each dispatch **both** their events (the piece's `INACTIVE` and its
+  fireball), so the landing runs the whole sequence rather than just reaching it.
+- Each piece's flight — `t(sparkout) − t(launch)`, both read off the same timeline — falls inside
+  the band its authored `translation_range` allows.
+- A yard sweep over the seven `m_build` buildings: 28/28 `sparkout` dispatches, zero late landings.
+
+**A band, not a time — and the measurement that proves it had to be.** `part3` is 3.118…4.135 s and
+`part4` 3.212…5.516 s from `t = 2·speed·sin(elev)/10` over the authored ranges. The seed is pinned
+(`--run-tests` implies `--det`), but the draw moves with how often the shared `anim` stream has been
+drawn from first: in this session `part4` came out **4.083 s** with the suite run alone and
+**3.883 s** in the full 18-suite sweep. An exact assertion would have flaked with a cause that looked
+like a real regression.
+
+**Shown able to fail.** With A2's solve disabled the suite reports 2 launches instead of 4 and no
+`sparkout` at all — five failures, exactly the pre-fix behaviour.
+
+**⚠ What this suite does not guard.** The two zero-late-landing checks read `UnhandledEventCounts`
+directly (sidestepping LOG-16, which only blocks the *printing* of that counter) and are genuine
+invariants — but they are **not** able-to-fail guards here. Removing A4's retirement hold leaves both
+green: every C1 def with a solvable launch also runs an unbounded `fire_n_smoke` loop that keeps its
+instance alive regardless, and the seven yard buildings still gave 28/28 dispatches with the hold
+gone. A4's able-to-fail control stays the recorded `--destroy=m_build` probe (1 miss in 7). The
+suite's doc-comment and a runtime `Note` both say so, so an unchanged zero cannot read as coverage.
+
+**Also measured.** The registry holds **14** `m_build` rows for **seven** buildings — a reader
+wildcard def and its compiled per-instance twin bind the same nodes — so the sweep groups by anchor;
+taking registry rows killed each building twice, the second a no-op on something already dead.
+
+**Verified.** `.\RunTests.ps1` full **PASS**: 352 units, 18/18 engine suites, engine errors clean,
+13/13 goldens hash-identical.
+
+### Original approach (kept for reference)
 
 **Goal.** The first regression guard this bug family has ever had.
 

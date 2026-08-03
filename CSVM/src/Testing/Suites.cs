@@ -79,6 +79,8 @@ public static class Suites
             "weapon hits destroy, swap, drop colliders, and survive destroy→reset→destroy", DamageHd));
         into.Add(new TestHarness.Suite("stop-sequence",
             "authored STOP_SEQUENCE stops run: the fireball's 0.3 s stopper and the 30 s fire's halt", StopSequenceStops));
+        into.Add(new TestHarness.Suite("bounce-launch",
+            "a bounce-terminated OBJECT_MOTION flies its solved parabola and fires its BOUNCE_SEQUENCE on landing", BounceLaunch));
         into.Add(new TestHarness.Suite("destructible-census",
             "per-chapter destructible registry totals", DestructibleCensus));
         into.Add(new TestHarness.Suite("tex-dropin",
@@ -704,6 +706,190 @@ public static class Suites
                 stage.Free();
             }
         });
+    }
+
+    // ---- BL-240: bounce-terminated launches fly and land ---------------------------------------
+
+    /// <summary>BL-240: an <c>OBJECT_MOTION</c> that omits <c>RUN_TIME</c> and names a
+    /// <c>BOUNCE_SEQUENCE</c> is the data's "fly until you hit something" idiom. It must solve its
+    /// own flight time, actually fly, and dispatch that sequence on landing — before the fix all
+    /// ~150 such pieces were posed at rest on the wreck they should have left.
+    ///
+    /// <para>Kills one <c>refuel*</c> tank through <see cref="AnimRuntime.DamageAt"/>, the same
+    /// call a rocket makes, and asserts on the dispatch timeline. The def is the clean A/B: the
+    /// same death launches <c>part1</c>/<c>part2</c> with an authored <c>RUN_TIME</c> and
+    /// <c>part3</c>/<c>part4</c> without one, so a regression that re-broke only the solved half
+    /// still shows here.</para>
+    ///
+    /// <para>⚠ What this suite is shown able to fail on is the SOLVE and the DISPATCH: with the
+    /// flight solve disabled it reports 2 launches instead of 4 and no <c>sparkout</c> at all. The
+    /// two zero-miss checks are carried invariants, not guards — removing A4's retirement hold
+    /// leaves them green at this seed, because every C1 def with a solvable launch also runs an
+    /// unbounded <c>fire_n_smoke</c> loop that keeps its instance alive anyway. A4's able-to-fail
+    /// control is the <c>--destroy=m_build</c> probe on the record, not this suite.</para>
+    ///
+    /// <para>⚠ Assert a BAND, never an exact time. Both launches draw speed and elevation from
+    /// <c>translation_range</c> per instance, so the flight is a random variable whose support the
+    /// authored ranges fix exactly (see the constants below). The master seed is pinned
+    /// (<c>--run-tests</c> implies <c>--det</c>), but the draw still depends on how many times the
+    /// shared <c>anim</c> stream has been drawn from before this suite runs — which suite order
+    /// and a cached world's earlier kills both move. ⚠ Nothing here touches the emitter
+    /// census — <c>TestHarness.BuildWorld</c> builds no puffers (BL-241), and this fix's claims are
+    /// motion and dispatch, neither of which reads the <c>PufferFactory</c>.</para></summary>
+    private static void BounceLaunch(TestContext ctx)
+    {
+        // extracted/C1/cam_anim/refuel1-refuel1-healthy.json, the two bounce-terminated events.
+        // t = 2·v0y/|g| = 2·speed·sin(elev)/10 over the authored ranges, so the support is closed:
+        //   part3  speed 18…22  elev 60…70°  g −10  →  3.118 … 4.135 s
+        //   part4  speed 28…36  elev 35…50°  g −10  →  3.212 … 5.516 s
+        // A landing is detected on a frame boundary, so the observed time can run one tick long.
+        const float Part3Min = 3.118f, Part3Max = 4.135f;
+        const float Part4Min = 3.212f, Part4Max = 5.516f;
+        const float Tick = 1f / 60f;
+        const string chapter = "C1";   // the only chapter shipping refuel* (5 defs)
+        const string lateBounce = "ObjectMotion(bounce landed after its instance ended)";
+
+        ctx.WithWorld(chapter, collision: false, world =>
+        {
+            var runtime = world.Runtime;
+            DestructibleRegistry.Instance? tank = null;
+            foreach (var inst in runtime.Destructibles.All)
+            {
+                if (inst.Def.AnimName is { } name
+                    && name.StartsWith("refuel", System.StringComparison.OrdinalIgnoreCase))
+                {
+                    tank = inst;
+                    break;
+                }
+            }
+            ctx.Check(tank != null, $"chapter ships a refuel tank chapter={chapter}");
+            if (tank == null)
+            {
+                return;
+            }
+
+            // A shared cached world reaches this suite already swept by damage-hd, and DamageAt is
+            // a no-op on something already destroyed — heal first so the death actually runs.
+            if (tank.Status == DestructibleRegistry.State.Destroyed)
+            {
+                runtime.ResetDestructible(tank);
+            }
+
+            int Missed() =>
+                runtime.UnhandledEventCounts.TryGetValue(lateBounce, out int n) ? n : 0;
+
+            var timeline = new List<(float T, string Seq, string Kind, string? Name)>();
+            float clock = 0f;
+            var previous = runtime.OnEventDispatched;
+            int launchesBefore = runtime.BallisticMotionsLaunched;
+            int missedBefore = Missed();
+            try
+            {
+                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                runtime.DamageAt(tank.Anchor, tank.MaxHealth + 1f);
+                for (int i = 0; i < 600; i++)   // 10 s, comfortably past the 5.5 s worst-case flight
+                {
+                    clock += Tick;
+                    runtime.Advance(Tick);
+                }
+            }
+            finally
+            {
+                runtime.OnEventDispatched = previous;
+            }
+
+            // part1/part2 (authored RUN_TIME) plus part3/part4 (solved) — four, measured. The
+            // called fireball defs carry no ballistic motion of their own, so this is the whole
+            // count and a fifth would mean the death grew a launch nobody authored.
+            int launched = runtime.BallisticMotionsLaunched - launchesBefore;
+            ctx.Same(4, launched, $"ballistic launches on one {tank.Def.AnimName} death");
+
+            float LaunchAt(string node) => timeline
+                .Where(e => e.Kind == "ObjectMotion" && e.Name == node)
+                .Select(e => e.T).DefaultIfEmpty(-1f).First();
+            float BounceAt(string seq) => timeline
+                .Where(e => e.Seq == seq)
+                .Select(e => e.T).DefaultIfEmpty(-1f).First();
+
+            CheckFlight(ctx, "part3", "sparkout3", LaunchAt("part3"), BounceAt("sparkout3"),
+                Part3Min, Part3Max + Tick);
+            CheckFlight(ctx, "part4", "sparkout4", LaunchAt("part4"), BounceAt("sparkout4"),
+                Part4Min, Part4Max + Tick);
+
+            // The bounce sequence is what deactivates the flying piece and pops its fireball —
+            // both of its events must run, not just the first.
+            ctx.Same(2, timeline.Count(e => e.Seq == "sparkout3"), $"sparkout3 events dispatched");
+            ctx.Same(2, timeline.Count(e => e.Seq == "sparkout4"), $"sparkout4 events dispatched");
+            ctx.Same(0, Missed() - missedBefore, $"refuel bounces landing after their instance ended");
+
+            // ---- the retirement hold (A4) ----
+            // A landing must reach a LIVE instance, and the launch is the LAST event of its
+            // sequence, so nothing but the hold keeps one reachable. refuel* cannot show that: its
+            // own fire_n_smoke Loop keeps the instance alive whatever the hold does. The yard
+            // buildings can — killing all seven, one landed after its instance ended before A4.
+            // Which one is a coin toss (speed and elevation are per-instance draws), so the
+            // assertion is the invariant "none of them", not "this one".
+            // Grouped by ANCHOR, not taken as registry rows: a reader wildcard def and its compiled
+            // per-instance twin both bind these seven nodes, so the registry holds 14 rows for
+            // seven buildings and the second kill of a pair is a no-op on an already-dead object.
+            var yard = runtime.Destructibles.All
+                .Where(i => i.Def.AnimName is { } n
+                            && n.StartsWith("m_build", System.StringComparison.OrdinalIgnoreCase))
+                .GroupBy(i => i.Anchor)
+                .Select(g => g.First())
+                .ToList();
+            ctx.Same(7, yard.Count, $"chapter ships the yard buildings chapter={chapter}");
+
+            timeline.Clear();
+            clock = 0f;
+            missedBefore = Missed();
+            try
+            {
+                runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
+                foreach (var b in yard)
+                {
+                    if (b.Status == DestructibleRegistry.State.Destroyed)
+                    {
+                        runtime.ResetDestructible(b);
+                    }
+                    runtime.DamageAt(b.Anchor, b.MaxHealth + 1f);
+                }
+                for (int i = 0; i < 600; i++)
+                {
+                    clock += Tick;
+                    runtime.Advance(Tick);
+                }
+            }
+            finally
+            {
+                runtime.OnEventDispatched = previous;
+            }
+
+            ctx.Same(0, Missed() - missedBefore, $"yard bounces landing after their instance ended");
+            ctx.Note($"the two zero-miss checks are invariants this seed does not discriminate: removing A4's retirement hold leaves both green here. A4's able-to-fail control is the recorded --destroy=m_build probe (1 miss in 7), not this suite");
+            ctx.Same(
+                yard.Count * 4,   // sparkout3 + sparkout4, two events each, per building
+                timeline.Count(e => e.Seq == "sparkout3" || e.Seq == "sparkout4"),
+                $"yard sparkout events dispatched");
+        });
+    }
+
+    /// <summary>One bounce-terminated piece: it must launch, and its bounce sequence must fire a
+    /// flight time later that lands inside the band its authored <c>translation_range</c> allows.
+    /// A missing launch and a missing landing are reported apart — they are different bugs.</summary>
+    private static void CheckFlight(
+        TestContext ctx, string node, string seq, float launchAt, float bounceAt, float min, float max)
+    {
+        ctx.Check(launchAt >= 0f, $"{node}'s bounce-terminated OBJECT_MOTION dispatches t={launchAt:0.000}");
+        ctx.Check(bounceAt >= 0f, $"{seq} dispatches on landing t={bounceAt:0.000}");
+        if (launchAt < 0f || bounceAt < 0f)
+        {
+            return;
+        }
+        float flight = bounceAt - launchAt;
+        ctx.Note($"{node} solved flight {flight:0.000} s (band {min:0.000}…{max:0.000})");
+        ctx.Check(flight >= min && flight <= max,
+            $"{node}'s solved flight is inside its authored band flight={flight:0.000} band={min:0.000}…{max:0.000}");
     }
 
     // ---- BL-044: node lab tree rows must follow live Visible ------------------------------------

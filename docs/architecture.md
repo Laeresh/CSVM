@@ -147,7 +147,7 @@ instead.
 
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
-- `src/Testing/Suites.cs` — the 16 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
+- `src/Testing/Suites.cs` — the 18 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -1555,11 +1555,16 @@ PASS/FAIL/SKIP table, `.scratch/test-report.json`, and the process exit code.
   them (LOG-8).
 
 ## src/Testing/Suites.cs
-The 16 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 18 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings, live weapon fire, destructible stages/death/census, animation
-stops, texture flattening, glTF round trips, collision/node visibility, and authored stunt gates.
+stops and bounce-terminated launches, texture flattening, glTF round trips, collision/node
+visibility, and authored stunt gates.
 ⚠ Expected numbers are **golden counts against the retail install** (48 weapon defs, 11 airframes,
   per-chapter destructibles); change one only with the measurement that moved it.
+⚠ `bounce-launch` asserts a **band**, not a time: the launch draws speed and elevation per instance,
+  and the draw moves with suite order (the same run gave `part4` 4.083 s filtered and 3.883 s in the
+  full sweep). Its zero-miss checks are carried invariants the seed does not discriminate — the
+  suite is shown able to fail on the solve and the dispatch only (BL-240).
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
 ## src/Testing/GoldenShot.cs

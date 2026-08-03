@@ -11234,3 +11234,40 @@ pinned that should not have been. `.\RunTests.ps1` **PASS**: 352 units, 17/17 en
 errors clean, 13/13 goldens hash-identical. `SequenceRunner`'s comments on `Halt()` and
 `AnimInstance.Finished` now record that instance end is the exception to "resources outlive their
 sequence", and that `Finished` is no longer the retirement test on its own.
+
+## 2026-08-03 — the bounce-launch family gets its first regression guard (`PLAN-bounce-launch` A5)
+
+`bounce-launch`, the 18th in-engine suite (`Suites.cs`), kills one `refuel*` tank through
+`AnimRuntime.DamageAt` — the same call a rocket makes — and asserts on the dispatch timeline that
+`BL-240`'s fix actually holds. That def is the clean A/B: the same death launches `part1`/`part2`
+with an authored `RUN_TIME` and `part3`/`part4` without one, so a regression that re-broke only the
+solved half still shows. Four ballistic launches, `sparkout3` and `sparkout4` each dispatching both
+of their events, and each piece's flight inside the band its authored `translation_range` allows.
+
+**A band, not a time.** `part3` draws speed 18…22 m/s at elevation 60…70° and `part4` 28…36 at
+35…50°, both under gravity −10, so `t = 2·speed·sin(elev)/10` has a closed support: 3.118…4.135 s
+and 3.212…5.516 s. The seed is pinned (`--run-tests` implies `--det`) but the draw is not fixed —
+it moves with how often the shared `anim` stream has been drawn from first. Measured in the same
+session: `part4` came out **4.083 s** running the suite alone and **3.883 s** in the full 18-suite
+sweep. An exact-value assertion would have been a flake with a plausible-looking cause.
+
+**Shown able to fail.** With the A2 solve disabled the suite reports 2 launches instead of 4 and no
+`sparkout` at all — five failures, the pre-fix behaviour exactly.
+
+**What it does NOT guard, said out loud.** The two "bounces landing after their instance ended"
+checks read `UnhandledEventCounts` directly, which sidesteps LOG-16 (that counter is only ever
+*printed* by the bootstrap census), and they are real invariants — but they are not able-to-fail
+guards. Removing A4's retirement hold leaves both green: every C1 def carrying a solvable launch
+also runs an unbounded `fire_n_smoke` loop that keeps its instance alive whatever the hold does, and
+the seven yard buildings gave 28/28 `sparkout` dispatches with the hold gone. A4's able-to-fail
+control remains the recorded `--destroy=m_build` probe (1 miss in 7), and the suite's doc-comment and
+a run-time `Note` both say so rather than letting an unchanged zero read as coverage.
+
+Two counts had to be measured rather than assumed. The death launches **four** pieces, not two — the
+called fireball defs carry no ballistic motion of their own, so `part1`/`part2` are in the total.
+And the registry holds **14** `m_build` rows for **seven** buildings, a reader wildcard def and its
+compiled per-instance twin binding the same nodes, so the sweep groups by anchor; taking registry
+rows meant killing each building twice and the second kill was a no-op on something already dead.
+
+`.\RunTests.ps1` **PASS**: 352 units, 18/18 engine suites, engine errors clean, 13/13 goldens
+hash-identical.
