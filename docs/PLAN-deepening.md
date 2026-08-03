@@ -52,7 +52,7 @@ prose disagrees with itself.
 | 4 | Is Wave G in scope at all, or just noted? | **In scope as a gate, not a commitment.** `G18` is a design-it-twice decision that may land as `❌` with an entry in `docs/architecture.md` saying why — which is a success. `G19` executes only if `G18` says go. |
 | 5 | Wave C converts the remaining `GD.Print` sites? | **No.** `docs/architecture.md`'s `src/Utils/Log.cs` entry forbids a bulk sweep (SHELL-3). `C6` adds the seam; `C7` converts exactly one family to prove the seam works. The rest converts incrementally, as items touch it. |
 | 6 | What counts as "verified" for a pure refactor? | **13/13 goldens hash-identical plus `.\RunTests.ps1` green — and at least one new assertion that has been seen able to fail.** An unchanged green proves nothing on its own; every wave lands a test that was watched failing first. |
-| 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** (`E12` ran on 2026-08-03; its output is the Decisions 9–18 table below. `D8` is still open.) A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
+| 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** (Both ran on 2026-08-03; their output is the Decisions 9–18 and 19–27 tables below.) A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
 | 8 | When do those sessions run? | **Whenever — they contend on nothing.** A grilling session lands no code, so it never blocks or is blocked by a wave in flight. Running `D8` and `E12` early is free, and means D and E start against a settled interface instead of designing from scratch. |
 | 9 (2026-08-03, `A2`) | Should `March` take the sim step, or keep its fixed `1/120 s`? | **Keep the fixed step.** Census of the 48 `BALLISTICS` entries: four carry a non-zero `ACCELERATION` (`wep_04`, `wep_25`, `wep_26`, `wep_27` — all 150 m/s²), **zero** carry a non-zero `GRAVITY`, and none of the four is a gun. A gun group resolves caliber + ammo → `wep_30..73` only, so the divergence disproven claim 4 predicted is **unreachable**: every marched round is a straight line, and the step size cannot move a straight line's endpoint. A fixed step also keeps the reticle from twitching with the frame rate. Guarded by two `[ExtractedDataFact]` tripwires in `CSVM.Tests/BallisticsTests.cs`, so the answer re-checks itself if the data or the loadouts change. |
 | 10 (2026-08-03, `B3`) | `Resolve`'s sketched signature takes three arguments. Is that enough to pick a stand-in? | **No — it takes a fourth, `hasEffectsRuntime`.** The explosion stand-in's live condition is `!showedModel && !weapon.IsGun && EffectSink == null` (`Projectile.cs:1173`): a hardpoint weapon in a scene-less pool (the weapon lab) has nowhere to build its real fireball, so the burst stands in for it. That is a fact about the *caller*, exactly like `modelResolved`, and it cannot be derived from the weapon and the surface — with three arguments one of the three stand-ins the item is defined by is unreachable. `B4` passes `EffectSink != null`. |
@@ -80,6 +80,34 @@ authority for `E13`–`E15b`, and it closes every question `E12` listed as one i
 
 **What Wave E now touches beyond `AnimRuntime.cs`** (wider than the plan assumed, from Decision 11): `WorldSession.cs` (`:209`, `:251`, `Options`), `WorldEffectsFactory.cs` (`:244`, `:363`), `TestHarness.cs` (one option), `Puffer.cs` (`E15b` only). It deliberately does **not** touch `GameSession.cs:1222`'s `EffectSink`/`ExternalEffect` wiring — that is `F17`/`BL-232`'s line, and E must not cross it.
 
+## Decisions — Wave D's interface (2026-08-03, the `D8` `/grilling` session)
+
+`D8`'s deliverable. Numbered **19–27** because the general table above already restarted at 9 for
+`A2`/`B3` and the Wave E table runs 9–18; continuing past 18 avoids a third collision. Every row was
+put as a fork with a recommendation and answered by the author, with the losing option recorded.
+This table is the authority for `D9` and `D11`, and it closes every question `D8` listed as one it
+"must not leave open". ⚠ Line citations below are against `AnimRuntime.cs` at `530bf36`, which has
+drifted ~21 lines from the numbers the original items quote (`AddMotion` is `:3355`, not `:3334`).
+
+| # | Question | Decision |
+|---|---|---|
+| 19 | Does `MotionSet.Tick` dispatch the `BOUNCE_SEQUENCE`, or return the landings? | **Return them.** The landing branch needs four `AnimRuntime` members (`InstanceOf`, `CallSequence`, `Count`, `DebugMotions`), so owning the dispatch means a back-reference to the runtime — precisely the coupling `ISequenceHost` exists to avoid. The counter-argument (keep remove-then-dispatch inside the owning module) **fails on inspection**: `AnimInstance.CallSequence` only does `Runners.Add(new SequenceRunner(seq))` (`SequenceRunner.cs:78–85`) and that constructor only calls `SetDue()` (`:159–165`), so no event dispatches synchronously and **no motion can be added or evicted inside `TickMotions` at HEAD**. The `:3374–3376` hazard is unreachable and `D9`'s trap overstates it. Returning makes the rule structural: `Tick` cannot return a landing it has not already removed. Losing option: an `OnLanded` callback mirroring `OnEventDispatched` — no back-reference either, but the ordering stays a choice the module makes rather than one its signature forces. |
+| 20 | The sketch names four members (`Add`/`Tick`/`OwesWork`/`LaunchCount`). Is that the surface? | **Nine, and `MotionSet` owns all of them.** The five the sketch omits: `DiscardFor` (`TearDownResourcesOf:1838`), `Reset` (`ResetToBaseState:837`), `HasSpinOn` (`Dispatch:2080`), `Count` (`:777`, `:818`, `:1538`, `:3325`) and `Live` (`LogMotions:3331`). `HasSpinOn` is the one that matters: it is the **other half of the registration rule**, and both bugs this family has shipped are registration bugs — the hangar-door "later registration wins" (`:3350–3354`) and the `Loop{-1}` spin rebuilt every frame, which "would sit almost still while looking, in the logs, perfectly driven" (`:2075–2079`). They live 1,275 lines apart today. It cannot fold into `Add`: the guard must run *before* `new SpinMotion(…)`, whose constructor writes `Target.Transform` (`SpinMotion.cs:29`). **No census row type** — unlike `E13`'s `EmitterCensusRow`, `IAnimMotion` already carries `Target`/`Owner`/`Channel`/`Finished`, which is exactly what a row would copy. |
+| 21 | Is `OwesWork` bounce-specific or general? | **Bounce-specific, and renamed `OwesBounce`**, keeping `is MotionRuntime { PendingBounce: not null }` verbatim and moving `Retirable`'s 14-line ⚠ block (`:3035–3048`) onto it. Widening then costs deleting a type test in the file that carries the warning. Losing option: `bool OwesWork => false` as a default interface member on `IAnimMotion`, narrow by opt-in — it reads better but invites a future `SpinMotion` override of `!Finished`, which is `PLAN-bounce-launch`'s disproven claim 2 re-created in a file the ⚠ does not live in. No general case is coming: `BL-245` extends this to the 379 falls and the 204 authored-`RUN_TIME` bounces, all still bounces. `Retirable` **stays on `AnimRuntime`** — it is an instance-retirement question that consults motions, not a motion question. |
+| 22 | Does `MotionSet` key on `Node3D`, or on an identity token? | **`Node3D` stays, and `D11` remains an engine suite.** `MotionSet` dereferences no node in any of the nine operations — identity comparison only — so it is **already engine-free in behaviour**, and that is the deepening. Godot *structs* work in the unit tier (`BallisticsTests` builds `Vector3` freely), so `Node3D` identity is the sole blocker — and it blocks exactly the three identity-keyed rules worth testing: an off-engine fake can only return `null!`, so every `Add` evicts every other. The tier also needs a visibility widening (`IAnimMotion`/`MotionRuntime` are `internal`, there is no `InternalsVisibleTo` anywhere in the repo) against a standing ⚠ in `docs/architecture.md`. Not worth it for a suite that already exists. |
+| 23 | Which of `D9`'s three invariants stay module-enforced? | **All three, one of them for free — and a new caller obligation takes its place.** Owner-stamping and `(Target, Channel)` eviction live in `Add`; remove-before-dispatch stops being an invariant at all under Decision 19. ⚠ **New, and sharp:** the landings must dispatch *between* `Tick` and the instance walk. Split them and the instance is `Finished` with `OwesBounce` false → retired → `FinishEffectInstance` (`:943`) `SustainEnd`s the piece's trail emitter, which is `BL-236`'s machinery and moves `c1-destroy-effects`. Enforced by keeping a private `AnimRuntime.TickMotions(dt)` that does both, so `Advance` still has one statement at `:926`. |
+| 24 | Who increments the launch counter? | **`Add` derives it** — `if (motion is MotionRuntime) LaunchCount++`. Provably equivalent today: `:2033` is the only site that registers one and always increments immediately after. ⚠ `Reset()` clears the list but must **not** zero `LaunchCount` — every reader takes a delta. `BallisticMotionsLaunched` stays a **public forwarding property**, the same call `E13` makes for `PuffersBuilt`: it has four external readers (`Probes.cs:593`/`:660`, `Suites.cs:784`/`:804`, and `WorldDamageLab.cs` in six places including the F5 lab's on-screen status). |
+| 25 | What does `D11` port? | **Nothing — it re-aims.** `D11`'s premise is false at HEAD: `BounceLaunch` reads only public API (`BallisticMotionsLaunched`, `OnEventDispatched`, `UnhandledEventCounts`, `Destructibles`, `DamageAt`, `Advance`, `ResetDestructible`), no internals. With the forwarding property it compiles unchanged, and "landing assertions read `Tick`'s result" is **unimplementable** — `Tick` is called from inside `Advance`, which a suite drives from outside. `D11` instead asserts `OwesBounce` across the flight: the retirement hold's real mechanism, which `A5` recorded the existing zero-miss checks as unable to catch. |
+| 26 | Where does the module's documentation live, and what is it called? | **Its own `## src/Mech3/Anim/MotionSet.cs` entry**, plus an index line. The `src/Mech3/Anim/` entry is at PROJECT_CONTEXT's 3-⚠ cap and describes itself as "not an independently-owned subsystem", which `MotionSet` would be. The new entry takes the two ⚠ from rows 22 and 23 plus the re-pointed `MotionChannel` one, dropping `Anim/` back to 2. **The name stays `MotionSet`**: `EmitterDirector` builds its emitters through a factory and owns their whole life, while `MotionSet` never constructs a motion — `AnimRuntime` builds them and hands them over. |
+| 27 | Three items, or fewer? | **Two.** `D10`'s five holders resolve to two that legitimately stay (`MotionRuntime.PendingBounce`; `Dispatch`'s `bounceArmed`, a per-*event* fact feeding `Count("…deferred)")`, not a per-instance one), two that move in `D9` (the landing sweep, `Retirable`/`HasPendingBounceFor`), and one doc-comment. `D9` absorbs it and inherits its Verify battery — the `BL-236` census, `A5`'s `--destroy=m_build` probe, 13 goldens — running it **once** instead of twice for a rename. `D11` stays its own commit: it adds an assertion that must be watched failing first (Decision 6), and an assertion cannot move a golden. |
+
+**Two things this session found and deliberately did not file.** `TickMotions`' reverse walk calls
+out to `CallSequence` mid-iteration; if that ever gained a synchronous dispatch it could evict an
+element below `i` and skip a motion for a frame. Unreachable at HEAD (row 19) and structurally
+impossible after `D9`, so a `backlog.md` entry would describe a bug that cannot fire and is about to
+be deleted. And the ~21-line citation drift is noted at the head of this table rather than corrected
+across the original items, which are being rewritten anyway.
+
 ## ⚠ Read this before implementing anything
 
 | # | The wrong claim | How it died |
@@ -92,9 +120,8 @@ authority for `E13`–`E15b`, and it closes every question `E12` listed as one i
 | Confidence | Items | What that means for you |
 |---|---|---|
 | **Traced to an exact mechanism in code, with the data that proves it** | A1–A2, B3–B5, C6–C7, F16–F17 | The friction *and* the fix shape are both traced. Confirm the trace, then implement. |
-| **Interface settled by a grilling session; implementation traced** | E13–E15b | Upgraded from "direction sound" on 2026-08-03 when `E12` landed. The module shape is no longer a judgement call — Decisions 9–18 fix the seam, the members, the census, the ownership and the item order, with each fork's losing option recorded. Implement against that table; reopening a row is allowed, editing it silently is not. |
-| **Direction sound, module shape a judgement call** | D9–D11 | *That* the concept is spread is measured; *which* interface collects it is a design call — which is why the wave opens with a grilling session (`D8`) whose output is the interface. Do not start the extraction before its session has landed rows in the Decisions table. |
-| **Leads only — no mechanism yet** | D8, G18–G19 | Budget for investigation. These may end in a disproof, and a recorded "no" is the deliverable if so. |
+| **Interface settled by a grilling session; implementation traced** | D9, D11, E13–E15b | Both upgraded from "direction sound" on 2026-08-03, when `E12` and `D8` landed. Neither module's shape is a judgement call now — Decisions 9–18 fix Wave E's seam, members, census, ownership and item order; Decisions 19–27 do the same for Wave D, each fork's losing option recorded. Implement against those tables; reopening a row is allowed, editing it silently is not. |
+| **Leads only — no mechanism yet** | G18–G19 | Budget for investigation. These may end in a disproof, and a recorded "no" is the deliverable if so. |
 
 **⚠ Worktree hazard.** `git stash` is repo-global and shared across worktrees — never use it in a
 worktree session here; use a local commit or a file copy. Wave C is the only wave that may run in a
@@ -141,10 +168,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave D — a motion that owes a bounce
 
-8. ☐ **Grill the `MotionSet` interface** — no code
-9. ☐ Extract `MotionSet` from `AnimRuntime`
-10. ☐ Fold the pending-bounce rules into it
-11. ☐ Port the `bounce-launch` suite onto the interface
+8. ☑ **Grill the `MotionSet` interface** — no code *(landed 2026-08-03; Decisions 19–27)*
+9. ☐ Extract `MotionSet`, folding the pending-bounce rules in
+10. ❌ Folded into `D9` (Decision 27) — `OwesBounce` is one of `D9`'s nine operations
+11. ☐ Add `OwesBounce` assertions to the `bounce-launch` suite
 
 ### Wave E — emitter lifetime behind a seam
 
@@ -172,14 +199,14 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 completed. Nothing else here waits on anything outside this file.
 
 **The grilling items are outside every gate.** `D8` and `E12` land no code, so they contend on
-nothing and wait for nothing (Decision 8). `E12` ran on 2026-08-03, while Wave A was in flight, and
-that is exactly the intended timing: `E13` now starts against a settled interface. `D8` is still
-open and should be run the same way. They are also the two items that **cannot be delegated**:
-`/grilling` interrogates the author, so these are sessions you sit in, not work an agent runs in a
-worktree.
+nothing and wait for nothing (Decision 8). Both ran on 2026-08-03 while other waves were in flight,
+which is exactly the intended timing: `D9` and `E13` each start against a settled interface. They
+were also the two items that **cannot be delegated**: `/grilling` interrogates the author, so these
+are sessions you sit in, not work an agent runs in a worktree.
 
 **Chains.** A1 → A2 (A2 is a decision about the module A1 creates). B3 → B4 → B5. C6 → C7
-(disproven claim 1). D8 → D9 → D10 → D11. E12 → E13 → E14 → E15 → E15b (Decision 17 — and note it
+(disproven claim 1). D8 → D9 → D11 (`D10` folded into `D9`, Decision 27). E12 → E13 → E14 → E15 →
+E15b (Decision 17 — and note it
 overrides `E14`'s original Verify, which had the E13/E14 order backwards). F16 and F17 are
 independent of each other. **They no longer wait on E**: Decision 18 means `E15` needs no
 `TextureArchive` at all, so E stops changing what the harness asks of the archive and the
@@ -399,7 +426,15 @@ classes convert when a later item touches them, not here.
 
 # Wave D — a motion that owes a bounce
 
-## D8 ☐ Grill the `MotionSet` interface — no code
+## D8 ☑ Grill the `MotionSet` interface — no code
+
+**Landed 2026-08-03.** The deliverable is the "Decisions — Wave D's interface" table above
+(rows 19–27) and the restated `D9`/`D11` below. All four questions this item said it must not leave
+open are answered. Four answers changed the wave rather than detailing it: the collection's real
+surface is **nine** operations, not the sketch's four (20); the argument for `MotionSet` owning the
+landing dispatch turned out to rest on a hazard that is **unreachable at HEAD** (19); `D10`
+dissolves into `D9`, leaving Wave D two items (27); and `D11`'s premise — that the suite reads
+`AnimRuntime`'s internals — is **false**, so the item re-aims rather than ports (25).
 
 **Goal.** The interface `D9` extracts to is decided and written down before any code moves, as rows
 appended to this plan's Decisions table with their own date.
@@ -430,67 +465,93 @@ one session or three.
 
 **Verify.** Not code. The deliverable is the Decisions rows. The test that they are real: `D9`'s
 approach paragraph can be rewritten to name exact signatures without any remaining "or".
+**Met** — the full signature block is in `D9` below, and every "or" in this item's question list
+resolved to a recorded fork with its losing option stated.
 
 **⚠ Traps.** Grill against `HEAD`, not against a memory of the pre-`A4` file: `A4` (`840bc98`)
 added `Retirable`/`HasPendingBounceFor` — two of the five holders this wave collects — and `A5`
 (`9fecbfa`) added the `bounce-launch` engine suite, which `D11` has to port rather than write.
 
-## D9 ☐ Extract `MotionSet` from `AnimRuntime`
+## D9 ☐ Extract `MotionSet`, folding the pending-bounce rules in
 
-**Goal.** The live motion collection and its rules live in one module; `AnimRuntime` keeps the
-dispatch that feeds it.
+**Goal.** The live motion collection, its two registration rules and the pending-bounce predicate
+live in one module; `AnimRuntime` keeps the dispatch that feeds it and the dispatch its landings
+feed.
 
-**Evidence (confidence: direction sound; the trace is exact, the interface is a design call).**
-`_motions` (`AnimRuntime.cs:447`), `AddMotion` (`:3334`) and `TickMotions` (`:3345`) carry three
+**Evidence (confidence: traced; the interface is settled by `D8`, Decisions 19–27).** `_motions`
+(`AnimRuntime.cs:447`) is touched from **nine** places, not the four the original sketch named:
+`AddMotion` (`:3355`), `TickMotions` (`:3366`), `TearDownResourcesOf` (`:1838`), `ResetToBaseState`
+(`:837`), the spin re-assert guard in `Dispatch` (`:2080`), `HasPendingBounceFor` (`:3053`), four
+`Count` reads (`:777`, `:818`, `:1538`, `:3325`) and `LogMotions`' twelve-row list (`:3331`). Three
 invariants a caller must currently know by reading them: `Owner` is stamped on add, one motion per
-`(Target, Channel)` evicts the previous, and the finished body is removed *before* its bounce
-dispatches because that dispatch may add motions of its own (`:3358-3360`).
+`(Target, Channel)` evicts the previous, and the finished body is removed before its bounce
+dispatches. `D10`'s five holders of the bounce concept fold in here (Decision 27) — two stay where
+they are, two move with this item, one is a doc-comment.
 
-**Approach.** New `CSVM/src/Mech3/Anim/MotionSet.cs` owning the list and those three rules:
-`Add(IAnimMotion, AnimDefinition, Node3D?)`, `Tick(float dt)` returning the landings it swept,
-`OwesWork(def, anchor)`, `LaunchCount`. `AnimRuntime` holds one and forwards. **Do not move**
-`RestOf`, `_rng`, `SetSubtreeOpacity` or `NonSingularScale` — `docs/architecture.md`'s
+**Approach.** New `CSVM/src/Mech3/Anim/MotionSet.cs`, per Decisions 19–27, with exactly this
+surface:
+
+```csharp
+internal readonly record struct Landing(
+    AnimDefinition Def, Node3D? Anchor, string Bounce, Node3D Target);
+
+internal sealed class MotionSet
+{
+    void Add(IAnimMotion motion, AnimDefinition def, Node3D? anchor); // owner stamp + (Target,Channel) evict
+    IReadOnlyList<Landing> Tick(float dt);                            // swept + removed; empty on most frames
+
+    void DiscardFor(AnimDefinition def, Node3D? anchor);              // was TearDownResourcesOf:1838
+    void Reset();                                                     // was ResetToBaseState:837 — keeps LaunchCount
+
+    bool OwesBounce(AnimDefinition def, Node3D? anchor);              // was HasPendingBounceFor:3053
+    bool HasSpinOn(Node3D target, Vector3 rate, float runTime);       // was Dispatch:2080
+
+    int Count       { get; }
+    int LaunchCount { get; }                                          // Add increments per MotionRuntime
+    IReadOnlyList<IAnimMotion> Live { get; }                          // LogMotions only
+}
+```
+
+and on `AnimRuntime`:
+
+```csharp
+internal MotionSet Motions { get; } = new();
+public int BallisticMotionsLaunched => Motions.LaunchCount;   // four external readers keep working
+private bool Retirable(AnimInstance inst) => inst.Finished && !Motions.OwesBounce(inst.Def, inst.Anchor);
+private void TickMotions(float dt) { foreach (var l in Motions.Tick(dt)) { /* InstanceOf / CallSequence / Count */ } }
+```
+
+`Retirable`'s 14-line ⚠ block (`:3035–3048`) moves onto `OwesBounce`, and `AnimInstance.Finished`'s
+doc-comment (`SequenceRunner.cs:59–62`) repoints at it. Keep the arming in `MotionRuntime.Create`
+where the drawn `v0` lives — `MotionSet` reads `PendingBounce`, it does not re-derive it. **Do not
+move** `RestOf`, `_rng`, `SetSubtreeOpacity` or `NonSingularScale` — `docs/architecture.md`'s
 `src/Mech3/Anim/` entry records them as `internal` on `AnimRuntime` precisely so the motion types can
-reach them, and that stays true.
+reach them, and that stays true. Same turn: a new `## src/Mech3/Anim/MotionSet.cs` entry in
+`docs/architecture.md` plus its index line (Decision 26), carrying three ⚠ — the ordering rule
+below, the `Node3D`-typed-but-never-dereferenced note, and the `MotionChannel` one re-pointed out of
+the `src/Mech3/Anim/` entry, which drops that entry back to 2.
 
-**Model recommendation.** high — highest-churn file in the repo, and the sweep is per-frame.
+**Model recommendation.** high — highest-churn file in the repo, the sweep is per-frame, and this
+item now carries `D10`'s verification burden as well as its own.
 
 **Verify.** Baseline first: `--freecam --chapter=C1 --destroy=refuel --debug-anim` with its
 `N live motion(s), M ballistic launch(es)` line. After: the same counts, the same landing lines, the
-same order. 13/13 goldens hash-identical, `.\RunTests.ps1` green, 8-chapter sweep clean.
+same order. Then the negative, because it is the one that bites: the emitter census for the `BL-236`
+regression set (`c3-island`, `c4-snow`, `c5-city-night`) must be unchanged, proving no spin-bearing
+instance was pinned. Then `A5`'s recorded `--destroy=m_build` probe — **not** `RunTests` — as the
+able-to-fail control for the hold itself. Then 13/13 goldens hash-identical, `.\RunTests.ps1` green,
+8-chapter sweep clean.
 
-**⚠ Traps.** The removal-before-dispatch order in `TickMotions` is not incidental — reversing it
-re-ticks a landed body and can double-fire its `BOUNCE_SEQUENCE`. `LogMotions` prints at most 12
-motions (`LOG-5`); the cumulative counter, not the list, is the headless answer to whether a launch
-happened.
-
-## D10 ☐ Fold the pending-bounce rules into it
-
-**Goal.** "A motion owes a bounce" is asked of one module, and `AnimInstance.Finished` no longer
-needs a doc-comment warning that it is not the retirement test.
-
-**Evidence (confidence: direction sound).** After `PLAN-bounce-launch` `A4` the concept has five
-holders: `MotionRuntime.PendingBounce` (`Anim/MotionRuntime.cs:104`, set `:216`), the `bounceArmed`
-flag in `Dispatch` (`AnimRuntime.cs:2036`), the landing dispatch in `TickMotions` (`:3383`),
-`Retirable` / `HasPendingBounceFor` (`:3049`, `:3052`), and the warning on `AnimInstance.Finished`
-in the engine-free `SequenceRunner.cs:62`.
-
-**Approach.** `Retirable` becomes `inst.Finished && !_motions.OwesWork(inst.Def, inst.Anchor)` —
-one call, no `_motions` scan spelled out at the call site. Keep the arming in `MotionRuntime.Create`
-where the drawn `v0` lives; `MotionSet` reads it, it does not re-derive it. Rewrite
-`AnimInstance.Finished`'s doc-comment to point at `MotionSet.OwesWork` as the single answer.
-
-**Model recommendation.** high — the predicate's width is the difference between fixing 150 events
-and re-opening `BL-236` across 1,037 defs; `PLAN-bounce-launch`'s Decision 4 is the evidence.
-
-**Verify.** The negative first, because it is the one that bites: the emitter census for the
-`BL-236` regression set (`c3-island`, `c4-snow`, `c5-city-night`) must be unchanged, proving no
-spin-bearing instance was pinned. Then `A5`'s recorded `--destroy=m_build` probe — **not**
-`RunTests` — as the able-to-fail control for the hold itself. Then all 13 goldens.
-
-**⚠ Traps.** **Do not widen `OwesWork` to "any live motion."** `SpinMotion.cs:36` never reports
-`Finished` for the 2,181 unbounded spins, so a wider predicate makes them immortal — this is
-`PLAN-bounce-launch`'s disproven claim 2 and it must not be re-derived here.
+**⚠ Traps.** ⚠ **The landings must dispatch between `Tick` and the instance walk** (Decision 23).
+Put the walk in between and the instance is `Finished` with `OwesBounce` false, so it retires,
+`FinishEffectInstance` (`:943`) `SustainEnd`s the piece's trail emitter — `BL-236`'s machinery — and
+`c1-destroy-effects` moves. Keeping a private `AnimRuntime.TickMotions(dt)` that does both keeps
+`Advance` at one statement and the ordering unbreakable. ⚠ **Do not widen `OwesBounce` to "any live
+motion."** `SpinMotion.cs:36` never reports `Finished` for the 2,181 unbounded spins, so a wider
+predicate makes them immortal — `PLAN-bounce-launch`'s disproven claim 2, not to be re-derived here.
+⚠ `Reset()` clears the list but must **not** zero `LaunchCount`; all four readers take a delta.
+`LogMotions` prints at most 12 motions (`LOG-5`); the cumulative counter, not the list, is the
+headless answer to whether a launch happened.
 
 ⚠ **A green `RunTests` does not prove the hold survived this item.** `A5`'s own commit records that
 breaking `A4`'s retirement hold leaves the `bounce-launch` suite green: every C1 def with a solvable
@@ -499,34 +560,81 @@ yard still gave 28/28 with the hold removed. The only instrument that has been *
 the `--destroy=m_build` probe, at 1 miss in 7. Use it, and do not read an unchanged 18/18 as
 coverage.
 
-## D11 ☐ Port the `bounce-launch` suite onto the interface
+## D10 ❌ Fold the pending-bounce rules into it — folded into `D9`
 
-**Goal.** The family's existing guard reads `MotionSet`'s interface instead of `AnimRuntime`'s
-internals, and survives the extraction unchanged in what it asserts.
+**Closed 2026-08-03 by `D8`** (Decision 27) — folded, not disproven. The work is real and it lands;
+it just lands inside `D9`. `OwesBounce` is one of `D9`'s nine operations, so the predicate and
+`Retirable`'s rewrite move with the collection whether or not this item exists. What remained here
+was two doc-comment rewrites carrying the plan's most expensive Verify battery; `D9` absorbs both
+and runs that battery once instead of twice for a rename.
 
-**Evidence (confidence: traced).** The suite already exists — `PLAN-bounce-launch` `A5` landed it as
-`bounce-launch`, the 18th registered suite (`9fecbfa`, +186 lines in `Suites.cs`). It kills one
-`refuel*` tank through `DamageAt` and asserts on the `OnEventDispatched` timeline: 4 ballistic
-launches, `sparkout3`/`sparkout4` each dispatching both their events, each flight inside the band
-its authored `translation_range` allows, and a yard sweep over seven `m_build` buildings giving
-28/28 dispatches. It needs no `PufferFactory`, so `BL-241` never blocked it.
+Where the five holders end up:
 
-**Approach.** Repoint its reads: `BallisticMotionsLaunched` becomes `MotionSet.LaunchCount`, and
-the landing assertions read `Tick`'s result rather than the dispatch timeline where that is now the
-more direct question. **Assert the same facts** — a port that changes what is asserted is a new
-suite wearing an old name, and the old one's able-to-fail evidence no longer covers it.
+| Holder | Fate |
+|---|---|
+| `MotionRuntime.PendingBounce` (`Anim/MotionRuntime.cs:112`, set `:224`) | **stays** — the arming belongs where the drawn `v0` lives |
+| `bounceArmed` in `Dispatch` (`AnimRuntime.cs:2020`, `:2036`, `:2047`) | **stays** — a per-*event* fact feeding `Count("ObjectMotion(bounce_sequence deferred)")`, not a per-instance one |
+| the landing dispatch in `TickMotions` (`:3383`) | **`D9`** — the sweep moves to `MotionSet`, the dispatch stays on `AnimRuntime` (Decision 19) |
+| `Retirable` / `HasPendingBounceFor` (`:3049`, `:3052`) | **`D9`** — becomes `OwesBounce`, ⚠ block and all (Decision 21) |
+| `AnimInstance.Finished`'s warning (`SequenceRunner.cs:59–62`) | **`D9`** — a doc-comment repoint |
 
-**Model recommendation.** medium — mechanical once D9/D10 are in.
+⚠ **The two traps this item carried are not closed with it — they moved to `D9`:** do not widen
+`OwesBounce` to "any live motion" (`PLAN-bounce-launch`'s disproven claim 2), and a green
+`RunTests` does not prove the retirement hold survived.
 
-**Verify.** Break `D9`'s launch counting deliberately (drop one launch) and confirm the suite fails;
-restore. `.\RunTests.ps1` full pass at 18/18 suites. **Do not use `OwesWork` as the thing you break**
-— per D10's second trap the suite stays green when the hold goes, so that control proves nothing
-here.
+## D11 ☐ Add `OwesBounce` assertions to the `bounce-launch` suite
 
-**⚠ Traps.** Assert a **band**, not an exact time — the launch is a random draw within
-`translation_range`, and `A5` measured the same piece at 4.083 s alone and 3.883 s in the full sweep
-because the shared `anim` stream had been drawn from a different number of times first. A pinned
-seed does not pin the draw.
+**Goal.** The one fact `D9` newly makes askable gets asserted: a piece in the air owes its
+`BOUNCE_SEQUENCE`, and nothing owes one once every piece has landed.
+
+**Evidence (confidence: traced; re-aimed by `D8`, Decision 25).** The suite already exists —
+`PLAN-bounce-launch` `A5` landed it as `bounce-launch`, the 18th registered suite (`9fecbfa`, +186
+lines in `Suites.cs`). It kills one `refuel*` tank through `DamageAt` and asserts on the
+`OnEventDispatched` timeline: 4 ballistic launches, `sparkout3`/`sparkout4` each dispatching both
+their events, each flight inside the band its authored `translation_range` allows, and a yard sweep
+over seven `m_build` buildings giving 28/28 dispatches. **The original item's premise is false:**
+every read it makes is public API (`BallisticMotionsLaunched`, `OnEventDispatched`,
+`UnhandledEventCounts`, `Destructibles`, `DamageAt`, `Advance`, `ResetDestructible`), never an
+internal, so with `D9`'s forwarding property it compiles and passes unchanged and there is nothing
+to port. "Read `Tick`'s result" is unimplementable besides — `Tick` is called from inside `Advance`,
+which the suite drives from outside. What `D9` *does* newly expose is `OwesBounce`, the retirement
+hold's own mechanism, which `A5` explicitly recorded the suite's existing zero-miss checks as unable
+to catch.
+
+**Approach.** Leave every existing assertion untouched and add two around the `refuel*` kill,
+sampling **inside** the step loop:
+
+```csharp
+bool everOwed = false;
+for (int i = 0; i < 600; i++)
+{
+    clock += Tick;
+    runtime.Advance(Tick);
+    everOwed |= runtime.Motions.OwesBounce(tank.Def, tank.Anchor);
+}
+ctx.Check(everOwed, $"a launched refuel piece owed its BOUNCE_SEQUENCE while in flight");
+ctx.Check(!runtime.Motions.OwesBounce(tank.Def, tank.Anchor),
+    $"nothing is still owed once every piece has landed");
+```
+
+`Suites.cs` is in the same assembly as `MotionSet`, so `internal MotionSet Motions { get; }` needs no
+visibility widening.
+
+**Model recommendation.** medium — two assertions against behaviour `D9` has settled.
+
+**Verify.** Disarm `PendingBounce` in `MotionRuntime.Create` and confirm `everOwed` goes false and
+the new check fails; restore. `.\RunTests.ps1` full pass at 18/18 suites. **Do not break the
+retirement hold as the control** — per `D9`'s last trap the suite stays green when the hold goes, so
+that proves nothing here.
+
+**⚠ Traps.** ⚠ **The mid-flight check cannot be a single `Advance` after `DamageAt`.** The death's
+debris motion is scheduled seconds in, not fired at the kill (`WorldDamageLab.cs:604` records
+exactly this), so one sample immediately after reads false and the assertion is vacuous — or worse,
+gets "fixed" by asserting false. Sample inside the loop. And keep asserting a **band**, not an exact
+time, on the existing flight checks: the launch is a random draw within `translation_range`, and
+`A5` measured the same piece at 4.083 s alone and 3.883 s in the full sweep because the shared
+`anim` stream had been drawn from a different number of times first. A pinned seed does not pin the
+draw.
 
 # Wave E — emitter lifetime behind a seam
 
