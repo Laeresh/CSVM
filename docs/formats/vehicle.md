@@ -170,6 +170,21 @@ health**: its per-zone allocation is in units that are armor points 1:1, and a *
 reads the same per-zone numbers the zrdr def carries (a stock Bloodhawk shows ~20 units on each of
 its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, 2026-08-03.
 
+**Confirmed end-to-end by `CAP-19`** (observed at the controls, 2026-08-03). Three results:
+
+1. **Armor depletes before health.** The ordering retail string 3372 states and
+   [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives from a dominance argument is now
+   *directly observed*, not inferred.
+2. **The armory's per-zone cap is 60 units**, uniform across a plane's four zones. (Whether the cap
+   varies by airframe is untested — one airframe was read.)
+3. **A stripped zone falls far faster** than an armored one — green→red in visibly less time, more
+   damage per hit. **Direction only, and deliberately not timed:** a live sortie moves ammo type,
+   hit distribution, graze damage and pilot skill at once, so it cannot isolate a time-to-kill
+   figure — and does not need to. With armor equal to hp at stock and armor spent first with 1:1
+   overflow, the **2× effective pool is entailed by the model**, not a separate quantity to measure.
+
+`CAP-19` is discharged and retired from [`playtest.md`](../../playtest.md).
+
 ⚠ **The zrdr number is the *stock* allocation, not a fixed property of the airframe.** A player
 buys more. Every pair being equal is a fact about stock loadouts, **not** a licence to fold armor
 into hp — see `BL-085`.
@@ -202,15 +217,20 @@ Corroborating evidence, all data-confirmed:
    A gate, not a damage reducer. [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives
    the same ordering from a dominance argument; this is the direct statement.
 
-**Still open: what `ARMOR: Standard (N/T/W)` is.** Five of the eleven airframe blurbs carry a
-per-zone armor triple (`ui_strings.json` ids 40115 Balmoral 400/400/350, 40116 Bloodhawk
-400/300/200, 40118 Fury 400/400/350, 40120 Warhawk 700/500/700, 40122 Autogyro 300/300/200). It is
-**not** the stock allocation — stock is ~20 — so it is most likely a per-zone cap. Two measured
-constraints on what it can be: retail-triple ÷ zrdr-part-sum is 13.75 / 16.7 / 12.0 / 21.7 / 16.7
-across the five, so **no linear map** relates them; and at the armory's observed 4 lbs/unit, 1100
-units of stock armor would weigh 4,400 lbs against a `veh_weight` of 1900. The armory's own
-constants — per-unit cost and weight, per-zone caps — are **executable-resident**; `ui_strings.json`
-ships only the printf templates. `CAP-19` reads the caps off the screen.
+**Still open: what `ARMOR: Standard (N/T/W)` is — and it is now known *not* to be the cap.** Five of
+the eleven airframe blurbs carry a per-zone armor triple (`ui_strings.json` ids 40115 Balmoral
+400/400/350, 40116 Bloodhawk 400/300/200, 40118 Fury 400/400/350, 40120 Warhawk 700/500/700, 40122
+Autogyro 300/300/200). It is **not** the stock allocation — stock is ~20 — and `CAP-19` has now ruled
+out the per-zone-cap reading that stood in its place: the observed cap is **60 units, uniform across
+a plane's four zones**, while every blurb triple is both far larger and *unequal* across zones.
+Three measured constraints on what it can be: retail-triple ÷ zrdr-part-sum is
+13.75 / 16.7 / 12.0 / 21.7 / 16.7 across the five, so **no linear map** relates them; triple ÷ 60 is
+ragged for the same reason; and at the armory's observed 4 lbs/unit a **fully** armored airframe is
+4 × 60 × 4 = **960 lbs** against a `veh_weight` of 1900 — a real trade-off, where the
+blurb-as-cap reading implied 1100 units and 4,400 lbs on a 1900 lb plane. That weight arithmetic was
+already one of the two arguments against blurb-as-cap; the measured 60 replaces it with a figure the
+weight model can carry. The armory's own constants — per-unit cost and weight, per-zone caps — are
+**executable-resident**; `ui_strings.json` ships only the printf templates.
 
 ## Def-level injure_anims
 

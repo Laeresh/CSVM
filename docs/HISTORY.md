@@ -12051,3 +12051,54 @@ needs no separate session and "the `⚠` line from G18 is the whole deliverable"
 so no goldens/tests were owed** (the plan's Verify for G18: "Not code"). Every item of
 `PLAN-deepening` has now landed; the plan is ready to archive to `docs/plans/` with a `COMPLETE`
 banner and a `plans.md` row.
+
+## 2026-08-03 — `CAP-19` flown: armour-first observed, the per-zone cap is 60 units, blurb-as-cap refuted
+
+**Documentation only; no code changed.** The armour capture filed the same day was flown by the
+user, discharging all of it.
+
+**What was observed.** (1) **Armour depletes before health** — the ordering `PLAN-M3-weapons.md`
+C23 derived from a dominance argument and retail string 3372 states outright ("AP rounds tend to
+punch clean through unarmored surfaces") is now *directly observed*, not inferred. (2) **The
+armory's per-zone cap is 60 units**, uniform across a plane's four zones; one airframe was read, so
+whether the cap varies by airframe is untested. (3) A zone stripped of armour visibly takes more
+damage per hit and runs green→red far faster than an armoured one.
+
+**The 2× is entailed, not measured — and deliberately so.** `CAP-19` was written asking for a
+time-to-kill reference for `BL-085`'s intended 2× effective pool. The user's judgement, taken:
+the game moves ammo type, hit distribution, graze damage and pilot skill at once, so a live sortie
+cannot isolate the factor. Nor does it need to. With armour equal to hp at stock (all 88 shipped
+entries, measured) and armour spent first with 1:1 overflow (now observed), **the 2× follows
+arithmetically from two confirmed facts** — it was never an independent empirical claim. Result (3)
+confirms the direction, which is all an unclean instrument can give and all that was owed.
+`BL-085`'s trap (b) is reworded to say so, with a ⚠ against re-filing a capture to "measure" it.
+
+**Refuted: `ARMOR: Standard (N/T/W)` is not a per-zone cap.** That reading replaced the
+stock-allocation reading in `docs/formats/vehicle.md` and stood as "most likely". The measured cap
+kills it: 60 is **uniform across a plane's zones and far smaller than any blurb triple** (Balmoral
+400/400/350, Bloodhawk 400/300/200, Fury 400/400/350, Warhawk 700/500/700, Autogyro 300/300/200 —
+every one of them unequal across zones). What the triple is goes back to open, with a third
+constraint added: triple ÷ 60 is as ragged as triple ÷ zrdr-part-sum (13.75 / 16.7 / 12.0 / 21.7 /
+16.7), so no linear map relates the blurb to either the stock allocation or the cap.
+
+**A corroboration fell out.** At the armory's observed 4 lbs/unit, a **fully** armoured airframe is
+4 zones × 60 × 4 = **960 lbs** against a `veh_weight` of 1900 — a real trade-off, and stock (20 of
+60) is one third of capacity, leaving two thirds to buy. The blurb-as-cap reading implied ~1100
+units and 4,400 lbs on a 1900 lb plane, which was already one of the two arguments against it; the
+measured 60 replaces an absurdity with a figure the weight model can carry.
+
+**Recorded unanswered.** One sub-item of the capture was not read: whether the in-flight
+`Armor: %1%% Health: %2%%` readout shows 100 % regardless of units bought, or scales against the
+60-unit cap. It decides only how `BL-173` normalises the damage gauge's outer ring, so it is logged
+as a ⚠ on `BL-085` rather than re-filed as a capture — settle it whenever the armory is next on
+screen.
+
+**Outcome.** `CAP-19` is retired from `playtest.md` (IDs never reused; `next free` stays `CAP-20`).
+`BL-085` remains **unblocked, schedulable and unscheduled** — this capture calibrated it, it did not
+implement anything; the armour layer is still plan-sized and `PlaneStats.cs:249-256` still drops the
+second float. `BL-173` is unaffected: still blocked only on `BL-085` landing a two-pool
+`PlaneDamage`.
+
+**Verified.** No code touched — `.\RunTests.ps1` not run for this entry (documentation only; the
+2026-08-03 armory entry above records the last full pass: 393 unit tests, 20/20 engine suites,
+13/13 goldens hash-identical).

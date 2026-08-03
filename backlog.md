@@ -872,14 +872,29 @@ the document alone, it says so and marks the value TUNE.
   reads the same per-zone numbers the zrdr def carries (stock Bloodhawk ~20 per zone;
   `pbloodhawk` is 20/20/20/20). Observed at the controls. See
   `docs/formats/vehicle.md`, "The hp pair: armor + hit points".
+  **`CAP-19` flown and discharged 2026-08-03** — the mechanism is now observed rather than inferred:
+  **armor depletes before health**, the armory's **per-zone cap is 60 units** (uniform across a
+  plane's four zones), and a stripped zone visibly falls faster than an armored one. The capture is
+  retired. It also **refuted** the standing reading that `ARMOR: Standard (N/T/W)` is a per-zone cap
+  — 60 is uniform and far smaller than any blurb triple — so what that triple is went back to open
+  (`docs/formats/vehicle.md`); nothing in this item depends on the answer.
+  ⚠ One sub-question of that capture went **unrecorded** and is not worth its own capture: whether
+  the in-flight `Armor: %1%% Health: %2%%` readout reads 100 % regardless of how many units were
+  bought, or scales against the 60-unit cap. It decides only how `BL-173` normalises the gauge's
+  outer ring — settle it whenever the armory is next on screen.
   ⚠ **Traps.** (a) **Do not fold armour into hp.** The two are equal on all 88 shipped entries
   **at stock only** — armour is a *purchasable* quantity (`BL-067`'s configurator), so equality is
   a fact about default loadouts, not about the model. `PlaneStats` must read **both** floats
   (`PlaneStats.cs:249-256` currently takes the first and drops the second) and `PlaneDamage` must
   carry two independent pools, or this breaks the moment an armory exists. (b) **The 2× is
-  intended, not a regression.** A real armour pool doubles every zone's effective HP against a
-  balanced round; that is what the original does — record it as faithful rather than tuning it
-  away (decided 2026-08-03). `CAP-19` gives the time-to-kill reference. (c) It **supersedes C23's
+  intended, not a regression — and it is entailed, not a pending measurement.** A real armour pool
+  doubles every zone's effective HP against a balanced round; that is what the original does —
+  record it as faithful rather than tuning it away (decided 2026-08-03). ⚠ **Do not file a capture
+  to "measure" the factor.** With armour equal to hp at stock (all 88 entries) and armour spent
+  first with 1:1 overflow (observed, `CAP-19`), the 2× *follows arithmetically* from those two
+  confirmed facts. A live sortie moves ammo type, hit distribution, graze damage and pilot skill at
+  once and cannot isolate a time-to-kill figure; `CAP-19` confirmed the direction (a stripped zone
+  falls far faster) and was discharged on that basis, 2026-08-03. (c) It **supersedes C23's
   model 1** ("player planes — per-part HP, no armour/health pair"), which is now wrong;
   `player.json`'s `crash` block spending **`armor_damage_range [50,300]` and
   `health_damage_range [50,300]`** on the player's own collision damage fits the corrected model.
