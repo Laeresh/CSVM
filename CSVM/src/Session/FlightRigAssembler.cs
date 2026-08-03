@@ -111,7 +111,12 @@ public sealed class FlightRigAssembler
         {
             try
             {
-                controller.Loadout = Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
+                // The weapon lab (B4/B5) flies the FULL-RIG loadout instead: every firepoint and
+                // every pylon the airframe carries, seeded from this same stock fit — so the
+                // panel can mount a weapon on a hardpoint the stock file never names.
+                controller.Loadout = _spec.WeaponLab
+                    ? Loadout.ForRig(planeModel, _in.WeaponDefs, ldef)
+                    : Loadout.Bind(ldef, planeModel, _in.WeaponDefs);
                 controller.Projectiles = _in.Projectiles;
                 controller.InfiniteAmmo = _spec.InfiniteAmmo;
                 controller.AmmoCapOverride = _spec.AmmoCap;

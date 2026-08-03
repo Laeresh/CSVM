@@ -123,7 +123,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
-- `src/UI/WeaponLab.cs` — the `--viewer` weapon lab (W): guns from gun groups, hardpoints from pylons, at a stand-in target; `--weapon-test` fires all 48.
+- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, guns onto gun groups, hardpoints onto pylons; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
@@ -1223,7 +1223,9 @@ The rockets mounted under a plane's wings (D44): `Build` instances ONE FLYOUT MO
 pylon via `ProjectilePool.BuildFlyoutBody` (the SAME gamez prototype the round flies), parents it to
 that pylon marker at identity local transform (nose -Z forward, tail at the mount = the launch pose),
 and `Update` shows/hides each per its live `Hardpoint.Ammo`. FlightController drives `Update` after
-UpdateRockets; the mounted body rides the plane and is freed with it. --fly only.
+UpdateRockets; the mounted body rides the plane and is freed with it. --fly only. `Unmount` takes the
+set back off — detaching each body from its pylon IMMEDIATELY, not merely queueing it — so the weapon
+lab's rebuild-on-swap cannot leave the old ordnance hanging beside the new.
 ⚠ ONE model per pylon, not one per CLUSTER_SIZE round — the original shows a single rocket per
   hardpoint (D44 trap). Show while `Ammo > 0`, hide at zero; a respawn refill re-shows next frame.
 ⚠ No double-up with airframe geometry: NO plane model carries static ordnance mesh — every
@@ -1439,29 +1441,27 @@ shapes: the `--viewer` lab owns the parked plane; the scoped lab (`--freecam`/`-
 ⚠ Built after the subject joins the tree — `GlobalTransform` on a detached node is identity + error spam.
 
 ## src/UI/WeaponLab.cs
-The weapon lab: GUNS fire from the plane's gun groups, HARDPOINTS from its pylons; steppers pick
-bank/weapon/mount; copy-CLI-args. **Two hosts, chosen by the `host` ctor argument** (A3, the same
-one-panel/two-hosts shape `DamageLab` uses):
-- **Hosted in flight (`--weapon-lab`, key W)** — bound to player 1's HELD `FlightController` inside a
-  real chapter world, fed the session's `ProjectilePool` (`sharedPool`), so rounds carry the flyout
-  bodies, trails, authored `IMPACT` effects and `DamageSink` that flight has. The panel is top-right
-  (the gauge cluster owns the bottom-right corner in flight) and shows the bank/weapon/mount half only.
-- **Parked (`--weapon-test`)** — the no-world bench it started as: its own scene-less pool, the
-  15–1100 m stand-in target wall, the target-surface tag and its own auto-fire/fire-once volley loop.
-⚠ Hosted, this node does NOT fire: `SimStep` returns immediately and the aircraft's own trigger owns
-  the fire clock (decision 3 — the lab fires exactly what free flight fires). Do not re-add a second
-  spawn path here; B5 rewires the panel to drive the controller's live `Loadout` instead.
-⚠ Hosted, the pool is BORROWED — never `Clear()` it (that would wipe every player's rounds) and never
-  set its `Listener`; `_ownsPool` gates both. The stand-in wall is built without its collision shape,
-  so there is no 60 m box in the middle of the map to shoot or fly into.
-⚠ No chapter world (the parked host, or `--weapon-lab --stage=empty`): rockets fly streak-only, gun
-  impacts show the spark, hardpoint impacts the explosion stand-in, and `DamageSink` is null.
-⚠ Mounts bind from the stock `Loadout`; a plane the table omits (or a bind failure) falls back to
-  the raw firepoint/pylon marker rig.
-⚠ A live volley (`FireVolley`, the parked host's trigger/auto-fire path) fires one mount node per pull
-  and alternates, mirroring `FlightController.UpdateGuns`'s per-group muzzle cursor — never every node
-  at once. `RunSelfTest` is the one exception: it still fires every node of a mount directly (not
-  through `FireVolley`), for the `--weapon-test` pass check across all 48 weapons.
+The weapon lab's **panel** (`--weapon-lab`, key **B**): a configurator for the held aircraft's LIVE
+loadout, hosted top-right in flight (the gauge cluster owns the bottom-right corner, the HUD the
+top-left). It owns no weapon and fires nothing — the steppers write into the `FlightController`'s
+bound `Loadout` and the aircraft's own trigger then fires it. GUNS arm gun groups, HARDPOINTS arm
+pylons: a gun goes onto the SELECTED group with a full clip of its `CLUSTER_SIZE`; a hardpoint
+weapon re-arms EVERY pylon (`ProbeRunner.ApplyRocketOverride`) and rebuilds `PylonOrdnance`. The
+mount stepper drives `SelectGunGroup`/`SelectPylon`, the auto-fire toggle `AutoFire`/
+`AutoFireRockets` by bank, and "reset to stock" restores the fit the session launched with (stock
+as `--rocket=`/`--loadout=` left it, not as the file reads). `--weapon-cycle=N` steps the weapon
+list every N physics frames — the scripted twin, the only thing this node does per frame.
+⚠ This node NEVER spawns a round. Its one exception is `RunSelfTest` (the `--weapon-test` 48-weapon
+  pass check on a PARKED plane, host null), which fires every node of a mount straight into the
+  caller-supplied pool. Do not give the panel a firing loop back — the lab exists to fire exactly
+  what free flight fires.
+⚠ Gun mounts are `Loadout.FirableGuns` order, because that is the order `SelectGunGroup` indexes —
+  a mount list built in any other order silently fires the wrong group. No loadout at all (a plane
+  the stock table omits) falls back to the raw marker rig, which has nothing live to arm.
+⚠ A hardpoint swap must `PylonOrdnance.Unmount()` the old set BEFORE building the new one, or every
+  swap leaves a body under each pylon; `ordnance_nodes=` on the `weapons` debug line is the tripwire
+  (it must equal `mounted=`). A weapon whose `FLYOUT` model this chapter's gamez lacks mounts
+  nothing — `Build` returns null and the wings go empty, never a throw.
 
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mesh under the
@@ -1964,7 +1964,9 @@ runtime built after the controller joins the tree. Constructed once per session 
 `(SessionSpec, LiveryResolver, SpawnPicker, WorldEffectsFactory, worldRoot, Inputs)`, then
 `Assemble(pi, rig)` once per rig; `MeshInstances`/`WhatSuffix` accumulate across the rigs for the
 caller's build summary. `--weapon-lab` sets `FlightController.Held` on every rig right after `Setup`
-(which places the plane) — the pin is captured at the first held sim step, so it takes the spawn pose.
+(which places the plane) — the pin is captured at the first held sim step, so it takes the spawn pose
+— and binds `Loadout.ForRig` (every firepoint + every pylon, seeded from the same stock fit) in place
+of `Loadout.Bind`, so the lab panel can arm a mount the stock file never names.
 ⚠ **Call it in ascending player order.** `Inputs.PaintRng` and `SpawnBase` are shared streams — the
   livery draw and the spawn index wrap are order-dependent, so reordering or parallelising the rigs
   silently repaints and respawns the whole field.

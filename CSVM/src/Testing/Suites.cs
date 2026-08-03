@@ -542,11 +542,12 @@ public static class Suites
 
         var planesGamez = GameZ.Load(ctx.PlanesGamezPath);
         var weapons = WeaponDefs.Load(ctx.ZrdrPath, Messages.Load(ctx.MessagesPath));
-        // The lab holds the archive past construction (it bakes the target material and the
-        // impact stand-ins), so it is disposed only after the self-test has run.
+        // The pool holds the archive past construction (it bakes the tracer and impact stand-ins),
+        // so it is disposed only after the self-test has run.
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
         UI.WeaponLab? lab = null;
+        ProjectilePool? pool = null;
         try
         {
             plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
@@ -561,7 +562,9 @@ public static class Suites
                 }
             }
             ctx.Check(loadout != null, $"stock loadout found for plane={ctx.PlaneName}");
-            lab = new UI.WeaponLab(plane, weapons, loadout, textures, ctx.Camera, ctx.PlaneName);
+            pool = new ProjectilePool(textures, null, null);
+            ctx.Host.AddChild(pool);
+            lab = new UI.WeaponLab(plane, weapons, loadout, ctx.PlaneName, pool: pool);
             ctx.Host.AddChild(lab);
             var result = lab.SelfTest();
             ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the self-test");
@@ -574,6 +577,7 @@ public static class Suites
         finally
         {
             lab?.Free();
+            pool?.Free();
             plane?.Free();
             textures.Dispose();
         }

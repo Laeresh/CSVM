@@ -12318,3 +12318,34 @@ sim is ~4 frames at the 30 fps these captures run at and cannot be resolved by c
 same defect applies to `BL-097`: there is no partial aileron deflection either, so its "moderate roll
 input" clip cannot be flown and it should be re-read as a held-key step question. Trace plot kept at
 `playtest/CAP-04/cap04_pitch_trace.png`.
+
+## 2026-08-03 — the weapon lab's panel drives the live loadout (`PLAN-weapon-lab` B5)
+
+`WeaponLab` is now a panel and nothing else. Deleted: `FireVolley`, `SimStep`, the lab-owned
+`ProjectilePool`, the stand-in target wall with its surface tag and distance slider, `BuildScene`,
+`PlaceTarget`, `ApplySurfaceTag`, and the `Mount.NextNode` firing cursor — the duplicated firing loop
+`docs/architecture.md` had carried a ⚠ about since it was written. What replaces it: every stepper
+writes into the held `FlightController`'s bound `Loadout`. A gun goes onto the **selected** group with
+a full clip of its `CLUSTER_SIZE`; a hardpoint weapon re-arms every pylon (`ApplyRocketOverride`) and
+rebuilds `PylonOrdnance`; the mount stepper calls A2's `SelectGunGroup`/`SelectPylon`; the auto-fire
+toggle holds `AutoFire`/`AutoFireRockets` by bank; "reset to stock" restores the launch fit. The
+panel key moved **W → B** (`W` is pitch), and the lab session now binds B4's `Loadout.ForRig` instead
+of the stock fit, so all 4 gun groups and all 8 pylons are reachable on any airframe.
+
+Two supporting pieces the item needed. `PylonOrdnance.Unmount()` takes the mounted set off the pylons
+**immediately** (`RemoveChild` then `QueueFree`, not `QueueFree` alone) — rebuilding without it leaks
+one body per pylon per swap, and a deferred free would leave the old set beside the new for a frame.
+And `--weapon-cycle[=frames]` steps the bank's weapon list every N physics frames: the scripted twin
+of holding the panel's `>` down, without which the item's verify step needs a human at the controls.
+
+**Verified.** `--weapon-lab=wep_06 --plane=player_bhawk --chapter=C2 --weapon-cycle=4 --frames=1000
+--log=weapons:debug`: **130 swaps, every one `mounted=8 ordnance_nodes=8`** — the mounted-model count
+is exactly the count of ordnance bodies parented to the rig, so no swap leaks. All 13 distinct
+`FLYOUT` prototypes in the hardpoint bank instanced real geometry (`he_rocket`, `flak`, `sonic`,
+`a_torpedo` at 6 meshes, …) and the change is visible — small HE rockets
+against eight red torpedoes on the same wings (`analysis/weapon-lab-loadout/` records the
+captures; the renders themselves stay out of the repo, in the ignored `Screenshots/`). Guns:
+`--weapon-mount=g1..g4 --weapon-fire` each logged the lab's mount line, the arm line and
+`FlightController`'s own "gun group N firing" in agreement — group 1 → `firepoint7,8`, 2 → `5,6`,
+3 → `3,4`, 4 → `1,2`, the last two being mounts the Bloodhawk's stock fit never names.
+`.\RunTests.ps1` PASS: 395 units, 22 suites, 13 goldens hash-identical.

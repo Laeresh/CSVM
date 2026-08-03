@@ -17,7 +17,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `G` | D-pad ← | select gun group (one at a time) |
 | `H` | D-pad → | select ordnance |
 | `F5` | | damage lab on the flown plane — `--damage=` |
-| `W` | | weapon lab panel — `--weapon-lab` sessions only, where the plane is held and reads no stick input, so `W` is free (Space/`F` still fire) |
+| `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
 | `R` | | respawn |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |

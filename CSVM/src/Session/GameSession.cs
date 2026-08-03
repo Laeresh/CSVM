@@ -1075,7 +1075,13 @@ public partial class GameSession : Node3D
                     break;
                 }
             }
-            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName);
+            // The bench's own scene-less pool: rockets fly streak-only, gun impacts show the spark,
+            // hardpoint impacts the pool's explosion stand-in, and there is no DamageSink. The lab
+            // node no longer builds one — it drives a loadout, it does not fire (B5).
+            var benchPool = new ProjectilePool(state.Textures, null, null);
+            _worldRoot!.AddChild(benchPool);
+            benchPool.Listener = _camera;
+            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, _spec.PlaneName, pool: benchPool);
             _worldRoot!.AddChild(weaponLab);
             // Mount and fire every one of the 48 weapons once and report any that throw, then quit
             // (windowless under --headless). The report is synchronous (Spawn does the muzzle math +
@@ -1339,29 +1345,23 @@ public partial class GameSession : Node3D
             // A soak run must never dry up: the lab exists to watch a weapon fire, not to manage
             // ammo. Explicit flags still win — --ammo=N caps the load on purpose.
             p1c.InfiniteAmmo = true;
-            var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, state.Textures,
-                labRig.Camera, _spec.PlaneName, host: p1c, sharedPool: projectiles)
+            // --weapon-fire holds the real trigger, the one free flight pulls (decision 3) — which
+            // one follows the panel's bank, so the lab sets it rather than this call site.
+            var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, _spec.PlaneName,
+                host: p1c, pool: projectiles)
             {
                 DebugShow = true,   // the lab IS the session now — the panel is why you launched it
                 InitialWeapon = _spec.WeaponSelect,
                 InitialMount = _spec.WeaponMount,
+                AutoFireAtStart = _spec.WeaponFire,
+                CycleFrames = _spec.WeaponCycle,
             };
             _worldRoot!.AddChild(lab);
-            // --weapon-fire: hold the real trigger, the one free flight pulls (decision 3). Which
-            // trigger depends on the selected weapon's own class — a hardpoint weapon launches from
-            // the pylons, everything else fires from the gun groups.
-            if (_spec.WeaponFire)
-            {
-                bool rockets = _spec.WeaponSelect is { } sel
-                    && weaponDefs.All.FirstOrDefault(w =>
-                        string.Equals(w.Id, sel, StringComparison.OrdinalIgnoreCase)) is { IsGun: false };
-                p1c.AutoFire = !rockets;
-                p1c.AutoFireRockets = rockets;
-            }
             GD.Print($"weapon lab: '{_spec.PlaneName}' held " +
                      (_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}") +
                      ", firing through the session pool" +
-                     (_spec.WeaponFire ? " (--weapon-fire: trigger held)" : ""));
+                     (_spec.WeaponFire ? " (--weapon-fire: trigger held)" : "") +
+                     (_spec.WeaponCycle > 0 ? $" (--weapon-cycle: a weapon every {_spec.WeaponCycle} frames)" : ""));
             // The authored impact/destruction effects need the world-effects runtime, which is only
             // built when there IS a world program — say so rather than silently drawing stand-ins.
             if (state.WorldScene == null)
