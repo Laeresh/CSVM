@@ -372,6 +372,16 @@ public sealed record SessionSpec
     /// weapon list one entry every N physics frames — the scripted twin of the panel's weapon
     /// stepper, so the arm/ordnance-rebuild path can be walked with nobody at the controls. 0 = off.</summary>
     public int WeaponCycle { get; private set; }
+    /// <summary><c>--weapon-click[=x,y]</c>: replay one weapon-lab click at that viewport pixel on
+    /// the first physics frame — the scripted twin of click-to-place. Set with no value to click
+    /// the viewport centre, which is why the flag and its coordinates are separate fields.</summary>
+    public bool WeaponClick { get; private set; }
+    /// <summary><b>Resolved.</b> The pixel <see cref="WeaponClick"/> names, or null for the
+    /// viewport centre.</summary>
+    public Vector2? WeaponClickAt { get; private set; }
+    /// <summary><b>Resolved.</b> The <c>,aim</c> suffix: aim at the picked point without
+    /// re-parking, the scripted twin of shift-click.</summary>
+    public bool WeaponClickAimOnly { get; private set; }
 
     // ---- Collision ----------------------------------------------------------------------------
 
@@ -569,6 +579,34 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--weapon-lab=")) { s.WeaponLab = true; s.WeaponSelect = arg["--weapon-lab=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-mount=")) { s.WeaponMount = arg["--weapon-mount=".Length..]; s.HasContentArg = true; }
             else if (arg == "--weapon-fire") { s.WeaponFire = true; s.HasContentArg = true; }
+            else if (arg == "--weapon-click") { s.WeaponClick = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-click="))
+            {
+                s.WeaponClick = true;
+                s.HasContentArg = true;
+                string want = arg["--weapon-click=".Length..];
+                var parts = want.Split(',', StringSplitOptions.TrimEntries);
+                // A trailing "aim" is the scripted shift-click: aim without re-parking.
+                if (parts.Length == 3 && string.Equals(parts[2], "aim", StringComparison.OrdinalIgnoreCase))
+                {
+                    s.WeaponClickAimOnly = true;
+                    parts = new[] { parts[0], parts[1] };
+                }
+                if (parts.Length == 2
+                    && float.TryParse(parts[0], NumberStyles.Float, CultureInfo.InvariantCulture, out float cx)
+                    && float.TryParse(parts[1], NumberStyles.Float, CultureInfo.InvariantCulture, out float cy))
+                {
+                    s.WeaponClickAt = new Vector2(cx, cy);
+                }
+                else if (!string.Equals(want, "aim", StringComparison.OrdinalIgnoreCase))
+                {
+                    notes.Add(new Note("ui", $"--weapon-click={want} is not x,y[,aim] — clicking the viewport centre instead"));
+                }
+                else
+                {
+                    s.WeaponClickAimOnly = true;
+                }
+            }
             else if (arg == "--weapon-cycle") { s.WeaponCycle = 30; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-cycle=")) { s.WeaponCycle = Math.Max(1, int.Parse(arg["--weapon-cycle=".Length..])); s.HasContentArg = true; }
             else if (arg == "--weapon-test") { s.WeaponTest = true; s.HasContentArg = true; }
@@ -879,9 +917,9 @@ public sealed record SessionSpec
         // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
         // anything that forced a non-flight mode wins the arbitration above, but that would
         // silently leave the lab half-built, so it is reported instead.
-        if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0) && !Fly)
+        if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick) && !Fly)
         {
-            Warn("core", "--weapon-lab/--weapon-mount/--weapon-fire/--weapon-cycle need flight; another mode flag won this session, so the lab will not build");
+            Warn("core", "the --weapon-lab flags need flight; another mode flag won this session, so the lab will not build");
         }
         bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
         if (DebugSelect != null && !observing)

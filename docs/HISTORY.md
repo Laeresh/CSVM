@@ -12409,3 +12409,31 @@ else.
 frame count against a golden rendered at `--frames=120`, producing two images 100 MPH apart that
 looked like a huge regression. The golden runner appends each shot's own `frame` field; an ad-hoc
 probe must be given it explicitly or the comparison is meaningless.
+
+## 2026-08-03 — the weapon lab picks a real surface and parks on it (`PLAN-weapon-lab` C6)
+
+Left-click anywhere in the lab's world: the panel names what is under the cursor (`cs_name` +
+IMPACT surface class + range), an orange marker drops on the point, and the held aircraft re-parks
+on that same camera ray at the panel's stand-off (default 90 m, slider 15–1100), nose on it.
+Shift-click aims without moving. The pick is the lab's **own physics raycast** —
+`SelectionService`'s AABB scan deliberately skips map-scale meshes, so it can never select the sea
+or a terrain tile, the two things this lab most needs to shoot at. The class comes from
+`ProjectilePool.ClassifySurface`, the classifier the impact path itself uses, so the panel cannot
+disagree with what the round does. `--weapon-click=x,y[,aim]` is the scripted twin (one click on
+the first physics frame, viewport centre when the value is omitted).
+
+**Verified** — full commands and verbatim log lines in `analysis/weapon-lab-targeting/`. C3 water:
+`body=col_water surface=water`, and the rocket plays the authored splash with **no stand-in
+anywhere** (`fx=bsplsh.flt snd=snd_bsplash standin=None`). C5 buildings: `body=col_buildings
+surface=buildings`, `fx=large_fireball`. C2 default: `fx=he_ground_effect standin=DirtDebris`, and
+the same rocket destroyed the destructible it hit (`ramses` HP 20→0) — `DamageSink` is live here.
+A click on the sky reports `hit nothing — aircraft left where it was`. `.\RunTests.ps1` PASS.
+
+**Two findings worth keeping.** (1) A buildings-*classed collider* is far rarer than a building:
+C2 carries 80 against 14187 clutter, and six clicks on an orange-outlined warehouse all returned
+the untagged `col` sibling — the class belongs to the polygon's texture, not the object, so
+adjacent picks on one mesh legitimately differ (`BL-204`'s split working as designed). The pick
+line therefore logs the struck **body** name beside the object's, which is what distinguishes a
+missed sibling from a misclassification. (2) The "don't re-park inside geometry" clamp never fired
+and by construction cannot, unless the stand-off exceeds the picked range: the camera→hit segment
+is empty because the hit is the ray's first intersection.

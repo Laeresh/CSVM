@@ -125,7 +125,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
-- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, guns onto gun groups, hardpoints onto pylons; `--weapon-test` fires all 48.
+- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface; `--weapon-test` fires all 48.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
@@ -1484,15 +1484,23 @@ pylons: a gun goes onto the SELECTED group with a full clip of its `CLUSTER_SIZE
 weapon re-arms EVERY pylon (`ProbeRunner.ApplyRocketOverride`) and rebuilds `PylonOrdnance`. The
 mount stepper drives `SelectGunGroup`/`SelectPylon`, the auto-fire toggle `AutoFire`/
 `AutoFireRockets` by bank, and "reset to stock" restores the fit the session launched with (stock
-as `--rocket=`/`--loadout=` left it, not as the file reads). `--weapon-cycle=N` steps the weapon
-list every N physics frames — the scripted twin, the only thing this node does per frame.
+as `--rocket=`/`--loadout=` left it, not as the file reads). Gun mounts are in `FirableGuns` order
+because that is the order `SelectGunGroup` indexes; a plane with no loadout at all falls back to the
+raw marker rig, which has nothing live to arm.
+**Click to place:** a left click casts the lab's OWN physics ray from the camera, names what it hit
+(`cs_name` ancestor via `SelectionService.NameOf`, class via `ProjectilePool.ClassifySurface`,
+distance) and re-parks the held plane on that same ray at the panel's stand-off through `PlaceHeld`;
+shift-click aims without moving, and an orange ball marks the aim point. `--weapon-cycle=N` (weapon
+stepper every N physics frames) and `--weapon-click=x,y[,aim]` (one click on the first physics
+frame) are the scripted twins, and stepping/picking is the only thing this node does per frame.
 ⚠ This node NEVER spawns a round. Its one exception is `RunSelfTest` (the `--weapon-test` 48-weapon
   pass check on a PARKED plane, host null), which fires every node of a mount straight into the
   caller-supplied pool. Do not give the panel a firing loop back — the lab exists to fire exactly
   what free flight fires.
-⚠ Gun mounts are `Loadout.FirableGuns` order, because that is the order `SelectGunGroup` indexes —
-  a mount list built in any other order silently fires the wrong group. No loadout at all (a plane
-  the stock table omits) falls back to the raw marker rig, which has nothing live to arm.
+⚠ The ray is cast in the PHYSICS step, never in the input handler (the space state cannot be queried
+  while the server flushes queries), and the class is read off THE BODY THE RAY RETURNED and nothing
+  else — one mesh yields a body per surface class present (`col`, `col_water`, `col_buildings`), so
+  adjacent picks on one object legitimately differ. A click that hits nothing leaves the plane put.
 ⚠ A hardpoint swap must `PylonOrdnance.Unmount()` the old set BEFORE building the new one, or every
   swap leaves a body under each pylon; `ordnance_nodes=` on the `weapons` debug line is the tripwire
   (it must equal `mounted=`). A weapon whose `FLYOUT` model this chapter's gamez lacks mounts

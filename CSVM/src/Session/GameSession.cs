@@ -1364,13 +1364,16 @@ public partial class GameSession : Node3D
             // --weapon-fire holds the real trigger, the one free flight pulls (decision 3) — which
             // one follows the panel's bank, so the lab sets it rather than this call site.
             var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, _spec.PlaneName,
-                host: p1c, pool: projectiles)
+                host: p1c, pool: projectiles, camera: labRig.Camera)
             {
                 DebugShow = true,   // the lab IS the session now — the panel is why you launched it
                 InitialWeapon = _spec.WeaponSelect,
                 InitialMount = _spec.WeaponMount,
                 AutoFireAtStart = _spec.WeaponFire,
                 CycleFrames = _spec.WeaponCycle,
+                DebugClickRequested = _spec.WeaponClick,
+                DebugClick = _spec.WeaponClickAt,
+                DebugClickAimOnly = _spec.WeaponClickAimOnly,
             };
             _worldRoot!.AddChild(lab);
             GD.Print($"weapon lab: '{_spec.PlaneName}' held " +

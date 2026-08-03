@@ -109,7 +109,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave C — targeting
 
-6. ☐ C6 — click-to-place: raycast pick, surface readout, re-park on the camera ray
+6. ☑ C6 — click-to-place: raycast pick, surface readout, re-park on the camera ray
 7. ☐ C7 — scripted twins: `--weapon-target=`, `--weapon-surface=`, `--weapon-standoff=`
 
 ### Wave D — camera, probes, docs
@@ -285,7 +285,7 @@ behaviour needs the toggle turned off to be seen at all — say so in the panel.
 
 # Wave C — targeting
 
-## C6 ☐ Click to place: pick a real surface, re-park on the camera ray
+## C6 ☑ Click to place: pick a real surface, re-park on the camera ray
 
 **Goal.** Left-click anywhere in the world: the panel names what is under the cursor (`cs_name` +
 surface class + distance) and the aircraft teleports onto that camera ray at the stand-off

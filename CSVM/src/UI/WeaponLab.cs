@@ -38,9 +38,17 @@ public sealed partial class WeaponLab : Node3D
     private const int Guns = 0;
     private const int Hardpoints = 1;
 
+    private const float MinStandoff = 15f;
+    private const float MaxStandoff = 1100f;      // far enough to watch a rocket fly its full course
+    private const float DefaultStandoff = 90f;
+    private const float RayLength = 20000f;       // past the far side of the largest chapter
+    private const float ClearanceProbeStart = 0.5f;  // m off the struck face, so the back-ray leaves it
+    private const float ClearanceMargin = 2f;     // m kept clear of whatever the back-ray struck
+
     private readonly Node3D _plane;
     private readonly string _planeModel;
     private readonly WeaponDefs _weapons;
+    private readonly Camera3D? _camera;
 
     private readonly List<WeaponDef> _all;        // every weapon, for the self-test
     private readonly List<WeaponDef> _gunWeapons = new();
@@ -70,22 +78,34 @@ public sealed partial class WeaponLab : Node3D
     private bool _autoFire;
     private int _cycleTick;
 
+    // Click-to-place: the click is taken in _UnhandledInput but the ray is cast in the physics
+    // step — the space state may not be queried while the server is flushing queries.
+    private Vector2? _pendingClick;
+    private bool _pendingAimOnly;
+    private bool _debugClickDone;
+    private float _standoff = DefaultStandoff;
+    private string _pickLine = "target: (nothing picked yet)";
+    private MeshInstance3D? _marker;
+
     private CanvasLayer _ui = null!;
     private Label _bankLabel = null!;
     private Label _weaponLabel = null!;
     private Label _weaponDetail = null!;
     private Label _mountLabel = null!;
     private Label _ammoLabel = null!;
+    private Label _pickLabel = null!;
+    private Label _standoffLabel = null!;
     private Label _cliLabel = null!;
     private CheckButton _autoFireToggle = null!;
     private CheckButton _infiniteAmmoToggle = null!;
     private bool _suppress; // set while rewriting widgets from a state change
 
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout, string planeModel,
-        Flight.FlightController? host = null, ProjectilePool? pool = null)
+        Flight.FlightController? host = null, ProjectilePool? pool = null, Camera3D? camera = null)
     {
         _plane = plane;
         _weapons = weapons;
+        _camera = camera;
         _planeModel = planeModel;
         _host = host;
         _loadout = loadout;
@@ -118,6 +138,20 @@ public sealed partial class WeaponLab : Node3D
     /// mount/ordnance-rebuild path can be walked headlessly under <c>--log=weapons</c>. 0 = off.</summary>
     public int CycleFrames { get; init; }
 
+    /// <summary><c>--weapon-click[=x,y]</c>: replay one left click at that viewport pixel on the
+    /// first physics frame (the viewport centre when the value is omitted) — the scripted twin of
+    /// click-to-place, so a capture can aim at a real surface with nobody at the mouse. Null = off.
+    /// </summary>
+    public Vector2? DebugClick { get; init; }
+
+    /// <summary>Whether <see cref="DebugClick"/> was given at all — the value is optional, so a
+    /// null <see cref="DebugClick"/> still means "click the centre" when this is set.</summary>
+    public bool DebugClickRequested { get; init; }
+
+    /// <summary><c>--weapon-click=x,y,aim</c>: the scripted shift-click — aim at the struck point
+    /// without moving the aircraft.</summary>
+    public bool DebugClickAimOnly { get; init; }
+
     private List<WeaponDef> BankWeapons => _bank == Guns ? _gunWeapons : _rocketWeapons;
     private List<Mount> BankMounts => _bank == Guns ? _gunMounts : _pylonMounts;
     private WeaponDef? SelectedWeapon => _weaponIndex < BankWeapons.Count ? BankWeapons[_weaponIndex] : null;
@@ -136,8 +170,22 @@ public sealed partial class WeaponLab : Node3D
 
     public override void _PhysicsProcess(double delta)
     {
-        // The only thing this node does per frame — and only when asked to (--weapon-cycle).
-        // Firing belongs to the aircraft's trigger; there is deliberately no second spawn path here.
+        // Both of this node's per-frame jobs are picks and swaps, never a shot: firing belongs to
+        // the aircraft's trigger and there is deliberately no second spawn path here.
+        if (DebugClickRequested && !_debugClickDone && _camera != null)
+        {
+            // Deferred to the first physics frame, as the selection service's scripted pick is:
+            // the camera pose and the world's colliders are only final once the session is built.
+            _debugClickDone = true;
+            var screen = DebugClick ?? (_camera.GetViewport().GetVisibleRect().Size * 0.5f);
+            Log.Info("ui", $"weapon lab: scripted click at ({screen.X:0},{screen.Y:0}){(DebugClickAimOnly ? " (aim only)" : "")}");
+            PickAt(screen, DebugClickAimOnly);
+        }
+        if (_pendingClick is { } click)
+        {
+            _pendingClick = null;
+            PickAt(click, _pendingAimOnly);
+        }
         if (CycleFrames <= 0 || _host == null || ++_cycleTick < CycleFrames)
         {
             return;
@@ -212,6 +260,24 @@ public sealed partial class WeaponLab : Node3D
             _panel = !_panel;
             SyncState();
         }
+    }
+
+    public override void _UnhandledInput(InputEvent @event)
+    {
+        // Unhandled only: a click on the panel's own buttons is consumed by the GUI and never
+        // reaches here, so the steppers do not also re-park the aircraft.
+        if (_camera == null || @event is not InputEventMouseButton
+            {
+                Pressed: true, ButtonIndex: MouseButton.Left,
+            } click)
+        {
+            return;
+        }
+        // Read the position off the CAMERA's viewport rather than the event: in splitscreen the
+        // event carries window coordinates while the ray projection wants the pane's own.
+        _pendingClick = _camera.GetViewport().GetMousePosition();
+        _pendingAimOnly = click.ShiftPressed;
+        GetViewport().SetInputAsHandled();
     }
 
     // ---- weapon + mount resolution -----------------------------------------------------------
@@ -343,6 +409,110 @@ public sealed partial class WeaponLab : Node3D
     }
 
     private static string Trim(string s, int n) => s.Length <= n ? s : s[..n];
+
+    // ---- click to place ------------------------------------------------------------------------
+
+    /// <summary>The struck body's readable name: colliders are unnamed children of the mesh node,
+    /// so the name lives on the nearest ancestor carrying the <c>cs_name</c> meta.</summary>
+    private static string NameOfStruck(Node? body)
+    {
+        for (var n = body; n != null; n = n.GetParent())
+        {
+            if (n is Node3D n3d && n3d.HasMeta(AnimRuntime.NameMeta))
+            {
+                return SelectionService.NameOf(n3d);
+            }
+        }
+        return body?.Name.ToString() ?? "?";
+    }
+
+    /// <summary>Fires the lab's own physics ray through <paramref name="screen"/>, reports what it
+    /// struck — its <c>cs_name</c>, its IMPACT surface class and its distance — and re-parks the
+    /// held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
+    /// <paramref name="aimOnly"/> (shift-click) turns the aircraft toward it without moving it.
+    ///
+    /// <para>The class comes from <see cref="ProjectilePool.ClassifySurface"/> — the one classifier
+    /// the impact path itself uses, so the panel cannot disagree with what the round does — applied
+    /// to <b>the body the ray returned and nothing else</b>: one mesh yields a separate body per
+    /// surface class present, so the sibling bodies of a coastal tile carry different classes.</para></summary>
+    private void PickAt(Vector2 screen, bool aimOnly)
+    {
+        if (_camera == null || _host == null || !IsInsideTree())
+        {
+            return;
+        }
+        var from = _camera.ProjectRayOrigin(screen);
+        var dir = _camera.ProjectRayNormal(screen);
+        var query = PhysicsRayQueryParameters3D.Create(from, from + (dir * RayLength));
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0)
+        {
+            // A click on the sky is not a placement — say so and leave the aircraft where it is.
+            _pickLine = "target: nothing under the cursor (sky)";
+            Log.Info("ui", $"weapon lab: pick at ({screen.X:0},{screen.Y:0}) hit nothing — aircraft left where it was");
+            SyncState();
+            return;
+        }
+        var point = hit["position"].AsVector3();
+        var body = hit["collider"].As<Node>();
+        var surface = ProjectilePool.ClassifySurface(body);
+        string name = NameOfStruck(body);
+        float standoff = aimOnly ? (point - _plane.GlobalPosition).Length() : ClampedStandoff(point, dir);
+        _pickLine = $"target: {Trim(name, 22)} · {surface.ToString().ToLowerInvariant()} · "
+                    + $"{(point - from).Length():0} m";
+        // The body's own node name is in the line on purpose: one mesh yields a body per surface
+        // class present, so "col" vs "col_buildings" is what distinguishes a click that missed the
+        // tagged sibling from a genuinely untagged surface.
+        Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface.ToString().ToLowerInvariant()} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) range={(point - from).Length():0} standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
+        ShowMarker(point);
+        _host.PlaceHeld(aimOnly ? _plane.GlobalPosition : point - (dir * standoff), point);
+        SyncState();
+    }
+
+    /// <summary>The stand-off the panel asks for, shortened if the ray back from the struck point
+    /// re-enters geometry — re-parking the aircraft inside a hillside or a warehouse would be worse
+    /// than standing closer than requested. Probed from just off the struck face, so the surface the
+    /// ray just hit is not itself the obstruction.</summary>
+    private float ClampedStandoff(Vector3 point, Vector3 dir)
+    {
+        var back = -dir;
+        var start = point + (back * ClearanceProbeStart);
+        var query = PhysicsRayQueryParameters3D.Create(start, point + (back * _standoff));
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        if (hit.Count == 0)
+        {
+            return _standoff;
+        }
+        float blocked = (hit["position"].AsVector3() - point).Length();
+        float clamped = Mathf.Max(MinStandoff, blocked - ClearanceMargin);
+        Log.Info("ui", $"weapon lab: stand-off clamped {_standoff:0} -> {clamped:0} m — geometry {blocked:0} m back along the aim");
+        return clamped;
+    }
+
+    /// <summary>Drops the aim marker on the struck point — a small unshaded ball, built on first
+    /// use. Tagged as an overlay so the inspect tools' subtree measurements skip it, and meshes
+    /// carry no collider, so it can never be picked or shot itself.</summary>
+    private void ShowMarker(Vector3 point)
+    {
+        if (_marker == null)
+        {
+            _marker = new MeshInstance3D
+            {
+                Name = "weapon_lab_aim",
+                Mesh = new SphereMesh { Radius = 1.5f, Height = 3f, RadialSegments = 12, Rings = 6 },
+                MaterialOverride = new StandardMaterial3D
+                {
+                    ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
+                    AlbedoColor = new Color(1f, 0.35f, 0.1f),
+                },
+                CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
+            };
+            _marker.SetMeta(SelectionService.OverlayMeta, true);
+            AddChild(_marker);
+        }
+        _marker.Visible = true;
+        _marker.GlobalPosition = point;
+    }
 
     /// <summary>Builds the two mount banks from the bound loadout: one entry per <b>firable</b> gun
     /// group (in <see cref="Loadout.FirableGuns"/> order, which is the order
@@ -612,6 +782,8 @@ public sealed partial class WeaponLab : Node3D
             ? $"{mounts[_mountIndex].Label}   [{_mountIndex + 1}/{mounts.Count}]"
             : (_bank == Guns ? "(no gun groups)" : "(no pylons)");
         _ammoLabel.Text = AmmoLine();
+        _pickLabel.Text = _pickLine;
+        _standoffLabel.Text = $"stand-off {_standoff:0} m";
         _autoFireToggle.ButtonPressed = _autoFire;
         _infiniteAmmoToggle.ButtonPressed = _host is { InfiniteAmmo: true };
         _cliLabel.Text = CliArgs();
@@ -719,7 +891,34 @@ public sealed partial class WeaponLab : Node3D
         box.AddThemeConstantOverride("separation", 3);
 
         box.AddChild(new Label { Text = "WEAPON LAB" });
-        box.AddChild(Small("B hides · Space fires the guns · F fires a rocket"));
+        box.AddChild(Small("B hides · Space/F fire · click parks on a surface · shift-click aims"));
+
+        // target readout + stand-off: what the last click struck, and how far back up the camera
+        // ray the aircraft parks from the next one.
+        _pickLabel = new Label { CustomMinimumSize = new Vector2(330, 0) };
+        _pickLabel.AutowrapMode = TextServer.AutowrapMode.WordSmart;
+        box.AddChild(_pickLabel);
+        _standoffLabel = Small("");
+        box.AddChild(_standoffLabel);
+        var standoffSlider = new HSlider
+        {
+            MinValue = MinStandoff,
+            MaxValue = MaxStandoff,
+            Step = 5,
+            Value = _standoff,
+            CustomMinimumSize = new Vector2(220, 0),
+        };
+        standoffSlider.ValueChanged += v =>
+        {
+            if (!_suppress)
+            {
+                _standoff = Mathf.Clamp((float)v, MinStandoff, MaxStandoff);
+                SyncState();
+            }
+        };
+        box.AddChild(standoffSlider);
+
+        box.AddChild(Separator());
 
         // bank stepper (guns arm gun groups, hardpoints arm pylons)
         _bankLabel = new Label { CustomMinimumSize = new Vector2(300, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -744,7 +943,6 @@ public sealed partial class WeaponLab : Node3D
         box.AddChild(Separator());
 
         // mount stepper — the group/pylon the trigger fires from
-        box.AddChild(Small("mount — the group / pylon the trigger uses"));
         _mountLabel = new Label { CustomMinimumSize = new Vector2(280, 0), VerticalAlignment = VerticalAlignment.Center };
         var mountRow = new HBoxContainer();
         mountRow.AddChild(StepButton("<", () => StepMount(-1)));
