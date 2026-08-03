@@ -39,6 +39,20 @@ Chapters are lower-cased (`c1`, `c1b`, `c2b`, …) and missions match the missio
 names (`ia1`, `m02`, `mp3`), so the script for a mission is exactly
 `support\<chapter>\<mission>.gw`.
 
+### Build vs. run — the `USEZBD` split
+
+The same script tree is both the engine's asset **compiler** and its **loader**, switched
+by preprocessor defines in `support\main.gw`. Without `USEZBD`, the `load.gw` scripts
+`LoadGameGen` the raw `..\data\**\*.flt` art tree into a scene DB and `GameZWriteZBDFile`
+writes the chapter's `gamez.zbd` — that path owns `mkdir`, `PrintUsedTextures` and the
+`COMPILE` define, and it is dead in a retail install, which ships no `..\data\` tree.
+`support\planes.gw` builds `planes.zbd` the same way, running `util\planesurgery.gw` once
+per aircraft to split `cockpit1` out of the model into a `player_*` root with `geometry` +
+`cockpit1` children — the shape the readers see. With `USEZBD` (retail runtime), the engine
+reads `gamez.zbd` + `planes.zbd` instead. `adjust.gw` (the clutter registry) and the
+per-mission `<mission>.gw` run **in both paths** — they are the only genuinely runtime
+scripts, and exactly the subset this project consumes.
+
 ## The per-mission scripts — which entities a mission shows
 
 **This is the mechanism that decides world entity presence, and it settles a question the

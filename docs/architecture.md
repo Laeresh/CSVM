@@ -491,7 +491,7 @@ Parses + applies the per-mission `.gw` interp script that decides which world en
 shows; acts on `NodeSetActive`/`DeleteTree`/`Object3DSetScroll`, counts + reports every other verb.
 ⚠ Read docs/formats/interp.md before extending: order matters and last write wins, a `FindNode`
   matching nothing is NORMAL (never warn), and `DeleteTree` names its own target.
-⚠ `Object3DRotate` is unimplemented on purpose — the data's angle unit is ambiguous; guessing would silently mis-pose props.
+⚠ `Object3DRotate` is unimplemented on purpose — the data's angle unit is ambiguous; guessing would silently mis-pose props (BL-249, with `Object3DTranslate`).
 ⚠ The entity half applies as AnimRuntime bootstrap pass 0, before animation state (engine load order).
 
 ## src/Mech3/AnimRuntime.cs

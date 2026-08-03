@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-249`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-250`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -219,7 +219,7 @@ work is below.
   chained eased rock (accelerate, decelerate, reverse) is at least as plausible a reading, and
   under (b) each event would snap back to rest. **Needs the original game**: watch a zeppelin rock
   through several loops and see whether it returns to the same attitude or walks. Same class of
-  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit.
+  call as `MissionSetup`'s unguessed `Object3DRotate` angle unit (`BL-249`).
 
 - `BL-035` **Animation event kinds that need weapons or cutscenes — `CALLBACK`, `OBJECT_CYCLE_TEXTURE`,
   one-shot `SOUND`** (triaged 2026-07-22, the last of `docs/plans/PLAN-anim-rendering-followups.md`
@@ -269,6 +269,21 @@ work is below.
   flag** (next entry). Kept as a correction rather than deleted because the wrong claim was
   repeated across three documents. Whatever `WorldPartitionSetActive` does for C3 is still
   unimplemented and still undescribed — but it is a C3 question, not a ground-LOD one.
+
+- `BL-249` **`MissionSetup` does not apply the interp placement verbs — `Object3DTranslate` /
+  `Object3DRotate`** (measured 2026-08-04; previously visible only as an aside in `BL-034`).
+  Mission-script uses (build-side `load.gw` uses are baked into the shipped gamez and need
+  nothing): `c1\m05.gw` ×20 — repositions the nine `lifesaver*` boats, `redcross` and
+  `workersvoyagezep`, rotations unambiguously **degrees** (`0 45 0`, `0 172 0`);
+  `c3\mp1.gw`+`mp2.gw` ×4 — places `cargozep1`, rotation unambiguously **radians**
+  (`-3.144009` ≈ π on Y); `c5\mp1.gw` ×1 — moves `rearm_node_2`. Effect while open: flying
+  C1/M05, C3/MP1–2 or C5/MP1 leaves those entities at the world corner / unrotated (the
+  vehicles-load-unplaced mechanism in `docs/formats/interp.md`).
+  ⚠ Traps: **the angle unit is per-script inconsistent in shipped data** — degrees in C1/M05,
+  radians in C3/MP — so a single global unit guess mis-poses one set or the other; any fix needs
+  a per-script (or magnitude-based) unit decision plus an original-game check. Last-write-wins
+  ordering applies as everywhere in these scripts. No IA1/default mission uses either verb, so
+  the goldens cannot catch a wrong guess — verify in the named missions directly.
 
 - `BL-038` **`FogState` is a decoded animation event we do not act on** (found 2026-07-22). Fog **can** be
   changed mid-mission by animation, but the data uses it exactly once install-wide:
@@ -731,12 +746,15 @@ unscheduled.
   (`WingLights.cs`), world lamp/beacon glow sprites (`gen_flare_yellow`, `poleflare`,
   `docklight_flare` — `SceneBuilder.cs:771`, `WorldBuilder.cs:403`), and gun/rocket effects — nothing
   tied to the sun.
-  *Candidate asset, unverified:* every chapter's texture archive ships a lens-flare-shaped set —
-  `bigflare01`/`bigflare02` (large core discs) + `lflare1`..`lflare4` (small secondary rings) — but
-  **zero non-manifest references** turn up for them anywhere in `extracted/**/*.json` (no gamez node,
-  no material, no cam_anim/zrdr def binds them), consistent with the original driving them as a
-  hardcoded screen-space effect rather than a scene-graph object. This is a lead from naming + shape
-  convention only — a starting guess, not a spec.
+  *Candidate asset, engine-bound (upgraded 2026-08-04):* every chapter's texture archive ships a
+  lens-flare-shaped set — `bigflare01`/`bigflare02` (large core discs) + `lflare1`..`lflare4`
+  (small secondary rings) — and the interp boot scripts **register the small set by verb**:
+  `support\c2\init.gw` and `support\c3\init.gw` each carry `LensFlareTexture 0 lflare1` …
+  `LensFlareTexture 3 lflare4` (plus `LightMapTexture lightmap`), binding `lflare1`–`lflare4` to
+  flare element slots 0–3 in that order. No gamez node, material, or cam_anim/zrdr def references
+  them, consistent with a hardcoded screen-space effect fed by these registered textures. Open
+  oddity: only C2/C3 carry the lines — the other chapters' `init.gw` scripts register nothing, yet
+  the original presumably flares everywhere; `bigflare01`/`02` remain a naming-convention lead only.
   *Fix shape:* a screen-space flare rig keyed off the sun's view-space direction (sprites strung along
   the sun→screen-centre vector), textured from the candidate set above, gated by an occlusion check
   (terrain/plane in front of the sun kills it).
