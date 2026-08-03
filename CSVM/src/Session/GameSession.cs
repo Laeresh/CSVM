@@ -109,9 +109,12 @@ public partial class GameSession : Node3D
     // The node lab (N, --freecam/--anim-lab): tree panel, search, per-node actions and the
     // dependency readout for whatever the selection holds.
     private UI.NodeLab? _nodeLab;
-    // The world damage lab (H, --freecam/--anim-lab): HP slider + kill/reset on the selection's
+    // The world damage lab (F5, --freecam/--anim-lab): HP slider + kill/reset on the selection's
     // destructible pool — the interactive twin of --damage-test.
     private UI.WorldDamageLab? _worldDamageLab;
+    // The aircraft damage lab (F5, --viewer/--fly/--stunt): per-part HP sliders on the parked
+    // plane's visuals, or on P1's real PlaneDamage in flight.
+    private DamageLab? _damageLab;
     // The effect/crash stage factory (PLAN-planeviewer-split A4) — builds the world-effects runtime
     // (D32, lazily, on demand for a plane-less session: --destroy, the damage lab's first kill) and
     // each player's crash runtime. Constructed once per session, same lifetime as _liveryResolver.
@@ -957,14 +960,16 @@ public partial class GameSession : Node3D
                 // the HUD gauge cluster as a lab toggle (user request): the damage
                 // dial mirrors the sliders, blinks on decreases like a flight hit
                 var labGauges = GaugeCluster.Build(state.Gamez, _spec.PlaneName, state.Textures, stats.DestroyableParts);
-                _worldRoot!.AddChild(new DamageLab(stats, visuals, _plane, _spec.DamagePreset, labGauges)
+                _damageLab = new DamageLab(stats, new ViewerDamageTarget(visuals, _plane),
+                    _spec.DamagePreset, labGauges)
                 {
-                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for H
-                });
+                    StartHidden = !_spec.DamageLab, // --damage opens it; plain --viewer waits for F5
+                };
+                _worldRoot!.AddChild(_damageLab);
                 GD.Print($"damage lab: {stats.DestroyableParts.Count} part sliders, " +
                          $"{visuals.PanelCount} panels, {panelTrails.Count} panel fire trails"
-                         + (_spec.DamageLab ? "" : " (hidden — H)"));
-                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (H)";
+                         + (_spec.DamageLab ? "" : " (hidden — F5)"));
+                state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
             }
         }
 
@@ -1136,7 +1141,7 @@ public partial class GameSession : Node3D
         GD.Print($"freecam: spectator camera at ({camPos.X:0}, {camPos.Y:0}, {camPos.Z:0}) — " +
                  "hold RMB to look, WASD/QE to move, Shift boost, wheel sets speed; " +
                  "click an object to select it, PgUp/PgDn walk its ancestor ladder (Home/End jump), " +
-                 "N opens the node lab, H the damage lab on whatever destructible is selected");
+                 "N opens the node lab, F5 the damage lab on whatever destructible is selected");
     }
 
     /// <summary>--fly (and --stunt): builds every rendered rig's aircraft — model, loadout,
@@ -1305,6 +1310,30 @@ public partial class GameSession : Node3D
         }
         state.MeshInstances += assembler.MeshInstances;
         state.What += assembler.WhatSuffix;
+
+        // Damage lab in flight (F5): the same panel --viewer hosts, bound to P1's real
+        // PlaneDamage instead of visuals alone — so a dialled-in state drives the HUD DMG line,
+        // the damaged-engine mix and the gauge dial, and can then be flown. The sim keeps
+        // running under it, and its sliders follow the hits taken while it is up. Splitscreen
+        // binds P1 only: the panel is one overlay, not one per pane.
+        if (_rigs.Count > 0 && _rigs[0].Controller is { Damage: not null } p1)
+        {
+            var p1Stats = StatsFor(PlaneRoster.PlaneFor(_spec, 0));
+            _damageLab = new DamageLab(p1Stats,
+                new FlightDamageTarget(p1, _rigs.Count > 1 ? "P1" : null), _spec.DamagePreset)
+            {
+                StartHidden = !_spec.DamageLab, // --damage opens it; a plain flight waits for F5
+                RightAligned = true,            // the top-left corner is the flight HUD's
+            };
+            _worldRoot!.AddChild(_damageLab);
+            GD.Print($"damage lab: {p1Stats.DestroyableParts.Count} part sliders on the flown " +
+                     "plane's HP" + (_spec.DamageLab ? "" : " (hidden — F5)"));
+            state.What += _spec.DamageLab ? " + damage lab" : " + damage lab (F5)";
+        }
+        else if (_spec.DamageLab)
+        {
+            GD.Print($"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
+        }
 
         // The race's shared results board: one ranked row per player, over the
         // WHOLE window rather than inside a pane — the race ends for everybody at once — so

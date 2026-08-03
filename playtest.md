@@ -135,6 +135,17 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
   overall crash intensity (fireball + cluster + debris fire are additive — judge the whole), and the
   `snd_exp_ground_a` mix. A/B against branch `bespoke-crash-animation`. *Blocks:* crash sign-off.
 
+- `PT-29` **The damage lab in flight (F5) — the first interactive test any aircraft damage lab has
+  had.** `BL-130` records that the labs have only ever been verified by scripted screenshot; this
+  adds a live host, so it needs hands on it. `./RunDev.ps1 --fly --plane=player_bhawk` then **F5**.
+  *Look for:* (a) dragging a slider changes the HUD `DMG` line, the damage dial and the engine
+  rattle while the plane keeps flying; (b) a drag is smooth — the per-frame read-back must not fight
+  the mouse; (c) take a graze off scenery and the slider drops on its own; (d) **R** returns the
+  panel to 100 %; (e) "repair all" clears the torn panels and the fire trail without a visible
+  stutter. Note that zeroing a critical part does **not** down the plane on its own — death is
+  decided on the next impact (`FlightController.SurviveHit`), which is the intended behaviour, not a
+  bug to report. *Blocks:* the interactive half of `BL-130`.
+
 - `PT-13` **Damage-stage smoke/fire re-test (A1 / `BL-199` landed 2026-07-31).** Hold a
   destructible in its stages with gunfire: black smoke should sputter at ≤60 % HP, black smoke +
   climbing fire at ≤30 %, both anchored on the object, for as long as the stage holds (past 32 s),

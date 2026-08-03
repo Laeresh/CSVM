@@ -10,10 +10,10 @@ using Godot;
 namespace CSVM.UI;
 
 /// <summary>
-/// The world damage lab (H) in <c>--freecam</c>/<c>--anim-lab</c>: when
+/// The world damage lab (F5) in <c>--freecam</c>/<c>--anim-lab</c>: when
 /// <see cref="SelectionService"/> lands on a destructible, this panel shows that object's live HP
 /// pools with a slider, a Kill and a Reset — the interactive twin of <c>--damage-test</c>, on any
-/// object, in the running world. In <c>--viewer</c> H still means the parked aircraft's
+/// object, in the running world. Elsewhere F5 means the aircraft's
 /// <see cref="Flight.DamageLab"/>; the two never exist in the same session.
 ///
 /// <para><b>The unit of control is a pool, not an object.</b> A node can carry several
@@ -155,7 +155,7 @@ public sealed partial class WorldDamageLab : Node
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.H })
+        if (@event is InputEventKey { Pressed: true, Echo: false, Keycode: Key.F5 })
         {
             Toggle();
             GetViewport().SetInputAsHandled();

@@ -310,7 +310,7 @@ public sealed partial class LiveryLab : Node
         box.AddThemeConstantOverride("separation", 3);
 
         box.AddChild(new Label { Text = "LIVERY LAB" });
-        box.AddChild(Small("L hides this panel · H toggles the damage lab"));
+        box.AddChild(Small("L hides this panel · F5 toggles the damage lab"));
         box.AddChild(Small("patterns are per aircraft — this plane's set only"));
 
         _paintedToggle = new CheckButton { Text = "painted" };

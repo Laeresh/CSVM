@@ -20,9 +20,12 @@
                                 LIVERY LAB (pattern, RGB colour sliders, decal
                                 slots, repainting the plane live).
       * --viewer --chapter[=C1] static world view (no plane, no prompts)
-      * --damage[=part:frac,..] the damage lab -- implies --viewer, so it needs no
-                                extra flag. Per-part HP sliders (H toggles them);
+      * --damage[=part:frac,..] the damage lab -- implies --viewer unless --fly or
+                                --stunt asked for flight by name, so it needs no
+                                extra flag. Per-part HP sliders (F5 toggles them);
                                 prompts for the plane unless --plane= is given.
+                                In flight the same sliders drive the flown plane's
+                                real HP, and F5 works there with or without this.
 
     Any other CSVM user args are forwarded as-is (see
     docs/cli.md for the full list: --mission=, --scenario=,
@@ -164,13 +167,16 @@ $hasPlane   = @($UserArgs | Where-Object { $_ -like '--plane=*' }).Count -gt 0
 $hasChapter = @($UserArgs | Where-Object { $_ -like '--chapter=*' -or $_ -eq '--chapter' }).Count -gt 0
 $hasViewer  = $UserArgs -contains '--viewer'
 $hasDamage  = @($UserArgs | Where-Object { $_ -eq '--damage' -or $_ -like '--damage=*' }).Count -gt 0
+$hasFlight  = ($UserArgs -contains '--fly') -or ($UserArgs -contains '--stunt')
 
 # Flight is the viewer's default (2026-07-20), so the flows key on --viewer, not --fly.
 # Viewer flow  = the static inspection view: --viewer, or --damage (which implies it).
 #                It needs a plane, unless --chapter asked for a static world instead.
 # Fly flow     = everything else, including a bare --plane= (which now FLIES that
 #                aircraft rather than orbit-viewing it). Prompts for whatever is missing.
-$viewerFlow = $hasViewer -or $hasDamage
+#                The damage lab has a flight host too, so a named --fly/--stunt keeps
+#                --damage here rather than pulling the session into the viewer.
+$viewerFlow = $hasViewer -or ($hasDamage -and -not $hasFlight)
 
 if ($viewerFlow) {
     if (-not $hasPlane -and -not $hasChapter) { $UserArgs += Select-Plane }

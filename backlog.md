@@ -1654,8 +1654,11 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
 - `BL-129` **`--freecam` interactive feel** — look sensitivity and the speed curve have never been
   assessed by hand; the module was built entirely through scripted screenshots and
   `--debug-anim`.
-- `BL-130` **The labs are mouse-driven** (`--viewer`: damage on H, livery on L, mesh on M) and have had no
-  interactive playtest beyond scripted verification.
+- `BL-130` **The labs are mouse-driven** (`--viewer`: damage on F5, livery on L, mesh on M) and have had no
+  interactive playtest beyond scripted verification. The damage lab now has a second, live host —
+  F5 in `--fly` drives the flown plane's real HP while the sim runs — which widens the gap rather
+  than closing it: a drag there competes with a per-frame read-back and nothing scripted can prove
+  that feels right. `PT-29` is the owed test.
 
 ## C3 ships gamez references to textures its texture.zbd does not contain
 

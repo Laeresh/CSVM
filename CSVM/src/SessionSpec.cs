@@ -102,8 +102,10 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> Flight plus the mission's danger zones — a modifier on
     /// <see cref="SessionMode.Fly"/>, cleared by any mode that beats flight.</summary>
     public bool Stunt { get; private set; }
-    /// <summary><b>Resolved.</b> The parked plane's per-part HP sliders — a viewer modifier,
-    /// dropped when the session builds a world instead of one aircraft.</summary>
+    /// <summary><b>Resolved.</b> Open the aircraft's per-part HP sliders at launch — a modifier on
+    /// <see cref="SessionMode.Viewer"/> (the parked plane) or <see cref="SessionMode.Fly"/> (the
+    /// flown one), dropped by the modes that build no aircraft at all. The lab itself is always
+    /// built; this only decides whether it starts open or waits behind F5.</summary>
     public bool DamageLab { get; private set; }
     public bool ForceMenu { get; private set; }
     public string MenuStartScreen { get; private set; } = "";
@@ -770,7 +772,7 @@ public sealed record SessionSpec
         bool fly = _flyArg || _stuntArg;
         bool stunt = _stuntArg;
         bool damageLab = _damageLabArg;
-        bool viewer = _viewerArg || _damageLabArg || MarkersOverlay || WeaponLab
+        bool viewer = _viewerArg || MarkersOverlay || WeaponLab
             || WeaponMount != null || WeaponFire || WeaponTest;
         bool freecam = _freecamArg || DamageTest || EffectsTest;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
@@ -795,6 +797,13 @@ public sealed record SessionSpec
         {
             Print("--freecam is a world view with no aircraft; ignoring --fly/--stunt/--viewer/--damage");
             fly = stunt = viewer = damageLab = false;
+        }
+        // The damage lab has two hosts now — the parked plane and the flown one — so --damage
+        // asks for a lab, not for a mode. It only picks the parked viewer when nothing else
+        // claimed the session, which keeps a bare --damage= meaning what it always did.
+        if (damageLab && !fly && !freecam && !animLab)
+        {
+            viewer = true;
         }
         // Flight is the default for any content arg; --viewer opts out into the static inspection
         // view. The explicit --viewer wins, since a bare --fly is now just the default spelled out.

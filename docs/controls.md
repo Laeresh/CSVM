@@ -16,6 +16,7 @@ Flags are specified in [`cli.md`](cli.md).
 | `F` | A | fire rockets — one per pull |
 | `G` | D-pad ← | select gun group (one at a time) |
 | `H` | D-pad → | select ordnance |
+| `F5` | | damage lab on the flown plane — `--damage=` |
 | `R` | | respawn |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |
@@ -38,7 +39,7 @@ Flags are specified in [`cli.md`](cli.md).
 
 | Input | Does | Scripted twin |
 |---|---|---|
-| `H` | damage lab | `--debug-damage=` |
+| `F5` | damage lab | `--damage=` |
 | `L` | livery lab | |
 | `M` | mesh lab | `--debug-mesh=` |
 | `K` | marker overlay | |
@@ -55,4 +56,4 @@ Flags are specified in [`cli.md`](cli.md).
 | `M` | mesh lab, on that selection alone | `--debug-mesh=` |
 | `C` | show the built colliders (see `--collision`) — also bound in `--fly`/`--stunt` | `--debug-colliders` |
 | `X` | colour world objects by class (destructible/facade/clutter/scenery) — also bound in `--fly`/`--stunt` | `--debug-classoverlay` |
-| `H` | damage lab on the selected destructible | `--debug-damage=` |
+| `F5` | damage lab on the selected destructible | `--debug-damage=` |

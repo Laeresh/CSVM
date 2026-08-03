@@ -123,7 +123,7 @@ Highest-traffic modules, so the common cases skip the index: `GameSession.cs` (s
 
 ### User args (after `--`)
 
-**Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the damage / livery / mesh labs live. `--fly` is accepted but redundant. A bare launch (no content arg) shows the launchscreen.
+**Flight is the default.** Any content arg builds a *flight* unless `--viewer` is present: `--plane=player_fury` flies the Fury and `--chapter=C4` flies over C4. `--viewer` gives the static inspection view, where the livery / mesh labs live. The damage lab now lives in both — F5 in `--viewer` drives a parked plane's visuals, F5 in `--fly` drives the flown plane's real HP — so `--fly` is redundant except with `--damage=`, which picks the parked viewer unless flight was asked for by name. A bare launch (no content arg) shows the launchscreen.
 
 The day-to-day 28 of 99 — 99 is both the parser's accepted-flag count and `docs/cli.md`'s flag-index count, kept equal on purpose. **[`docs/cli.md`](docs/cli.md) opens with an index of all of them, grouped**, and each flag's bullet there is the **description of record** — the whole `--debug-*` family, the paint overrides, spawn/mission selection, scripted `--hold` input, the data-path overrides, and the deprecated `--campos`/`--spawn-at`/`--spawn-dir` spellings of the placement pair.
 
@@ -135,9 +135,9 @@ The day-to-day 28 of 99 — 99 is both the parser's accepted-flag count and `doc
 | `--stage=empty` | no *chapter* gamez: a collidable grid ground plane + the plane, booting in ~2 s — the flight/ballistics test stage |
 | `--node=<cs_name>` | `--viewer`/`--anim-lab` build only that gamez subtree, auto-framed; multiple matches build the first, a miss lists candidates |
 | `--plane=` | which aircraft; comma-separated gives one per splitscreen player |
-| `--fly` | free flight (the default): world + skydome + plane + arcade controls |
+| `--fly` | free flight (the default): world + skydome + plane + arcade controls; also hosts the damage lab (F5) on the flown plane |
 | `--stunt` | flight + the mission's Danger Zones as timed fly-through objectives; a race with `--players` |
-| `--viewer` | the static inspection view; hosts the damage (H), livery (L) and mesh (M) labs |
+| `--viewer` | the static inspection view; hosts the damage (F5), livery (L) and mesh (M) labs |
 | `--freecam` | spectator mode: the live animated world, no aircraft, free-flying camera, click-selection |
 | `--anim-lab` | the animation debugger: quiet world stage + def playback (`--play-anim=`, `--seed=`) on a fixed-dt clock; a transport button panel, the freecam camera, and click-to-follow the selection |
 | `--players=N` | splitscreen 1–4 in one shared world, one pane/camera/HUD/pad each |
@@ -191,7 +191,7 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Active plan:** none — [`docs/plans/PLAN-bounce-launch.md`](docs/plans/PLAN-bounce-launch.md) completed (Wave A, all 6 items).
 **Next:** pick the next plan from `backlog.md` (`BL-245`, the bounce-terminated falls, is the natural
-follow-on — blocked on a ground ray). Owed cockpit re-tests (`PT-13`–`PT-28`) remain in
+follow-on — blocked on a ground ray). Owed cockpit re-tests (`PT-13`–`PT-29`) remain in
 [`playtest.md`](playtest.md). Verify any
 change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code);
 read [`docs/verification.md`](docs/verification.md) before measuring anything.

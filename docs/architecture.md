@@ -93,7 +93,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneCollider.cs` — derives 5–8 plane-frame collision boxes from the built model's triangles, with no per-plane data.
 - `src/Flight/PlaneDamage.cs` — per-part HP model from vehicle.json `destroyable_parts`; maps struck box + impact point to a data part.
 - `src/Flight/DamageVisuals.cs` — flips the torn-skin `pdpN` panels (paired by mesh position) at the data's injure thresholds, plus fire trails.
-- `src/Flight/DamageLab.cs` — the viewer's `--damage` slider UI: one HP slider per part driving flight's own DamageVisuals.
+- `src/Flight/DamageLab.cs` — the `--damage`/F5 slider UI: one HP slider per part, driving the parked plane's DamageVisuals or the flown plane's real PlaneDamage.
 - `src/Flight/CompassTape.cs` — the top-centre heading tape from the game's own HUD textures, drawn as a cylindrical drum seen edge-on.
 - `src/Flight/GaugeCluster.cs` — the cockpit dials as HUD (altimeter/speedo/damage + gun/missile), geometry from the plane's `gauges` subtree.
 - `src/Flight/FlightController.cs` — the flying-aircraft node: input → FlightModel → transform, chase camera, HUD, collision/crash, respawn.
@@ -122,7 +122,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
 - `src/UI/NodeLab.cs` — the `--freecam`/`--anim-lab` node lab (N, `--debug-nodelab`): lazy `cs_name` tree, search, frame/hide, dependencies, destructibles.
-- `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (H, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
+- `src/UI/WorldDamageLab.cs` — the `--freecam`/`--anim-lab` world damage lab (F5, `--debug-damage`): HP slider + kill/reset on the selection's destructible pool.
 - `src/UI/OrbitCamera.cs` — the `--viewer` orbit camera (orbit/zoom/framing), extracted from `GameSession` for `--anim-lab`.
 - `src/UI/AnimLab.cs` — the `--anim-lab` debugger: quiet stage, fixed-dt clock, transport panel, def picker, timeline, freecam, follows the selection.
 - `src/UI/AnimTimeline.cs` — the anim lab's per-sequence timeline: authored event blocks vs runtime-fired ticks (the scheduler-divergence instrument).
@@ -1159,14 +1159,19 @@ blocked on enemy fire (`BL-222`); do not add the entry to other planes to "fix" 
   vice versa; diagnose them separately.
 
 ## src/Flight/DamageLab.cs
-The --viewer damage lab (H toggles): one HP slider per destroyable part with threshold readouts,
-plus a mirrored GaugeCluster damage dial; presets (--damage=part:frac) land through the same
-ValueChanged path as a hand drag. It drives the SAME DamageVisuals instance flight uses — it never
-reimplements visuals, only decides when to rebuild them.
+The damage lab (F5 toggles): one HP slider per destroyable part with threshold readouts, plus a
+mirrored GaugeCluster damage dial in the viewer; presets (--damage=part:frac) land through the same
+ValueChanged path as a hand drag. One panel, two hosts, chosen by the injected IDamageLabTarget
+(same file): ViewerDamageTarget drives DamageVisuals on a parked plane, FlightDamageTarget writes
+P1's real PlaneDamage while the sim runs. It never reimplements visuals, only decides when to
+rebuild them.
 ⚠ Reapply's crossed-anim set-diff (TargetAnims) is load-bearing twice: it implements repair
   (re-derives from pristine) and keeps a slider drag from restarting the fires at every pixel.
-⚠ Built in EVERY --viewer session (StartHidden without --damage) so H has a receiver; two H
-  presses must return a byte-identical frame (SetLabVisible toggles panel + gauge layer together).
+⚠ Built in EVERY viewer AND flight session (StartHidden without --damage) so F5 has a receiver; two
+  F5 presses must return a byte-identical frame (SetLabVisible toggles panel + gauge layer together).
+⚠ FlightDamageTarget.Tick is deliberately empty and it must not touch Gauges.PartFraction:
+  FlightController already drives DamageVisuals from the live pose and binds the dial to the same
+  PlaneDamage the sliders write. SyncFromTarget's read-back skips sliders being dragged.
 
 ## src/Flight/CompassTape.cs
 The original's top-centre heading tape rebuilt from the game's own compassticks2/compasstxt
@@ -1351,7 +1356,7 @@ hide button, so a def re-showing a hidden node reads visible again on its own (B
   bound nothing shows as `UNRESOLVED`; the totals equal the `destructible-census` suite's.
 
 ## src/UI/WorldDamageLab.cs
-The world damage lab (H) in `--freecam`/`--anim-lab`: the destructible pools of whatever
+The world damage lab (F5) in `--freecam`/`--anim-lab`: the destructible pools of whatever
 `SelectionService` holds, each with live HP, and a slider + Kill + Reset on the one a weapon hit
 reaches, driving `AnimRuntime.DamageAt`/`ResetDestructible`. `--debug-damage[=node=,pool=,hp=,kill,
 reset,tick=,open]` is the scripted twin (an ordered script, not a token set).

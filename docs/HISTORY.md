@@ -11316,3 +11316,40 @@ fixed. `BL-245` (the 379 falls, blocked on a ground ray) survives the closure an
 `backlog.md`'s "Blocked / deferred," cross-referenced from both doc pages above.
 
 `PLAN-bounce-launch.md` moves to `docs/plans/` with its `✅ COMPLETE` banner and a row in `plans.md`.
+
+## 2026-08-03 — the damage lab gets a flight host, and both labs move to F5
+
+**What landed.** The aircraft damage lab (`src/Flight/DamageLab.cs`) now runs in `--fly`/`--stunt`
+as well as `--viewer`, bound to the flown plane's real `PlaneDamage` instead of visuals alone.
+One panel, two hosts, chosen by an injected `IDamageLabTarget`: `ViewerDamageTarget` is the old
+behaviour lifted verbatim (sliders → `DamageVisuals`, trails burnt in place by `UpdateStatic`);
+`FlightDamageTarget` writes HP as `Reset()` + `Apply((1-frac)·MaxHp)`, which is how an absolute
+slider state is expressed against a model that only ever spends HP. The sim keeps running under it,
+and the read-back is two-way — a graze moves the sliders, `R` returns them to 100 % — with sliders
+under the mouse skipped so a drag doesn't fight the poll. The panel right-aligns in flight because
+the top-left corner is the HUD's own text block, which grows to ~6 lines.
+
+Both damage labs moved **H → F5**, with no alias: `DamageLab`, `WorldDamageLab`, and the hint lines
+in the livery/mesh labs. `H` stays ordnance-select in flight, which is what forced the move — one
+key could not mean the lab everywhere while `H` was already taken there.
+
+`--damage=` no longer votes for `--viewer` unconditionally. It elects the parked viewer only when
+neither `--fly` nor `--stunt` named flight, so every existing invocation resolves exactly as before
+and `--fly --damage=…` is the new scripted twin. `RunDev.ps1`'s viewer routing learned the same rule.
+
+**How verified.** `.\RunTests.ps1` green — 352 units, 18 in-engine suites, 13 golden hashes
+identical, including `viewer-bhawk`, `empty-stage` and `c1-flight`, so the always-built hidden lab is
+inert in both modes and the viewer path is unchanged. Probes:
+`--fly --stage=empty --plane=player_bhawk --damage=nose:0.2,leftwing:0.5 --screenshot=` shows the
+panel clear of the HUD, sliders and the HUD `DMG` line agreeing, and the nose fire streaming behind
+a *moving* plane (so `FlightController.Update` drives the trails, not `UpdateStatic`).
+
+**Measured, and left alone: zeroing a critical part does not down the plane.**
+`--fly --damage=nose:0` flies on at `nose 0%`, fully ablaze. Death is decided only inside
+`FlightController.SurviveHit`, on the next impact — the lab reaches the HP model, not the kill path.
+That is the intended split; adding a death trigger to the lab would have invented a second one.
+
+**Not verified, and not verifiable here:** everything about how the panel *feels* — drag smoothness
+against the per-frame read-back above all. `analysis/session-baseline/` cannot help (its
+`--dump-session` instrument was deleted; `FINDINGS.md` says so). `PT-29` is the owed test, and
+`BL-130` now records that this change widened the gap it describes.
