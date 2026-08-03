@@ -345,6 +345,9 @@ public sealed partial class DamageLab : Node
         panel.AddChild(margin);
         _ui.AddChild(panel);
         AddChild(_ui);
+        // This lab has a flight host (F5 while flying), where Space is the trigger and a focused
+        // "repair all" would swallow it — the same defect the weapon lab's panel had.
+        UI.PanelFocus.Strip(_ui, "damage lab: panel built");
     }
 
     private Dictionary<string, float> ReadSliders()

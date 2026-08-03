@@ -12533,3 +12533,27 @@ mode, has no world, owns a target wall, builds its own pool, or is toggled with 
 changed in this item). The plan moves to `docs/plans/` with a COMPLETE banner and a `plans.md` row;
 `PROJECT_CONTEXT.md` has no active plan again. The one thing no script covers — flying the lab at
 the controls, the plan's own verification step 2 — is owed as `PT-30` in `playtest.md`.
+
+## 2026-08-03 — the weapon lab's panel no longer eats the fire key (user-reported)
+
+Reported at the controls: in the weapon lab, Space re-triggered whichever panel option was clicked
+last instead of firing the guns. Cause is plain Godot — a `Button` that holds keyboard focus answers
+Space as "press me again", and this panel's 11 widgets (six steppers, the stand-off slider, two
+toggles, "reset to stock", "copy CLI args") were all focusable, unlike the older `--freecam` labs
+whose buttons each set `FocusMode = None`. The arrow keys had the same problem: they walked the
+focus chain rather than swinging the lab's orbit.
+
+The fix is `src/UI/PanelFocus.cs`, one `Strip(subtree, who)` applied to the **whole** panel subtree
+rather than per widget — a control added later cannot re-open the hole, and sliders and toggles are
+covered as well as buttons. It logs what it changed and, counted again afterwards, what is left.
+
+The same defect was found next door and fixed with it: `Flight/DamageLab.cs` has a flight host (F5
+while flying, `PT-29`), where a focused "repair all" would swallow the trigger just the same — 5
+focusable widgets. The `--viewer`-only panels (`LiveryLab`, `MeshLab`) are deliberately untouched:
+no trigger key exists there to swallow.
+
+**Verified.** `--weapon-lab --chapter=C1 --log=ui:debug` logs `weapon lab: panel built: 33
+control(s), 11 made unfocusable, focusable_left=0` and `damage lab: panel built: 19 control(s), 5
+made unfocusable, focusable_left=0` — the 11 and the 5 are the measured "before", since they are
+what the walk had to change. `.\RunTests.ps1` PASS with all 13 goldens hash-identical. The
+at-the-controls confirmation belongs to `PT-30`, which is what reported it.

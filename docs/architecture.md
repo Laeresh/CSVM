@@ -127,6 +127,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
 - `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
+- `src/UI/PanelFocus.cs` — the one-line rule every flight-hosted panel applies: no widget takes keyboard focus, or a focused button eats the fire key.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
@@ -1391,6 +1392,8 @@ rebuild them.
   (re-derives from pristine) and keeps a slider drag from restarting the fires at every pixel.
 ⚠ Built in EVERY viewer AND flight session (StartHidden without --damage) so F5 has a receiver; two
   F5 presses must return a byte-identical frame (SetLabVisible toggles panel + gauge layer together).
+⚠ Its widgets are stripped of keyboard focus through `UI.PanelFocus` — this panel has a flight host,
+  where a focused "repair all" would swallow the Space trigger.
 ⚠ FlightDamageTarget.Tick is deliberately empty and it must not touch Gauges.PartFraction:
   FlightController already drives DamageVisuals from the live pose and binds the dial to the same
   PlaneDamage the sliders write. SyncFromTarget's read-back skips sliders being dragged.
@@ -1522,6 +1525,8 @@ collision VERTEX, since a chapter's water tiles all sit at the world origin), th
 (`--weapon-camera=free|<frames>`), the controller standing down via `CameraOwned` in between.
 `--weapon-cycle=N` steps the weapon list every N physics frames; stepping, placing and the camera
 hand-off are the only things this node does per frame.
+⚠ No widget of this panel takes keyboard focus (`UI.PanelFocus` strips the subtree at build): Space
+  is the fire key here, and a focused stepper would re-press itself instead.
 ⚠ This node NEVER spawns a round — there is no exception left since D9 moved the `--weapon-test`
   48-weapon pass check out to `src/Flight/WeaponBench.cs`, and it takes no `ProjectilePool` at all.
   Do not give the panel a firing loop back — the lab exists to fire exactly what free flight fires.
@@ -1533,6 +1538,20 @@ hand-off are the only things this node does per frame.
   swap leaves a body under each pylon; `ordnance_nodes=` on the `weapons` debug line is the tripwire
   (it must equal `mounted=`). A weapon whose `FLYOUT` model this chapter's gamez lacks mounts
   nothing — `Build` returns null and the wings go empty, never a throw.
+
+## src/UI/PanelFocus.cs
+`Strip(subtree, who)` — makes every `Control` under a panel unfocusable and logs the tally
+(`N control(s), M made unfocusable, focusable_left=0`), the invariant every panel hosted in a
+**flight** session must hold. A focused `Button` answers Space with "press me again", so the pilot's
+fire key re-fires the last-clicked stepper instead of the guns, and the arrow keys walk the focus
+chain instead of reaching the aircraft or the lab's orbit camera (user-reported on the weapon lab,
+2026-08-03; the flight damage lab had it too — 11 and 5 focusable widgets respectively).
+⚠ Applied to the **whole subtree**, not per widget, precisely so a control added to a panel later
+  cannot re-open the hole — the older `--freecam`/`--anim-lab` labs set `FocusMode` per button, and
+  a slider or toggle added beside those buttons would be missed. The panels not covered are the
+  `--viewer`-only ones (`LiveryLab`, `MeshLab`), where no trigger key exists to swallow.
+⚠ `focusable_left` is **counted again after the walk**, not assumed from what the walk changed —
+  that number, not the intent, is what the log line reports.
 
 ## src/UI/SelectionService.cs
 The shared world selection in `--freecam`/`--anim-lab`: left-click picks the mesh under the

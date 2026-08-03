@@ -1190,6 +1190,9 @@ public sealed partial class WeaponLab : Node3D
         root.AddChild(panel);
         _ui.AddChild(root);
         AddChild(_ui);
+        // Space is the fire key here, so no widget of this panel may hold keyboard focus — see
+        // PanelFocus for why, and note it covers the sliders and toggles too, not just the buttons.
+        PanelFocus.Strip(_ui, "weapon lab: panel built");
     }
 
     /// <summary>One selectable place on the airframe: a firable gun group or a pylon.
