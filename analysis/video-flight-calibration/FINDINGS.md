@@ -77,7 +77,7 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 | 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
 | 8/8 → 1/8, 290 → 150 mph | 5.03 wall s = **7.04 sim s** |
 | zoom climb from 300 mph level, full pull | **+1635 ft**, bottoming at 104 mph in 10.5 sim s |
-| level top speed vs altitude | flat ~300 mph from 714 m to 1909 m, then collapses |
+| level top speed vs altitude | flat ~300 mph from 714 m to **1988 m**, i.e. right up to the cap |
 
 The acceleration and the terminal dive fall out of **one** number: a max thrust acceleration of
 **A ≈ 60 m/s²** reproduces the measured acceleration *and* predicts a 70.7° terminal dive of
@@ -89,8 +89,20 @@ conversion needs the plane's own stock engine power, and the Bloodhawk's `engine
 (Bloodhawk Lvl-2, 0.62) — not the level-1 row, 0.47. Reading the wrong tier inflates the
 constant by 32%, and it survives every consistency check that only ever sees `A`.
 
-**There is an altitude limit near 2065 m, mechanism unknown.** `Ceiling 2` is 43 s of repeated
-attempts; five apexes:
+**The altitude limit is a hard clamp on altitude, measured 2026-08-03 from `CAP-03`.** Four
+16:9 clips, Bloodhawk, C1B IA1, all gating rigid. Level full-throttle equilibrium is **299.71 ±
+0.32 mph at 5492 ft**, **299.80 ± 0.56 at 6001 ft** and **300.00 ± 0.52 at 6520 ft** — no fade at
+all below the cap. In `CAP-03 Stall at max Alt.mp4` the aircraft cruises level at **6570.4 ± 1.04
+ft / 297.3 mph**, and pulling ~22° nose-up (ADI sin θ −0.13 → +0.24, against −0.135 at level)
+gains **no altitude whatever**: 6571.6 ± 0.39 ft over the last 5 s while airspeed decays at 13.0
+mph/sim-s to a fresh equilibrium of **173.74 ± 0.60 mph** with the stall window lit. Sub-foot
+altitude at 22° AoA is a clamp, not an energy limit, and the "auto stall" is its consequence.
+Earlier zoom attempts in the same clip overshoot ballistically to **6712 ft (2046 m)** and sag
+back — which is what the five-apex reading below was seeing. Resting cap **6571.6 ft = 2003 m**;
+whether it is global or per mission is untested (one mission flown).
+
+The older reading, kept because its data is real and its trap still bites — `Ceiling 2` is 43 s of
+repeated attempts; five apexes:
 
 | apex altitude | speed at apex |
 |---|---|
@@ -107,6 +119,8 @@ reads 283.5 mph near-level at 2009 m, and at 2066 m the aircraft holds level fli
 ~234 mph while still accelerating gently — so whatever happens is concentrated in
 **1909–2066 m** and is invisible below it. With λ = 1 confirmed these are true altitudes, and
 they are 76–83% of the data's `flight_ceiling` 2500, so **the limit is not that constant**.
+⚠ Every apex above ~2003 m in that list is now read as ballistic overshoot of the clamp, so the
+"performance limit" signature was an artifact of measuring a clamp with zoom climbs.
 
 **`player.json` ships a physics block almost none of which is consumed** (units unverified;
 found while chasing the clock, alongside the already-used `nom_gravity 20.0` and
@@ -351,4 +365,4 @@ the spread only a trigger for computing it.
 | 3 | Sustained level turn, max pull | ✅ **decoded 2026-08-03** from `CAP-01.mp4` — 222.9 mph sustained against 299.0 level, at 18.95 °/sim-s and 100° bank (`BL-092`, `BL-247`) |
 | 4 | 360° aileron roll | ✅ |
 | 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
-| 6 | Level top speed at 5500 / 6000 / 6500 / 6800 ft | ❌ owed — settles what enforces the ~2065 m limit |
+| 6 | Level top speed at 5500 / 6000 / 6500 ft, plus the cap | ✅ **decoded 2026-08-03** from the four `CAP-03` clips — flat 300 mph to 1988 m, then a hard altitude clamp at 2003 m (`BL-094`). 6800 ft is unreachable: the aircraft cannot be flown above the clamp |

@@ -59,7 +59,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
-| `CAP-03` | Level top speed at four altitudes | Full-throttle level runs held to equilibrium at 5500 / 6000 / 6500 / 6800 ft | `BL-094` |
 | `CAP-05` | Stall & knife-edge recovery | A full stall entry and recovery, plus a sustained knife-edge | `BL-115`, `BL-124` |
 | `CAP-06` | Graded stall-warning reference | The airspeed dial's warning blink **through the approach to stall**, not only after it | `BL-148` |
 

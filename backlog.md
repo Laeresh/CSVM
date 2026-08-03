@@ -670,8 +670,9 @@ unscheduled.
     randomizes per player. Decide from playtest whether the menu should offer it.
   - **AI/ace liveries.** `ia.json` `ace_*` and the AI defs' own `paint_*` are parsed into the
     catalog but nothing flies them — there are no AI aircraft yet.
-- `BL-073` **An altitude limit** — none is modelled, and the original's is measured at ~2065 m rather than
-  the data's `flight_ceiling` 2500; see "Flight-model gaps the video calibration measured" below.
+- `BL-073` **An altitude limit** — none is modelled, and the original's is a hard *clamp* on altitude
+  at ~2003 m (measured, not the data's `flight_ceiling` 2500); see `BL-094` below for the
+  measurement and for why a thrust fade is the wrong shape.
 - `BL-074` **PLAYER_INIT fields [3]/[4] semantics + per-plane spawn speed** — story-mission spawns
   currently assume the IA convention (0.5 throttle / 53.6 m/s).
 - `BL-075` **Sky UV scroll** (`h_zone*scroll`) — scroll rate unknown, not implemented.
@@ -1142,20 +1143,38 @@ needs one of them to move needs a new measurement first.
   (c) `LowSpeedDragBlend` 0.35 exists to answer a user report that a throttled-back plane barely
   decelerated; whatever lands here must not reintroduce that.
 
-- `BL-094` **No altitude limit at all, and the original's is not `flight_ceiling`.** Measured: the Bloodhawk
-  cannot exceed **~2065 m**, level top speed is flat ~300 mph from 714 m to 1909 m and then
-  collapses (283.5 mph at 2009 m, ~234 mph at 2066 m), so whatever enforces it is concentrated in
-  **1909–2066 m** and invisible below. That is 76–83% of the data's `flight_ceiling` 2500, which
+- `BL-094` **No altitude limit at all, and the original's is a hard altitude clamp — not a
+  performance ceiling and not `flight_ceiling`.** Settled by `CAP-03` (four clips, decoded
+  2026-08-03; all four gate rigid, dx corr +1.00). **There is no performance fade below the
+  clamp:** level full-throttle equilibrium is **299.71 ± 0.32 mph at 5492 ft**, **299.80 ± 0.56 at
+  6001 ft**, **300.00 ± 0.52 at 6520 ft** — flat to ±0.3 mph across 1674–1988 m, and equal to the
+  298.96 ± 0.20 measured low down. The clip that goes higher (`CAP-03 Stall at max Alt.mp4`,
+  Bloodhawk, C1B IA1) then shows the mechanism directly: the aircraft holds level flight at
+  **6570.4 ± 1.04 ft at 297.3 mph**, and when the nose is pulled up ~22° (ADI sin θ −0.13 → +0.24,
+  against −0.135 at level in all three reference clips) it **does not climb one foot** —
+  6571.6 ± 0.39 ft over the last 5 s while airspeed bleeds at 13.0 mph/sim-s to a new equilibrium
+  of **173.74 ± 0.60 mph** with the speedometer's stall window lit. Altitude held to sub-foot at a
+  22° nose-up attitude is a **clamp**, not an energy limit; the low equilibrium is what full
+  throttle buys against the induced drag of sitting pinned against it. Earlier zoom attempts in the
+  same clip overshoot the clamp ballistically to **6712 ft (2046 m)** and sag back, which is what
+  the old "five apexes at 2010–2109 m" reading was seeing. So: resting cap **6571.6 ft = 2003 m**;
+  transient overshoot ~+140 ft; 80% of the data's `flight_ceiling` 2500, which
   `PlaneStats.FlightCeiling` parses and nothing reads (two hits: the field and the assignment).
-  A thrust fade confined to the last few percent under a hard ceiling fits the shape.
-  *Blocked on `CAP-03`* (`playtest.md` §0).
-  ⚠ **Traps.** (a) **Neither signature is clean, and which two points you quote decides the
-  answer.** Across five apexes altitude trades smoothly against apex speed — a *performance* limit
-  — but the 2065/2066 pair reaches the same altitude at 183 and 234 mph, which a pure energy limit
-  cannot do. (b) The measurement that settles it is a **level full-throttle run held to equilibrium
-  at 5500 / 6000 / 6500 / 6800 ft**, which no clip covers; it is the one owed capture that would
-  close a whole mechanism. (c) These are true altitudes: the altimeter was proved a straight feet
-  conversion (λ = 1.000 ± 0.004) against four spawn-point readings, so do not re-open the scale.
+  ⚠ **Traps.** (a) **Do not implement this as a thrust or lift fade under the ceiling** — the three
+  level runs rule a fade out to within 0.3 mph right up to 1988 m, 15 m under the cap. What is
+  needed is a clamp on *altitude* (or on climb rate, with enough lag to allow the measured ~140 ft
+  of ballistic overshoot), leaving the aerodynamics untouched below it. (b) **The "auto stall" is a
+  consequence, not the mechanism.** The aircraft is not stalled when it reaches the cap — it is at
+  297 mph — it stalls because holding the nose up against the clamp bleeds it to 173 mph. Build the
+  clamp and our existing stall model should produce the same symptom for free.
+  (c) **6571.6 ft may be per-mission, and only one mission was flown.** This is C1B IA1; the
+  2026-07 `Ceiling` clip touched 2109 m in a different session. Whether the cap is global, per
+  chapter/zone, or per aircraft is untested — do not hardcode 2003 m as a world constant without
+  one more mission's worth of evidence. (d) These are true altitudes: the altimeter was proved a
+  straight feet conversion (λ = 1.000 ± 0.004) against four spawn-point readings, so do not
+  re-open the scale. The three reference clips decode to 5492/6001/6520 ft against the user's own
+  5500/6000/6500 ft targets, which independently confirms the 1,000 ft band pick (`anchor.py`
+  margins are soft on level clips: 41×, 1.61×, 2.46×, 1.66×).
 
 - `BL-095` **`player.json` ships a physics block we consume almost none of.** Alongside the used
   `nom_gravity 20.0` / `stall_mag 1.25`: `maxAOA 46.0`, `liftAOAs [5,9]`, `lift_accel_rate 0.75`,
@@ -1727,7 +1746,7 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   at *all* height levels rather than a confined band. Root cause: `CloudPuffs.cs`'s
   `BandBelow`/`BandAbove` (120 m/280 m) plus `VertFull`/`VertFade` (200 m/560 m) together make the
   field seed visible puffs for any camera altitude in **[290 m, 1964 m]** for C1/IA1 — effectively the
-  whole flight envelope (ceiling ~2065 m, `BL-094`) — while `weather.json`'s own `CLOUD_COVER` block
+  whole flight envelope (ceiling ~2003 m, `BL-094`) — while `weather.json`'s own `CLOUD_COVER` block
   defines a much narrower band: `TOP`/`BOTTOM` 1124/970 (clear at both edges) with a fully-opaque core
   of only 1032–1062 (`docs/formats/weather.md:190-192`, `Weather.cs:112-113`). No zrdr defines a
   separate ambient-puff emitter — reconfirmed against the newly-extracted `cam_anim` set; the only

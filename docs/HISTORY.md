@@ -12681,3 +12681,42 @@ Excluded with reasons recorded in the plan: `BL-047` (capture-blocked per the 20
 `BL-160` (CAP-09), `BL-161` (needs a cockpit-audio feature), `BL-048` (Hi-Def invention), and the
 CAP-01-unblocked flight-model pair `BL-092`/`BL-247` (user ruling: its own future plan).
 PROJECT_CONTEXT.md status now names the plan.
+
+## 2026-08-03 — `CAP-03` decoded: the original's altitude limit is a hard clamp, not a ceiling
+
+Four clips (`CAP-03 5500ft/6000ft/6500ft` plus `CAP-03 Stall at max Alt`, Bloodhawk, C1B IA1,
+2560×1440), all gating rigid (`|dx(ALT)−dx(MPH)|` 0 px, dx corr +1.00, registration peak 0.74–0.76;
+panel pixel-locked to the pooled median as every prior session). `CAP-03` is discharged and its
+`playtest.md` row retired; `BL-094` is unblocked and rewritten.
+
+**The result reverses the working hypothesis.** `BL-094` had assumed "a thrust fade confined to the
+last few percent under a hard ceiling", from the 2026-07 `Ceiling` clip's five apexes (2010–2109 m
+at 104–283 mph) and its 283.5 mph reading near 2009 m. The level runs kill the fade: full-throttle
+equilibrium is **299.71 ± 0.32 mph at 5492 ft**, **299.80 ± 0.56 at 6001 ft** and **300.00 ± 0.52
+at 6520 ft** — flat to ±0.3 mph over 1674–1988 m and equal to the 298.96 ± 0.20 measured low down.
+Each run is a genuine plateau (mph slope ≤ 0.07 mph/sim-s, altitude drift ≤ 3.4 ft/sim-s over 12–13
+sim s), so there is no performance degradation whatever right up to 15 m under the limit.
+
+The 58 s stall clip then shows the mechanism directly rather than by inference. The aircraft holds
+level flight at **6570.4 ± 1.04 ft / 297.3 mph**; pulling the nose up ~22° (ADI sky fraction 0.42 →
+0.65, sin θ −0.13 → +0.24 against −0.135 measured at level in all three reference clips) produces
+**no climb at all** — 6571.9 ± 0.78 ft through the deceleration and 6571.6 ± 0.39 ft over the last
+5 s — while airspeed bleeds at 13.0 mph/sim-s to a second equilibrium of **173.74 ± 0.60 mph** with
+the speedometer's stall window lit (still at 56.5 s wall). Altitude held to sub-foot precision at a
+22° nose-up attitude cannot be an energy limit; it is a clamp, and the "auto stall" the user
+reported at 6600 ft is its consequence, not its cause. Earlier zoom attempts in the same clip
+overshoot the clamp ballistically to **6712 ft (2046 m)** and sag back, which is what the old
+five-apex "performance limit" signature was actually measuring.
+
+Numbers for the implementation: resting cap **6571.6 ft = 2003 m**, ballistic overshoot ~+140 ft,
+pinned-equilibrium speed 173.7 mph. That is 80% of the data's `flight_ceiling` 2500, which
+`PlaneStats.FlightCeiling` still parses and nothing reads — so the constant remains unexplained.
+Recorded as open on the entry: only C1B IA1 was flown, so whether the cap is global, per
+chapter/zone or per aircraft is untested, and 2003 m must not be hardcoded as a world constant on
+one mission's evidence.
+
+Method notes: `extract.py` gained `cap03a`/`cap03b`/`cap03c`/`cap03stall`; nothing else in the
+pipeline needed changing (the 2560×1440 layout was already known). The three reference clips decode
+to 5492/6001/6520 ft against the user's own 5500/6000/6500 ft targets — a free confirmation of the
+1,000 ft band pick, which matters because `anchor.py`'s margins are soft on level clips (41×, 1.61×,
+2.46×, 1.66×) exactly as the `CAP-01` trap predicts. All times are sim seconds at k = 1.390 off PTS.
