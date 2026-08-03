@@ -974,10 +974,17 @@ Splitscreen race bookkeeping: one `Racer` per player (own `StuntMission`, `Rank`
 finishing stamps the next placing, `RaceCompleted` fires when the last pilot is in; `Standings()`
 orders finishers by placing then in-flight players by progress; `Restart()` (rematch) resets
 every mission and clears placings — the planes are respawned by GameSession, which owns them.
+Its console lines, and `StuntScoreboard`/`StuntRaceBoard`'s, route through `Log.Info("flight", …)`
+(M3 `PLAN-deepening.md` C6/C7) instead of a bare `GD.Print`. Off-engine coverage:
+`CSVM.Tests/StuntRaceTests.cs` (finish ordering, rematch reset, standings ties).
 ⚠ `FinishTime` is snapshotted separately from `Mission.Elapsed` so the board still reads
   correctly after a rematch has reset the missions.
 ⚠ Deliberately not a Node — it is freed with the session, so the `RunCompleted` subscriptions
   need no teardown.
+⚠ `StuntMission` (its `Racer.Mission`) is NOT part of this seam — `Load`/`Complete` still call
+  `GD.Print`/`GD.PushWarning` directly and crash the test host outside the engine (an unmanaged
+  `AccessViolationException`, not a catchable one). `StuntRaceTests` never calls either: it builds
+  a `StuntMission` via reflection on the private constructor and fires `RunCompleted` the same way.
 
 ## src/Flight/StuntRaceBoard.cs
 The race's shared ranked results overlay: same clean-Godot-UI construction as StuntScoreboard,

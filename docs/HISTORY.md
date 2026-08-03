@@ -11547,3 +11547,38 @@ every other line byte-identical, proving the sink plumbing is behaviourally iner
 installed. Then `.\RunTests.ps1` full pass: build clean, 381 units, 18/18 engine suites, 13/13
 goldens hash-identical. `C7` (convert the `StuntRace` family and assert on it off-engine) is next —
 this item only adds the seam, per the plan's ground rule against a bulk `GD.Print` sweep.
+
+**M3 Wave C C7 (2026-08-03): convert the `StuntRace` family, assert on it off-engine.** Converted
+every `GD.Print` in `StuntRace.cs`, `StuntScoreboard.cs` and `StuntRaceBoard.cs` (the "stunt-race
+family" C7's evidence names — `StuntMission` is explicitly one of the other eight plain classes
+deferred to a later item, not this one) to `Log.Info("flight", …)`. Added
+`CSVM.Tests/StuntRaceTests.cs`: finish ordering (placings stamped in finish order, not entry order),
+a rematch's `Restart()` clearing every racer and mission, and `Standings()`'s tie-break (a finisher
+first, then still-flying racers by zones cleared then the faster clock).
+
+**The trap this item found, not just the one it was warned about.** Writing the suite, a plain
+`GD.Print("hello")` in a bare CSVM.Tests fact crashes the whole test host with an unmanaged
+`AccessViolationException` — not a catchable `Exception`, and not scoped to the one test; it takes
+every test in the run down with it. That makes `StuntMission` a live landmine for this item:
+`Load` and `Complete` both still call `GD.Print`/`GD.PushWarning` directly (out of scope — C7's
+family is `StuntRace`/`StuntScoreboard`/`StuntRaceBoard` only, per the plan's SHELL-3 ground rule
+against a bulk sweep), and `Racer.Mission` needs a real `StuntMission` to drive `StuntRace`'s
+finish/standings logic. `StuntMission` has no public constructor besides `Load`/`ForAnotherPlayer`,
+both unreachable off-engine. The tests reach a `StuntMission` through its private constructor via
+reflection (a fake zone list, no game data — the format's own no-invented-content rule doesn't
+apply, this is test scaffolding, not decoded content) and raise `RunCompleted` by invoking its
+private backing delegate directly, simulating exactly what `Complete()` does once every zone is in,
+without ever calling the two methods that would crash the host. `docs/architecture.md`'s
+`StuntRace.cs` entry records the boundary so a later `StuntMission` item doesn't have to re-find it.
+
+**How verified.** Broke `Standings()`'s zone-count comparator (reversed it) and confirmed the new
+standings test failed; restored. A pre-change and post-change `--stunt --chapter=C4 --players=2
+--debug-scoreboard --screenshot` run (force-completes the race on the first frame, deterministic
+finish times): console text for every converted line is unchanged — same wording, same order,
+same `[flight]` tag `Log.Info` already carried for every other converted call in this codebase (the
+plan's "changes nothing you see" is about visibility at the default threshold, not the literal
+bytes; a bare `GD.Print` has never carried a category tag). The one real, intended difference: these
+lines now also land in `.scratch/logs/` for the first time — before this item they were console-only
+and invisible to a post-hoc grep, which is the whole point of the seam. Then `.\RunTests.ps1` full
+pass: 384 units (up from 381; `StuntRaceTests` adds 3), 18/18 engine suites, 13/13 goldens
+hash-identical.

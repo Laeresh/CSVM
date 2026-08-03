@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -129,8 +130,9 @@ public sealed partial class StuntScoreboard : Control
         float total = _mission.Elapsed;
         float? prevBest = _store.GetBest(_scoreKey);
         bool newBest = _store.RecordIfBest(_scoreKey, total);
-        GD.Print($"stunt: run complete {StuntMission.FormatTime(total)}"
-            + (newBest ? " — NEW BEST" : prevBest.HasValue ? $" (best {StuntMission.FormatTime(prevBest.Value)})" : ""));
+        string bestSuffix = newBest ? " — NEW BEST"
+            : prevBest.HasValue ? $" (best {StuntMission.FormatTime(prevBest.Value)})" : "";
+        Log.Info("flight", $"stunt: run complete {StuntMission.FormatTime(total)}{bestSuffix}");
         // Log the split table too (the splits are otherwise only visible on the rendered board —
         // this makes a run's scoring reviewable from the headless log).
         float prev = 0f;
@@ -138,8 +140,8 @@ public sealed partial class StuntScoreboard : Control
         foreach (var z in _mission.InCompletionOrder())
         {
             string name = z.Description.Length > 0 ? z.Description : z.DzName;
-            GD.Print($"  split {n}. {name}: +{StuntMission.FormatTime(z.CompletedAt - prev)}"
-                + $" (@ {StuntMission.FormatTime(z.CompletedAt)})");
+            Log.Info("flight",
+                $"  split {n}. {name}: +{StuntMission.FormatTime(z.CompletedAt - prev)} (@ {StuntMission.FormatTime(z.CompletedAt)})");
             prev = z.CompletedAt;
             n++;
         }

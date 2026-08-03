@@ -1,3 +1,4 @@
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -119,10 +120,10 @@ public sealed partial class StuntRaceBoard : Control
     private void OnRaceCompleted()
     {
         // Log the final order too, so a race is reviewable from a headless run's log.
-        GD.Print("stunt race results:");
+        Log.Info("flight", $"stunt race results:");
         foreach (var r in _race.Standings())
-            GD.Print($"  {StuntRace.Ordinal(r.Rank)}  {r.Tag}  {r.PlaneDisplay}  " +
-                     $"{StuntMission.FormatTime(r.FinishTime)}");
+            Log.Info("flight",
+                $"  {StuntRace.Ordinal(r.Rank)}  {r.Tag}  {r.PlaneDisplay}  {StuntMission.FormatTime(r.FinishTime)}");
         Populate();
         Visible = true;
     }

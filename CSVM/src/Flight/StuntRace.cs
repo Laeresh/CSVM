@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Flight;
@@ -136,11 +137,11 @@ public sealed class StuntRace
         FinishedCount++;
         racer.Rank = FinishedCount;
         racer.FinishTime = racer.Mission.Elapsed;
-        GD.Print($"stunt race: {racer.Tag} finished {Ordinal(racer.Rank)} " +
-                 $"in {StuntMission.FormatTime(racer.FinishTime)} ({racer.PlaneDisplay})");
+        Log.Info("flight",
+            $"stunt race: {racer.Tag} finished {Ordinal(racer.Rank)} in {StuntMission.FormatTime(racer.FinishTime)} ({racer.PlaneDisplay})");
         if (AllFinished)
         {
-            GD.Print("stunt race: RACE COMPLETE");
+            Log.Info("flight", $"stunt race: RACE COMPLETE");
             RaceCompleted?.Invoke();
         }
     }
