@@ -8,6 +8,10 @@ lines of prose or chasing its references by hand.
 
 This skill is **read-only**. Never edit `backlog.md`, never build, never run tests.
 
+The sibling skill for **active-plan** items (`A1`, `B11`) is [`/plan-item`](../plan-item/SKILL.md) —
+a `BL-NNN` already scheduled into the active plan is better explained there, since that skill reads
+the plan's ground rules and dependency notes too and can start, close, or defer the item.
+
 ## 1. Resolve the item
 
 The argument may be `BL-242`, a bare `242`, or a phrase like "rocket pylon".

@@ -56,6 +56,8 @@ State it as one line: **Recommend: `<continue | /compact | /clear>` — `<why>`.
 
 Compose a self-contained prompt for the next item that stands on its own after a `/clear` or `/compact`. Assume the reader has CLAUDE.md loaded but zero memory of this session, so it must name the item and point at where the detail lives. Use this shape (fill in the `<...>`):
 
+⚠ **The template's two body paragraphs are mirrored verbatim in `/plan-item` §5 option 1 — keep them in sync.** That skill works an item in-session from the same instructions, so a change here that isn't reflected there makes the two paths diverge silently.
+
 ~~~
 Implement item <ID> — <one-line title> — from <active plan path> (the M3 weapons plan).
 
