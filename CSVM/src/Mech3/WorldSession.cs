@@ -20,17 +20,17 @@ namespace CSVM.Mech3;
 /// <see cref="Options.EffectsParent"/> exactly as before.</para>
 ///
 /// <para><b>Disposal-lifetime contract (semantics, not incidental).</b> A puffer bakes its atlas
-/// at construction and world-sound streams decode on demand, so both the <c>PufferFactory</c> and
+/// at construction and world-sound streams decode on demand, so both the <c>IEmitterFactory</c> and
 /// the sound <c>Loader</c> outlive this build holding a reference to an archive whose zip handle
-/// the caller may close. Each is therefore cleared after the bootstrap **unless the caller says it
+/// the caller may close. Each is therefore retired after the bootstrap **unless the caller says it
 /// owns that archive for longer** — <see cref="Options.TexturesOutliveBuild"/> and
 /// <see cref="Options.SoundsOutliveBuild"/>. The two are separate because the two lifetimes are:
 /// a game session hands the <see cref="TextureArchive"/> to the session (freed on return-to-menu)
 /// while its <see cref="SoundArchive"/> stays a <c>using</c> local of the build, and only the lab
 /// keeps both. Sounds are also prewarmed while the archive is open regardless, which is what makes
 /// clearing the loader survivable; puffers have no equivalent, since a puffer bakes per authored
-/// state rather than per name — so a cleared factory is silently no fire, no dust, no smoke for
-/// every <c>PUFFER_STATE</c> reached after the bootstrap (`BL-234`).</para>
+/// state rather than per name — so a retired factory is no fire, no dust, no smoke for
+/// every <c>PUFFER_STATE</c> reached after the bootstrap, which is why it says so once (`BL-234`).</para>
 ///
 /// <para><b>The <c>--node=</c> stage is the same pipeline with three steps switched off.</b>
 /// <see cref="Options.NodeSubtree"/> replaces the world build with one named gamez subtree
@@ -193,7 +193,7 @@ public sealed class WorldSession
         StartupProfile.Record("anim", mark);
         s.Program = animProgram;
         // The runtime builds PUFFER_STATE emitters through this factory rather than holding the
-        // TextureArchive: a puffer bakes its atlas at construction. Cleared right after the
+        // TextureArchive: an emitter bakes its atlas at construction. Retired right after the
         // bootstrap only when `textures` dies with the caller's build scope — see
         // Options.TexturesOutliveBuild.
         var lights = new WorldLights();
@@ -205,8 +205,7 @@ public sealed class WorldSession
             AutoStart = o.AutoStart,
             Seed = o.RuntimeSeed,
             Setup = missionSetup,
-            PufferParent = o.EffectsParent,
-            PufferFactory = st => Effects.Puffer.Create(st, textures, sustained: true),
+            EmitterFactory = new Anim.PufferEmitterFactory(textures, o.EffectsParent),
             // Where LIGHT_STATE spill reaches the fullbright world shader. Owned by the caller so a
             // teardown drops the previous world's lights.
             Lights = lights,
@@ -248,7 +247,7 @@ public sealed class WorldSession
         }
         if (!o.TexturesOutliveBuild)
         {
-            animRuntime.PufferFactory = null;
+            animRuntime.Emitters.RetireFactory();
         }
         // Same rule as the puffer factory: the zip handle dies with the caller's build scope. The
         // decoded streams stay cached in WorldSounds, so an emitter created later reusing a name
@@ -315,7 +314,7 @@ public sealed class WorldSession
         public bool DebugDzPaths { get; init; }
 
         /// <summary>The caller's <see cref="TextureArchive"/> outlives this build, so the runtime
-        /// keeps its <c>PufferFactory</c> and every <c>PUFFER_STATE</c> reached at RUNTIME — a
+        /// keeps its emitter factory and every <c>PUFFER_STATE</c> reached at RUNTIME — a
         /// destructible's death trails and sustained fire, the ON_CALL ambient dust and smoke —
         /// can still bake its atlas. True in every game session (the archive belongs to the
         /// session, freed on return-to-menu); false only where it is genuinely a <c>using</c> local

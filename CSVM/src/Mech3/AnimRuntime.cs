@@ -190,16 +190,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     ///
     /// <para>⚠ Off on the WORLD runtime, deliberately, and this is not a keying scheme layered on
     /// the puffer key: emitters there stay keyed by the collapsed <c>(name, host)</c> (see
-    /// <see cref="DefScopedPufferKeys"/> and the <see cref="_puffers"/> remark) — the world's
+    /// <see cref="DefScopedPufferKeys"/> and <see cref="EmitterDirector"/>'s keying remark) — the world's
     /// templates are the world's own nodes, not staged copies, and there is nothing to pool. A
     /// pooled call gets distinct emitters for free, because each slot's host node is a different
     /// node.</para></summary>
     public bool PooledTemplates;
 
-    /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see the
-    /// <see cref="_puffers"/> remark. Set on the world-effects runtime, where distinct effect defs
-    /// declaring same-named puffers are distinct emitters (the damage-stage sputters); off on the
-    /// world runtime, where the collapsed key de-dups same-name multi-def ambient stacks.</summary>
+    /// <summary>Key puffer emitters by owning def as well as (name, host) â€” see
+    /// <see cref="EmitterDirector"/>'s keying remark, which carries the measurement behind each
+    /// case. Set on the world-effects runtime, where distinct effect defs declaring same-named
+    /// puffers are distinct emitters (the damage-stage sputters); off on the world runtime, where
+    /// the collapsed key de-dups same-name multi-def ambient stacks. Read once, when
+    /// <see cref="Emitters"/> is first built.</summary>
     public bool DefScopedPufferKeys;
 
     /// <summary>Makes this runtime resolve every node reference by NAME, ignoring the compiled
@@ -255,26 +257,16 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public Vector3 InheritedWorldVelocity;
 
     // ---- PUFFER_STATE ----
-    /// <summary>
-    /// Builds a <see cref="Effects.Puffer"/> for a state, or null. Supplied by GameSession and
-    /// valid only DURING the world build: a puffer bakes its texture atlas at construction
-    /// from the session's <see cref="TextureArchive"/>, which is disposed when the build ends.
-    /// Cleared afterwards, so a later request is reported rather than silently faulting on a
-    /// closed zip handle. In practice every PUFFER_STATE that matters fires during the
-    /// bootstrap passes (measured on C1: the waterfall mist, the train's steam, two truck
-    /// dust plumes â€” nothing else reaches one).
-    /// </summary>
-    public Func<Effects.PufferState, Effects.Puffer?>? PufferFactory;
-
-    /// <summary>Where built puffers are parented (the session root, not the animated node â€”
-    /// their particles live in world space and must not be dragged by the emitter's motion).</summary>
-    public Node? PufferParent;
-
-    /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
-    /// the owning def). The D32 world-effects verify checks this rather than "the def ran" â€” a
-    /// started effect whose factory is torn down or whose textures are missing builds nothing and
-    /// renders nothing (verification.md WORLD-12).</summary>
-    public int PuffersBuilt;
+    /// <summary>What <see cref="Emitters"/> builds through. Supplied at construction and valid only
+    /// DURING the world build: an emitter bakes its texture atlas from the session's
+    /// <see cref="TextureArchive"/>, which is disposed when the build ends. A caller whose archive
+    /// dies with its build calls <see cref="EmitterDirector.RetireFactory"/> afterwards, so a later
+    /// request is reported rather than silently faulting on a closed zip handle. In practice every
+    /// PUFFER_STATE that matters fires during the bootstrap passes (measured on C1: the waterfall
+    /// mist, the train's steam, two truck dust plumes â€” nothing else reaches one).
+    /// <para>Null â€” the default â€” means this runtime renders no emitters at all, which is the
+    /// honest answer for a stage with no textures behind it.</para></summary>
+    public IEmitterFactory? EmitterFactory;
 
     /// <summary>How many <see cref="PlayEffectAt"/> calls took a pool slot whose previous instance
     /// was still live â€” the pool being smaller than the concurrency it met, so those two calls
@@ -364,30 +356,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     private readonly List<string> _censusMissingTargets = new();
 
     private readonly Dictionary<int, Node3D> _byIndex = new();
-
-    // One emitter per (puffer name, emitter node[, owning def]). Definitions re-assert their
-    // PUFFER_STATE every loop iteration â€” C1's waterfall is [PufferState Ã—3, Loop{-1}] â€” so the
-    // handler has to be idempotent: re-asserting an already-running emitter must be a no-op, not a
-    // second emitter. On the world-effects runtime (<see cref="DefScopedPufferKeys"/>) the key
-    // also carries the def, because two effect defs can declare same-named puffers on one host â€”
-    // the two damage-stage sputters both call theirs `black_smoke`, and a shared key let the
-    // stage-1 smoke emitter mask the stage-2 fire build. Safe by the data: all 2,774 compiled
-    // PUFFER_STATE events reference only puffers their own def declares (measured install-wide).
-    // The WORLD runtime deliberately keeps the def out of the key (Def = null): C5's six
-    // `m_crane_go(#N)` twins all name-resolve `man_spark` onto one node, and def-scoped keys there
-    // stacked six spark emitters on it (measured â€” it moved the c5-city-night golden); the
-    // collapsed key doubles as the de-dup for that name-resolution artifact. The value carries the
-    // owning (def, anchor) so Stop can tear down exactly the emitters a stopped instance created.
-    private readonly Dictionary<(string Name, Node3D Node, AnimDefinition? Def), (Effects.Puffer Puffer, AnimDefinition Def, Node3D? Anchor)> _puffers = new();
-
-    private readonly List<(Effects.Puffer Puffer, Node3D Node)> _activePuffers = new();
-
-    // Each host node's emission point in its own frame (see VisualOriginOf) â€” zero for a node
-    // whose origin sits inside its mesh bounds. Computed lazily on the first tick, never at
-    // dispatch: the bootstrap dispatches PUFFER_STATE before the world enters the tree, where a
-    // GlobalTransform read only returns identity and an error. Local-frame, so it stays valid
-    // when a motion drives the node.
-    private readonly Dictionary<Node3D, Vector3> _hostOffsets = new();
 
     // The call-site node a PlayEffectAt instance was invoked WITH â€” the callee's INPUT_NODE. The
     // local CALL_ANIMATION path expresses this by anchoring the callee on the site node; the
@@ -499,14 +467,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// Reported once per name, not per event: snd_fire1 alone has 363 sites.</summary>
     private bool _soundCensusPrinted;
 
-    /// <summary>Set once the "a PUFFER_STATE arrived after <see cref="PufferFactory"/> was
-    /// released" warning has been said. The puffer half of <see cref="_soundCensusPrinted"/>'s
-    /// lesson, and it cost more: the bootstrap census cannot distinguish "no def ever asked" from
-    /// "every def asked and none built", so a world with no fire, no dust and no smoke read as a
-    /// clean log for the project's whole life (`BL-234`). Once per runtime, not per name â€” unlike
-    /// a missing sound, the condition is one build-time contract rather than one datum per
-    /// emitter, so the first miss says everything the thousandth would.</summary>
-    private bool _reportedPufferFactoryGone;
+    private EmitterDirector? _emitters;
 
     private float _effectClock;
 
@@ -560,6 +521,22 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// verified headless.</summary>
     public int OneShotSoundsPlayed { get; private set; }
 
+    /// <summary>How many PUFFER_STATE emitters this runtime has actually built (not just started
+    /// the owning def). The D32 world-effects verify checks this rather than "the def ran" â€” a
+    /// started effect whose factory is retired or whose textures are missing builds nothing and
+    /// renders nothing (verification.md WORLD-12).</summary>
+    public int PuffersBuilt => Emitters.Built;
+
+    /// <summary>Every PUFFER_STATE emitter's whole life on this runtime â€” start, the four stops,
+    /// the follow, and the census a suite reads.
+    /// <para>⚠ Built on FIRST USE, which captures <see cref="EmitterFactory"/>,
+    /// <see cref="DefScopedPufferKeys"/> and <see cref="DebugMotions"/> as they stand then. A Godot
+    /// Node cannot take constructor arguments, and those three arrive through the object
+    /// initialiser; first use is inside <see cref="Bind"/>, so every caller sets them in time.
+    /// Flipping one afterwards does NOT reach the director â€” nothing does, and nothing should.</para></summary>
+    public EmitterDirector Emitters => _emitters ??= new EmitterDirector(
+        EmitterFactory ?? new SpentEmitterFactory(), DefScopedPufferKeys, DebugMotions, Count);
+
     /// <summary>The live motion collection and its registration rules. `internal` so the
     /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
     /// mechanism.</summary>
@@ -570,12 +547,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// takes (<see cref="AutoStart"/>=false, <see cref="PlaceCalledTemplates"/>,
     /// <see cref="NameResolveFallback"/>, <see cref="SoundHandledElsewhere"/>). The caller still calls
     /// <see cref="Bind"/> + adds the returned node to the tree — this only hides the invariant block.
-    /// <paramref name="pufferParent"/> must be the world root even for a per-player caller (the crash
-    /// lesson: a PUFFER_STATE emitter goes TopLevel the moment it emits, so parenting it anywhere else
-    /// leaves it drawn-but-unrendered).</summary>
-    public static AnimRuntime ForEffects(int seed, Node3D pufferParent,
-        Func<Effects.PufferState, Effects.Puffer?> pufferFactory, bool debugMotions, float effectTtl,
-        Func<Vector3> playerPosition)
+    /// Where emitters are parented is <paramref name="emitterFactory"/>'s business now, not this
+    /// role's (see <see cref="PufferEmitterFactory"/>).</summary>
+    public static AnimRuntime ForEffects(int seed, IEmitterFactory emitterFactory,
+        bool debugMotions, float effectTtl, Func<Vector3> playerPosition)
     {
         return new AnimRuntime
         {
@@ -585,8 +560,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             SoundHandledElsewhere = true,
             DefScopedPufferKeys = true,
             DebugMotions = debugMotions,
-            PufferParent = pufferParent,
-            PufferFactory = pufferFactory,
+            EmitterFactory = emitterFactory,
             EffectTtl = effectTtl,
             Seed = seed,
             PlayerPosition = playerPosition,
@@ -596,12 +570,9 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Configures (but does not bind) the per-player crash rig's construction ritual —
     /// the same four invariant flags as <see cref="ForEffects"/>, but with no <c>EffectTtl</c> or
     /// <c>PlayerPosition</c> (the crash def has no PUFFER_STATE that needs either). The caller still
-    /// calls <see cref="Bind"/> + adds the returned node to the tree. <paramref name="pufferParent"/>
-    /// must be the world root, never the per-player crash root (the crash lesson: a PUFFER_STATE
-    /// emitter goes TopLevel the moment it emits, so parenting it under the controller subtree leaves
-    /// it drawn-but-unrendered).</summary>
-    public static AnimRuntime ForCrashRig(int seed, Node3D pufferParent,
-        Func<Effects.PufferState, Effects.Puffer?> pufferFactory, bool debugMotions)
+    /// calls <see cref="Bind"/> + adds the returned node to the tree.</summary>
+    public static AnimRuntime ForCrashRig(int seed, IEmitterFactory emitterFactory,
+        bool debugMotions)
     {
         return new AnimRuntime
         {
@@ -610,8 +581,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             NameResolveFallback = true,
             SoundHandledElsewhere = true,
             DebugMotions = debugMotions,
-            PufferParent = pufferParent,
-            PufferFactory = pufferFactory,
+            EmitterFactory = emitterFactory,
             Seed = seed,
         };
     }
@@ -628,7 +598,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>Runs the bootstrap passes against a built world. A separate call (not folded into
     /// construction) so a caller can set build-time-only collaborators (notably
-    /// <see cref="PufferFactory"/>, which depends on the session TextureArchive's lifetime)
+    /// <see cref="EmitterFactory"/>, which depends on the session TextureArchive's lifetime)
     /// before the passes fire the events that need them. The world runtime binds directly; the
     /// <see cref="ForEffects"/>/<see cref="ForCrashRig"/> role factories return unbound for the same
     /// reason.</summary>
@@ -837,16 +807,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     {
         _instances.Clear();
         Motions.Reset();
-        foreach (var entry in _puffers.Values)
-        {
-            entry.Puffer.SustainEnd();
-            entry.Puffer.Clear();     // drop live particles NOW; respawn must not leave fire burning
-            entry.Puffer.QueueFree(); // the next crash builds fresh emitters â€” do not accumulate
-        }
-        _puffers.Clear();
-        _activePuffers.Clear();
+        Emitters.Reset();
         _inputNodes.Clear();
-        _hostOffsets.Clear();
         _lights.Clear();
         if (Sounds != null)
         {
@@ -926,7 +888,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Motions advance ONCE per frame, here â€” not from the sequence runners, which would
         // apply dt once per running sequence and run the train at 4Ã— speed.
         TickMotions(dt);
-        TickPuffers(dt);
+        Emitters.Tick(dt);
         TickLights(dt);
         Sounds?.Tick();
         SweepEffectTtls(dt);
@@ -1228,6 +1190,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Mathf.Abs(s.Y) < MinPoseScale ? (s.Y < 0f ? -MinPoseScale : MinPoseScale) : s.Y,
         Mathf.Abs(s.Z) < MinPoseScale ? (s.Z < 0f ? -MinPoseScale : MinPoseScale) : s.Z);
 
+    // `internal` (not `private`) so EmitterDirector's debug lines name their nodes the same way
+    // every other anim log line does — same-assembly only, no wider exposure intended.
+    internal static string NameOf(Node3D n) =>
+        n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
+
+    /// <summary>Where a world node visually IS, for effect siting and puffer emission. An
+    /// absolute-modelled gamez subtree carries its vertices in world space under an identity node
+    /// transform (WORLD-15), so its origin is the map corner, kilometers from the object â€” the
+    /// damage-stage smoke measurably emitted there. When the node's own origin lies outside its
+    /// subtree's world mesh bounds, the bounds centre is the honest position; a node whose origin
+    /// sits inside them (a real transform: the waterfall, the train, debris pieces) keeps it
+    /// exactly, so every effect that rendered correctly before is untouched. Meshless nodes have
+    /// no bounds and keep their origin.</summary>
+    internal static Vector3 VisualOriginOf(Node3D node)
+    {
+        var box = UI.SelectionService.SubtreeWorldAabb(node);
+        if (box.Size.LengthSquared() <= 1e-9f)
+            return node.GlobalPosition;
+        return box.Grow(1f).HasPoint(node.GlobalPosition) ? node.GlobalPosition : box.GetCenter();
+    }
+
     /// <summary>The node's authored pose, remembered the first time anything moves it, so
     /// every pose op stays an offset from the rest pose rather than compounding.</summary>
     internal Transform3D RestOf(Node3D node)
@@ -1306,25 +1289,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         Dictionary<string, object?> d => string.Join(",", d.Select(kv => $"{kv.Key}={kv.Value}")),
         _ => value.ToString() ?? "",
     };
-
-    private static string NameOf(Node3D n) =>
-        n.HasMeta(NameMeta) ? n.GetMeta(NameMeta).AsString() : n.Name.ToString();
-
-    /// <summary>Where a world node visually IS, for effect siting and puffer emission. An
-    /// absolute-modelled gamez subtree carries its vertices in world space under an identity node
-    /// transform (WORLD-15), so its origin is the map corner, kilometers from the object â€” the
-    /// damage-stage smoke measurably emitted there. When the node's own origin lies outside its
-    /// subtree's world mesh bounds, the bounds centre is the honest position; a node whose origin
-    /// sits inside them (a real transform: the waterfall, the train, debris pieces) keeps it
-    /// exactly, so every effect that rendered correctly before is untouched. Meshless nodes have
-    /// no bounds and keep their origin.</summary>
-    private static Vector3 VisualOriginOf(Node3D node)
-    {
-        var box = UI.SelectionService.SubtreeWorldAabb(node);
-        if (box.Size.LengthSquared() <= 1e-9f)
-            return node.GlobalPosition;
-        return box.Grow(1f).HasPoint(node.GlobalPosition) ? node.GlobalPosition : box.GetCenter();
-    }
 
     /// <summary>A node's world position, valid DURING the bootstrap too. The world subtree
     /// is still detached while the bootstrap passes run (GameSession parents it after the
@@ -1552,9 +1516,10 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (ran.Count > 0 || missing.Count > 0)
             GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
                      (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
-        if (_puffers.Count > 0)
-            GD.Print($"anim: {_puffers.Count} puffer emitter(s): " +
-                     string.Join(", ", _puffers.Keys.Select(k => k.Name).Distinct()));
+        var emitterCensus = Emitters.Census;
+        if (emitterCensus.Count > 0)
+            GD.Print($"anim: {emitterCensus.Count} puffer emitter(s): " +
+                     string.Join(", ", emitterCensus.Select(r => r.Name).Distinct()));
         if (_lights.Count > 0)
         {
             int on = _lights.Values.Count(l => l.Active);
@@ -1791,8 +1756,8 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     /// <summary>An instance ends its sustained emitters when its OWN sequences end â€” the authored
     /// stop for a def that ships none. The data's stop paths are an <c>ACTIVE_STATE 0</c> on the
-    /// emitter (<see cref="HandlePufferState"/>'s off-branch) or a deactivated host
-    /// (<c>EndSustainedOn</c>); a def carrying an <c>ACTIVE_STATE 1</c> and neither has no other
+    /// emitter (<see cref="EmitterDirector.End"/>) or a deactivated host
+    /// (<see cref="EmitterDirector.EndOn"/>); a def carrying an <c>ACTIVE_STATE 1</c> and neither has no other
     /// way to stop, and before this rule existed such an emitter burned for the whole session.
     ///
     /// <para>Reached on both runtimes deliberately. On the effects runtime it is what stops
@@ -1819,37 +1784,20 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Consumes the effects runtime's TTL entry when there is one (this got there first, so
         // the sweep has nothing left to do); a world instance simply carries none.
         _effectTtls.RemoveAll(t => t.Def == def && t.Anchor == anchor);
-        if (_puffers.Count == 0)
-            return;
-        foreach (var entry in _puffers.Values.Where(v => v.Def == def && v.Anchor == anchor).ToList())
-        {
-            entry.Puffer.SustainEnd();
-            _activePuffers.RemoveAll(a => a.Puffer == entry.Puffer);
-        }
+        Emitters.EndFor(def, anchor);
     }
 
     /// <summary>Tears down every live resource a stopped instance created â€” its motions, puffers,
     /// lights and sounds â€” so nothing of the definition keeps running after <see cref="Stop"/>.
     /// Motions and puffers are attributed to the exact <c>(def, anchor)</c> that registered them
-    /// (see <see cref="MotionSet.Add"/> and <see cref="_puffers"/>). Lights and sounds are keyed by
+    /// (see <see cref="MotionSet.Add"/> and <see cref="EmitterDirector.Discard"/>). Lights and sounds are keyed by
     /// <c>(name, anchor)</c>, so they are cleared by anchor â€” the anchor is the instance identity,
     /// and a name colliding on one anchor across two defs already shares a single entry (last
     /// writer wins), so there is nothing finer to attribute to.</summary>
     private void TearDownResourcesOf(AnimDefinition def, Node3D? anchor)
     {
         Motions.DiscardFor(def, anchor);
-
-        var pufferKeys = _puffers
-            .Where(kv => kv.Value.Def == def && kv.Value.Anchor == anchor)
-            .Select(kv => kv.Key)
-            .ToList();
-        foreach (var key in pufferKeys)
-        {
-            var puffer = _puffers[key].Puffer;
-            puffer.SustainEnd();
-            _activePuffers.RemoveAll(a => a.Puffer == puffer);
-            _puffers.Remove(key);
-        }
+        Emitters.Discard(def, anchor);
 
         foreach (var key in _lights.Keys.Where(k => k.Anchor == anchor).ToList())
             _lights.Remove(key);
@@ -1900,7 +1848,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                     bool active = ev.Data.Bool("state");
                     SetSubtreeActive(t, active);
                     if (!active)
-                        EndSustainedOn(t);
+                        Emitters.EndOn(t);
                     _opsApplied++;
                 }
                 return true;
@@ -2261,196 +2209,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             return;
         }
 
-        var key = (pufferName, host, DefScopedPufferKeys ? def : null);
         if (!on)
         {
-            if (_puffers.TryGetValue(key, out var running))
-            {
-                running.Puffer.SustainEnd();
-                _activePuffers.RemoveAll(a => a.Puffer == running.Puffer);
-                return;
-            }
-            // The two halves of an authored on/off pair do not always name the same host, so the
-            // exact key can miss an emitter this very instance is running. Measured on a C1 crash
-            // (BL-242): all four defs whose stop missed start the emitter at their OWN template
-            // root and stop it with no AT_NODE at all, which falls to the anchor —
-            // `large_10sec_fire` ON at `fire_here` / OFF at `destroyed`, `large_fireball` ON at
-            // `flame_ball_01` / OFF at `healthy`, likewise `small_yellow_sparks` and
-            // `large_black_smokeball`. Two keys, one emitter: the stop looked up a key nothing
-            // ever wrote and returned silently.
-            //
-            // Fall back to the same-named emitter THIS instance OWNS — the `(def, anchor)`
-            // identity every other teardown path resolves through (FinishEffectInstance,
-            // TearDownResourcesOf). That is exactly what `PUFFER_STATE <name> 0` asks for: stop
-            // MY puffer called <name>. Narrowed on the name as well as the owner, so a def
-            // running several emitters (`he_trails`' five spurt columns) still stops only the
-            // one the event names.
-            var owned = _puffers
-                .Where(kv => kv.Key.Name == pufferName
-                             && kv.Value.Def == def && kv.Value.Anchor == anchor)
-                .Select(kv => kv.Value.Puffer)
-                .ToList();
-            foreach (var stray in owned)
-            {
-                stray.SustainEnd();
-                _activePuffers.RemoveAll(a => a.Puffer == stray);
-            }
-            // Say it out loud. A stop reaching nothing is how this stayed invisible: every one of
-            // the four was masked by a backstop that happened to fire at the authored moment —
-            // three by the `OBJECT_ACTIVE_STATE false` sitting next to them in the same stopper
-            // (EndSustainedOn), `large_10sec_fire` by BL-236's instance-end rule. A future def
-            // without that luck would just leak.
-            Count(owned.Count > 0
-                ? $"PufferState(stop matched by owner, not host: {pufferName})"
-                : $"PufferState(stop reached no emitter: {pufferName})");
-            if (DebugMotions)
-                GD.Print($"anim: PUFFER_STATE 0 '{pufferName}' missed its host '{NameOf(host)}' "
-                         + $"[def {def.AnimName}] — "
-                         + (owned.Count > 0
-                             ? $"stopped {owned.Count} emitter(s) this instance owns instead"
-                             : "this instance owns no emitter of that name"));
+            Emitters.End(pufferName, host, def, anchor);
             return;
         }
-        if (_puffers.TryGetValue(key, out var existing))
-        {
-            // Re-asserting a RUNNING emitter is a no-op (the loop idiom). A SustainEnd'ed one
-            // REVIVES instead: the damage-stage `puffit` loop cycles ACTIVE_STATE 0/1 on a 50%
-            // dice every pass, and reading "stopped" as "still running" collapsed the authored
-            // sputter to at most one burst per stage.
-            if (!_activePuffers.Any(a => a.Puffer == existing.Puffer))
-                _activePuffers.Add((existing.Puffer, host));
-            // The re-asserting instance TAKES OWNERSHIP (same def, later anchor). Ownership is
-            // what every teardown path resolves through — Stop, the TTL sweep and
-            // FinishEffectInstance all ask "which puffers does (def, anchor) own?" — so an
-            // emitter left attributed to the FIRST asserter outlives every later one: three
-            // torpedoes' `fire_n_smoke` share a host (their pooled `torp_effects` copies all
-            // resolve through the def's own node index), so calls 2 and 3 revived call 1's
-            // emitter, and when they ended they owned nothing to stop. Guarded on the def: a
-            // name colliding across two defs on an un-def-scoped runtime is the "builds beside"
-            // case below, not one def's own pool, and must not change hands.
-            if (existing.Def == def && existing.Anchor != anchor)
-                _puffers[key] = (existing.Puffer, def, anchor);
-            return;
-        }
-
-        if (PufferFactory == null)
-        {
-            // Say it out loud, exactly as a late SOUND_NODE miss does. The census this counter
-            // feeds prints at the end of the bootstrap — before any death, ON_CALL sequence or
-            // range-deferred def can reach a PUFFER_STATE — so on its own it reported a world with
-            // no fire, trails or dust as a clean log. A build whose textures really do die with it
-            // (the test harness) says this once and moves on.
-            Count("PufferState(after build)");
-            if (!_reportedPufferFactoryGone)
-            {
-                _reportedPufferFactoryGone = true;
-                Log.Warn("anim", $"puffer '{pufferName}' asked for after the texture archive was released — this runtime builds no further PUFFER_STATE emitters (WorldSession.Options.TexturesOutliveBuild)");
-            }
-            return;
-        }
-        var state = Effects.PufferState.FromAnimEvent(ev.Data);
-        // A PUFFER_STATE carrying no textures is an adjust/stop stub that re-asserts a puffer
-        // some other event defines â€” the readers have the same idiom, which is why
-        // PufferState.FindInReader tests for a "fully defined" state. There is nothing to
-        // build from it; C1's truck1dust_puffer and black_exhaust_puffer are the two here.
-        if (state.Textures.Count == 0 && state.TextureSequence.Count == 0)
-        {
-            Count($"PufferState(stub, no textures: {state.Name})");
-            return;
-        }
-        if (PufferFactory(state) is not { } puffer)
-        {
-            // Name it: a puffer whose textures are absent from this chapter's archive is a
-            // data-coverage fact worth being able to look up, not an anonymous count.
-            Count($"PufferState(no texture: {state.Name})");
-            return;
-        }
-        (PufferParent ?? _root).AddChild(puffer);
-        if (DebugMotions && DefScopedPufferKeys)
-        {
-            foreach (var other in _puffers)
-                if (other.Key.Name == pufferName && other.Key.Node == host && other.Value.Def != def)
-                    GD.Print($"anim: puffer '{pufferName}' on '{NameOf(host)}' builds beside "
-                             + $"'{other.Value.Def.AnimName}''s emitter [def {def.AnimName}]");
-        }
-        _puffers[key] = (puffer, def, anchor);
-        _activePuffers.Add((puffer, host));
-        _opsApplied++;
-        PuffersBuilt++;
-    }
-
-    /// <summary>Ends sustained emission for every emitter hosted on <paramref name="root"/> or
-    /// inside its subtree — the authored stop for a stop-less <c>PUFFER_STATE</c>. `he_trails`'
-    /// five spurt columns carry no <c>ACTIVE_STATE 0</c>; what the data turns off is the HOST
-    /// (<c>OBJECT_ACTIVE_STATE fly_trailN false</c>, sequenced after the 2.5 s launch that threw
-    /// it), and until this was honoured the emitters ran on, so a rocket's smoke ended only at the
-    /// 32 s runtime TTL or when the next rocket re-started the def.
-    ///
-    /// <para>Live particles finish their lifetimes (<c>SustainEnd</c>, not a teardown), and the
-    /// <c>_puffers</c> entry stays so a later <c>PUFFER_STATE 1</c> revives it — the sputter loop
-    /// cycles 0/1 forever and relies on that. The emitter must leave <c>_activePuffers</c> though:
-    /// <c>SustainAt</c> re-arms <c>_sustaining</c> on its own, so a still-ticked emitter would
-    /// resume on the very next frame.</para>
-    ///
-    /// <para>⚠ Visibility is NOT the test here, unlike <see cref="TickLights"/>. The world-effects
-    /// stage keeps every template root hidden deliberately and its puffers still show, because
-    /// particles go TopLevel into world space — gating emission on <c>IsVisibleInTree</c> would
-    /// silence every staged impact effect. Only an explicit deactivation of the host counts.</para>
-    /// </summary>
-    private void EndSustainedOn(Node3D root)
-    {
-        for (int i = _activePuffers.Count - 1; i >= 0; i--)
-        {
-            var (puffer, node) = _activePuffers[i];
-            if (!IsInstanceValid(puffer) || !IsInstanceValid(node))
-            {
-                _activePuffers.RemoveAt(i);
-                continue;
-            }
-            if (node != root && !root.IsAncestorOf(node))
-                continue;
-            puffer.SustainEnd();
-            _activePuffers.RemoveAt(i);
-            if (DebugMotions)
-                GD.Print($"anim: host '{NameOf(node)}' deactivated — emitter stopped "
-                         + $"({_activePuffers.Count} still emitting)");
-        }
-    }
-
-    // Drives every running emitter from its host node's current world pose. Emitters follow
-    // moving nodes (the train's smokestack travels the whole track loop), so this is per frame.
-    private void TickPuffers(float dt)
-    {
-        for (int i = _activePuffers.Count - 1; i >= 0; i--)
-        {
-            var (puffer, node) = _activePuffers[i];
-            if (!IsInstanceValid(puffer) || !IsInstanceValid(node))
-            {
-                _activePuffers.RemoveAt(i);
-                continue;
-            }
-            var xform = node.GlobalTransform;
-            var offset = HostOffsetOf(node, xform);
-            puffer.SustainAt(offset == Vector3.Zero ? xform.Origin : xform * offset, xform.Basis, dt);
-        }
-    }
-
-    /// <summary>The host's emission point in its own frame, cached per node. Zero â€” and the
-    /// emission point exactly the node origin, byte-identical with the pre-cache behaviour â€” for
-    /// every node whose origin sits inside its mesh bounds; the offset to the bounds centre for
-    /// absolute-modelled world subtrees, whose origin is the map corner (WORLD-15). Local-frame,
-    /// so a motion-driven host carries its emission point along.</summary>
-    private Vector3 HostOffsetOf(Node3D host, in Transform3D xform)
-    {
-        if (_hostOffsets.TryGetValue(host, out var offset))
-            return offset;
-        var visual = VisualOriginOf(host);
-        offset = visual == xform.Origin ? Vector3.Zero : xform.AffineInverse() * visual;
-        _hostOffsets[host] = offset;
-        if (DebugMotions && offset != Vector3.Zero)
-            GD.Print($"anim: puffer host '{NameOf(host)}' origin {xform.Origin} is outside its mesh "
-                     + $"bounds â€” emitting at {visual}");
-        return offset;
+        // _opsApplied counts APPLIED ops, and only a build is one: a re-assert of a running
+        // emitter is a no-op and a miss is already counted by name. Read off the director's own
+        // total rather than re-deriving the verdict here.
+        int built = Emitters.Built;
+        Emitters.Assert(pufferName, host, def, anchor, ev.Data);
+        if (Emitters.Built != built)
+            _opsApplied++;
     }
 
     /// <summary>The stored call-site node for a live instance, when it is still valid.</summary>
@@ -3292,18 +3062,17 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         if (_debugClock < 1f)
             return;
         _debugClock = 0f;
-        if (_activePuffers.Count > 0)
+        var emitting = Emitters.Census.Where(r => r.Emitting).ToList();
+        if (emitting.Count > 0)
         {
             int live = 0;
-            foreach (var a in _activePuffers)
-                live += a.Puffer.LiveCount;
+            foreach (var r in emitting)
+                live += r.LiveParticles;
             // Name them: three runtimes (world, world-effects, each crash rig) print this line, so
             // a bare count cannot say whose emitters are running — which is the whole question when
             // checking that an impact effect stopped.
-            var which = _puffers.Where(p => _activePuffers.Any(a => a.Puffer == p.Value.Puffer))
-                .Select(p => p.Key.Name).Distinct();
-            GD.Print($"anim/debug: {_activePuffers.Count} active puffer(s), {live} live particle(s)"
-                     + $": {string.Join(", ", which)}");
+            GD.Print($"anim/debug: {emitting.Count} active puffer(s), {live} live particle(s)"
+                     + $": {string.Join(", ", emitting.Select(r => r.Name).Distinct())}");
         }
         // Totals BEFORE the list, which is capped at 12: a debris piece is routinely past the cap
         // (five tank kills put 34 motions in flight at once), so reading "it never launched" out of

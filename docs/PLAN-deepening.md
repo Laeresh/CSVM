@@ -176,7 +176,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave E — emitter lifetime behind a seam
 
 12. ☑ **Grill the `EmitterDirector` interface and the seam** — no code *(landed 2026-08-03; Decisions 9–18)*
-13. ☐ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
+13. ☑ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
 14. ☐ The counting fake, and proof it is reachable
 15. ☐ The suite `BL-241` says cannot exist
 15b. ☐ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
@@ -701,7 +701,34 @@ scheme — the session must reach that constraint explicitly and decide the pool
 than discovering it mid-extraction. Read `src/Effects/Puffer.cs`'s entry too, not just
 `AnimRuntime`'s: the seam's lower option lands inside it.
 
-## E13 ☐ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all four stop paths
+## E13 ☑ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all four stop paths
+
+**Landed 2026-08-03**, not split (the `E13a`/`E13b` fallback was not needed). Three deviations from
+the sketch below, each forced by the code rather than chosen:
+
+1. **`IEmitterFactory.Create` takes an `out string? miss`.** The sketch's `Create(PufferState)`
+   cannot keep the report lines byte-identical: `PufferState(after build)`, `PufferState(stub, no
+   textures: …)` and `PufferState(no texture: …)` are three distinct counts and only the factory
+   knows which happened — while Decision 14's shared real factory cannot hold the per-runtime
+   counter. The factory names the miss; the director counts it. This also keeps the spent-factory
+   check ahead of the stub check, which is the live ordering.
+2. **`Assert` takes the raw `AnimData`, not a parsed `PufferState`.** Parsing eagerly would allocate
+   on the re-assert path, which 619 infinite-LOOP defs take every frame. `PufferState.FromAnimEvent`
+   is emitter knowledge, so it moved with the rest.
+3. **`NameOf`/`VisualOriginOf` widened to `internal static`** on `AnimRuntime`, against the standing
+   ⚠ in `docs/architecture.md`'s `src/Mech3/Anim/` entry. `VisualOriginOf` is shared with the
+   `ExternalEffect` siting path and could not move; `HostOffsetOf`, which needs it, had to.
+
+`WorldSession.Options.EmitterFactory` (Decision 18) is deliberately NOT here — it has no non-default
+caller until `E14`, and a public option nothing passes is speculative. `E14` adds it.
+
+**Verified.** Emitter census identical before/after at every sampled second: the C1
+`--destroy=refuel --debug-anim` run over 10 s (30 census/motion lines, byte-identical) and the
+`BL-236` regression set (`c3-island`, `c4-snow`, `c5-city-night`, 5 lines each). `.\RunTests.ps1`
+full pass — 389 units, 18/18 engine suites, **13/13 goldens hash-identical**. 8-chapter `--freecam`
+sweep, zero errors. Able-to-fail control (Decision 6): forcing the key def-scoped on every runtime
+moved **two** goldens, `c5-city-night` *and* `c3-island` — one more than the item predicted, so the
+goldens really do reach the extracted keying rule; restored, 13/13 again.
 
 **Goal.** An emitter's whole life — start and all four stops — is one module with a readable
 census, instead of five methods over two private collections.

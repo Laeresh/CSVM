@@ -3,6 +3,7 @@ using System.Collections.Generic;
 using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
+using CSVM.Mech3.Anim;
 using CSVM.Utils;
 using Godot;
 
@@ -193,7 +194,7 @@ public sealed class WorldEffectsFactory
     /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
     /// per-player crash runtime. It stages the impact/destruction effect templates under a
     /// dedicated subtree so their names resolve locally without colliding with the world or the crash
-    /// roots, keeps a live <c>PufferFactory</c> over the session textures, and binds the closure of
+    /// roots, keeps a live <c>IEmitterFactory</c> over the session textures, and binds the closure of
     /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
     /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
     /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
@@ -240,8 +241,8 @@ public sealed class WorldEffectsFactory
         // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
         // sprites emit at these ground-level sites and measured near-invisible with it on (the
         // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
-        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects), _worldRoot,
-            st => Puffer.Create(st, textures, sustained: true),
+        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects),
+            new PufferEmitterFactory(textures, _worldRoot),
             _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
         // Bind name resolution to the template stage — so the effect names resolve to these
         // templates and not to the world's or the crash roots' same-named nodes — but parent the
@@ -347,11 +348,8 @@ public sealed class WorldEffectsFactory
         // The scoped crash runtime: no ambient start (nothing runs until the crash Plays the def),
         // puffers baked lazily via the session textures (kept open above), effect templates
         // relocated onto the call site, and the crash def's non-portable node ptrs resolved by name.
-        // ⚠ PufferParent is the WORLD root, NOT the crash root: a PUFFER_STATE emitter goes TopLevel
-        // (world-space) the moment it emits, and parenting it under the per-player controller subtree
-        // left it drawn-but-unrendered (every particle correctly positioned, IsVisibleInTree true, yet
-        // nothing on screen — measured). Parenting at world level, exactly like the world runtime's
-        // own PufferFactory, renders it. Each crash runtime still makes its own emitter instances at
+        // ⚠ The emitter factory parents at the WORLD root, NOT the crash root (its own doc carries
+        // the measurement). Each crash runtime still makes its own emitter instances at
         // its own crash site, so splitscreen crashes stay independent. The SOUND either variant
         // reaches (snd_exp_ground_a on the dirt def itself, snd_exp_water_a inside the sea dive's
         // plane_big_splash) is already played by FlightAudio from Crash(); this runtime has no audio
@@ -359,8 +357,8 @@ public sealed class WorldEffectsFactory
         // render effects, not sound. The seed drives wreckage scatter and the
         // crash def's RANDOM_WEIGHT verdicts: one draw per player off the advancing crash stream, so
         // splitscreen crashes differ from each other but repeat run to run.
-        var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash), _worldRoot,
-            st => Puffer.Create(st, textures, sustained: true), _spec.DebugAnim);
+        var crashRuntime = AnimRuntime.ForCrashRig(Rng.NewIntSeed(Rng.Crash),
+            new PufferEmitterFactory(textures, _worldRoot), _spec.DebugAnim);
         // Bind only the named defs' transitive CALL_ANIMATION closures (Subset), never the whole
         // world program: the full 800+ defs include ~150 generic-named world defs that would
         // mis-anchor onto this plane's parts and run their reset states on the aircraft. The set is

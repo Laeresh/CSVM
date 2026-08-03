@@ -51,6 +51,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
 - `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
+- `src/Mech3/Anim/EmitterDirector.cs` — every PUFFER_STATE emitter's whole life on one runtime: the keying rule, the start, all four stops, the respawn wipe, the per-frame follow, and the census. Plus `IEmitter`/`IEmitterFactory` and the real/retired adapters.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -514,16 +515,10 @@ def, an unbuilt index or a root outside every candidate leaves the name match st
 Every name→node lookup routes through `ResolveScoped` — call anchor, then the def's OWN root, then
 global — because staged effect templates reuse node names (`fly_trail1`-`5` is `he_trails` AND
 `ap_trails` AND `carnage_trails`) and the unplaced copies sit at the stage origin (`BL-219`).
-Puffer emitters key `(name, host[, def])`: def-scoped only where `DefScopedPufferKeys` is set (the
-effects runtime — the two damage-stage sputters both declare `black_smoke`; on the world runtime the
-collapsed key de-dups C5's six same-node `m_crane_go` spark defs, measured via the c5 golden — see
-the `_puffers` field comment before changing this). A `PUFFER_STATE 1` re-assert REVIVES a
-SustainEnd'ed emitter (the `puffit` sputter loop cycles 0/1 forever), and `OBJECT_ACTIVE_STATE false`
-ends emission under that node (`EndSustainedOn`) — the only *authored* stop a stop-less
-`PUFFER_STATE` has (`BL-224`), and NOT expressible as an `IsVisibleInTree` gate the way `TickLights` is, since the
-effects stage keeps template roots hidden while their world-space particles show; emission sits at the host's
-mesh-bounds centre only when its node origin lies outside them (absolute-modelled subtrees,
-WORLD-15 — zero offset, byte-identical, otherwise). Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
+Puffer emitters live in `Anim/EmitterDirector.cs` (`Emitters`) — read its entry before touching
+anything emitter-shaped. This class keeps only the dispatch case, the `at_node` sentinel resolution
+and the `active_state` read, then forwards; `DefScopedPufferKeys` is the one role flag it still
+carries, read once when the director is built. Effect templates are **pooled** on the effects runtime (`PooledTemplates`, `BL-225`): the stage holds
 `WorldEffectsFactory.EffectPoolSlots` copies of each template, one per slot container carrying
 `PoolSlotMeta`, and each `PlayEffectAt` takes the next slot (`NextPooledAnchors`, cursor per template
 ROOT name, not per anim name — two defs on one root must not both be handed slot 0). Everything
@@ -533,10 +528,10 @@ and searched for the def's own names (`ResolveInOwnRoot`) — all off the slot t
 in, so a nested CALL_ANIMATION stays inside its caller's copy instead of driving all four
 `fly_trail*` sets. The cursor wraps: past the pool a call recycles a still-live slot, which is the
 old shared-template collapse, counted in `PoolRecycles` and named once per effect.
-⚠ The pool is NOT a third keying scheme — puffer keys are unchanged (`DefScopedPufferKeys` on the
-  effects runtime, the collapsed `(name, host)` on the WORLD runtime, which has no pool at all: its
-  templates are the world's own nodes). Distinct emitters per call fall out of the host node being a
-  different node per slot; do not add slot to a key.
+The pool is NOT a third keying scheme (the rule and its ⚠ live on `EmitterDirector`); distinct
+emitters per call fall out of the host node being a different node per slot, and `SlotOf` /
+`NextPooledAnchors` / `PlaceTemplateAt` stay here — the director is handed already-resolved host and
+anchor nodes.
 `PlayEffectAt(name, point, inputNode, ttl)` carries
 the call-site node: it resolves the callee's INPUT_NODE (the sputter emits on, and its `NodeActive`
 loop gate reads, the damaged object); `ttl` overrides `EffectTtl` per call (a gun hit passes 0.3 s,
@@ -570,8 +565,8 @@ an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the 
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet` shares the
-namespace but IS independently owned — its own entry below.
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet` and `EmitterDirector` share the
+namespace but ARE independently owned — their own entries below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -581,7 +576,9 @@ OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScal
 — 30 of the 45 distinct SCALE events carry a bare `-0.1`, which absolute is a negative scale.
 ⚠ `RestOf`, `_rng`, `SetSubtreeOpacity` and `NonSingularScale` on `AnimRuntime` are `internal`
   (not `private`) specifically so these motion types can reach them — same-assembly only, no wider
-  exposure intended; don't widen further without a reason.
+  exposure intended; don't widen further without a reason. `NameOf`/`VisualOriginOf` joined them for
+  `EmitterDirector` (log lines and the WORLD-15 emission point), which is what a reason looks like:
+  `VisualOriginOf` is shared with `AnimRuntime`'s own `ExternalEffect` siting, so it could not move.
 ⚠ Every pose-scale write goes through `AnimRuntime.NonSingularScale` (`FromToMotion.Seek`,
   `PoseScale`): the data ends scale channels at exact 0 ("shrink away" — 217 FROM_TOs + 216
   SCALE_STATEs install-wide), and an un-clamped singular basis makes the physics server's
@@ -606,6 +603,37 @@ constructs a motion — `AnimRuntime` builds them and hands them over.
 `Node3D`-typed but never dereferenced: every operation is identity comparison, so the behaviour is
 engine-free even though the type is not. An off-engine fake can only return `null!` for a target,
 which collapses all three identity-keyed rules — the tier stays the in-engine `bounce-launch` suite.
+
+## src/Mech3/Anim/EmitterDirector.cs
+One runtime's PUFFER_STATE emitters as a module: `Assert` (start / revive / re-home), the four stops,
+`Reset` (the crash rig's respawn — `Clear` + `Destroy`, not a `SustainEnd`, since respawn is
+immediate), the per-frame `Tick` follow, and `Census`. `AnimRuntime` keeps only the dispatch case,
+the `at_node` sentinel resolution and the `active_state` read. One director per runtime (a shared one
+would make `Reset` a filtered delete over a discriminator — the selector error this family has
+shipped five times, re-created at session scope); `IEmitterFactory` is what builds, so `Puffer`,
+`TextureArchive` and the parent node are all behind the seam and a suite can install a fake.
+Emission sits at the host's mesh-bounds centre only when its node origin lies outside them
+(absolute-modelled subtrees, WORLD-15 — zero offset, byte-identical, otherwise).
+`Census` spans the KNOWN emitters, not the active ones — active-only cannot tell a paused-revivable
+entry from a forgotten one, which is the `EndFor`/`Discard` distinction itself; `--debug-anim`'s
+active line and the bootstrap emitter line are both projections of it, never parallel re-derivations.
+⚠ The four stops do NOT collapse into one parameterised call. They vary on two independent axes —
+  SELECTOR (key / host subtree / owning instance) × DISPOSITION (pause-revivable / pause-and-forget)
+  — proven independent by `EndFor` and `Discard` sharing a selector and differing only in
+  disposition. Every shipped bug here (`BL-224`, `BL-233`, `BL-236`, `BL-242`) was a SELECTOR error.
+⚠ Emitters key `(name, host[, def])` and BOTH cases are measured. Def-scoped **required** on the
+  effects runtime — the two damage-stage sputters both declare `black_smoke` and masked each other.
+  **Forbidden** on the world runtime — C5's six same-node `m_crane_go` spark defs stacked six
+  emitters and moved the `c5-city-night` golden (re-measured 2026-08-03: forcing def-scope
+  everywhere moves `c5-city-night` AND `c3-island`). The effect-template pool is not a third scheme;
+  do not add slot to a key.
+⚠ `SpentEmitterFactory`'s warn stays a warn. A null object that silently swallows **is** `BL-234` —
+  a world with no fire, dust or smoke reading as a clean log — and the bootstrap census cannot cover
+  it, printing before the first death can reach a `PUFFER_STATE` (LOG-16).
+A `PUFFER_STATE 1` re-assert REVIVES a `SustainEnd`ed emitter (the `puffit` sputter loop cycles 0/1
+forever), and the re-asserting instance takes ownership. `EndOn` is NOT expressible as an
+`IsVisibleInTree` gate the way `TickLights` is: the effects stage keeps template roots hidden while
+their world-space particles show.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.
@@ -1499,12 +1527,13 @@ they are testable. `SessionMode` is closed — Menu/Fly/Viewer/Freecam/AnimLab �
 ## src/Mech3/WorldSession.cs
 Builds one chapter world and binds its `AnimProgram` — the world+anim half of a session build;
 `Build` returns Root, Runtime, Program, Builder, Clutter, CloudDeck and Lights.
-⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: nulls `PufferFactory`
-  unless `Options.TexturesOutliveBuild` and the sound loader (prewarming first) unless
-  `SoundsOutliveBuild`. A game session owns the TEXTURE archive all session (so this is always true
-  there — a false left the world with no runtime fire, trails or dust, `BL-234`) and scopes the SOUND
-  archive to the build; only the lab owns both. A cleared factory now warns once at the first late
-  `PUFFER_STATE` — the bootstrap census cannot report a runtime miss.
+⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: calls
+  `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild`, and nulls the sound
+  loader (prewarming first) unless `SoundsOutliveBuild`. A game session owns the TEXTURE archive all
+  session (so this is always true there — a false left the world with no runtime fire, trails or
+  dust, `BL-234`) and scopes the SOUND archive to the build; only the lab owns both. A retired
+  factory warns once at the first late `PUFFER_STATE` — the bootstrap census cannot report a runtime
+  miss.
 ⚠ **The phase boundaries are a reported contract** (`StartupProfile` spans zrdr/world/clutter/anim/
   bind/prewarm): move a step, move its `Record` — a dropped phase reads as a growing `rest`, not as
   missing. Keep them leaves.
@@ -1816,7 +1845,7 @@ crash variants' closures (`player_crash_dirt` + `player_crash_water`; the surfac
 impact, so both are bound and `FlightController.ClassifySurface` picks) **plus**
 `PlaneDamageEffectAnims` (the four `<part>_damage_effects` shims →
 `random_gun_impact` → `yellow_sparks_follow`), because those need exactly what it already has — the
-`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live puffer factory.
+`player` anim root, the plane's own `pdpN` panels as INPUT_NODEs, and a live emitter factory.
 `EffectAnimNames` binds impact + death effects — including the 12 gun `*_gunhit` variants, which a
 gun hit plays throttled and time-bounded (C8) — **and** the
 `DAMAGE_SEQUENCE` stage pair `sputter_black_smoke_obj`/`sputter_fire_smoke_obj` (root

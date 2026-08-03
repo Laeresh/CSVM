@@ -735,7 +735,7 @@ public static class Suites
     /// shared <c>anim</c> stream has been drawn from before this suite runs — which suite order
     /// and a cached world's earlier kills both move. ⚠ Nothing here touches the emitter
     /// census — <c>TestHarness.BuildWorld</c> builds no puffers (BL-241), and this fix's claims are
-    /// motion and dispatch, neither of which reads the <c>PufferFactory</c>.</para></summary>
+    /// motion and dispatch, neither of which reads the emitter factory.</para></summary>
     private static void BounceLaunch(TestContext ctx)
     {
         // extracted/C1/cam_anim/refuel1-refuel1-healthy.json, the two bounce-terminated events.

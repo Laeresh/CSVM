@@ -421,8 +421,10 @@ unscheduled.
 - `BL-241` **No engine suite can observe emitter lifetime — a test world builds no puffers at all
   (noted 2026-08-02 while landing `BL-236`).** `TestHarness.BuildWorld` owns its `TextureArchive`
   as a `using` local and does not set `WorldSession.Options.TexturesOutliveBuild`, so the harness's
-  world runtime has its `PufferFactory` cleared after the bootstrap (`WorldSession.cs:249`) —
-  exactly the `BL-234` condition, here on purpose. Every emitter bug in this family
+  world runtime retires its emitter factory after the bootstrap (`WorldSession.cs`) —
+  exactly the `BL-234` condition, here on purpose. **`E13` (2026-08-03) landed the census this entry
+  needs** (`AnimRuntime.Emitters.Census`, behind `IEmitter`/`IEmitterFactory`); `E14`/`E15` install a
+  fake factory through the harness and write the suite, which is what closes this. Every emitter bug in this family
   (`BL-233`/`BL-235`/`BL-236`/`BL-242`) therefore has to be verified by a `--debug-anim` probe read
   by hand; none of them is guarded by a suite, and a regression would be caught only by somebody
   re-running the probe. The `stop-sequence` suite covers the *dispatch* side (which events fire,

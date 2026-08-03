@@ -11682,3 +11682,43 @@ via=--volume`, so the flag survives the drop the config key does not. `audio.vol
 the dumped template. The three complaint paths were run end to end: `--volume=4` →
 `WARN --volume=4 is outside 0-1 — using 1`, `--volume=loud` → `WARN … is not a number (0-1) —
 leaving the volume alone` and a launch that carries on, `--mute --volume=0` → the conflict `WARN`.
+
+## 2026-08-03 â€” emitter lifetime becomes a module behind a seam (`PLAN-deepening` E13)
+
+**What landed.** `CSVM/src/Mech3/Anim/EmitterDirector.cs` plus `IEmitter.cs` and
+`PufferEmitterFactory.cs`: an emitter's whole life â€” the keying rule, the start, all four stops, the
+respawn wipe, the per-frame follow and a `Census` â€” is one module per runtime instead of five methods
+over two private `AnimRuntime` collections. `AnimRuntime` keeps the dispatch case, the `at_node`
+sentinel resolution and the `active_state` read, and forwards. Gone from it: `_puffers`,
+`_activePuffers`, `_hostOffsets`, `HostOffsetOf`, `PufferFactory`, `PufferParent`,
+`_reportedPufferFactoryGone`, `TickPuffers`, `EndSustainedOn`, and `HandlePufferState`'s body below
+the host resolve. `PuffersBuilt` is now a forwarding property, so its four external readers are
+untouched. The three byte-identical `st => Puffer.Create(st, textures, sustained: true)` closures
+(`WorldSession`, the effects runtime, each crash rig) consolidate into `PufferEmitterFactory`, which
+also owns the parent node â€” so the "world root, never the per-player crash root" rule is one type's
+doc instead of prose repeated in two role factories. `WorldSession`'s post-bootstrap
+`PufferFactory = null` becomes `Emitters.RetireFactory()`, installing a `SpentEmitterFactory` that
+names the miss and warns once, exactly as the old null branch did.
+
+Interface per the `E12` grilling session (Decisions 9â€“18). Three deviations from the sketch, each
+forced by the code: `IEmitterFactory.Create` carries an `out string? miss` (three distinct report
+counts, and Decision 14's shared real factory cannot hold the per-runtime counter, so the factory
+names the miss and the director counts it); `Assert` takes the raw `AnimData` rather than a parsed
+`PufferState` (619 infinite-LOOP defs re-assert every frame, so eager parsing would allocate on the
+hot path); and `NameOf`/`VisualOriginOf` widened to `internal static` on `AnimRuntime`, because
+`VisualOriginOf` is shared with the `ExternalEffect` siting path and could not move with
+`HostOffsetOf`. `WorldSession.Options.EmitterFactory` is left to `E14`, the first item with a caller
+for it.
+
+**How verified.** Emitter census before/after, identical at every sampled second: the C1
+`--freecam --destroy=refuel --debug-anim --frames=600` run (30 census + motion lines, byte-identical)
+and the `BL-236` regression set `c3-island` / `c4-snow` / `c5-city-night` (5 lines each). Full
+`RunTests` pass â€” 389 units, 18/18 engine suites, **13/13 goldens hash-identical**, engine errors
+clean. 8-chapter `--freecam` sweep, zero errors in all eight.
+
+**The able-to-fail control** (Decision 6, for a wave whose only evidence is unchanged output):
+forcing the emitter key def-scoped on every runtime â€” the one rule the extraction had to carry across
+intact â€” moved **two** goldens, `c5-city-night` (the measured C5 `m_crane_go` six-twin stack) *and*
+`c3-island`, which the item did not predict. So the goldens do reach inside the extracted module, and
+an unchanged 13/13 is evidence rather than an absence of it. Restored â†’ 13/13 again. The wave's own
+new assertion is still owed: it is `E15`, which is what `BL-241` is waiting for.

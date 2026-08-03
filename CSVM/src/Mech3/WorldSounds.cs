@@ -31,7 +31,7 @@ public sealed partial class WorldSounds : Node3D
 
     /// <summary>
     /// Resolves a sound definition's WAV into a stream. Supplied by the caller and valid only
-    /// DURING the world build, exactly like <see cref="AnimRuntime.PufferFactory"/>: the session
+    /// DURING the world build, exactly like <see cref="AnimRuntime.EmitterFactory"/>: the session
     /// <see cref="SoundArchive"/> is disposed when the build scope ends. Decoded streams are
     /// cached below, so an emitter created later reusing a name already heard still works; only a
     /// genuinely new name after the build is reported rather than faulting on a closed zip.
