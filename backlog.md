@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-244`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-246`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -807,17 +807,16 @@ unscheduled.
   them — splitting them has nothing to split yet. Plan-sized — not a TUNE.** `GaugeCluster.Draw`
   computes one `frac = PartFraction?.Invoke(z.Part)` per zone and feeds the **same** `color` index to
   both `z.Border` (outer ring) and `z.Fill` (inner hatch) (`GaugeCluster.cs:263-268`) — there is
-  structurally one number per zone, not an armour/health pair. Checked whether the data ships a real
-  pair to drive a split: `destroyable_parts`' two `hp` values are **measured equal on all 88 entries**
-  across all 22 defs that carry them (`docs/formats/vehicle.md:85-89,145-148`) — consistent with an
-  (armor, hp) pair *or* a duplicate, unresolved (the `BL-085` hypothesis). **Until that hypothesis is
-  settled, a split gauge has nothing distinct to bind its two rings to** — this is blocked on
-  `BL-085`, not an independent TUNE. *Fix shape:* once `BL-085` lands a real two-pool `PlaneDamage`,
+  structurally one number per zone, not an armour/health pair. **The data does ship a real pair** —
+  `destroyable_parts` is (hit points, armour), settled 2026-08-03 against the original's armory
+  (`docs/formats/vehicle.md`, "The hp pair: armor + hit points"). So the two rings have something
+  distinct to bind to; what is missing is the receiving model. **Blocked on `BL-085` landing a
+  two-pool `PlaneDamage`** — not on an open question, and not an independent TUNE. *Fix shape:*
   drive `Border` from the armour pool's fraction and `Fill` from health's (or vice versa — confirm
-  against `MSG_HUD_HEALTH` = "Armor: %1%% Health: %2%%", `docs/formats/vehicle.md:129-130`).
+  against `MSG_HUD_HEALTH` = "Armor: %1%% Health: %2%%").
   ⚠ **Traps.** (a) Do not fabricate a synthetic armour/health split from the single existing `Hp` pool
-  (e.g. armour = first N%, health = remainder) — that would look like a fix but encodes a balance
-  guess the shipped data does not support; wait for `BL-085`'s falsification test. (b)
+  (e.g. armour = first N%, health = remainder) — the real second number is in the data and
+  `BL-085` is what surfaces it; a synthetic split would encode a balance guess instead. (b)
   `GaugeCluster.cs` is at its 3-⚠ cap in `docs/architecture.md` — this entry records the gap, it does
   not schedule a `GaugeCluster.cs` doc change.
 
@@ -876,19 +875,29 @@ the document alone, it says so and marks the value TUNE.
   armour-piercing is strictly the **worst** round in every calibre (`30 AP` 1.5 health vs `30 DD`
   4.5), so the tier is inverted, not merely simplified. Wanted: two pools per damage zone, **armour
   first, with overflow spilling into health 1:1 within the same shot** so a nearly-stripped zone
-  never wastes damage. The armour-then-health *order* is already settled
-  (`docs/plans/PLAN-M3-weapons.md` C23's dominance argument); the overflow rule is the spec's.
-  ⚠ **Traps.** (a) **Where the armour pool comes from is a hypothesis, not a finding.** The
-  candidate is `destroyable_parts`' undecoded second value — measured 2026-07-25 it is **equal to
-  the first on all 22 defs** (11 `p*` + 11 `r*`), which is consistent with an armour pool *and*
-  with a duplicate. Adopting it **doubles** every part's effective HP against a balanced round: a
-  balance change, not a drop-in. (b) It **contradicts C23's model 1** ("player planes — per-part HP,
-  no armour/health pair"). The new evidence against that reading is `player.json`'s `crash` block,
-  which spends **`armor_damage_range [50,300]` and `health_damage_range [50,300]`** (plus
-  `bounce_factor 0.6`) on the *player's own* collision damage — hard to explain if player planes
-  have no armour pool. Nothing in `CSVM/src` reads that block either. Settle this before writing
-  code. (c) World destructibles carry **health only** (C23, measured over 16,114 defs) — this entry
-  does not touch them.
+  never wastes damage. The armour-then-health *order* is settled twice over: C23's dominance
+  argument (`docs/plans/PLAN-M3-weapons.md`) and, directly, retail string 3372 — "AP rounds tend to
+  punch clean through unarmored surfaces, inflicting very little damage". The overflow rule is the
+  spec's.
+  **Unblocked 2026-08-03 — the pool's origin is now a finding.** The armour pool is
+  `destroyable_parts`' second value. The original's **armory** settles what the shipped data could
+  not: its per-zone allocation is in units that are armour points 1:1, and a **stock** airframe
+  reads the same per-zone numbers the zrdr def carries (stock Bloodhawk ~20 per zone;
+  `pbloodhawk` is 20/20/20/20). Observed at the controls. See
+  `docs/formats/vehicle.md`, "The hp pair: armor + hit points".
+  ⚠ **Traps.** (a) **Do not fold armour into hp.** The two are equal on all 88 shipped entries
+  **at stock only** — armour is a *purchasable* quantity (`BL-067`'s configurator), so equality is
+  a fact about default loadouts, not about the model. `PlaneStats` must read **both** floats
+  (`PlaneStats.cs:249-256` currently takes the first and drops the second) and `PlaneDamage` must
+  carry two independent pools, or this breaks the moment an armory exists. (b) **The 2× is
+  intended, not a regression.** A real armour pool doubles every zone's effective HP against a
+  balanced round; that is what the original does — record it as faithful rather than tuning it
+  away (decided 2026-08-03). `CAP-19` gives the time-to-kill reference. (c) It **supersedes C23's
+  model 1** ("player planes — per-part HP, no armour/health pair"), which is now wrong;
+  `player.json`'s `crash` block spending **`armor_damage_range [50,300]` and
+  `health_damage_range [50,300]`** on the player's own collision damage fits the corrected model.
+  Nothing in `CSVM/src` reads that block. (d) World destructibles carry **health only** (C23,
+  measured over 16,114 defs) — this entry does not touch them.
   **Collision damage bypasses armour too, not only guns.** `FlightController.SurviveHit`
   (`FlightController.cs:1455-1456`) computes a hand-authored `GrazeMaxDamage * (vn/CrashSpeed)²` and
   spends it through the same single-pool `PlaneDamage.Apply` — no armour concept exists on the

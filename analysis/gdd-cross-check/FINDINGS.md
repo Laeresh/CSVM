@@ -17,7 +17,7 @@ from the script, so it works from the main tree or a worktree; `CS_EXTRACTED` ov
 | `gun_cone.py` | Is `gun_pitch`/`gun_yaw` a turret arc? | **No** — the AI's forward-gun cone |
 | `dzpath_gates.py` | Does a Danger Zone ship gate geometry? | **Yes** — route + exactly two matched outlines, 80/80 |
 | `chapter_distinct.py` | Are C1/C1B/C1C one terrain re-lit? | **No** — separate worlds |
-| `damage_pools.py` | Is the `destroyable_parts` hp pair (armor, hit points)? | Strongly supported, **not decidable from this data** |
+| `damage_pools.py` | Is the `destroyable_parts` hp pair (armor, hit points)? | **Yes** — undecidable from this data, settled outside it (below) |
 | `reader_census.py` | What do `ia`/`dzones`/`zeppelins`/`egen` carry? | Full key inventories |
 | `commands.py` | Which player commands shipped? | 74 bindable; spyglass + padlock **shipped** |
 
@@ -57,18 +57,30 @@ any file here — everything is read from `extracted/**` at runtime.
   table is a retail-UI observation; mixing is already expressible in the engine, only
   `stock_loadouts.json`'s `{count, stock}` is too narrow. A schema limit, not a bug.
 
-## Hypothesis, deliberately not promoted
+## Promoted 2026-08-03 — settled outside this data
 
-**The `destroyable_parts` pair is (armor, hit points).** `MSG_HUD_HEALTH` =
+**The `destroyable_parts` pair is (hit points, armor).** `MSG_HUD_HEALTH` =
 `Armor: %1%% Health: %2%%`; 46 weapons carry both `ARMOR_DAMAGE` and `HEALTH_DAMAGE` and **18
 differ** — the ammo tiers are built from that split (`wep_31` DD 1.5/4.5 vs `wep_32` AP 4.5/1.5,
-mirrored at every calibre); `player.json`'s `crash` splits armor from health ranges; and the
-design gives each of four identically-named zones its own armor and hit-point pool, armor first.
+mirrored at every calibre); `player.json`'s `crash` splits armor from health ranges.
 
-**Why it stays a hypothesis:** every shipped pair is equal, so nothing here can separate
-(armor, hp) from (hp, hp) or (max, current). **Falsification, at the controls:** rounds-to-kill
-one zone with `wep_31` (DD) vs `wep_32` (AP). Different counts support two pools; equal counts
-kill it.
+**This probe's verdict was right and stays right: not decidable from this data.** Every shipped
+pair is equal, so nothing here can separate (armor, hp) from (hp, hp) or (max, current). What
+changed is that a decisive measurement existed *outside* the extracted data — the original's
+**armory**, which varies armor independently of health. Its per-zone allocation is in units that
+are armor points 1:1, and a **stock** airframe reads the same per-zone numbers the zrdr def
+carries (stock Bloodhawk ~20 per zone; `pbloodhawk` 20/20/20/20). Observed at the controls.
+Full write-up: `docs/formats/vehicle.md`, "The hp pair: armor + hit points".
+
+⚠ **Transferable lesson: "not decidable from this data" is not "not decidable."** This probe
+correctly reported that the shipped values were degenerate, and the reading then sat blocked for
+nine days because nobody asked which *other* instrument could vary the quantity the data holds
+constant. When a census comes back uniform, the next question is what varies it — not whether to
+wait for better data.
+
+The re-sourced evidence (retail `rof/ui_strings.json` rather than the pre-release design document)
+is in `vehicle.md`; the design-doc appeal that used to sit here is retired, since
+`playtest.md` flags that source as unreliable as a class for HUD/damage material.
 
 `ace_stats` is a weaker second hypothesis — 9 values, and `vehicle.json` has exactly nine
 pilot-skill keys emitted in one identical order by all 26 defs carrying them, with `accentID`

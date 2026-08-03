@@ -491,13 +491,20 @@ public partial class GameSession : Node3D
     /// anim lab node, or the session for teardown).</summary>
     private void LoadArchives(BuildState state)
     {
-        long mark = StartupProfile.Mark();
-        state.Gamez = GameZ.Load(state.GamezPath);
-        StartupProfile.Record("gamez", mark);
-        mark = StartupProfile.Mark();
-        var textures = new TextureArchive(state.TexturesPath);
-        StartupProfile.Record("textures", mark);
-        state.Textures = textures;
+        // Opened before the world build rather than with the flight audio below, because the
+        // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
+        // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
+        // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
+        var archives = SessionArchives.OpenFor(
+            _spec.AnimLab ? ArchiveIntent.Lab : ArchiveIntent.Session,
+            state.GamezPath, state.TexturesPath, state.SoundsPath, state.ZrdrPath, state.Mute);
+        state.Gamez = archives.Gamez;
+        state.Textures = archives.Textures;
+        state.Sounds = archives.Sounds;
+        state.SoundDefs = archives.SoundDefs;
+        state.SoundGroups = archives.SoundGroups;
+        state.TexturesOutliveBuild = archives.TexturesOutliveBuild;
+        state.SoundsOutliveBuild = archives.SoundsOutliveBuild;
         // The texture archive stays open past this build scope: the data-driven crash bakes its
         // effect puffers lazily at crash time (the same reason --anim-lab keeps it open). The lab
         // owns its copy (LabTextures, freed with the lab node); every other mode hands it to the
@@ -505,30 +512,13 @@ public partial class GameSession : Node3D
         // the previous archive instead of leaking it. A failed build disposes it from the catch.
         if (_spec.AnimLab)
         {
-            state.LabTextures = textures;
+            state.LabTextures = archives.Textures;
+            state.LabSounds = archives.Sounds;
         }
         else
         {
-            _sessionTextures = textures;
+            _sessionTextures = archives.Textures;
         }
-        // Opened before the world build rather than with the flight audio below, because the
-        // animation bootstrap builds the world's ambient SOUND_NODE emitters (the waterfall,
-        // the train, the sirens) and needs the archive while it runs. Same lifetime rule as
-        // the puffer factory: the decoded streams outlive this scope, the zip handle does not.
-        state.HaveSounds = !state.Mute && (File.Exists(state.SoundsPath) || Directory.Exists(state.SoundsPath));
-        mark = StartupProfile.Mark();
-        var sounds = state.HaveSounds ? new SoundArchive(state.SoundsPath) : null;
-        StartupProfile.Record("sounds", mark);
-        state.Sounds = sounds;
-        state.LabSounds = _spec.AnimLab ? sounds : null;
-        mark = StartupProfile.Mark();
-        state.SoundDefs = state.HaveSounds ? SoundDefs.Load(state.ZrdrPath) : null;
-        // The SOUND_GROUPS table (weighted random destruction/impact sounds) the one-shot SOUND
-        // anim events resolve through — the death explosion's air_mixed_exp_sg picks one of five.
-        state.SoundGroups = state.HaveSounds ? SoundDefs.LoadGroups(state.ZrdrPath) : null;
-        StartupProfile.Record("zrdr", mark);
-        if (!state.Mute && !state.HaveSounds)
-            GD.PushWarning($"sound archive not found, flying silent: {state.SoundsPath}");
     }
 
     /// <summary>--node=&lt;cs_name&gt;: resolve the request against the chapter gamez BEFORE
@@ -643,9 +633,10 @@ public partial class GameSession : Node3D
                 // to _sessionTextures, or to the lab node), not to this build scope — so the world
                 // runtime keeps a live PufferFactory and a death's fire/trails, or a car's dust,
                 // still bakes when it is first reached (BL-234). The sound archive does NOT: it is
-                // a `using` of this build below except in the lab, and the prewarm covers it.
-                TexturesOutliveBuild = true,
-                SoundsOutliveBuild = _spec.AnimLab,
+                // a `using` of this build below except in the lab, and the prewarm covers it. Both
+                // flags come from LoadArchives's ArchiveIntent, not set here by hand.
+                TexturesOutliveBuild = state.TexturesOutliveBuild,
+                SoundsOutliveBuild = state.SoundsOutliveBuild,
                 // The lab: quiet stage, ambient playback deferred to its A toggle.
                 AutoStart = !_spec.AnimLab,
                 // The world's dice — RANDOM_WEIGHT verdicts, SOUND_GROUPS picks, crash-debris
@@ -1703,10 +1694,13 @@ public partial class GameSession : Node3D
 
         public GameZ Gamez = null!;
         public TextureArchive Textures = null!;
-        public bool HaveSounds;
         public SoundArchive? Sounds;
         public Dictionary<string, SoundDef>? SoundDefs;
         public Dictionary<string, SoundGroup>? SoundGroups;
+        // Set by LoadArchives from the ArchiveIntent (Session/Lab) it opened the archives for —
+        // BuildWorldStage's WorldSession.Options carries them through unchanged.
+        public bool TexturesOutliveBuild;
+        public bool SoundsOutliveBuild;
         // The archives that outlive this build scope in the anim lab (the lab node owns their
         // disposal); a failed build closes them from StartSession's catch instead.
         public TextureArchive? LabTextures;

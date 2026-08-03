@@ -585,14 +585,12 @@ public sealed class TestContext
 
         var stage = new Node3D { Name = $"TestWorld_{chapter}" };
         Host.AddChild(stage);
-        var gamez = GameZ.Load(gamezPath);
         // The archives are this scope's: WorldSession clears the puffer factory and the sound
         // loader after its bootstrap precisely so they can close here.
-        using var textures = new TextureArchive(texturesPath);
-        bool haveSounds = !Mute && (File.Exists(SoundsPath) || Directory.Exists(SoundsPath));
-        using var sounds = haveSounds ? new SoundArchive(SoundsPath) : null;
-        var soundDefs = haveSounds ? SoundDefs.Load(ZrdrPath) : null;
-        var soundGroups = haveSounds ? SoundDefs.LoadGroups(ZrdrPath) : null;
+        var archives = SessionArchives.OpenFor(ArchiveIntent.Suite, gamezPath, texturesPath,
+            SoundsPath, ZrdrPath, Mute);
+        using var textures = archives.Textures;
+        using var sounds = archives.Sounds;
 
         var session = WorldSession.Build(
             new WorldSession.Options
@@ -608,8 +606,10 @@ public sealed class TestContext
                 Collision = collision,
                 RuntimeSeed = Rng.IntSeedFor(Rng.Anim),
                 EmitterFactory = EmitterFactory,
+                TexturesOutliveBuild = archives.TexturesOutliveBuild,
+                SoundsOutliveBuild = archives.SoundsOutliveBuild,
             },
-            gamez, textures, sounds, soundDefs, soundGroups);
+            archives.Gamez, textures, sounds, archives.SoundDefs, archives.SoundGroups);
         stage.AddChild(session.Root);
         session.Runtime.ManualAdvance = true;
         return new TestWorld
