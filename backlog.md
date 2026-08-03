@@ -416,33 +416,6 @@ unscheduled.
   *Fix shape:* out of scope until a cockpit-audio or damage-audio feature is scheduled; recorded here
   so nobody has to re-derive from scratch that the *data* isn't the blocker.
 
-### World animation & effects
-
-- `BL-241` **No engine suite can observe emitter lifetime — a test world builds no puffers at all
-  (noted 2026-08-02 while landing `BL-236`).** `TestHarness.BuildWorld` owns its `TextureArchive`
-  as a `using` local and does not set `WorldSession.Options.TexturesOutliveBuild`, so the harness's
-  world runtime retires its emitter factory after the bootstrap (`WorldSession.cs`) —
-  exactly the `BL-234` condition, here on purpose. **`E13` (2026-08-03) landed the census this entry
-  needs** (`AnimRuntime.Emitters.Census`, behind `IEmitter`/`IEmitterFactory`); `E14`/`E15` install a
-  fake factory through the harness and write the suite, which is what closes this. Every emitter bug in this family
-  (`BL-233`/`BL-235`/`BL-236`/`BL-242`) therefore has to be verified by a `--debug-anim` probe read
-  by hand; none of them is guarded by a suite, and a regression would be caught only by somebody
-  re-running the probe. The `stop-sequence` suite covers the *dispatch* side (which events fire,
-  when), which is why it passed throughout all four bugs — including `BL-242`, where the event it
-  asserts (the fireball's 0.3 s stopper) fired correctly and then failed to reach its emitter.
-  ⚠ **And build before you probe** (`dotnet build CSVM/CSVM.sln`): `RunProbe.ps1` does not, which
-  once turned a missing instrument into a fabricated "measurement". Any probe whose conclusion
-  rests on output NOT appearing must show the instrument firing somewhere first.
-  *Fix shape:* let the harness own the archive for the world's lifetime (`TexturesOutliveBuild =
-  true`, dispose in `TestWorld.Destroy`), then a suite can kill a `refuel*` tank through
-  `DamageAt` and assert the emitter census returns to its pre-kill set — which needs one public
-  read-only census on `AnimRuntime` (`_activePuffers` is private, and the debug line is a
-  `GD.Print`).
-  ⚠ Traps:
-  - **Assert the NAMES, not the count.** Same trap as the probe: several runtimes contribute.
-  - Baking an atlas per authored state costs real time on world build; measure the suite's added
-    seconds before widening it past one chapter.
-
 ## Feature backlog
 
 - `BL-059` **Data-driven crash — the remaining variants/follow-ups (PLAN-data-driven-crash COMPLETE for the

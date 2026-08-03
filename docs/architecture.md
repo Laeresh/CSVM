@@ -152,7 +152,7 @@ instead.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
-- `src/Testing/Suites.cs` — the 18 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
+- `src/Testing/Suites.cs` — the 19 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -1534,7 +1534,10 @@ caller supplies its own to observe emitter lifetime with no GPU (`CSVM.Testing.C
 is the one caller, through `TestContext.EmitterFactory`); a post-build swap would miss the bootstrap,
 where most `PUFFER_STATE`s fire.
 ⚠ Disposal contract, **one flag per archive because the two lifetimes differ**: calls
-  `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild`, and nulls the sound
+  `Runtime.Emitters.RetireFactory()` unless `Options.TexturesOutliveBuild` **or the caller supplied
+  its own `Options.EmitterFactory`** (a caller-supplied one holds no archive reference, so it is
+  never auto-retired regardless of the flag — `CountingEmitterFactory` needs neither
+  `TextureArchive` nor `TexturesOutliveBuild` to stay alive past the bootstrap), and nulls the sound
   loader (prewarming first) unless `SoundsOutliveBuild`. A game session owns the TEXTURE archive all
   session (so this is always true there — a false left the world with no runtime fire, trails or
   dust, `BL-234`) and scopes the SOUND archive to the build; only the lab owns both. A retired
@@ -1688,10 +1691,13 @@ own fix note asked for.
   factory again, and a fake that went invalid on stop would assert against a lie.
 
 ## src/Testing/Suites.cs
-The 18 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 19 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings, live weapon fire, destructible stages/death/census, animation
-stops and bounce-terminated launches, texture flattening, glTF round trips, collision/node
-visibility, and authored stunt gates.
+stops and bounce-terminated launches, emitter lifetime, texture flattening, glTF round trips,
+collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
+the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
+running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
+`collision:true` immediately after forces a real rebuild for everyone downstream.
 ⚠ Expected numbers are **golden counts against the retail install** (48 weapon defs, 11 airframes,
   per-chapter destructibles); change one only with the measurement that moved it.
 ⚠ `bounce-launch` asserts a **band**, not a time: the launch draws speed and elevation per instance,

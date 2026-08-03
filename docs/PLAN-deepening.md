@@ -178,7 +178,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 12. ☑ **Grill the `EmitterDirector` interface and the seam** — no code *(landed 2026-08-03; Decisions 9–18)*
 13. ☑ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
 14. ☑ The counting fake, and proof it is reachable
-15. ☐ The suite `BL-241` says cannot exist
+15. ☑ The suite `BL-241` says cannot exist
 15b. ☐ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
 
 ### Wave F — invariants the caller no longer remembers
@@ -864,7 +864,18 @@ fire, not by a test. Enforce it structurally: the fake lives in `CSVM/src/Testin
 warn (Decision 15) — a null object that silently swallows *is* `BL-234`, however polite its type
 name.
 
-## E15 ☐ The suite `BL-241` says cannot exist
+## E15 ☑ The suite `BL-241` says cannot exist
+
+**Landed 2026-08-03, closing `BL-241`.** As sketched, plus one fix `E14` didn't cover:
+`WorldSession.Build` retired `Options.EmitterFactory` unconditionally whenever
+`!TexturesOutliveBuild`, with no exception for a caller-supplied one, so the `CountingEmitterFactory`
+was swapped out for `SpentEmitterFactory` the instant the bootstrap finished — before this suite's
+own `DamageAt` ever ran. Fixed by scoping the auto-retire to the factory `Build` built itself:
+`if (o.EmitterFactory == null && !o.TexturesOutliveBuild)`. Inert for every production caller, which
+all leave `Options.EmitterFactory` null. `emitter-lifetime` is registered FIRST in `Suites.cs`,
+deliberately — the only suite installing a fake, and the shared C1 world `WithWorld` caches must be
+built with it in effect before `damage-hd`'s `collision:true` forces a real rebuild for everyone
+downstream.
 
 **Goal.** Killing a destructible in the harness asserts that its emitters start and then stop —
 the guard four bugs in this family never had.
@@ -887,9 +898,11 @@ no pre-kill baseline, and the pre-kill set is the whole assertion (Decision 18).
 
 **Model recommendation.** medium — a suite against behaviour E13/E14 have settled.
 
-**Verify.** Revert `BL-236`'s fix locally and confirm this suite fails — that is the strongest
-possible proof, since `BL-236` is a bug this family actually shipped. Restore, then
-`.\RunTests.ps1` full pass.
+**Verified.** Reverted `BL-236`'s fix locally (commented out `Emitters.EndFor(def, anchor)` in
+`FinishEffectInstance`) — the suite failed on exactly `"fire_n_smoke stopped once the death instance
+retired"`, the strongest available proof since `BL-236` is a bug this family actually shipped.
+Restored, then `.\RunTests.ps1` full pass: 393 units, **19/19 engine suites**, **13/13 goldens
+hash-identical**, engine errors clean.
 
 **⚠ Traps.** **Assert the names, not the count** (`BL-241`'s own trap) — though note the per-runtime
 census (Decision 14) narrows that hazard: rows now say which director they came from, so a

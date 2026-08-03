@@ -57,6 +57,15 @@ public static class Suites
 
     public static void Register(List<TestHarness.Suite> into)
     {
+        // Registered FIRST, deliberately: it is the only suite that installs a fake
+        // IEmitterFactory, and TestContext.WithWorld caches one world per chapter — the chapter
+        // it needs (C1, the only one shipping refuel* tanks) is also ctx.Chapter, the one every
+        // other C1-touching suite below shares. Running first means it builds that shared world
+        // while the fake is installed; damage-hd's collision:true immediately after forces a
+        // rebuild with the real factory again (ctx.EmitterFactory is reset by then), so nothing
+        // downstream ever sees the fake. See EmitterLifetime's own doc comment.
+        into.Add(new TestHarness.Suite("emitter-lifetime",
+            "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
         into.Add(new TestHarness.Suite("gauge-colours",
             "the belt indicator's yellow tier is gun-only; hardpoints step green→red", GaugeColours));
         into.Add(new TestHarness.Suite("weapons-defs",
@@ -93,6 +102,87 @@ public static class Suites
             "the node lab's tree row follows live Visible, not the hide button's last action", NodeLabVisibility));
         into.Add(new TestHarness.Suite("stunt-gates",
             "C4 Danger Zones require their authored entry and exit apertures, not a marker sphere", StuntGates));
+    }
+
+    // ---- BL-241: emitter lifetime is observable with no GPU -------------------------------------
+
+    /// <summary>Closes `BL-241`: kills a <c>refuel*</c> tank with a <see cref="CountingEmitterFactory"/>
+    /// installed and asserts on its <c>fire_n_smoke</c> emitter — the def whose <c>ACTIVE_STATE 1</c>
+    /// carries no authored stop of its own, so only `BL-236`'s instance-retirement rule
+    /// (<see cref="AnimRuntime.Retirable"/> → <c>FinishEffectInstance</c> → <see cref="EmitterDirector.EndFor"/>)
+    /// ever ends it.
+    ///
+    /// <para>Asserts THREE distinct facts, not one — the traps `BL-241`'s own fix note and `E15`
+    /// both name: the fake was actually reached (a name census, not a count — several runtimes could
+    /// otherwise mask each other); the emitter started (the census reads a row that is
+    /// <see cref="EmitterCensusRow.Emitting"/>); and once the death instance retires, it stops
+    /// WITHOUT being forgotten (the row is still present, `Emitting` false) — `EndFor`'s disposition,
+    /// never `Discard`'s. A suite reading only "stopped" cannot tell a correct pause from the emitter
+    /// having been torn down by the wrong selector, which is exactly how this family's bugs
+    /// shipped.</para></summary>
+    private static void EmitterLifetime(TestContext ctx)
+    {
+        const string chapter = "C1";   // the only chapter shipping refuel* (5 defs) — matches bounce-launch
+        const string pufferName = "fire_n_smoke";
+        var fake = new CountingEmitterFactory();
+        ctx.EmitterFactory = fake;
+        try
+        {
+            ctx.WithWorld(chapter, collision: false, world =>
+            {
+                var runtime = world.Runtime;
+                DestructibleRegistry.Instance? tank = null;
+                foreach (var inst in runtime.Destructibles.All)
+                {
+                    if (inst.Def.AnimName is { } name
+                        && name.StartsWith("refuel", System.StringComparison.OrdinalIgnoreCase))
+                    {
+                        tank = inst;
+                        break;
+                    }
+                }
+                ctx.Check(tank != null, $"chapter ships a refuel tank chapter={chapter}");
+                if (tank == null)
+                {
+                    return;
+                }
+
+                if (tank.Status == DestructibleRegistry.State.Destroyed)
+                {
+                    runtime.ResetDestructible(tank);
+                }
+
+                var before = new HashSet<string>(runtime.Emitters.Census.Select(r => r.Name));
+                ctx.Check(!before.Contains(pufferName), $"{pufferName} is not yet known before the kill");
+
+                runtime.DamageAt(tank.Anchor, tank.MaxHealth + 1f);
+                ctx.Check(fake.Built.Count > 0, $"the death reached the fake factory count={fake.Built.Count}");
+
+                bool sawEmitting = false;
+                const float tick = 1f / 60f;
+                for (int i = 0; i < 600; i++)   // 10 s, comfortably past the ~5 s the tank's own death instance takes to retire
+                {
+                    runtime.Advance(tick);
+                    if (runtime.Emitters.Census.Any(r => r.Name == pufferName && r.Emitting))
+                    {
+                        sawEmitting = true;
+                    }
+                }
+                ctx.Check(sawEmitting, $"{pufferName} started emitting after the kill");
+
+                bool rowPresent = runtime.Emitters.Census.Any(r => r.Name == pufferName);
+                ctx.Check(rowPresent, $"{pufferName}'s emitter row survives the kill — EndFor pauses, it does not forget");
+
+                bool stillEmitting = rowPresent
+                    && runtime.Emitters.Census.First(r => r.Name == pufferName).Emitting;
+                ctx.Check(!stillEmitting,
+                    $"{pufferName} stopped once the death instance retired (BL-236's own rule)");
+            });
+        }
+        finally
+        {
+            ctx.EmitterFactory = null;
+        }
     }
 
     // ---- pure data -----------------------------------------------------------------------------
@@ -733,9 +823,9 @@ public static class Suites
     /// authored ranges fix exactly (see the constants below). The master seed is pinned
     /// (<c>--run-tests</c> implies <c>--det</c>), but the draw still depends on how many times the
     /// shared <c>anim</c> stream has been drawn from before this suite runs — which suite order
-    /// and a cached world's earlier kills both move. ⚠ Nothing here touches the emitter
-    /// census — <c>TestHarness.BuildWorld</c> builds no puffers (BL-241), and this fix's claims are
-    /// motion and dispatch, neither of which reads the emitter factory.</para></summary>
+    /// and a cached world's earlier kills both move. ⚠ Nothing here reads the emitter census — this
+    /// fix's claims are motion and dispatch, neither of which reads the emitter factory; that census
+    /// is <c>emitter-lifetime</c>'s job.</para></summary>
     private static void BounceLaunch(TestContext ctx)
     {
         // extracted/C1/cam_anim/refuel1-refuel1-healthy.json, the two bounce-terminated events.

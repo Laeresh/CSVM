@@ -11751,3 +11751,43 @@ itself defaults its own field null too, so every existing suite still builds thr
 **Consequence for `E15`.** The fake is proven reachable and honest about revive (`IsValid` stays true
 after `SustainEnd`, matching a real `Puffer`) — `E15` can now install it for the `refuel*` kill and
 assert the emitter census returns to its pre-kill set, closing `BL-241`.
+
+## 2026-08-03 — the suite `BL-241` says cannot exist (`PLAN-deepening` E15), closing `BL-241`
+
+**What landed.** `emitter-lifetime` in `Suites.cs`, the 19th registered suite: kills a C1 `refuel*`
+tank through `DamageAt` with a `CountingEmitterFactory` installed, then asserts on its
+`fire_n_smoke` emitter — the def whose `PUFFER_STATE ACTIVE_STATE 1` carries no authored stop of its
+own, so only `BL-236`'s instance-retirement rule (`AnimRuntime.Retirable` → `FinishEffectInstance` →
+`EmitterDirector.EndFor`) ever ends it. Asserts three distinct facts per `BL-241`'s and `E15`'s own
+traps: the fake was actually reached (a name census, not a count); the emitter started (a census row
+reading `Emitting`); and once the death instance retires, it stops **without being forgotten** — the
+row is still present, `Emitting` false — proving `EndFor`'s disposition, never `Discard`'s.
+
+**A real gap `E14` didn't cover, found while landing this.** `WorldSession.Build` retired
+`AnimRuntime.Emitters`' factory unconditionally whenever `!TexturesOutliveBuild`, with no exception
+for a caller-supplied one — so a `CountingEmitterFactory` installed through `Options.EmitterFactory`
+was swapped out by `SpentEmitterFactory` the instant the bootstrap finished, before the suite's own
+`DamageAt` ever ran (measured: `PufferState(after build)=206` over the suite's 600-tick window, and
+the census only ever showed the four ambient bootstrap emitters, never `fire_n_smoke`). Fixed in
+`WorldSession.cs`: the auto-retire is now `if (o.EmitterFactory == null && !o.TexturesOutliveBuild)`
+— a caller-supplied factory holds no `TextureArchive` reference for `TexturesOutliveBuild` to be
+about, so it is never auto-retired regardless of the flag. Production callers (game/viewer/flight/
+lab) all leave `Options.EmitterFactory` null, so this is behaviourally inert for every real session.
+
+**Registered first, deliberately.** `emitter-lifetime` is the only suite installing a fake
+`IEmitterFactory`, and `TestContext.WithWorld` caches one world per chapter — the chapter it needs
+(C1, the only one shipping `refuel*`) is also the run's default chapter, shared by `damage-hd`,
+`stop-sequence`, `bounce-launch` and `destructible-census`. Running first means it builds that
+shared world while the fake is installed; `damage-hd`'s `collision:true` immediately after forces a
+rebuild with the real factory again, so nothing downstream ever sees the fake.
+
+**Verified — including the negative the item demanded.** Reverting `BL-236`'s own fix locally
+(commenting out `Emitters.EndFor(def, anchor)` in `FinishEffectInstance`) failed the suite on exactly
+`"fire_n_smoke stopped once the death instance retired"` — the strongest available proof, since
+`BL-236` is a bug this family actually shipped. Restored, then `.\RunTests.ps1` full pass: 393 unit
+tests, **19/19 engine suites**, **13/13 goldens hash-identical**, engine errors clean.
+
+**Closes `BL-241`.** Deleted from `backlog.md` along with its now-empty "World animation & effects"
+subsection. The four bugs this family shipped (`BL-233`/`BL-235`/`BL-236`/`BL-242`) still have no
+regression guard of their own, but the seam and the first suite over it now exist for the next one
+to extend.

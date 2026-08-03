@@ -245,7 +245,10 @@ public sealed class WorldSession
         {
             Log.Info("anim", $"{line}");
         }
-        if (!o.TexturesOutliveBuild)
+        // Only the REAL factory this method built itself is tied to `textures`'s scope — a
+        // caller-supplied one (the harness's CountingEmitterFactory) holds no archive reference at
+        // all, so it needs no retirement and TexturesOutliveBuild is not its caller's concern.
+        if (o.EmitterFactory == null && !o.TexturesOutliveBuild)
         {
             animRuntime.Emitters.RetireFactory();
         }
@@ -328,11 +331,13 @@ public sealed class WorldSession
 
         /// <summary>The factory <see cref="AnimRuntime"/> builds <c>PUFFER_STATE</c> emitters
         /// through. Null (the default) means the real <see cref="Anim.PufferEmitterFactory"/> over
-        /// this build's <see cref="TextureArchive"/> and <see cref="EffectsParent"/>; a caller
-        /// supplies its own — the test harness's <c>CountingEmitterFactory</c> — to observe emitter
-        /// lifetime with no GPU. A post-build swap would miss the bootstrap, where most
-        /// <c>PUFFER_STATE</c>s fire, so this is read once, here, not assigned after
-        /// <see cref="Build"/> returns.</summary>
+        /// this build's <see cref="TextureArchive"/> and <see cref="EffectsParent"/>, subject to
+        /// <see cref="TexturesOutliveBuild"/> exactly as before; a caller supplies its own — the
+        /// test harness's <c>CountingEmitterFactory</c> — to observe emitter lifetime with no GPU,
+        /// and a caller-supplied factory is never auto-retired (it holds no archive reference for
+        /// <see cref="TexturesOutliveBuild"/> to be about). A post-build swap would miss the
+        /// bootstrap, where most <c>PUFFER_STATE</c>s fire, so this is read once, here, not assigned
+        /// after <see cref="Build"/> returns.</summary>
         public Anim.IEmitterFactory? EmitterFactory { get; init; }
 
         /// <summary>The caller's <see cref="SoundArchive"/> outlives this build, so
