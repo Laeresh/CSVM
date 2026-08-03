@@ -12830,7 +12830,7 @@ pulling on the path over the same interval so an align rate cannot be backed out
 three owed cockpit judgements, which remain owed because the fix has not landed. `BL-115` keeps a
 pointer for the same reason. The 2026-07-23 entry above now carries a forward-pointer so a reader
 landing on the original bound-is-necessary argument does not stop there.
-
+## 2026-08-04 — M3 polish-6 A1
 **M3 polish-6 A1: the gamez node `active` flag is honoured (2026-08-04).** `GameZ` now parses
 `flags.active` per node (`GameZNode.Active`, default true when flags are absent, mirroring
 `IntersectSurface`); `WorldBuilder.Add` skips building a world-build root outright when it is false —
