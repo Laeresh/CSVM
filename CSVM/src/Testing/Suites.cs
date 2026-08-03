@@ -15,7 +15,7 @@ namespace CSVM.Testing;
 /// on live engine state; none of them re-implements a check the inspection reports already do.
 ///
 /// <para>Expected counts here are <b>golden numbers measured against the retail install</b> — the
-/// data is a fixed input, so 48 weapon defs and 214 C1 destructibles are invariants, not
+/// data is a fixed input, so 48 weapon defs and 210 C1 destructibles are invariants, not
 /// guesses. A suite whose data is absent skips rather than passing.</para>
 /// </summary>
 public static class Suites
@@ -43,12 +43,12 @@ public static class Suites
     /// object the loaded mission authors no def for.</para></summary>
     private static readonly (string Chapter, int Instances, int Anchors)[] Census =
     {
-        ("C1", 214, 145),
+        ("C1", 210, 143),
         ("C1B", 29, 29),
         ("C1C", 28, 28),
         ("C2", 200, 133),
         ("C2B", 28, 28),
-        ("C3", 228, 151),
+        ("C3", 221, 147),
         ("C4", 92, 67),
         ("C5", 176, 112),
     };

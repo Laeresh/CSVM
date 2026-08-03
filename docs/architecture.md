@@ -212,6 +212,8 @@ plain C# objects, reading both the v0.6.1 "legacy" and the fork "unified" shapes
 docs/formats/gamez.md); `WorldTransformOf` resolves a node's world transform without building it.
 Carries the node's `flags.intersect_surface` as `IntersectSurface` (default true when flags are
 absent) — the original's collision-participation flag, honoured by WorldBuilder.NoCollisionNode.
+Carries `flags.active` as `Active` (same default) — the build script's own `NodeSetActive` record,
+honoured by `WorldBuilder.Add`, which skips building an inactive world-build root outright.
 `IsMarkerGizmo(meshIndex)` classifies a mesh as an authoring mark rather than scenery (one flat-
 coloured untextured triangle — see docs/formats/world-structure.md); SceneBuilder draws none.
 ⚠ GameZNode.Index is the flat list position, NEVER the unified JSON `index` (1-based, duplicated);
@@ -353,6 +355,9 @@ Splits the overcast deck into
 textures, billboards, and any node with gamez `intersect_surface` false — the original's own
 collision flag, false on props/debris/effects/glows and the C3 spiderweb (docs/formats/gamez.md);
 honouring it is what lets the plane fly through the web and wreck debris as the original does.
+`Add` skips a world-build root outright when gamez `flags.active` is false (default true when
+absent) — the build script's own `NodeSetActive` record; `BuildNode` (`--node=`) deliberately does
+not check it, since the caller named the subtree explicitly.
 ⚠ `HideUnplacedEntities` is HALF the rule — motion targets still at origin (OBJECT_MOTION_FROM_TO)
   need `RestorePlacedEntities`, the other half; a one-shot sweep breaks them.
 ⚠ `BuildNode` (the `--node=` stage) is deliberately unlike `Build` in three ways, each of which

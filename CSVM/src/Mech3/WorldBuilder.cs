@@ -813,6 +813,8 @@ public sealed class WorldBuilder
         if (nodeIndex < 0 || nodeIndex >= _gamez.Nodes.Count)
             return;
         var node = _gamez.Nodes[nodeIndex];
+        if (!node.Active)
+            return; // the build script's own NodeSetActive off — never built, like the original
         bool isDeck = _deckNodes.Contains(nodeIndex);
         var built = _scene.BuildSubtree(node, SkipWorldNode, NoCollisionNode,
             forceDoubleSided: isDeck);

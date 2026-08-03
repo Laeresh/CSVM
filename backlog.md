@@ -347,28 +347,6 @@ unscheduled.
   hold rule but **has never been observed**, precisely because they are dead — whoever revives them
   owns confirming that. And a live one is the only way `Seek`'s `rot *= Euler(...)` / `scale *= ...`
   lines get exercised at all, so a regression that never reaches one proves nothing about them.
-- `BL-051` **The gamez node `active` flag is never read.** `GameZ` parses no node flags at all (`flags` is
-  touched only for *polygon* flags, `GameZ.cs:278`), so `flags.active` — the shipped on/off state
-  each node was saved with — is ignored and every node is built visible. That flag is the gamez
-  record of the build script's own `NodeSetActive off`: C2's `load.gw` switches `piratezep` off
-  right after loading it, which is exactly why C2's `piratezep` is the one zeppelin in the install
-  shipped `active: false`. **Measured population — small, which is why this has never been
-  noticed:** nodes shipped inactive per chapter are C1 13, C1B 2, C1C 2, C2 3, C2B 2, C3 6, C4 6,
-  C5 2, and of those only **four are world-build roots**: C1 `fuel_truck01`/`fuel_truck02`,
-  C2 `piratezep`, C3 `barracuda`. All four are currently masked by something else (a mission setup
-  script, or polish-4 item 4's unplaced sweep), so there is no *known* visible symptom — but the
-  masking is coincidental, and C2/M01–M03 do not name `piratezep` in their setup scripts at all, so
-  C2 is where a symptom would surface first.
-  ⚠ **Traps.** **Do not fix this while the item-3 fidelity question is open** (C1 IA1 oil tanks
-  already destroyed at spawn, under "Open fidelity questions"): C1's `fuel_truck01`/`fuel_truck02`
-  are shipped inactive and that investigation turns on whether those trucks are present in IA1 —
-  honouring the flag would hide them and silently change the very thing it is blocked on testing.
-  The flag is **not** a fix for the item-4 symptom and must not be confused with it: C5's
-  `piratezep` ships `active: true`. And do not extend this to other node flags without a survey —
-  `terrain` in particular is **not** a visibility flag, it marks world-space map geometry, and is
-  what separates C3's `zepbridge1/2` and C4/C5's `zepdock` (identity transform, geometry already in
-  world coordinates, correctly drawn) from the zeppelin vehicles.
-
 - `BL-053` **`node_bias` already spans 1.22–2.86 priority levels per chapter** (C1 1.77, C1B 1.40,
   C1C 1.41, C2 1.24, C2B 1.22, C3 1.35, C4 2.07, **C5 2.86**). `docs/architecture.md` recorded
   this as an accepted corner case ("a prio-0 node >~4000 indices later can out-bias a prio-1

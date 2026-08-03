@@ -75,7 +75,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — surfaces: what the builders drop
 
-1. ☐ A1 `BL-051` — honour the gamez node `active` flag
+1. ☑ A1 `BL-051` — honour the gamez node `active` flag
 2. ☐ A2 `BL-056` — render the per-polygon second material pass
 3. ☐ A3 `BL-058` — answer the C5 doubled-buildings question (post-subface check)
 4. ☐ A4 `BL-053` — dense cross-node conflict rank for the depth bias
@@ -143,6 +143,12 @@ visibility flag (it marks world-space map geometry; C3 `zepbridge1/2`, C4/C5 `ze
 flag is **not** a fix for the polish-4 unplaced-sweep symptom — C5's `piratezep` ships
 `active: true`. (c) C2/M01–M03 do not name `piratezep` in their setup scripts, so C2 is where a
 behaviour difference would first be visible — look there, not only at C1.
+
+**Landed 2026-08-04.** `GameZ.Active` + `WorldBuilder.Add`'s build-time skip, exactly as scoped.
+`RunTests.ps1` clean (13/13 goldens hash-identical); `destructible-census` moved exactly as
+predicted and was rebaselined (C1 214→210/145→143, C3 228→221/151→147). A git-stash A/B on C2
+isolated the whole effect to `piratezep` (383 mesh instances, matching its own subtree size);
+C5's `piratezep` (`active: true`) confirmed unaffected. Full record: `docs/HISTORY.md` 2026-08-04.
 
 ## A2 ☐ `BL-056` — render the per-polygon second material pass
 

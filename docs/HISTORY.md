@@ -12830,3 +12830,31 @@ pulling on the path over the same interval so an align rate cannot be backed out
 three owed cockpit judgements, which remain owed because the fix has not landed. `BL-115` keeps a
 pointer for the same reason. The 2026-07-23 entry above now carries a forward-pointer so a reader
 landing on the original bound-is-necessary argument does not stop there.
+
+**M3 polish-6 A1: the gamez node `active` flag is honoured (2026-08-04).** `GameZ` now parses
+`flags.active` per node (`GameZNode.Active`, default true when flags are absent, mirroring
+`IntersectSurface`); `WorldBuilder.Add` skips building a world-build root outright when it is false —
+the compiled record of the level's own `NodeSetActive off`. `BuildNode` (`--node=`) deliberately does
+not check it, since a `--node=` request names its subject explicitly. Four world-build roots ship
+`active: false`: C1 `fuel_truck01`/`fuel_truck02`, C2 `piratezep`, C3 `barracuda` — the rest of the
+install's inactive nodes (`BL-051`'s per-chapter counts) are non-root descendants this item does not
+touch. The blocking fidelity question (`BL-099`, C1 IA1 oil tanks) was answered 2026-08-02, clearing
+the item to land.
+
+This is a separate mechanism from `MissionSetup`'s existing `interp.json` handling: `MissionSetup.Load`
+only reads per-mission `support\<chapter>\<mission>.gw` scripts, never the chapter-shared `load.gw`
+that ships `NodeSetActive off piratezep` for C2 — so the compiled gamez flag is the only path by which
+this engine ever honours that particular call. The two mechanisms read disjoint files and cannot
+double-apply.
+
+**Verified.** `.\RunTests.ps1`: build/units/engine/goldens all pass, 13/13 golden hashes unchanged
+(none of the four masked roots were on-camera in any pinned shot — consistent with `BL-051`'s own
+"no known visible symptom" note). `destructible-census` moved exactly as predicted and was rebaselined
+in `Suites.cs`: C1 214→210 instances / 145→143 node groups (the two fuel trucks), C3 228→221 / 151→147
+(`barracuda`); C2/C1B/C1C/C2B/C4/C5 unchanged. Targeted: a git-stash A/B on `--freecam --chapter=C2`
+isolated the fix's whole effect to `piratezep` — 1995→1612 mesh instances, 1133→942 uv-clamped
+surfaces, exactly matching `piratezep`'s own subtree size measured via `--viewer --node=piratezep`
+(383 mesh instances, 191 uv-clamped surfaces); the mission-setup log now reports it unresolved
+("1 name(s) not in the built world"), where it previously resolved and was hidden only by the
+origin-parked heuristic. C5's `piratezep` (`active: true`) was confirmed unaffected: still built, and
+still switched off only by the pre-existing `HideUnplacedEntities` origin heuristic, not by this item.
