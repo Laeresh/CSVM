@@ -37,3 +37,4 @@ per-item shape), with the right sections stubbed for you to fill in.
 | [PLAN-m3-polish-3.md](PLAN-m3-polish-3.md) | M3 polish run 3: the 2026-07-31 cockpit-pass follow-ups — imperceptible feedback, destructible behaviour, weapon visuals, rockets (11 items, Waves A–D) | 2026-08-01 |
 | [PLAN-m3-polish-4.md](PLAN-m3-polish-4.md) | M3 polish run 4: impact feedback, test affordances, blast radius (10 items; 1 disproven) | 2026-08-01 |
 | [PLAN-m3-polish-5.md](PLAN-m3-polish-5.md) | M3 polish run 5: effect reachability, world-render fidelity, the instruments (10 items; 1 disproven) | 2026-08-02 |
+| [PLAN-bounce-launch.md](PLAN-bounce-launch.md) | Bounce-terminated launches: solve + fly + land the 150 upward `BL-240` debris pieces (6 items, Wave A; falls split out as `BL-245`) | 2026-08-03 |

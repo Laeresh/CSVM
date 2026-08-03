@@ -10527,7 +10527,10 @@ was simply never able to build before.
 **Re-diagnosed against the compiled data later the same day**, which moved both halves. The second
 is not an effects bug at all and split out as `BL-240`: a bounce-terminated `OBJECT_MOTION` carries
 no `RUN_TIME`, our `ballTime <= 0f` branch poses it at rest, and `part3`/`part4` therefore never
-launch — 529 authored debris launches install-wide. The first is not downstream of `BL-235` either
+launch — 529 authored debris launches install-wide. **This "529, one population" framing did not
+survive `BL-240`'s own re-census: only 152 have an upward launch with an apex to solve; the other
+379 have none and are the still-open `BL-245`. `BL-240` itself closed 2026-08-03 — see that date's
+`PLAN-bounce-launch` entry below.** The first is not downstream of `BL-235` either
 (`refuel*`'s instance drains at ~5 s, the crash def's `Loop{-1}` never does), and the claim that
 most of the plateau is ambient dust does not survive arithmetic: five defs × two leaked emitters is
 10 of the 12 above baseline.
@@ -11271,3 +11274,45 @@ rows meant killing each building twice and the second kill was a no-op on someth
 
 `.\RunTests.ps1` **PASS**: 352 units, 18/18 engine suites, engine errors clean, 13/13 goldens
 hash-identical.
+
+## 2026-08-03 — `PLAN-bounce-launch` closes: the launch-height rule recorded as a choice, `BL-240` retired
+
+**`PLAN-bounce-launch` is COMPLETE (Wave A, 6/6).** A1–A5 solved, dispatched, and guarded the flight
+for a bounce-terminated `OBJECT_MOTION` that launches upward; A6 is the closing record. Census over
+all 17,568 extracted defs, reproduced exactly across A1's probe and A2–A5's implementation: **7,458**
+`ObjectMotion` events, **733** carrying a `bounce_sequence`, **529** of those with no authored
+`RUN_TIME` (217 def files) — the idiom for "fly until you land." Those 529 split **152/379**:
+
+| shape | count | outcome |
+|---|---|---|
+| upward launch, `translation_range` elev +60…+85°, gravity < 0 | **152** (150 in executed `sequences`) | **Fixed here.** `MotionRuntime.FlightToLaunchHeight` solves the apex, the piece flies, lands, and dispatches `sparkout3`/`sparkout4`/`treasure_splash`. |
+| free-fall from rest, `translation (0,0,0)`, gravity −9.8 | 335 | No apex — `t = 0` from the same solve. Still deferred, `BL-245`. |
+| thrown downward, elev −70…−90° | ~17 | Same — no apex, `BL-245`. |
+| `translation (0,−3,0)`, gravity 0 | 8 | Constant descent, no parabola at all — `BL-245`. |
+
+**The landing-height rule is recorded as a ⚠ CHOICE, not a decode**, beside `MotionRuntime`'s existing
+TUNE caveats and in `docs/formats/destructibles.md`'s "Debris tumbles" bullet (extending the
+`ground-rest is deferred` note at what was `:179`/`:239` to say what happens for each of the two
+populations) and `docs/formats/anim-definitions.md`'s `GRAVITY` bullet: the original tested real
+ground via `do_intersections`; a down-ray would replace it, and the two agree wherever the ground
+under the piece is flat, which is every one of the 150 reachable cases measured.
+
+**Three claims this plan's own grilling session disproved, so they don't get to survive it:**
+
+1. *"529 authored debris launches never move"* — `BL-240`'s original, uniform framing. The re-census
+   split it: only 152 have an upward launch with negative gravity; 335 start from rest, 8 `chuteman`
+   carry zero gravity, ~17 are thrown downward — for all 379 the solve correctly returns `t = 0`, the
+   bug those still carry, unchanged.
+2. *"Pin the instance on any live motion"* — the first shape considered for A4. `SpinMotion` never
+   reports `Finished` for an unbounded spin (`_runTime > 0f && _t >= _runTime`), and 2,181 of those
+   sit across 1,037 def files; that predicate would have made every one of those instances immortal,
+   re-opening `BL-236` install-wide. A4 pins on a pending bounce alone, which self-expires.
+3. *"Returning a real duration will shift the rest of the sequence"* — measured false. All 150
+   launches are the last event of their sequence (`{0: 150}`, no exceptions), so there is no
+   successor for the new duration to push.
+
+**`BL-240` closed** via `/close-backlog-item` — the entry is deleted from `backlog.md`, not marked
+fixed. `BL-245` (the 379 falls, blocked on a ground ray) survives the closure and stays filed under
+`backlog.md`'s "Blocked / deferred," cross-referenced from both doc pages above.
+
+`PLAN-bounce-launch.md` moves to `docs/plans/` with its `✅ COMPLETE` banner and a row in `plans.md`.

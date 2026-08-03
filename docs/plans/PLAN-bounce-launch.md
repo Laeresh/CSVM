@@ -1,8 +1,11 @@
 # Bounce-terminated launches — give `BL-240`'s debris a real flight
 
-**ACTIVE PLAN** (written 2026-08-02). It sits in `docs/`, which by this repo's convention makes it
-a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
-`COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
+> **✅ COMPLETE — 2026-08-03.** All 6 items landed (Wave A). A bounce-terminated `OBJECT_MOTION`
+> that launches upward with no authored `RUN_TIME` (152 events, 150 reachable) now solves its own
+> flight time, flies its parabola, dispatches its `BOUNCE_SEQUENCE` on landing, and holds its
+> instance open to receive it — guarded by the `bounce-launch` engine suite. The other 379
+> bounce-terminated events are FALLS with no apex; they stayed out of scope from the start and are
+> `BL-245`, blocked on a ground ray. `BL-240` closed via `/close-backlog-item`.
 
 This plan delivers the launch half of `BL-240`: an `OBJECT_MOTION` that omits `RUN_TIME` and names a
 `BOUNCE_SEQUENCE` gets a solved flight time, actually flies, and dispatches its bounce sequence when
@@ -130,7 +133,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 3. ☑ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
 4. ☑ Keep the instance alive while a bounce is pending
 5. ☑ Engine suite: motion launched, time in band, `sparkoutN` fired
-6. ☐ Record the choice and close `BL-240`
+6. ☑ Record the choice and close `BL-240`
 
 ## Dependency and parallelism notes
 
@@ -472,7 +475,16 @@ unchanged green is not evidence unless it has been seen able to fail.
 `translation_range`. Do not extend this suite to the emitter census — that needs `BL-241`'s
 `TexturesOutliveBuild` change and is a separate item.
 
-## A6 ☐ Record the choice and close `BL-240`
+## A6 ☑ Record the choice and close `BL-240`
+
+**Landed (2026-08-03).** The ⚠ CHOICE note sits beside `MotionRuntime`'s existing TUNE caveats
+(`MotionRuntime.cs`'s gravity-channel `<item>`), naming `FlightToLaunchHeight` and pointing at
+`docs/formats/destructibles.md`'s "Debris tumbles" bullet for the 152/379 split.
+`docs/formats/destructibles.md:172-180/227-243` and `docs/formats/anim-definitions.md:173-177` now
+say what happens for each population instead of "ground-rest is deferred" undifferentiated. The dated
+`docs/HISTORY.md` entry carries the census and the three disproven claims. `BL-240` closed via
+`/close-backlog-item` — deleted, not marked fixed — leaving `BL-245` open and cross-referenced in both
+`backlog.md`'s "Blocked / deferred" section and the docs above.
 
 **Goal.** The next cold reader finds the landing rule marked as a choice, with the ray named as what
 replaces it — and `backlog.md` no longer carries a solved item.

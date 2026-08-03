@@ -37,8 +37,16 @@ namespace CSVM.Mech3.Anim;
 ///   <c>nom_gravity</c> of 20: the census carries a literal <b>−9.8</b> on 173 events (and −10
 ///   on 400), which is Earth gravity spelled out. The weak values (−1/−2/−3) sit on smoke
 ///   trails, where floating is the authored look. <c>do_intersections</c> ground-rest and the
-///   <c>bounce_sequence</c> re-launch are a Layer-1.5 follow-up (they need a physics ray) — the
-///   body integrates freely over the run time and then finishes.</item>
+///   <c>bounce_sequence</c> re-launch are still a Layer-1.5 follow-up (they need a physics ray;
+///   <c>BL-245</c>) for the 379 events that FALL — no apex, so no parabola to solve — which the
+///   body still integrates freely over the run time and then holds at rest.
+///   ⚠ For the other 152 (150 reachable) that LAUNCH upward with no authored <c>RUN_TIME</c>,
+///   <see cref="FlightToLaunchHeight"/> ends the flight when the parabola returns to launch
+///   height instead: a CHOICE, not a decode — the original tested real ground via
+///   <c>do_intersections</c>, which a down-ray would replace. It agrees wherever the ground under
+///   the piece is flat, which is every reachable case measured (debris off a ground-sitting
+///   structure). See <c>docs/formats/destructibles.md</c>'s "Debris tumbles" bullet for the
+///   split.</item>
 /// <item><c>forward_rotation.Time.initial</c> is a tumble RATE (rad/s) about the node's local
 ///   X axis (a piece = 15.708 = 900°/s). ⚠ the axis is a reasoned choice — the data carries a
 ///   scalar rate, not an axis — an end-over-end tumble about the local X reads well for

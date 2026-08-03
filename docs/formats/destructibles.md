@@ -175,9 +175,11 @@ loop of 13 iterations on the `splashbase` texture (`PUFFER_STATE` schema in
 HP (C21), the progressive damage stages (C22), weapon fire that spends that HP (C23), the death
 sequence at zero (C24), the collision that goes with it (C25), the debris **tumble** (C26), the
 **`WeaponOrCollideHit` collision path** (C27), and **reset/restore** (C28). Two pieces are deliberately
-deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and the debris
-**ground-rest** (the `do_intersections`/`bounce_sequence` half — a Layer-1.5 follow-up needing a
-physics ray). A format reader should know the current wiring:
+deferred out of Wave C: the death **audio** (the one-shot `Sound` events — D31) and, for most of the
+debris, **ground-rest** (the `do_intersections`/`bounce_sequence` half — a Layer-1.5 follow-up needing
+a physics ray, `BL-245`). `PLAN-bounce-launch` closed the other slice: a bounce-terminated launch with
+an apex now flies its own parabola and lands for real — see the "Debris tumbles" bullet below for
+which pieces that covers. A format reader should know the current wiring:
 
 - **Both source forms of `DAMAGE_SEQUENCE` are read.** The compiled archives deliver it as an
   ordinary sequence literally named `DAMAGE_SEQUENCE`; `AnimDefs.cs`'s reader front-end now parses
@@ -235,10 +237,27 @@ physics ray). A format reader should know the current wiring:
   water tower launches **2** visible pieces (`h2twr_middle` arcs from y≈5 to y≈19 in 0.8 s, tumbling,
   `run_time` 5 s), C1 buildings **7** each, passenger planes **2**; deaths that author no
   `OBJECT_MOTION` (the AA guns, `air_gen`) correctly launch **0**.
-  - **Ground-rest is deferred (Layer-1.5).** `MotionRuntime` integrates the piece freely over its
-    `run_time` then holds its final pose; the `do_intersections` ground-collision and the
-    `bounce_sequence` re-launch (both need a physics ray) are not simulated. The pieces arc and tumble
-    and are then hidden by the sequence's own `OBJECT_ACTIVE_STATE`, so they read fine without it.
+  - **Ground-rest is split, `PLAN-bounce-launch` (2026-08-03).** A census over all 17,568 extracted
+    defs found 733 `OBJECT_MOTION` events naming a `bounce_sequence`, 529 of those with no authored
+    `RUN_TIME` (217 def files) — the shape that means "fly until you land." Those 529 are two
+    populations, not one:
+    - **152 (150 reachable in an executed `sequences`) are upward launches** — positive launch speed,
+      negative gravity, so the parabola has an apex. For these, `MotionRuntime.FlightToLaunchHeight`
+      solves `t = 2·v0.y / |accel.y|` and ends the flight there instead of holding the final pose: a
+      **⚠ CHOICE, not a decode** — the original tested real ground collision via `do_intersections`;
+      a down-ray would replace it, and agrees with the launch-height solve wherever the ground under
+      the piece is flat, which is every one of the 150 measured (debris off a ground-sitting
+      structure). Landing then dispatches the named `BOUNCE_SEQUENCE` (`default` only — none of the
+      150 carry a `water`/`lava` branch), which runs the piece's own `OBJECT_ACTIVE_STATE …
+      INACTIVE` and stops its trail puffer.
+    - **The other 379 have no apex and are still deferred (Layer-1.5, `BL-245`, blocked on a ground
+      ray).** 335 free-falling zeppelin `gasbag1`/`crashnode1` pieces start from rest, ~17 lifeboats
+      and turret parts are thrown downward, and 8 zero-gravity `chuteman` descents fall at a constant
+      rate — none has a parabola to solve, and their `BOUNCE_SEQUENCE` tables carry live
+      `water`/`lava` branches that need a struck collider to choose between, which the analytic solve
+      above cannot supply. `MotionRuntime` still integrates these freely over the run time and then
+      holds the final pose; the pieces arc/fall and are then hidden by the sequence's own
+      `OBJECT_ACTIVE_STATE`, so they read fine without it.
 - **Death audio (D31) is still stubbed.** The explosion is silent; the one-shot `Sound` events are
   not yet played.
 - **Flying into a collide-destructible breaks it (C27).** `ACTIVATION` decides what a plane
