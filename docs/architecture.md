@@ -709,7 +709,11 @@ silently diverge; each still owns its own step size.
 `ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
 (+ `HasBlastDamage`) — plus the pure static `Resolve` that computes it from a `WeaponDef` and a
 `SurfaceClass`. No Godot type, no scene, no sink, no sound archive, so the dispatch's one decision
-is readable by a unit test; `ImpactOutcomeTests` is that test. `ProjectilePool.Impact` classifies the
+is readable by a unit test; `ImpactOutcomeTests` is that test, including a suite over all 48
+shipped weapons × the three reachable surfaces asserting the *rule* (an effect or a stand-in but
+never neither; a resolved sound names either a `SoundDefs` entry or a `SOUND_GROUPS` name;
+`HasBlastDamage` matches the raw damage/radius fields) rather than a table of expected per-weapon
+outcomes. `ProjectilePool.Impact` classifies the
 surface and calls it, then `Apply` performs the result; `ProjectilePool.HasBlastDamage` is the
 weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once.
 ⚠ `modelResolved` and `hasEffectsRuntime` are **inputs**, not things `Resolve` discovers: whether
@@ -722,6 +726,13 @@ weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once
 ⚠ `Player`/`Enemy` get no case of their own — unreachable in M3, they read off the table and fall
   to the spark like any unbound class. Do not author behaviour for them; and note the reader drops
   an all-null class entry, so "present but empty" and "absent" are the same thing here.
+⚠ `Quicksand` is unreachable too, for a different reason than `Player`/`Enemy`: `ProjectilePool
+  .ClassifySurface` and `SceneBuilder.ClassifySurface(string?)` only ever stamp a collider `water`
+  or `buildings`, defaulting everything else — including quicksand terrain — to `Default`
+  (`WeaponLab.SurfaceNames` agrees: three classes, not four). A weapon's `quicksand` IMPACT entry
+  is still real data the reader parses correctly; `Resolve` is just never called with it. `B5`'s
+  suite runs the 48 weapons across `{Default, Water, Buildings}` only — a fourth case would be
+  invented coverage.
 
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated

@@ -132,7 +132,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 3. ☑ `ImpactOutcome` + a pure `Resolve`
 4. ☑ Route `Impact` through `Resolve` → `Apply`
-5. ☐ Unit suite: 48 weapons × the reachable surfaces
+5. ☑ Unit suite: 48 weapons × the reachable surfaces
 
 ### Wave C — a sink seam under the log
 
@@ -321,7 +321,7 @@ produced anything — preserve that precedence exactly or a weapon quietly gains
 `ApplyDamage` runs its own `IntersectShape` blast query independent of the primary raycast; that
 query stays in `Apply`, not in `Resolve`.
 
-## B5 ☐ Unit suite: 48 weapons × the reachable surfaces
+## B5 ☑ Unit suite: 48 weapons × the reachable surfaces
 
 **Goal.** The first automated coverage this dispatch has ever had, at the seam B3 created.
 

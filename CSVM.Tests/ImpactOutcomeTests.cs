@@ -1,5 +1,7 @@
+using System.Collections.Generic;
 using System.IO;
 using CSVM.Flight;
+using CSVM.Mech3;
 using Xunit;
 
 namespace CSVM.Tests;
@@ -15,6 +17,23 @@ namespace CSVM.Tests;
 /// </summary>
 public class ImpactOutcomeTests
 {
+    /// <summary>The surfaces a round can actually strike in M3. Not the whole
+    /// <see cref="SurfaceClass"/> enum: <c>Player</c>/<c>Enemy</c> are the already-documented
+    /// unreachable pair (no aircraft physics body), and <c>Quicksand</c> turns out to be a third —
+    /// <c>ProjectilePool.ClassifySurface</c> (<c>Projectile.cs:380</c>) and the collider tagger
+    /// behind it, <c>SceneBuilder.ClassifySurface(string?)</c> (<c>SceneBuilder.cs:389</c>), only
+    /// ever stamp <c>"water"</c> or <c>"buildings"</c> and default everything else — including
+    /// quicksand terrain — to <c>Default</c>. <c>WeaponLab</c>'s own manual test rig agrees
+    /// (<c>SurfaceNames</c>, <c>WeaponLab.cs:48</c>: "the three surface classes a viewer target can
+    /// carry"). A weapon's <c>quicksand</c> IMPACT entry (e.g. <c>wep_04</c>'s) is real data the
+    /// reader must still parse correctly, but no code path ever asks <see cref="ImpactOutcome.Resolve"/>
+    /// for it — a suite case for it would be invented coverage, the exact trap B3 named for
+    /// <c>Player</c>/<c>Enemy</c>.</summary>
+    private static readonly SurfaceClass[] ReachableSurfaces =
+    {
+        SurfaceClass.Default, SurfaceClass.Water, SurfaceClass.Buildings,
+    };
+
     private static string SharedZrdr =>
         SessionPaths.PreferUnzipped(Path.Combine(TestData.ExtractedRoot!, "zrdr.zip"));
 
@@ -183,6 +202,69 @@ public class ImpactOutcomeTests
         Assert.Null(outcome.EffectName);
         Assert.Null(outcome.Sound);
         Assert.Equal(ImpactStandIn.DirtDebris, outcome.StandIn);
+    }
+
+    // ---- B5: the 48 weapons x the reachable surfaces -----------------------------------------
+
+    /// <summary>The rule, not a snapshot: every one of the 48 shipped weapons, at every reachable
+    /// surface, resolves an outcome that is coherent by three checks that hold regardless of which
+    /// weapon or surface it is — never a table of expected per-row values, which is exactly the
+    /// form the plan's trap warns would break on the next weapon-polish item.</summary>
+    [ExtractedDataFact]
+    public void Every48WeaponsResolvesACoherentOutcomeAtEveryReachableSurface()
+    {
+        var weapons = WeaponDefs.Load(SharedZrdr);
+        Assert.Equal(48, weapons.All.Count);
+
+        var sounds = SoundDefs.Load(SharedZrdr);
+        var groups = SoundDefs.LoadGroups(SharedZrdr);
+        var violations = new List<string>();
+
+        foreach (var weapon in weapons.All)
+        {
+            // HasBlastDamage's rule, re-derived from the raw fields rather than read back off the
+            // outcome it is meant to check — a positive-damage weapon with an authored radius owes
+            // a blast; a zero-damage flash/flare special's radius is an effect radius only.
+            var expectedBlast = weapon.HealthDamage is > 0f && weapon.ImpactProximity is > 0f;
+
+            foreach (var surface in ReachableSurfaces)
+            {
+                var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime: true);
+                var where = $"{weapon.Id} ({weapon.Name}) / {surface}";
+
+                if (outcome.EffectName == null && outcome.StandIn == ImpactStandIn.None)
+                    violations.Add($"{where}: neither an effect name nor a stand-in");
+
+                // A SOUND token in the IMPACT table names either a plain SETS def (snd_*) or a
+                // SOUND_GROUPS entry (e.g. bullet_hit_sg) resolved through the group table at play
+                // time (ImpactOutcome's own doc comment) — a real key can be absent from SoundDefs
+                // and still be valid, so the coherent check is the union of both tables.
+                if (outcome.Sound != null && !sounds.ContainsKey(outcome.Sound) && !groups.ContainsKey(outcome.Sound))
+                    violations.Add($"{where}: sound '{outcome.Sound}' is neither a SoundDefs entry nor a SOUND_GROUPS name");
+
+                if (outcome.HasBlastDamage != expectedBlast)
+                    violations.Add($"{where}: HasBlastDamage was {outcome.HasBlastDamage}, expected {expectedBlast}");
+            }
+        }
+
+        Assert.True(violations.Count == 0, string.Join("\n", violations));
+    }
+
+    /// <summary>The third hand-picked case the review named: a rocket's authored splash model at
+    /// water beats the stand-in ladder entirely, same as the synthetic case in
+    /// <see cref="AResolvedModelLeavesNoStandIn"/> but against the shipped incendiary rocket's own
+    /// table row rather than a hand-built weapon.</summary>
+    [ExtractedDataFact]
+    public void ARocketOnWaterResolvesTheGamezSplashModel()
+    {
+        var incendiary = WeaponDefs.Load(SharedZrdr).Get("wep_04")!;
+
+        var outcome = ImpactOutcome.Resolve(incendiary, SurfaceClass.Water, modelResolved: true, hasEffectsRuntime: true);
+
+        Assert.Equal("bsplsh.flt", outcome.EffectName);
+        Assert.Equal("snd_bsplash", outcome.Sound);
+        Assert.Equal(ImpactStandIn.None, outcome.StandIn);
+        Assert.True(outcome.HasBlastDamage);
     }
 
     private static WeaponDef Gun() => new() { Id = "test_gun", Caliber = 30, IsCannon = true };

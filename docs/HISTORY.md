@@ -11498,3 +11498,37 @@ evidence the routing is live, not that nothing is wired.
 **Not covered by a capture:** the `Buildings` → ricochet branch. No pose found in C1/C2/C5 hits a
 `buildings`-classed collider — the C5 skyscraper clutter classifies `Default` — so that branch rests
 on `ImpactOutcomeTests`' rule cases, as does the explosion stand-in.
+
+## 2026-08-03 — the dispatch's first automated coverage: 48 weapons across the reachable surfaces (`PLAN-deepening` `B5`)
+
+**What landed.** No behaviour change; this is the suite `B3`'s Verify deferred to. `ImpactOutcomeTests` gets
+a loop over every one of the 48 shipped `WeaponDef`s x `{Default, Water, Buildings}`, asserting the
+*rule* rather than a snapshot: `Resolve` always returns an effect name or a stand-in, never neither;
+a non-null `Sound` names either a `SoundDefs` SETS entry or a `SOUND_GROUPS` name (the IMPACT table
+mixes both — `bullet_hit_sg`/`ground_mixed_exp_sg`/`air_mixed_exp_sg` resolve only through groups);
+and `HasBlastDamage` matches the raw `HealthDamage`/`ImpactProximity` fields, re-derived independently
+rather than read back off the outcome it checks. A second new case runs the review's third hand-picked
+example against real data: the incendiary rocket (`wep_04`) at `Water` with `modelResolved: true`
+resolves the `bsplsh.flt` gamez model, not a stand-in.
+
+**The trap this item found, not just the one it was warned about.** `SurfaceClass` has six values
+and `B3`'s trap already named `Player`/`Enemy` unreachable in M3. Tracing "the reachable surfaces"
+for this suite's scope turned up a third: `ProjectilePool.ClassifySurface` and the collider tagger
+behind it, `SceneBuilder.ClassifySurface(string?)`, only ever stamp a struck collider `water` or
+`buildings` and default everything else — including quicksand terrain — to `Default`.
+`WeaponLab.SurfaceNames` (the weapon lab's own manual test rig) independently agrees: three classes,
+not four. `Quicksand`'s IMPACT entries (e.g. `wep_04`'s) are still real data the reader parses
+correctly; `Resolve` is simply never called with that surface anywhere in the engine. The suite runs
+the three reachable classes only — a fourth case would have been invented coverage, exactly the
+failure mode the plan's Ground rules warn against. `docs/architecture.md`'s `ImpactOutcome.cs` entry
+records the finding.
+
+**How verified.** Broke `Resolve`'s surface lookup deliberately (always read the `default` entry,
+never the struck surface's own) and reran the full `ImpactOutcomeTests` fixture: 3 of 20 tests failed
+(the slug's per-class table read, the unreachable-class-vs-flak read, and the new water-splash case) —
+more than one, as the plan's Verify asks. The generic 48-weapon suite itself did not fail on this
+break, because a fallback to `default` is still internally coherent by the three rules it checks;
+the per-weapon table-fidelity assertions already in the file are what catch a wrong-surface read, and
+that division of labour is intentional — restored, then `.\RunTests.ps1` full pass: 381 units (up
+from 379; `ImpactOutcomeTests` grows from 18 methods to 20), 18/18 engine suites, 13/13 goldens
+hash-identical.
