@@ -29,9 +29,10 @@ namespace CSVM.UI;
 /// <c>stock_loadouts.json</c>. "copy CLI args" writes the arguments that reproduce the current
 /// selection, as <see cref="LiveryLab"/> does.</para>
 ///
-/// <para>The parked host (<c>--weapon-test</c>) builds the same node without a controller: no live
-/// loadout to drive, so the panel's edits are inert and only <see cref="RunSelfTest"/> — the
-/// 48-weapon mount-and-fire pass check, which spawns into the caller's pool directly — runs.</para>
+/// <para>Without a controller (no host) there is no live loadout to drive and the panel's edits are
+/// inert — nothing in the shipping paths builds it that way since M3 D9 moved the
+/// <c>--weapon-test</c> 48-weapon pass check out to <see cref="Flight.WeaponBench"/>. This node
+/// takes no <see cref="ProjectilePool"/> at all.</para>
 /// </summary>
 public sealed partial class WeaponLab : Node3D
 {
@@ -54,7 +55,6 @@ public sealed partial class WeaponLab : Node3D
     private readonly WeaponDefs _weapons;
     private readonly Camera3D? _camera;
 
-    private readonly List<WeaponDef> _all;        // every weapon, for the self-test
     private readonly List<WeaponDef> _gunWeapons = new();
     private readonly List<WeaponDef> _rocketWeapons = new();
     private readonly List<Mount> _gunMounts = new();
@@ -64,10 +64,6 @@ public sealed partial class WeaponLab : Node3D
     // (--weapon-test) host. Set means there IS a live loadout to write into.
     private readonly Flight.FlightController? _host;
     private readonly Loadout? _loadout;
-
-    // The self-test's spawn target — the caller's pool. Never cleared and never given a listener:
-    // in a flight session it is the whole session's pool.
-    private readonly ProjectilePool? _pool;
 
     // The fit the session launched with (stock, or whatever --rocket/--loadout made it), captured
     // before the panel touches anything — what "reset to stock" restores.
@@ -112,7 +108,7 @@ public sealed partial class WeaponLab : Node3D
     private bool _suppress; // set while rewriting widgets from a state change
 
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout, string planeModel,
-        Flight.FlightController? host = null, ProjectilePool? pool = null, Camera3D? camera = null)
+        Flight.FlightController? host = null, Camera3D? camera = null)
     {
         _plane = plane;
         _weapons = weapons;
@@ -120,9 +116,7 @@ public sealed partial class WeaponLab : Node3D
         _planeModel = planeModel;
         _host = host;
         _loadout = loadout;
-        _pool = pool;
-        _all = new List<WeaponDef>(weapons.All);
-        foreach (var w in _all)
+        foreach (var w in weapons.All)
         {
             (w.IsGun ? _gunWeapons : _rocketWeapons).Add(w);
         }
@@ -262,61 +256,6 @@ public sealed partial class WeaponLab : Node3D
         }
         _cycleTick = 0;
         StepWeapon(1);
-    }
-
-    /// <summary>Mounts and fires every one of the 48 weapons once — each from a mount of its own
-    /// class (a gun from the gun groups, a hardpoint weapon from the pylons) — catching any that
-    /// throw. Returns the report (the caller also writes it).</summary>
-    public string RunSelfTest() => SelfTest().Report;
-
-    /// <summary><see cref="RunSelfTest"/> with its counts kept, so an automated suite asserts on
-    /// numbers instead of parsing the report back.</summary>
-    public SelfTestResult SelfTest()
-    {
-        var sb = new StringBuilder();
-        var gunMount = _gunMounts.Count > 0 ? _gunMounts[0] : null;
-        var pylonMount = _pylonMounts.Count > 0 ? _pylonMounts[0] : null;
-        sb.AppendLine($"weapon-test: plane {_planeModel}, {_all.Count} weapons "
-                      + $"({_gunWeapons.Count} gun, {_rocketWeapons.Count} hardpoint); "
-                      + $"gun mount '{gunMount?.Label ?? "none"}', pylon mount '{pylonMount?.Label ?? "none"}'");
-        int ok = 0, err = 0, skip = 0;
-        foreach (var w in _all)
-        {
-            // A hardpoint weapon fires from a pylon; a gun from a gun group. Fall back to the other
-            // bank's mount only if this plane has none of its own (never happens for the 11).
-            var mount = w.IsGun ? (gunMount ?? pylonMount) : (pylonMount ?? gunMount);
-            string kind = w.IsRocket ? "rocket" : w.IsGun ? "gun" : "other";
-            if (mount == null || _pool == null)
-            {
-                skip++;
-                sb.AppendLine($"  {w.Id,-7} {Trim(w.Name, 10),-10} {kind,-6} SKIP — "
-                              + (mount == null ? "no mount on this plane" : "no projectile pool"));
-                continue;
-            }
-            try
-            {
-                foreach (var n in mount.Nodes)
-                {
-                    _pool.Spawn(w, n.GlobalTransform, Vector3.Zero);
-                }
-                ok++;
-                sb.AppendLine($"  {w.Id,-7} {Trim(w.Name, 10),-10} {kind,-6} → {mount.Label,-20} fired {mount.Nodes.Count} round(s) OK");
-            }
-            catch (Exception e)
-            {
-                err++;
-                sb.AppendLine($"  {w.Id,-7} {Trim(w.Name, 10),-10} ERROR: {e.Message}");
-            }
-        }
-        sb.AppendLine($"weapon-test: {ok}/{_all.Count} fired OK, {err} error(s), {skip} skipped");
-        return new SelfTestResult
-        {
-            Report = sb.ToString(),
-            Total = _all.Count,
-            Ok = ok,
-            Errors = err,
-            Skipped = skip,
-        };
     }
 
     // ---- input -------------------------------------------------------------------------------
@@ -1251,18 +1190,6 @@ public sealed partial class WeaponLab : Node3D
         root.AddChild(panel);
         _ui.AddChild(root);
         AddChild(_ui);
-    }
-
-    /// <summary>The self-test's verdict: the report text plus the counts a suite asserts on.
-    /// <see cref="Skipped"/> is called out because it is a success-looking outcome — a weapon with
-    /// no mount on this plane never fires and nothing else would notice.</summary>
-    public sealed class SelfTestResult
-    {
-        public required string Report { get; init; }
-        public required int Total { get; init; }
-        public required int Ok { get; init; }
-        public required int Errors { get; init; }
-        public required int Skipped { get; init; }
     }
 
     /// <summary>One selectable place on the airframe: a firable gun group or a pylon.

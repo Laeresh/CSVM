@@ -12488,3 +12488,25 @@ behaviour working. `.\RunTests.ps1` PASS with `c1-flight` and `c1-crash` **hash-
 Splitscreen: the lab is one overlay on one aircraft, so with `--players>1` it binds P1's rig and
 P1's pane and now says so on its own log line, rather than leaving the other panes' pilots looking
 for a panel they cannot see.
+
+## 2026-08-03 — the 48-weapon pass check moves off the lab node and onto the whole rig (`PLAN-weapon-lab` D9)
+
+`--weapon-test` and the `weapons-fire` in-engine suite kept their cheap, world-less "do all 48
+mount and fire without throwing" check by borrowing `WeaponLab.SelfTest` — the one thing the lab
+still fired after B5 stripped its firing loop out. That check is now `Flight/WeaponBench.cs`, one
+static `Run(plane, Loadout, WeaponDefs, ProjectilePool)` over a parked plane, and **neither caller
+constructs a `WeaponLab` any more**; the lab node no longer takes a `ProjectilePool` at all, so
+"this panel never spawns a round" is now true without an exception clause.
+
+The bench also fires the airframe's **whole** rig: both callers hand it `Loadout.ForRig` (B4)
+instead of the stock fit, and each weapon fires from **every** mount of its class rather than the
+first one. And the cross-bank fallback is gone — a gun with no gun group SKIPs rather than
+borrowing a pylon, so a skip means a real gap instead of a fallback that quietly found something.
+
+**Verified.** `.\RunTests.ps1` PASS — 413 units, 22 suites, 13 goldens hash-identical.
+`weapons-fire` still asserts **48/48, 0 errors, 0 skipped**, and now also pins `GunMounts` at
+ForRig's 4 (a coverage shrink cannot hide behind an unchanged 48/48; the pylon count is per-rig, so
+only its presence is checked). `--weapon-test --plane=player_bhawk`: 48/48, 0 errors, 0 skipped,
+firing from `[g1 Inner Wing Guns, g2 Outer Wing Guns, g3 Gun Group 3, g4 Gun Group 4]` and 8
+pylons — 8 rounds per gun where it used to be 2, from one group. `--plane=player_kestrel`: same
+verdict from its centreline rig, including the `g4 Rear Turret` group stock marks inert.

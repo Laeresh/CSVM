@@ -23,6 +23,11 @@ public static class Suites
     private const int PlayerAirframes = 11;
     private const int WeaponDefCount = 48;
 
+    /// <summary>Gun-group slots <see cref="Loadout.ForRig"/> seats on any airframe (B4) — the
+    /// weapon bench fires every gun from all of them, so a drop here would quietly shrink its
+    /// coverage without changing the 48/48 line.</summary>
+    private const int RigGunGroups = 4;
+
     /// <summary>How many flight scenarios carry a measured target to assert. Pinned so that
     /// silently demoting one to informational cannot read as a green run.</summary>
     private const int FlightScenarios = 6;
@@ -546,37 +551,41 @@ public static class Suites
         // so it is disposed only after the self-test has run.
         var textures = new TextureArchive(texturesPath);
         Node3D? plane = null;
-        UI.WeaponLab? lab = null;
         ProjectilePool? pool = null;
         try
         {
             plane = new PlaneBuilder(planesGamez, textures).Build(ctx.PlaneName);
             ctx.Host.AddChild(plane);
-            Loadout? loadout = null;
+            LoadoutDef? stock = null;
             foreach (var def in StockLoadouts.Load().All.Values)
             {
                 if (def.Model == ctx.PlaneName)
                 {
-                    loadout = Loadout.Bind(def, plane, weapons);
+                    stock = def;
                     break;
                 }
             }
-            ctx.Check(loadout != null, $"stock loadout found for plane={ctx.PlaneName}");
+            ctx.Check(stock != null, $"stock loadout found for plane={ctx.PlaneName}");
+            // The whole rig, not just what stock names (D9) — so every weapon has a mount of its
+            // own class and a skip means a real gap, not a fallback that did not fire.
+            var loadout = Loadout.ForRig(plane, weapons, stock);
             pool = new ProjectilePool(textures, null, null);
             ctx.Host.AddChild(pool);
-            lab = new UI.WeaponLab(plane, weapons, loadout, ctx.PlaneName, pool: pool);
-            ctx.Host.AddChild(lab);
-            var result = lab.SelfTest();
-            ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the self-test");
+            var result = WeaponBench.Run(plane, loadout, weapons, pool);
+            ctx.Same(WeaponDefCount, result.Total, $"weapons offered to the bench");
             ctx.Same(WeaponDefCount, result.Ok, $"weapons that mounted and fired");
             ctx.Same(0, result.Errors, $"weapons that threw");
-            // A skip is a success-looking outcome in the report — a weapon with no mount on this
-            // plane never fires, and nothing else would notice.
+            // ForRig seats 4 gun-group slots on every airframe (B4's own suite proves that across
+            // all 11); the pylon count is per-rig, so only its presence is pinned here — 0 pylons
+            // would turn every hardpoint weapon into a skip.
+            ctx.Same(RigGunGroups, result.GunMounts, $"gun groups the bench fired from");
+            ctx.Check(result.PylonMounts > 0, $"pylons the bench fired from ({result.PylonMounts})");
+            // A skip is a success-looking outcome in the report — a weapon with no mount of its
+            // class on this plane never fires, and nothing else would notice.
             ctx.Same(0, result.Skipped, $"weapons with no mount");
         }
         finally
         {
-            lab?.Free();
             pool?.Free();
             plane?.Free();
             textures.Dispose();

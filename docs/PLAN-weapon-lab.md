@@ -115,7 +115,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave D — camera, probes, docs
 
 8. ☑ D8 — orbit ↔ free camera switch in the lab
-9. ☐ D9 — `WeaponBench`: the 48-weapon pass check, split off the lab node
+9. ☑ D9 — `WeaponBench`: the 48-weapon pass check, split off the lab node
 10. ☐ D10 — docs: `cli.md`, `controls.md`, `architecture.md`, `HISTORY.md`, `PROJECT_CONTEXT.md`
 
 ## Dependency and parallelism notes
@@ -362,7 +362,7 @@ stays live. `--fly` unchanged (`CameraOwned` defaults false).
 **⚠ Traps.** Splitscreen: the lab binds player 1's rig only; with `--players>1` either refuse the
 combination or bind rig 0 and say so.
 
-## D9 ☐ `WeaponBench`: the 48-weapon pass check, split off the lab
+## D9 ☑ `WeaponBench`: the 48-weapon pass check, split off the lab
 
 **Goal.** `--weapon-test` and the `weapons-fire` in-engine suite keep their cheap, world-less "do
 all 48 mount and fire without throwing" check after the lab moves into flight.

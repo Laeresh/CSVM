@@ -1056,37 +1056,31 @@ public partial class GameSession : Node3D
             long mark = StartupProfile.Mark();
             var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
             StartupProfile.Record("zrdr", mark);
-            // Bind the plane's stock loadout so the lab's mounts are the game's named gun groups
-            // + pylons (guns fire from gun groups, hardpoints from pylons). A binding failure
-            // (or a plane the table omits) leaves it null — the lab falls back to the raw rig.
-            Loadout? labLoadout = null;
+            // The bench fires the airframe's WHOLE rig (D9): ForRig's 4 gun groups + every pylon,
+            // seeded from the plane's stock entry where it has one, so a weapon that stock never
+            // mounts still gets a mount of its own class rather than a skip. A plane the table omits
+            // passes a null stock def — ForRig synthesizes the rig from the markers regardless.
+            LoadoutDef? stock = null;
             foreach (var ldef in StockLoadouts.Load().All.Values)
             {
                 if (ldef.Model == _spec.PlaneName)
                 {
-                    try
-                    {
-                        labLoadout = Loadout.Bind(ldef, _plane, labWeapons);
-                    }
-                    catch (Exception e)
-                    {
-                        GD.PushWarning($"weapon lab: could not bind loadout {ldef.Def} — {e.Message}");
-                    }
+                    stock = ldef;
                     break;
                 }
             }
+            var benchLoadout = Loadout.ForRig(_plane, labWeapons, stock);
             // The bench's own scene-less pool: rockets fly streak-only, gun impacts show the spark,
-            // hardpoint impacts the pool's explosion stand-in, and there is no DamageSink. The lab
-            // node no longer builds one — it drives a loadout, it does not fire (B5).
+            // hardpoint impacts the pool's explosion stand-in, and there is no DamageSink. No
+            // WeaponLab is built here at all — the lab is a flight-mode panel that fires nothing
+            // (B5); the pass check is WeaponBench's (D9).
             var benchPool = new ProjectilePool(state.Textures, null, null);
             _worldRoot!.AddChild(benchPool);
             benchPool.Listener = _camera;
-            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, _spec.PlaneName, pool: benchPool);
-            _worldRoot!.AddChild(weaponLab);
-            // Mount and fire every one of the 48 weapons once and report any that throw, then quit
-            // (windowless under --headless). The report is synchronous (Spawn does the muzzle math +
-            // pool insert without needing a frame), so no world tick is required.
-            string report = weaponLab.RunSelfTest();
+            // Mount and fire every one of the 48 weapons once per mount and report any that throw,
+            // then quit (windowless under --headless). The report is synchronous (Spawn does the
+            // muzzle math + pool insert without needing a frame), so no world tick is required.
+            string report = WeaponBench.Run(_plane, benchLoadout, labWeapons, benchPool).Report;
             GD.Print(report);
             _probeRunner.WriteScratch("weapon_test.txt", report);
             GetTree().Quit();
@@ -1364,7 +1358,7 @@ public partial class GameSession : Node3D
             // --weapon-fire holds the real trigger, the one free flight pulls (decision 3) — which
             // one follows the panel's bank, so the lab sets it rather than this call site.
             var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, _spec.PlaneName,
-                host: p1c, pool: projectiles, camera: labRig.Camera)
+                host: p1c, camera: labRig.Camera)
             {
                 DebugShow = true,   // the lab IS the session now — the panel is why you launched it
                 InitialWeapon = _spec.WeaponSelect,

@@ -69,6 +69,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/PlaneStats.cs` — typed per-plane stats from vehicle/engines/player.json: dynamics, engine sound, destroyable parts.
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
+- `src/Flight/WeaponBench.cs` — the world-less 48-weapon mount-and-fire pass check behind `--weapon-test` and `weapons-fire`; fires the whole `ForRig` rig, no lab node involved.
 - `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
@@ -125,7 +126,7 @@ The launchscreen and splitscreen rig, plus the interactive debug labs. Every lab
 - `src/UI/MeshLab.cs` — the geometry/shading lab (M): normal lines, smoothing seams, cull/normal overrides; on the parked plane, or on the selection.
 - `src/UI/ColliderOverlay.cs` — the collider wireframes (C): every built collision shape drawn, coloured by owner class; needs `--collision` outside flight.
 - `src/UI/ClassOverlay.cs` — the colour-by-class overlay (X): every drawn mesh tinted destructible/facade/clutter/scenery, a findable-targets view.
-- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface; `--weapon-test` fires all 48.
+- `src/UI/WeaponLab.cs` — the weapon lab panel (B): steppers that arm the held plane's live loadout, click-to-place on a real world surface. Fires nothing itself.
 - `src/UI/NodeLabels.cs` — floating `cs_name` labels over scene nodes (T): Off/Meshes/All, anchored on mesh centres, de-cluttered.
 - `src/UI/MarkerOverlay.cs` — the `--viewer` firepoint/pylon/target overlay (K, `--markers`): coloured gizmos + de-cluttered labels.
 - `src/UI/SelectionService.cs` — the shared `--freecam`/`--anim-lab` selection: click-pick + the `cs_name` ancestor ladder, breadcrumb + highlight box.
@@ -762,6 +763,24 @@ weapon (`wep_30` if the plane has no stock guns at all) under a generic mount la
 ⚠ Never assumes 8 firepoints/pylons — it discovers the rig same as `Bind`'s own marker walk and
   only synthesizes a slot when at least one of its pair actually exists.
 
+## src/Flight/WeaponBench.cs
+The world-less "do all 48 weapons mount and fire without throwing" pass check (M3 D9) behind
+`--weapon-test` and the `weapons-fire` in-engine suite: one static
+`Run(plane, Loadout, WeaponDefs, ProjectilePool)` over a **parked** plane that spawns straight into
+the caller's pool and returns the report plus the counts a suite asserts on (`Total`/`Ok`/`Errors`/
+`Skipped` + `GunMounts`/`PylonMounts`). Needs no world, no colliders and no frame — `Spawn` does the
+muzzle math and the pool insert synchronously. Hand it `Loadout.ForRig`'s loadout (both callers do)
+and every weapon fires from **every** mount of its class: measured on the Bloodhawk, 4 gun groups ×
+2 muzzles for each of the 31 guns and 8 pylons for each of the 17 hardpoint weapons — 48/48, 0
+errors, 0 skipped.
+⚠ It lives here, NOT on `WeaponLab`: the lab is a flight-mode panel that fires nothing of its own
+  (M3 B5) and neither caller constructs one any more. Do not fold this back in — a firing loop on
+  the panel is exactly what B5 removed.
+⚠ There is deliberately **no cross-bank fallback** — a gun with no gun group SKIPs rather than
+  borrowing a pylon. `Skipped` is the success-looking outcome (a weapon that never fires and nothing
+  notices), so both callers assert it at 0, and `GunMounts` is pinned at ForRig's 4 so shrinking the
+  coverage cannot hide behind an unchanged 48/48.
+
 ## src/Flight/WeaponCursor.cs
 The ammo-slot selector as pure index math, shared by rocket hardpoints (H, `_selectedPylon`) and
 firable gun groups (G, `_gunSel`), lifted out of `FlightController` so it unit-tests without a live
@@ -850,7 +869,7 @@ weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once
 ⚠ `Quicksand` is unreachable too, for a different reason than `Player`/`Enemy`: `ProjectilePool
   .ClassifySurface` and `SceneBuilder.ClassifySurface(string?)` only ever stamp a collider `water`
   or `buildings`, defaulting everything else — including quicksand terrain — to `Default`
-  (`WeaponLab.SurfaceNames` agrees: three classes, not four). A weapon's `quicksand` IMPACT entry
+  (the lab's own pick readout agrees: three classes, not four). A weapon's `quicksand` IMPACT entry
   is still real data the reader parses correctly; `Resolve` is just never called with it. `B5`'s
   suite runs the 48 weapons across `{Default, Water, Buildings}` only — a fourth case would be
   invented coverage.
@@ -1503,10 +1522,9 @@ collision VERTEX, since a chapter's water tiles all sit at the world origin), th
 (`--weapon-camera=free|<frames>`), the controller standing down via `CameraOwned` in between.
 `--weapon-cycle=N` steps the weapon list every N physics frames; stepping, placing and the camera
 hand-off are the only things this node does per frame.
-⚠ This node NEVER spawns a round. Its one exception is `RunSelfTest` (the `--weapon-test` 48-weapon
-  pass check on a PARKED plane, host null), which fires every node of a mount straight into the
-  caller-supplied pool. Do not give the panel a firing loop back — the lab exists to fire exactly
-  what free flight fires.
+⚠ This node NEVER spawns a round — there is no exception left since D9 moved the `--weapon-test`
+  48-weapon pass check out to `src/Flight/WeaponBench.cs`, and it takes no `ProjectilePool` at all.
+  Do not give the panel a firing loop back — the lab exists to fire exactly what free flight fires.
 ⚠ The ray is cast in the PHYSICS step, never in the input handler (the space state cannot be queried
   while the server flushes queries), and the class is read off THE BODY THE RAY RETURNED and nothing
   else — one mesh yields a body per surface class present (`col`, `col_water`, `col_buildings`), so
