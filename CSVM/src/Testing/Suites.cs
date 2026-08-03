@@ -783,6 +783,7 @@ public static class Suites
             var previous = runtime.OnEventDispatched;
             int launchesBefore = runtime.BallisticMotionsLaunched;
             int missedBefore = Missed();
+            bool everOwed = false;
             try
             {
                 runtime.OnEventDispatched = d => timeline.Add((clock, d.Sequence, d.EventKind, d.EventName));
@@ -791,12 +792,17 @@ public static class Suites
                 {
                     clock += Tick;
                     runtime.Advance(Tick);
+                    everOwed |= runtime.Motions.OwesBounce(tank.Def, tank.Anchor);
                 }
             }
             finally
             {
                 runtime.OnEventDispatched = previous;
             }
+
+            ctx.Check(everOwed, $"a launched {tank.Def.AnimName} piece owed its BOUNCE_SEQUENCE while in flight");
+            ctx.Check(!runtime.Motions.OwesBounce(tank.Def, tank.Anchor),
+                $"nothing is still owed once every piece has landed");
 
             // part1/part2 (authored RUN_TIME) plus part3/part4 (solved) — four, measured. The
             // called fireball defs carry no ballistic motion of their own, so this is the whole

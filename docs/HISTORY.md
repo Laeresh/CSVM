@@ -11619,3 +11619,21 @@ order — is **byte-identical** before and after across five probes: `--destroy=
 `c3-island` / `c4-snow` / `c5-city-night` at **11 / 15 / 36 active puffers**, matching the counts
 recorded for `BL-234` and `A4`. `.\RunTests.ps1` **PASS**: 384 units, 18/18 engine suites, engine
 errors clean, 13/13 goldens hash-identical. 8-chapter `--freecam` sweep clean, zero errors.
+
+**Wave D, `D11` (2026-08-03): `OwesBounce` assertions land in `bounce-launch`, closing Wave D.**
+`D9` exposed `MotionSet.OwesBounce` through `AnimRuntime.Motions` (`internal`, same-assembly reach
+from `Suites.cs` needs no visibility widening); `D11` re-aimed by `D8`'s Decision 25 — the suite's
+premise that it read `AnimRuntime` internals was false, so there was nothing to port, only a new
+fact to assert. Two checks added around the existing `refuel*` kill's 600-tick flight loop, sampled
+**inside** the loop (`everOwed |= runtime.Motions.OwesBounce(tank.Def, tank.Anchor)` after every
+`Advance`) rather than once after `DamageAt`: the death's debris motion is scheduled seconds in, so
+a single post-kill sample reads false and the assertion would be vacuous (the trap `D11` names).
+Asserts `everOwed` true (a launched piece owed its bounce while in flight) and `OwesBounce` false
+once the 10 s window closes (nothing outstanding once every piece has landed). **Verified against
+the correct control, not the retirement hold:** temporarily disarming `MotionRuntime.Create`'s
+`PendingBounce` assignment flips `everOwed` false and fails the new check (`bounce-launch` suite
+went red, confirmed, then restored) — per `D9`'s own trap, breaking the retirement hold instead
+would have stayed green (`refuel*`'s `fire_n_smoke` loop keeps its instance alive regardless) and
+proven nothing. `.\RunTests.ps1` full pass: 384 units, 18/18 engine suites, 13/13 goldens
+hash-identical. Wave D is now both items landed (`D9` ☑, `D11` ☑; `D10` closed into `D9` by
+Decision 27) — only Wave E, F and G remain open in `PLAN-deepening.md`.

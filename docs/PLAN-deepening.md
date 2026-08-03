@@ -171,7 +171,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 8. ☑ **Grill the `MotionSet` interface** — no code *(landed 2026-08-03; Decisions 19–27)*
 9. ☑ Extract `MotionSet`, folding the pending-bounce rules in
 10. ❌ Folded into `D9` (Decision 27) — `OwesBounce` is one of `D9`'s nine operations
-11. ☐ Add `OwesBounce` assertions to the `bounce-launch` suite
+11. ☑ Add `OwesBounce` assertions to the `bounce-launch` suite
 
 ### Wave E — emitter lifetime behind a seam
 
@@ -589,7 +589,14 @@ Where the five holders end up:
 `OwesBounce` to "any live motion" (`PLAN-bounce-launch`'s disproven claim 2), and a green
 `RunTests` does not prove the retirement hold survived.
 
-## D11 ☐ Add `OwesBounce` assertions to the `bounce-launch` suite
+## D11 ☑ Add `OwesBounce` assertions to the `bounce-launch` suite
+
+**Landed 2026-08-03.** Two checks added around the `refuel*` kill, sampled once per tick inside the
+existing 600-iteration flight loop (not a single post-`DamageAt` sample — Decision 25's own trap).
+Verified against the disproof control: disarming `PendingBounce` in `MotionRuntime.Create` flips
+`everOwed` to false and fails the new assertion (`bounce-launch` suite went red); restoring it
+returns 18/18 suites green. Full `.\RunTests.ps1` pass: 384 unit tests, 18/18 engine suites, 13/13
+goldens hash-identical.
 
 **Goal.** The one fact `D9` newly makes askable gets asserted: a piece in the air owes its
 `BOUNCE_SEQUENCE`, and nothing owes one once every piece has landed.

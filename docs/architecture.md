@@ -1648,7 +1648,10 @@ visibility, and authored stunt gates.
 ⚠ `bounce-launch` asserts a **band**, not a time: the launch draws speed and elevation per instance,
   and the draw moves with suite order (the same run gave `part4` 4.083 s filtered and 3.883 s in the
   full sweep). Its zero-miss checks are carried invariants the seed does not discriminate — the
-  suite is shown able to fail on the solve and the dispatch only (BL-240).
+  suite is shown able to fail on the solve and the dispatch only (BL-240). It also samples
+  `MotionSet.OwesBounce` on every tick of the `refuel*` kill's flight (D11): the retirement hold's
+  own mechanism, which the zero-miss checks cannot catch — sampling once right after `DamageAt`
+  reads false regardless, since the death's debris motion is scheduled seconds in.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
 ## src/Testing/GoldenShot.cs
