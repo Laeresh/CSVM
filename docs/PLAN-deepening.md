@@ -55,6 +55,7 @@ prose disagrees with itself.
 | 7 | Does every wave get a `/grilling` session? | **No — only the two whose interface is open: `D8` and `E12`.** A, B, C and F are graded traced: the fix shape is dictated by the code, and grilling a settled shape is ceremony. `G18` is already a decision item by construction. |
 | 8 | When do those sessions run? | **Whenever — they contend on nothing.** A grilling session lands no code, so it never blocks or is blocked by a wave in flight. Running `D8` and `E12` early is free, and means D and E start against a settled interface instead of designing from scratch. |
 | 9 (2026-08-03, `A2`) | Should `March` take the sim step, or keep its fixed `1/120 s`? | **Keep the fixed step.** Census of the 48 `BALLISTICS` entries: four carry a non-zero `ACCELERATION` (`wep_04`, `wep_25`, `wep_26`, `wep_27` — all 150 m/s²), **zero** carry a non-zero `GRAVITY`, and none of the four is a gun. A gun group resolves caliber + ammo → `wep_30..73` only, so the divergence disproven claim 4 predicted is **unreachable**: every marched round is a straight line, and the step size cannot move a straight line's endpoint. A fixed step also keeps the reticle from twitching with the frame rate. Guarded by two `[ExtractedDataFact]` tripwires in `CSVM.Tests/BallisticsTests.cs`, so the answer re-checks itself if the data or the loadouts change. |
+| 10 (2026-08-03, `B3`) | `Resolve`'s sketched signature takes three arguments. Is that enough to pick a stand-in? | **No — it takes a fourth, `hasEffectsRuntime`.** The explosion stand-in's live condition is `!showedModel && !weapon.IsGun && EffectSink == null` (`Projectile.cs:1173`): a hardpoint weapon in a scene-less pool (the weapon lab) has nowhere to build its real fireball, so the burst stands in for it. That is a fact about the *caller*, exactly like `modelResolved`, and it cannot be derived from the weapon and the surface — with three arguments one of the three stand-ins the item is defined by is unreachable. `B4` passes `EffectSink != null`. |
 
 ## ⚠ Read this before implementing anything
 
@@ -105,7 +106,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave B — deciding an impact, apart from performing it
 
-3. ☐ `ImpactOutcome` + a pure `Resolve`
+3. ☑ `ImpactOutcome` + a pure `Resolve`
 4. ☐ Route `Impact` through `Resolve` → `Apply`
 5. ☐ Unit suite: 48 weapons × the reachable surfaces
 
@@ -230,7 +231,7 @@ code does cannot catch the code being wrong.
 
 # Wave B — deciding an impact, apart from performing it
 
-## B3 ☐ `ImpactOutcome` + a pure `Resolve`
+## B3 ☑ `ImpactOutcome` + a pure `Resolve`
 
 **Goal.** "What should happen when this weapon hits this surface" is a value that can be computed,
 returned and asserted, with no `Node3D` and no physics space.

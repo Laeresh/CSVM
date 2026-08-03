@@ -68,6 +68,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
+- `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable before anything in the world shoots back.
@@ -702,6 +703,24 @@ silently diverge; each still owns its own step size.
   gun group can resolve any of the four (a gun is caliber + ammo → `wep_30..73`). Every marched
   round is therefore a straight line, on which the step size cannot move the endpoint, and a fixed
   step keeps the reticle from twitching with the frame rate. `BallisticsTests` guards the census.
+
+## src/Flight/ImpactOutcome.cs
+"What should happen when this weapon hits this surface" as a value — `EffectName` (the class's
+`ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
+(+ `HasBlastDamage`) — plus the pure static `Resolve` that computes it from a `WeaponDef` and a
+`SurfaceClass`. No Godot type, no scene, no sink, no sound archive, so the dispatch's one decision
+is readable by a unit test; `ImpactOutcomeTests` is that test. **Nothing calls it yet** —
+`ProjectilePool.Impact` still decides for itself until `PLAN-deepening` `B4` routes it through.
+⚠ `modelResolved` and `hasEffectsRuntime` are **inputs**, not things `Resolve` discovers: whether
+  the effect name is a real gamez node needs the chapter scene, and whether a world-effects runtime
+  exists is a fact about the caller (a scene-less pool takes the explosion stand-in). Passing a
+  guess for either silently changes which stand-in a caller draws.
+⚠ The stand-in ladder's order is load-bearing and mirrors `Impact`'s branch chain exactly —
+  model ▸ explosion (non-gun, no runtime) ▸ dirt debris (Default) ▸ ricochet (Buildings + gun) ▸
+  spark. Reordering it gives a weapon a different look.
+⚠ `Player`/`Enemy` get no case of their own — unreachable in M3, they read off the table and fall
+  to the spark like any unbound class. Do not author behaviour for them; and note the reader drops
+  an all-null class entry, so "present but empty" and "absent" are the same thing here.
 
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated

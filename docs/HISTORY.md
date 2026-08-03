@@ -11415,3 +11415,44 @@ hash-identical. Able-to-fail controls, both watched failing and restored: halvin
 `Ballistics.ApplyForces` failed the drop test (and only it); dropping the `RANGE` term from `March`'s
 `cap` failed both range-cap tests. Note the range-cap-under-gravity test is *not* sensitive to the
 gravity break — its endpoint is invariant by construction, which is the property it asserts.
+
+## 2026-08-03 — an impact's decision, as a value: `ImpactOutcome` + a pure `Resolve`
+
+**What landed.** No behaviour change, and nothing wired — deliberately. `PLAN-deepening` `B3` gives
+the weapon-fire dispatch's one decision ("what should happen when this weapon hits this surface") a
+value and a pure function that computes it, ahead of `B4` routing `ProjectilePool.Impact` through
+it. New `CSVM/src/Flight/ImpactOutcome.cs`: a `readonly record struct` carrying `EffectName` (the
+struck class's `ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, an `ImpactStandIn`, and
+`Damage`/`BlastRadius` with a derived `HasBlastDamage`; plus
+`Resolve(weapon, surface, modelResolved, hasEffectsRuntime)`, which touches no `Node3D`, no sink and
+no sound archive. `Impact` still decides for itself, so the goldens are trivially identical and that
+inertness is the item's whole claim.
+
+**The signature grew a fourth argument** (plan Decision 10). The sketch was three; with three, one of
+the three stand-ins the item is defined by is unreachable. The explosion stand-in's live condition is
+`!showedModel && !weapon.IsGun && EffectSink == null` — a hardpoint weapon in a scene-less pool (the
+weapon lab) has nowhere to build its real fireball — which is a fact about the caller, exactly like
+`modelResolved`, and not derivable from the weapon and the surface. `B4` will pass
+`EffectSink != null`.
+
+**New:** `CSVM.Tests/ImpactOutcomeTests.cs`, 18 tests. The stand-in ladder in its load-bearing order
+(model ▸ explosion ▸ dirt debris ▸ ricochet ▸ spark) on hand-built defs, and the table lookup against
+the shipped `weapons.zrd.json` rather than against fixtures that agree with the reader by
+construction: the 30 cal slug's per-class entries are taken **whole**, so its `buildings` binding
+(`bld_damage.flt`, no `SOUND`) is silent rather than borrowing the default's sound; the AA flak
+rocket's `player` entry (`flak_effectplayer`) is read where the slug's is not; the armour-piercing
+rocket resolves through `SURFACE_ANIMATION` where `ANIMATION` is absent; and `wep_26`, the one entry
+of the 48 with no `IMPACT` block at all, resolves to nothing bound without faulting.
+
+**A data fact that killed a written assumption.** The plan's trap warns not to invent behaviour for
+the M3-unreachable `Player`/`Enemy` classes. The data has 44 `player` entries and 3 `enemy` ones, and
+28 more `enemy` values that are the bare null meaning "no effect on that surface" — but the reader
+also drops an entry whose every slot is null (`ParseEffect` returns null on `IsEmpty`), which the
+slug's `player` entry is. So *present-but-empty and absent are the same thing here*, and both take
+the ordinary `default` fallback. A first draft of the test asserted the opposite and failed;
+`Resolve` gets no case for either class, and `docs/architecture.md` records the reader fact.
+
+**How verified.** `.\RunTests.ps1` **PASS** — 379 units (18 new), 18/18 engine suites, 13/13 goldens
+hash-identical. Able-to-fail controls, both watched failing and restored: making the class lookup
+return `default` unconditionally failed the two data cases; gating the explosion branch on
+`surface != Default` failed one ladder case and only it.
