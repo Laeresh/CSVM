@@ -302,7 +302,8 @@ public sealed class FlightRigAssembler
         }
 
         var (spawnPos, spawnLookAt) = _spawns.ChooseSpawn(_in.SpawnList, _in.MissionZrdrPath, _in.SpawnBase, pi, tag);
-        controller.Setup(new FlightModel(stats), rig.Camera, spawnPos, spawnLookAt);
+        controller.Setup(new FlightModel(stats), rig.Camera, _in.CamParamsFor(planeName),
+            spawnPos, spawnLookAt);
         // --weapon-lab (A2): the lab is a flight session whose aircraft is pinned at the spawn pose
         // — everything else (world, pool, effects, the trigger itself) runs exactly as in free
         // flight. Set AFTER Setup, which places the plane: the pin is captured at the first held
@@ -359,6 +360,8 @@ public sealed class FlightRigAssembler
         public GameZ PlanesGamez = null!;
         /// This plane's stats, loaded once per distinct aircraft (splitscreen players differ).
         public Func<string, PlaneStats> StatsFor = null!;
+        /// This plane's camera tuning, cached the same way and for the same reason.
+        public Func<string, CamParams> CamParamsFor = null!;
         /// How many rigs this session flies — drives the log tags, the verbose-once lines and the
         /// single-player-only controller affordances (pause/halt).
         public int RigCount;

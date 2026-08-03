@@ -718,8 +718,9 @@ unscheduled.
   (b) **Motion is wrong in kind, not just speed.** The original eases to AND from each position
   holding cam distance/radius constant, and the ease reads linear, not smoothstepped; ours snaps both
   ways (`ApplyFixedView` has no smoothing branch at all).
-  (c) **Distance is a TUNE hand-copied from the chase camera** (`ViewDist`, shared with the chase
-  camera per `BL-149` — real per-plane data exists there, e.g. Bloodhawk 18.5 vs our 16.62).
+  (c) ~~**Distance is a TUNE hand-copied from the chase camera.**~~ **Resolved** — the fixed views
+  now take the per-plane shipped distance with the chase camera (`CameraController`); the Bloodhawk's
+  radius is its own 18.5, not 16.62. Nothing left to do here.
   (d) **Mid-ease interrupt behaviour is unmodelled.** In the original, pressing another key while
   easing back from a position goes straight to the new position (no snap to base first); holding
   several keys at once yields further, blended positions. Ours has neither concept — `ActiveView` is a
@@ -732,7 +733,7 @@ unscheduled.
   (f) **Numpad + / − trim camera distance slightly** — wholly new, unimplemented; the user already has
   video evidence for this one.
   *Fix shape:* a rebuilt `Views` table (order + the missing 0), an eased position/orientation update
-  sharing `BL-149`'s distance data instead of `ViewDist`, a small state machine for the
+  on top of `CameraController`'s existing per-plane radius, a small state machine for the
   interrupt/combination behaviour in (d), and the +/− trim as a new input.
   *Blocked on `CAP-07`/`CAP-08`* (`playtest.md` §0).
   ⚠ **Traps.** (a) **Only `--view=` is machine-verifiable** — live held-key input cannot be scripted
@@ -740,8 +741,8 @@ unscheduled.
   passing `--view=` capture alone. (b) **The layout (a) cannot be fixed before the owed screenshots pin
   the exact mapping** — do not guess-swap 8/2 and ship it; the front/back split for 1/3/7/0 is a
   different shape of layout than today's above/below split, not a two-symbol swap. (c) Don't retune
-  `ViewDist`/`CamBack`/`CamUp` here in isolation — it's the same number `BL-149` owns; a fix landing
-  only in one place desyncs the two cameras again. (d) Combined/multi-key positions are UNDESIGNED,
+  the chase radius here in isolation — the fixed views and the chase camera share one number in
+  `CameraController` by design; a fix landing only in one place desyncs the two cameras again. (d) Combined/multi-key positions are UNDESIGNED,
   not merely unbuilt — resist inferring a formula (e.g. "average the two directions") from a single
   set of screenshots; get the key-combo captures first.
 
@@ -1537,8 +1538,9 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   made is now contradicted by cockpit testing (8/2 swapped, 7/0 both underside-front, 1/3 both rear,
   and the original binds 0 which we don't), and the "distance is user-recall, not data" claim is now
   false — `extracted/zrdr/camparam.zrd.json` ships real per-plane distances. Superseded by `BL-149`
-  (the shipped camera data) and `BL-150` (the plan-sized rebuild covering layout, easing, interrupts,
-  and the +/− trim). Kept as a retired ID, not deleted, per this file's permanent-ID rule.
+  (the shipped camera data — landed; its residue is `BL-248`) and `BL-150` (the plan-sized rebuild
+  covering layout, easing, interrupts, and the +/− trim). Kept as a retired ID, not deleted, per this
+  file's permanent-ID rule.
 - `BL-148` **Stall warning is binary, not graded — and the ramp itself doesn't exist yet.**
   `GaugeCluster.cs:247` gates the blink on `Stalled && WarnPhaseOn` — `Stalled` is a hard boolean from
   `FlightModel.isStalled()` (`FlightModel.cs:328-332`, a single `Speed < stallSpeed` threshold with no
@@ -1556,31 +1558,31 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   calculation on top instead. (c) Don't reuse `LowAltAglM`'s pattern uncritically — the low-alt cue is
   legitimately binary (a fixed AGL gate, no spec claim of a ramp there), so a shared "warning"
   abstraction that ramps both would over-apply the fix.
-- `BL-149` **`camparam.zrd.json` ships full chase/third-person camera tuning and nothing reads it.**
-  Full `default` block: `dist` **13.0**, `dist_factor` **0.01**, `dist_vary` **0.1**, `dist_catch_up`
-  **1.0**, `dist_min`/`dist_max` **15.7 / 25.0**, `pos_catch_up` **2.0**, `thirdp_height` **0.138**,
-  `thirdp_pitch` **0.29**, `look_catch_up` **3.0**, plus `back_dist_min`/`max` (15.5/55, presumably a
-  look-behind view), a `death_*` block (interval 2.0, z 0, x 80, alt 5, min_alt 15.1), a `crash_*`
-  block (horiz 30, y 45, chord_y 1000, elev 40), and a `flyby_*` block (watch time 3.8–4.3 s, radius
-  5.5–7.0, interval 1.9–2.3 s, switch dist 70–85). Seven planes override `dist`/`dist_min`/`dist_max`
-  individually — **Bloodhawk 18.5**, Fury 17.0, Peacemaker 18.0, Kestrel 14.5, Firebrand 20.5, Warhawk
-  20.0, Balmoral 25.0 (Balmoral also overrides `thirdp_height`/`thirdp_pitch` to 0.2/0.2). Our chase
-  camera is airframe-*independent* hand-picked constants (`CamBack` 16, `CamUp` 4.5 → `ViewDist`≈16.62
-  for every plane, `FlightController.cs:240,284`) — 10% off the Bloodhawk's own shipped 18.5.
-  `CamRotSmooth` 7/s (`FlightController.cs:242`) is exactly the kind of number
-  `pos_catch_up`/`look_catch_up`/`dist_catch_up` may already answer. *Wanted:* a `camparam` reader +
-  wiring `dist` per plane into `CamBack`/`CamUp`'s magnitude (keeping the behind-and-above direction)
-  and mapping the catch-up triplet onto `CamSmooth`/`CamRotSmooth` once their units are derived.
-  ⚠ **Traps.** (a) **Units of the catch-up fields are undecoded** —
-  `pos_catch_up`/`look_catch_up`/`dist_catch_up` read plausibly as our existing `1/s`
-  exponential-smoothing rate, but could as easily be a frame count, a seconds-to-settle, or something
-  else; do not wire a number in without confirming the shape (a settling-time capture, or the same
-  math-consistency method `METHOD-14` in `docs/verification.md` warns can fool itself). (b) This is
-  the SAME distance the numpad fixed views borrow (`ViewDist`, `FlightController.cs:281-284` —
-  cross-ref `BL-150`), so a `dist` fix here moves both cameras at once; land them together, not
-  separately. (c) `dist_min`/`dist_max`/`dist_vary` suggest the ORIGINAL's chase distance is itself
-  dynamic (varies with speed/situation, not fixed) — swapping in a single static `dist` number is a
-  partial fix, not the full mechanism; say so rather than declaring this closed once `dist` lands.
+- `BL-248` **The original's chase distance is DYNAMIC and its easing rates are undecoded — only the
+  static per-plane distance has landed.** `BL-149` shipped the reader and wired `dist` per airframe
+  (`CamParams`/`CameraController`), which is the fixed part of the mechanism. Two pieces of the same
+  file remain unread, both deliberately: (a) the **dynamic distance** — `dist_factor` 0.01,
+  `dist_vary` 0.1, `dist_min`/`dist_max` — which implies the original's chase distance moves with
+  something (speed? throttle? load factor?) rather than sitting at one number; and (b) the
+  **catch-up triplet** `pos_catch_up` 2.0 / `look_catch_up` 3.0 / `dist_catch_up` 1.0, against our
+  hand-picked `CamSmooth` 8 / `CamRotSmooth` 7. Also unread: `thirdp_height`/`thirdp_pitch` (which
+  would replace the hand-picked offset DIRECTION, not just its radius) and the whole
+  `back_*`/`death_*`/`crash_*`/`flyby_*` set, none of which have cameras to drive yet.
+  *Fix shape:* decode the dynamic law from `CAP-21`, then drive the radius through it; separately
+  measure a settling time to fix the catch-up units before touching the two smoothing constants.
+  *Blocked on `CAP-21`* (`playtest.md` §0).
+  ⚠ **Traps.** (a) **`dist_min` (15.7) is LARGER than `dist` (13.0) in the `default` block**, while
+  the seven per-plane blocks have them equal — so the mechanism is NOT "clamp `dist` into
+  `[dist_min, dist_max]`"; under that reading no plane could ever sit at the default's own 13.0.
+  Whatever law lands has to explain that, not work around it. (b) **The catch-up units are
+  undecoded** — 1/s, a frame count and a seconds-to-settle are all plausible and differ by ~4x in
+  felt lag, and none of them looks broken on screen, so the by-eye test cannot decide it
+  (`METHOD-14`, `docs/verification.md`). (c) The chase radius is the SAME number the numpad fixed
+  views use (cross-ref `BL-150`); anything dynamic here moves both cameras, which is intended —
+  do not "fix" that by giving the views their own copy. (d) `thirdp_pitch` 0.29 rad = 16.6° sits
+  close to our hand-picked 15.7° elevation, which is suggestive and **not** a decode —
+  `thirdp_height`'s units are unknown, so the pair cannot be wired on the strength of one
+  near-match.
 - `BL-118` **Cloud puffs** — opacity and density. **Cloud deck** — brightness reads ~40 units lighter
   than the original. **Playtest (2026-07-30), two new specifics + mechanism traced.** (1) The deck
   itself shows dense cloud puffs while flying through it. (2) In C1/IA1, puffs show around the plane

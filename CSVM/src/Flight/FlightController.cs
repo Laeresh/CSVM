@@ -376,10 +376,11 @@ public partial class FlightController : Node3D
         }
     }
 
-    public void Setup(FlightModel model, Camera3D camera, Vector3 spawnPos, Vector3 spawnLookAt)
+    public void Setup(FlightModel model, Camera3D camera, CamParams camParams,
+        Vector3 spawnPos, Vector3 spawnLookAt)
     {
         _model = model;
-        _cam = new CameraController(camera, KeyDown, PinnedView);
+        _cam = new CameraController(camera, camParams, KeyDown, PinnedView);
         _spawnPos = spawnPos;
         _spawnAttitude = Basis.LookingAt((spawnLookAt - spawnPos).Normalized(), Vector3.Up);
         _warningShots = new WarningShotCue(model.Stats.WarningShotMax,

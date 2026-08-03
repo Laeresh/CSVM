@@ -15,10 +15,19 @@ namespace CSVM.Flight;
 /// behaviour, not a detail — the chase camera takes SIM time so a scripted capture is
 /// frame-rate independent, while the orbit keeps WALL time so you can fly around a halted
 /// world.</para>
+///
+/// <para>The chase RADIUS is the plane's own, from <see cref="CamParams"/> — the Balmoral sits
+/// 25 m back and the Kestrel 14.5 m. The offset's DIRECTION is not in the data and stays the
+/// hand-picked behind-and-above one. Nothing else camparam ships is wired: see
+/// <see cref="CamParams"/>'s warnings on the undecoded dynamics before reaching for them.</para>
 /// </summary>
 public sealed class CameraController
 {
-    private const float CamBack = 16f, CamUp = 4.5f, CamLookAhead = 40f;
+    // The chase offset's DIRECTION: behind and above the nose, at atan2(4.5, 16) ≈ 15.7° of
+    // elevation. Hand-picked and still a TUNE — camparam ships a distance per plane, not an angle,
+    // so only the radius below comes from the data.
+    private const float BaseBack = 16f, BaseUp = 4.5f;
+    private const float CamLookAhead = 40f;
     private const float CamSmooth = 8f;         // 1/s — position catch-up
     private const float CamRotSmooth = 7f;      // 1/s — orientation (basis) catch-up; a touch of
                                                 // lag on fast rolls so they read dynamic (TUNE)
@@ -28,10 +37,9 @@ public sealed class CameraController
 
     private const float Diag = 0.70710678f;     // sin/cos 45° — the four diagonal views' components
 
-    // Fixed views sit the same distance from the plane as the chase camera's rigid offset, so a
-    // snap changes the angle and nothing else. TUNE: the distance, the 45° elevations and the
-    // instant snap are all recalled from the original rather than measured out of it.
-    private static readonly float ViewDist = Mathf.Sqrt((CamBack * CamBack) + (CamUp * CamUp));
+    // The offset the direction above works out to at unit... i.e. the length of (BaseBack, BaseUp),
+    // ≈ 16.62 m. Only used to normalise that direction against the data's own distance.
+    private static readonly float BaseDist = Mathf.Sqrt((BaseBack * BaseBack) + (BaseUp * BaseUp));
 
     /// <summary>The numpad's fixed camera perspectives, keyed by its own spatial layout: 2 straight
     /// under the plane, 1/3 45° up from there to the left/right, 4/6 the level flanks, 7/9 45° above
@@ -61,14 +69,22 @@ public sealed class CameraController
     // The numpad view held for the whole run (--view=); 0 is the chase camera.
     private readonly int _pinnedView;
 
+    // This airframe's own chase offset: the hand-picked direction above, scaled to the distance
+    // camparam ships for it. The fixed numpad views take the same radius, so a snap changes the
+    // angle and nothing else — they are one number, and moving only one desyncs the two cameras.
+    private readonly float _back, _up, _viewDist;
+
     private float _orbitYaw, _orbitPitch, _orbitDist; // free orbit-camera state while paused
     private int _viewPrev = -1;                  // index into Views last applied (-1 = chase camera)
 
-    public CameraController(Camera3D camera, Func<Key, bool> keyDown, int pinnedView)
+    public CameraController(Camera3D camera, CamParams cam, Func<Key, bool> keyDown, int pinnedView)
     {
         _camera = camera;
         _keyDown = keyDown;
         _pinnedView = pinnedView;
+        _viewDist = cam.Dist;
+        _back = BaseBack * (cam.Dist / BaseDist);
+        _up = BaseUp * (cam.Dist / BaseDist);
     }
 
     /// <summary>Which fixed view the camera should hold this frame, as an index into
@@ -112,7 +128,7 @@ public sealed class CameraController
         // Rigid views ride the DRAWN pose, not the raw sim pose — the two differ on the realtime
         // clock (render interpolation), and mixing them would jitter the plane inside a view
         // whose whole point is to be bolted to it. Identical on a parent-driven clock.
-        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * ViewDist));
+        _camera.Position = renderPose.Origin + (renderPose.Basis * (dir * _viewDist));
         _camera.Basis = renderPose.Basis * Basis.LookingAt(-dir, up);
     }
 
@@ -211,6 +227,6 @@ public sealed class CameraController
     {
         var nose = -attitude.Z;
         camUp = attitude.Y;
-        return planePos - (nose * CamBack) + (camUp * CamUp);
+        return planePos - (nose * _back) + (camUp * _up);
     }
 }

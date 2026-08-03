@@ -37,6 +37,25 @@ public class ExtractedGoldenTests
         { "C5", 57 },
     };
 
+    /// <summary>Every player airframe's shipped chase distance from <c>camparam.json</c>. Seven
+    /// carry a block of their own; the four that do not (Devastator, Hoplite, Hellhound, Brigand)
+    /// take the 13.0 default, and are listed precisely so a future block appearing for one of them
+    /// shows up as a failure rather than passing unnoticed.</summary>
+    public static TheoryData<string, float> ShippedChaseDistances => new()
+    {
+        { "player_bhawk", 18.5f },
+        { "player_fury", 17.0f },
+        { "player_peacemaker", 18.0f },
+        { "player_kestrel", 14.5f },
+        { "player_fbrand", 20.5f },
+        { "player_warhawk", 20.0f },
+        { "player_balmoral", 25.0f },
+        { "player_pfighter", 13.0f },
+        { "player_autogyro", 13.0f },
+        { "player_avenger", 13.0f },
+        { "player_brigand", 13.0f },
+    };
+
     private static string Extracted => TestData.ExtractedRoot!;
     private static string DataRoot => TestData.DataRoot!;
 
@@ -180,6 +199,15 @@ public class ExtractedGoldenTests
             Assert.NotNull(def.AnimName);
             Assert.NotEqual("", def.SourceFile);
         }
+    }
+
+    [ExtractedDataTheory]
+    [MemberData(nameof(ShippedChaseDistances))]
+    public void EveryAirframeResolvesItsShippedChaseDistance(string plane, float dist)
+    {
+        var cam = CamParams.Load(SharedZrdr, plane);
+        Assert.True(cam.FromData);
+        Assert.Equal(dist, cam.Dist, 3);
     }
 
     private static float LateralOf(MarkerRig rig, string name)

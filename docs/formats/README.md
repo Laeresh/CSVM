@@ -35,6 +35,7 @@ the original game (screenshots, videos, in-game measurements) — no exe decompi
 | [interp.md](interp.md) | `interp.zbd` boot scripts (`.gw`): the command format, and the **per-mission world setup** that decides which entities a mission shows (zeppelins, CTF props) |
 | [clutter.md](clutter.md) | The clutter system: `interp.json` boot scripts, `AddClutterTemplates`, template subtree shape |
 | [hud.md](hud.md) | HUD: the compass tape textures + drum projection, the cockpit gauge dials (altimeter/speedometer/damage display) |
+| [camparam.md](camparam.md) | `camparam.json`: the chase/third-person camera tuning — per-plane chase distance (keyed by DISPLAY name), catch-up rates, and the look-behind/death/crash/flyby geometry |
 | [paint.md](paint.md) | Aircraft paint: `paint_pattern`/`paint_color`/`paint_decal` schemes, the numbered 00–49 decal set, why shipped skins are unpainted key textures |
 | [rof.md](rof.md) | `.rof` UI resource archives: the container, the GUI scripts + `LAYOUT.CSV`, and the `.BM` texture format carrying the **paint region masks** |
 | [strings.md](strings.md) | UI text: the `langui.dll` Win32 string table, `RESOURCE.H` symbols, the `[FONTID]` convention, the aircraft name/description blocks — plus the **bindable-command inventory** (`MSG_CMD_*`/`MSG_CAM*`), the authoritative list of what the retail game let a player do |

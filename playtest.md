@@ -76,8 +76,13 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 |---|---|---|---|
 | `CAP-07` | Numpad view stills | One still per numpad key held — **including 0**, which the original binds and we do not — framed wide enough to read the angle and height | `BL-150` |
 | `CAP-08` | Numpad key-combination stills | Two or more numpad keys held together, one still per combination tried | `BL-150` |
+| `CAP-21` | Chase distance against airspeed | One aircraft, external chase view, a slow full-throttle acceleration from near-stall to top speed and back, held level, with the **airspeed readable in frame throughout**. The plane's apparent size is the measurement, so keep the view unchanged and do not touch the +/− trim. Names the aircraft in the filename — the distance is per-plane | `BL-248` |
 
 *(The numpad +/− distance trim needs no capture — you already have video of it.)*
+
+*(`CAP-21` decides whether the original's chase distance moves at all. If the plane's apparent size
+is constant across the whole speed range, `dist_factor`/`dist_vary` do not drive distance from
+speed, and `BL-248`(a) is disproved rather than implemented — a correct disproof closes it.)*
 
 ### Audio
 

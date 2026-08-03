@@ -12246,3 +12246,63 @@ its frame is unchanged).
 (B4/B5), and the mount stepper does not yet drive the controller's selectors, though A2 exposed
 `SelectGunGroup`/`SelectPylon` for exactly that. `docs/cli.md` + `docs/controls.md` were corrected in
 this turn (W moved from the `--viewer` table to the flight one); D10 is still the full doc pass.
+
+
+## 2026-08-03 — Per-plane camera: `CamParams` + `CameraController` (`BL-149`)
+
+**The camera moved out of `FlightController` first, as a null-diff refactor.** The roll-following
+chase camera, the numpad fixed views (`Views`/`ActiveView`/`FixedView`/`LogView`) and the paused
+orbit became `src/Flight/CameraController.cs`, a sealed class steering a `Camera3D` it does not own —
+the shape `UI/OrbitCamera` already had for the static viewer. It is deliberately passive: no clock,
+no input devices. The host passes the dt, because which clock a camera runs on is behaviour, not a
+detail — `Chase` takes SIM dt so a scripted capture is frame-rate independent, `Orbit` takes WALL dt
+so you can fly around a halted world. The orbit's three axes arrive pre-mixed from a new
+`OrbitInput()` and `ActiveView` takes a `Func<Key,bool>` that already folds in `UseKeyboard`, so pad
+devices, window focus and the stick curve stay in the flight node. Verified as a true null diff
+before anything else changed: `--fly --plane=player_bhawk --chapter=C1 --frames=90 --screenshot`
+and the same run with `--view=4` were both md5-identical to their pre-change twins from `bda1711`,
+and the `--view=4` telemetry still read `dist=16.621`.
+
+**Then `camparam.zrd.json` got a reader, and the chase distance became the plane's own.**
+`src/Flight/CamParams.cs` resolves the file's `default` block and layers the aircraft's own block on
+top; `GameSession` caches it per distinct plane beside `PlaneStats`. The chase offset's *direction*
+(behind and above at ~15.7°) is unchanged and still hand-picked — only the *radius* comes from the
+data, which is what `BL-149` asked for. The numpad fixed views share that radius deliberately, so
+both cameras moved together (`BL-149` trap (b)). New format page: `docs/formats/camparam.md`.
+
+**The join key was the trap.** The file is keyed by DISPLAY name ("Bloodhawk", "Firebrand"), not by
+the model node or the vehicle def, so the lookup goes through `MarkerRig.PlayerAirframes`.
+`PlaneRoster.PlaneDisplayName` — the obvious-looking alternative — strips a leading `p` and
+title-cases, yielding "Fbrand" for `player_fbrand`: it would have silently dropped the Firebrand's
+20.5 override and fallen back to 13.0 with nothing failing. `CamParamsTests` pins that case.
+
+**What deliberately did NOT land.** `dist_factor`/`dist_vary`/`dist_min`/`dist_max` and the
+`pos_catch_up`/`look_catch_up`/`dist_catch_up` triplet are parsed, exposed and left dormant. Two
+reasons, both recorded on the type and the format page: in the `default` block **`dist_min` (15.7)
+is larger than `dist` (13.0)** while all seven per-plane blocks have them equal — so the mechanism
+is not a clamp, and no reading that assumes one can be right; and the catch-up units could be 1/s,
+frame counts or seconds-to-settle, which differ ~4x in felt lag with nothing looking broken on
+screen either way. `BL-149` is retired into `BL-248` for that residue, blocked on new `CAP-21`
+(chase distance against airspeed). `BL-150`'s point (c) — "distance is a TUNE hand-copied from the
+chase camera" — is resolved by this work; its layout/easing/interrupt/trim rebuild is untouched and
+still blocked on `CAP-07`/`CAP-08`.
+
+**Verified.** All 11 airframes swept through `--fly --view=4 --log=flight`, with `LogView` reading
+the distance back **off the camera's own transform** rather than off the value fed to it: Bloodhawk
+18.5, Fury 17.0, Peacemaker 18.0, Kestrel 14.5, Firebrand 20.5, Warhawk 20.0, Balmoral 25.0, and
+Devastator/Hoplite/Hellhound/Brigand at the 13.0 default — 11/11 exact, 0 failures.
+`.\RunTests.ps1`: 413/413 units (18 new), 21/21 engine suites, 0 StyleCop warnings.
+
+**Four goldens moved, and the pattern is the evidence.** `empty-stage`, `c1-flight`,
+`c1-destroy-effects` and `c1-crash` are exactly the four shots with a *flown* Bloodhawk; the eight
+chapter `--freecam` shots and `viewer-bhawk` are byte-unchanged. Every golden with a chase camera
+moved, every golden without one did not — which is the discrimination that says the change is the
+intended one and nothing else. Confirmed visually as well: re-rendering `c1-flight`'s exact command
+at its manifest frame count from `bda1711` gives the same 248 MPH, ALT 1103 FT, same terrain, fog,
+HUD and gauges, with the aircraft simply smaller in frame. Manifest diff is 4 hash lines and nothing
+else.
+
+⚠ **Instrument note.** The first attempt at that visual A/B compared a probe run at the default
+frame count against a golden rendered at `--frames=120`, producing two images 100 MPH apart that
+looked like a huge regression. The golden runner appends each shot's own `frame` field; an ad-hoc
+probe must be given it explicitly or the comparison is meaningless.

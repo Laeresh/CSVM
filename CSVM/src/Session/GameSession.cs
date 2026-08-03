@@ -1169,6 +1169,21 @@ public partial class GameSession : Node3D
                      $"torques=({loaded.PitchTorque},{loaded.RollTorque},{loaded.RudderTorque})");
             return loaded;
         }
+        // The camera's per-plane tuning, cached the same way and for the same reason. Only the
+        // chase distance is applied; the line names it so a capture's evidence is in its own log.
+        var camCache = new Dictionary<string, CamParams>();
+        CamParams CamParamsFor(string plane)
+        {
+            if (camCache.TryGetValue(plane, out var cached))
+                return cached;
+            var loaded = CamParams.Load(state.ZrdrPath, plane);
+            camCache[plane] = loaded;
+            GD.Print($"camera [{loaded.DisplayName ?? plane}]: dist={loaded.Dist:0.##} m" +
+                     (loaded.FromData
+                        ? loaded.DisplayName == null ? " (camparam default — no block of its own)" : ""
+                        : " (no camparam.json — built-in defaults)"));
+            return loaded;
+        }
         // Splitscreen: several own-ship engine stacks in one mix — equal-power scale them.
         float mixGain = 1f / Mathf.Sqrt(_rigs.Count);
         // The launchscreen's join flow binds the pads; a CLI launch derives them
@@ -1270,6 +1285,7 @@ public partial class GameSession : Node3D
             {
                 PlanesGamez = planesGamez,
                 StatsFor = StatsFor,
+                CamParamsFor = CamParamsFor,
                 RigCount = _rigs.Count,
                 MixGain = mixGain,
                 PadAssignment = padAssignment,

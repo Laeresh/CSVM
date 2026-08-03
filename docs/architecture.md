@@ -71,6 +71,8 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
 - `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
+- `src/Flight/CamParams.cs` — one aircraft's camera tuning from `camparam.json`: `default` plus its own block, keyed by DISPLAY name. Only `Dist` is applied.
+- `src/Flight/CameraController.cs` — the flown plane's camera: roll-following chase, numpad fixed views, paused orbit. Steers a `Camera3D` it does not own.
 - `src/Flight/ImpactOutcome.cs` — what a weapon×surface hit should do (effect, sound, stand-in, damage) as a value; `Resolve` is pure and engine-free.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
@@ -771,6 +773,44 @@ silently diverge; each still owns its own step size.
   round is therefore a straight line, on which the step size cannot move the endpoint, and a fixed
   step keeps the reticle from twitching with the frame rate. `BallisticsTests` guards the census.
 
+## src/Flight/CamParams.cs
+One aircraft's camera tuning out of `camparam.json` ([formats/camparam.md](formats/camparam.md)):
+the `default` block, then the plane's own block layered on top. Seven of the eleven airframes carry
+one; the other four take the 13.0 default. Mirrors `PlaneStats.Load`'s shape (same
+`Load(zrdrPath, planeNodeName)`, same nearest-wins resolution), and like it is loaded once per
+distinct plane and cached by `GameSession`. `FromData` is false when the file was absent — the
+built-in fallbacks are the shipped `default` block verbatim, so a partial extraction still flies and
+the session log distinguishes "the data says 13" from "we guessed 13".
+⚠ The file is keyed by DISPLAY name ("Bloodhawk"), so the lookup goes through
+  `MarkerRig.PlayerAirframes`. `PlaneRoster.PlaneDisplayName` strips a leading `p` and title-cases,
+  which yields "Fbrand" for `player_fbrand` — it would silently drop the Firebrand's override
+  rather than fail. `CamParamsTests` pins that case.
+⚠ Only `Dist` is applied. The dynamic-distance keys and the catch-up triplet are parsed and
+  deliberately DORMANT: in the `default` block `dist_min` (15.7) exceeds `dist` (13.0), so the
+  obvious clamp reading is wrong, and the catch-up units could be 1/s, frames or seconds-to-settle.
+  Both need a capture of the original, not a plausible-looking constant — see the format page.
+
+## src/Flight/CameraController.cs
+The flown aircraft's camera, split out of `FlightController`: the roll-following chase camera, the
+numpad fixed views (`Views`, `ActiveView`, `FixedView`, `LogView`) and the free orbit used while the
+debug freeze holds the world. Steers a `Camera3D` it does not own, as `UI/OrbitCamera` does for the
+static viewer. The chase RADIUS is `CamParams.Dist`, per plane; the offset's DIRECTION (behind and
+above at ~15.7° elevation) is not in the data and stays hand-picked. Collaborators: `FlightController`
+(the only host) and `CamParams`.
+⚠ Deliberately passive — no clock, no input devices. The host passes the dt, because which clock a
+  camera runs on is behaviour: `Chase` takes the SIM clock's dt so a scripted capture is frame-rate
+  independent, `Orbit` takes WALL dt because the point of the freeze is to fly around a stopped
+  world. The orbit's axes arrive pre-mixed and `ActiveView` takes a `Func<Key,bool>` that already
+  folds in `UseKeyboard`, so pad devices and window focus stay out of here.
+⚠ The chase camera slerps its BASIS, never a re-derived LookAt — that is what lets inverted flight
+  render upside down. On the realtime clock the DRAWN pose is `_renderPose`, interpolated between
+  the last two sim poses (DET-10), and anything bolted to the plane (the rigid numpad views) must
+  read it, never the raw sim pose.
+⚠ The fixed views share the chase radius, so a distance change moves BOTH cameras. That is
+  intended (they are one number; moving one desyncs them) — and it is why the four golden shots
+  with a flown plane moved when the per-plane distances landed, while the eight `--freecam` shots
+  and `viewer-bhawk` did not. `BL-150`'s rebuild of the view LAYOUT is still open.
+
 ## src/Flight/ImpactOutcome.cs
 "What should happen when this weapon hits this surface" as a value — `EffectName` (the class's
 `ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
@@ -1228,11 +1268,13 @@ one OR two parallel planes per axis (the double cut separates bilateral pairs li
 ⚠ Known limit: the Bloodhawk's canard tips stay uncovered.
 
 ## src/Flight/FlightController.cs
-The flying-aircraft node: input → FlightModel → transform, roll-following chase camera + fixed
-numpad views, text HUD + telemetry, weapon firing/selection, crash and respawn. Sweeps the
+The flying-aircraft node: input → FlightModel → transform, text HUD + telemetry, weapon
+firing/selection, crash and respawn. The camera is `CameraController`'s — this node only feeds it
+the pose, the dt and the mixed orbit axes (`OrbitInput`). Sweeps the
 PlaneCollider boxes via CastMotion each physics frame; the sim half is `SimStep(dt)`, called by
 `_PhysicsProcess` (realtime clock) or by `GameSession` (fixed/halted clock). Collaborators:
-FlightModel, Loadout + ProjectilePool (guns/rockets), `CollideDamageSink` →
+FlightModel, CameraController + CamParams, Loadout + ProjectilePool (guns/rockets),
+`CollideDamageSink` →
 `AnimRuntime.CollideDamageAt` (fly-through facades), CrashRuntime, every HUD widget and animator.
 `Crash` reads the struck body through the same `ProjectilePool.ClassifySurface` (`ClassifySurface`
 here maps it to `CrashSurface`) to pick the variant: a `water`-tagged body plays
@@ -1260,13 +1302,6 @@ programmatic twins of G/H for the lab panel.
   `_model` reader stays consistent; and because a held plane sits at 0 m/s (below every stall speed)
   and may legally be parked under `UnderMapY`, the stall gauge/HUD line and the under-map respawn
   backstop are explicitly exempt while held.
-⚠ The chase camera slerps its BASIS, never a re-derived LookAt (inverted flight renders upside
-  down), and takes the SIM clock's dt; the halted orbit camera keeps wall time on purpose. Its
-  distance/lag constants are hand-picked while `extracted/zrdr/camparam.zrd.json` ships real ones
-  (per-plane) that nothing reads — check there before adding or retuning any camera constant.
-  On the realtime clock the DRAWN pose is `_renderPose` — interpolated between the last two sim
-  poses, because the 60 Hz sim stutters against >60 fps rendering (DET-10) — and anything bolted
-  to the plane (the rigid numpad views) must read it, never the raw sim pose.
 ⚠ The reticle march (`BallisticImpactPoint`) calls `Ballistics.March`, the same integration
   `ProjectilePool.SimStep` steps real rounds with — see `Ballistics.cs`'s entry for the one thing
   that still differs between them (`dt`).

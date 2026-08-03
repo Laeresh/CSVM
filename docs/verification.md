@@ -70,6 +70,14 @@ and leave gaps when retiring old ones.
 - **GOLD-1** — **Update moved hashes with the visual change and explain each shot.**
 - **GOLD-2** — **A golden is a tripwire, not a diagnosis.**
 - **GOLD-3** — **For render-path changes, sweep every golden and inspect the largest movers.**
+- **GOLD-4** — **Reproduce a golden with its OWN `frame` count, or the A/B is meaningless.** The
+  runner appends each shot's manifest `frame` field to its args; an ad-hoc `RunProbe.ps1` repro
+  that omits it renders a different sim frame, and two shots of the same flight seconds apart
+  differ everywhere — it reads as a catastrophic regression when nothing is wrong.
+- **GOLD-5** — **Which goldens move is itself evidence — check the pattern, not just the count.**
+  A change that should touch one subsystem should move exactly the shots exercising it and no
+  others. Per-plane chase distance moved all four flown-aircraft shots and none of the nine
+  without an aircraft, which localises the change far better than any single image diff.
 
 ## DET — determinism and randomness
 
