@@ -1960,7 +1960,12 @@ root someone just re-sized actually got its copies.
   so freeing the session node on `ReturnToMenu` frees it too, and the factory itself is discarded and
   rebuilt fresh next `StartSession`, same as `LiveryResolver`/`SpawnPicker`. Do not add a
   `GameSession`-side cache of the runtime "for symmetry" — it would be a second place to keep in sync
-  with the factory's.
+  with the factory's. `BuildWorldEffectsRuntime` is `private` **for exactly this reason**
+  (`PLAN-deepening` F17, closing `BL-232`): it used to be public and `GameSession` called it directly
+  from two sites that never populated `_worldEffects`, so a later `EnsureWorldEffects` demand in the
+  same session found the cache empty and built a second runtime. `EnsureWorldEffects` is now the only
+  way in, and it also wires `ProjectilePool.EffectSink` when a pool is passed (gated on "unset", same
+  as `ExternalEffect`) — the wiring `GameSession`'s raw call used to do inline.
 ⚠ `BuildEffectStage`, `BuildCrashAnchorSet` and `EffectAnimNames` are `public static` (no session
   state) — `GameSession`'s anim-lab stage and `--effects-test`'s `ProbeRunner.RunEffectsTest` call
   them as `Session.WorldEffectsFactory.X`, not through the instance.

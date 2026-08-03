@@ -527,19 +527,6 @@ unscheduled.
   **When it comes back**, the fuse branch must carry its struck body into `Impact` instead of
   `null`, or it re-breaks per-surface effect selection the moment it is switched on.
 
-- `BL-232` **A flight session plus `--destroy` builds the world-effects runtime TWICE (found while
-  landing `BL-225`, 2026-08-02).** `GameSession.cs:1217` calls `BuildWorldEffectsRuntime` directly and
-  does **not** populate the factory's `_worldEffects` cache, so `ApplyDestroyOverride`'s
-  `EnsureWorldEffects` (`:1364`) finds it null and builds a second one — two stages, two runtimes,
-  both live (`world-effects runtime: …` prints twice in `--plane=… --destroy=…` logs). Harmless to
-  the picture today (`c1-destroy-effects` is hash-identical either way, and only the wired runtime
-  receives calls), but it is a debug-path waste that the template pool multiplies: each stage is now
-  `EffectPoolSlots` × ~38 template subtrees. *Fix shape:* route `:1217` through `EnsureWorldEffects`
-  so there is one cache and one runtime, as `docs/architecture.md` already says there is.
-  ⚠ Trap: `:1217` wires the projectile pool's `EffectSink` and the world runtime's `ExternalEffect`
-  in one place and `EnsureWorldEffects` only wires the latter (and only if unset) — check the
-  ordering against a `--fly --destroy` run before assuming the two are interchangeable.
-
 - `BL-061` **World-effects runtime follow-ups (from M3 D32, 2026-07-24).** The world-effects runtime
   (`PlaneViewer.BuildWorldEffectsRuntime`) renders the impact/destruction **puffers**; one thread
   still open (numbering kept — other entries cite `item 2`; **item 3 disproven, M3 polish-5 B5,

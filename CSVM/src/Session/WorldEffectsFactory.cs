@@ -191,99 +191,18 @@ public sealed class WorldEffectsFactory
         return set;
     }
 
-    /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
-    /// per-player crash runtime. It stages the impact/destruction effect templates under a
-    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
-    /// roots, keeps a live <c>IEmitterFactory</c> over the session textures, and binds the closure of
-    /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
-    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
-    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
-    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
-    /// not suppress them.
-    ///
-    /// <para>The stage itself is visible and each template ROOT starts hidden
-    /// (<see cref="AnimRuntime.ShowPlacedTemplates"/> reveals one for as long as an effect plays on
-    /// it): a template's meshes are half the effect — the rocket's authored per-type rings, the
-    /// fireball facades, the splash models — and hiding the whole stage rendered none of them
-    /// (D31). Inside a revealed root the data still decides what shows: every ring is reset
-    /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para></summary>
-    public AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
-        TextureArchive textures, AnimProgram worldProgram)
-    {
-        var stage = new Node3D { Name = "world_effects" };
-        _worldRoot.AddChild(stage);
-        // The pool (BL-225): each root staged in as many copies as effect_pools.json sizes it for
-        // THIS session's player count, one copy per slot container, and AnimRuntime hands the next
-        // slot to each call. The containers carry only the slot meta and no cs_name, so they are
-        // invisible to name resolution — what keeps the copies apart is the slot, read off the
-        // anchor a call runs on. Sizes differ per root, so the deeper slots hold only the roots
-        // sized that deep (the shared gun family lives in slot 0 alone); a def whose root has no
-        // copy in its slot falls back to one that exists.
-        int players = Math.Max(1, _spec.Players);
-        int depth = _pools.DepthFor(EffectStageRoots, players);
-        int staged = 0;
-        for (int slot = 0; slot < depth; slot++)
-        {
-            var pool = new Node3D { Name = $"pool{slot}" };
-            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
-            stage.AddChild(pool);
-            int at = slot;
-            staged += BuildEffectStage(gamez, worldScene, pool,
-                Array.FindAll(EffectStageRoots, r => _pools.SlotsFor(r, players) > at));
-            foreach (var child in pool.GetChildren())
-                if (child is Node3D root)
-                    root.Visible = false;
-        }
-        // The impact/death SOUND an effect def carries is already played by the projectile pool
-        // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
-        // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
-        // off the master seed — decide which effects render at all.
-        // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
-        // sprites emit at these ground-level sites and measured near-invisible with it on (the
-        // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
-        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects),
-            new PufferEmitterFactory(textures, _worldRoot),
-            _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
-        // Bind name resolution to the template stage — so the effect names resolve to these
-        // templates and not to the world's or the crash roots' same-named nodes — but parent the
-        // runtime node itself under the visible world root, a plain logic node that self-ticks.
-        effects.ShowPlacedTemplates = true;
-        effects.PooledTemplates = true;
-        effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
-        _worldRoot.AddChild(effects);
-        int wanted = 0;
-        foreach (var r in EffectStageRoots)
-            wanted += _pools.SlotsFor(r, players);
-        // Name the sizes, not just the total: "143 staged" cannot say whether a root the tester
-        // just re-sized actually got its copies. Grouped by size so the line stays one line.
-        var bySize = new SortedDictionary<int, List<string>>();
-        foreach (var r in EffectStageRoots)
-            bySize.TryAdd(_pools.SlotsFor(r, players), new List<string>());
-        foreach (var r in EffectStageRoots)
-            bySize[_pools.SlotsFor(r, players)].Add(r);
-        var sizes = new List<string>();
-        foreach (var (size, names) in bySize)
-        {
-            sizes.Add(names.Count > 4
-                ? $"{size}× {names.Count} root(s)"
-                : $"{size}× {string.Join("/", names)}");
-        }
-        GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
-                 + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
-                 + $"{EffectAnimNames.Length} effect name(s) bound");
-        foreach (var unknown in _pools.UnknownRoots(EffectStageRoots))
-            Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
-        return effects;
-    }
-
-    /// <summary>The session's one world-effects runtime, built on first demand and wired into the
-    /// world runtime's <see cref="AnimRuntime.ExternalEffect"/> so a death's CALL_ANIMATION renders.
-    /// Flight builds one during the session build and wires it to the projectile pool as well, so
-    /// this leaves an existing wiring alone; a plane-less <c>--freecam</c>/<c>--anim-lab</c> builds
-    /// none of its own, which is why a kill there draws nothing until something asks. Returns null
-    /// when the build fails — the HP/kill/swap/reset mechanics do not depend on it.</summary>
+    /// <summary>The session's one world-effects runtime (the only way to reach
+    /// <see cref="BuildWorldEffectsRuntime"/> — see its own doc for the two-runtimes bug a second
+    /// entry point caused, `BL-232`), built on first demand and wired into the world runtime's
+    /// <see cref="AnimRuntime.ExternalEffect"/> and, when <paramref name="projectiles"/> is given,
+    /// the pool's <c>EffectSink</c> — both gated on "unset" so a caller that already wired one (or
+    /// calls again on a later demand) leaves it alone. A plane-less <c>--freecam</c>/<c>--anim-lab</c>
+    /// passes no <paramref name="projectiles"/> and gets none wired, which is why a kill there draws
+    /// nothing until something asks. Returns null when the build fails — the HP/kill/swap/reset
+    /// mechanics do not depend on it.</summary>
     public AnimRuntime? EnsureWorldEffects(GameZ gamez, SceneBuilder worldScene,
-        TextureArchive textures, AnimProgram worldProgram, AnimRuntime worldRuntime)
+        TextureArchive textures, AnimProgram worldProgram, AnimRuntime worldRuntime,
+        ProjectilePool? projectiles = null)
     {
         if (_worldEffects == null)
         {
@@ -302,6 +221,10 @@ public sealed class WorldEffectsFactory
         {
             worldRuntime.ExternalEffect = (name, pt, node) => effects.Handles(name) && effects.PlayEffectAt(name, pt, node);
             worldRuntime.ExternalEffectStop = name => effects.Stop(name);
+        }
+        if (projectiles != null && projectiles.EffectSink == null)
+        {
+            projectiles.EffectSink = (name, pt, ttl) => effects.PlayEffectAt(name, pt, null, ttl);
         }
         return effects;
     }
@@ -401,5 +324,96 @@ public sealed class WorldEffectsFactory
             {
                 CollectVisibility(c, into);
             }
+    }
+
+    /// <summary>Builds the one world-effects runtime (D32) — the world-scoped generalization of the
+    /// per-player crash runtime. It stages the impact/destruction effect templates under a
+    /// dedicated subtree so their names resolve locally without colliding with the world or the crash
+    /// roots, keeps a live <c>IEmitterFactory</c> over the session textures, and binds the closure of
+    /// <see cref="EffectAnimNames"/>. <see cref="AnimRuntime.PlayEffectAt"/> then stages any of those
+    /// effects at a hit or death point: <c>ProjectilePool.EffectSink</c> calls it on a weapon impact,
+    /// and the world runtime's <see cref="AnimRuntime.ExternalEffect"/> routes a death's
+    /// CALL_ANIMATION here. Puffers parent at world level (the crash lesson) so the stage does
+    /// not suppress them.
+    ///
+    /// <para>The stage itself is visible and each template ROOT starts hidden
+    /// (<see cref="AnimRuntime.ShowPlacedTemplates"/> reveals one for as long as an effect plays on
+    /// it): a template's meshes are half the effect — the rocket's authored per-type rings, the
+    /// fireball facades, the splash models — and hiding the whole stage rendered none of them
+    /// (D31). Inside a revealed root the data still decides what shows: every ring is reset
+    /// INACTIVE or opacity-OFF at bootstrap and its own def turns it on.</para>
+    ///
+    /// <para>⚠ Private — <see cref="EnsureWorldEffects"/> is the only way in. A caller that built its
+    /// own copy alongside the cached one is exactly `BL-232`: a <c>--fly --destroy=</c> session's
+    /// direct call here, followed by the damage lab's own <see cref="EnsureWorldEffects"/> lookup
+    /// finding the cache empty, built two runtimes, each carrying <c>EffectPoolSlots</c> × ~38
+    /// template subtrees.</para></summary>
+    private AnimRuntime BuildWorldEffectsRuntime(GameZ gamez, SceneBuilder worldScene,
+        TextureArchive textures, AnimProgram worldProgram)
+    {
+        var stage = new Node3D { Name = "world_effects" };
+        _worldRoot.AddChild(stage);
+        // The pool (BL-225): each root staged in as many copies as effect_pools.json sizes it for
+        // THIS session's player count, one copy per slot container, and AnimRuntime hands the next
+        // slot to each call. The containers carry only the slot meta and no cs_name, so they are
+        // invisible to name resolution — what keeps the copies apart is the slot, read off the
+        // anchor a call runs on. Sizes differ per root, so the deeper slots hold only the roots
+        // sized that deep (the shared gun family lives in slot 0 alone); a def whose root has no
+        // copy in its slot falls back to one that exists.
+        int players = Math.Max(1, _spec.Players);
+        int depth = _pools.DepthFor(EffectStageRoots, players);
+        int staged = 0;
+        for (int slot = 0; slot < depth; slot++)
+        {
+            var pool = new Node3D { Name = $"pool{slot}" };
+            pool.SetMeta(AnimRuntime.PoolSlotMeta, slot);
+            stage.AddChild(pool);
+            int at = slot;
+            staged += BuildEffectStage(gamez, worldScene, pool,
+                Array.FindAll(EffectStageRoots, r => _pools.SlotsFor(r, players) > at));
+            foreach (var child in pool.GetChildren())
+                if (child is Node3D root)
+                    root.Visible = false;
+        }
+        // The impact/death SOUND an effect def carries is already played by the projectile pool
+        // (D30) or the world runtime (D31); this runtime only renders the puffers. Several gun
+        // effects gate their puffer behind RANDOM_WEIGHT, so this runtime's dice — its own stream
+        // off the master seed — decide which effects render at all.
+        // Puffer.Create pairs the depth fade with the blend it derives — off for MIX, whose dark
+        // sprites emit at these ground-level sites and measured near-invisible with it on (the
+        // damage-stage black smoke), on for additive fire, which leaks through the fade anyway.
+        var effects = AnimRuntime.ForEffects(Rng.IntSeedFor(Rng.Effects),
+            new PufferEmitterFactory(textures, _worldRoot),
+            _spec.DebugAnim, EffectRuntimeTtl, _playerPosition);
+        // Bind name resolution to the template stage — so the effect names resolve to these
+        // templates and not to the world's or the crash roots' same-named nodes — but parent the
+        // runtime node itself under the visible world root, a plain logic node that self-ticks.
+        effects.ShowPlacedTemplates = true;
+        effects.PooledTemplates = true;
+        effects.Bind(stage, worldProgram.Subset(EffectAnimNames));
+        _worldRoot.AddChild(effects);
+        int wanted = 0;
+        foreach (var r in EffectStageRoots)
+            wanted += _pools.SlotsFor(r, players);
+        // Name the sizes, not just the total: "143 staged" cannot say whether a root the tester
+        // just re-sized actually got its copies. Grouped by size so the line stays one line.
+        var bySize = new SortedDictionary<int, List<string>>();
+        foreach (var r in EffectStageRoots)
+            bySize.TryAdd(_pools.SlotsFor(r, players), new List<string>());
+        foreach (var r in EffectStageRoots)
+            bySize[_pools.SlotsFor(r, players)].Add(r);
+        var sizes = new List<string>();
+        foreach (var (size, names) in bySize)
+        {
+            sizes.Add(names.Count > 4
+                ? $"{size}× {names.Count} root(s)"
+                : $"{size}× {string.Join("/", names)}");
+        }
+        GD.Print($"world-effects runtime: {staged}/{wanted} effect template(s) staged over "
+                 + $"{depth} pool slot(s) for {players} player(s) [{string.Join(", ", sizes)}], "
+                 + $"{EffectAnimNames.Length} effect name(s) bound");
+        foreach (var unknown in _pools.UnknownRoots(EffectStageRoots))
+            Log.Warn("anim", $"effect pools: '{unknown}' is not an effect stage root — it sizes nothing");
+        return effects;
     }
 }

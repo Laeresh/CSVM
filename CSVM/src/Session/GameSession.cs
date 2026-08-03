@@ -692,8 +692,11 @@ public partial class GameSession : Node3D
         if (_spec.EffectsTest && state.WorldScene != null)
         {
             _worldRoot!.AddChild(_plane);
-            var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, session.Program);
-            _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
+            if (_worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene, state.Textures,
+                    session.Program, session.Runtime) is { } effects)
+            {
+                _probeRunner.RunEffectsTest(_spec, _camera, effects, WorldEffectsFactory.EffectAnimNames);
+            }
             GetTree().Quit();
             return false;
         }
@@ -1227,18 +1230,15 @@ public partial class GameSession : Node3D
         // puffer effects the world runtime cannot (its factory is gone after the build). A
         // rocket impact plays its named effect here; the world runtime routes a death's
         // CALL_ANIMATION of a curated effect here too. Needs the world's SceneBuilder to stage
-        // the templates, so it is built only when the world was.
+        // the templates, so it is built only when the world was. Through EnsureWorldEffects (not
+        // built directly) so a later --destroy=/damage-lab demand on the SAME session finds the
+        // cache instead of building a second one (`BL-232`) — it also wires projectiles.EffectSink,
+        // since this is the one call site that has a ProjectilePool to wire it to.
         AnimRuntime? worldEffects = null;
-        if (state.WorldScene != null)
+        if (state.WorldScene != null && state.WorldRuntime != null)
         {
-            var effects = _worldEffectsFactory.BuildWorldEffectsRuntime(state.Gamez, state.WorldScene, state.Textures, state.CrashProgram!);
-            worldEffects = effects; // the rigs' graze reaction plays through the same runtime
-            projectiles.EffectSink = (name, pt, ttl) => effects.PlayEffectAt(name, pt, null, ttl);
-            if (state.WorldRuntime != null)
-            {
-                state.WorldRuntime.ExternalEffect = (name, pt, node) => effects.Handles(name) && effects.PlayEffectAt(name, pt, node);
-                state.WorldRuntime.ExternalEffectStop = name => effects.Stop(name);
-            }
+            worldEffects = _worldEffectsFactory.EnsureWorldEffects(state.Gamez, state.WorldScene,
+                state.Textures, state.CrashProgram!, state.WorldRuntime, projectiles); // the rigs' graze reaction plays through the same runtime
         }
 
         // Stunt run: the mission's danger-zone objectives from ia.json

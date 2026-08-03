@@ -184,7 +184,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave F — invariants the caller no longer remembers
 
 16. ☑ `SessionArchives.OpenFor(intent)`
-17. ☐ Seal the raw effects builder (`BL-232`)
+17. ☑ Seal the raw effects builder (`BL-232`)
 
 ### Wave G — three runtimes, three interfaces
 
@@ -987,7 +987,7 @@ growing `rest`, not as missing. Then `.\RunTests.ps1` and the 8-chapter sweep.
 **⚠ Traps.** The sound archive is scoped to the build and the texture archive is not; that asymmetry
 is deliberate and `OpenFor` must reproduce it per intent, not normalise it.
 
-## F17 ☐ Seal the raw effects builder (`BL-232`)
+## F17 ☑ Seal the raw effects builder (`BL-232`)
 
 **Goal.** There is one world-effects runtime because there is only one way to ask for one.
 

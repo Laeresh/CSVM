@@ -10405,7 +10405,7 @@ default root) against a solo session's 147 over 8, from the same file.
 runtime **twice** — `GameSession.cs:1217` builds directly without populating the factory's
 `_worldEffects` cache, so `ApplyDestroyOverride`'s `EnsureWorldEffects` builds a second. Harmless to
 the picture (the golden is identical either way) but a debug-path waste the pool now multiplies;
-`BL-232`.
+`BL-232`. **Fixed 2026-08-03 — see that date's `PLAN-deepening` F17 entry.**
 
 Docs: `architecture.md` (`AnimRuntime`'s pool paragraph + the not-a-third-key warning,
 `WorldEffectsFactory`'s slot layout, a new `EffectPools` entry), `PROJECT_CONTEXT.md` (`CSVM/data/`
@@ -11986,3 +11986,39 @@ all of which fly identity poses. Docs: `BL-121`'s "confirmed to render in real f
 corrected (that confirmation was pose-narrow); `BL-246` filed for the separate *reachability*
 gap (smoke needs ≤ 10 % HP; grazes cap at 18 dmg behind a cooldown and 0 HP crashes — organic
 play never shows the trail; the F5 lab is currently the only practical trigger).
+
+## 2026-08-03 — seal the raw effects builder, closing `BL-232` (`PLAN-deepening` F17)
+
+**The bug, confirmed live before touching anything.** `.\RunProbe.ps1 --fly --plane=player_bhawk
+--chapter=C1 --destroy=refuel` printed `world-effects runtime: …` **twice**: `GameSession`'s
+flight-rig setup called `WorldEffectsFactory.BuildWorldEffectsRuntime` directly, which never
+populated the factory's `_worldEffects` cache, so `ApplyDestroyOverride`'s later
+`EnsureWorldEffects` call found the cache empty and built a second stage + runtime — exactly
+`BL-232`'s own trace. `--effects-test` had the same raw call, harmless there only because that mode
+quits before anything could ask for a second one.
+
+**Disproven claim 3 was real** — a bare swap would have dropped the projectile pool's `EffectSink`
+wiring. `GameSession.cs:1222`'s raw call site wired both `projectiles.EffectSink` and
+`state.WorldRuntime.ExternalEffect`/`ExternalEffectStop` inline; `EnsureWorldEffects` only ever
+wired the latter two. Fix: `EnsureWorldEffects` now takes an optional `ProjectilePool? projectiles`
+and wires its `EffectSink` too, gated on "unset" exactly like the `ExternalEffect` gate already
+next to it — so a second demand in the same session (the damage lab, `ApplyDestroyOverride`) leaves
+an existing wiring alone instead of re-pointing it at nothing new.
+
+**What moved.** `BuildWorldEffectsRuntime` is now `private` — `EnsureWorldEffects` is the only way
+to reach it, so a second entry point cannot recur by accident. Both raw call sites
+(`--effects-test`, the flight-rig setup) now go through `EnsureWorldEffects`; the flight-rig one
+passes its freshly-built `ProjectilePool` so the `EffectSink` wiring rides along. `docs/
+architecture.md`'s `WorldEffectsFactory.cs` entry already asserted "`_worldEffects` is the ONE
+lazily-built runtime" as a design decision — that assertion was aspirational until this item; it is
+now what the code actually enforces.
+
+**Verified.** The same repro clean: `world-effects runtime: 147/147 …` prints **once**, 0 engine
+errors. `c1-destroy-effects` stayed hash-identical (`fb21d757b2beebf275b457b083f0f4cc`, same as
+before) — a control, since the correct runtime is what rendered it before this fix too. `.\
+RunTests.ps1` full pass: 393 unit tests, **21/21 engine suites**, **13/13 goldens hash-identical**,
+engine errors clean. The 8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5): zero
+errors, node/mesh counts unchanged from `F16`'s own sweep.
+
+**Closes `BL-232`.** Deleted from `backlog.md`; no `docs/formats/` page (engine wiring, not a
+decode). `PLAN-deepening` Wave F is complete.
