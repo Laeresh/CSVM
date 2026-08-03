@@ -4,11 +4,10 @@
 a live plan; PROJECT_CONTEXT.md's "Current status" names it. Move it to `docs/plans/` with a
 `COMPLETE` banner, and add its row to [`plans.md`](plans.md), when every item lands.
 
-⚠ **Drafted, not started — but unblocked.** When this was written,
+⚠ **Started 2026-08-03 with `A1`.** When this was written,
 [`PLAN-bounce-launch`](plans/PLAN-bounce-launch.md) was live and its uncommitted `A4` gated Waves D
 and E. That plan **completed and archived the same day** (`840bc98`, `9fecbfa`, `41b5140`), so the
-gate has lapsed and every wave here is startable. "Current status" names no active plan; repoint it
-at this file when the first item starts.
+gate had already lapsed and every wave here was startable from the first item.
 
 This plan turns seven shallow places into deep modules, one wave each, from the architecture review
 of 2026-08-03. Every candidate was traced to file and line before it was written down; the review's
@@ -100,7 +99,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave A — one ballistic model
 
-1. ☐ Extract `Ballistics` and route both callers through it
+1. ☑ Extract `Ballistics` and route both callers through it
 2. ☐ Settle the integration step, and unit-test the model
 
 ### Wave B — deciding an impact, apart from performing it
@@ -168,7 +167,7 @@ family as its stated file ownership, and nothing else.
 
 # Wave A — one ballistic model
 
-## A1 ☐ Extract `Ballistics` and route both callers through it
+## A1 ☑ Extract `Ballistics` and route both callers through it
 
 **Goal.** The `VELOCITY`/`ACCELERATION`/`GRAVITY` integration exists once. `ProjectilePool` and the
 gun pipper call the same module, so a change to the model cannot move one without the other.

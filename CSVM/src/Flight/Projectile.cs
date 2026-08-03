@@ -597,15 +597,9 @@ public sealed partial class ProjectilePool : Node3D
             if (!p.Alive)
                 continue;
             // Integrate (fixed physics step, frame-rate independent).
-            if (p.Accel != 0f)
-            {
-                var dir = p.Vel.Normalized();
-                p.Vel += dir * (p.Accel * dt);
-            }
-            if (p.Grav != 0f)
-                p.Vel += Vector3.Down * (p.Grav * dt);
             var prev = p.Pos;
-            var next = p.Pos + p.Vel * dt;
+            var next = p.Pos;
+            Ballistics.Step(ref next, ref p.Vel, p.Accel, p.Grav, dt);
             float stepLen = (next - prev).Length();
 
             if (space != null && stepLen > 1e-5f)

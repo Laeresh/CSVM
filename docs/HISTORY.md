@@ -11353,3 +11353,32 @@ That is the intended split; adding a death trigger to the lab would have invente
 against the per-frame read-back above all. `analysis/session-baseline/` cannot help (its
 `--dump-session` instrument was deleted; `FINDINGS.md` says so). `PT-29` is the owed test, and
 `BL-130` now records that this change widened the gap it describes.
+
+## 2026-08-03 — one ballistic model: `Ballistics` extracted, both callers routed through it
+
+**What landed.** `CSVM/src/Flight/Ballistics.cs`: a static, Godot-`Node`-free class holding the
+VELOCITY/ACCELERATION/GRAVITY integration that used to live twice — `ProjectilePool.SimStep`
+(`Projectile.cs`) and `FlightController.BallisticImpactPoint`'s reticle march (`FlightController.cs`),
+the latter's own doc-comment already claiming the two agree with nothing enforcing it. `Step(ref pos,
+ref vel, accel, grav, dt)` is one round's per-frame advance; `March(weapon, origin, forward,
+inheritVel, maxDistance, dt)` is the reticle's whole capped walk (range cap + 4096-iteration bound).
+`SimStep` still owns its raycast/fuse-test loop and calls `Step` with the caller's sim `dt`;
+`BallisticImpactPoint` is now a two-line wrapper around `March`, still passing its own hard-coded
+`1/120 s`. **Only the integration arithmetic moved — neither caller's step size changed**, so the
+extraction is provably inert; that question is the next item's (A2's) to decide.
+
+**How verified.** `.\RunTests.ps1` green: 352 units, 18/18 engine suites, 13/13 goldens
+hash-identical, including `c1-flight` (the manifest already names it as exercising the impact
+reticle). Beyond the goldens: a `--chapter=C1 --plane=player_bhawk --hold=0.2,0.1,0,1` fly capture
+(exercises `March` via the live reticle) and a `--viewer --weapon-lab=slug_gun --plane=player_bhawk`
+capture (exercises `Step` via live fire) were each taken against the pre-extraction code (`git
+stash`) and the post-extraction code; both pairs came back byte-identical.
+
+**Trap hit while capturing the baseline.** The first `--hold=0.2,0.1,0,1` probe never returned:
+PowerShell splits an unquoted `--hold=0.2,0.1,0,1` into an array before it reaches the forwarded-args
+string, so Godot received a garbled value in place of it and `Launcher._Process` NullReferenceException-
+looped, writing a 750k-line `.err` file until the task was killed. `docs/cli.md`'s "quote comma args in
+PowerShell" note (written for `--direction=`/`--pos=`) applies equally to `--hold=`.
+
+**`PROJECT_CONTEXT.md`'s "Current status" now names `PLAN-deepening`** (Wave A) as the active plan —
+it named no active plan before this item started.

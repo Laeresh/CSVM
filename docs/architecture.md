@@ -67,6 +67,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 - `src/Flight/WeaponDefs.cs` — typed reader over `weapons.json` `BALLISTICS`: 48 `WeaponDef`s; inspect with `--dump-weapons`.
 - `src/Flight/Loadout.cs` — `stock_loadouts.json` reader + `Bind` to a built plane: gun groups + hardpoints, markers→muzzle nodes; `--dump-loadout`.
 - `src/Flight/WeaponCursor.cs` — pure ammo-slot stepping shared by rockets (H) and gun groups (G): manual select + on-empty auto-advance, engine-free so it unit-tests.
+- `src/Flight/Ballistics.cs` — the VELOCITY/ACCELERATION/GRAVITY integration step, shared by `ProjectilePool` and the reticle's projected impact point.
 - `src/Flight/Projectile.cs` — `ProjectilePool`: the weapon-fire subsystem — ballistics, tracers, flashes, per-surface impact, damage to destructibles.
 - `src/Flight/WarningShotCue.cs` — the shipped near-miss accumulator (player.json `warning_shot_*`) + swept-segment/point distance; engine-free so it unit-tests.
 - `src/Flight/IncomingFire.cs` — `--incoming`: the near-miss test rig — a phantom shooter on each player's six, so the cue is reachable before anything in the world shoots back.
@@ -688,9 +689,19 @@ carry one hardpoint type). `FlightController` owns the two cursor fields and the
 feeds and advances each cursor the instant its slot empties (in `UpdateRockets`/`UpdateGuns`); this
 file is stateless.
 
+## src/Flight/Ballistics.cs
+The VELOCITY/ACCELERATION/GRAVITY integration every round steps with: a static, Godot-`Node`-free
+class with `Step` (one round's per-frame advance, mutating pos/vel in place — `ProjectilePool.SimStep`
+owns the surrounding raycast/fuse-test loop and its own `dt`) and `March` (the reticle's whole capped
+walk — range cap and 4096-iteration bound included — called once per frame by
+`FlightController.BallisticImpactPoint` with its own fixed `dt`). Extracted so the two callers cannot
+silently diverge; each still owns its own step size.
+⚠ Both callers integrate at a different `dt` — `SimStep` the caller's sim step, `March` a hard-coded
+  `1/120 s` — a deliberate, still-open question, not an oversight to "fix" in passing.
+
 ## src/Flight/Projectile.cs
 `ProjectilePool` — the shared-world weapon-fire subsystem: a fixed pool of projectiles integrated
-with the data's ballistics (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
+with `Ballistics` (VELOCITY/ACCELERATION/GRAVITY, expiring at RANGE), plus tracer streaks,
 muzzle flashes, and the per-surface IMPACT sound + effect model. Per-class impact looks (A2): a
 water hit instances the authored splash model and plays its def's own scale curves for the 2 s run
 (`AdvanceSplash` — base disc 1→2→1.8 xz, column popped to ×100 Y collapsing to 0, the
@@ -1120,8 +1131,9 @@ registration (the assembler sets it at construction, not in the stunt block).
   On the realtime clock the DRAWN pose is `_renderPose` — interpolated between the last two sim
   poses, because the 60 Hz sim stutters against >60 fps rendering (DET-10) — and anything bolted
   to the plane (the rigid numpad views) must read it, never the raw sim pose.
-⚠ The reticle march (`BallisticImpactPoint`) shares `ProjectilePool.WorldGravity` with real
-  rounds — same gravity source or reticle and rounds silently disagree.
+⚠ The reticle march (`BallisticImpactPoint`) calls `Ballistics.March`, the same integration
+  `ProjectilePool.SimStep` steps real rounds with — see `Ballistics.cs`'s entry for the one thing
+  that still differs between them (`dt`).
 ⚠ The stunt/race AllComplete freeze runs BEFORE the crash branch; Respawn never resets a mid-run stunt.
 
 ## src/Flight/PlaneDamage.cs

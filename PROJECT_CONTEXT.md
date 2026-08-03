@@ -189,10 +189,10 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan:** none — [`docs/plans/PLAN-bounce-launch.md`](docs/plans/PLAN-bounce-launch.md) completed (Wave A, all 6 items).
-**Next:** start a drafted plan — [`docs/PLAN-deepening.md`](docs/PLAN-deepening.md) (7 waves, unblocked;
-`D8`/`E12` are ungated grilling sessions) or [`docs/PLAN-weapon-lab.md`](docs/PLAN-weapon-lab.md); `BL-245`
-needs a ground ray first. Owed cockpit re-tests (`PT-13`–`PT-29`) remain in
+**Active plan:** [`docs/PLAN-deepening.md`](docs/PLAN-deepening.md) — Wave A landed `A1`.
+**Next:** `A2` (settle the integration step, unit-test `Ballistics`); `D8`/`E12` are ungated grilling
+sessions, runnable any time. [`docs/PLAN-weapon-lab.md`](docs/PLAN-weapon-lab.md) and `BL-245` (needs a
+ground ray first) remain unscheduled. Owed cockpit re-tests (`PT-13`–`PT-29`) remain in
 [`playtest.md`](playtest.md). Verify any
 change with **`.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit code);
 read [`docs/verification.md`](docs/verification.md) before measuring anything.

@@ -898,47 +898,14 @@ public partial class FlightController : Node3D
 
     /// <summary>Where a round of <paramref name="weapon"/> fired from <paramref name="origin"/> along
     /// <paramref name="forward"/> (carrying <paramref name="inheritVel"/>, the plane's velocity) sits
-    /// after travelling <paramref name="distance"/> m of path — the SAME
-    /// <c>VELOCITY</c>/<c>ACCELERATION</c>/<c>GRAVITY</c> integration <see cref="ProjectilePool"/>
-    /// steps each round with, so the reticle and the rounds agree. Player guns carry no
-    /// <c>ACCELERATION</c>/<c>GRAVITY</c>, so for them this is a straight line; the loop stays
-    /// faithful for any weapon that does. The march is capped at the weapon's <c>RANGE</c> (a round
-    /// never converges past where it expires) and a hard iteration bound.</summary>
+    /// after travelling <paramref name="distance"/> m of path — <see cref="Ballistics.March"/>, the
+    /// SAME integration <see cref="ProjectilePool"/> steps each round with, so the reticle and the
+    /// rounds agree.</summary>
     private static Vector3 BallisticImpactPoint(WeaponDef weapon, Vector3 origin, Vector3 forward,
         Vector3 inheritVel, float distance)
     {
-        var vel = forward * (weapon.Velocity ?? 500f) + inheritVel;
-        float accel = weapon.Acceleration ?? 0f;
-        float grav = (weapon.Gravity ?? 0f) * ProjectilePool.WorldGravity;
-        float cap = Mathf.Min(distance, weapon.Range ?? distance);
         const float dt = 1f / 120f; // a fixed integration step; guns are straight-line so it is moot
-        var pos = origin;
-        float travelled = 0f;
-        for (int i = 0; i < 4096 && travelled < cap; i++)
-        {
-            if (accel != 0f)
-            {
-                vel += vel.Normalized() * (accel * dt);
-            }
-            if (grav != 0f)
-            {
-                vel += Vector3.Down * (grav * dt);
-            }
-            var stepv = vel * dt;
-            float step = stepv.Length();
-            if (step < 1e-6f)
-            {
-                break; // a degenerate near-zero speed must never spin the loop
-            }
-            if (travelled + step > cap)
-            {
-                pos += stepv * ((cap - travelled) / step); // don't overshoot the convergence range
-                break;
-            }
-            pos += stepv;
-            travelled += step;
-        }
-        return pos;
+        return Ballistics.March(weapon, origin, forward, inheritVel, distance, dt);
     }
 
     /// <summary>Which crash variant the original would play for the surface just hit, from the
