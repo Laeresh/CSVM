@@ -65,7 +65,7 @@ document, so they are shipped-only features.
 | `smokescreen_stun_range` `_angle` `_interval` | 600 m / 170° / 5.0 s | **The smokescreen weapon's blind effect** — who it stuns: within 600 m, inside a 170° arc, re-evaluated every 5 s. Matches the design's stun-recovery pilot skill and the flare/sonic-rocket stun. |
 
 Also worth naming, all data-confirmed: `crash` (`armor_damage_range`, `health_damage_range`,
-`bounce_factor` — see the [hp-pair hypothesis](#the-hp-pair-armor--hit-points-hypothesis));
+`bounce_factor` — see [the hp pair](#the-hp-pair-armor--hit-points));
 `autohead_turn_time`/`_max`/`_min_pitch` (the padlock/look camera's head-turn rate limits — see
 the [command inventory](strings.md#the-bindable-command-table-messagesjson)); `rogue` (three
 `[fameThreshold, soundName]` steps warning a player who is shooting allies);
@@ -84,12 +84,15 @@ A list of part entries:
 ```
 
 - `name`: `nose` / `tail` / `leftwing` / `rightwing` for every player plane.
-- **The two `hp` values are equal in every entry** — all 88 parts across the 22 defs that carry
-  `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. The
-  remake takes the first as max HP and spends only `HEALTH_DAMAGE` against it (backlogged).
+- **The pair is (armor, hit points)** — `[1]` is the zone's hit points, `[2]` its **armor pool**,
+  spent first. Settled against the original's armory; see [below](#the-hp-pair-armor--hit-points).
+- **The two values are equal in every entry** — all 88 parts across the 22 defs that carry
+  `destroyable_parts` (11 player `p*` + 11 AI `r*`), measured; values 15/20/25/30/35/40. Equal
+  because armor is **purchasable** and these are the *stock* allocations, not because the number is
+  duplicated. The remake takes the first as max HP and spends only `HEALTH_DAMAGE` against it —
+  a known gap, `BL-085`.
   *(An earlier version of this page said AI variants differ 25/20 — that is wrong; nothing in
   this install has an unequal pair.)*
-- **Hypothesis: the pair is (armor, hit points).** See [below](#the-hp-pair-armor--hit-points-hypothesis).
 - Flags: `critical` — the plane is destroyed when this part reaches 0 HP (all four player
   parts carry it); `engine` — engine damage/power loss on that part. Not tail-only: it sits on
   the tail for `pbloodhawk`/`pdevastator` but on the nose for `pautogyro`/`pbrigand`/`pfury`/
@@ -102,7 +105,16 @@ A list of part entries:
 - `injure_anims`: **descending HP fractions**; when the part's HP fraction crosses one,
   the named anim runs. Two families interleave:
   - `<part>_damage_green` (0.72) / `_yellow` (0.46) / `_red` (0.20) — the cockpit
-    damage-indicator texture cycle (unwired until a cockpit exists).
+    damage-indicator texture cycle (unwired until a cockpit exists). The retail manual describes
+    this indicator (the "Crispen Mark V") as colouring each of nose/tail/left/right wing over the
+    **combined** progression of both pools: yellow = up to half the zone's armor gone, orange =
+    the rest of the armor plus the first quarter of the airframe, red = beyond that. With armor
+    equal to hp at stock those bands break at 0.75 and 0.375 of the combined pool, and
+    `_damage_green` firing at **0.72** is the expected one-state name lag (see the standing rule in
+    `backlog.md`). ⚠ **A reading, not a decode** — `_damage_yellow` at 0.46 sits mid-band rather
+    than on 0.375, so the correspondence is suggestive and does not pin the mapping down.
+    Source: Crimson Skies PC manual, damage-indicator section —
+    <https://manualmachine.com/gamespc/crimsonskies/1119420-user-manual/>.
   - `<part>_damage_effects` (0.99) — **not part of that cycle, despite the neighbouring
     thresholds: this is the per-impact spark burst.** All four (`nose`/`tail`/`leftwing`/
     `rightwing`) are one-event shims calling `random_gun_impact` (anim root `player`) with no
@@ -146,39 +158,59 @@ engine must hide the healthy skins at damage time by an engine-side rule. Beware
 `pdpN`↔`pdpN_h` numbering is crossed on three plane models — pair torn↔healthy by mesh
 position, not by name (measurements in `gamez.md`, "Player-plane damage states").
 
-### The hp pair: armor + hit points (hypothesis)
+### The hp pair: armor + hit points
 
-**Claim.** The two numbers on a `destroyable_parts` entry are that zone's **armor pool** and its
-**hit-point pool**, armor spent first.
+**The two numbers on a `destroyable_parts` entry are that zone's hit points `[1]` and its armor
+pool `[2]`, armor spent first.** Settled 2026-08-03.
 
-Supporting evidence, in descending strength:
+**How it was settled.** Every pair in this install is *equal*, so no measurement over the shipped
+data can separate (armor, hp) from (hp, hp) or (max, current) — the reading stood as a hypothesis
+for that reason. The original's **armory breaks the tie, because it varies armor independently of
+health**: its per-zone allocation is in units that are armor points 1:1, and a **stock** airframe
+reads the same per-zone numbers the zrdr def carries (a stock Bloodhawk shows ~20 units on each of
+its four zones; `pbloodhawk`'s parts are 20/20/20/20). Observed at the controls, 2026-08-03.
+
+⚠ **The zrdr number is the *stock* allocation, not a fixed property of the airframe.** A player
+buys more. Every pair being equal is a fact about stock loadouts, **not** a licence to fold armor
+into hp — see `BL-085`.
+
+Corroborating evidence, all data-confirmed:
 
 1. **The HUD showed two pools.** `messages.json` `MSG_HUD_HEALTH` = `Armor: %1%% Health: %2%%` —
-   the shipped in-flight readout has an armor bar *and* a health bar. Data-confirmed.
+   the shipped in-flight readout has an armor bar *and* a health bar.
 2. **Weapons carry both damage figures, and they differ.** Every one of the 46
    `weapons.json` `BALLISTICS` entries with damage carries `ARMOR_DAMAGE` **and**
    `HEALTH_DAMAGE`, and 18 of them differ — the ammo matrix is built out of the split:
    `wep_N1` (dum-dum) is armor-light/health-heavy (`wep_31` 1.5 / 4.5), `wep_N2` (AP) is the
    mirror (`wep_32` 4.5 / 1.5), `wep_N3` (magnesium) is between. A two-pool target is the only
-   thing that makes those numbers mean different things. Data-confirmed.
+   thing that makes those numbers mean different things.
 3. **Crash damage is two-pool too.** `player.json`'s `crash` block is
    `armor_damage_range [50,300]` + `health_damage_range [50,300]` + `bounce_factor`.
-   Data-confirmed.
-4. **The design says so, per zone.** The original design gives an aircraft four damage zones —
-   Nose, Tail, Left Wing, Right Wing, exactly the `destroyable_parts` names — each with its own
-   Armor and Hit Points, damage applied to armor until it is gone; and its airframe table lists
-   a per-zone "Standard Armor (N/T/W)" stat. Design-informed.
+4. **Retail shipped a per-zone armor purchase.** `rof/ui_strings.json` id 1039 `IDS_AR_TITLE`
+   = "3) ADD ARMOR", ids 1044–1047 = Nose / Tail / Left Wing / Right Wing — exactly the
+   `destroyable_parts` names. Id 1155 `IDS_PX_ARMORINFO` prices and weighs armor per unit and
+   warns "Left and right wings must be balanced!" (and indeed `leftwing == rightwing` in all 22
+   defs); id 1170 `IDS_PX_ARMORUNITS` = "%1!d! units"; id 206 `IDS_PX_SWITCHAIRFRAMES` speaks of
+   "the **default** armor, engine, and guns for this new airframe" — a stock allocation exists.
+   *(This replaces an earlier appeal to the pre-release design spec, which
+   [`playtest.md`](../../playtest.md) flags as unreliable as a class for HUD/damage material.)*
+5. **Retail states armour-first depletion outright** — `ui_strings.json` id 3372 (AP: "hardened
+   tip designed for shredding and destroying armor. WARNING: AP rounds tend to punch clean through
+   unarmored surfaces, inflicting very little damage"), id 3371 (dum-dum: "very useful for
+   finishing off aircraft that have already been damaged"), id 3410 (AP rocket: "remove most, if
+   not all, of the armor from an aircraft but has no noticeable effect on unarmored surfaces").
+   A gate, not a damage reducer. [`PLAN-M3-weapons.md`](../plans/PLAN-M3-weapons.md) C23 derives
+   the same ordering from a dominance argument; this is the direct statement.
 
-**Why it stays a hypothesis.** All 88 entries in this install have the two values *equal*, so no
-measurement over the shipped data can separate (armor, hp) from (hp, hp) or (max, current). The
-AI defs' separate `armor`/`health` pair is equal too on every aircraft, which is consistent but
-equally non-discriminating.
-
-**Falsification test (needs the original, at the controls).** Against one aircraft zone, count
-rounds-to-destroy for a dum-dum gun versus an AP gun of the *same* caliber (`wep_31` vs
-`wep_32`, or `wep_51` vs `wep_52`). Two pools depleting at different published rates must give
-different counts; if the two guns kill the zone in the same number of hits, there is one pool
-and the hypothesis is dead.
+**Still open: what `ARMOR: Standard (N/T/W)` is.** Five of the eleven airframe blurbs carry a
+per-zone armor triple (`ui_strings.json` ids 40115 Balmoral 400/400/350, 40116 Bloodhawk
+400/300/200, 40118 Fury 400/400/350, 40120 Warhawk 700/500/700, 40122 Autogyro 300/300/200). It is
+**not** the stock allocation — stock is ~20 — so it is most likely a per-zone cap. Two measured
+constraints on what it can be: retail-triple ÷ zrdr-part-sum is 13.75 / 16.7 / 12.0 / 21.7 / 16.7
+across the five, so **no linear map** relates them; and at the armory's observed 4 lbs/unit, 1100
+units of stock armor would weigh 4,400 lbs against a `veh_weight` of 1900. The armory's own
+constants — per-unit cost and weight, per-zone caps — are **executable-resident**; `ui_strings.json`
+ships only the printf templates. `CAP-19` reads the caps off the screen.
 
 ## Def-level injure_anims
 
@@ -236,9 +268,16 @@ fighters, 500 for the boat/truck). Positions 3–4 are inferred, not confirmed.
 overheating. Backlogged, deliberately not implemented.
 
 **`armor` / `health`** — the AI two-pool damage model (fighters `64/64`…`100/100`, always
-equal; `patrolboat`/`t_truck` `0/40`, unarmoured soft targets). Distinct from the player
-planes' per-part `destroyable_parts` — **player defs have no `armor`/`health` pair**, and
-`PlaneStats` does not read these. Where the pool applies, armour is spent before health.
+equal; `patrolboat`/`t_truck` `0/40`, unarmoured soft targets). Carried by the 12 base aircraft
+defs plus the boat and truck — 15 in all. `PlaneStats` does not read either. Armour is spent
+before health, the same ordering as the per-part pools.
+
+⚠ **The whole-vehicle pair and the per-part pools are not alternatives — 11 defs resolve both.**
+An `r*` AI variant chains to its base def (`rbloodhawk → bloodhawk → basic_airplane`), so it
+inherits `armor 64` *and* carries its own 4×20/20 `destroyable_parts`. No **player** def resolves
+a whole-vehicle pair at all (`pbloodhawk → player_airplane → basic_airplane` carries none in the
+chain), so for player planes the per-part pools are the whole model. Which of the two an AI
+combatant actually spends is undecided — `BL-102` for the same question on the patrol boat.
 
 **`turrets`** — on exactly the five turret airframes (`pavenger`, `pbalmoral`, `pbrigand`,
 `pfirebrand`, `pkestrel`). A viewpoint-keyed list (`firstp`/`thirdp`) of

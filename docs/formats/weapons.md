@@ -78,7 +78,10 @@ See [CLUSTER_SIZE vs AMMO_LIMIT](#cluster_size-vs-ammo_limit) for which entries 
 | `DAMAGE` | 2 | 0.0 | a single combined value used *instead of* the armor/health split on the two non-damaging specials (`FLASH` `wep_09`, `FLARE` `wep_15`) |
 
 `ARMOR_DAMAGE`/`HEALTH_DAMAGE` feed the `destroyable_parts` armor+health model in
-[vehicle.md](vehicle.md).
+[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points) — two sequential pools per damage zone,
+armor spent first. **Both figures are absolute per-hit damage, not multipliers**: there is no
+multiplier field anywhere in `BALLISTICS`, and the 0.5×/1.5× ammo pattern below is a derived ratio
+against each caliber's slug, not something the engine computes.
 
 ### Guided flight & detonation (rocket block)
 
@@ -153,7 +156,10 @@ are equal:
 - **Air-to-air rockets/missiles** (HE, AP, FLAK, SONIC, FLASH, BEEPER, SEEKER, SMOKER,
   TORPDO, FLARE — `wep_05`–`11`, `13`–`15`, `24`) carry **`CLUSTER_SIZE` and no
   `AMMO_LIMIT`**: they are allotted per pylon only. `wep_06`, the HE rocket, is the model
-  case — `CLUSTER_SIZE [3]`, no `AMMO_LIMIT`.
+  case — `CLUSTER_SIZE [3]`, no `AMMO_LIMIT`. Its anti-armour counterpart `wep_05` carries
+  **`CLUSTER_SIZE [4]`** — you rack one *more* AP rocket than HE, on the same
+  `IMPACT_PROXIMITY [15]`, with the damage pair mirrored (60/40 against HE's 40/60). The AP
+  rocket's near-absence from community loadout advice is not a numbers problem.
 - **Ground-attack / emplacement munitions** (the six `CRATER`-carrying entries: incendiary
   `wep_04`, choker `wep_12`, glidebomb `wep_25`, fake `wep_26`, AA-flak `wep_27`, cannonball
   `wep_28`) *do* carry `AMMO_LIMIT` (100, or 9999 for AA flak) — so "no `AMMO_LIMIT` on
@@ -173,11 +179,26 @@ only the damage split differs, on an exact rule (verified on all five calibers):
 | slug (`X0`) | 1.0× (balanced, armor = health) | 1.0× |
 | dum-dum (`X1`) | **0.5×** | **1.5×** |
 | armor-piercing (`X2`) | **1.5×** | **0.5×** |
-| magnesium (`X3`) | ≈1.04–1.17× | ≈0.83–0.96× (a mild armor-leaning round, converging to balanced at higher caliber) |
+| magnesium (`X3`) | **slug + 0.5** | **slug − 0.5** |
+
+Magnesium is an **additive** offset, not a ratio: exactly +0.5 armor and −0.5 health against that
+caliber's slug, on all five (30: 3.5/2.5 vs 3.0/3.0 … 70: 12.25/11.25 vs 11.75/11.75). It is
+therefore a mild armor-leaning round whose *relative* bias shrinks as caliber climbs, and it is
+**not** an all-round upgrade over slug — a common secondary-source claim that the data refutes,
+since it trades health damage away one-for-one.
 
 Example (50-cal, `wep_50`–`53`): slug 6.25/6.25, dum-dum 3.125/9.375, AP 9.375/3.125,
 magnesium 6.75/5.75. Base slug damage climbs with caliber (30→3.0, 70→11.75) while fire
 rate falls (30-cal 8.0/s → 70-cal 6.0/s) and velocity drops (1000 → 750 m/s).
+
+**The ammo type costs nothing but damage split.** Within a caliber all four rounds share
+`FIRE_RATE`, `VELOCITY`, `RANGE`, `CANNON_SPREAD` and `CLUSTER_SIZE`/`AMMO_LIMIT` (30-cal: 8.0/s,
+2800 rounds, for every one of the four). There is no rate-of-fire or magazine penalty on magnesium
+or any other type — another secondary-source claim the data refutes. The in-game descriptions are
+`ui_strings.json` ids 3370 (slug), 3371 (dum-dum), 3372 (AP), 3373 (magnesium/"EX"); 3372's
+"AP rounds tend to punch clean through unarmored surfaces, inflicting very little damage" is retail
+confirmation that armor is a **gate**, not a damage reducer — see
+[vehicle.md](vehicle.md#the-hp-pair-armor--hit-points).
 
 ## The AI detune (`wep_130`–`170`)
 
