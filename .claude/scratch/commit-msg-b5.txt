@@ -1,3 +1,0 @@
-M3 Wave B B5: unit suite over 48 weapons x the reachable surfaces
-
-Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
