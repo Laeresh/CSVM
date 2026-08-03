@@ -190,9 +190,9 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan:** [`docs/PLAN-deepening.md`](docs/PLAN-deepening.md) — all waves complete (`G18`/`G19` closed `❌`).
-**Next:** archive the plan (move to `docs/plans/` with a `COMPLETE` banner + `plans.md` row).
-[`docs/PLAN-weapon-lab.md`](docs/PLAN-weapon-lab.md) and `BL-245`
+**Active plan:** None. [`docs/plans/PLAN-deepening.md`](docs/plans/PLAN-deepening.md) archived 2026-08-03
+(all waves complete, G18/G19 as design decisions).
+**Next candidates:** [`docs/PLAN-weapon-lab.md`](docs/PLAN-weapon-lab.md) and `BL-245`
 (needs a ground ray first) remain unscheduled. Owed cockpit re-tests (`PT-13`–`PT-29`) remain in
 [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine
 suites → golden hashes → one exit code); read [`docs/verification.md`](docs/verification.md) first.
