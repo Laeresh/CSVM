@@ -1,10 +1,23 @@
 # Weapon lab — fire it like the world does
 
-**DRAFTED, NOT YET ACTIVE** (written 2026-08-02). The file sits in `docs/`, but
-`PROJECT_CONTEXT.md`'s "Current status" **deliberately does not name it yet** — it is a written-up
-plan waiting to be scheduled, not the running one. Point "Current status" at it when the work
-starts; move it to `docs/plans/` with a `COMPLETE` banner and add its row to
-[`plans.md`](plans/plans.md) when every item lands.
+**ACTIVE** (written 2026-08-02, line citations refreshed and scheduled 2026-08-03). Move it to
+`docs/plans/` with a `COMPLETE` banner and add its row to [`plans.md`](plans/plans.md) when every
+item lands.
+
+**2026-08-03 refresh.** A day of M3 Wave A–F landings shifted every line citation below by 20–60
+lines (no content moved or changed) and one citation was already wrong at draft time
+(`PylonOrdnance.cs:1061-1062` — the file is 89 lines; the null-return guard is the ordnance-build
+early-out near the top of `Build`, cite the method, not a line). All have been corrected in place.
+One landed commit is directly relevant: **`c42e9a1` "Give the damage lab a flight host, and move
+both damage labs to F5"** already built the vote-arbitration and dual-construction pattern A1 and
+A3 need — `SessionSpec.Resolve` now votes `--damage` into `fly` instead of forcing `viewer`
+(`"The damage lab has two hosts now — the parked plane and the flown one — so --damage asks for a
+lab, not for a mode."`), and `GameSession.BuildFlightRigs` already builds a second, flight-rig-side
+lab alongside the pre-existing viewer-side one. A1/A3 should follow this precedent rather than
+invent the pattern fresh — it de-risks both from "traced" toward "precedented". It does **not**
+touch A2: the damage lab's flight host keeps the plane flying freely and just applies real damage
+via `Reset()+Apply()`; nothing pins the aircraft in place while the world sim runs, so A2's
+`Held`/`PlaceHeld` mechanic is still wholly unbuilt and still needed as designed.
 
 ## Context
 
@@ -74,8 +87,8 @@ already exercised by `--fly`.
   as each landed item; a landed item gets a dated `docs/HISTORY.md` entry.
 - **Read `docs/verification.md` before measuring anything.**
 - **Read the module's entry in `docs/architecture.md` before modifying it** — `src/UI/WeaponLab.cs`
-  (line 1253), `src/Flight/Projectile.cs` (670), `src/Flight/PylonOrdnance.cs` (1051),
-  `src/Session/GameSession.cs` (1420), `src/Session/WorldEffectsFactory.cs` (1689).
+  (line 1415), `src/Flight/Projectile.cs` (804), `src/Flight/PylonOrdnance.cs` (1207),
+  `src/Session/GameSession.cs` (1614), `src/Session/WorldEffectsFactory.cs` (1936).
 - **Verify with `.\RunTests.ps1`** (build → units → in-engine suites → golden hashes → one exit
   code) and drive probes through `RunProbe.ps1`, never the Godot exe directly.
 
@@ -123,12 +136,14 @@ worktrees.
 (default `--chapter=C1`), the way `--stunt` is a flight modifier. `--weapon-test` alone keeps its
 cheap no-world path.
 
-**Evidence (confidence: traced).** `SessionSpec.Resolve` votes the lab into the viewer today
-(`SessionSpec.cs:773-774`); `WorldMode` (`:879`) and `BuildsCollision` (`:157`) both come out true
-for free once the mode is `Fly`.
+**Evidence (confidence: precedented — see the 2026-08-03 refresh note above).**
+`SessionSpec.Resolve` votes the lab into the viewer today (`SessionSpec.cs:803-804`); `WorldMode`
+(`:916`) and `BuildsCollision` (`:159`) both come out true for free once the mode is `Fly`. `c42e9a1`
+already did the identical move for `--damage` (viewer vote → `if (damageLab && !fly && !freecam &&
+!animLab)`) — follow that shape.
 
 **Approach.** Drop `WeaponLab` / `WeaponMount != null` / `WeaponFire` from the `viewer` vote and
-add them to the `fly` vote (`SessionSpec.cs:770`); leave `WeaponTest` voting viewer, since D9
+add them to the `fly` vote (`SessionSpec.cs:800`); leave `WeaponTest` voting viewer, since D9
 keeps that a plane-only probe. Update `SessionSpecTests` accordingly.
 
 **Model recommendation.** medium — mechanical, but the arbitration order in `Resolve` is
@@ -137,7 +152,7 @@ load-bearing and documented as such.
 **Verify.** `--weapon-lab --plane=player_fury` logs `mode=fly chapter=C1`; `--weapon-test` still
 logs the viewer subject. `dotnet test` (`SessionSpecTests`).
 
-**⚠ Traps.** `Resolve`'s step ORDER is behaviour (`SessionSpec.cs:759-764`) — add the vote, don't
+**⚠ Traps.** `Resolve`'s step ORDER is behaviour (`SessionSpec.cs:787-792`) — add the vote, don't
 reorder the block. `--weapon-lab --viewer` must now report the contradiction rather than silently
 half-building.
 
@@ -147,7 +162,7 @@ half-building.
 its props spin, its guns fire, its rounds fly and the world keeps running. This is *not* the P
 halt, which stops the whole clock (`FlightController.cs:740-761`).
 
-**Evidence (confidence: traced).** `SimStep`'s weapon half (`FlightController.cs:699-704` —
+**Evidence (confidence: traced).** `SimStep`'s weapon half (`FlightController.cs:701-704` —
 `CycleWeaponSelectors` / `UpdateGuns` / `UpdateRockets` / `Ordnance?.Update()`) is already
 independent of the flight-model half above it (`:647-693`); `FlightModel.Reset(position, attitude,
 speed, throttle)` (`FlightModel.cs:119`) is the existing placement entry point `Respawn` uses.
@@ -178,11 +193,13 @@ the point is that the *world* keeps running.
 
 **Goal.** The lab node is built in `BuildFlightRigs`, after the rigs, holding a reference to
 player 1's `FlightController` — and therefore sharing the session's fully-wired `ProjectilePool`
-(`GameSession.cs:1196-1207`: `flyoutGamez`/`flyoutScene`/`flyoutAnims`/`soundGroups` +
-`DamageSink`) and its world-effects `EffectSink` (`:1214-1225`).
+(`GameSession.cs:1213-1218`: `flyoutGamez`/`flyoutScene`/`flyoutAnims`/`soundGroups` +
+`DamageSink`) and its world-effects `EffectSink` (`:1229-1241`). `c42e9a1` already built this exact
+shape for the damage lab — `BuildFlightRigs` constructs a second, flight-rig-side lab alongside the
+pre-existing viewer-side one — follow that precedent.
 
-**Approach.** Delete the viewer-side lab construction (`GameSession.cs:1030-1082`) and the
-`_weaponLabNode.SimStep` fork in `DriveSimSteps` (`:1635-1638`) — the controller now owns the fire
+**Approach.** Delete the viewer-side lab construction (`GameSession.cs:1050-1101`) and the
+`_weaponLabNode.SimStep` fork in `DriveSimSteps` (`:1676-1679`) — the controller now owns the fire
 clock. Build the lab at the end of `BuildFlightRigs` when `_spec.WeaponLab`, passing
 `(rig.Controller, weaponDefs, stockLoadouts, projectiles, rig.Camera)`. Default `InfiniteAmmo` on
 in the lab so a soak run never dries up. Keep the `--weapon-test` branch out of this path entirely
@@ -196,7 +213,7 @@ pool; a rocket must leave a smoke trail and its impact must play a named effect
 (`--log=weapons,anim`). Compare against the same shot from `--fly --fire-rockets` — they should be
 indistinguishable.
 
-**⚠ Traps.** `EffectSink` is only wired when `state.WorldScene != null` (`:1215`) — on
+**⚠ Traps.** `EffectSink` is only wired when `state.WorldScene != null` (`:1229`) — on
 `--stage=empty` there is no world program, so the lab must say so in one line rather than silently
 drawing stand-ins again. The 8-chapter `--freecam` regression still has to pass: nothing in the
 flight build may change for a non-lab session.
@@ -228,7 +245,7 @@ deliberate lab-only difference from stock, where the turret slot is inert until 
 
 **Model recommendation.** medium.
 
-**Verify.** New in-engine assertion in `Suites.cs`: for all 11 airframes, `ForRig` yields 4 gun
+**Verify.** New in-engine assertion in `Suites.cs` (`WeaponsFire`, `:534-577`): for all 11 airframes, `ForRig` yields 4 gun
 groups covering every `firepointN` present and one hardpoint per `pylonN`, with no marker bound
 twice and none missing. `--dump-loadout` for a lab session lists mounts the stock file never names.
 
@@ -261,8 +278,8 @@ mounted model changes with the selection (the D44 pylon bodies) and that the mod
 constant across 50 swaps (no leak). Fire each gun group and confirm the muzzle flash comes from the
 selected group's firepoints.
 
-**⚠ Traps.** `PylonOrdnance.Build` returns null when the pool has no flyout gamez
-(`PylonOrdnance.cs:1061-1062`) — a rocket with no `FLYOUT` model must leave the pylons empty, not
+**⚠ Traps.** `PylonOrdnance.Build` returns null when the pool has no flyout gamez (the early-out
+near the top of `Build`, `PylonOrdnance.cs:33`+) — a rocket with no `FLYOUT` model must leave the pylons empty, not
 throw. Ammo: with `InfiniteAmmo` the counters never drain, so the "hide the model at zero"
 behaviour needs the toggle turned off to be seen at all — say so in the panel.
 
@@ -283,7 +300,7 @@ builds real colliders (`SessionSpec.BuildsCollision`), and those bodies carry th
 
 **Approach.** The lab does its **own physics raycast** —
 `camera.ProjectRayOrigin/ProjectRayNormal` into `PhysicsRayQueryParameters3D`. Classify the struck
-body with `ProjectilePool.ClassifySurface` (`Projectile.cs:364-376`) — the one classifier the
+body with `ProjectilePool.ClassifySurface` (`Projectile.cs:380-391`) — the one classifier the
 impact path itself uses, so the panel cannot disagree with what the round does — and read its name
 off the `AnimRuntime.NameMeta` ancestor (`SelectionService.NameOf` is reusable as-is). Placement:
 `pos = hit - rayDir * standoff`, attitude `Basis.LookingAt(hit - pos)`, applied through A2's
@@ -298,8 +315,8 @@ off the `AnimRuntime.NameMeta` ancestor (`SelectionService.NameOf` is reusable a
 `--screenshot` captures for the item's evidence.
 
 **⚠ Traps.** The surface tag lives on the **collider body**, not the mesh
-(`SceneBuilder.cs:649-655`), and one mesh can yield several bodies of different classes
-(`SceneBuilder.cs:668-679`, `BL-204`) — so classify the body the ray returned and nothing else. A
+(`SceneBuilder.cs:645-657`), and one mesh can yield several bodies of different classes
+(`SceneBuilder.cs:676-688`, `BL-204`) — so classify the body the ray returned and nothing else. A
 click that hits nothing must say so and leave the plane put. Re-parking must not put the plane
 inside geometry: clamp the stand-off if the ray back from the hit point re-enters a collider.
 
@@ -331,9 +348,9 @@ chapter with no water must warn and leave the plane at spawn, not fail the launc
 can fly out to the impact point and watch it from a metre away.
 
 **Approach.** The orbit already exists — `FlightController.SeedOrbit`/`UpdateOrbitCamera`
-(`FlightController.cs:1924-1947`) run today whenever the sim is halted. Gate that on
+(`FlightController.cs:1883-1913`) run today whenever the sim is halted. Gate that on
 `Held || halted` instead of `halted` alone. For the free view, add
-`FlightController.CameraOwned`: when set, skip every camera write (`:781-793`, `SnapCamera`), and
+`FlightController.CameraOwned`: when set, skip every camera write (`:781-794`, `SnapCamera`), and
 have the lab attach a `SpectatorCamera` (`src/Flight/SpectatorCamera.cs`, the `--freecam` one) to
 the same `Camera3D`. Toggle on **V**.
 
@@ -353,7 +370,7 @@ all 48 mount and fire without throwing" check after the lab moves into flight.
 **Approach.** Move `WeaponLab.SelfTest`/`RunSelfTest`/`SelfTestResult`
 (`WeaponLab.cs:189-241,840-847`) into a new static `Flight/WeaponBench.cs` taking
 `(Node3D plane, Loadout, WeaponDefs, ProjectilePool)` — B4's `ForRig` loadout, so the bench now
-covers every mount, not just the stock ones. `Suites.WeaponsFire` (`Suites.cs:264-308`) and the
+covers every mount, not just the stock ones. `Suites.WeaponsFire` (`Suites.cs:534-577`) and the
 `--weapon-test` branch call it directly; neither constructs a `WeaponLab` any more.
 
 **Model recommendation.** medium — a move, but it is what keeps `RunTests.ps1` cheap.
