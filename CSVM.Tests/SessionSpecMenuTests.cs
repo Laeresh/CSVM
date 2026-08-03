@@ -132,12 +132,13 @@ public class SessionSpecMenuTests
     [Fact]
     public void EverythingThePickDoesNotNameStillComesFromTheCommandLine()
     {
-        var cli = Cli("--menu", "--mission=M02", "--seed=7", "--mute", "--no-fog", "--anim-lod=1");
+        var cli = Cli("--menu", "--mission=M02", "--seed=7", "--mute", "--volume=0", "--no-fog", "--anim-lod=1");
         var spec = Menu(cli, "C3", stunt: false, "player_bhawk");
 
         Assert.Equal("M02", spec.Mission);
         Assert.Equal(7ul, spec.Seed);
         Assert.True(spec.Mute);
+        Assert.Equal(0f, spec.Volume);
         Assert.True(spec.NoFog);
         Assert.Equal(1, spec.AnimLod);
     }

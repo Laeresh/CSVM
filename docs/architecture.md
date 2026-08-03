@@ -1724,7 +1724,13 @@ precedence, `Pads.Disabled`/`TextureDropIn`/`Log`/master-seed side effects, the
 `--dump-*`/`--run-tests` early quits, the `--headless`+`--screenshot` rejection (after `Log.Open`,
 so the message actually lands somewhere) — plus everything that persists across in-process relaunches
 (camera, orbit rig, sun, WorldEnvironment, launchscreen, focus mute, the per-frame shader clock /
-`--perf` / capture tick at priority -999). `LaunchSession()` instantiates a `GameSession` per
+`--perf` / capture tick at priority -999). Both audio levers are master-*bus* writes from here,
+because only `FlightAudio` has a gain to scale and `WorldSounds` would sound through any factor
+threaded through the other path: `SetFocusMuted` owns the bus's mute FLAG (alt-tab), while
+`ApplyMasterVolume` writes its VOLUME once per launch from `--volume=`, else the `audio.volume`
+config key. Separate properties, so neither disturbs the other — and unlike `--mute`, a zero volume
+still loads and plays everything, so the sound counters and log lines stay intact.
+`LaunchSession()` instantiates a `GameSession` per
 launch; `ReturnToMenu` `QueueFree`s it; a menu launch derives its spec via
 `SessionSpec.FromMenu(_cli, …)`, never from the outgoing spec.
 ⚠ `GlobalShaderParameterAdd` runs in `_Ready` ONCE — a session rebuild must never double-Add

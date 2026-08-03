@@ -11637,3 +11637,48 @@ would have stayed green (`refuel*`'s `fire_n_smoke` loop keeps its instance aliv
 proven nothing. `.\RunTests.ps1` full pass: 384 units, 18/18 engine suites, 13/13 goldens
 hash-identical. Wave D is now both items landed (`D9` ☑, `D11` ☑; `D10` closed into `D9` by
 Decision 27) — only Wave E, F and G remain open in `PLAN-deepening.md`.
+
+## 2026-08-03 — `--volume=`: a master gain, so a test run can be silent without going blind
+
+**What landed.** A `--volume=N` flag (linear, 0–1, default 1) and the matching `audio.volume` config
+key, applied once per launch as a master-bus write in `Launcher.ApplyMasterVolume` — after the
+`--det` block, so a deterministic run reads the flag but not the tuning file `ClearOverrides` just
+dropped, and before the early-quit probes, so `--run-tests` and the `--dump-*` wrappers get the same
+gain an interactive launch gets. Precedence is flag > config key > 1; the config read happens even
+when the flag wins, because the read is what registers the key and skipping it would drop
+`audio.volume` from `--dump-config` on exactly the runs that set a volume.
+
+The point is what `--mute` cannot do. `--mute` is a **load-time** switch: `FlightAudio` and
+`WorldSounds` are never constructed, so a muted run is not merely quiet, it is *blind* — no sound
+counters, no `sound` log lines, and (per the quickwins entry above) errors that only a sounded run
+surfaces. `--volume=0` builds and plays everything and attenuates the bus instead, so the run is
+inaudible and fully observable at once. Bus, not `MixGain`, for the reason the focus mute already
+had written down: only `FlightAudio` has gain plumbing, and `WorldSounds` would go on sounding
+through any factor threaded through the other path. It writes the bus's VOLUME while `SetFocusMuted`
+owns its MUTE flag — separate properties, so alt-tabbing out of a `--volume=0` run and back leaves
+the gain where it was. An out-of-range value is clamped and an unreadable one ignored, each with a
+`WARN` (`TryParse`, not the throwing `Flt` helper — a typo'd volume must not take the launch down),
+and `--mute --volume=` warns rather than silently wasting one of the two.
+
+**How verified.** `.\RunTests.ps1` full pass from a worktree with `CSVM_DATA_ROOT` at the primary
+tree: 389 units (up from 384; the five new `SessionSpecTests` audio facts), 18/18 engine suites,
+13/13 goldens hash-identical — the goldens run `--mute`, and the gain is skipped outright at the
+default, so a stock launch's bus and console output are untouched.
+
+The behaviour itself is a three-way contrast over one scripted crash run (`--chapter=C1
+--plane=player_bhawk --crash=5 --det --debug-anim --frames=400`), which is the only way to see this
+at all — audio cannot be screenshot-verified. At `--volume=0`: `anim: prewarmed 58 sound stream(s)`,
+`anim: 2 ambient sound emitter(s): snd_waterfall, snd_train`, `crash sound: snd_exp_plane4`. At
+`--volume=0.02` (the audible control, kept quiet on purpose): the same three lines, byte for byte —
+the gain value changes nothing about the audio path. At `--mute`: no prewarm, no crash sound, and
+`anim: 0 ambient sound emitter(s): [2 requested with no audio session]`. All three screenshots
+pixmd5-identical (`3d862c3d…`), so the flag reaches nothing but the bus.
+
+Sources and precedence, via `--dump-config` (which reaches `ApplyMasterVolume` and quits before any
+audio is built, so it tests the wiring without playing a note): with a `config.json` carrying
+`{"audio":{"volume":0}}`, `--no-det` gives `master volume=0 via=config`; `--det` reports
+`dropped_overrides=1` and no volume line at all; `--det --volume=0.25` gives `master volume=0.25
+via=--volume`, so the flag survives the drop the config key does not. `audio.volume: 1` appears in
+the dumped template. The three complaint paths were run end to end: `--volume=4` →
+`WARN --volume=4 is outside 0-1 — using 1`, `--volume=loud` → `WARN … is not a number (0-1) —
+leaving the volume alone` and a launch that carries on, `--mute --volume=0` → the conflict `WARN`.

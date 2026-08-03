@@ -35,6 +35,14 @@ public partial class Launcher : Node3D
     /// and everything (both audio paths) is on it by default.</summary>
     private const int MasterBus = 0;
 
+    /// <summary>Master output gain, linear. 1 is the engine's own default (0 dB), so a stock launch
+    /// never touches the bus at all — see <see cref="ApplyMasterVolume"/>.</summary>
+    private const float MasterVolumeDefault = 1f;
+
+    /// <summary>Gain floor for the dB conversion, since <c>LinearToDb(0)</c> is negative infinity.
+    /// -80 dB is inaudible, which is the whole point of <c>--volume=0</c>.</summary>
+    private const float MasterVolumeFloor = 0.0001f;
+
     // What F11's placement print receives at the launchscreen, where no session (and no rigs)
     // exists — the same empty list the pre-split root held after a teardown.
     private static readonly List<PlayerRig> NoRigs = new();
@@ -129,6 +137,11 @@ public partial class Launcher : Node3D
     //
     // `--mute` is unrelated and cannot be reused for this: it is a load-time switch that
     // simply never constructs FlightAudio/WorldSounds, so there is nothing to toggle.
+    //
+    // --volume= (ApplyMasterVolume) rides the same bus for the same reasons, but writes its
+    // VOLUME rather than its mute flag. The two are separate bus properties, so neither has to
+    // know about the other: alt-tabbing in and out of a --volume=0 run restores the mute flag
+    // and leaves the gain where it was.
     private bool _focusMuted;
 
     /// <summary>The session clock as this frame sees it: the suites' own under
@@ -309,6 +322,10 @@ public partial class Launcher : Node3D
             string wouldBe = _spec.DetExplicit ? "--det" : _spec.ScriptedBy;
             Log.Info("core", $"no-det: {wouldBe} would run deterministically — wall-clock sim clock, unpinned randomness seed={_masterSeed}");
         }
+        // After the --det block, so a deterministic run reads the flag but not the tuning file that
+        // ClearOverrides just dropped; before the early-quit probes below, so --run-tests and the
+        // --dump-* wrappers are covered by the same gain an interactive launch gets.
+        ApplyMasterVolume();
         // Prefer the unpacked sibling folder from ExtractAssets.ps1 -Unzip when it exists (loose
         // JSON/PNG/WAV: no zip decompression at load). Base (chapter-independent) paths resolve now;
         // the chapter-dependent gamez/texture/mission paths resolve per-session in StartSession.
@@ -663,6 +680,39 @@ public partial class Launcher : Node3D
             _session = null;
         }
         ShowLaunchMenu();
+    }
+
+    /// <summary>Settles the master output gain for the launch: <c>--volume=</c> if it was given,
+    /// else the <c>audio.volume</c> config key, else unattenuated.
+    ///
+    /// <para>This is the knob for running the game next to something else, and it is deliberately
+    /// NOT <c>--mute</c>: at volume 0 both audio paths still load and play, so every sound counter
+    /// and every <c>sound</c> log line reads exactly as it does at full volume — the run is silent
+    /// but not blind. It is a bus write for the reason the focus mute above is: only FlightAudio
+    /// has a gain to scale, and WorldSounds would go on sounding through any factor threaded
+    /// through the other path.</para>
+    ///
+    /// <para>The config read is unconditional even when the flag wins, because the read is what
+    /// registers the key — skipping it would drop <c>audio.volume</c> from
+    /// <c>--dump-config</c> on exactly the runs that set a volume.</para></summary>
+    private void ApplyMasterVolume()
+    {
+        float volume = Config.GetFloat("audio.volume", MasterVolumeDefault);
+        string source = "config";
+        if (_spec.Volume is { } asked)
+        {
+            volume = asked;
+            source = "--volume";
+        }
+        // The default is the bus's own resting state, so leaving it alone keeps a stock launch
+        // byte-identical in both output and console log.
+        if (Mathf.IsEqualApprox(volume, MasterVolumeDefault))
+        {
+            return;
+        }
+        AudioServer.SetBusVolumeDb(MasterBus, Mathf.LinearToDb(Mathf.Max(volume, MasterVolumeFloor)));
+        string note = volume <= 0f ? " — sounds still load, play, count and log" : "";
+        Log.Info("sound", $"master volume={volume:0.###} via={source}{note}");
     }
 
     /// <summary>Mutes/unmutes the master bus and gates pad reads, on window focus. Idempotent —
