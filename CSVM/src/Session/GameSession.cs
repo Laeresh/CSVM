@@ -1374,6 +1374,9 @@ public partial class GameSession : Node3D
                 DebugClickRequested = _spec.WeaponClick,
                 DebugClick = _spec.WeaponClickAt,
                 DebugClickAimOnly = _spec.WeaponClickAimOnly,
+                DebugTarget = _spec.WeaponTarget,
+                DebugSurface = _spec.WeaponSurface,
+                StandoffAtStart = _spec.WeaponStandoff,
             };
             _worldRoot!.AddChild(lab);
             GD.Print($"weapon lab: '{_spec.PlaneName}' held " +

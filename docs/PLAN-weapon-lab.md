@@ -110,7 +110,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 ### Wave C — targeting
 
 6. ☑ C6 — click-to-place: raycast pick, surface readout, re-park on the camera ray
-7. ☐ C7 — scripted twins: `--weapon-target=`, `--weapon-surface=`, `--weapon-standoff=`
+7. ☑ C7 — scripted twins: `--weapon-target=`, `--weapon-surface=`, `--weapon-standoff=`
 
 ### Wave D — camera, probes, docs
 
@@ -320,7 +320,7 @@ off the `AnimRuntime.NameMeta` ancestor (`SelectionService.NameOf` is reusable a
 click that hits nothing must say so and leave the plane put. Re-parking must not put the plane
 inside geometry: clamp the stand-off if the ray back from the hit point re-enters a collider.
 
-## C7 ☐ Scripted twins for the click
+## C7 ☑ Scripted twins for the click
 
 **Goal.** Deterministic captures without a mouse: `--weapon-target=x,y,z` parks the plane facing
 that world point; `--weapon-surface=water|buildings|dirt` finds the nearest collider of that class

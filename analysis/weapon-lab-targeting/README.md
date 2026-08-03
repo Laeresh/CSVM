@@ -1,4 +1,13 @@
-# Weapon lab C6 — click to place, on a real surface
+# Weapon lab C6/C7 — click to place, on a real surface
+
+**C7 addendum (same day).** The scripted placements (`--weapon-target=`, `--weapon-surface=`,
+`--weapon-standoff=`) land in the same `PlaceOn` as a click. One measurement from building them is
+worth keeping: **"nearest collider by the body's origin" is a useless metric for water.** A
+chapter's water tiles are each one mesh whose node origin is the WORLD origin, so every water body
+is equidistant from everywhere — the search picked one 5023 m away and aimed the aircraft at
+(0,0,0). Measuring to the nearest *vertex of the collision geometry* gives 877 m in the same
+chapter. The C3 water capture reproduces byte-identically across two `--det` runs
+(`22145A9BFDF78DF9D68EBCC0D6EAF78FF1AEFB2A790C65A41368FFBFF6E73946`).
 
 Evidence for `PLAN-weapon-lab` C6 (2026-08-03). The captures are renders of the game's own
 geometry, so they are **not committed** — they live in the git-ignored `Screenshots/`

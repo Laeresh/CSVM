@@ -382,6 +382,14 @@ public sealed record SessionSpec
     /// <summary><b>Resolved.</b> The <c>,aim</c> suffix: aim at the picked point without
     /// re-parking, the scripted twin of shift-click.</summary>
     public bool WeaponClickAimOnly { get; private set; }
+    /// <summary><c>--weapon-target=x,y,z</c>: park the lab's aircraft facing that world point.</summary>
+    public Vector3? WeaponTarget { get; private set; }
+    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the nearest collider of
+    /// that class to the spawn. <b>Resolved</b> — an unknown class is warned about and dropped.</summary>
+    public string? WeaponSurface { get; private set; }
+    /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the lab's parking distance, 0 for the 90 m
+    /// default.</summary>
+    public float WeaponStandoff { get; private set; }
 
     // ---- Collision ----------------------------------------------------------------------------
 
@@ -579,6 +587,9 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--weapon-lab=")) { s.WeaponLab = true; s.WeaponSelect = arg["--weapon-lab=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-mount=")) { s.WeaponMount = arg["--weapon-mount=".Length..]; s.HasContentArg = true; }
             else if (arg == "--weapon-fire") { s.WeaponFire = true; s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-target=")) { s.WeaponTarget = ParseVec3(arg["--weapon-target=".Length..]); s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-surface=")) { s.WeaponSurface = arg["--weapon-surface=".Length..]; s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-standoff=")) { s.WeaponStandoff = Flt(arg["--weapon-standoff=".Length..]); s.HasContentArg = true; }
             else if (arg == "--weapon-click") { s.WeaponClick = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-click="))
             {
@@ -917,7 +928,16 @@ public sealed record SessionSpec
         // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
         // anything that forced a non-flight mode wins the arbitration above, but that would
         // silently leave the lab half-built, so it is reported instead.
-        if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick) && !Fly)
+        // An unknown surface class would otherwise search for a class no collider can carry and
+        // report "this chapter has none", which reads as a map fact rather than a typo.
+        if (WeaponSurface is { } wantSurface
+            && wantSurface.ToLowerInvariant() is not ("water" or "buildings" or "dirt" or "default"))
+        {
+            Warn("ui", $"--weapon-surface={wantSurface} is not water/buildings/dirt — ignoring it");
+            WeaponSurface = null;
+        }
+        if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick
+             || WeaponTarget != null || WeaponSurface != null || WeaponStandoff > 0f) && !Fly)
         {
             Warn("core", "the --weapon-lab flags need flight; another mode flag won this session, so the lab will not build");
         }

@@ -1490,9 +1490,13 @@ raw marker rig, which has nothing live to arm.
 **Click to place:** a left click casts the lab's OWN physics ray from the camera, names what it hit
 (`cs_name` ancestor via `SelectionService.NameOf`, class via `ProjectilePool.ClassifySurface`,
 distance) and re-parks the held plane on that same ray at the panel's stand-off through `PlaceHeld`;
-shift-click aims without moving, and an orange ball marks the aim point. `--weapon-cycle=N` (weapon
-stepper every N physics frames) and `--weapon-click=x,y[,aim]` (one click on the first physics
-frame) are the scripted twins, and stepping/picking is the only thing this node does per frame.
+shift-click aims without moving, and an orange ball marks the aim point. The scripted twins all fire
+on the first physics frame, most specific first — `--weapon-target=x,y,z`, then
+`--weapon-surface=water|buildings|dirt` (nearest collider of that class, measured to the nearest
+collision VERTEX, since a chapter's water tiles all sit at the world origin), then
+`--weapon-click=x,y[,aim]` — and every one of them ends in the same `PlaceOn` as a real click, at
+`--weapon-standoff=` metres. `--weapon-cycle=N` steps the weapon list every N physics frames;
+stepping and placing are the only things this node does per frame.
 ⚠ This node NEVER spawns a round. Its one exception is `RunSelfTest` (the `--weapon-test` 48-weapon
   pass check on a PARKED plane, host null), which fires every node of a mount straight into the
   caller-supplied pool. Do not give the panel a firing loop back — the lab exists to fire exactly

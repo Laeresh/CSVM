@@ -18,8 +18,9 @@ Flags are specified in [`cli.md`](cli.md).
 | `H` | D-pad → | select ordnance |
 | `F5` | | damage lab on the flown plane — `--damage=` |
 | `B` | | weapon lab panel — `--weapon-lab` sessions only; its steppers arm the plane's live loadout and Space/`F` then fire it (`--weapon-lab=` picks the weapon, `--weapon-mount=` the mount, `--weapon-cycle=` steps the list) |
-| click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y` |
+| click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=water\|buildings\|dirt` to place without a mouse at all |
 | shift-click | | weapon lab: aim at that point without moving the plane — `--weapon-click=x,y,aim` |
+| stand-off slider | | weapon lab: how far back every placement parks (15–1100 m, default 90) — `--weapon-standoff=` |
 | `R` | | respawn |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |

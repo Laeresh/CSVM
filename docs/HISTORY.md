@@ -12437,3 +12437,29 @@ line therefore logs the struck **body** name beside the object's, which is what 
 missed sibling from a misclassification. (2) The "don't re-park inside geometry" clamp never fired
 and by construction cannot, unless the stand-off exceeds the picked range: the camera→hit segment
 is empty because the hit is the ray's first intersection.
+
+## 2026-08-03 — scripted twins for the lab's placement (`PLAN-weapon-lab` C7)
+
+Three flags place the held aircraft with nobody at the mouse, all resolving on the first physics
+frame and all ending in the same `PlaceOn` a real click uses, so a scripted capture and a hand-flown
+one park identically. `--weapon-target=x,y,z` faces a world point on the line from the spawn;
+`--weapon-surface=water|buildings|dirt` faces the nearest collider of that class;
+`--weapon-standoff=<m>` sets the distance for all of them (and the panel slider's start). Most
+specific wins: target, then surface, then `--weapon-click=`.
+
+**The nearest-by-centre rule the plan specified had to change, and the disproof is the interesting
+part.** "Nearest `StaticBody3D` by the body's own origin" put the aircraft 5023 m from its spawn in
+C3, aiming at (0,0,0) — because a chapter's water tiles are built as one mesh per tile whose node
+origin is the WORLD origin, so every water body measures the same distance from everywhere.
+Measuring to the nearest **vertex of the collision geometry** instead gives 877 m and a tile the
+aircraft can actually see. The search then rays the line it chose and reports the first body it
+strikes, which need not be the one searched for — adjacent tiles share vertices, and it is the
+struck surface a round will hit that the readout must name.
+
+**Verified.** `--weapon-lab=wep_06 --chapter=C3 --weapon-surface=water --weapon-fire --det
+--screenshot` twice: **byte-identical PNGs** (`22145A9B…`), the plan's criterion, with
+`fx=bsplsh.flt standin=None` on every impact. `--weapon-surface=buildings` in C5 finds one at 118 m
+of 665 candidates; `dirt` in C4 one at 231 m of 1749. `--weapon-target=-4608,0,-2048
+--weapon-standoff=250` parks at exactly 250 m and splashes. `--stage=empty --weapon-surface=water`
+warns "no water collider among 1 scanned" and leaves the aircraft at spawn rather than failing the
+launch. `.\RunTests.ps1` PASS: 413 units, 22 suites, 13 goldens hash-identical.

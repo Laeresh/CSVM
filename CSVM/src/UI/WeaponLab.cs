@@ -82,7 +82,7 @@ public sealed partial class WeaponLab : Node3D
     // step — the space state may not be queried while the server is flushing queries.
     private Vector2? _pendingClick;
     private bool _pendingAimOnly;
-    private bool _debugClickDone;
+    private bool _scriptedPlacementDone;
     private float _standoff = DefaultStandoff;
     private string _pickLine = "target: (nothing picked yet)";
     private MeshInstance3D? _marker;
@@ -152,6 +152,19 @@ public sealed partial class WeaponLab : Node3D
     /// without moving the aircraft.</summary>
     public bool DebugClickAimOnly { get; init; }
 
+    /// <summary><c>--weapon-target=x,y,z</c>: park facing that world point on the first physics
+    /// frame. Wins over <see cref="DebugSurface"/> and <see cref="DebugClick"/> — it is the most
+    /// specific of the three.</summary>
+    public Vector3? DebugTarget { get; init; }
+
+    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the nearest collider of
+    /// that class to the spawn, on the first physics frame.</summary>
+    public string? DebugSurface { get; init; }
+
+    /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the parking distance every placement uses, and
+    /// the panel slider's starting value. 0 keeps the 90 m default.</summary>
+    public float StandoffAtStart { get; init; }
+
     private List<WeaponDef> BankWeapons => _bank == Guns ? _gunWeapons : _rocketWeapons;
     private List<Mount> BankMounts => _bank == Guns ? _gunMounts : _pylonMounts;
     private WeaponDef? SelectedWeapon => _weaponIndex < BankWeapons.Count ? BankWeapons[_weaponIndex] : null;
@@ -159,6 +172,10 @@ public sealed partial class WeaponLab : Node3D
 
     public override void _Ready()
     {
+        if (StandoffAtStart > 0f)
+        {
+            _standoff = Mathf.Clamp(StandoffAtStart, MinStandoff, MaxStandoff);
+        }
         BuildUi();
         ResolveInitialSelection();
         _panel = DebugShow;
@@ -172,14 +189,27 @@ public sealed partial class WeaponLab : Node3D
     {
         // Both of this node's per-frame jobs are picks and swaps, never a shot: firing belongs to
         // the aircraft's trigger and there is deliberately no second spawn path here.
-        if (DebugClickRequested && !_debugClickDone && _camera != null)
+        if (!_scriptedPlacementDone && _host != null)
         {
             // Deferred to the first physics frame, as the selection service's scripted pick is:
             // the camera pose and the world's colliders are only final once the session is built.
-            _debugClickDone = true;
-            var screen = DebugClick ?? (_camera.GetViewport().GetVisibleRect().Size * 0.5f);
-            Log.Info("ui", $"weapon lab: scripted click at ({screen.X:0},{screen.Y:0}){(DebugClickAimOnly ? " (aim only)" : "")}");
-            PickAt(screen, DebugClickAimOnly);
+            // Most specific wins: an explicit point, then a surface class, then a screen pixel.
+            _scriptedPlacementDone = true;
+            if (DebugTarget is { } target)
+            {
+                Log.Info("ui", $"weapon lab: scripted target ({target.X:0.0},{target.Y:0.0},{target.Z:0.0})");
+                PlaceOnTarget(target);
+            }
+            else if (DebugSurface is { } surface)
+            {
+                PlaceOnNearestSurface(surface);
+            }
+            else if (DebugClickRequested && _camera != null)
+            {
+                var screen = DebugClick ?? (_camera.GetViewport().GetVisibleRect().Size * 0.5f);
+                Log.Info("ui", $"weapon lab: scripted click at ({screen.X:0},{screen.Y:0}){(DebugClickAimOnly ? " (aim only)" : "")}");
+                PickAt(screen, DebugClickAimOnly);
+            }
         }
         if (_pendingClick is { } click)
         {
@@ -426,6 +456,32 @@ public sealed partial class WeaponLab : Node3D
         return body?.Name.ToString() ?? "?";
     }
 
+    /// <summary>The closest point of a body's collision geometry to <paramref name="from"/>, in
+    /// world space, measured over the trimesh's own vertices. Null when the body carries no
+    /// concave shape (nothing in a built chapter does, but a hand-made body might).</summary>
+    private static (Vector3 Point, float Dist)? NearestVertex(StaticBody3D body, Vector3 from)
+    {
+        (Vector3 Point, float Dist)? best = null;
+        foreach (var child in body.GetChildren())
+        {
+            if (child is not CollisionShape3D { Shape: ConcavePolygonShape3D concave } cs)
+            {
+                continue;
+            }
+            var xf = cs.GlobalTransform;
+            foreach (var v in concave.GetFaces())
+            {
+                var world = xf * v;
+                float d = world.DistanceSquaredTo(from);
+                if (best is not { } b || d < b.Dist)
+                {
+                    best = (world, d);
+                }
+            }
+        }
+        return best is { } found ? (found.Point, Mathf.Sqrt(found.Dist)) : null;
+    }
+
     /// <summary>Fires the lab's own physics ray through <paramref name="screen"/>, reports what it
     /// struck — its <c>cs_name</c>, its IMPACT surface class and its distance — and re-parks the
     /// held aircraft on that same camera ray at the stand-off distance, nose on the struck point.
@@ -453,20 +509,115 @@ public sealed partial class WeaponLab : Node3D
             SyncState();
             return;
         }
-        var point = hit["position"].AsVector3();
         var body = hit["collider"].As<Node>();
+        PlaceOn(hit["position"].AsVector3(), dir, body, NameOfStruck(body), aimOnly);
+    }
+
+    /// <summary>Re-parks the held aircraft on the aim line through <paramref name="point"/>: back up
+    /// <paramref name="dir"/> by the stand-off, nose on the point. Shared by the click (where
+    /// <paramref name="dir"/> is the camera ray) and by the scripted target/surface twins (where it
+    /// is the line from the spawn), so all three place the aircraft the same way and report the same
+    /// line. <paramref name="aimOnly"/> turns the aircraft without moving it.</summary>
+    private void PlaceOn(Vector3 point, Vector3 dir, Node? body, string name, bool aimOnly)
+    {
+        if (_host == null)
+        {
+            return;
+        }
         var surface = ProjectilePool.ClassifySurface(body);
-        string name = NameOfStruck(body);
         float standoff = aimOnly ? (point - _plane.GlobalPosition).Length() : ClampedStandoff(point, dir);
-        _pickLine = $"target: {Trim(name, 22)} · {surface.ToString().ToLowerInvariant()} · "
-                    + $"{(point - from).Length():0} m";
+        _pickLine = $"target: {Trim(name, 22)} · {surface.ToString().ToLowerInvariant()} · {standoff:0} m";
         // The body's own node name is in the line on purpose: one mesh yields a body per surface
         // class present, so "col" vs "col_buildings" is what distinguishes a click that missed the
         // tagged sibling from a genuinely untagged surface.
-        Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface.ToString().ToLowerInvariant()} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) range={(point - from).Length():0} standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
+        Log.Info("ui", $"weapon lab: picked name={name} body={body?.Name} surface={surface.ToString().ToLowerInvariant()} at=({point.X:0.0},{point.Y:0.0},{point.Z:0.0}) standoff={standoff:0}{(aimOnly ? " (aim only)" : "")}");
         ShowMarker(point);
         _host.PlaceHeld(aimOnly ? _plane.GlobalPosition : point - (dir * standoff), point);
         SyncState();
+    }
+
+    /// <summary><c>--weapon-target=x,y,z</c>: park facing that world point, on the line from the
+    /// aircraft's spawn — the mouse-free twin of a click, for a point already known from a log or a
+    /// previous capture. The point is taken as given: a coordinate in mid-air is a legitimate aim,
+    /// so nothing is raycast and the surface class reads <c>default</c> unless a body is under
+    /// it.</summary>
+    private void PlaceOnTarget(Vector3 point)
+    {
+        var dir = point - _plane.GlobalPosition;
+        if (dir.LengthSquared() <= 1e-6f)
+        {
+            Log.Warn("ui", $"--weapon-target names the aircraft's own position — leaving it at spawn");
+            return;
+        }
+        dir = dir.Normalized();
+        // Probe the point itself so the readout names a real body when there is one under the aim,
+        // rather than reporting "default" for a building the tester deliberately aimed at.
+        var query = PhysicsRayQueryParameters3D.Create(point - (dir * ClearanceProbeStart), point + (dir * ClearanceProbeStart));
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var body = hit.Count > 0 ? hit["collider"].As<Node>() : null;
+        PlaceOn(point, dir, body, body != null ? NameOfStruck(body) : "(world point)", aimOnly: false);
+    }
+
+    /// <summary><c>--weapon-surface=water|buildings|dirt</c>: park facing the NEAREST piece of that
+    /// class to the aircraft's spawn. The search walks the built world once for
+    /// <see cref="StaticBody3D"/>s, classifies each through the same
+    /// <see cref="ProjectilePool.ClassifySurface"/> the impact path uses, and measures to the
+    /// nearest <b>vertex of its collision geometry</b> — not to the body's origin, which for a
+    /// chapter's water is the world origin on every tile and would send the aircraft kilometres off
+    /// to aim at (0,0,0). Ties fall to the earlier node in tree order (strictly-less), so a
+    /// <c>--det</c> capture is reproducible. A chapter with none of that class warns and leaves the
+    /// aircraft at spawn; it is not a failed launch.</summary>
+    private void PlaceOnNearestSurface(string want)
+    {
+        var target = want.ToLowerInvariant() switch
+        {
+            "water" => SurfaceClass.Water,
+            "buildings" => SurfaceClass.Buildings,
+            _ => SurfaceClass.Default,   // "dirt"/"default": everything untagged
+        };
+        var origin = _plane.GlobalPosition;
+        Node3D? best = null;
+        var bestPoint = Vector3.Zero;
+        float bestDist = float.MaxValue;
+        int scanned = 0, matched = 0;
+        void Walk(Node node)
+        {
+            foreach (var child in node.GetChildren())
+            {
+                if (child is StaticBody3D sb)
+                {
+                    scanned++;
+                    if (ProjectilePool.ClassifySurface(sb) == target)
+                    {
+                        matched++;
+                        if (NearestVertex(sb, origin) is { } near && near.Dist < bestDist)
+                        {
+                            bestDist = near.Dist;
+                            bestPoint = near.Point;
+                            best = sb;
+                        }
+                    }
+                }
+                Walk(child);
+            }
+        }
+        Walk(GetParent() ?? this);
+        if (best == null)
+        {
+            Log.Warn("ui", $"--weapon-surface={want}: this chapter has no {want} collider among {scanned} scanned — leaving the aircraft at spawn");
+            _pickLine = $"target: no {want} collider in this chapter";
+            SyncState();
+            return;
+        }
+        Log.Info("ui", $"--weapon-surface={want}: nearest of {matched} {want} bodies ({scanned} scanned) is {NameOfStruck(best)}/{best.Name} at {bestDist:0} m, point=({bestPoint.X:0.0},{bestPoint.Y:0.0},{bestPoint.Z:0.0})");
+        // Take the FIRST thing the line to that point actually strikes: the readout must name the
+        // surface a round fired down this aim would hit, which is not always the one searched for.
+        var dir = (bestPoint - origin).Normalized();
+        var query = PhysicsRayQueryParameters3D.Create(origin, origin + (dir * RayLength));
+        var hit = GetWorld3D().DirectSpaceState.IntersectRay(query);
+        var point = hit.Count > 0 ? hit["position"].AsVector3() : bestPoint;
+        var body = hit.Count > 0 ? hit["collider"].As<Node>() : best;
+        PlaceOn(point, dir, body, NameOfStruck(body), aimOnly: false);
     }
 
     /// <summary>The stand-off the panel asks for, shortened if the ray back from the struck point
