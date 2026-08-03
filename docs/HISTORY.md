@@ -12275,3 +12275,46 @@ text (which only ever describes 4 groups + pylons, and calls the Kestrel's incom
 single-muzzle group") as describing the degenerate case, not a fifth mount category; `WeaponLab`'s
 existing raw-marker fallback already offers per-firepoint mounts at the UI layer when B5 needs finer
 granularity than a W-group. B5 (the panel driving this live loadout) is next.
+
+## 2026-08-03 — `CAP-04` flown: the original's pitch input is digital, so `BL-147`'s "moderate deflection" does not exist
+
+`CAP-04` was filmed to give `BL-147` a per-frame pitch trace from a ~45° (moderate) input, the twin
+of `BL-097`'s roll question. Both takes decode cleanly — `checkclip` `OK` on each (dx correlation
++0.95 / +1.00, so the panel shake is translation, not auto head turn), compass tape travel 0.17° and
+−0.22° over the whole clip so the manoeuvre really is wings-level pitch, altimeter band resolved at
+11.2× and 8.2× margin, second-difference noise 1.75 / 1.32 ft and 1.14 / 1.11 mph.
+
+**The item's premise turned out to be wrong, and that is the finding.** The user flies the
+original's pitch on the keyboard: every pitch command is full deflection, gated on and off by the
+key, so there is no sub-full-deflection input to spin up and a "~45° pull" is a *tap cadence*. (The
+numpad captures `CAP-07`/`CAP-08` are the *camera*, not the stick — an easy wrong inference.) The
+data agrees: the smoothed peak flight-path pitch rate over the four pull events is 8.5 / 9.8 / 9.4 /
+12.7 °/sim-s, i.e. 26–30% of the 33 °/sim-s full-deflection rate — a duty cycle — while the
+instantaneous rate climbs to 20–24 °/sim-s as the smoothing window tightens, which is the individual
+taps showing through. Neither take is a 45° pull by any reading: flight path peaks at **+33.5°** and
+**+28.0°**, and the pitch *attitude* is unreadable because the ADI ball saturates at its 0.730 sky
+ceiling once the flight path passes ~+10°.
+
+**The step response was already in footage we had.** The 2026-07 `Bloodhawk Pitch` loop was flown by
+*holding* the key: 4 s of dead-level 299.4 mph (the same entry condition as both `CAP-04` takes),
+key down at t = 4.10 s wall, rate rising to an asymptote **R = 26–31 °/sim-s** — consistent with the
+published sustained 33 — with a model-free 10–90% rise of **0.66 s sim**. The exponential τ is
+**not resolvable**: fitted τ falls monotonically with the smoothing window (0.73 → 0.19 s sim), which
+is `FINDINGS.md`'s "a peak found by differentiating a smoothed signal is a smoothing artifact" in its
+exact form, so only the **upper bound τ ≲ 0.2 s sim** is real. Our held-stick spin-up is
+`1/ang_momentum_damp` = 1/5.0 = **0.2 s**, sitting exactly at that bound — **no spin-up mismatch is
+demonstrable and `PitchTune` 0.75 is not implicated**, which now defends it twice over (sustained
+rate before, spin-up bound now).
+
+**Where the "sluggish" feel probably comes from.** At matched smoothing the held key reaches its rate
+in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s — 1.5× to 8× slower, and
+not reproducible between takes, which is a human hand rather than a flight model. The check that
+follows from it is our key-to-input path: if it ramps or filters where the original's is a bare
+on/off, that is the divergence, not the airframe constants.
+
+`BL-147` is bounded, not closed; `CAP-04`'s row stays, rewritten to ask for a **step** — hold the
+pitch key ~2 s from level and release cleanly — at **≥60 fps constant frame rate**, since τ ≲ 0.2 s
+sim is ~4 frames at the 30 fps these captures run at and cannot be resolved by construction. The
+same defect applies to `BL-097`: there is no partial aileron deflection either, so its "moderate roll
+input" clip cannot be flown and it should be re-read as a held-key step question. Trace plot kept at
+`playtest/CAP-04/cap04_pitch_trace.png`.

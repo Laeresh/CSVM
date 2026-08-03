@@ -60,7 +60,7 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 |---|---|---|---|
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
 | `CAP-03` | Level top speed at four altitudes | Full-throttle level runs held to equilibrium at 5500 / 6000 / 6500 / 6800 ft | `BL-094` |
-| `CAP-04` | Moderate-deflection pitch trace | A ~45° pull from level, timed frame by frame like the existing sustained-rate clips | `BL-147` |
+| `CAP-04` | ~~Moderate-deflection pitch trace~~ **flown 2026-08-03, premise refuted; re-record owed** | Both takes decoded (`BL-147`). There is **no moderate deflection** — the original's pitch is a keyboard on/off key, so the clip is a *tap cadence* and no spin-up curve can be fitted from it. What is still owed is τ, via a **fixed-cadence key macro** — alternate pitch-up/pitch-down as a square wave, ~20 s per period at ~0.23 / 0.37 / 0.57 / 0.93 s (deliberately non-integer frame counts), level entry, fixed throttle, auto-repeat off. τ comes from the altitude *ripple* across periods, which averages over hundreds of cycles, so **30 fps is a floor, not a target** — record at whatever rate the recorder gives, keep the bitrate high, and keep the resolution to 2560×720 or 2560×1440 (anything else needs a `LAYOUTS` entry first). Those periods stay non-integer-frame at 30/60/120 fps. See `BL-147` for the modelled amplitudes and the self-check | `BL-147` |
 | `CAP-05` | Stall & knife-edge recovery | A full stall entry and recovery, plus a sustained knife-edge | `BL-115`, `BL-124` |
 | `CAP-06` | Graded stall-warning reference | The airspeed dial's warning blink **through the approach to stall**, not only after it | `BL-148` |
 

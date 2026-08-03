@@ -1183,21 +1183,88 @@ needs one of them to move needs a new measurement first.
   360° averages 246, so the original's roll was **still accelerating when it finished**. Our
   `1/damp` spin-up reproduces the total time (1.98 s vs 2.05) — whether it reproduces the curve is
   unknown, and only a per-frame bank trace would say.
+  ⚠ **Re-read this as a held-key step question** (2026-08-03, out of `BL-147`/`CAP-04`): the
+  original's controls are digital, so there is no partial aileron deflection to spin up and a
+  "moderate roll input" clip cannot be flown. The only measurable transient is the leading edge of a
+  *held* key from steady flight — and at 30 fps that edge is unresolvable, exactly as it was for
+  pitch. Any roll-transient capture needs ≥60 fps constant frame rate.
 
-- `BL-147` **Pitch's transient/spin-up shape is untested — the exact twin of `BL-097`'s roll question.**
-  The video calibration only ever pinned pitch's *sustained* rate (33°/s original vs 33.5 ours,
-  asserted by `flight-envelope`); it says nothing about the curve on the way there or at
-  sub-full-deflection inputs (the user still reads ~45° pitch inputs as sluggish at the controls even
-  while accepting the sustained-rate match). Wanted: a per-frame pitch trace from a moderate (~45°)
-  input, the same shape of evidence `BL-097` wants for roll.
-  *Blocked on `CAP-04`* (`playtest.md` §0).
+- `BL-147` **Pitch's spin-up: the premise was wrong, and what survives of it is consistent with our
+  0.2 s. Bounded 2026-08-03 from `CAP-04`, not closed.**
+  The item was written asking for a *moderate-deflection* pitch trace, on the assumption that a
+  sub-full-deflection input exists to spin up. **It does not — the user flies the original's pitch on
+  the keyboard, so every pitch command is full deflection gated on/off by the key** (confirmed by the
+  user, 2026-08-03; note the numpad in the original is the *camera*, `CAP-07`/`CAP-08`, not the stick).
+  A "~45° pull" is therefore a **tap cadence**, not a deflection, and there is no partial-deflection
+  spin-up curve to fit.
+  **What `CAP-04` actually measured** (both takes, `checkclip` `OK`, heading flat to 0.2° so the
+  manoeuvre is genuinely wings-level pitch; decode noise 1.3–1.8 ft second-difference; altimeter band
+  resolved 11.2× / 8.2×). Entry 299.4 / 300.4 mph level, then a tapped pull. Smoothed peak
+  flight-path pitch rate **8.5 / 9.8 / 9.4 / 12.7 °/sim-s** over the four pull events = 26–30% of the
+  33 °/sim-s full-deflection rate, i.e. the tap duty cycle; the instantaneous rate climbs to
+  **20–24 °/sim-s** as the smoothing window shrinks, which is the individual taps showing through.
+  Flight path peaked at **+33.5°** (take 1) and **+28.0°** (take 2) — the clip is *not* a 45° pull, and
+  the pitch *attitude* is unreadable because the ADI ball saturates (sky fraction pinned at its 0.730
+  ceiling) once the flight path passes ~+10°.
+  **The step response was already in the 2026-07 loop clip**, which was flown by *holding* the key:
+  from 4 s of dead-level 299.4 mph, key down at t = 4.10 s wall, the rate rises to an asymptote
+  **R = 26–31 °/sim-s** (consistent with the published sustained 33) with a model-free 10–90% rise of
+  **0.66 s sim**. The exponential **τ is not resolvable** — fitted τ tracks the smoothing window
+  (0.73 → 0.19 s sim as the window tightens), so all the footage supports is an **upper bound
+  τ ≲ 0.2 s sim**. Our model's held-stick spin-up is `1/ang_momentum_damp` = 1/5.0 = **0.2 s**
+  (`FlightModel.cs`, `return_rate` adds only on release), which sits exactly at that bound: **no
+  spin-up mismatch is demonstrable, and `PitchTune` 0.75 is not implicated.**
+  **The sluggishness is most likely the tap cadence, not the airframe.** At matched smoothing the held
+  key reaches its rate in 0.66 s sim while `CAP-04`'s tapped pulls take 0.99 / 1.25 / 1.50 / 5.28 s —
+  1.5× to 8× slower, and *not reproducible between takes*, which is the signature of a human hand
+  rather than a flight model. Before touching any constant, check whether our key-to-input path
+  ramps/filters where the original's is a bare on/off.
+  **What remains open:** τ itself.
+  **How to get it — a fixed-cadence key macro. 30 fps is a floor, not a target; record at whatever
+  rate the recorder gives and keep the bitrate high.** A single step
+  edge is ~4 frames and unresolvable, but a *periodic* input is not: drive the pitch keys as a square
+  wave and τ shows up as the **ripple amplitude** at a known frequency, which averages down over
+  hundreds of cycles instead of living or dying on one edge. Alternate pitch-**up** and pitch-**down**
+  (not a single key) so the mean rate is zero — the aircraft porpoises about level, speed and the aero
+  gain stay put, altitude stays in one band and the ADI never saturates.
+  Modelled ripple at τ = 0.2 s sim, V = 440 ft/s, against the 1.75 ft second-difference noise
+  (conservative: that statistic implies only ~0.7 ft of independent per-frame noise):
+
+  | period (wall) | frames/cycle | alt ripple | ripple at τ = 0.1 / 0.2 / 0.3 |
+  |---|---|---|---|
+  | 0.25 s | 7.5 | 0.57 ft | 1.06 / 0.57 / 0.39 |
+  | 0.40 s | 12 | 2.25 ft | 3.75 / 2.25 / 1.56 |
+  | 0.60 s | 18 | 6.99 ft | 10.22 / 6.99 / 5.06 |
+  | 1.00 s | 30 | 26.3 ft | 32.5 / 26.3 / 20.9 |
+
+  Shorter periods discriminate τ harder, longer ones give more signal; **0.25–0.60 s is the band**, and
+  a 20 s run at each of ~0.25 / 0.40 / 0.60 / 1.00 s in one session is the measurement. **Fit the ratio
+  across periods, not one period's absolute amplitude** — the ratio cancels the unknown gain from body
+  rate to flight path, which is the one systematic we cannot otherwise pin.
+  ⚠ Pick periods that are **not** an integer number of frames (0.40 s and 1.00 s are exactly 12 and 30
+  at 30 fps — use e.g. 0.23 / 0.37 / 0.57 / 0.93 s, which stay non-integer at 30, 60 and 120 fps, so
+  the set does not have to be re-chosen for the recorder). Integer periods resample the same phases
+  every cycle; non-integer ones let the phase drift reconstruct the waveform *below* the frame
+  interval. Frame rate otherwise does not matter — the pipeline reads real PTS and the existing clips
+  are already VFR — but **resolution does**: `extract.py`'s `LAYOUTS` knows only 2560×720 and
+  2560×1440 and raises on anything else, so declare a new geometry *before* recording.
+  **The strongest form is a matched A/B, and then no absolute τ is needed at all:** run the identical
+  macro cadence against our build and compare the γ ripple directly. The aero gain, the clock factor
+  and the AoA coupling all cancel, and the comparison answers the feel question rather than a constant.
+  Self-check that the pulses are actually landing: a symmetric ±cadence must hold mean rate ≈ 0, and a
+  50%-duty single-key run must give mean 16.5 °/sim-s. If it doesn't, the game is quantising the key
+  state and the input waveform is not what the macro thinks. Keyboard auto-repeat off, raw key
+  down/up, fixed throttle.
   ⚠ **Traps.** (a) `PitchTune` **0.75 is a pinned measurement** (see this section's header warning) —
-  it cannot move to fix a spin-up complaint without a new frame-by-frame measurement first, exactly as
-  `BL-097` cannot retune `RollTune` off a feel report alone. (b) The existing clip proves only the
-  sustained 120–280 mph plateau; a moderate-deflection clip has never been shot, so any spin-up curve
-  fitted today is invention, not decode. (c) Don't fold this into `BL-097` — same shape of gap,
+  and it is now *doubly* defended: the sustained rate matched before, and the spin-up bound matches
+  now. It cannot move to fix a feel report. (b) **Do not quote a τ from `CAP-04` or from the loop
+  clip.** Every fitted τ here is smoothing-limited and falls monotonically as the window tightens —
+  `FINDINGS.md`'s "a peak found by differentiating a smoothed signal is a smoothing artifact", in its
+  exact form. Only the upper bound is real. (c) Don't fold this into `BL-097` — same shape of gap,
   different axis, and pitch's own coupling to speed (`BL-092`'s induced-drag gap) makes conflating the
-  two easy to get wrong.
+  two easy to get wrong. (d) The digital-input finding is not pitch-specific — it means **`BL-097`'s
+  roll question has the same defect**: there is no partial aileron deflection either, so a "moderate
+  roll input" clip cannot be flown, and `BL-097` should be re-read as a held-key step question too.
 
 - `BL-243` **The original carries destruction across missions in a state log; CSVM has no log, so a
   warm instant action starts clean where the original does not.** Decoded 2026-08-02 out of
