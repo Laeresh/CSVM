@@ -12102,3 +12102,26 @@ second float. `BL-173` is unaffected: still blocked only on `BL-085` landing a t
 **Verified.** No code touched — `.\RunTests.ps1` not run for this entry (documentation only; the
 2026-08-03 armory entry above records the last full pass: 393 unit tests, 20/20 engine suites,
 13/13 goldens hash-identical).
+
+**PLAN-weapon-lab A1: `--weapon-lab` routes to flight, not the viewer (2026-08-03).**
+`SessionSpec.Resolve`'s mode arbitration no longer votes `WeaponLab`/`WeaponMount`/`WeaponFire`
+into `viewer` — they now fall through to the same `HasContentArg && !viewer && !freecam && !animLab
+→ fly = true` default `--fly` itself relies on, the identical shape `c42e9a1` already used for
+`--damage`. `--weapon-test` is untouched (still votes viewer — D9 keeps it a plane-only probe). A
+new post-arbitration check warns instead of silently half-building when another mode flag wins
+against a weapon-lab flag (e.g. `--weapon-lab --viewer`): *"--weapon-lab/--weapon-mount/--weapon-fire
+need flight; another mode flag won this session, so the lab will not build"* — true today because
+`GameSession`'s lab construction is still gated on `_spec.Viewer` (A3's job to move).
+
+**Verified.** `dotnet test` — three new `SessionSpecTests` facts (`TheWeaponLabRoutesToFlightNotTheViewer`
+over `--weapon-lab`/`--weapon-mount=`/`--weapon-fire`, `WeaponTestStillRoutesToTheViewer`,
+`WeaponLabAgainstAnExplicitViewerReportsTheContradiction`), 395/395 passing. `RunProbe.ps1`:
+`--weapon-lab --plane=player_fury` logs `startup mode=fly chapter=C1`; `--weapon-test
+--plane=player_fury` still logs `mode=viewer` with `Subject=plane=player_fury` and reports
+`48/48 fired OK, 0 errors, 0 skipped`; `--weapon-lab --viewer` prints the new contradiction warning
+and stays in `viewer`. `.\RunTests.ps1`: build clean, 395/395 units, 21/21 engine suites, 13/13
+goldens hash-identical — the mode is additive, nothing built by another session moved.
+
+**Note.** The lab does not yet actually build under `--weapon-lab` alone (no `--viewer`) — that is
+expected until A3 relocates its construction into the flight path; A1 only settles which mode the
+flag asks for.

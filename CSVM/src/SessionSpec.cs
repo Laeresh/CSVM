@@ -800,8 +800,7 @@ public sealed record SessionSpec
         bool fly = _flyArg || _stuntArg;
         bool stunt = _stuntArg;
         bool damageLab = _damageLabArg;
-        bool viewer = _viewerArg || MarkersOverlay || WeaponLab
-            || WeaponMount != null || WeaponFire || WeaponTest;
+        bool viewer = _viewerArg || MarkersOverlay || WeaponTest;
         bool freecam = _freecamArg || DamageTest || EffectsTest;
         bool animLab = _animLabArg || PlayAnim != null || DebugAnimUi;
 
@@ -870,6 +869,13 @@ public sealed record SessionSpec
         {
             Warn("core", $"--view={View} is a flight camera; ignoring it outside --fly/--stunt");
             View = 0;
+        }
+        // The weapon lab is a flight-mode affair (it fires through a real FlightController) —
+        // anything that forced a non-flight mode wins the arbitration above, but that would
+        // silently leave the lab half-built, so it is reported instead.
+        if ((WeaponLab || WeaponMount != null || WeaponFire) && !Fly)
+        {
+            Warn("core", "--weapon-lab/--weapon-mount/--weapon-fire need flight; another mode flag won this session, so the lab will not build");
         }
         bool observing = Mode == SessionMode.Freecam || Mode == SessionMode.AnimLab;
         if (DebugSelect != null && !observing)

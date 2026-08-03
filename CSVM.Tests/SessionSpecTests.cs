@@ -112,9 +112,6 @@ public class SessionSpecTests
     [Theory]
     [InlineData("--damage")]
     [InlineData("--markers")]
-    [InlineData("--weapon-lab")]
-    [InlineData("--weapon-mount=firepoint0")]
-    [InlineData("--weapon-fire")]
     [InlineData("--weapon-test")]
     public void TheseFlagsVoteForTheViewer(string arg) => Assert.Equal(SessionMode.Viewer, S(arg).Mode);
 
@@ -453,6 +450,31 @@ public class SessionSpecTests
         var s = S("--damage", "--chapter=C4");
         Assert.False(s.DamageLab);
         Assert.Contains(s.Warnings, w => w.Message.Contains("--damage is the plane lab"));
+    }
+
+    /// <summary>The weapon lab fires through a real FlightController, so it needs the flight mode,
+    /// not the static viewer — unlike --weapon-test, which stays a cheap plane-only probe.</summary>
+    [Theory]
+    [InlineData("--weapon-lab")]
+    [InlineData("--weapon-mount=wep_06")]
+    [InlineData("--weapon-fire")]
+    public void TheWeaponLabRoutesToFlightNotTheViewer(string flag)
+    {
+        Assert.Equal(SessionMode.Fly, S(flag).Mode);
+    }
+
+    [Fact]
+    public void WeaponTestStillRoutesToTheViewer()
+    {
+        Assert.Equal(SessionMode.Viewer, S("--weapon-test").Mode);
+    }
+
+    [Fact]
+    public void WeaponLabAgainstAnExplicitViewerReportsTheContradiction()
+    {
+        var s = S("--weapon-lab", "--viewer");
+        Assert.Equal(SessionMode.Viewer, s.Mode);
+        Assert.Contains(s.Warnings, w => w.Category == "core" && w.Message.Contains("need flight"));
     }
 
     // ---- Tools that only exist in some modes ---------------------------------------------------

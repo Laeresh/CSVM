@@ -98,7 +98,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave A — the lab becomes a flight mode
 
-1. ☐ A1 — `--weapon-lab` routes to flight, not the viewer (`SessionSpec`)
+1. ☑ A1 — `--weapon-lab` routes to flight, not the viewer (`SessionSpec`)
 2. ☐ A2 — `FlightController.Held`: the airframe holds its pose while the world sim runs
 3. ☐ A3 — `GameSession` builds the lab in the flight path, off the shared pool/effects wiring
 
@@ -130,7 +130,7 @@ worktrees.
 
 # Wave A — the lab becomes a flight mode
 
-## A1 ☐ `--weapon-lab` routes to flight, not the viewer
+## A1 ☑ `--weapon-lab` routes to flight, not the viewer
 
 **Goal.** `--weapon-lab[=wep_id] --plane=player_bhawk` builds a chapter-world *flight* session
 (default `--chapter=C1`), the way `--stunt` is a flight modifier. `--weapon-test` alone keeps its
