@@ -11532,3 +11532,18 @@ the per-weapon table-fidelity assertions already in the file are what catch a wr
 that division of labour is intentional — restored, then `.\RunTests.ps1` full pass: 381 units (up
 from 379; `ImpactOutcomeTests` grows from 18 methods to 20), 18/18 engine suites, 13/13 goldens
 hash-identical.
+
+**M3 Wave C C6 (2026-08-03): `Log` gets a settable console sink.** Disproven claim 1 in
+`PLAN-deepening.md` traced the reason `Log`'s doc-comment claim of purity was false: the write path
+called `GD.Print`/`GD.PrintErr` directly at three sites (`Log.cs:185`, `:219–227`), so no caller could
+reach the unit-test tier through it regardless of whether it used `Log` or `GD.Print` itself. Added
+`Log.ConsoleSink` (`Action<string>?`, default null), routed all three sites through a new
+`WriteConsole(line, isError)` private helper that falls back to `GD.Print`/`GD.PrintErr` when the
+sink is unset. The file sink (`WriteFile`) is untouched — still takes everything, unconditionally.
+**How verified.** A pre-change and post-change `--headless -- --dump-weapons` run (implies `--det`,
+needs no world/camera) each produced a `.scratch/logs/dump-*.log`; `diff` showed exactly one line
+differing — the `log file=…` line, which necessarily embeds the run's own timestamped filename —
+every other line byte-identical, proving the sink plumbing is behaviourally inert with no sink
+installed. Then `.\RunTests.ps1` full pass: build clean, 381 units, 18/18 engine suites, 13/13
+goldens hash-identical. `C7` (convert the `StuntRace` family and assert on it off-engine) is next —
+this item only adds the seam, per the plan's ground rule against a bulk `GD.Print` sweep.

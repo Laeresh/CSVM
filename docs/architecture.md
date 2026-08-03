@@ -1532,8 +1532,12 @@ Published as `GameClock.Current` (session-scoped, nulled on teardown; null = raw
 The diagnostic log: `Log.Info("world", $"…")` / `Warn` / `Error` / `Debug` over nine categories
 (`anim world flight weapons sound perf test ui core`) and four levels. Two sinks with different
 jobs — the console is the human's, the `.scratch/logs/<mode>-<stamp>.log` file is the machine's.
-⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter; `--log=`
-  only moves the *console* threshold, so a post-hoc grep can never miss a category.
+`Log.ConsoleSink` (`Action<string>?`, default null) overrides where console lines go; null means
+`GD.Print`/`GD.PrintErr` as before. Installed by a test host so a plain (non-`Node`) class that
+logs is callable from `CSVM.Tests` without an engine.
+⚠ **The file sink always takes EVERYTHING** — every category, every level, no filter, and is
+  untouched by `ConsoleSink`; `--log=` only moves the *console* threshold, so a post-hoc grep can
+  never miss a category.
 ⚠ **No timestamp column, deliberately** — a `--det` run must produce a byte-identical log; a line
   that needs time carries it as an explicit `key=value`.
 ⚠ **Migration is incremental by decision — do NOT bulk-sweep the remaining `GD.Print` sites** (a

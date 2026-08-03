@@ -163,7 +163,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave C — a sink seam under the log
 
-6. ☐ Give `Log` a settable console sink
+6. ☑ Give `Log` a settable console sink
 7. ☐ Convert one family and assert on it off-engine
 
 ### Wave D — a motion that owes a bounce

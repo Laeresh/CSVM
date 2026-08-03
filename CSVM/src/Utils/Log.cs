@@ -66,6 +66,11 @@ public static class Log
     /// <summary>The open log file's absolute path, or null before <see cref="Open"/>.</summary>
     public static string? SinkPath { get; private set; }
 
+    /// <summary>Overrides where console lines go; null (the default) means <c>GD.Print</c> /
+    /// <c>GD.PrintErr</c>. A test host installs its own to assert on console output off-engine.
+    /// The file sink is untouched by this — it always takes everything regardless.</summary>
+    public static Action<string>? ConsoleSink { get; set; }
+
     /// <summary>Applies a <c>--log=</c> filter spec: comma-separated <c>cat</c>,
     /// <c>cat:level</c>, <c>*</c>, <c>*:level</c> or a bare <c>level</c>. A bare category means
     /// "turn it up to debug"; a bare level sets every category. Pure — it touches no Godot API,
@@ -182,7 +187,7 @@ public static class Log
     /// <c>StringBuilder</c> reports (<c>--dump-*</c>) that do not fit a one-line grammar.</summary>
     public static void Raw(string text)
     {
-        GD.Print(text);
+        WriteConsole(text, isError: false);
         WriteFile(text);
     }
 
@@ -216,15 +221,15 @@ public static class Log
             switch (level)
             {
                 case Level.Error:
-                    GD.PrintErr($"ERROR [{cat}] {message}");
+                    WriteConsole($"ERROR [{cat}] {message}", isError: true);
                     break;
                 case Level.Warn:
                     // Plain, not GD.PushWarning: Godot .NET appends a managed stack trace to
                     // every pushed warning, which buries the message it is meant to surface.
-                    GD.Print($"WARN [{cat}] {message}");
+                    WriteConsole($"WARN [{cat}] {message}", isError: false);
                     break;
                 default:
-                    GD.Print($"[{cat}] {message}");
+                    WriteConsole($"[{cat}] {message}", isError: false);
                     break;
             }
         }
@@ -232,6 +237,26 @@ public static class Log
         if (detail != null)
         {
             WriteFile(detail);
+        }
+    }
+
+    // The console half of a line. ConsoleSink, once installed, replaces GD.Print/GD.PrintErr
+    // entirely — the caller who set it decides what "console" means, including dropping the
+    // Error/non-Error distinction if it wants one sink for everything.
+    private static void WriteConsole(string line, bool isError)
+    {
+        if (ConsoleSink != null)
+        {
+            ConsoleSink(line);
+            return;
+        }
+        if (isError)
+        {
+            GD.PrintErr(line);
+        }
+        else
+        {
+            GD.Print(line);
         }
     }
 
