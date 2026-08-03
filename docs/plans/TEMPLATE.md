@@ -147,11 +147,11 @@ you've already ruled out so it isn't re-chased.>
 what NOT to touch if that's a live risk.>
 
 **Model recommendation.** <Which capability tier should execute this item — **low / medium /
-high**, tool-agnostic so any agent can map it onto its own model roster — with a one-line why:
+high / max**, tool-agnostic so any agent can map it onto its own model roster — with a one-line why:
 mechanical or exploratory work goes to a lower tier, judgement-heavy or high-blast-radius work to
 a higher one. Optionally suffix a reasoning-effort override when the item clearly warrants one
 (e.g. "medium, low effort" for a mechanical fan-out); omit it to inherit the session default —
-don't invent a tier you can't justify. **Never recommend low** for a whole item in this codebase —
+don't invent a tier you can't justify. **Only recommend low for exploration**  —
 even mechanical work here needs at least medium-tier judgement; use low *effort* on medium instead
 when you want cheap execution.>
 
