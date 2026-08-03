@@ -12,7 +12,7 @@ internal interface IAnimMotion
     Node3D Target { get; }
 
     // The (def, anchor) instance that registered this motion, so Stop can tear down exactly
-    // the motions a stopped instance drives. Set by AddMotion; ownership transfers when a
+    // the motions a stopped instance drives. Set by MotionSet.Add; ownership transfers when a
     // later instance's motion replaces an earlier one on the same target.
     (AnimDefinition Def, Node3D? Anchor) Owner { get; set; }
 

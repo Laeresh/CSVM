@@ -866,7 +866,7 @@ public static class Suites
             }
 
             ctx.Same(0, Missed() - missedBefore, $"yard bounces landing after their instance ended");
-            ctx.Note($"the two zero-miss checks are invariants this seed does not discriminate: removing A4's retirement hold leaves both green here. A4's able-to-fail control is the recorded --destroy=m_build probe (1 miss in 7), not this suite");
+            ctx.Note($"the two zero-miss checks are invariants this seed does not discriminate: removing A4's retirement hold leaves both green here. the able-to-fail control is a SEED SWEEP of the --destroy=m_build probe, not this suite and not one run of that probe — with the hold removed it misses on 4 of 10 seeds and is clean on seed 1 (INSTR-6)");
             ctx.Same(
                 yard.Count * 4,   // sparkout3 + sparkout4, two events each, per building
                 timeline.Count(e => e.Seq == "sparkout3" || e.Seq == "sparkout4"),

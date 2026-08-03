@@ -189,9 +189,10 @@ Single-context; this repo's glossary and decisions live in `docs/`, not `CONTEXT
 
 **Where the project is.** Milestones 1, 2 and 2.5 are delivered (plans indexed in [`docs/plans/plans.md`](docs/plans/plans.md)): 11 flyable aircraft over 8 animated chapter worlds — free flight, stunt mode, or 2–4-player splitscreen, launched from the in-game menu, with original liveries, weather, world animation and sound; extraction is complete and round-trips byte-identically. M3 has since added firing guns and rockets, and world destructibles that take damage, die, lose collision, throw debris and reset. The owed at-the-controls playtests are in [`playtest.md`](playtest.md).
 
-**Active plan:** [`docs/PLAN-deepening.md`](docs/PLAN-deepening.md) — Waves A, B and C complete.
-**Next:** `D9` (extract `MotionSet`) and `E13` (`IEmitter`/`IEmitterFactory` + extract
-`EmitterDirector`) — both start against interfaces the `D8`/`E12` grillings settled.
+**Active plan:** [`docs/PLAN-deepening.md`](docs/PLAN-deepening.md) — Waves A, B and C complete, D
+one item from it.
+**Next:** `D11` (`OwesBounce` assertions in the `bounce-launch` suite) and `E13`
+(`IEmitter`/`IEmitterFactory` + extract `EmitterDirector`, against the interface `E12` settled).
 [`docs/PLAN-weapon-lab.md`](docs/PLAN-weapon-lab.md) and `BL-245`
 (needs a ground ray first) remain unscheduled. Owed cockpit re-tests (`PT-13`–`PT-29`) remain in
 [`playtest.md`](playtest.md). Verify any change with **`.\RunTests.ps1`** (build → units → in-engine

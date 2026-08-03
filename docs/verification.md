@@ -147,6 +147,7 @@ and leave gaps when retiring old ones.
 - **INSTR-3** — **Share derived predicates with production code.**
 - **INSTR-4** — **An observer must not change the state it reports.**
 - **INSTR-5** — **Log resolved outputs as well as lookup inputs.**
+- **INSTR-6** — **An able-to-fail control over randomised state must sweep seeds, not pin one.** A pinned seed makes one draw, and a bug that fires on some draws is invisible on the rest. Measured: with the BL-240 retirement hold removed, the recorded `--destroy=m_build` probe reports 0 misses at seed 1 but 2/1/1/1 at seeds 4/7/9/10 — the control that a single run was recorded as passing.
 
 ## SRC — sources and documents
 

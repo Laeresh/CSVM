@@ -443,9 +443,6 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
 
     private readonly HashSet<string> _retargetsLogged = new(StringComparer.Ordinal);
 
-    // ---- active motions ----
-    private readonly List<IAnimMotion> _motions = new();
-
     // Memoized for the life of the runtime: results go stale if a node is ever reparented
     // into or out of a world subtree at runtime, so nothing may do that (pooled sound
     // emitters and crash puffers live outside the world for this reason).
@@ -526,7 +523,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// pieces a death or crash flings (translation/translation_range/scale/forward_rotation over a
     /// run time). Zero at bootstrap (nothing ambient fires the ballistic path); the C26 harness
     /// samples the delta across a kill to prove the wreck actually tumbles.</summary>
-    public int BallisticMotionsLaunched { get; private set; }
+    public int BallisticMotionsLaunched => Motions.LaunchCount;
 
     /// <summary>Live animation instances currently running (diagnostics).</summary>
     public int ActiveInstances => _instances.Count;
@@ -562,6 +559,11 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// screenshot audio: a nonzero delta across a kill is how "the death's explosion sounded" is
     /// verified headless.</summary>
     public int OneShotSoundsPlayed { get; private set; }
+
+    /// <summary>The live motion collection and its registration rules. `internal` so the
+    /// `bounce-launch` suite can ask <c>OwesBounce</c>, which is the retirement hold's own
+    /// mechanism.</summary>
+    internal MotionSet Motions { get; } = new();
 
     /// <summary>Configures (but does not bind) the world-effects runtime's construction ritual: the
     /// four invariant flags a "renders effects at a call site, no ambience of its own" role always
@@ -774,7 +776,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _ambientStarted = true;
         var (startupRun, ran, missing) = RunAmbientPasses();
         GD.Print($"anim: ambient start â€” {startupRun} ON_STARTUP + {ran.Count} start anims running, "
-                 + $"{_instances.Count} live instance(s), {_motions.Count} live motion(s)");
+                 + $"{_instances.Count} live instance(s), {Motions.Count} live motion(s)");
         if (ran.Count > 0 || missing.Count > 0)
             GD.Print($"anim: start anims [{string.Join(", ", ran)}]" +
                      (missing.Count > 0 ? $", undefined here: [{string.Join(", ", missing)}]" : ""));
@@ -815,7 +817,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         _rangeDeferred.Clear(); // a quiet stage must not proximity-start ambient defs
         _ambientStarted = false;
         GD.Print($"anim: ambient stopped â€” {_instances.Count} live instance(s) kept, "
-                 + $"{_motions.Count} live motion(s)");
+                 + $"{Motions.Count} live motion(s)");
     }
 
     /// <summary>Hard-stops EVERYTHING this runtime created and re-applies every anchored
@@ -834,7 +836,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     public void ResetToBaseState()
     {
         _instances.Clear();
-        _motions.Clear();
+        Motions.Reset();
         foreach (var entry in _puffers.Values)
         {
             entry.Puffer.SustainEnd();
@@ -963,7 +965,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
         // Restart: drop any existing instance of this def on this anchor, but LEAVE its live
         // resources so the new instance re-establishes them idempotently (motions replaced by
-        // target in AddMotion, puffers/lights/sounds re-asserted as no-ops). Tearing them down
+        // target in MotionSet.Add, puffers/lights/sounds re-asserted as no-ops). Tearing them down
         // here would break that seamless restart and rebuild every resource â€” measured on C5's
         // bootstrap, which restarts m_crane_go and please_go_spark. A caller that wants the
         // resources cleared (STOP_ANIMATION, the debugger/crash respawn) calls Stop directly.
@@ -1535,7 +1537,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                  $"{program.ReaderCount} reader), {program.ScriptPoolCount} SI scripts; " +
                  $"{anchored} anchored, {_opsApplied} state ops applied, {_opsUnresolved} unresolved");
         GD.Print($"anim: {startupRun} ON_STARTUP + {ran.Count} start anims running, " +
-                 $"{_instances.Count} live instance(s), {_motions.Count} live motion(s) " +
+                 $"{_instances.Count} live instance(s), {Motions.Count} live motion(s) " +
                  $"[index {indexMs} ms, reset states {resetMs - indexMs} ms, " +
                  $"start {sw.ElapsedMilliseconds - resetMs} ms]");
         if (_destructibles.Count > 0)
@@ -1829,13 +1831,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
     /// <summary>Tears down every live resource a stopped instance created â€” its motions, puffers,
     /// lights and sounds â€” so nothing of the definition keeps running after <see cref="Stop"/>.
     /// Motions and puffers are attributed to the exact <c>(def, anchor)</c> that registered them
-    /// (see <see cref="AddMotion"/> and <see cref="_puffers"/>). Lights and sounds are keyed by
+    /// (see <see cref="MotionSet.Add"/> and <see cref="_puffers"/>). Lights and sounds are keyed by
     /// <c>(name, anchor)</c>, so they are cleared by anchor â€” the anchor is the instance identity,
     /// and a name colliding on one anchor across two defs already shares a single entry (last
     /// writer wins), so there is nothing finer to attribute to.</summary>
     private void TearDownResourcesOf(AnimDefinition def, Node3D? anchor)
     {
-        _motions.RemoveAll(m => m.Owner.Def == def && m.Owner.Anchor == anchor);
+        Motions.DiscardFor(def, anchor);
 
         var pufferKeys = _puffers
             .Where(kv => kv.Value.Def == def && kv.Value.Anchor == anchor)
@@ -1929,7 +1931,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         if (instant || runTime <= 0f)
                             tween.Seek(runTime); // RESET_STATE / zero-length: land on the end pose
                         else
-                            AddMotion(tween, def, anchor);
+                            Motions.Add(tween, def, anchor);
                         _opsApplied++;
                     }
                     duration = instant ? 0f : runTime;
@@ -1986,7 +1988,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         if (instant || runTime <= 0f)
                             fade.Seek(runTime); // RESET_STATE / zero-length: land on the end opacity
                         else
-                            AddMotion(fade, def, anchor);
+                            Motions.Add(fade, def, anchor);
                         _opsApplied++;
                     }
                     duration = instant ? 0f : runTime;
@@ -2030,8 +2032,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                             }
                             else
                             {
-                                AddMotion(motion, def, anchor);
-                                BallisticMotionsLaunched++;
+                                Motions.Add(motion, def, anchor); // MotionSet.Add counts the launch
                                 ballTime = Mathf.Max(ballTime, flight);
                                 bounceArmed |= motion.PendingBounce != null;
                             }
@@ -2077,13 +2078,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // re-reading rest from the current pose and restarting the clock at 0, which
                         // advances one frame's worth of angle and then throws it away. The prop would
                         // sit almost still while looking, in the logs, perfectly driven.
-                        if (_motions.Any(m => m.Target == t && m is SpinMotion s && s.Matches(rate, spinFor)))
+                        if (Motions.HasSpinOn(t, rate, spinFor))
                             continue;
                         var motion = new SpinMotion(t, rate, spinFor);
                         if (instant)
                             motion.Seek(0f); // RESET_STATE poses the start; a spin starts unturned
                         else
-                            AddMotion(motion, def, anchor);
+                            Motions.Add(motion, def, anchor);
                         _opsApplied++;
                     }
                     duration = instant ? 0f : spinFor;
@@ -2105,7 +2106,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         if (instant)
                             playback.Seek(0f); // pose at the script's first frame
                         else
-                            AddMotion(playback, def, anchor);
+                            Motions.Add(playback, def, anchor);
                         _opsApplied++;
                         duration = Mathf.Max(duration, script.Duration);
                     }
@@ -2143,7 +2144,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                 // stays within 25 m. Restarting there pins the 2 s door at its first frame for
                 // as long as you hover, which is exactly backwards. (Nothing regresses: the
                 // bootstrap passes call Start directly, and the hangar-door pair that relies
-                // on "later registration wins" resolves through AddMotion, not through this.)
+                // on "later registration wins" resolves through MotionSet.Add, not through this.)
                 if (ev.Data.Str("name") is { } callName)
                 {
                     // A call may re-anchor the callee onto ANOTHER node. That is the data's
@@ -3032,26 +3033,12 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
-    /// <summary>Whether a finished instance may actually be retired. Ordinarily "finished" means
-    /// its runners have all ended — but a bounce-terminated launch is the last event of its
-    /// sequence, so the runner is done the frame the piece leaves the ground while the flight has
-    /// seconds to run, and the landing needs a live instance to dispatch its BOUNCE_SEQUENCE into
-    /// (BL-240). Measured before this existed: killing C1's seven <c>m_build</c> at once, one
-    /// instance in seven lost its <c>part4</c> bounce — and which one depends on the randomised
-    /// launch draw, so it is an intermittent miss, not a fixed one.
-    ///
-    /// <para>⚠ Deliberately narrow: a motion OWING A BOUNCE, not any live motion.
-    /// <see cref="SpinMotion.Finished"/> is <c>_runTime > 0f &amp;&amp; _t >= _runTime</c> and the
-    /// OBJECT_MOTION handler builds spins with <c>run_time ?? 0f</c>, so an unbounded steady spin
-    /// is never finished — 2,181 of them across 1,037 definition files. Pinning on those would make
-    /// every one of their instances immortal and re-open BL-236's emitter teardown install-wide.
-    /// A pending bounce self-expires; a spin does not.</para></summary>
+    /// <summary>Whether a finished instance may actually be retired — an instance-retirement
+    /// question that consults the motions, which is why it stays here rather than moving with them.
+    /// The narrowness of the hold, and the measurement behind it, are on
+    /// <see cref="MotionSet.OwesBounce"/>.</summary>
     private bool Retirable(AnimInstance inst) =>
-        inst.Finished && !HasPendingBounceFor(inst.Def, inst.Anchor);
-
-    private bool HasPendingBounceFor(AnimDefinition def, Node3D? anchor) =>
-        _motions.Any(m => m is MotionRuntime { PendingBounce: not null }
-                          && m.Owner.Def == def && m.Owner.Anchor == anchor);
+        inst.Finished && !Motions.OwesBounce(inst.Def, inst.Anchor);
 
     // Both sequence events act on the live instance of (def, anchor); on the instant/bootstrap
     // dispatch path no instance exists and both are no-ops.
@@ -3322,13 +3309,13 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // (five tank kills put 34 motions in flight at once), so reading "it never launched" out of
         // the truncated list is LOG-5. BallisticMotionsLaunched is cumulative and uncapped, and is
         // the only headless answer to "did the launch happen at all".
-        GD.Print($"anim/debug: {_motions.Count} live motion(s), "
+        GD.Print($"anim/debug: {Motions.Count} live motion(s), "
                  + $"{BallisticMotionsLaunched} ballistic launch(es) so far");
-        if (_motions.Count == 0)
+        if (Motions.Count == 0)
         {
             return;
         }
-        foreach (var m in _motions.Take(12))
+        foreach (var m in Motions.Live.Take(12))
         {
             var t = m.Target;
             var name = t.HasMeta(NameMeta) ? t.GetMeta(NameMeta).AsString() : t.Name.ToString();
@@ -3343,59 +3330,32 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             GD.Print($"anim/debug: {name} at ({p.X:0.0}, {p.Y:0.0}, {p.Z:0.0}) "
                      + $"rot ({r.X:0.0}, {r.Y:0.0}, {r.Z:0.0}) {(shown ? "visible" : "HIDDEN")}");
         }
-        if (_motions.Count > 12)
-            GD.Print($"anim/debug: â€¦ and {_motions.Count - 12} more");
+        if (Motions.Count > 12)
+            GD.Print($"anim/debug: â€¦ and {Motions.Count - 12} more");
     }
 
-    /// <summary>Registers a motion, replacing any motion already driving the same node. An
-    /// object has exactly one motion in the original, and the data relies on it: C1/IA1's
-    /// startanims run `hangar3_doors` (doors to Â±50) and then `mp_hangar3_open` (the same
-    /// doors to Â±25), where the later one is meant to win. Without this both tween the same
-    /// node every frame and the outcome depends on list order.</summary>
-    private void AddMotion(IAnimMotion motion, AnimDefinition def, Node3D? anchor)
-    {
-        motion.Owner = (def, anchor);
-        // Evict only a prior motion on the SAME channel: a node can carry one transform motion
-        // AND one opacity fade at once (the crash dust scales via a MotionRuntime while an
-        // OpacityFade fades it), and those write different data, so neither displaces the other.
-        _motions.RemoveAll(m => m.Target == motion.Target && m.Channel == motion.Channel);
-        _motions.Add(motion);
-    }
-
-    /// <summary>Advances every live motion. Called from the instance walk each frame.</summary>
+    /// <summary>Advances every live motion, then dispatches whatever landed. ⚠ The two halves stay
+    /// in one method, called from one statement in <see cref="Advance"/>, because the instance walk
+    /// must not run between them: an instance whose only hold is a landed piece would be
+    /// <c>Finished</c> with nothing owed, so it retires and <c>FinishEffectInstance</c> SustainEnds
+    /// the piece's trail emitter — BL-236's machinery.</summary>
     private void TickMotions(float dt)
     {
-        for (int i = _motions.Count - 1; i >= 0; i--)
+        foreach (var landing in Motions.Tick(dt))
         {
-            _motions[i].Tick(dt);
-            if (!_motions[i].Finished)
-                continue;
-            var done = _motions[i];
-            // Removed BEFORE the bounce dispatch, which runs a sequence that may itself add
-            // motions: the new ones append past this index, and the landed body must not be
-            // ticked again by the sequence it triggers.
-            _motions.RemoveAt(i);
-            // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
-            // launch is the whole meaning of its flight ending (BL-240). The named sequence
-            // belongs to the same definition — `sparkoutN` deactivates the piece and pops its
-            // fireball, and that OBJECT_ACTIVE_STATE is what stops the trail through BL-224's
-            // EndSustainedOn path, with no effects-side change here.
-            if (done is MotionRuntime { PendingBounce: { } bounce } landed)
-            {
-                // A landing can outlive its own instance: a runner is done the frame its last
-                // event fires whatever duration that event returned (SequenceRunner), and the
-                // launch IS the last event on all 150 of these. Where no sibling sequence is
-                // still holding the instance open, CallSequence has nothing to dispatch into and
-                // returns silently — so the miss is counted here rather than vanishing.
-                bool live = InstanceOf(landed.Owner.Def, landed.Owner.Anchor) != null;
-                if (live)
-                    CallSequence(landed.Owner.Def, landed.Owner.Anchor, bounce);
-                else
-                    Count("ObjectMotion(bounce landed after its instance ended)");
-                if (DebugMotions)
-                    GD.Print($"anim/debug: '{done.Target.Name}' landed — bounce sequence '{bounce}'"
-                             + (live ? "" : " — NO LIVE INSTANCE, dispatched nothing"));
-            }
+            // A landing can outlive its own instance: a runner is done the frame its last
+            // event fires whatever duration that event returned (SequenceRunner), and the
+            // launch IS the last event on all 150 of these. Where no sibling sequence is
+            // still holding the instance open, CallSequence has nothing to dispatch into and
+            // returns silently — so the miss is counted here rather than vanishing.
+            bool live = InstanceOf(landing.Def, landing.Anchor) != null;
+            if (live)
+                CallSequence(landing.Def, landing.Anchor, landing.Bounce);
+            else
+                Count("ObjectMotion(bounce landed after its instance ended)");
+            if (DebugMotions)
+                GD.Print($"anim/debug: '{landing.Target.Name}' landed — bounce sequence '{landing.Bounce}'"
+                         + (live ? "" : " — NO LIVE INSTANCE, dispatched nothing"));
         }
     }
 

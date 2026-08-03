@@ -169,7 +169,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave D — a motion that owes a bounce
 
 8. ☑ **Grill the `MotionSet` interface** — no code *(landed 2026-08-03; Decisions 19–27)*
-9. ☐ Extract `MotionSet`, folding the pending-bounce rules in
+9. ☑ Extract `MotionSet`, folding the pending-bounce rules in
 10. ❌ Folded into `D9` (Decision 27) — `OwesBounce` is one of `D9`'s nine operations
 11. ☐ Add `OwesBounce` assertions to the `bounce-launch` suite
 
@@ -472,7 +472,14 @@ resolved to a recorded fork with its losing option stated.
 added `Retirable`/`HasPendingBounceFor` — two of the five holders this wave collects — and `A5`
 (`9fecbfa`) added the `bounce-launch` engine suite, which `D11` has to port rather than write.
 
-## D9 ☐ Extract `MotionSet`, folding the pending-bounce rules in
+## D9 ☑ Extract `MotionSet`, folding the pending-bounce rules in
+
+**Landed 2026-08-03.** Nine operations, as Decision 20 settled. One correction to this item's own
+Verify: **the `--destroy=m_build` probe does not fail at a single seed.** With the retirement hold
+removed it gives 14 landings / 0 misses at seed 1 — the trap below warns that `RunTests` cannot see
+the hold, and the same is true of one run of the probe, because the miss is a per-instance random
+draw. A 10-seed sweep is the control that works: hold removed → seeds 4, 7, 9, 10 miss (2/1/1/1);
+hold restored → 0/10. Details in `docs/HISTORY.md`.
 
 **Goal.** The live motion collection, its two registration rules and the pending-bounce predicate
 live in one module; `AnimRuntime` keeps the dispatch that feeds it and the dispatch its landings

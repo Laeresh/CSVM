@@ -50,6 +50,7 @@ GameZ→Godot builders, and the animation runtime that drives the world.
 - `src/Mech3/MissionSetup.cs` — parses + applies the per-mission `.gw` interp script deciding which world entities a mission shows.
 - `src/Mech3/AnimRuntime.cs` — the animation engine: bootstrap, live def instances, event dispatch, motions, conditions, lights, puffers, world effects.
 - `src/Mech3/Anim/` — `AnimRuntime`'s motion + light value types (`IAnimMotion` and its four implementations, `AnimLight`, the bind-census enums), split out of `AnimRuntime.cs` into their own files/namespace for size.
+- `src/Mech3/Anim/MotionSet.cs` — the live motion collection: the two registration rules, the per-frame sweep, and the pending-bounce predicate the instance walk retires on.
 - `src/Mech3/SequenceRunner.cs` — the engine-free sequence interpreter (event clock / LOOP / IF-ELSEIF), extracted behind the 3-member `ISequenceHost` seam; headlessly testable.
 - `src/Mech3/DestructibleRegistry.cs` — live per-instance HP for `HEALTH>0` anim defs, one pool per `(def,anchor)`; `Resolve` maps a struck collider back.
 - `src/Mech3/WorldSession.cs` — builds a chapter world + binds its `AnimProgram` (load→WorldBuilder→clutter→bind→sound-prewarm); `--node=` slices it to one subtree.
@@ -491,7 +492,8 @@ which trails ~25 m behind). Also hosts the destructible-damage entries (`DamageA
 template stage). Second instances serve per-player crash rigs and the world-effects closure, built
 unbound via the `ForEffects`/`ForCrashRig` static factories (construction-only; the caller still
 `Bind`s + adds the returned node) — the world runtime stays a plain inline `new AnimRuntime`. The
-sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs`; this class
+sequence interpreter (event clock / LOOP / IF-ELSEIF) lives in `SequenceRunner.cs` and the live
+motions in `Anim/MotionSet.cs` (`Motions`); this class
 satisfies its `ISequenceHost` seam by explicit interface implementation (`Dispatch`,
 `EvaluateCondition`, the get-only `OnEventDispatched` hook — off its own public surface).
 ⚠ A partial opacity on an opaque-shader mesh swaps that instance's surfaces to a fade-twin
@@ -568,7 +570,8 @@ an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the 
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own
 namespace, purely for file size — not an independently-owned subsystem, still driven entirely by
 `AnimRuntime`. `IAnimMotion` (`ScriptPlayback`/`SpinMotion`/`FromToMotion`/`OpacityFade`/
-`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum.
+`MotionRuntime`), `AnimLight`, and the bind-census `AnchorKind` enum. `MotionSet` shares the
+namespace but IS independently owned — its own entry below.
 `MotionRuntime`'s `translation_range` is a SPHERICAL launch — `xz` azimuth, `y` elevation, both in
 degrees, `initial` the speed (`analysis/object-motion-range/`, decoded 2026-08-01) — and a launch
 seeds from the node's authored rest pose, since a shared effect template's children are re-homed by
@@ -583,9 +586,26 @@ OFFSET from unit scale (`1 + initial + delta·u`), unlike the absolute `PoseScal
   `PoseScale`): the data ends scale channels at exact 0 ("shrink away" — 217 FROM_TOs + 216
   SCALE_STATEs install-wide), and an un-clamped singular basis makes the physics server's
   `affine_inverse` spam native `det == 0` for every StaticBody3D under the node (BL-007).
+
+## src/Mech3/Anim/MotionSet.cs
+`AnimRuntime`'s live motions as a module: `Add` (owner stamp + `(Target, Channel)` eviction +
+`LaunchCount`), the per-frame `Tick` sweep, `DiscardFor`/`Reset`, and the two predicates the rest of
+the runtime asks — `OwesBounce` (the BL-240 retirement hold's own mechanism, which `AnimRuntime.
+Retirable` consults) and `HasSpinOn` (the `Loop{-1}` spin re-assert guard, which cannot fold into
+`Add` because it must run before `SpinMotion`'s constructor writes `Target.Transform`). Never
+constructs a motion — `AnimRuntime` builds them and hands them over.
+⚠ `Tick` RETURNS its landings; the caller dispatches them. They must dispatch **between** `Tick` and
+  the instance walk — `AnimRuntime.TickMotions` does both in one statement for this reason. Split
+  them and an instance held open only by a landed piece is `Finished` with nothing owed, so it
+  retires and `FinishEffectInstance` SustainEnds the piece's trail emitter (BL-236).
+⚠ `Reset()` clears the list but does NOT zero `LaunchCount` — all four external readers of
+  `AnimRuntime.BallisticMotionsLaunched` take a delta across an event.
 ⚠ A node carries at most ONE motion per `MotionChannel` (`Transform` or `Opacity`) — a transform
   motion and an opacity fade coexist on the same node, but two motions on the same channel evict
-  each other (`AnimRuntime.AddMotion`).
+  each other (`Add`).
+`Node3D`-typed but never dereferenced: every operation is identity comparison, so the behaviour is
+engine-free even though the type is not. An off-engine fake can only return `null!` for a target,
+which collapses all three identity-keyed rules — the tier stays the in-engine `bounce-launch` suite.
 
 ## src/Mech3/SequenceRunner.cs
 The engine-free sequence interpreter, extracted from `AnimRuntime` behind the `ISequenceHost` seam.

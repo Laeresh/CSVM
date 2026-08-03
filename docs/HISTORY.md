@@ -11582,3 +11582,40 @@ lines now also land in `.scratch/logs/` for the first time — before this item 
 and invisible to a post-hoc grep, which is the whole point of the seam. Then `.\RunTests.ps1` full
 pass: 384 units (up from 381; `StuntRaceTests` adds 3), 18/18 engine suites, 13/13 goldens
 hash-identical.
+
+## 2026-08-03 — the live motion collection becomes a module (`PLAN-deepening` D9)
+
+**`CSVM/src/Mech3/Anim/MotionSet.cs`** takes the nine places `AnimRuntime._motions` was touched from
+and the two rules that governed registering a motion. Its surface is what the `D8` grilling settled
+(Decisions 19–27): `Add` / `Tick` / `DiscardFor` / `Reset` / `OwesBounce` / `HasSpinOn` / `Count` /
+`LaunchCount` / `Live`. `AnimRuntime` keeps `Retirable` — an instance-retirement question that
+consults motions, not a motion question — and `BallisticMotionsLaunched` as a forwarding property,
+so its four external readers (`Probes.cs`, `Suites.cs`, `WorldDamageLab.cs`) compile untouched.
+
+**`Tick` returns its landings rather than dispatching them,** which is what keeps the module free of
+a back-reference: the landing branch needs four `AnimRuntime` members. It also makes
+remove-before-dispatch structural — `Tick` cannot return a landing it has not already removed. The
+counter-question ("does deferring the dispatch past the rest of the sweep change anything?") is no:
+`AnimInstance.CallSequence` only adds a `SequenceRunner`, whose constructor only calls `SetDue()`,
+so nothing dispatches synchronously and no motion can be added or evicted inside the sweep.
+
+**⚠ The two halves stay in one statement.** `AnimRuntime.TickMotions(dt)` ticks and then dispatches,
+and `Advance` calls it once. Putting the instance walk between them would leave an instance whose
+only hold is a landed piece `Finished` with nothing owed — it retires, `FinishEffectInstance`
+`SustainEnd`s the piece's trail emitter, and `c1-destroy-effects` moves. `Reset()` likewise clears
+the list but leaves `LaunchCount` standing, because every reader takes a delta.
+
+**The recorded able-to-fail control was itself unable to fail, and that is the finding here.**
+`PLAN-bounce-launch` `A5` recorded that a green `RunTests` cannot see the retirement hold and named
+the `--destroy=m_build` probe as the control instead. Run at the pinned seed the probe is no better:
+with the hold deleted it still gives **14 landings / 0 misses at seed 1**. The miss is a per-instance
+random draw, so one seed is one sample. Sweeping ten: hold removed → **seeds 4, 7, 9, 10 miss
+(2/1/1/1)**, the other six clean; hold restored → **0/10**. That is the control, and it is now
+`INSTR-6` in `docs/verification.md` rather than a fact about this one probe.
+
+**Verified.** The whole `--debug-anim` stream — every motion pose line and every landing line, in
+order — is **byte-identical** before and after across five probes: `--destroy=m_build` (14 landings,
+63 launches), `--destroy=refuel` (10 landings, 20 launches), and the `BL-236` emitter-census set
+`c3-island` / `c4-snow` / `c5-city-night` at **11 / 15 / 36 active puffers**, matching the counts
+recorded for `BL-234` and `A4`. `.\RunTests.ps1` **PASS**: 384 units, 18/18 engine suites, engine
+errors clean, 13/13 goldens hash-identical. 8-chapter `--freecam` sweep clean, zero errors.
