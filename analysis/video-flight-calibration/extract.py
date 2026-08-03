@@ -55,6 +55,13 @@ CLIPS = {
     "cap06": "CAP-06.mp4",                              # stall-warning approach
     "cap06b": "CAP-06 2.mp4",
     "cap10": "CAP-10 2.mp4",                            # engine note through a dive
+    # CAP-03: level full-throttle runs held to equilibrium, one clip per altitude.
+    # 6800 ft has no clip - the aircraft auto-stalls at/above ~6600 ft, which is
+    # itself the answer BL-094 was after.
+    "cap03a": "CAP-03 5500ft.mp4",
+    "cap03b": "CAP-03 6000ft.mp4",
+    "cap03c": "CAP-03 6500ft.mp4",
+    "cap03stall": "CAP-03 Stall at max Alt.mp4",         # the ~6600 ft forced stall
     # 2026-08-03 CAP-04 re-record: square-wave pitch cadence driven by
     # pitch_cadence.ahk, one clip per period, each with its edge log alongside.
     # tau comes from the ripple amplitude ACROSS these, not from any one of them.

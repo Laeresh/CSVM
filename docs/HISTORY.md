@@ -12664,3 +12664,20 @@ so the objection above disappears and no transfer function has to be assumed. It
 footage of the original, which is why the capture retires now. The user has deferred it into a planned
 flight-model run. Footage and logs are kept at `playtest/CAP-04/` (git-ignored, not swept) with the
 plot `cadence_response.png`, and are retained deliberately because `BL-147` is still open.
+
+## 2026-08-03 — PLAN-m3-polish-6 scaffolded (Milestone-Polish run)
+
+Ten items selected into `docs/PLAN-m3-polish-6.md` under user-chosen criteria (the "Open bugs"
+section and its neighbours — test infra, surfaces/colliders, HUD & audio — with every
+capture-blocked item excluded because the user works those themselves): A `BL-051`/`BL-056`/
+`BL-058`/`BL-053`/`BL-057` (surfaces the builders drop), B `BL-050`/`BL-135` (anim-runtime dropped
+data + dispatch lag), C `BL-039`/`BL-070` (instruments), D `BL-133` (the reserved user decision).
+Verified during selection against both HISTORY and the code: no chosen ID has a landed entry;
+`zone_set` zero hits in `CSVM/src`; `FromToMotion.cs:109-111` still drops the bare-vector delta
+channels; `cloud1`/`cloud2` absent from `KnownAbsentFromGameData`; `GameZ.cs` parses no node-level
+`active` flag. Two blockers found cleared: `BL-051` (excluded 2026-08-01 on the then-open `BL-099`,
+answered 2026-08-02) and `BL-058` (its subface-fix precondition landed, cited by polish-5 A2).
+Excluded with reasons recorded in the plan: `BL-047` (capture-blocked per the 2026-07-30 ruling),
+`BL-160` (CAP-09), `BL-161` (needs a cockpit-audio feature), `BL-048` (Hi-Def invention), and the
+CAP-01-unblocked flight-model pair `BL-092`/`BL-247` (user ruling: its own future plan).
+PROJECT_CONTEXT.md status now names the plan.
