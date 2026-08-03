@@ -11791,3 +11791,51 @@ tests, **19/19 engine suites**, **13/13 goldens hash-identical**, engine errors 
 subsection. The four bugs this family shipped (`BL-233`/`BL-235`/`BL-236`/`BL-242`) still have no
 regression guard of their own, but the seam and the first suite over it now exist for the next one
 to extend.
+
+## 2026-08-03 — `IEmitterRenderer` inside `Puffer`, closing Wave E (`PLAN-deepening` E15b)
+
+**The seam, and where it cuts.** `Puffer.cs` carried 847 lines no test could reach: the CPU particle
+integration and the GPU draw were the same object, and that object needs a `TextureArchive` to
+exist. `IEmitterRenderer` (`src/Effects/EmitterRenderer.cs`) splits them at three members —
+`Attach(owner, capacity, cullMargin)`, `Write(index, position, size, frame, alpha, color)`,
+`Show(liveCount)`. `MultiMeshEmitterRenderer` is the real one and now owns the shader source, the
+`MultiMesh`, the `MultiMeshInstance3D` and the blend/soft-particle render modes; `Puffer` keeps the
+state parse, the pool sizing, the three spawn paths and `_Process`'s integration.
+
+**The item's open question, settled first: the atlas is built ABOVE the seam.** `Create` still calls
+`BuildAtlas` and hands the finished `ImageTexture` to the renderer's constructor. Below it, a
+`Puffer` would still have needed a `TextureArchive` and the modes would have stayed unreachable —
+the seam would have delivered nothing (Decision 9's lower seam is defined by exactly this). What
+that buys is `Puffer.CreateWith(state, renderer, …)`: any mode, no atlas, no archive, no GPU.
+
+**The RNG hazard the plan flagged as the riskiest thing in Wave E, handled by not moving anything.**
+`_rng` is a field initializer drawing one seed off the shared `Rng.Puffer` stream, so the whole
+stream is pinned to the ORDER of `Puffer` object constructions — move `new Puffer()` relative to
+`BuildAtlas` and all four emitter-bearing goldens move with it. It stayed on its own line exactly
+where it was; `CreateWith` is a second construction site that only a suite reaches. `Init`'s
+signature changed (atlas/frameCount/blend/softParticles out, one renderer in), and its `Auto` blend
+fallback died with it — `Create` had already resolved the verdict before every call.
+
+**`puffer-modes`, the 20th suite, 0.01 s.** All three modes driven through
+`RecordingEmitterRenderer`, against states read from the shipped readers rather than written in the
+suite — `flame_ball.json`'s `fierypuffer` (TIME_INTERVAL 0.2, NUMBER 18, LIFETIME 0.8–1.0, six
+flipbook frames, no COLORS) and `pufftrails.json`'s `smokepuffer` (DISTANCE_INTERVAL 2, a COLORS
+ramp). The authored inputs are asserted first, so a reader change fails by name instead of silently
+re-baselining the counts that derive from it: burst pool 36 (2 batches × 18), first batch at t = 0
+rather than one interval in, the flipbook reaching its last column, the emitter hiding itself when
+its last particle dies; sustain pool 108 (the steady-state formula), emission on the very first
+frame, a 5 s hitch filling the pool and stopping at slot 107, `SustainEnd` leaving the live
+particles to finish; the trail's first call homing without emitting, one puff per 2 m, and a partial
+interval carrying instead of rounding. Plus the COLORS-ramp-owns-the-fade rule read off the alpha
+both ways. ⚠ The suite detaches `GameClock.Current` — the harness's FixedStep clock is stepped by
+nobody, so `FrameDt` is 0 and every check would have passed vacuously with it installed.
+
+**Verified.** The able-to-fail control: `_sustainCarry = 0f` in place of the first-frame seed failed
+the suite on exactly `sustain emits on its very first frame expected=18 actual=0`, with the other
+15 checks still green (so the assertions are not vacuous). Restored, then `.\RunTests.ps1` full
+pass: 393 unit tests, **20/20 engine suites**, **13/13 goldens hash-identical** — including all four
+puffer-bearing shots (`c1-waterfall`, `c3-island`, `c1-destroy-effects`, `c1-crash`) — engine errors
+clean.
+
+**Wave E is complete** (`E12`–`E15b`). Emitter lifetime and the emitter itself are both behind
+seams, both assertable without a GPU, and `BL-241` is closed. Wave F (`F16`/`F17`) is next.

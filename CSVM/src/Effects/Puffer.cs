@@ -259,14 +259,14 @@ public sealed class PufferState
 
 /// <summary>
 /// A running instance of a <see cref="PufferState"/>: a CPU-simulated burst of
-/// billboard sprites drawn as one <see cref="MultiMeshInstance3D"/> (one draw call).
+/// billboard sprites, handed one frame at a time to an <see cref="IEmitterRenderer"/>.
 /// The CPU integration honours the reader parameters directly — per-axis random
 /// velocity, exponential friction, size growth, and the exact (non-uniform) flipbook
 /// timing — which map awkwardly onto Godot's built-in particle process material.
 ///
-/// A shared shader billboards each instance quad toward the camera, picks its flipbook
-/// column from per-instance custom data, and additively blends the fire (the frames are
-/// alpha-masked with black edges, so additive gives a soft glow and no quad edge).
+/// Everything past that integration — the atlas, the shader and the <c>MultiMesh</c> —
+/// is behind the renderer seam, so the three emission modes are reachable by a test with
+/// no GPU and no <c>TextureArchive</c> (see <see cref="CreateWith"/>).
 ///
 /// Reusable across the effect readers; today it drives the crash fireball
 /// (<c>flame_ball.json</c> → <c>fierypuffer</c>).
@@ -299,56 +299,6 @@ public sealed partial class Puffer : Node3D
     // spawn 5 s worth of particles in one frame and blow the pool.
     private const int MaxSustainBatchesPerFrame = 8;
 
-    private const string ShaderCode = """
-        shader_type spatial;
-        render_mode BLEND_MODE, unshaded, cull_disabled, depth_draw_never, shadows_disabled, fog_disabled;
-
-        uniform sampler2D atlas : source_color, filter_linear;
-        uniform float frame_count = 1.0;
-        uniform sampler2D depth_texture : hint_depth_texture, filter_nearest;
-
-        varying flat float v_frame;
-        varying flat float v_alpha;
-        varying flat vec4 v_color;
-
-        void vertex() {
-            // Billboard the instance quad toward the camera, keeping its per-instance scale
-            // (Godot's billboard_keep_scale, done by hand because this is a MultiMesh).
-            MODELVIEW_MATRIX = VIEW_MATRIX * mat4(
-                INV_VIEW_MATRIX[0], INV_VIEW_MATRIX[1], INV_VIEW_MATRIX[2], MODEL_MATRIX[3]);
-            MODELVIEW_MATRIX[0] *= length(MODEL_MATRIX[0].xyz);
-            MODELVIEW_MATRIX[1] *= length(MODEL_MATRIX[1].xyz);
-            MODELVIEW_MATRIX[2] *= length(MODEL_MATRIX[2].xyz);
-            v_frame = INSTANCE_CUSTOM.x;
-            v_alpha = INSTANCE_CUSTOM.y;
-            v_color = COLOR;
-        }
-
-        void fragment() {
-            float col = floor(v_frame + 0.5);
-            vec2 uv = vec2((UV.x + col) / frame_count, UV.y);
-            vec4 t = texture(atlas, uv);
-            // fade to nothing at the quad rim: some source frames leak bright pixels
-            // to their border (fire_f01 edge maxes at 247), which otherwise paints
-            // faint additive rectangles over dark ground on large grown quads
-            vec2 rim = smoothstep(vec2(0.0), vec2(0.12), UV)
-                     * smoothstep(vec2(0.0), vec2(0.12), vec2(1.0) - UV);
-            // soft particles: a billboard tilted by a high chase camera dips into the
-            // terrain and the depth test cuts it with a hard straight line — fade
-            // alpha out over the last ~1.5 m before the scene depth instead. Disabled
-            // (SOFT_EXPR → 1.0) for the crash smokeball: it sits just above the ground,
-            // so the fade zeroes the alpha of every fresh puff against the terrain right
-            // behind it — a bright additive fire still leaks through, but MIX black smoke
-            // faded to zero is simply invisible until it grows tall.
-            float scene_raw = texture(depth_texture, SCREEN_UV).r;
-            vec4 unproj = INV_PROJECTION_MATRIX * vec4(SCREEN_UV * 2.0 - 1.0, scene_raw, 1.0);
-            float scene_z = unproj.z / unproj.w;
-            float soft = SOFT_EXPR;
-            ALBEDO = t.rgb * v_color.rgb;
-            ALPHA = t.a * v_alpha * v_color.a * rim.x * rim.y * soft;
-        }
-        """;
-
     // Particle spread/size/life/frame jitter. One stream per emitter, drawn off the master seed's
     // puffer stream, so a run repeats and two emitters still scatter independently.
     private readonly System.Random _rng = Rng.NewSystemRandom(Rng.Puffer);
@@ -361,8 +311,7 @@ public sealed partial class Puffer : Node3D
     private float _sustainSizeScale = SizeScaleDefault;
 
     private PufferState _state = null!;
-    private MultiMeshInstance3D _mmi = null!;
-    private MultiMesh _mm = null!;
+    private IEmitterRenderer _renderer = null!;
     private Particle[] _particles = Array.Empty<Particle>();
     private int _liveCount;
 
@@ -416,8 +365,26 @@ public sealed partial class Puffer : Node3D
             : state.Colors.Count > 0 || diesDark ? PufferBlend.Mix
             : PufferBlend.Additive;
         var puffer = new Puffer();
-        puffer.Init(state, atlas, frameNames.Count, activeDuration, sustained, resolved,
-            softParticles ?? resolved != PufferBlend.Mix);
+        puffer.Init(state, new MultiMeshEmitterRenderer(atlas, frameNames.Count,
+            resolved == PufferBlend.Mix, softParticles ?? resolved != PufferBlend.Mix),
+            activeDuration, sustained);
+        return puffer;
+    }
+
+    /// <summary>Builds an emitter over a supplied <paramref name="renderer"/> — the same modes, the
+    /// same pool sizing and the same spawn paths as <see cref="Create"/>, with no atlas, no
+    /// <c>TextureArchive</c> and no <see cref="MultiMesh"/> in the path. This is what makes the
+    /// three modes assertable (`docs/PLAN-deepening.md` `E15b`); the real path never calls it.
+    ///
+    /// <para>⚠ Constructing a <c>Puffer</c> draws one seed off the shared <see cref="Rng.Puffer"/>
+    /// stream, so every emitter built after it scatters differently. That is why this is a test
+    /// entry point and not a general one: calling it on a capture path would move every
+    /// puffer-bearing golden.</para></summary>
+    public static Puffer CreateWith(PufferState state, IEmitterRenderer renderer,
+        float activeDuration = 0.3f, bool sustained = false)
+    {
+        var puffer = new Puffer();
+        puffer.Init(state, renderer, activeDuration, sustained);
         return puffer;
     }
 
@@ -457,8 +424,7 @@ public sealed partial class Puffer : Node3D
         _sustaining = false;
         _active = false;
         _liveCount = 0;
-        if (_mm != null)
-            _mm.VisibleInstanceCount = 0;
+        _renderer?.Show(0);
         Visible = false;
     }
 
@@ -594,15 +560,14 @@ public sealed partial class Puffer : Node3D
 
             float lifeFrac = p.Age / p.Life;
             float size = p.BaseSize * Mathf.Lerp(1f, _state.GrowthFactor, lifeFrac);
-            _mm.SetInstanceTransform(i, new Transform3D(Basis.Identity.Scaled(new Vector3(size, size, size)), p.Pos));
             // The COLORS ramp owns the fade when present (its alpha ends at 0);
             // otherwise the render-nicety envelope eases the additive glow in/out.
-            _mm.SetInstanceCustomData(i, new Color(
+            _renderer.Write(i, p.Pos, size,
                 flipbook ? FrameFor(lifeFrac) : p.Frame,
-                hasRamp ? 1f : FadeFor(lifeFrac), 0f, 0f));
-            _mm.SetInstanceColor(i, hasRamp ? RampColor(lifeFrac) : Colors.White);
+                hasRamp ? 1f : FadeFor(lifeFrac),
+                hasRamp ? RampColor(lifeFrac) : Colors.White);
         }
-        _mm.VisibleInstanceCount = _liveCount;
+        _renderer.Show(_liveCount);
 
         if (_liveCount == 0 && !_emitting && !_trailing && !_sustaining)
         {
@@ -673,10 +638,11 @@ public sealed partial class Puffer : Node3D
         return sum / (w * h);
     }
 
-    private void Init(PufferState state, ImageTexture atlas, int frameCount, float activeDuration,
-        bool sustained = false, PufferBlend blend = PufferBlend.Auto, bool softParticles = true)
+    private void Init(PufferState state, IEmitterRenderer renderer, float activeDuration,
+        bool sustained)
     {
         _state = state;
+        _renderer = renderer;
         Name = "puffer_" + state.Name;
         _burstSizeScale = Config.GetFloat("puffer.burstSizeScale", SizeScaleDefault);
         _trailSizeScale = Config.GetFloat("puffer.trailSizeScale", SizeScaleDefault);
@@ -698,41 +664,11 @@ public sealed partial class Puffer : Node3D
             _particles = new Particle[state.Number * _burstsTotal];
         }
 
-        // Create resolves Auto from the COLORS ramp and the dying sprite's luminance; a direct
-        // Init caller that leaves it Auto gets the ramp half of that rule.
-        string blendMode = blend switch
-        {
-            PufferBlend.Additive => "blend_add",
-            PufferBlend.Mix => "blend_mix",
-            _ => state.Colors.Count > 0 ? "blend_mix" : "blend_add",
-        };
-        var code = ShaderCode
-            .Replace("BLEND_MODE", blendMode)
-            .Replace("SOFT_EXPR", softParticles ? "clamp((VERTEX.z - scene_z) / 1.5, 0.0, 1.0)" : "1.0");
-        var mat = new ShaderMaterial { Shader = new Shader { Code = code } };
-        mat.SetShaderParameter("atlas", atlas);
-        mat.SetShaderParameter("frame_count", (float)frameCount);
-
-        _mm = new MultiMesh
-        {
-            TransformFormat = MultiMesh.TransformFormatEnum.Transform3D,
-            UseCustomData = true,
-            UseColors = true,
-            Mesh = new QuadMesh { Size = Vector2.One },
-            InstanceCount = _particles.Length,
-            VisibleInstanceCount = 0,
-        };
-        _mmi = new MultiMeshInstance3D
-        {
-            Multimesh = _mm,
-            MaterialOverride = mat,
-            CastShadow = GeometryInstance3D.ShadowCastingSetting.Off,
-            // billboarding moves verts off the MultiMesh's computed AABB — pad culling; the
-            // margin covers the largest tuned size any spawn path could produce
-            ExtraCullMargin = Mathf.Max(4f, state.SizeMax * state.GrowthFactor
-                * Mathf.Max(_burstSizeScale, Mathf.Max(_trailSizeScale, _sustainSizeScale))),
-        };
-        AddChild(_mmi);
+        // The cull margin is a fact about the particles, not about the draw: it covers the largest
+        // tuned size any spawn path here could produce, and the renderer only applies it.
+        renderer.Attach(this, _particles.Length,
+            Mathf.Max(4f, state.SizeMax * state.GrowthFactor
+                * Mathf.Max(_burstSizeScale, Mathf.Max(_trailSizeScale, _sustainSizeScale))));
         Visible = false;
     }
 

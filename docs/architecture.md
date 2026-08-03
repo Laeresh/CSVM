@@ -106,6 +106,7 @@ from the extracted zrdr; owns the arcade physics and everything drawn over the p
 ### `src/Effects/` — particle systems
 
 - `src/Effects/Puffer.cs` — data-driven `PUFFER_STATE` billboard-particle emitter: burst, distance-trail, or sustained at-node modes.
+- `src/Effects/EmitterRenderer.cs` — the `IEmitterRenderer` seam under `Puffer` (particles → GPU) and the real `MultiMesh` + billboard-shader renderer behind it.
 - `src/Effects/CloudPuffs.cs` — synthetic ambient cloud field: one alpha-blended MultiMesh of billboards on the CLOUD_COVER band.
 - `src/Effects/Precipitation.cs` — weather.json rain/snow: one camera-following MultiMesh of flakes or streaks, self-animating on the GPU.
 
@@ -152,7 +153,8 @@ instead.
 - `src/Testing/Probes.cs` — the assertion cores behind the `--dump-*`/`--damage-test` reports: report text **and** a verdict, shared with the suites.
 - `src/Testing/TestHarness.cs` — `--run-tests`: suite registry, `TestContext`, the PASS/FAIL/SKIP table, JSON report, exit code, engine-error allowlist.
 - `src/Testing/CountingEmitterFactory.cs` — the no-GPU `IEmitterFactory` fake a suite installs to observe `PUFFER_STATE` emitter lifetime.
-- `src/Testing/Suites.cs` — the 19 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
+- `src/Testing/RecordingEmitterRenderer.cs` — the no-GPU `IEmitterRenderer` fake that keeps a `Puffer`'s particles instead of drawing them, so its three modes are assertable.
+- `src/Testing/Suites.cs` — the 20 registered suites and their golden counts (48 weapon defs, 11 airframes, blast/fuse rules, destructibles, flight envelope, glTF round trip).
 - `src/Testing/GoldenShot.cs` — the engine half of the golden-image tripwire: raw-pixel md5 + GPU adapter, printed on every `--screenshot`.
 - `src/Testing/ProbeRunner.cs` — the `--dump-*`/`--run-tests`/`--*-test`/`--destroy=` probe wrappers the Launcher and the session node quit into.
 - `src/Testing/CaptureDirector.cs` — the `--screenshot=`/`--shots=`/`--frames=` capture state machine + F11/F12, ticked from `_Process`.
@@ -1079,8 +1081,9 @@ crash variant's boom (`snd_exp_ground_a` off the dirt def itself, `snd_exp_water
 ## src/Effects/Puffer.cs
 The original engine's billboard-particle emitter, data-driven from `PUFFER_STATE` blocks
 (schema: docs/formats/effects.md). `PufferState.Load` finds the fully-defined state in an
-effects reader; `Puffer.Create` builds a texture atlas + ONE MultiMesh whose shader billboards
-each quad, with quad-rim fade + soft-particle depth fade. Modes: `Burst`, `TrailAdvance` /
+effects reader; `Puffer.Create` builds the atlas and hands it to an `IEmitterRenderer`
+(`EmitterRenderer.cs`) — the class itself owns only the CPU integration, so `CreateWith` builds any
+mode with no atlas, no `TextureArchive` and no GPU. Modes: `Burst`, `TrailAdvance` /
 `TrailBurnAt` (distance trails), `SustainAt` (continuous at a moving node — pool sized to steady
 state, catch-up capped); `PufferState.FromAnimEvent` parses the compiled anim payloads.
 Three config knobs scale `BaseSize` per spawn path — `puffer.burstSizeScale` /
@@ -1096,7 +1099,20 @@ puffer-bearing golden and only those (measured: `c1-waterfall`, `c3-island`, `c1
   `Create`'s `blend`/`softParticles` force the verdict for a caller that knows better.
 ⚠ Each emitter's `_rng` is a per-instance stream off `Rng.Puffer`, so particle spread is pinned by
   the master seed: measured, the C1 waterfall mist moved 0.47% of a `--det` frame before and 0.00%
-  after. Its seed depends on how many puffers were built before it — deterministic under `--det`.
+  after. Its seed depends on how many puffers were built before it — deterministic under `--det`,
+  and pinned to WHERE `new Puffer()` sits in `Create`. Moving it, or constructing one anywhere on a
+  capture path, re-pins all four puffer-bearing goldens; `CreateWith` is a test entry point only.
+
+## src/Effects/EmitterRenderer.cs
+`Puffer`'s lower seam: `IEmitterRenderer` takes live particles (`Attach` sizes the pool, `Write`
+per particle, `Show` publishes the frame) and `MultiMeshEmitterRenderer` draws them as ONE MultiMesh
+of camera-billboarded quads, owning the shader — quad-rim fade, flipbook column from per-instance
+custom data, and the soft-particle depth fade. Reached in a suite by `RecordingEmitterRenderer`.
+⚠ The atlas is built ABOVE this seam, in `Puffer.Create`, and passed to the renderer's constructor.
+  That is the whole point of the cut: below it, a `Puffer` would still need a `TextureArchive` and
+  the three modes would stay unreachable (`PLAN-deepening` Decision 9, `E15b`).
+⚠ The blend arrives resolved. `Create` derives additive-vs-mix from the COLORS ramp and the dying
+  sprite's luminance; this type holds no state to re-derive it from, so there is no `Auto` here.
 
 ## src/Effects/CloudPuffs.cs
 Synthetic ambient cloud field: ONE alpha-blended MultiMesh of cloud1/cloud2 billboards in a
@@ -1690,11 +1706,19 @@ own fix note asked for.
   — `EmitterDirector` revives a stopped entry through its own dictionary, never by asking the
   factory again, and a fake that went invalid on stop would assert against a lie.
 
+## src/Testing/RecordingEmitterRenderer.cs
+`IEmitterRenderer` for a suite: it keeps the particles a `Puffer` hands it (`LastFrame`, `Shown`,
+`MaxShown`, `MaxIndex`, `MaxFrame`, plus the `Capacity` the emitter sized) instead of drawing them,
+so `puffer-modes` asserts on burst / distance-trail / sustain with no atlas, `TextureArchive` or
+`MultiMesh` in the path. The mirror of `CountingEmitterFactory` one seam lower: that fake replaces
+the whole emitter so `EmitterDirector`'s LIFETIME is assertable, this one replaces the draw so the
+emitter's own MODES are. Neither covers the other's job.
+
 ## src/Testing/Suites.cs
-The 19 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
+The 20 registered in-engine assertion suites cover typed weapon data, blast/fuse rules, the original's
 flight envelope, plane/loadout bindings, live weapon fire, destructible stages/death/census, animation
-stops and bounce-terminated launches, emitter lifetime, texture flattening, glTF round trips,
-collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
+stops and bounce-terminated launches, emitter lifetime and the emitter's own modes, texture
+flattening, glTF round trips, collision/node visibility, and authored stunt gates. `emitter-lifetime` is registered FIRST — it is
 the only suite installing a fake `IEmitterFactory`, and `WithWorld` caches one world per chapter, so
 running first means it builds the shared C1 world while the fake is in effect; `damage-hd`'s
 `collision:true` immediately after forces a real rebuild for everyone downstream.
@@ -1707,6 +1731,9 @@ running first means it builds the shared C1 world while the fake is in effect; `
   `MotionSet.OwesBounce` on every tick of the `refuel*` kill's flight (D11): the retirement hold's
   own mechanism, which the zero-miss checks cannot catch — sampling once right after `DamageAt`
   reads false regardless, since the death's debris motion is scheduled seconds in.
+⚠ `puffer-modes` detaches `GameClock.Current` for its duration and drives `_Process` itself. The
+  harness's clock is a FixedStep one nothing steps, so `FrameDt` is 0 — left installed, every tick
+  advances no sim and every check passes vacuously.
 ⚠ `weapons-fire` asserts `skipped == 0` as well as `ok == 48`; a skipped mount is not success.
 ⚠ `--loadout=<def>` reaches `loadout-bind`; `--run-tests=loadout-bind --loadout=pbloodhawk` is its able-to-fail cross-bind.
 ## src/Testing/GoldenShot.cs

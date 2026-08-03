@@ -1,9 +1,11 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using CSVM.Effects;
 using CSVM.Flight;
 using CSVM.Mech3;
 using CSVM.UI;
+using CSVM.Utils;
 using Godot;
 
 namespace CSVM.Testing;
@@ -66,6 +68,8 @@ public static class Suites
         // downstream ever sees the fake. See EmitterLifetime's own doc comment.
         into.Add(new TestHarness.Suite("emitter-lifetime",
             "a destructible's death starts a PUFFER_STATE emitter and BL-236's own retirement rule stops it", EmitterLifetime));
+        into.Add(new TestHarness.Suite("puffer-modes",
+            "the emitter's burst, distance-trail and sustain modes, driven through a fake renderer with no GPU", PufferModes));
         into.Add(new TestHarness.Suite("gauge-colours",
             "the belt indicator's yellow tier is gun-only; hardpoints step green→red", GaugeColours));
         into.Add(new TestHarness.Suite("weapons-defs",
@@ -182,6 +186,172 @@ public static class Suites
         finally
         {
             ctx.EmitterFactory = null;
+        }
+    }
+
+    // ---- E15b: the emitter's own modes, with no GPU ---------------------------------------------
+
+    /// <summary>Drives all three <see cref="Puffer"/> emission modes through a
+    /// <see cref="RecordingEmitterRenderer"/> — the seam `E15b` cut so that 847 lines reachable by
+    /// nothing could be reached by something. No atlas, no <c>TextureArchive</c> and no
+    /// <c>MultiMesh</c> is constructed anywhere in this suite, which is also its own tripwire: if it
+    /// ever gets slow, something started building real emitters again.
+    ///
+    /// <para>Both states are read from the shipped readers rather than written here, so every
+    /// expected number below is derived from authored data: <c>flame_ball.json</c>'s
+    /// <c>fierypuffer</c> (TIME_INTERVAL 0.2, NUMBER 18, LIFETIME 0.8–1.0, a six-frame
+    /// TEXTURE_SEQUENCE, no COLORS) and <c>pufftrails.json</c>'s <c>smokepuffer</c>
+    /// (DISTANCE_INTERVAL 2, LIFETIME 1.5–4.5, a COLORS ramp).</para>
+    ///
+    /// <para>⚠ The suite detaches <see cref="GameClock.Current"/> for its duration. <c>_Process</c>
+    /// takes its dt from the clock when one is installed, and the harness's clock is a FixedStep one
+    /// nothing is stepping — <c>FrameDt</c> is 0, so every tick would advance no sim at all and
+    /// every check below would pass vacuously.</para></summary>
+    private static void PufferModes(TestContext ctx)
+    {
+        ctx.RequireData(ctx.ZrdrPath, $"zrdr effect readers");
+
+        var burstState = PufferState.Load(ctx.ZrdrPath, "flame_ball.json", "fierypuffer");
+        var trailState = PufferState.Load(ctx.ZrdrPath, "pufftrails.json", "smokepuffer");
+        ctx.Check(burstState != null, $"flame_ball.json defines fierypuffer");
+        ctx.Check(trailState != null, $"pufftrails.json defines smokepuffer");
+        if (burstState == null || trailState == null)
+            return;
+
+        // The authored inputs every expected count below is derived from. Asserted rather than
+        // assumed: a reader change must fail here, naming itself, rather than silently re-baselining
+        // the mode assertions that read off it.
+        ctx.Same(18, burstState.Number, $"fierypuffer NUMBER");
+        ctx.Check(Mathf.IsEqualApprox(0.2f, burstState.TimeInterval), $"fierypuffer TIME_INTERVAL is 0.2 s");
+        ctx.Check(Mathf.IsEqualApprox(1f, burstState.LifetimeMax), $"fierypuffer LIFETIME_RANGE max is 1 s");
+        ctx.Same(6, burstState.TextureSequence.Count, $"fierypuffer flipbook frames");
+        ctx.Same(0, burstState.Colors.Count, $"fierypuffer has no COLORS ramp");
+        ctx.Check(Mathf.IsEqualApprox(2f, trailState.DistanceInterval), $"smokepuffer DISTANCE_INTERVAL is 2 m");
+        ctx.Check(trailState.Colors.Count > 0, $"smokepuffer carries a COLORS ramp");
+
+        var clock = GameClock.Current;
+        GameClock.Current = null;
+        try
+        {
+            PufferBurstMode(ctx, burstState);
+            PufferSustainMode(ctx, burstState);
+            PufferTrailMode(ctx, trailState);
+        }
+        finally
+        {
+            GameClock.Current = clock;
+        }
+    }
+
+    /// <summary>Burst: the pool is sized from the calling animation's stop time, the first batch is
+    /// spawned at t = 0 rather than one interval in, the flipbook walks its whole sequence, and the
+    /// emitter puts itself away once the last particle dies.</summary>
+    private static void PufferBurstMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, activeDuration: 0.3f);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            // 0.3 s of emission at one batch per 0.2 s = batches at t=0 and t=0.2, so 2 × NUMBER.
+            ctx.Same(36, gpu.Capacity, $"burst pool = NUMBER × the batches 0.3 s of emission fits");
+            ctx.Check(gpu.CullMargin >= 4f, $"burst emitter pads its cull margin margin={gpu.CullMargin}");
+
+            puffer.Burst(new Vector3(0f, 500f, 0f));
+            puffer._Process(1f / 60f);
+            ctx.Same(18, gpu.Shown, $"burst spawns its first batch at t=0, not one interval in");
+            ctx.Check(gpu.LastFrame.Count > 0 && gpu.LastFrame.All(p => p.Alpha < 1f),
+                $"a ramp-less state fades in on the life envelope rather than drawing at full alpha");
+
+            for (int i = 0; i < 6; i++)   // 0.3 s: comfortably past the second batch at 0.2 s
+                puffer._Process(0.05f);
+            ctx.Same(36, gpu.Shown, $"burst's second batch lands one TIME_INTERVAL in");
+
+            for (int i = 0; i < 30; i++)  // 1.5 s: past the last batch's 1 s lifetime
+                puffer._Process(0.05f);
+            ctx.Same(0, gpu.Shown, $"burst ends when its last particle dies");
+            ctx.Check(!puffer.Visible, $"a finished burst hides itself");
+            ctx.Same(5, (long)gpu.MaxFrame, $"the flipbook reaches its last column (TEXTURE_SEQUENCE keys are life fractions)");
+            ctx.Check(gpu.MaxIndex < gpu.Capacity, $"burst never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>Sustain: the pool is sized to the steady-state population, emission starts on the
+    /// very first frame, a long frame cannot overrun the pool, and <c>SustainEnd</c> stops emission
+    /// without cutting the live particles short.</summary>
+    private static void PufferSustainMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu, sustained: true);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            // ceil(NUMBER × LIFETIME_max / TIME_INTERVAL) + NUMBER = ceil(18 × 1 / 0.2) + 18.
+            ctx.Same(108, gpu.Capacity, $"sustain pool = the steady-state population, not a burst count");
+
+            var origin = new Vector3(0f, 800f, 0f);
+            puffer.SustainAt(origin, Basis.Identity, 1f / 60f);
+            puffer._Process(1f / 60f);
+            ctx.Same(18, gpu.Shown, $"sustain emits on its very first frame");
+            ctx.Check(gpu.LastFrame.All(p => p.Position.DistanceTo(origin) < 3f),
+                $"sustained particles spawn at the world point they are driven at, not at the node");
+
+            // A 5 s hitch asks for 25 batches; the catch-up cap and the pool between them must keep
+            // that inside 108. Integrated at a normal dt so the spawns are observable before they age
+            // out — the cap is a spawn-path rule, and this is where it is read.
+            puffer.SustainAt(origin, Basis.Identity, 5f);
+            puffer._Process(1f / 60f);
+            ctx.Same(108, gpu.Shown, $"a 5 s hitch fills the pool and stops there");
+            ctx.Check(gpu.MaxIndex == gpu.Capacity - 1,
+                $"the hitch reached the pool's last slot and no further max={gpu.MaxIndex} pool={gpu.Capacity}");
+
+            puffer.SustainEnd();
+            puffer._Process(0.05f);
+            ctx.Check(gpu.Shown > 0, $"SustainEnd stops emission without clearing the live particles");
+            for (int i = 0; i < 30; i++)  // 1.5 s, past LIFETIME_RANGE's 1 s
+                puffer._Process(0.05f);
+            ctx.Same(0, gpu.Shown, $"the live particles finish their own lifetimes and the emitter goes quiet");
+        }
+        finally
+        {
+            puffer.Free();
+        }
+    }
+
+    /// <summary>Distance trail: the first call homes the trail rather than emitting at it, and the
+    /// per-meter emission carries its remainder across frames instead of rounding it away.</summary>
+    private static void PufferTrailMode(TestContext ctx, PufferState state)
+    {
+        var gpu = new RecordingEmitterRenderer();
+        var puffer = Puffer.CreateWith(state, gpu);
+        ctx.Host.AddChild(puffer);
+        try
+        {
+            ctx.Same(640, gpu.Capacity, $"trail pool is the live-particle cap, not a burst count");
+
+            puffer.TrailAdvance(new Vector3(0f, 600f, 0f));
+            puffer._Process(1f / 60f);
+            ctx.Same(0, gpu.Shown, $"the trail's first call homes it at the muzzle and emits nothing");
+
+            // 10 m at one puff per 2 m = 5, then 3 m more = 1 puff with 1 m carried, not 2 rounded up.
+            puffer.TrailAdvance(new Vector3(10f, 600f, 0f));
+            puffer._Process(1f / 60f);
+            ctx.Same(5, gpu.Shown, $"the trail emits one puff per DISTANCE_INTERVAL of motion");
+            ctx.Check(gpu.LastFrame.All(p => Mathf.IsEqualApprox(p.Alpha, 1f)),
+                $"a COLORS ramp owns the fade, so the life envelope stays out of it");
+
+            puffer.TrailAdvance(new Vector3(13f, 600f, 0f));
+            puffer._Process(1f / 60f);
+            ctx.Same(6, gpu.Shown, $"a partial interval carries into the next frame instead of rounding");
+            ctx.Check(gpu.MaxIndex < gpu.Capacity, $"trail never writes past its pool max={gpu.MaxIndex} pool={gpu.Capacity}");
+        }
+        finally
+        {
+            puffer.Free();
         }
     }
 

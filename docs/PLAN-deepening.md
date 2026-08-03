@@ -179,7 +179,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 13. ☑ `IEmitter`/`IEmitterFactory` + extract `EmitterDirector` with all **four** stop paths
 14. ☑ The counting fake, and proof it is reachable
 15. ☑ The suite `BL-241` says cannot exist
-15b. ☐ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
+15b. ☑ `IEmitterRenderer` inside `Puffer` — **last** (numbered `15b`, not `16`, so F and G keep their IDs)
 
 ### Wave F — invariants the caller no longer remembers
 
@@ -912,7 +912,7 @@ reads only one cannot tell a broken disposition from a working one. And `BL-241`
 an atlas per authored state costs real time on world build — with the fake that cost is gone, so if
 the suite is slow, something is still constructing real emitters.
 
-## E15b ☐ `IEmitterRenderer` inside `Puffer` — last
+## E15b ☑ `IEmitterRenderer` inside `Puffer` — last
 
 **Goal.** `Puffer`'s own logic — burst, distance-trail and sustain modes — becomes reachable by a
 test, which today it is not at any point in its 847 lines.
@@ -931,6 +931,19 @@ item delivering nothing testable. Nothing in `E13`–`E15` depends on the answer
 internals will read differently once they do.
 
 **Model recommendation.** high — the one item in this wave that goes near the particle spawn path.
+
+**Settled at the top of the item: the seam cuts ABOVE the atlas.** `Create` keeps `BuildAtlas` and
+hands the finished `ImageTexture` to `MultiMeshEmitterRenderer`'s constructor, so `Puffer` holds only
+the CPU integration and `CreateWith(state, renderer, …)` builds any mode with no atlas, no
+`TextureArchive` and no GPU. Below the atlas the modes would have stayed unreachable and the seam
+would have delivered nothing.
+
+**Verified.** `new Puffer()` never moved — it sits on its own line after `BuildAtlas`, exactly where
+it was — and the four puffer-bearing goldens came back byte-identical on the first run. The
+able-to-fail control: `_sustainCarry = 0f` in place of the first-frame seed failed `puffer-modes` on
+exactly `sustain emits on its very first frame expected=18 actual=0`, with its other 15 checks still
+green. Restored, then `.\RunTests.ps1` full pass: 393 units, **20/20 engine suites**, **13/13 goldens
+hash-identical**, engine errors clean.
 
 **Verify.** 13/13 goldens hash-identical, and this is the item where that is *hard*: `_rng` is a
 field initializer (`Puffer.cs:354`), so the RNG stream is pinned to the order of `Puffer` **object**
