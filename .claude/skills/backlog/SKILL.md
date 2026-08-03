@@ -8,6 +8,13 @@ lines of prose or chasing its references by hand.
 
 This skill is **read-only**. Never edit `backlog.md`, never build, never run tests.
 
+⚠ **Output rule: text written between tool calls is not shown in chat.** The explanation is this
+skill's entire deliverable, so it must be the **final message after the last tool call** — do the
+reading of §1–§2 first, then emit §3 and §4 together as one message and stop. Do **not** call
+`AskUserQuestion` (or any other tool) to pose §4's choice: that turns the explanation into
+between-calls text and the user sees only the question. §4's options are plain text at the end of
+that message.
+
 The sibling skill for **active-plan** items (`A1`, `B11`) is [`/plan-item`](../plan-item/SKILL.md) —
 a `BL-NNN` already scheduled into the active plan is better explained there, since that skill reads
 the plan's ground rules and dependency notes too and can start, close, or defer the item.
@@ -65,7 +72,8 @@ to fix the entry — write nothing to `backlog.md` without approval.
 
 ## 4. Offer the handoff
 
-Close by asking (AskUserQuestion) what to do with the item:
+End the same message by asking what to do with the item — numbered plain text, one line each, no tool
+call (see the output rule at the top; an `AskUserQuestion` here hides §3 entirely):
 
 - scaffold a plan — run `/new-plan`;
 - start work — run `/grill-me` on the item first, then work from what that settles;
