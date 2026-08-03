@@ -336,6 +336,9 @@ public partial class FlightController : Node3D
     private bool _gunSelPrev;                    // edge detection for the gun-selector button
     private bool _rocketSelPrev;                 // edge detection for the hardpoint-selector (H) button
     private bool _held;                          // Held's backing field — the airframe is pinned (weapon lab)
+    private bool _cameraOwned;                   // CameraOwned's backing field — the lab's free camera has the view
+    private bool _orbitPrev;                     // edge detection for entering the orbit (halt or hold)
+    private bool _reseedOrbit;                   // the free camera handed the view back; re-seed from where it left it
     private bool _heldPinned;                    // the pinned pose below is valid (captured on the first held step)
     private Vector3 _heldPos;                    // the pinned position, re-applied through the model every held step
     private Basis _heldAttitude;                 // the pinned attitude, ditto
@@ -373,6 +376,24 @@ public partial class FlightController : Node3D
             {
                 _heldPinned = false;   // a later re-hold pins wherever the plane is then
             }
+        }
+    }
+
+    /// <summary>The weapon lab's free camera (D8): while set, this controller writes NOTHING to the
+    /// camera — no chase, no fixed view, no orbit, and <see cref="SnapCamera"/> is a no-op — because
+    /// the lab has handed the same <see cref="Camera3D"/> to a <see cref="SpectatorCamera"/> so the
+    /// tester can fly out and watch an impact from a metre away. Clearing it re-seeds the orbit from
+    /// wherever the free camera left the eye, so the hand-back does not jump.</summary>
+    public bool CameraOwned
+    {
+        get => _cameraOwned;
+        set
+        {
+            if (_cameraOwned && !value)
+            {
+                _reseedOrbit = true;
+            }
+            _cameraOwned = value;
         }
     }
 
@@ -810,24 +831,24 @@ public partial class FlightController : Node3D
         if (halted != _haltPrev)
         {
             _haltPrev = halted;
-            if (halted)
-            {
-                _cam.SeedOrbit(_model.Position);   // start the orbit where the chase camera left off (no jump)
-            }
             // The engine/whine/rattle loops hold their sample position through the freeze; the
             // one-shots already in flight are left to play out.
             Audio?.SetPaused(halted);
         }
+        // The orbit camera serves both the P freeze and the weapon lab's HELD airframe (D8): in
+        // both the plane is standing still and the point is to fly the view around it. Seeding on
+        // the edge starts it where the chase camera left off, so neither entry jumps — and so does
+        // the hand-back from the lab's free camera, which leaves the eye somewhere else entirely.
+        bool orbiting = halted || Held;
+        if ((orbiting && !_orbitPrev) || _reseedOrbit)
+        {
+            _reseedOrbit = false;
+            _cam.SeedOrbit(_model.Position);
+        }
+        _orbitPrev = orbiting;
         // Plane state — animators, audio ramps — is sim time, so it freezes and scales with it.
         float simDt = clock?.FrameDt ?? (float)delta;
-        if (halted)
-        {
-            // The orbit camera runs on wall time through a halt on purpose: the point of the
-            // freeze is to fly the camera around a stopped world.
-            var (yawIn, pitchIn, zoomIn) = OrbitInput();
-            _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
-        }
-        else
+        if (!orbiting)
         {
             // Draw the plane between its last two sim poses (see the _simPrev/_simCurr fields).
             // Skipped while crashed (the sim pair is stale; the wreck owns the visuals) and on a
@@ -837,7 +858,21 @@ public partial class FlightController : Node3D
                 _renderPose = _simPrev.InterpolateWith(_simCurr, (float)Engine.GetPhysicsInterpolationFraction());
                 GlobalTransform = _renderPose;
             }
-
+        }
+        if (CameraOwned)
+        {
+            // The lab's free camera has the view (D8) — every camera write here would fight it.
+        }
+        else if (orbiting)
+        {
+            // The orbit camera runs on wall time through a halt on purpose: the point of the
+            // freeze is to fly the camera around a stopped world. A held airframe is the same
+            // situation with the world still running.
+            var (yawIn, pitchIn, zoomIn) = OrbitInput();
+            _cam.Orbit((float)delta, _model.Position, yawIn, pitchIn, zoomIn);
+        }
+        else
+        {
             int view = _cam.ActiveView();
             if (view >= 0)
             {
@@ -1840,7 +1875,15 @@ public partial class FlightController : Node3D
 
     /// <summary>Places the camera at its settled pose immediately (spawn, respawn, the weapon
     /// lab's re-park) — there is nothing to interpolate from at those moments.</summary>
-    private void SnapCamera() => _cam.Snap(_model.Position, _model.Attitude, _renderPose);
+    // Silent no-op while the lab's free camera owns the view (D8): a respawn or a lab re-park must
+    // not yank the eye back onto the plane the tester just flew away from.
+    private void SnapCamera()
+    {
+        if (!CameraOwned)
+        {
+            _cam.Snap(_model.Position, _model.Attitude, _renderPose);
+        }
+    }
 
     /// <summary>The paused orbit camera's three axes, mixed from this player's keyboard and pads.
     /// Read here rather than in <see cref="CameraController"/> so the camera never learns about

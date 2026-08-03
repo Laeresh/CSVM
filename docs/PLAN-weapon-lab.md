@@ -114,7 +114,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 ### Wave D — camera, probes, docs
 
-8. ☐ D8 — orbit ↔ free camera switch in the lab
+8. ☑ D8 — orbit ↔ free camera switch in the lab
 9. ☐ D9 — `WeaponBench`: the 48-weapon pass check, split off the lab node
 10. ☐ D10 — docs: `cli.md`, `controls.md`, `architecture.md`, `HISTORY.md`, `PROJECT_CONTEXT.md`
 
@@ -342,7 +342,7 @@ chapter with no water must warn and leave the plane at spawn, not fail the launc
 
 # Wave D — camera, probes, docs
 
-## D8 ☐ Orbit ↔ free camera
+## D8 ☑ Orbit ↔ free camera
 
 **Goal.** The lab starts orbiting the held plane; one key hands the camera to a free camera so you
 can fly out to the impact point and watch it from a metre away.

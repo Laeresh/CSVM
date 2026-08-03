@@ -1377,8 +1377,18 @@ public partial class GameSession : Node3D
                 DebugTarget = _spec.WeaponTarget,
                 DebugSurface = _spec.WeaponSurface,
                 StandoffAtStart = _spec.WeaponStandoff,
+                FreeCameraAtStart = _spec.WeaponFreeCamera,
+                CameraToggleFrames = _spec.WeaponCameraToggle,
             };
             _worldRoot!.AddChild(lab);
+            // The lab is one overlay on one aircraft (like the damage lab), and its camera hand-off
+            // takes that rig's camera — so in splitscreen it binds P1 and says so rather than
+            // silently leaving the other panes' pilots without a panel they can see.
+            if (_rigs.Count > 1)
+            {
+                GD.Print($"weapon lab: {_rigs.Count} players — the lab binds P1's aircraft and P1's " +
+                         "pane only; the other panes fly normally");
+            }
             GD.Print($"weapon lab: '{_spec.PlaneName}' held " +
                      (_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}") +
                      ", firing through the session pool" +

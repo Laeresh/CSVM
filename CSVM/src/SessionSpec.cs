@@ -390,6 +390,12 @@ public sealed record SessionSpec
     /// <summary><c>--weapon-standoff=&lt;m&gt;</c>: the lab's parking distance, 0 for the 90 m
     /// default.</summary>
     public float WeaponStandoff { get; private set; }
+    /// <summary><c>--weapon-camera=free</c>: the lab starts with the view handed to its free
+    /// camera rather than the orbit.</summary>
+    public bool WeaponFreeCamera { get; private set; }
+    /// <summary><c>--weapon-camera=&lt;N&gt;</c>: hand the view over and back every N physics
+    /// frames — the scripted twin of tapping V. 0 = off.</summary>
+    public int WeaponCameraToggle { get; private set; }
 
     // ---- Collision ----------------------------------------------------------------------------
 
@@ -590,6 +596,24 @@ public sealed record SessionSpec
             else if (arg.StartsWith("--weapon-target=")) { s.WeaponTarget = ParseVec3(arg["--weapon-target=".Length..]); s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-surface=")) { s.WeaponSurface = arg["--weapon-surface=".Length..]; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-standoff=")) { s.WeaponStandoff = Flt(arg["--weapon-standoff=".Length..]); s.HasContentArg = true; }
+            else if (arg.StartsWith("--weapon-camera="))
+            {
+                // free | orbit (the default) | a frame count that toggles between the two.
+                string want = arg["--weapon-camera=".Length..];
+                s.HasContentArg = true;
+                if (string.Equals(want, "free", StringComparison.OrdinalIgnoreCase))
+                {
+                    s.WeaponFreeCamera = true;
+                }
+                else if (int.TryParse(want, NumberStyles.Integer, CultureInfo.InvariantCulture, out int every) && every > 0)
+                {
+                    s.WeaponCameraToggle = every;
+                }
+                else if (!string.Equals(want, "orbit", StringComparison.OrdinalIgnoreCase))
+                {
+                    notes.Add(new Note("ui", $"--weapon-camera={want} is not free/orbit/<frames> — keeping the orbit camera"));
+                }
+            }
             else if (arg == "--weapon-click") { s.WeaponClick = true; s.HasContentArg = true; }
             else if (arg.StartsWith("--weapon-click="))
             {
@@ -937,7 +961,8 @@ public sealed record SessionSpec
             WeaponSurface = null;
         }
         if ((WeaponLab || WeaponMount != null || WeaponFire || WeaponCycle > 0 || WeaponClick
-             || WeaponTarget != null || WeaponSurface != null || WeaponStandoff > 0f) && !Fly)
+             || WeaponTarget != null || WeaponSurface != null || WeaponStandoff > 0f
+             || WeaponFreeCamera || WeaponCameraToggle > 0) && !Fly)
         {
             Warn("core", "the --weapon-lab flags need flight; another mode flag won this session, so the lab will not build");
         }

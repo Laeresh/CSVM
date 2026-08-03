@@ -12463,3 +12463,28 @@ of 665 candidates; `dirt` in C4 one at 231 m of 1749. `--weapon-target=-4608,0,-
 --weapon-standoff=250` parks at exactly 250 m and splashes. `--stage=empty --weapon-surface=water`
 warns "no water collider among 1 scanned" and leaves the aircraft at spawn rather than failing the
 launch. `.\RunTests.ps1` PASS: 413 units, 22 suites, 13 goldens hash-identical.
+
+## 2026-08-03 — the lab orbits the held plane, and V hands the view to a free camera (`PLAN-weapon-lab` D8)
+
+Two changes. The orbit camera — the one the `P` freeze already used, on wall time, swung with
+WASD/arrows and zoomed with Shift/Ctrl — is now gated on `halted || Held` rather than `halted`
+alone, so the lab swings the view around its standing aircraft instead of trailing it with the
+chase camera (WASD is free there: a held airframe reads no stick input). And `V` hands the same
+`Camera3D` to a `SpectatorCamera`, the `--freecam` one, so the tester can fly out and watch an
+impact from a metre away. `FlightController.CameraOwned` is what makes that safe: while set this
+node writes NOTHING to the camera — not the chase, not a fixed view, not the snap a respawn or a
+lab re-park would otherwise do — and clearing it re-seeds the orbit from wherever the free camera
+left the eye. `--weapon-camera=free|orbit|<frames>` is the scripted twin.
+
+**Verified.** `--weapon-camera=45` toggles the view over and back every 45 frames and logs the eye
+at each hand-off plus one frame later, where a jump would show: **0.00 m at every hand-back**, in
+both directions, across four hand-offs. The scripted twin deliberately displaces the free camera
+45 m on the way out, so the check can fail — without that the free camera would hand the view back
+from exactly where it took it and 0.00 m would prove nothing. `--weapon-camera=free` captures the
+firing run from a fixed vantage while the aircraft re-parks under it, which is the `CameraOwned`
+behaviour working. `.\RunTests.ps1` PASS with `c1-flight` and `c1-crash` **hash-identical**, so
+`--fly` is untouched (`CameraOwned` defaults false and `Held` is false there).
+
+Splitscreen: the lab is one overlay on one aircraft, so with `--players>1` it binds P1's rig and
+P1's pane and now says so on its own log line, rather than leaving the other panes' pilots looking
+for a panel they cannot see.

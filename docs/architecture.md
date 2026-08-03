@@ -1312,7 +1312,11 @@ registration (the assembler sets it at construction, not in the stunt block).
 selectors, guns, rockets, ordnance, gauges, telemetry) runs exactly as in free flight, which is what
 makes the lab fire through the real path. `PlaceHeld(pos, lookAt)` moves the pin (C6/C7's re-park)
 through the same `Reset` + `SnapCamera` pair `Respawn` uses; `SelectGunGroup`/`SelectPylon` are the
-programmatic twins of G/H for the lab panel.
+programmatic twins of G/H for the lab panel. A held airframe also takes the ORBIT camera rather than
+the chase — `halted || Held`, since both mean "the plane is standing still and the view should swing
+around it" — and `CameraOwned` (D8) makes this node write nothing to the camera at all while the lab
+hands the same `Camera3D` to a `SpectatorCamera`; clearing it re-seeds the orbit from wherever the
+free camera left the eye.
 ⚠ Held is NOT `GameClock.Halted` — the point is that the world keeps running while one plane stops.
   The pose goes back in through the MODEL, never by writing GlobalTransform behind it, so every
   `_model` reader stays consistent; and because a held plane sits at 0 m/s (below every stall speed)
@@ -1495,8 +1499,10 @@ on the first physics frame, most specific first — `--weapon-target=x,y,z`, the
 `--weapon-surface=water|buildings|dirt` (nearest collider of that class, measured to the nearest
 collision VERTEX, since a chapter's water tiles all sit at the world origin), then
 `--weapon-click=x,y[,aim]` — and every one of them ends in the same `PlaceOn` as a real click, at
-`--weapon-standoff=` metres. `--weapon-cycle=N` steps the weapon list every N physics frames;
-stepping and placing are the only things this node does per frame.
+`--weapon-standoff=` metres. **V** hands the rig's camera to a `SpectatorCamera` and back
+(`--weapon-camera=free|<frames>`), the controller standing down via `CameraOwned` in between.
+`--weapon-cycle=N` steps the weapon list every N physics frames; stepping, placing and the camera
+hand-off are the only things this node does per frame.
 ⚠ This node NEVER spawns a round. Its one exception is `RunSelfTest` (the `--weapon-test` 48-weapon
   pass check on a PARKED plane, host null), which fires every node of a mount straight into the
   caller-supplied pool. Do not give the panel a firing loop back — the lab exists to fire exactly

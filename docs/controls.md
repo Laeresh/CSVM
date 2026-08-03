@@ -21,6 +21,8 @@ Flags are specified in [`cli.md`](cli.md).
 | click | | weapon lab: park the held plane on the surface under the cursor, at the panel's stand-off, nose on it — `--weapon-click=x,y`, or `--weapon-target=x,y,z` / `--weapon-surface=water\|buildings\|dirt` to place without a mouse at all |
 | shift-click | | weapon lab: aim at that point without moving the plane — `--weapon-click=x,y,aim` |
 | stand-off slider | | weapon lab: how far back every placement parks (15–1100 m, default 90) — `--weapon-standoff=` |
+| `V` | | weapon lab: hand the view to a free camera and back — fly out and watch an impact from a metre away, then `V` returns the orbit where you left it. `--weapon-camera=free\|<frames>` |
+| `WASD` / `Shift`+`Ctrl` | | weapon lab: swing and zoom the orbit around the held plane (it reads no stick input while held). With `V` out, the freecam's own controls apply instead |
 | `R` | | respawn |
 | `Tab` | | cycle stunt target |
 | `numpad 1–9` (not `5`) | | hold a fixed camera view around the plane (P1's keyboard) — `--view=` |

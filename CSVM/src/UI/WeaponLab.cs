@@ -45,6 +45,10 @@ public sealed partial class WeaponLab : Node3D
     private const float ClearanceProbeStart = 0.5f;  // m off the struck face, so the back-ray leaves it
     private const float ClearanceMargin = 2f;     // m kept clear of whatever the back-ray struck
 
+    // Where --weapon-camera=<frames> parks the free camera relative to the eye it took over, so the
+    // hand-back it measures is from somewhere the orbit did not put it.
+    private static readonly Vector3 ScriptedFreeCameraOffset = new(30f, 15f, 30f);
+
     private readonly Node3D _plane;
     private readonly string _planeModel;
     private readonly WeaponDefs _weapons;
@@ -87,6 +91,12 @@ public sealed partial class WeaponLab : Node3D
     private string _pickLine = "target: (nothing picked yet)";
     private MeshInstance3D? _marker;
 
+    // Camera hand-off (V): the free camera exists only while it owns the view.
+    private bool _freeCamera;
+    private Flight.SpectatorCamera? _spectator;
+    private int _cameraTick;
+    private Vector3? _settleEye;
+
     private CanvasLayer _ui = null!;
     private Label _bankLabel = null!;
     private Label _weaponLabel = null!;
@@ -95,6 +105,7 @@ public sealed partial class WeaponLab : Node3D
     private Label _ammoLabel = null!;
     private Label _pickLabel = null!;
     private Label _standoffLabel = null!;
+    private Label _cameraLabel = null!;
     private Label _cliLabel = null!;
     private CheckButton _autoFireToggle = null!;
     private CheckButton _infiniteAmmoToggle = null!;
@@ -165,6 +176,15 @@ public sealed partial class WeaponLab : Node3D
     /// the panel slider's starting value. 0 keeps the 90 m default.</summary>
     public float StandoffAtStart { get; init; }
 
+    /// <summary><c>--weapon-camera=free</c>: start with the view already handed to the free camera,
+    /// so a capture can be framed from it.</summary>
+    public bool FreeCameraAtStart { get; init; }
+
+    /// <summary><c>--weapon-camera=&lt;N&gt;</c>: hand the camera over and back every N physics
+    /// frames — the scripted twin of tapping <b>V</b>, which is how the no-jump hand-back is
+    /// checked with nobody at the controls. 0 = off.</summary>
+    public int CameraToggleFrames { get; init; }
+
     private List<WeaponDef> BankWeapons => _bank == Guns ? _gunWeapons : _rocketWeapons;
     private List<Mount> BankMounts => _bank == Guns ? _gunMounts : _pylonMounts;
     private WeaponDef? SelectedWeapon => _weaponIndex < BankWeapons.Count ? BankWeapons[_weaponIndex] : null;
@@ -210,11 +230,31 @@ public sealed partial class WeaponLab : Node3D
                 Log.Info("ui", $"weapon lab: scripted click at ({screen.X:0},{screen.Y:0}){(DebugClickAimOnly ? " (aim only)" : "")}");
                 PickAt(screen, DebugClickAimOnly);
             }
+            // After the placement, never before: the free camera freezes the eye where it takes
+            // over (that is the point of CameraOwned), so handing it the view first would leave a
+            // --weapon-camera=free capture staring at the spawn the aircraft just left.
+            if (FreeCameraAtStart)
+            {
+                SetFreeCamera(true);
+            }
         }
         if (_pendingClick is { } click)
         {
             _pendingClick = null;
             PickAt(click, _pendingAimOnly);
+        }
+        if (_settleEye is { } handoff && _camera != null)
+        {
+            // One frame after a hand-off, where a jump would show: the new owner has had a full
+            // camera update, so this is the number that proves the hand-back is seamless.
+            _settleEye = null;
+            var now = _camera.GlobalPosition;
+            Log.Info("ui", $"weapon lab: camera settled at ({now.X:0.0},{now.Y:0.0},{now.Z:0.0}), moved {now.DistanceTo(handoff):0.00} m from the hand-off");
+        }
+        if (CameraToggleFrames > 0 && ++_cameraTick >= CameraToggleFrames)
+        {
+            _cameraTick = 0;
+            SetFreeCamera(!_freeCamera);
         }
         if (CycleFrames <= 0 || _host == null || ++_cycleTick < CycleFrames)
         {
@@ -285,10 +325,20 @@ public sealed partial class WeaponLab : Node3D
     {
         // B, not W: this is a flight session, and W is pitch. The plane is held and reads no stick
         // input, but the panel key must not be one a pilot's hand rests on.
-        if (@event is InputEventKey { Echo: false, Pressed: true, Keycode: Key.B })
+        if (@event is not InputEventKey { Echo: false, Pressed: true } key)
+        {
+            return;
+        }
+        // B, not W: this is a flight session, and W is pitch. The plane is held and reads no stick
+        // input, but the panel key must not be one a pilot's hand rests on.
+        if (key.Keycode == Key.B)
         {
             _panel = !_panel;
             SyncState();
+        }
+        else if (key.Keycode == Key.V)
+        {
+            SetFreeCamera(!_freeCamera);
         }
     }
 
@@ -480,6 +530,46 @@ public sealed partial class WeaponLab : Node3D
             }
         }
         return best is { } found ? (found.Point, Mathf.Sqrt(found.Dist)) : null;
+    }
+
+    /// <summary>Hands the rig's camera to a free <see cref="Flight.SpectatorCamera"/> and back
+    /// (<b>V</b>). Out: the controller stops writing the camera entirely
+    /// (<see cref="Flight.FlightController.CameraOwned"/>) and the free camera takes over from
+    /// exactly where the orbit had the eye, so there is no jump. Back: the free camera is dropped
+    /// and the controller re-seeds its orbit from wherever the eye now is, so there is no jump that
+    /// way either. The aircraft keeps flying/holding, firing and drawing its HUD throughout — only
+    /// the view changes hands.</summary>
+    private void SetFreeCamera(bool on)
+    {
+        if (_camera == null || _host == null || on == _freeCamera)
+        {
+            return;
+        }
+        _freeCamera = on;
+        var eye = _camera.GlobalPosition;
+        if (on)
+        {
+            _host.CameraOwned = true;
+            // The scripted twin has no hands on WASD, so the free camera would hand the view back
+            // from exactly where it took it and the no-jump check could not fail. Displace it on
+            // the way out, so the hand-back is measured from an eye the orbit never chose.
+            var start = CameraToggleFrames > 0 ? eye + ScriptedFreeCameraOffset : eye;
+            _spectator = new Flight.SpectatorCamera(_camera, start, _plane.GlobalPosition)
+            {
+                Name = "weapon_lab_freecam",
+                ShowReadout = false,   // the lab's own panel is the readout; a second one is clutter
+            };
+            AddChild(_spectator);
+        }
+        else
+        {
+            _spectator?.QueueFree();
+            _spectator = null;
+            _host.CameraOwned = false;
+        }
+        Log.Info("ui", $"weapon lab: camera -> {(on ? "free (V returns it)" : "orbit")} at ({eye.X:0.0},{eye.Y:0.0},{eye.Z:0.0})");
+        _settleEye = eye;   // the next frame logs where the new owner actually put the eye
+        SyncState();
     }
 
     /// <summary>Fires the lab's own physics ray through <paramref name="screen"/>, reports what it
@@ -933,6 +1023,9 @@ public sealed partial class WeaponLab : Node3D
             ? $"{mounts[_mountIndex].Label}   [{_mountIndex + 1}/{mounts.Count}]"
             : (_bank == Guns ? "(no gun groups)" : "(no pylons)");
         _ammoLabel.Text = AmmoLine();
+        _cameraLabel.Text = _freeCamera
+            ? "V: FREE camera — WASD/QE fly, hold RMB to look; V returns the orbit"
+            : "V: orbit camera (WASD/arrows swing it, Shift/Ctrl zoom) — V frees it";
         _pickLabel.Text = _pickLine;
         _standoffLabel.Text = $"stand-off {_standoff:0} m";
         _autoFireToggle.ButtonPressed = _autoFire;
@@ -1043,6 +1136,8 @@ public sealed partial class WeaponLab : Node3D
 
         box.AddChild(new Label { Text = "WEAPON LAB" });
         box.AddChild(Small("B hides · Space/F fire · click parks on a surface · shift-click aims"));
+        _cameraLabel = Small("");
+        box.AddChild(_cameraLabel);
 
         // target readout + stand-off: what the last click struck, and how far back up the camera
         // ray the aircraft parks from the next one.
