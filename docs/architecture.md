@@ -709,8 +709,9 @@ silently diverge; each still owns its own step size.
 `ANIMATION`, else its `SURFACE_ANIMATION`), `Sound`, the `ImpactStandIn`, `Damage`/`BlastRadius`
 (+ `HasBlastDamage`) — plus the pure static `Resolve` that computes it from a `WeaponDef` and a
 `SurfaceClass`. No Godot type, no scene, no sink, no sound archive, so the dispatch's one decision
-is readable by a unit test; `ImpactOutcomeTests` is that test. **Nothing calls it yet** —
-`ProjectilePool.Impact` still decides for itself until `PLAN-deepening` `B4` routes it through.
+is readable by a unit test; `ImpactOutcomeTests` is that test. `ProjectilePool.Impact` classifies the
+surface and calls it, then `Apply` performs the result; `ProjectilePool.HasBlastDamage` is the
+weapon-level spelling of the same `HasBlastDamage` rule, so the rule exists once.
 ⚠ `modelResolved` and `hasEffectsRuntime` are **inputs**, not things `Resolve` discovers: whether
   the effect name is a real gamez node needs the chapter scene, and whether a world-effects runtime
   exists is a fact about the caller (a scene-less pool takes the explosion stand-in). Passing a
@@ -775,10 +776,11 @@ runtime's own bound, gun hits under `GunEffectTtl` 0.3 s (the `*_gunhit` family'
 stop, and the only bound the stop-less slug defs have) and one play per `GunEffectInterval` 0.1 s
 per effect name = per firing group (`GunEffectDue`, on the sim clock);
 `ClassifySurface` is `public static` — the ONE surface classifier, shared with the airframe's
-graze reaction so a round and a wingtip never disagree about what they hit; the first 8 impacts log
-a breadcrumb carrying the class AND the `fx=`/`snd=` the class selected out of the weapon's
-`IMPACT` table, which is what makes a "these two surfaces look the same" report answerable without
-a lucky screenshot (`BL-019`); rockets fly
+graze reaction so a round and a wingtip never disagree about what they hit; `Impact` classifies and
+calls `ImpactOutcome.Resolve`, then `Apply` obeys the result and decides nothing — the first 8
+impacts log a breadcrumb of that record (`fx=`/`snd=`/`standin=`), so the probe line and the unit
+assertion say the same thing, which is what makes a "these two surfaces look the same" report
+answerable without a lucky screenshot (`BL-019`); rockets fly
 their FLYOUT model body via `BuildFlyoutBody` (shared with `PylonOrdnance`) and trail their FLYOUT
 `MODEL_ANIMATION` smoke (C21): the def's DISTANCE_INTERVAL puffers resolved from the world
 `AnimProgram` (ctor `flyoutAnims`), one pooled/reused `Puffer.TrailAdvance` set per live round,

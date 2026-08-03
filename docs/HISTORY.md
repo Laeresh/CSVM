@@ -11456,3 +11456,45 @@ the ordinary `default` fallback. A first draft of the test asserted the opposite
 hash-identical. Able-to-fail controls, both watched failing and restored: making the class lookup
 return `default` unconditionally failed the two data cases; gating the explosion branch on
 `surface != Default` failed one ladder case and only it.
+
+## 2026-08-03 — `Impact` decides nothing: routed through `Resolve` → `Apply`
+
+**What landed.** No behaviour change. `PLAN-deepening` `B4` splits `ProjectilePool.Impact` at the
+seam `B3` built: it classifies the surface, calls `ImpactOutcome.Resolve`, and hands the record to a
+new `Apply`, which carries the seven side effects unchanged and branches only on the record. The
+stand-in chain becomes a `switch` on `outcome.StandIn` in the ladder's authored order, and
+`ApplyDamage` now reads `outcome.Damage`/`BlastRadius`/`HasBlastDamage` rather than re-deriving them
+from the weapon — `ProjectilePool.HasBlastDamage`, which `Suites.cs` calls, forwards to the record so
+the rule exists once. `Resolve` is called twice per impact, because `modelResolved` cannot be known
+before the attempt: the first call yields the effect NAME to try, the second carries the answer.
+
+`Apply` still takes the weapon and the surface alongside the outcome, and both are deliberate:
+the weapon for `GunEffectDue`'s per-effect rate limit (a stateful throttle, not a decision) and the
+surface for the spark's water-vs-dirt `Color`, which the engine-free `ImpactOutcome` cannot carry
+without dragging Godot into it.
+
+**The breadcrumb now prints the record** — `fx=`/`snd=`/`standin=` — so the probe line and the unit
+assertion say the same thing. That is the item's one intended output change.
+
+**How verified.** Baselines captured **before** the edit and re-run after, on the same pinned
+commands: `--viewer --weapon-test` (`weapon_test.txt` byte-identical, 48/48 fired OK); and four
+firing runs whose breadcrumbs are identical in every field — weapon, class, position, `fx=`, `snd=`
+— in the same order, differing only by the appended `standin=`: the weapon lab (`Default`, scene-less
+pool), a C1 terrain strafe, a C2 city strafe, and a C1B sea dive. The sea run is the one that
+exercises the model path, and reads `standin=None` where `splash1.flt` instanced. The single
+ordering change in the whole sweep is the predicted one: `impact effect 'splash1.flt' instanced` now
+precedes its breadcrumb, because the breadcrumb waits for the model answer.
+
+`.\RunTests.ps1` **PASS** — 379 units, 18/18 engine suites, 13/13 goldens hash-identical (same
+hashes as the pre-edit run). The 8-chapter `--freecam` sweep (C1, C1B, C1C, C2, C2B, C3, C4, C5):
+zero errors, all eight shots rendered; the one warning per chapter is the pre-existing late
+`SOUND_NODE` line a `--mute` scripted run always emits.
+
+**Able-to-fail control**, watched failing and restored: the `--viewer --weapon-lab --weapon-fire`
+screenshot is **byte-identical** before and after the refactor (`9070e120…`), and dropping
+`SpawnDirtDebris` from `Apply`'s `DirtDebris` case moves it (`f6dcd4dc…`) — so the pixels are
+evidence the routing is live, not that nothing is wired.
+
+**Not covered by a capture:** the `Buildings` → ricochet branch. No pose found in C1/C2/C5 hits a
+`buildings`-classed collider — the C5 skyscraper clutter classifies `Default` — so that branch rests
+on `ImpactOutcomeTests`' rule cases, as does the explosion stand-in.

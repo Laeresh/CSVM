@@ -131,7 +131,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 ### Wave B — deciding an impact, apart from performing it
 
 3. ☑ `ImpactOutcome` + a pure `Resolve`
-4. ☐ Route `Impact` through `Resolve` → `Apply`
+4. ☑ Route `Impact` through `Resolve` → `Apply`
 5. ☐ Unit suite: 48 weapons × the reachable surfaces
 
 ### Wave C — a sink seam under the log
@@ -295,7 +295,7 @@ that the flying aircraft carries no physics body, so a round can never hit a pla
 the enum (they exist) but do not invent behaviour for them; a `Resolve` case for an unreachable
 surface is content invented rather than decoded.
 
-## B4 ☐ Route `Impact` through `Resolve` → `Apply`
+## B4 ☑ Route `Impact` through `Resolve` → `Apply`
 
 **Goal.** `Impact` decides nothing. It calls `Resolve`, then obeys the result.
 

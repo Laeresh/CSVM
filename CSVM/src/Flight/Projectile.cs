@@ -352,9 +352,12 @@ public sealed partial class ProjectilePool : Node3D
     /// lab, the dump probes), which costs the scan nothing.</summary>
     public List<NearMissTarget> NearMissTargets { get; } = new();
 
-    /// <summary>Whether an authored effect radius is also a positive-health damage blast.</summary>
+    /// <summary>Whether an authored effect radius is also a positive-health damage blast — the
+    /// weapon-level spelling of <see cref="ImpactOutcome.HasBlastDamage"/>, where the rule lives.
+    /// The surface never changes the answer, so any resolves it.</summary>
     public static bool HasBlastDamage(WeaponDef weapon) =>
-        weapon.HealthDamage is > 0f && weapon.ImpactProximity is > 0f;
+        ImpactOutcome.Resolve(weapon, SurfaceClass.Default, modelResolved: false, hasEffectsRuntime: true)
+            .HasBlastDamage;
 
     /// <summary>Linear blast falloff: full at the centre and zero at the authored radius.</summary>
     public static float BlastDamage(float fullDamage, float radius, float distance) =>
@@ -1135,67 +1138,73 @@ public sealed partial class ProjectilePool : Node3D
     private void Impact(WeaponDef weapon, Vector3 point, Node? collider, Vector3 normal)
     {
         var surface = ClassifySurface(collider);
-        // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
-        // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
-        var orient = SurfaceBasis(normal);
-        // The per-surface IMPACT binding: the struck surface's entry, else the weapon's `default`.
-        if (!weapon.Impact.TryGetValue(surface, out var effect))
-            weapon.Impact.TryGetValue(SurfaceClass.Default, out effect);
-
+        bool hasEffectsRuntime = EffectSink != null;
+        // The decision, taken once and read twice. `modelResolved` cannot be known before the
+        // attempt, so the first resolve is only for the effect NAME to attempt; the second carries
+        // the answer. Everything after this line obeys `outcome` — Impact itself decides nothing.
+        var outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: false, hasEffectsRuntime);
         // The named IMPACT effect (D30): when its `ANIMATION`/`SURFACE_ANIMATION` names a chapter
         // gamez node (the water splash prototypes), instance it at the hit point and skip the spark
         // — the authored model IS the effect. The gun/rocket smoke+fireball names resolve to reader
         // defs or nothing, so nothing instances and the spark stands in (their PUFFER_STATE is D32).
-        var fxName = effect != null ? (effect.Animation ?? effect.SurfaceAnimation) : null;
+        if (outcome.EffectName is { } fxName && SpawnImpactModel(fxName, point))
+            outcome = ImpactOutcome.Resolve(weapon, surface, modelResolved: true, hasEffectsRuntime);
+
         // Verification breadcrumb: the first few impacts confirm hit detection, surface
         // classification (B15) and which per-surface IMPACT entry the classification selected,
-        // without needing a lucky screenshot; then it goes quiet. `fx=`/`snd=` are what makes a
-        // "these two surfaces look the same" report answerable — the effect and sound the data
-        // chose, before anything renders.
+        // without needing a lucky screenshot; then it goes quiet. It prints the resolved outcome, so
+        // the probe line and the unit assertion say the same thing — `fx=`/`snd=`/`standin=` are
+        // what make a "these two surfaces look the same" report answerable.
         if (_impactsLogged < 8)
         {
             _impactsLogged++;
             GD.Print($"impact: {weapon.Id} ({weapon.Name}) -> {surface} at " +
                      $"({point.X:0},{point.Y:0},{point.Z:0}) on {collider?.GetParent()?.Name}/{collider?.Name}" +
-                     $" fx={fxName ?? "-"} snd={effect?.Sound ?? "-"}");
+                     $" fx={outcome.EffectName ?? "-"} snd={outcome.Sound ?? "-"} standin={outcome.StandIn}");
         }
-        bool showedModel = fxName != null && SpawnImpactModel(fxName, point);
-        // The puffer half (D32): when the effect is not a gamez model, hand its name to the
-        // world-effects runtime, which builds the smoke/fireball at the hit. The runtime no-ops on
-        // a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so the spark below
-        // still stands in for those. A gun hit is throttled and time-bounded (C8) — see
-        // GunEffectInterval / GunEffectTtl; a rocket fires at most ~1/s and takes the defaults.
-        if (!showedModel && fxName != null && (!weapon.IsGun || GunEffectDue(fxName)))
+        Apply(weapon, surface, outcome, point, collider, normal);
+    }
+
+    /// <summary>Perform a resolved impact: the effect, the stand-in burst, the sound and the damage.
+    /// Decides nothing — every branch here is keyed on <paramref name="outcome"/>. It still takes the
+    /// weapon for the gun-effect rate limit (a stateful throttle, not a decision) and the surface for
+    /// the spark's tint (a <c>Color</c>, which the engine-free <see cref="ImpactOutcome"/> cannot
+    /// carry).</summary>
+    private void Apply(WeaponDef weapon, SurfaceClass surface, in ImpactOutcome outcome, Vector3 point,
+        Node? collider, Vector3 normal)
+    {
+        // The impact sprites face the struck surface (SurfaceBasis(normal)) rather than a fixed world
+        // plane — a supplier distinct from the muzzle flash's plane basis (both feed Sprite.Orient).
+        var orient = SurfaceBasis(normal);
+        // The puffer half (D32): when the effect is not a gamez model — i.e. a stand-in is owed —
+        // hand its name to the world-effects runtime, which builds the smoke/fireball at the hit. The
+        // runtime no-ops on a name it does not carry (the inert `bld_damage.flt`/`f18sparks2`/…), so
+        // the stand-in below still draws for those. A gun hit is throttled and time-bounded (C8) —
+        // see GunEffectInterval / GunEffectTtl; a rocket fires at most ~1/s and takes the defaults.
+        if (outcome.StandIn != ImpactStandIn.None && outcome.EffectName is { } fxName
+            && (!weapon.IsGun || GunEffectDue(fxName)))
             EffectSink?.Invoke(fxName, point, weapon.IsGun ? GunEffectTtl : 0f);
-        if (!showedModel && !weapon.IsGun && EffectSink == null)
+        switch (outcome.StandIn)
         {
-            // A hardpoint weapon with no world-effects runtime to render its real fireball: a
-            // scene-less pool (the weapon lab). Show an explosion burst stand-in in place of the
-            // single spark, so the blast is visible. Flight keeps its real puffer (EffectSink set).
-            SpawnExplosion(point, orient);
-        }
-        else if (!showedModel && surface == SurfaceClass.Default)
-        {
-            // Dirt (unclassified terrain): a tumbling-debris burst, not one fat spark.
-            SpawnDirtDebris(point, orient);
-        }
-        else if (!showedModel && surface == SurfaceClass.Buildings && weapon.IsGun)
-        {
-            // A gun round off a building: ricochet sparks + the flash. The authored assets for
-            // this class (`bld_damage.flt`, the `rcochet1` EFFECT) are confirmed missing from the
-            // install, so the stand-in has to carry the read on its own (BL-203).
-            SpawnRicochet(point, orient);
-        }
-        else if (!showedModel && _impact.Count < MaxFlashes)
-        {
-            var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
-            _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint, Orient = orient });
+            case ImpactStandIn.Explosion:
+                SpawnExplosion(point, orient);
+                break;
+            case ImpactStandIn.DirtDebris:
+                SpawnDirtDebris(point, orient);
+                break;
+            case ImpactStandIn.Ricochet:
+                SpawnRicochet(point, orient);
+                break;
+            case ImpactStandIn.Spark when _impact.Count < MaxFlashes:
+                var tint = surface == SurfaceClass.Water ? new Color(0.8f, 0.9f, 1.0f) : new Color(1f, 0.9f, 0.5f);
+                _impact.Add(new Sprite { Pos = point, Life = ImpactLife, Size = ImpactSize, Tint = tint, Orient = orient });
+                break;
         }
         // Per-surface IMPACT sound (landed): the struck surface's SOUND, else the default's.
-        if (effect?.Sound is { } snd)
+        if (outcome.Sound is { } snd)
             PlaySound(snd);
         // Apply the hit to whatever destructible was struck (C23) — a no-op for terrain/water/clutter.
-        ApplyDamage(weapon, point, collider);
+        ApplyDamage(outcome, point, collider);
     }
 
     private bool ProximityFuseTriggered(PhysicsDirectSpaceState3D space, WeaponDef weapon,
@@ -1242,14 +1251,14 @@ public sealed partial class ProjectilePool : Node3D
         }
         return body.GlobalPosition;
     }
-    private void ApplyDamage(WeaponDef weapon, Vector3 point, Node? struck)
+    private void ApplyDamage(in ImpactOutcome outcome, Vector3 point, Node? struck)
     {
-        float fullDamage = weapon.HealthDamage ?? 0f;
-        float radius = weapon.ImpactProximity ?? 0f;
+        float fullDamage = outcome.Damage;
+        float radius = outcome.BlastRadius;
         if (DamageSink == null || fullDamage <= 0f)
             return;
 
-        if (!HasBlastDamage(weapon) || GetWorld3D()?.DirectSpaceState is not { } space)
+        if (!outcome.HasBlastDamage || GetWorld3D()?.DirectSpaceState is not { } space)
         {
             DamageSink(struck, fullDamage);
             return;
