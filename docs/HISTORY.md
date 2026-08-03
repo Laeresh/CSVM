@@ -12557,3 +12557,43 @@ control(s), 11 made unfocusable, focusable_left=0` and `damage lab: panel built:
 made unfocusable, focusable_left=0` — the 11 and the 5 are the measured "before", since they are
 what the walk had to change. `.\RunTests.ps1` PASS with all 13 goldens hash-identical. The
 at-the-controls confirmation belongs to `PT-30`, which is what reported it.
+
+## 2026-08-03 — the class overlay stops rendering inside-out, and tints at 50 %
+
+Two user-reported faults in the `X` colour-by-class overlay (`src/UI/ClassOverlay.cs`), one root
+cause. It tinted by installing a `MaterialOverride` — a plain `StandardMaterial3D`, so Godot's
+default `cull_back`. This world's single-sided geometry renders `cull_front` (MECH3's visible side
+is the CCW loop, i.e. Godot's BACK face — see `SceneBuilder.GetBiasShader`), so the overlay painted
+exactly the faces the world hides: the C2 shot came out inside-out, terrain gone and buildings
+showing their far interior walls.
+
+**Fixing the cull mode alone is not enough, and the dead end is worth keeping.** An override or a
+`MaterialOverlay` is *a different shader* from the world's. Screenshotted: with `cull_disabled` +
+50 % alpha as an overlay pass, the world came up right-side-up but (a) the tint z-fought its own
+geometry and mostly vanished, because the real shaders run `skip_vertex_transform` with the
+depth-bias eye-scale and the tint pass does not, and (b) every clutter tree became a ghost card at
+a fixed heading, because the billboard spin also lives in that vertex shader. No material installed
+from outside can be right here.
+
+So the tint moved INSIDE the world's own shaders, per instance: `csky_tint` (vec4, rgb = colour,
+a = strength) appended to `shaders/csky_instance_uniforms.gdshaderinc` per that file's append-only
+ordering contract, and `SceneBuilder.TintLine` (`ALBEDO = mix(ALBEDO, csky_tint.rgb, csky_tint.a)`)
+emitted as the last thing `fragment()` does to ALBEDO — after fog, so a tinted target reads as its
+class at any distance instead of fading into the fog wall. Emitted into the bias shader (always
+takes the preamble), Clutter's sprite shader, and the billboard/cylindrical shaders **only in the
+`blend || scissor` variants** — the opaque sprite variants declare no instance uniform and must stay
+off that buffer (the warning in the include; C5 alone stamps ~139k sprites). `ClassOverlay` now
+drives `SetInstanceShaderParameter(SceneBuilder.TintParam, …)` and clears it to alpha 0 on
+toggle-off, so it installs no materials at all and has nothing to restore but a number.
+
+The user's second ask — 50 % instead of full coloration — is `ClassOverlay.TintStrength = 0.5f`, and
+it is only meaningful *because* the mix happens in the real shader: it blends with the object's own
+texture rather than replacing it, so a named target ("the C2 water tower") stays recognisable as
+itself while still reading as its class.
+
+**Verified.** `RunProbe.ps1 --freecam --chapter=C2` at the golden `c2-city` pose, before and after:
+the before shot is the reported bug (flat red/green/blue silhouettes over a black hole where the
+terrain is), the after shot has an upright textured world under readable red/green/blue/pink, with
+the clutter billboards tinted in place and facing the camera. `.\RunTests.ps1`: 22/22 engine suites,
+0 unexpected engine errors, all 13 goldens hash-identical — `mix(x, t, 0.0)` is exactly `x`, so
+carrying the line changes no pixel while the overlay is off.

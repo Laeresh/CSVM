@@ -29,23 +29,33 @@ namespace CSVM.UI;
 /// </summary>
 public sealed partial class ClassOverlay : Node
 {
+    /// <summary>How much of the class colour is mixed over the object's real appearance. At 0.5 a
+    /// target reads as its class AND stays recognisable as itself — which is the point of the
+    /// overlay: a report names "the C2 water tower", and a flat red silhouette hides the tower.
+    /// <para>The mix happens inside the world's own shaders, per instance
+    /// (<see cref="SceneBuilder.TintParam"/>) — never through a <c>MaterialOverride</c>. See
+    /// <see cref="SceneBuilder.TintLine"/> for the three ways an overlay material got this
+    /// wrong.</para></summary>
+    private const float TintStrength = 0.5f;
+
     private static readonly Color DestructibleColor = new(0.95f, 0.15f, 0.15f);
     private static readonly Color FacadeColor = new(1f, 0.35f, 0.85f);
     private static readonly Color ClutterColor = new(0.45f, 0.95f, 0.25f);
     private static readonly Color SceneryColor = new(0.3f, 0.55f, 0.95f);
+
+    // Alpha 0 = the shader's identity mix, i.e. exactly the untinted world.
+    private static readonly Color Untinted = new(0f, 0f, 0f, 0f);
 
     // The legend's own class list, always shown regardless of what actually drew this session
     // (BL-205's rule, carried over from ColliderOverlay: a map legend describes the key, not just
     // what is currently on screen).
     private static readonly string[] LegendClasses = { "destructible", "facade", "clutter", "scenery" };
 
-    private static Dictionary<string, StandardMaterial3D>? _materials;
-
     private readonly Node3D _world;
     private readonly GameZ? _gamez;
     private readonly AnimRuntime? _runtime;
 
-    private readonly List<(GeometryInstance3D Node, Material? Original)> _tinted = new();
+    private readonly List<GeometryInstance3D> _tinted = new();
 
     private bool _shown, _debugDone;
     private CanvasLayer? _hudLayer;
@@ -113,21 +123,6 @@ public sealed partial class ClassOverlay : Node
         ShowNotice(_summary, showLegend: true);
     }
 
-    private static Dictionary<string, StandardMaterial3D> Materials() => _materials ??= new Dictionary<string, StandardMaterial3D>
-    {
-        ["destructible"] = Flat(DestructibleColor),
-        ["facade"] = Flat(FacadeColor),
-        ["clutter"] = Flat(ClutterColor),
-        ["scenery"] = Flat(SceneryColor),
-    };
-
-    private static StandardMaterial3D Flat(Color color) => new()
-    {
-        ShadingMode = BaseMaterial3D.ShadingModeEnum.Unshaded,
-        AlbedoColor = color,
-        DisableFog = true,
-    };
-
     private static Color ColorFor(string cls) => cls switch
     {
         "destructible" => DestructibleColor,
@@ -177,13 +172,12 @@ public sealed partial class ClassOverlay : Node
 
     private void Build()
     {
-        var materials = Materials();
         var perClass = new Dictionary<string, int>();
 
         void Tint(GeometryInstance3D gi, string cls)
         {
-            _tinted.Add((gi, gi.MaterialOverride));
-            gi.MaterialOverride = materials[cls];
+            _tinted.Add(gi);
+            gi.SetInstanceShaderParameter(SceneBuilder.TintParam, new Color(ColorFor(cls), TintStrength));
             perClass[cls] = perClass.GetValueOrDefault(cls) + 1;
         }
 
@@ -225,11 +219,11 @@ public sealed partial class ClassOverlay : Node
 
     private void Restore()
     {
-        foreach (var (node, original) in _tinted)
+        foreach (var node in _tinted)
         {
             if (IsInstanceValid(node))
             {
-                node.MaterialOverride = original;
+                node.SetInstanceShaderParameter(SceneBuilder.TintParam, Untinted);
             }
         }
         _tinted.Clear();

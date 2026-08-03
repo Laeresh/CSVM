@@ -1588,12 +1588,20 @@ node-backed shapes + 10k–14k clutter placements.
 ## src/UI/ClassOverlay.cs
 The colour-by-class overlay (key X, `--debug-classoverlay` scripts it) — same mode set as
 `ColliderOverlay` (`--freecam`/`--anim-lab`/`--fly`/`--stunt`), a findable-targets view rather than a
-collision one (`BL-029`). Tints every drawn mesh's `MaterialOverride` flat by class: destructible
-(red, via `DestructibleRegistry.Resolve` — the exact climb a weapon hit takes), facade (pink, via
-`SceneBuilder.ClassifyBillboard` on the source `GameZMesh`, resolved back through the built node's
-`AnimRuntime.IndexMeta`), clutter (green, every `MultiMeshInstance3D` under the world root —
-nothing else in this codebase parents one there), everything else scenery (blue). Rebuilt on every
-X press rather than cached, restoring each tinted node's original `MaterialOverride` first.
+collision one (`BL-029`). Mixes a class colour over every drawn mesh at 50 % (`TintStrength`), so a
+target stays recognisable as itself: destructible (red, via `DestructibleRegistry.Resolve` — the
+exact climb a weapon hit takes), facade (pink, via `SceneBuilder.ClassifyBillboard` on the source
+`GameZMesh`, resolved back through the built node's `AnimRuntime.IndexMeta`), clutter (green, every
+`MultiMeshInstance3D` under the world root — nothing else in this codebase parents one there),
+everything else scenery (blue). Rebuilt on every X press rather than cached, clearing each tinted
+node's `csky_tint` first.
+⚠ **The tint is an instance shader parameter (`SceneBuilder.TintParam`), never a `MaterialOverride`
+  — and that is a bug fix, not a style choice.** An installed material is a different shader from
+  the world's: it defaults to `cull_back` where this world is `cull_front` (the overlay rendered
+  inside-out, 2026-08-03), it lacks the bias shader's `skip_vertex_transform` depth scale (the tint
+  z-fights its own geometry), and it lacks Clutter's billboard spin (ghost tree cards at a fixed
+  heading). Tinting inside the real shader — `SceneBuilder.TintLine`, last write to `ALBEDO`, after
+  fog — has none of those by construction, and is the only form that can blend WITH the texture.
 ⚠ **Deliberately NOT keyed on `SceneBuilder.SurfaceMeta`** — that tag answers "what does a bullet do
   here" (water/buildings/default, for impact-effect selection), not "what is this object"; two
   unrelated objects can share a surface tag.

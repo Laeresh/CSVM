@@ -22,6 +22,10 @@ public sealed class SceneBuilder
 
     public const string OpacityParam = "csky_opacity";
 
+    /// <summary>Instance shader parameter behind <see cref="TintLine"/>: rgb is the colour, alpha
+    /// the strength. Alpha 0 (the default) is untinted.</summary>
+    public const string TintParam = "csky_tint";
+
     // Equal-priority tie-break applied per-instance (nodes.json DFS order = draw order):
     // the airfield's apron detail over its base tile, road decals over rail decals. 2000x
     // smaller than DepthBiasPerLevel below, so it never competes with a real priority step.
@@ -84,6 +88,23 @@ public sealed class SceneBuilder
     /// declaration is now everywhere, only the term distinguishes a shader that actually reads
     /// opacity.</para></summary>
     internal const string OpacityTerm = " * csky_opacity";
+
+    /// <summary>The debug overlays' per-instance tint (<see cref="UI.ClassOverlay"/>), applied
+    /// as the LAST thing fragment() does to ALBEDO — after fog and the light spill, so a tinted
+    /// object reads as its class colour at any distance instead of fading into the fog wall.
+    /// <para><b>Why the tint lives in the world's own shaders rather than in an overlay
+    /// material.</b> A <c>MaterialOverride</c>/<c>MaterialOverlay</c> is a different shader: it
+    /// does not carry <c>skip_vertex_transform</c>'s depth bias, does not spin the clutter
+    /// billboards, and defaults to <c>cull_back</c> where this world is <c>cull_front</c> — all
+    /// three were visible when the class overlay did it that way (an inside-out world, then a
+    /// tint that z-fought its own geometry and ghost tree cards facing the wrong way). Tinting
+    /// inside the real shader has none of those problems by construction, and it is the only
+    /// form that can blend WITH the texture rather than replace it.</para>
+    /// <para>Emitted only into shaders that already take the instance-uniform preamble — the
+    /// opaque sprite variants declare nothing and must stay off that buffer (see the warning in
+    /// the include). <c>mix(x, t, 0.0)</c> is exactly <c>x</c>, so carrying this line changes no
+    /// pixel while the overlay is off.</para></summary>
+    internal const string TintLine = "    ALBEDO = mix(ALBEDO, csky_tint.rgb, csky_tint.a);";
 
     private const string LightShaderCode = @"
 shader_type spatial;
@@ -1259,6 +1280,7 @@ void fragment() {{");
             sb.AppendLine("    float fog_amt = csky_fog_amount(fog_world, CAMERA_POSITION_WORLD);");
             sb.AppendLine("    ALBEDO = mix(ALBEDO, csky_fog_color, csky_fog_on * fog_amt);");
         }
+        sb.AppendLine(TintLine); // the debug overlays' per-instance tint; a no-op at alpha 0
         if (blend || scissor)
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
         if (scissor)
@@ -1339,8 +1361,12 @@ void fragment() {
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({lightTerm}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {lightTerm};");
+        // Only the variants that took the preamble above have csky_tint declared at all.
         if (blend || scissor)
+        {
+            sb.AppendLine(TintLine);
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+        }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");
@@ -1417,8 +1443,12 @@ void fragment() {{
         sb.AppendLine(fogged
             ? $"    ALBEDO = mix({cylLight}, csky_fog_color, fog_amt);"
             : $"    ALBEDO = {cylLight};");
+        // As in GetBillboardShader: csky_tint exists only where the preamble was taken.
         if (blend || scissor)
+        {
+            sb.AppendLine(TintLine);
             sb.AppendLine($"    ALPHA = col.a{OpacityTerm};");
+        }
         if (scissor)
             sb.AppendLine("    ALPHA_SCISSOR_THRESHOLD = 0.5;");
         sb.AppendLine("}");

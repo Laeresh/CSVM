@@ -404,7 +404,8 @@ public sealed class ClutterBuilder
         void fragment() {
             vec4 col = vec4(csky_srgb_to_linear(COLOR.rgb), COLOR.a) * texture(albedo_tex, UV);
             ALBEDO = col.rgb{{(lit ? " * csky_world_light" : "")}};
-        {{(fogged ? FogLines : "")}}    ALPHA = col.a;
+        {{(fogged ? FogLines : "")}}{{SceneBuilder.TintLine}}
+            ALPHA = col.a;
             ALPHA_SCISSOR_THRESHOLD = 0.5;
         }
         """;

@@ -28,5 +28,6 @@ instance uniform float node_bias = 0.0;       // per-node coplanar draw-order ti
 instance uniform float csky_fog_on = 1.0;     // 0 = opt out of distance fog (the camera-anchored skydome)
 instance uniform float csky_light_fade = 1.0; // 0 = no range fade (skydome stars)
 instance uniform float csky_opacity = 1.0;    // OBJECT_OPACITY_STATE; only the alpha-writing variants USE it
+instance uniform vec4 csky_tint = vec4(0.0);  // debug overlays: rgb = colour, a = strength (0 = untinted)
 
 #endif
