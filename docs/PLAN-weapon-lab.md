@@ -100,7 +100,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven.
 
 1. ☑ A1 — `--weapon-lab` routes to flight, not the viewer (`SessionSpec`)
 2. ☑ A2 — `FlightController.Held`: the airframe holds its pose while the world sim runs
-3. ☐ A3 — `GameSession` builds the lab in the flight path, off the shared pool/effects wiring
+3. ☑ A3 — `GameSession` builds the lab in the flight path, off the shared pool/effects wiring
 
 ### Wave B — the full-rig loadout
 
@@ -189,7 +189,7 @@ gauge (`:822`) — both read `_model`, which is why the pose is re-applied throu
 than by writing `GlobalTransform` behind the model's back. Do **not** reuse `GameClock.Halted`:
 the point is that the *world* keeps running.
 
-## A3 ☐ `GameSession` builds the lab in the flight path
+## A3 ☑ `GameSession` builds the lab in the flight path
 
 **Goal.** The lab node is built in `BuildFlightRigs`, after the rigs, holding a reference to
 player 1's `FlightController` — and therefore sharing the session's fully-wired `ProjectilePool`

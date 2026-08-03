@@ -1425,16 +1425,27 @@ shapes: the `--viewer` lab owns the parked plane; the scoped lab (`--freecam`/`-
 ⚠ Built after the subject joins the tree — `GlobalTransform` on a detached node is identity + error spam.
 
 ## src/UI/WeaponLab.cs
-The `--viewer` weapon lab (key W): mounts a weapon and fires it, driving its OWN `ProjectilePool`
-so a round runs the identical ballistics flight fires. GUNS fire from the plane's gun groups,
-HARDPOINTS from its pylons; steppers pick bank/weapon/mount/target surface, a slider parks a
-stand-in target wall 15–1100 m ahead; copy-CLI-args (`--weapon-lab=<id>`).
-⚠ No chapter world: the pool is built scene-less — rockets fly streak-only, gun impacts show the
-  spark, hardpoint impacts the explosion stand-in, and `DamageSink` is null.
+The weapon lab: GUNS fire from the plane's gun groups, HARDPOINTS from its pylons; steppers pick
+bank/weapon/mount; copy-CLI-args. **Two hosts, chosen by the `host` ctor argument** (A3, the same
+one-panel/two-hosts shape `DamageLab` uses):
+- **Hosted in flight (`--weapon-lab`, key W)** — bound to player 1's HELD `FlightController` inside a
+  real chapter world, fed the session's `ProjectilePool` (`sharedPool`), so rounds carry the flyout
+  bodies, trails, authored `IMPACT` effects and `DamageSink` that flight has. The panel is top-right
+  (the gauge cluster owns the bottom-right corner in flight) and shows the bank/weapon/mount half only.
+- **Parked (`--weapon-test`)** — the no-world bench it started as: its own scene-less pool, the
+  15–1100 m stand-in target wall, the target-surface tag and its own auto-fire/fire-once volley loop.
+⚠ Hosted, this node does NOT fire: `SimStep` returns immediately and the aircraft's own trigger owns
+  the fire clock (decision 3 — the lab fires exactly what free flight fires). Do not re-add a second
+  spawn path here; B5 rewires the panel to drive the controller's live `Loadout` instead.
+⚠ Hosted, the pool is BORROWED — never `Clear()` it (that would wipe every player's rounds) and never
+  set its `Listener`; `_ownsPool` gates both. The stand-in wall is built without its collision shape,
+  so there is no 60 m box in the middle of the map to shoot or fly into.
+⚠ No chapter world (the parked host, or `--weapon-lab --stage=empty`): rockets fly streak-only, gun
+  impacts show the spark, hardpoint impacts the explosion stand-in, and `DamageSink` is null.
 ⚠ Mounts bind from the stock `Loadout`; a plane the table omits (or a bind failure) falls back to
   the raw firepoint/pylon marker rig.
-⚠ A live volley (`FireVolley`, the trigger/auto-fire path) fires one mount node per pull and
-  alternates, mirroring `FlightController.UpdateGuns`'s per-group muzzle cursor — never every node
+⚠ A live volley (`FireVolley`, the parked host's trigger/auto-fire path) fires one mount node per pull
+  and alternates, mirroring `FlightController.UpdateGuns`'s per-group muzzle cursor — never every node
   at once. `RunSelfTest` is the one exception: it still fires every node of a mount directly (not
   through `FireVolley`), for the `--weapon-test` pass check across all 48 weapons.
 
@@ -1642,6 +1653,10 @@ when `_spec.AnimLab`, else `.Session`), which is also where `TexturesOutliveBuil
   atomically under `_worldRoot`. Only three non-child duties run in `_Notification(ExitTree)` —
   null `GameClock.Current`, `Dispose()` `_worldLights` + `_sessionTextures` — all null-guarded
   (no double-free after a failed build) and race-free (menu relaunch is a frame later).
+⚠ **The weapon lab is built in `BuildFlightRigs`, not the viewer path** (A3): it needs the session's
+  `ProjectilePool` + world-effects wiring and player 1's held controller, all of which exist only
+  there. The viewer path keeps exactly one weapon-lab construction — the `--weapon-test` self-check on
+  a parked plane, which quits the session. `DriveSimSteps` no longer steps a lab or a second pool.
 ⚠ **`--pos`/`--direction` are routed by mode in ONE place** (`ResolvePlacement`): flight gets
   `_spawnAt`/`_spawnDir`, everything else `_camPos`/`_camDir`. **Never fold `_camDir` into
   `_lookAt`** — `--lookat` is a POINT, `--direction` a vector; only flight converts one to the other.

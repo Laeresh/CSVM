@@ -12213,3 +12213,36 @@ clip needs the margin quoted with it.
 the counter was stale, `BL-246` was already taken), `playtest.md` (`CAP-01` row retired; it owed
 only `BL-092`), `FINDINGS.md`, `compass.py` (new), `run2.py` + `anchor.py` (`cap01` added to their
 clip lists so a cold start reproduces this).
+
+**PLAN-weapon-lab A3: the lab is built in the flight path, off the shared pool/effects wiring
+(2026-08-03).** `GameSession.BuildFlightRigs` now builds the `WeaponLab` panel at its end, bound to
+player 1's held `FlightController` (A2) and handed the session's own `ProjectilePool` — the fully
+wired one, with `flyoutGamez`/`flyoutScene`/`flyoutAnims`, the world-effects `EffectSink` and the
+destructible `DamageSink` — instead of the scene-less pool the lab used to build for itself. The
+viewer-side lab construction and the `_weaponLabNode.SimStep` + second-pool fork in `DriveSimSteps`
+are gone; the controller owns the fire clock, so `--weapon-fire` now holds the aircraft's real
+trigger (rockets when the selected weapon is a hardpoint weapon, guns otherwise), and `InfiniteAmmo`
+defaults on so a soak run never dries up. `WeaponLab` grew a `host`/`sharedPool` pair rather than a
+second class (the `DamageLab` one-panel/two-hosts shape): hosted, it never clears or re-listens the
+borrowed pool, builds the stand-in wall WITHOUT its collision shape (the world is the target,
+decision 1), returns immediately from `SimStep`, hides the wall/auto-fire controls that no longer
+mean anything, and moves the panel to the top-right because the gauge cluster owns the bottom-right
+corner in flight. `--weapon-test` keeps the parked no-world host it needs (D9 splits it out).
+
+**Verified.** `--weapon-lab=wep_06 --plane=player_bhawk --chapter=C1 --weapon-fire --frames=240
+--log=weapons,anim`: `world-effects runtime: 147/147 effect template(s) staged`, `flyout model
+'he_rocket' (wep_06) instanced`, `rocket trail 'he_rocket' (wep_06): 1 puffer state(s)`, then
+repeated `rocket: wep_06 (BOOM) from pylon1, ∞ left` → `impact: wep_06 (BOOM) -> Default at
+(-6312,326,-6203) … fx=he_ground_effect snd=snd_missile_explode`. The same shot from `--fly
+--fire-rockets --infinite-ammo` logs the identical flyout/trail/effect/sound and the same surface
+class — the only difference is that the lab's impacts land on one fixed point (the plane is held)
+while flight's walk across the terrain. `--stage=empty` prints the one-line fallback notice instead
+of silently drawing stand-ins. `--weapon-test --plane=player_bhawk`: still 48/48 fired OK, 0 errors,
+0 skipped. `.\RunTests.ps1` PASS — 395/395 units, 21/21 engine suites, 13/13 goldens hash-identical,
+including the 8 chapter `--freecam` shots and `viewer-bhawk` (the viewer's hidden lab node is gone;
+its frame is unchanged).
+
+**Note.** The panel's steppers still only *read* — picking a weapon does not yet re-arm the plane
+(B4/B5), and the mount stepper does not yet drive the controller's selectors, though A2 exposed
+`SelectGunGroup`/`SelectPylon` for exactly that. `docs/cli.md` + `docs/controls.md` were corrected in
+this turn (W moved from the `--viewer` table to the flight one); D10 is still the full doc pass.

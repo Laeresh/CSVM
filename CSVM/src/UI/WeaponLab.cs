@@ -58,7 +58,13 @@ public sealed partial class WeaponLab : Node3D
     private readonly List<Mount> _gunMounts = new();
     private readonly List<Mount> _pylonMounts = new();
 
+    // A3: the flight session's held aircraft this lab is bound to, or null for the parked
+    // (--weapon-test) host. Set means the world IS the target, the session's pool is the pool, and
+    // the aircraft's own trigger — not this node — owns the fire clock.
+    private readonly Flight.FlightController? _host;
+
     private ProjectilePool _pool = null!;
+    private bool _ownsPool;                       // false when a flight session lent us its pool
 
     private StaticBody3D _target = null!;
     private MeshInstance3D _targetMesh = null!;
@@ -94,12 +100,14 @@ public sealed partial class WeaponLab : Node3D
     private bool _suppress; // set while rewriting widgets from a state change
 
     public WeaponLab(Node3D plane, WeaponDefs weapons, Loadout? loadout,
-        TextureArchive textures, Camera3D camera, string planeModel)
+        TextureArchive textures, Camera3D camera, string planeModel,
+        Flight.FlightController? host = null, ProjectilePool? sharedPool = null)
     {
         _plane = plane;
         _textures = textures;
         _camera = camera;
         _planeModel = planeModel;
+        _host = host;
         _all = new List<WeaponDef>(weapons.All);
         foreach (var w in _all)
         {
@@ -109,7 +117,7 @@ public sealed partial class WeaponLab : Node3D
         Name = "weapon_lab";
         // The pool + target build now (not in _Ready) so RunSelfTest works synchronously right after
         // the lab joins the tree, before _Ready runs; child nodes may be built pre-tree.
-        BuildScene();
+        BuildScene(sharedPool);
     }
 
     /// <summary>The lab's own projectile pool, a child of this node — so a session driving the
@@ -136,13 +144,25 @@ public sealed partial class WeaponLab : Node3D
 
     public override void _Ready()
     {
-        _pool.Listener = _camera;
+        if (_ownsPool)
+        {
+            _pool.Listener = _camera;   // the session already set its own listener on a lent pool
+        }
         BuildUi();
         ResolveInitialSelection();
-        _autoFire = AutoFireAtStart;
+        // Hosted: the aircraft's trigger fires (this node's own volley loop is inert, see SimStep),
+        // there is no wall to show, and the panel is up whenever the lab was asked for.
+        _autoFire = _host == null && AutoFireAtStart;
         _panel = DebugShow;
-        _engaged = DebugShow || AutoFireAtStart;
-        PlaceTarget();
+        _engaged = _host != null || DebugShow || AutoFireAtStart;
+        if (_host != null)
+        {
+            _showTarget = false;
+        }
+        else
+        {
+            PlaceTarget();
+        }
         SyncState();
     }
 
@@ -162,6 +182,13 @@ public sealed partial class WeaponLab : Node3D
     /// Public because a non-realtime clock has the session call this instead of the physics tick.</summary>
     public void SimStep(float dt)
     {
+        if (_host != null)
+        {
+            // A3: hosted in flight, the FlightController owns the fire clock — the lab must not
+            // spawn a second, parallel stream of rounds beside the real trigger (B5 rewires the
+            // panel to drive that trigger's loadout instead, and deletes this loop).
+            return;
+        }
         bool firing = _engaged && (_autoFire || _spaceHeld);
         if (!firing || SelectedWeapon is not { } w || BankMounts.Count == 0)
         {
@@ -488,16 +515,37 @@ public sealed partial class WeaponLab : Node3D
         }
     }
 
-    private void BuildScene()
+    private void BuildScene(ProjectilePool? sharedPool)
     {
-        // No world scene: rockets fly streak-only, gun impacts show the spark, hardpoint impacts show
-        // the pool's explosion stand-in (no real puffer runtime), and there is no DamageSink.
-        _pool = new ProjectilePool(_textures, null, null);
-        AddChild(_pool);
+        // Hosted in a flight session (A3): fire into the session's fully-wired pool — world gamez +
+        // scene (rocket FLYOUT bodies), the flyout anims (smoke trails), the world-effects EffectSink
+        // (authored impact effects) and the destructible DamageSink. The session owns it, so this
+        // node neither adds nor clears it. Standalone (--weapon-test): its own scene-less pool —
+        // rockets fly streak-only, gun impacts show the spark, hardpoint impacts show the pool's
+        // explosion stand-in (no real puffer runtime), and there is no DamageSink.
+        _ownsPool = sharedPool == null;
+        if (sharedPool != null)
+        {
+            _pool = sharedPool;
+        }
+        else
+        {
+            _pool = new ProjectilePool(_textures, null, null);
+            AddChild(_pool);
+        }
 
-        var shape = new BoxShape3D { Size = new Vector3(TargetSize, TargetSize, 0.5f) };
         _target = new StaticBody3D { Name = "weapon_target", Visible = false };
-        _target.AddChild(new CollisionShape3D { Shape = shape });
+        // The stand-in wall is the no-world host's only target. In a chapter world the real surfaces
+        // are the target (decision 1), so the hosted lab builds the body WITHOUT its collision shape
+        // — a 60 m box in the middle of the map would be the one thing the lab must not shoot at,
+        // and the plane could fly into it. B5 deletes the wall outright.
+        if (_host == null)
+        {
+            _target.AddChild(new CollisionShape3D
+            {
+                Shape = new BoxShape3D { Size = new Vector3(TargetSize, TargetSize, 0.5f) },
+            });
+        }
         _targetMat = new StandardMaterial3D
         {
             Transparency = BaseMaterial3D.TransparencyEnum.Alpha,
@@ -577,7 +625,14 @@ public sealed partial class WeaponLab : Node3D
         if (!on)
         {
             _spaceHeld = false;
-            _pool.Clear(); // no tracers hang in the air once the lab is put away
+            if (_ownsPool)
+            {
+                _pool.Clear(); // no tracers hang in the air once the lab is put away
+            }
+        }
+        if (_host != null)
+        {
+            _engaged = true;   // the held aircraft stays armed whether or not the panel is up
         }
         SyncState();
     }
@@ -622,10 +677,16 @@ public sealed partial class WeaponLab : Node3D
     private string CliArgs()
     {
         var sb = new StringBuilder();
-        sb.Append("--viewer --plane=").Append(_planeModel);
+        // Hosted, the lab IS the session (--weapon-lab routes to flight, A1), so the line reproduces
+        // that; the parked --weapon-test host still names the viewer it lives in.
+        sb.Append(_host != null ? "--plane=" : "--viewer --plane=").Append(_planeModel);
         if (SelectedWeapon is { } w)
         {
             sb.Append(" --weapon-lab=").Append(w.Id);
+        }
+        else if (_host != null)
+        {
+            sb.Append(" --weapon-lab");
         }
         var mounts = BankMounts;
         if (mounts.Count > 0 && mounts[_mountIndex].Cli != "all")
@@ -697,13 +758,18 @@ public sealed partial class WeaponLab : Node3D
         var root = new Control { MouseFilter = Control.MouseFilterEnum.Ignore };
         root.SetAnchorsPreset(Control.LayoutPreset.FullRect);
 
-        // Bottom-right, the one free corner — DamageLab is top-left, LiveryLab top-right, MeshLab
-        // bottom-left, so all four can be open at once without overlapping.
+        // Parked: bottom-right, the one free corner — DamageLab is top-left, LiveryLab top-right,
+        // MeshLab bottom-left, so all four can be open at once without overlapping. Hosted in
+        // flight (A3) that corner belongs to the gauge cluster (GaugeCluster's right-hand dials are
+        // 420 px from the right edge in reference space), so the panel takes the top-right instead —
+        // free unless F5 opens the damage lab.
         var panel = new PanelContainer { SelfModulate = new Color(1, 1, 1, 0.85f) };
-        panel.SetAnchorsPreset(Control.LayoutPreset.BottomRight);
+        panel.SetAnchorsPreset(_host != null
+            ? Control.LayoutPreset.TopRight
+            : Control.LayoutPreset.BottomRight);
         panel.GrowHorizontal = Control.GrowDirection.Begin;
-        panel.GrowVertical = Control.GrowDirection.Begin;
-        panel.Position = new Vector2(-8, -8);
+        panel.GrowVertical = _host != null ? Control.GrowDirection.End : Control.GrowDirection.Begin;
+        panel.Position = new Vector2(-8, _host != null ? 8 : -8);
 
         var margin = new MarginContainer();
         foreach (var side in new[] { "margin_left", "margin_right", "margin_top", "margin_bottom" })
@@ -714,8 +780,14 @@ public sealed partial class WeaponLab : Node3D
         box.AddThemeConstantOverride("separation", 3);
 
         box.AddChild(new Label { Text = "WEAPON LAB" });
-        box.AddChild(Small("W hides · Space fires · orbit + zoom to watch the impact"));
-        box.AddChild(Small("no world: rockets fly as streaks, impacts are stand-ins"));
+        // The two hint lines describe the host: a real chapter world with the plane's own trigger
+        // (A3), or the parked no-world bench.
+        box.AddChild(Small(_host != null
+            ? "W hides · Space fires the guns · F fires a rocket"
+            : "W hides · Space fires · orbit + zoom to watch the impact"));
+        box.AddChild(Small(_host != null
+            ? "held in a real world: authored impacts, rocket flyout + trail"
+            : "no world: rockets fly as streaks, impacts are stand-ins"));
 
         // bank stepper (guns fire from gun groups, hardpoints from pylons)
         _bankLabel = new Label { CustomMinimumSize = new Vector2(300, 0), VerticalAlignment = VerticalAlignment.Center };
@@ -748,7 +820,8 @@ public sealed partial class WeaponLab : Node3D
         mountRow.AddChild(StepButton(">", () => StepMount(1)));
         box.AddChild(mountRow);
 
-        box.AddChild(Separator());
+        var targetSeparator = Separator();
+        box.AddChild(targetSeparator);
 
         // target controls
         _targetLabel = new Label();
@@ -788,7 +861,8 @@ public sealed partial class WeaponLab : Node3D
         };
         box.AddChild(_targetToggle);
 
-        box.AddChild(Separator());
+        var fireSeparator = Separator();
+        box.AddChild(fireSeparator);
 
         // fire controls
         _autoFireToggle = new CheckButton { Text = "auto-fire (hold trigger)" };
@@ -811,6 +885,21 @@ public sealed partial class WeaponLab : Node3D
             }
         };
         box.AddChild(fire);
+
+        // Hosted in flight, the wall and this node's own trigger are both gone (the world is the
+        // target, the aircraft's trigger fires) — so their controls are hidden rather than left on
+        // screen doing nothing. B5 rebuilds this half of the panel to drive the live loadout.
+        if (_host != null)
+        {
+            foreach (var dead in new Control[]
+                     {
+                         targetSeparator, _targetLabel, distSlider, surfaceRow, _targetToggle,
+                         fireSeparator, _autoFireToggle, fire,
+                     })
+            {
+                dead.Visible = false;
+            }
+        }
 
         box.AddChild(Separator());
 

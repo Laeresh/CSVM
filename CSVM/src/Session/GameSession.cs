@@ -137,7 +137,6 @@ public partial class GameSession : Node3D
     // the tree order Godot's physics tick would have used. Dropped by ReturnToMenu.
     private ProjectilePool? _projectiles;
     private IncomingFire? _incomingFire;   // --incoming: the near-miss test rig
-    private UI.WeaponLab? _weaponLabNode;
     // rolling mirrored-tile window past the map edge
     private Mech3.MapEdgeExtender? _edgeExtender;
     // the splitscreen pane rig (null in single player)
@@ -1047,13 +1046,12 @@ public partial class GameSession : Node3D
             _worldRoot!.AddChild(new UI.MarkerOverlay(_plane) { StartHidden = !_spec.MarkersOverlay });
             state.What += _spec.MarkersOverlay ? " + marker overlay" : " + marker overlay (K)";
         }
-        // Weapon lab (--viewer --plane, key W): mount any of the 48 weapons on any of the plane's
-        // firepoints/pylons and fire, watching the muzzle flash, tracer/rocket body and impact on a
-        // stand-in target wall. Parked plane only (a chapter world has no aircraft marker rig)
-        // and after the plane joins the tree — it reads each marker's GlobalTransform. Built in
-        // every parked --viewer session so W always toggles it, hidden unless --weapon-lab opened it,
-        // so an unadorned viewer screenshot is unchanged (the target + tracers show only while engaged).
-        if (_spec.Viewer && !_spec.WorldMode && _plane != null)
+        // --weapon-test: the 48-weapon pass check on a PARKED plane — the one weapon-lab host left in
+        // the viewer path. The interactive lab moved to flight (A3: it needs a real world, the
+        // session's pool and a real trigger), but this probe deliberately keeps the cheap no-world
+        // path: it only asks whether every weapon mounts and spawns without throwing, which needs no
+        // chapter, no colliders and no frame. D9 splits it out of WeaponLab entirely.
+        if (_spec.WeaponTest && _spec.Viewer && !_spec.WorldMode && _plane != null)
         {
             long mark = StartupProfile.Mark();
             var labWeapons = WeaponDefs.Load(state.ZrdrPath, Messages.Load(state.MessagesPath));
@@ -1077,28 +1075,16 @@ public partial class GameSession : Node3D
                     break;
                 }
             }
-            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName)
-            {
-                DebugShow = _spec.WeaponLab,
-                InitialWeapon = _spec.WeaponSelect,
-                InitialMount = _spec.WeaponMount,
-                AutoFireAtStart = _spec.WeaponFire,
-            };
+            var weaponLab = new UI.WeaponLab(_plane, labWeapons, labLoadout, state.Textures, _camera, _spec.PlaneName);
             _worldRoot!.AddChild(weaponLab);
-            _weaponLabNode = weaponLab;
-            // --weapon-test: mount and fire every one of the 48 weapons once and report any that
-            // throw, then quit (windowless under --headless). The report is
-            // synchronous (Spawn does the muzzle math + pool insert without needing a frame), so no
-            // world tick is required.
-            if (_spec.WeaponTest)
-            {
-                string report = weaponLab.RunSelfTest();
-                GD.Print(report);
-                _probeRunner.WriteScratch("weapon_test.txt", report);
-                GetTree().Quit();
-                return false;
-            }
-            state.What += _spec.WeaponLab ? " + weapon lab" : " + weapon lab (W)";
+            // Mount and fire every one of the 48 weapons once and report any that throw, then quit
+            // (windowless under --headless). The report is synchronous (Spawn does the muzzle math +
+            // pool insert without needing a frame), so no world tick is required.
+            string report = weaponLab.RunSelfTest();
+            GD.Print(report);
+            _probeRunner.WriteScratch("weapon_test.txt", report);
+            GetTree().Quit();
+            return false;
         }
         return true;
     }
@@ -1340,6 +1326,54 @@ public partial class GameSession : Node3D
         else if (_spec.DamageLab)
         {
             GD.Print($"damage lab: '{_spec.PlaneName}' has no destroyable_parts");
+        }
+
+        // The weapon lab in flight (A3): the panel the viewer used to host, now bound to player 1's
+        // HELD aircraft (A2) inside a real chapter world — so it fires through the session's own
+        // fully-wired ProjectilePool (flyout gamez/scene/anims, the world-effects EffectSink and the
+        // destructible DamageSink, all built above) instead of the scene-less pool it used to build
+        // for itself. Nothing here is per-player: the lab is one overlay on one aircraft, like the
+        // damage lab above. --weapon-test never reaches this path (it stays a parked-plane probe).
+        if (_spec.WeaponLab && _rigs.Count > 0 && _rigs[0] is { Controller: { PlaneModel: not null } p1c } labRig)
+        {
+            // A soak run must never dry up: the lab exists to watch a weapon fire, not to manage
+            // ammo. Explicit flags still win — --ammo=N caps the load on purpose.
+            p1c.InfiniteAmmo = true;
+            var lab = new UI.WeaponLab(p1c.PlaneModel, weaponDefs, p1c.Loadout, state.Textures,
+                labRig.Camera, _spec.PlaneName, host: p1c, sharedPool: projectiles)
+            {
+                DebugShow = true,   // the lab IS the session now — the panel is why you launched it
+                InitialWeapon = _spec.WeaponSelect,
+                InitialMount = _spec.WeaponMount,
+            };
+            _worldRoot!.AddChild(lab);
+            // --weapon-fire: hold the real trigger, the one free flight pulls (decision 3). Which
+            // trigger depends on the selected weapon's own class — a hardpoint weapon launches from
+            // the pylons, everything else fires from the gun groups.
+            if (_spec.WeaponFire)
+            {
+                bool rockets = _spec.WeaponSelect is { } sel
+                    && weaponDefs.All.FirstOrDefault(w =>
+                        string.Equals(w.Id, sel, StringComparison.OrdinalIgnoreCase)) is { IsGun: false };
+                p1c.AutoFire = !rockets;
+                p1c.AutoFireRockets = rockets;
+            }
+            GD.Print($"weapon lab: '{_spec.PlaneName}' held " +
+                     (_spec.EmptyStage ? "on the empty stage" : $"in {_spec.Chapter}") +
+                     ", firing through the session pool" +
+                     (_spec.WeaponFire ? " (--weapon-fire: trigger held)" : ""));
+            // The authored impact/destruction effects need the world-effects runtime, which is only
+            // built when there IS a world program — say so rather than silently drawing stand-ins.
+            if (state.WorldScene == null)
+            {
+                GD.Print("weapon lab: no world program on this stage — impacts fall back to the " +
+                         "pool's stand-in burst and rockets fly without their FLYOUT body/trail");
+            }
+            state.What += " + weapon lab";
+        }
+        else if (_spec.WeaponLab)
+        {
+            GD.Print("weapon lab: no flight rig to host it (nothing was built to hold)");
         }
 
         // The race's shared results board: one ranked row per player, over the
@@ -1673,11 +1707,8 @@ public partial class GameSession : Node3D
             {
                 rig.Controller?.SimStep(dt);
             }
-            if (_weaponLabNode != null)
-            {
-                _weaponLabNode.SimStep(dt);
-                _weaponLabNode.Pool.SimStep(dt);
-            }
+            // The weapon lab has no sim step of its own any more (A3): it is hosted by player 1's
+            // FlightController, which owns the fire clock, and fires into _projectiles above.
         }
     }
 
