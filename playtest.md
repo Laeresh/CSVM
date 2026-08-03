@@ -59,7 +59,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
-| `CAP-06` | Graded stall-warning reference | The airspeed dial's warning blink **through the approach to stall**, not only after it | `BL-148` |
 | `CAP-20` | Throttle equilibria + a shallow held climb | Two level runs held to equilibrium at **1/4** and **1/2** throttle (the thrust-vs-throttle curve), then a **shallow, steady climb** at fixed throttle — shallow enough that the ADI does **not** saturate, i.e. keep the nose under ~+25°, and hold it 10 s+. `CAP-05`'s 50%-throttle clip failed on exactly this: it was a zoom, the ADI pinned at sky fraction 0.730, and the nose angle became unreadable | `BL-115` (`ClimbGravityScale`), `BL-092` |
 
 ### HUD — ammo gauge in frame

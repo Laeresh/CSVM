@@ -12858,3 +12858,57 @@ surfaces, exactly matching `piratezep`'s own subtree size measured via `--viewer
 ("1 name(s) not in the built world"), where it previously resolved and was hidden only by the
 origin-parked heuristic. C5's `piratezep` (`active: true`) was confirmed unaffected: still built, and
 still switched off only by the pre-existing `HideUnplacedEntities` origin heuristic, not by this item.
+
+## 2026-08-04 — `CAP-06` decoded: the stall warning ramps by blink RATE, on a threshold above the stall
+
+Two clips (`CAP-06.mp4` 22.8 s, `CAP-06 2.mp4` 31.5 s; Bloodhawk, 2560×1440), both gating rigid —
+dx correlation +1.00, registration peak 0.72–0.73, zero panel translation. `CAP-06 2` is the capture
+the row asked for: a level deceleration from 299.4 mph all the way to 76.9 mph with altitude drifting
+only 1232 → 1299 ft, so the approach to the stall is fully covered rather than just its aftermath.
+The two `CAP-05` stall clips were pooled in as well (user's suggestion) — same panel geometry, and
+`CAP-05  Stall 50% thrust climb` reaches **42.8 mph = 0.143 fd**, far below anything `CAP-06` flies.
+`CAP-06` is discharged and its `playtest.md` row retired; `BL-148` is unblocked and rewritten.
+
+**Brightness is binary — the opacity half of the wanted fix is disproved.** The `STALL` plate (the
+red window above the speedometer hub, game x 892–918, y 548–558) reads **211.0 ± 0.2** lit and
+**41.7 ± 0.2** unlit, and those two levels are identical in every speed bin from 43 to 90 mph across
+all four clips. No intermediate value occurs at any speed. Duty cycle is 0.50 throughout.
+
+**The ramp is real, but it is in the RATE.** The blink half-period shortens monotonically with stall
+depth — 13.9 game frames at the threshold, 12.7 at 0.27 fd, 10.1 at 0.23, 9.0 at 0.21, 6.4 at 0.15 —
+which is a full period of **1285 ms sim at the threshold falling to 592 ms** deep in the stall.
+Across 105 pooled dwells **every dwell is an integer number of 33.37 ms game frames** (lattice
+residual ≤ 8 ms), so the lamp toggles on a frame counter. Half-period ≈ `5.9·V(mph) − 62` ms wall, or
+`5.1·V` through the origin; the residual is 36 ms — one frame — either way, so the data does not
+separate those forms and neither extrapolates below ~43 mph. It is keyed to speed and not to
+time-since-onset: in `CAP-06.mp4` the speed dips to 65 mph and recovers, and the blink rate falls and
+rises again with it, with no hysteresis at the threshold (on at 89.9/90.0 mph decelerating,
+90.0/89.9 accelerating). Ours is a fixed 400 ms, so we are ~3× too fast at the threshold and flat
+where the original ramps.
+
+**The warning fires on a different threshold from the stall, which is what the item was blocked on.**
+The lamp lights at **0.2989 / 0.2992 / 0.2994 / 0.2996 fd** across the four clips — 0.30 fd, exactly
+our `StallSpeedFrac`, so that constant is *right for the warning*. The nose-drop measured yesterday
+from `CAP-05` is at 0.25 fd. Both were then confirmed inside a single clip, which removes any
+cross-clip assumption: in `CAP-05 Stall 0% Thrust no input` the lamp lights at 7.96 sim s / 89.9 mph
+while the nose is still held at +4.3°, and the nose does not break until 10.60 sim s / 75.0 mph — the
+warning **leads the stall by 2.64 sim s and 14.9 mph (0.050 fd)**. So yesterday's reading that
+`StallSpeedFrac` 0.30 "stalls ~15 mph early" was half right: the constant is correct where it drives
+the *warning* and wrong where it drives the *nose-drop*, and the fix is to **split** it rather than
+move it. Our single `isStalled()` boolean drives both from one number and cannot express this.
+
+**⚠ Method trap, recorded because it nearly produced a confident wrong answer.** The first automated
+hunt for the lamp — "find the pixels that brighten when slow" — landed on the **speedometer needle**
+sweeping into the low-speed part of the dial. It yielded a clean-looking monotone brightness ramp
+(+21 luma at 0.35 fd rising to +36 at 0.25 fd) that would have been reported as the graded-opacity
+cue the item predicted. What exposed it was that the "ramp" *peaked and then fell away* below
+75 mph — the needle sweeping past — and a zoomed still then showed the box sitting on bare dial face
+next to the hub, with the real `STALL` plate 50 px away. This is the needle-vs-window confusion
+`reader2.py`'s high-pass already exists to handle, met from the other side; `FINDINGS.md` now carries
+it as a trap. Nothing was believed off a waveform until the box was checked against a still.
+
+Method notes: no pipeline changes — both keys were already in `extract.py`'s `CLIPS`. The plate is
+read in *colour* directly from the video, since the panel-strip cache is luma-only and the cue is
+red-on-dark-red. `anchor.py` margins were 2.25× (`cap06`) and 6.14× (`cap06b`); nothing here depends
+on absolute altitude. All periods are quoted in sim seconds at k = 1.390 with the wall figures
+alongside — implementing the wall numbers would run our blink 39% fast.

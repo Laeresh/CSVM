@@ -177,6 +177,40 @@ is degenerate.** A free 4-parameter fit runs `C` to its bound; holding `g` and r
 the degeneracy trap below. The descent leg also flies at ~+7° AoA against the climb leg's ~0°, so
 any AoA-dependent drag is being absorbed into `g`/`C` as well.
 
+**The stall warning is a blink-RATE ramp on a second, higher threshold — measured 2026-08-04 from
+`CAP-06` plus the two `CAP-05` stall clips.** The `STALL` plate is the red window above the
+speedometer hub, **game x 892–918, y 548–558**. It is read in *colour* from the video, not from the
+luma cache, and the box is kept to the plate's left two-thirds:
+
+⚠ **The first automated hunt for it found the NEEDLE instead.** Locating the lamp as "the pixels
+that brighten when slow" lands on the speedometer needle sweeping into the low-speed part of the
+dial — it produces a convincing monotone "ramp" that then *peaks and falls away* as the needle
+sweeps past. This is the same needle-vs-window confusion `reader2.py` high-passes away, met from the
+other side. Confirm any lamp box against a zoomed still before believing a waveform off it.
+
+| what | measurement |
+|---|---|
+| threshold, four clips | **0.2989 / 0.2992 / 0.2994 / 0.2996 fd** — i.e. 0.30 fd |
+| lit / unlit plate red | **211.0 ± 0.2** / **41.7 ± 0.2**, identical at every speed |
+| duty cycle | **0.50** |
+| half-period at threshold | 13.9 frames = 462 ms wall = **643 ms sim** |
+| half-period at 0.15 fd | 6.4 frames = 213 ms wall = **296 ms sim** |
+| hysteresis | none — on at 89.9/90.0 mph decelerating, 90.0/89.9 accelerating |
+
+**Brightness is binary; only the rate ramps.** The two levels never take an intermediate value in any
+of 105 pooled dwells spanning 43–90 mph. **Every dwell is an integer number of 33.37 ms game frames**
+(lattice residual ≤ 8 ms), so the lamp toggles on a frame counter. Half-period ≈ `5.9·V(mph) − 62` ms
+wall, or `5.1·V` through the origin — residual 36 ms, one frame, so those two forms are not
+separable here and neither extrapolates below ~43 mph. The rate tracks *speed*, not time-since-onset:
+in `CAP-06.mp4` the speed dips to 65 mph and recovers, and the blink rate falls and rises again with
+it.
+
+⚠ **The warning threshold and the stall itself are different numbers.** The lamp lights at 0.30 fd;
+the nose does not drop until **0.25 fd**. Measured inside a single clip — in `CAP-05 Stall 0% Thrust
+no input` the lamp lights at 7.96 sim s / 89.9 mph with the nose still held at +4.3°, and the break
+comes at 10.60 sim s / 75.0 mph, so the warning **leads the stall by 2.64 sim s and 14.9 mph**. Any
+model driving both cues off one threshold is wrong by construction.
+
 **`player.json` ships a physics block almost none of which is consumed** (units unverified;
 found while chasing the clock, alongside the already-used `nom_gravity 20.0` and
 `stall_mag 1.25`):
@@ -422,5 +456,6 @@ the spread only a trigger for computing it.
 | 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
 | 7 | Sustained knife-edge | ✅ **decoded 2026-08-04** from the two `CAP-05` knife clips — a 4° nose step then an unbounded 0.7–0.9 °/sim-s sag, 540 m lost in 38.9 sim s, turning only 0.7–1.1 °/sim-s at 100° bank (`BL-247`; closed `BL-124`) |
 | 8 | Stall entry and recovery, engine off | ✅ **decoded 2026-08-04** from `CAP-05 Stall 0% Thrust no input` — break at 0.25 fd, nose drop 3.4 °/sim-s to a −22° floor, and the low-speed drag curve (`BL-115`, `BL-092`) |
-| 9 | Level runs at 1/4 and 1/2 throttle, held to equilibrium | ❌ owed — the thrust-vs-throttle curve. `CAP-05`'s 50%-throttle clip cannot serve: its ADI saturates in the climb, so the nose angle (and with it the along-path thrust) is unreadable |
 | 6 | Level top speed at 5500 / 6000 / 6500 ft, plus the cap | ✅ **decoded 2026-08-03** from the four `CAP-03` clips — flat 300 mph to 1988 m, then a hard altitude clamp at 2003 m (`BL-094`). 6800 ft is unreachable: the aircraft cannot be flown above the clamp |
+| 9 | Level runs at 1/4 and 1/2 throttle, held to equilibrium | ❌ owed — the thrust-vs-throttle curve. `CAP-05`'s 50%-throttle clip cannot serve: its ADI saturates in the climb, so the nose angle (and with it the along-path thrust) is unreadable |
+| 10 | Approach to stall with the speedometer readable | ✅ **decoded 2026-08-04** from the two `CAP-06` clips (+ both `CAP-05` stalls) — warning is binary in brightness, ramped in blink rate, threshold 0.30 fd against the stall's own 0.25 (`BL-148`) |

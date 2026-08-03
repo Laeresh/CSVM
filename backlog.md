@@ -1741,6 +1741,10 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
     wrong rate. The break is wings-level and clean: the compass turns **0.0°** across the whole
     24.8 sim s, no wing drop. ⚠ Note `StallSpeedFrac` **0.30** is implicated too — the original breaks
     at 0.25 fd, not 0.30 — but that constant is outside this entry; raise it with `BL-148`.
+    **Resolved 2026-08-04 by `CAP-06`: the constant is `split`, not moved.** The original's *warning*
+    lights at 0.299 fd (four clips) — 0.30 is correct there — while the *nose-drop* is at 0.25 fd,
+    measured in the same frames of the same clip. So the nose-drop needs its own threshold and
+    `StallSpeedFrac` 0.30 stays where it is for the warning; `BL-148` owns the split.
   - **`LowSpeedDragBlend` 0.35 gives 4–6× too much drag below cruise.** The same clip is a
     thrust-free drag probe: measured `D` is **0.36 / 1.11 / 2.82 / 3.74 m/s²** at x = 0.25 / 0.35 /
     0.46 / 0.50 against our **7.69 / 12.13 / 17.91 / 20.25**. The ratio survives every `(g, C)` pair
@@ -1767,30 +1771,59 @@ scripted screenshot. **Consolidated actionable index: [`playtest.md`](playtest.m
   (the shipped camera data — landed; its residue is `BL-248`) and `BL-150` (the plan-sized rebuild
   covering layout, easing, interrupts, and the +/− trim). Kept as a retired ID, not deleted, per this
   file's permanent-ID rule.
-- `BL-148` **Stall warning is binary, not graded — and the ramp itself doesn't exist yet.**
-  `GaugeCluster.cs:247` gates the blink on `Stalled && WarnPhaseOn` — `Stalled` is a hard boolean from
-  `FlightModel.isStalled()` (`FlightModel.cs:328-332`, a single `Speed < stallSpeed` threshold with no
-  margin state) and `WarnPhaseOn` is a fixed 50%-duty blink at `WarnBlinkPeriod` **0.4 s**
-  (`GaugeCluster.cs:51,130`) — so the cue snaps on at full intensity the instant the boolean flips,
-  never rising as the stall approaches. The **[spec]** target wants a rising ramp. *Wanted:* a
-  proximity fraction (e.g. margin above `stallSpeed`) driving blink rate or opacity before `Stalled`
-  itself goes true.
-  *Blocked on `CAP-06`* (`playtest.md` §0) — for the *warning ramp*. **The threshold it ramps toward
-  is already measured: `CAP-05` (2026-08-04) puts the original's stall break at 0.25 fd, against our
-  `StallSpeedFrac` 0.30.** In `CAP-05 Stall 0% Thrust no input` the nose holds +4.2 ± 0.1° until
-  **76 mph = 0.25 fd** and the minimum speed reached is 69.8 mph = **0.232 fd**; we begin the
-  nose-drop at 0.30 fd = 90 mph, so we stall ~15 mph early. `StallSpeedFrac` is this entry's to move
-  because `isStalled()` is what both the nose-drop and the blink read — but ⚠ **do not move it
-  without `CAP-06`**: the same constant sets where the warning window lights, and `CAP-06` is the
-  clip that says whether the original's warning and its nose-drop share one threshold at all.
+- `BL-148` **Stall warning: the ramp is real, but it is a BLINK-RATE ramp and it needs a second
+  threshold.** `GaugeCluster.cs:247` gates the blink on `Stalled && WarnPhaseOn` — `Stalled` is a hard
+  boolean from `FlightModel.isStalled()` (`FlightModel.cs:328-332`, a single `Speed < stallSpeed`
+  threshold with no margin state) and `WarnPhaseOn` is a fixed 50%-duty blink at `WarnBlinkPeriod`
+  **0.4 s** (`GaugeCluster.cs:51,130`) — so the cue snaps on at one fixed rate the instant the boolean
+  flips, and never changes again however deep the stall goes.
+  **Measured 2026-08-04 from `CAP-06` (two clips) plus the two `CAP-05` stall clips — four clips, all
+  gating rigid.** The `STALL` plate is the red window above the speedometer hub (game x 892–918,
+  y 548–558); it was read in colour straight from the video, per frame.
+  - **Brightness is BINARY — do not build an opacity ramp.** Lit R = **211.0 ± 0.2**, unlit
+    **41.7 ± 0.2**, and those two levels are identical in every speed bin from 43 to 90 mph and in all
+    four clips. There is no intermediate state at any speed. Duty cycle is **0.50** throughout.
+  - **The RATE is the ramp.** The blink half-period shortens monotonically with stall depth:
+
+    | speed | fd | half-period (game frames) | full period, sim |
+    |---|---|---|---|
+    | 88–91 mph | 0.30 | 13.9 | **1285 ms** |
+    | 78–84 mph | 0.27 | 12.7 | 1182 ms |
+    | 66–72 mph | 0.23 | 10.1 | 932 ms |
+    | 60–66 mph | 0.21 | 9.0 | 834 ms |
+    | 40–50 mph | 0.15 | 6.4 | **592 ms** |
+
+    105 dwells pooled. **Every dwell is an integer number of 33.37 ms game frames** (lattice residual
+    ≤ 8 ms), so the lamp toggles on a frame counter. Half-period ≈ **5.9 × V(mph) − 62 ms wall**, or
+    **5.1 × V** through the origin; the residual is 36 ms either way — one frame — so the data cannot
+    separate those two forms, and neither should be extrapolated below ~43 mph.
+  - **It tracks speed, not time-since-onset.** In `CAP-06.mp4` the speed dips to 65 mph and recovers;
+    the blink rate falls and then rises again symmetrically, and the on-threshold is the same
+    decelerating (89.9/90.0 mph) as accelerating (90.0/89.9) — **no hysteresis**.
+  - ⚠ **The warning and the nose-drop are TWO thresholds, and this is the answer to the question this
+    entry was blocked on.** The lamp lights at **0.2992 / 0.2994 / 0.2989 / 0.2996 fd** across the
+    four clips — i.e. exactly **0.30 fd, our `StallSpeedFrac`, which is therefore right for the
+    warning**. The nose-drop is at **0.25 fd** (`CAP-05`). Verified *inside one clip*, so no
+    cross-clip assumption is involved: in `CAP-05 Stall 0% Thrust no input` the lamp lights at
+    t = 7.96 sim s / 89.9 mph while the nose is still held at +4.3°, and the nose only breaks at
+    t = 10.60 sim s / 75.0 mph — the lamp **leads the stall by 2.64 sim s and 14.9 mph (0.050 fd)**.
+    So `StallSpeedFrac` must be **split, not moved**: keep 0.30 for the warning, give the nose-drop
+    its own 0.25. Our single `isStalled()` boolean currently drives both from one number.
+  *Wanted:* a proximity fraction driving **blink rate** (not opacity), a warn threshold at 0.30 fd, a
+  separate stall threshold at 0.25 fd, and `WarnBlinkPeriod` replaced by a speed-dependent period —
+  ours is a fixed 400 ms against the original's 1285 ms at the threshold falling to ~590 ms deep in
+  the stall, so we are **~3× too fast where it matters most** and flat where the original ramps.
   ⚠ **Traps.** (a) This needs a code change before it needs a magnitude — do not treat it as a retune
-  of `WarnBlinkPeriod` alone. *Playtest after fix:* once a ramp lands, A/B its rate against the
-  original's stall-warning video (the same capture as the stall/knife-edge recording) before calling
-  it graded. (b) `isStalled()` currently returns only a boolean — adding a continuous margin changes
+  of `WarnBlinkPeriod` alone. *Playtest after fix:* once the ramp lands, A/B its rate against
+  `CAP-06`. (b) `isStalled()` currently returns only a boolean — adding a continuous margin changes
   its signature/call sites (`FlightController.cs:734,757`); don't bolt a second parallel margin
   calculation on top instead. (c) Don't reuse `LowAltAglM`'s pattern uncritically — the low-alt cue is
   legitimately binary (a fixed AGL gate, no spec claim of a ramp there), so a shared "warning"
-  abstraction that ramps both would over-apply the fix.
+  abstraction that ramps both would over-apply the fix. (d) ⚠ **The periods above are SIM ms** and the
+  wall figures are 1/1.390 of them; the original's clock runs fast, so implementing the wall numbers
+  would make our blink 39% quicker than the original was designed to be. (e) The lit plate also
+  carries an orange bezel glow that the unlit state has not — if the blink is ever reproduced by
+  swapping a texture rather than tinting, that glow is part of the lit art.
 - `BL-248` **The original's chase distance is DYNAMIC and its easing rates are undecoded — only the
   static per-plane distance has landed.** `BL-149` shipped the reader and wired `dist` per airframe
   (`CamParams`/`CameraController`), which is the fixed part of the mechanism. Two pieces of the same
