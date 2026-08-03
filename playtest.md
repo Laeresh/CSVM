@@ -58,7 +58,6 @@ unusable.** This already cost two takes. The capture spec and the clip-validity 
 
 | ID | Capture | What must be in frame | Unblocks |
 |---|---|---|---|
-| `CAP-01` | Sustained banked max-pull turn | A held maximum-G banked turn, gauges readable throughout — the speed bleed is the signal | `BL-092` |
 | `CAP-02` | Low pass along a canyon wall | A close pass down a canyon face; the only possible source of ground-blow magnitude | `BL-095` |
 | `CAP-03` | Level top speed at four altitudes | Full-throttle level runs held to equilibrium at 5500 / 6000 / 6500 / 6800 ft | `BL-094` |
 | `CAP-04` | Moderate-deflection pitch trace | A ~45° pull from level, timed frame by frame like the existing sustained-rate clips | `BL-147` |

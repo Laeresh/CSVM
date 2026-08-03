@@ -70,7 +70,8 @@ for the 90°-bank turn). The roll is the apples-to-apples one and involves no al
 
 | scenario | measured |
 |---|---|
-| level full-throttle equilibrium | 300.4 mph |
+| level full-throttle equilibrium | 300.4 mph (re-measured 298.96 ± 0.20 in the 08-03 session) |
+| **sustained max-pull turn, full throttle** | **222.94 ± 1.77 mph**, held 15.9 sim s at 100° bank |
 | full throttle, 150 → 290 mph | 2.685 wall s = **3.76 sim s** |
 | terminal dive (γ ≈ 70°) | **355.2 ± 0.4 mph** = 1.182 × level max |
 | 1/8 throttle equilibrium | **137.9 mph** (0.459 × fd) |
@@ -140,7 +141,8 @@ python analysis/video-flight-calibration/checkclip.py   # GATE a new clip before
 python analysis/video-flight-calibration/shake.py       # global panel translation per frame
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import fitdial"
 python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import run2;run2.main()"
-python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import anchor;[anchor.resolve(s) for s in ['pitch','roll','yaw','dive','accel','decel']]"
+python -c "import sys;sys.path.insert(0,'analysis/video-flight-calibration');import anchor;[anchor.resolve(s) for s in ['pitch','roll','yaw','dive','accel','decel','cap01']]"
+python analysis/video-flight-calibration/compass.py cap01   # heading, where a clip turns
 ```
 
 PTS timestamps come from the bundled ffmpeg — **required**, see the VFR trap below:
@@ -184,6 +186,23 @@ intact. Scoring all ten against the short needle's angular profile across every 
 once resolved every clip with a ≥1.97× margin. Re-picking the band frame by frame
 instead produces 1,000 ft jumps (the short needle is fat, sits in a thin annulus and gets
 crossed by the long needle's shaft, so single frames are unreliable while hundreds are not).
+
+**Heading comes off the compass tape, and the tape calibrates itself** (added for `CAP-01`,
+2026-08-03). The tape is a scrolling strip, so per-frame sub-pixel 1-D cross-correlation of a
+±45 px window about its centre tracks it (correlation median 0.973), and the cumulative scroll is
+heading. Its degrees-per-pixel needs no assumption: resampling the tracked central ±12 px into a
+tape-fixed coordinate stitches a **panorama** of the whole strip, and that panorama is periodic in
+360°. Two independent rulers on it agree — autocorrelation of the label band peaks at
+**537.7 px** (corr 0.907) ⇒ 1.4937 px/deg, and a lattice fit to the major ticks gives **22.343 px**
+per major, which is 24.07 majors per revolution ⇒ at exactly 24, 1.4896 px/deg. The two bracket
+**1.500 px/deg** to 0.3%, and put the majors **15°** apart, in canonical 1280×720 game coords.
+`compass.py` runs both. The end-to-end check: `CAP-01`'s
+675.14 px of travel is 450.09°, and the panorama's own label sequence reads
+E·NE·N·NW·W·SW·S·SE·E·NE·N — 10 × 45° = **450°**, agreeing to 0.02%.
+
+⚠ **The compass reads the nose, not the flight path.** It is a heading tape, so in any manoeuvre
+with angle of attack it is not the velocity-vector turn rate — which is the quantity the design
+document's turn-rate ladder refers to.
 
 **Attitude, when the dials cannot give it.** The artificial horizon is a gyro ball, so its
 painted horizon is a great circle and the *area* fraction either side of it is a known
@@ -299,6 +318,13 @@ ROI, the fitted dial affines and the median itself all carry over, and nothing d
 `extract.py` knows the capture geometry. An unlisted resolution raises rather than guessing an
 origin — a wrong origin decodes silently.
 
+**A level clip barely constrains the altimeter's 1,000 ft band.** `anchor.py` resolved the six
+manoeuvre clips with a ≥1.97× margin, but `CAP-01` — level throughout, 87 ft of total altitude
+range — came back **k=3 at only 1.39×**, with k=2 scoring 0.72. The short needle hardly moves, so
+there is almost nothing for the scoring to bite on. It did not matter there, because every result
+in that clip depends on *changes* in altitude and not its absolute value; but do not quote an
+absolute altitude off a level clip without saying the band is soft. The margin is printed — read it.
+
 **A big shake trips a bare `|dx|` threshold; only the sign separates it from head turn.**
 `checkclip`'s original rule rejected any clip whose two dials disagreed in dx by more than 2 px,
 which fails on a hard dive: `CAP-10 2` shears 3 px and is perfectly decodable. Head turn
@@ -322,7 +348,7 @@ the spread only a trigger for computing it.
 |---|---|---|
 | 1 | Vertical dive to terminal | ✅ `Dive 2` is vertical; `Dive` is ~70° but holds a 5 s plateau |
 | 2 | Full loop from level | ✅ this is what pinned the clock |
-| 3 | Sustained level turn, max pull | ✅ **filmed 2026-08-03** as `CAP-01.mp4` (23.7 s, gate OK) — undecoded; this is the one that measures induced drag (`BL-092`) |
+| 3 | Sustained level turn, max pull | ✅ **decoded 2026-08-03** from `CAP-01.mp4` — 222.9 mph sustained against 299.0 level, at 18.95 °/sim-s and 100° bank (`BL-092`, `BL-247`) |
 | 4 | 360° aileron roll | ✅ |
 | 5 | Low pass along a canyon wall | ❌ owed — the only source for ground blow |
 | 6 | Level top speed at 5500 / 6000 / 6500 / 6800 ft | ❌ owed — settles what enforces the ~2065 m limit |

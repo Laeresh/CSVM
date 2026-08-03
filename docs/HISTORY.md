@@ -12155,3 +12155,61 @@ is byte-for-byte what it was).
 **Note.** A2 only pins the plane; `--weapon-lab` still builds no lab node (A3 relocates its
 construction into the flight path), so the held session is a flight session with nothing at the
 controls.
+
+**`CAP-01` decoded — the original's max-pull turn measured, and induced drag pinned at 0.38 A
+(2026-08-03).** The one manoeuvre the flight-model calibration never had on video is now read.
+`OriginalScreenshots/Videos/CAP-01.mp4` (Bloodhawk, cockpit, 2560×1440, 713 frames, 23.65 wall s =
+32.87 sim s at k = 1.390) passes `checkclip` as rigid — dx correlation +1.00 between the two dials,
+registration peaks 0.67–0.71, panel translation ±0.14 px, so no shake correction was needed — and
+decodes at 0.27 ft second-difference noise on altitude and 0.58 mph on airspeed. Pilot-confirmed
+after the fact: **full throttle and stick full back throughout**, which is what makes the plateau a
+*maximum*-pull number rather than just a sustained one.
+
+**What it shows.** 7.6 sim s of level cruise at **298.96 ± 0.20 mph** — an independent re-measurement,
+in a different session, of the 300.4 mph full-throttle level equilibrium, 0.5% apart, which is what
+makes the rest a clean A/B — then a roll to **+100 ± 4° of bank** (past vertical, off the ADI's
+sky-region centroid), a 5.6 sim s bleed at −7.50 mph/sim-s, and then **15.9 sim s of true
+equilibrium: 222.94 ± 1.77 mph at −0.35 mph/sim-s, altitude 3217.5 ± 14.4 ft**. So a max-pull turn
+costs the original **25% of its top speed**, indefinitely.
+
+**The number `BL-092` was blocked on.** At the plateau `x = V/fd = 0.7457`, so `FlightModel.cs`'s
+`lerp(x², x, 0.35)` gives 0.6225 A of level drag against 1.000 A of thrust; the turn is level, so
+the gravity-along-path term is ~0 and the deficit is real along-path force. **The load-factor term
+must supply +0.380 A.** The bleed-in transient reaches **0.369 A** by an entirely different route —
+from its deceleration, at a different speed — 2.9% away. Turn geometry for keying it: **18.95
+°/sim-s** at 222.9 mph, i.e. `V·ω` = 32.96 m/s² lateral = 1.65 × `nom_gravity` 20.0. Recorded with
+four caveats on the entry: both segments sit at the same load factor so the *exponent* is
+unmeasured; the deficit is drag-law-shape dependent (+0.254 A linear … +0.585 A cubic); a sustained
+AoA would put some of it into thrust-vectoring rather than drag; and the 100°-bank result is
+`BL-247` below.
+
+**Two findings that were not what the capture was filmed for.** (1) **The original holds altitude at
+100° of bank** — our `wingVert = |Attitude.Y · Up|` lift scaling is 0.17 there and would drop the
+aircraft out of the manoeuvre, so `BL-247` opens for it; it is the lift-side view of the same
+unconsumed `player.json` AoA block (`maxAOA 46`, `liftAOAs`, `lift_accel_rate`) that `BL-092` (a)
+already points at, and `BL-124` note (2) had independently guessed the fix ("gate on actual bank
+instead of `1−wingVert`"). (2) **At max pull the heading rate is only 18.95 °/sim-s** — well under
+the ~33 °/sim-s sustained pitch rate the loop gave, and under the design ladder's bottom rung of 30.
+A compass reads the nose and not the flight path, so this is not simply path lag; `BL-092`'s trap
+(b), which forbids slowing the sustained pitch rate, now carries the warning that the loop's flat
+pitch rate may not transfer to a banked turn.
+
+**New instrument: the compass tape, self-calibrating** (`analysis/video-flight-calibration/compass.py`).
+Sub-pixel 1-D cross-correlation of a ±45 px window tracks the scrolling tape (correlation median
+0.973); resampling the tracked centre into a tape-fixed coordinate stitches a panorama of the whole
+strip, which is periodic in 360°. Its degrees-per-pixel then needs no assumption — label-band
+autocorrelation peaks at 537.7 px (corr 0.907) ⇒ 1.4937 px/deg, and a major-tick lattice fit gives
+22.343 px ⇒ 24.07 majors per revolution, so at exactly 24 majors, 1.4896 px/deg. The two bracket
+**1.500 px/deg**, majors 15° apart. End-to-end check: the clip's 675.14 px of travel is 450.09°, and
+the panorama's own label sequence reads E·NE·N·NW·W·SW·S·SE·E·NE·N = 10 × 45° = **450°** — 0.02%.
+
+**Also recorded as a trap.** `anchor.py` resolved this clip's 1,000 ft altimeter band at only a
+**1.39×** margin against the ≥1.97× the six manoeuvre clips gave: it is level throughout, 87 ft of
+total range, so the short needle barely moves and there is little for the scoring to bite on. It did
+not matter here (every result depends on altitude *changes*), but an absolute altitude off a level
+clip needs the margin quoted with it.
+
+**Files.** `backlog.md` (`BL-092` measured and unblocked, `BL-247` opened, next ID → `BL-248` —
+the counter was stale, `BL-246` was already taken), `playtest.md` (`CAP-01` row retired; it owed
+only `BL-092`), `FINDINGS.md`, `compass.py` (new), `run2.py` + `anchor.py` (`cap01` added to their
+clip lists so a cold start reproduces this).

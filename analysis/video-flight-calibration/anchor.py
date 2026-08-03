@@ -60,5 +60,5 @@ def resolve(short, verbose=True):
 
 
 if __name__ == "__main__":
-    for s in ["pitch", "roll", "yaw", "dive", "accel", "decel"]:
+    for s in ["pitch", "roll", "yaw", "dive", "accel", "decel", "cap01"]:
         resolve(s)

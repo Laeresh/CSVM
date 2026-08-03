@@ -11,7 +11,7 @@ only. When an item gets scheduled into a plan, move it there; when it lands, del
 
 **Item IDs.** Every entry carries a flat `BL-NNN` tag, assigned once in file order and never
 renumbered or reused, even when the item it names is deleted — so a stale cross-reference elsewhere
-fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-246`.**
+fails loudly instead of silently pointing at the wrong item. **Next ID to assign: `BL-248`.**
 When adding a new item, take the next number and bump this line.
 
 ## Milestone 3 Polishing (playtest findings, 2026-07-24)
@@ -1050,22 +1050,81 @@ needs one of them to move needs a new measurement first.
   is close (1450 ft vs 1635), the energy is not. This is the sharp form of the older "the original
   visibly bled speed in a sustained full-pitch 360°" observation, which can now be retired as vague.
   Wanted: a load-factor term in the drag, i.e. drag rising with commanded pitch rate / lift.
-  *Blocked on `CAP-01`* (`playtest.md` §0).
+  **Unblocked and the magnitude is now measured — `CAP-01` decoded 2026-08-03.** Full throttle,
+  stick full back throughout (pilot-confirmed), Bloodhawk, ~3,200 ft. The clip holds a **+100 ± 4°
+  banked turn for 15.9 sim s** and sweeps **449.8°** of heading, so it is a true sustained
+  equilibrium, not a transient:
+
+  | segment | speed | dV/dt | altitude |
+  |---|---|---|---|
+  | cruise, pre-pull (7.6 sim s) | **298.96 ± 0.20 mph** | +0.06 mph/sim-s | +5.7 ft/sim-s |
+  | bleed-in (5.6 sim s) | 237.2 mph mean | **−7.50 mph/sim-s** | +6.6 ft/sim-s |
+  | **sustained turn (15.9 sim s)** | **222.94 ± 1.77 mph** | −0.35 mph/sim-s | −1.85 ft/sim-s |
+
+  So a max-pull turn costs the original **25% of its top speed**, held indefinitely. The pre-pull
+  cruise re-measures the full-throttle level equilibrium at 298.96 mph in a *different session* from
+  the 300.4 mph in `FINDINGS.md` — 0.5% apart, which is what makes the comparison a clean A/B.
+  **The number to fit: our drag law needs a further `+0.38 × maxThrustAccel` at this load factor.**
+  At the plateau `x = V/fd = 0.7457`, so `lerp(x², x, 0.35) = 0.6225 A` of level drag against `1.000 A`
+  of thrust; since the turn is level the gravity-along-path term is ~0, so the deficit is real
+  along-path force. The bleed-in transient gives **0.369 A** by a completely different route (from
+  its deceleration, at a different speed) against the plateau's **0.380 A** — 2.9% apart.
+  Turn geometry, for keying the term: **18.95 °/sim-s** (fit residual sd 0.39°) at 222.9 mph, i.e.
+  `V·ω = 32.96 m/s²` lateral = **1.65 × `nom_gravity` 20.0** (3.36 g at 9.81).
   ⚠ **Traps.** (a) The candidate data ships: `player.json`'s `highGs [9,15]` / `lowGs [-6,-9]` /
   `maxAOA 46` / `liftAOAs [5,9]` / `lift_accel_rate 0.75` are an angle-of-attack model we have no
   equivalent of — decode that before inventing a term (see the `player.json` entry below).
   (b) **It must not slow the sustained pitch RATE**, which is measured flat across 120–280 mph and
   asserted by the suite: the original bleeds speed in a pull *without* losing pitch authority, so a
-  naive "less speed ⇒ less pitch" coupling would break a passing check. (c) The clip that would
-  measure this directly — a sustained banked max-pull turn — was never recorded; the yaw clip is a
-  verified wings-level *rudder* turn. Any fitted magnitude is inference until it is.
+  naive "less speed ⇒ less pitch" coupling would break a passing check. **`CAP-01` sharpens this
+  and may complicate it:** at max pull the *heading* rate is only 18.95 °/sim-s, well under the
+  ~33 °/sim-s sustained pitch rate the loop gave and under the design ladder's bottom rung of 30.
+  A compass reads the nose, not the flight path, so this is not simply path-lag — either pitch
+  authority in a banked turn is lower than the loop implies, or bank/AoA geometry eats the
+  difference. Do not assume the loop's flat pitch rate transfers to a banked turn.
+  (c) **0.380 A is one point on the curve, not the curve.** Both segments sit at essentially the
+  same load factor (`V·ω` 32.96 vs 34.02 m/s², 3%), so the clip pins the magnitude at max pull and
+  says nothing about the exponent — a term in `n`, `n²` or `ω²` all fit it equally. A second
+  capture at a *deliberately part-deflected* pull is what would separate them.
+  (d) **The deficit is shape-dependent — quote the drag law with it.** Same plateau, other laws:
+  pure linear needs +0.254 A, our β = 0.35 blend +0.378 A, pure quadratic +0.444 A, pure cubic
+  +0.585 A (total drag 1.34× / 1.61× / 1.80× / 2.41× the level drag at that speed). This is the
+  same fork `FINDINGS.md` flags on λ.
+  (e) **Part of the 0.38 A may be thrust vectoring, not drag.** Thrust acts along the nose and drag
+  opposes the path; a sustained AoA of α puts `1 − cos α` of it into the deficit (α = 25° ⇒ 0.09,
+  a quarter of the total). The clip cannot measure AoA, so 0.38 A is honestly a bound on the
+  *combined* along-path deficit — which is nonetheless exactly what a load-factor term must supply.
+  (f) **A 100° bank that holds altitude is not something our lift model can do.** `liftFrac` scales
+  by `wingVert = |Attitude.Y · Up|` ≈ 0.17 there, so we would shed ~83% of gravity across the path
+  and drop; the original sinks at 1.85 ft/sim-s. Fixing drag without looking at this will not
+  reproduce the manoeuvre — see `BL-247`.
   **Cockpit-confirmed 2026-07-30**, not just decoded from video: the user reports the original visibly
   slows through a sustained pitch pull, and climb bleed is stronger in the original than ours, from
   the controls — this is the felt form of the same gap, not a second finding.
   *Playtest after fix:* once a load-factor drag term lands, fly a full-pull 360° and a sustained climb
   and compare the bleed by feel before closing this.
 
-- `BL-093` **The throttle→thrust curve is undecoded, and 1/8 throttle is wrong in both directions.**
+- `BL-247` **The original holds altitude at 100° of bank; our `wingVert` lift model cannot** (decoded
+  out of `CAP-01`, 2026-08-03). Measured off the ADI: the Bloodhawk rolls to **+100 ± 4°** — past
+  vertical — and holds it for 15.9 sim s while altitude stays at 3217.5 ± 14.4 ft, sinking at only
+  **1.85 ft/sim-s**. `FlightModel.cs:275` scales lift by `wingVert = |Attitude.Y · Up|`, which is
+  **0.17** at that bank, so `gAcross * (1 - liftFrac)` would put ~83% of gravity across our flight
+  path and drop the aircraft out of the manoeuvre entirely.
+  This is the same `player.json` angle-of-attack block `BL-092` (a) points at — `maxAOA 46`,
+  `liftAOAs [5,9]`, `lift_accel_rate 0.75` — seen from the lift side rather than the drag side, and
+  the two should be decoded together: `CAP-01` is one clip that constrains both.
+  ⚠ **Traps.** (a) **Do not "fix" this by flattening `wingVert`.** The same quantity drives the
+  knife-edge nose-sag, whose *presence and direction* are proven by scripted test (`BL-124`), so a
+  bank-independent lift term would reproduce this turn and break that. Whatever carries the turn
+  has to vanish by 90° *without* being a function of bank alone — pull/AoA is the obvious
+  candidate, since knife-edge is flown near neutral stick and this turn at full back.
+  **This is the same suspicion `BL-124` note (2) already records** from the other direction ("the
+  fix is gating on actual bank instead of `1−wingVert`"); `CAP-01` is the first hard evidence that
+  `wingVert` alone is wrong, and `CAP-05` — filmed but still undecoded — is the clip that would
+  pin the knife-edge end of the same curve. Decode `CAP-05` before designing the replacement.
+  (b) The bank is read from the ADI sky-region centroid, which measured the 360° roll and is
+  trusted for bank, but 100° is past vertical where the aircraft symbol painted on the ball is
+  least helpful — treat "past vertical" as solid and the exact 100° as ±4°.
   Measured: the original settles at **137.9 mph** (0.459 × fd_speed) at 1/8 throttle and takes
   **7.04 sim s** to fall 290 → 150 mph. We settle at **93 mph** (0.309, and below lift speed, so
   ours is sinking rather than holding level) and decelerate in **2.47 s** — 2.8× too fast. Both are

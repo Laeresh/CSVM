@@ -4,7 +4,7 @@ import numpy as np
 from decode import CACHE
 from reader2 import Dial, LKRegistrar, circ_centroid, DEG
 
-CLIPS = ["pitch", "roll", "yaw", "dive", "accel", "decel"]
+CLIPS = ["pitch", "roll", "yaw", "dive", "accel", "decel", "cap01"]
 ALT_BANDS = {"long": (0.355, 0.50), "short": (0.15, 0.30)}
 SPD_BANDS = {"needle": (0.18, 0.45)}
 
