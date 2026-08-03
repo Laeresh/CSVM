@@ -94,6 +94,15 @@ internal sealed class MotionRuntime : IAnimMotion
     /// since only <see cref="Create"/> knows the randomised launch the solve rests on.</summary>
     public float RunTime => _runTime;
 
+    /// <summary>The ON_CALL sequence this body owes when it lands — <c>BOUNCE_SEQUENCE</c>'s
+    /// <c>default</c> branch — or null when nothing is owed. Armed only on a launch whose flight
+    /// time this class SOLVED, i.e. one the data terminated with a bounce rather than a
+    /// <c>RUN_TIME</c>. The 204 events that carry both an authored run time and a bounce are left
+    /// alone: 102 of them name a live <c>water</c> branch (<c>p1grndhit</c> vs its wet twin), and
+    /// choosing between the branches needs the struck collider that <c>BL-245</c> will cast for.
+    /// </summary>
+    public string? PendingBounce { get; private set; }
+
     public static MotionRuntime? Create(AnimRuntime rt, Node3D target, AnimData data, float runTime)
     {
         var rest = rt.RestOf(target); // records the authored pose; the fallback for a bad live basis
@@ -202,6 +211,9 @@ internal sealed class MotionRuntime : IAnimMotion
             {
                 rtSafe = flight;
                 m._runTime = flight;
+                // Landing is the only thing that ends this body, so the sequence the data names
+                // for the landing rides with it: every one of these 150 carries `default` alone.
+                m.PendingBounce = data.Obj("bounce_sequence")?.Str("default");
             }
         }
 

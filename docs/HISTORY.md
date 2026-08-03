@@ -11156,3 +11156,40 @@ answer to whether a launch happened at all.
 **Still open in this family:** the `BOUNCE_SEQUENCE` does not yet fire (A3) and the instance still
 ends the frame its last event dispatches (A4), so `sparkout3`/`sparkout4` stay unreached and
 `trailpuffer3` still stops on `BL-236`'s instance cap instead of at the landing.
+
+## 2026-08-03 — the landing runs its `BOUNCE_SEQUENCE`, and `trailpuffer3` finally stops where it should (`PLAN-bounce-launch` A3)
+
+**`MotionRuntime.PendingBounce`** carries `bounce_sequence.default`, armed only inside the
+solved-flight block added by A2 — so a body that owes a landing is exactly a body whose flight this
+code decided. `TickMotions` removes the finished body first (the sequence it triggers may add
+motions of its own, and the landed body must not be ticked again by what it triggered) and then
+calls `CallSequence(Owner.Def, Owner.Anchor, bounce)`. The sequence is always local to the same
+definition — measured across all 150 reachable events — so nothing new was needed to resolve it.
+
+**The 204 timed-bounce events deliberately do NOT arm.** Alongside the 529 that omit `RUN_TIME`,
+204 carry a bounce *and* an authored run time, and **102 of those name a live `water` branch** —
+`p1grndhit`/`p1hit`/`bounce_effects` and their wet twins. Choosing a branch needs the struck
+collider `BL-245` will cast for, so firing `default` at them would be wrong about half the time.
+They keep reporting as deferred.
+
+**`Count("ObjectMotion(bounce_sequence deferred)")` now fires only when nothing armed.** A bounce
+the event armed is acted on, and filing it as unhandled would report a working feature as a missing
+one — the rule the CALL_ANIMATION retarget tallies already follow.
+
+**Measured.** `--freecam --chapter=C1 --destroy=refuel --debug-anim`, five tank kills: **10
+landings** (`'part3' landed — bounce sequence 'sparkout3'` ×5, `'part4' … 'sparkout4'` ×5), and —
+the part that proves the sequence actually RAN rather than merely being called —
+**`anim: host 'part3' deactivated — emitter stopped` ×5, which never appeared before this change**;
+pre-A3 only `part1` and `part2` ever deactivated. That is `sparkout3`'s
+`OBJECT_ACTIVE_STATE part3 INACTIVE` firing and stopping `trailpuffer3` through `BL-224`'s existing
+`EndSustainedOn` path, with no effects-side change. The closing census is 6 ambient emitters with no
+`trailpuffer*` at all. `part4` correctly shows no emitter stop — only `part1`/`part2`/`part3` carry
+a trail. `.\RunTests.ps1` **PASS**: 352 units, 17/17 engine suites including `stop-sequence`, engine
+errors clean, 13/13 goldens hash-identical.
+
+**⚠ `refuel` cannot show whether the instance-lifetime fix is needed, and this run did not.** Its
+sibling `seq0` runs `part1` for an authored 5.0 s while the two landings fall at ~4.3 s and ~4.9 s,
+so the instance is still alive when they arrive — by tenths of a second, structurally, not by
+design. A def whose bounce launch outlives every sibling sequence still hits `CallSequence`'s silent
+no-instance return and dispatches nothing. That is the next item, and its verification has to pick a
+different def.

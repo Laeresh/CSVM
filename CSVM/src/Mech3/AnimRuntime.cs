@@ -2017,6 +2017,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                         // flight is read BACK off each body rather than assumed here — and the
                         // longest of them is what the sequence waits on (BL-240).
                         float ballTime = authored;
+                        bool bounceArmed = false;
                         foreach (var t in Targets(ev, def, anchor))
                         {
                             var motion = MotionRuntime.Create(this, t, ev.Data, authored);
@@ -2032,13 +2033,18 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
                                 AddMotion(motion, def, anchor);
                                 BallisticMotionsLaunched++;
                                 ballTime = Mathf.Max(ballTime, flight);
+                                bounceArmed |= motion.PendingBounce != null;
                             }
                             _opsApplied++;
                         }
-                        // BOUNCE_SEQUENCE (re-launch a piece on ground contact) is a Layer-1.5 follow-up
-                        // â€” it needs do_intersections + a ground ray; the pieces read fine tumbling to
-                        // rest without it. Report it so --debug-anim shows it is deferred, not missed.
-                        if (ev.Data.Has("bounce_sequence"))
+                        // A bounce this event ARMED is acted on — TickMotions dispatches it when the
+                        // body lands — so it must not be filed as unhandled; doing so would report a
+                        // working feature as a missing one, the same rule the retarget tallies follow.
+                        // What stays deferred is the rest: the falls, which have no apex to solve and
+                        // so never arm, and the 204 events carrying an authored RUN_TIME alongside a
+                        // bounce, half of which name a live `water` branch that cannot be chosen
+                        // without the struck collider. Both are BL-245, and both keep reporting.
+                        if (ev.Data.Has("bounce_sequence") && !bounceArmed)
                             Count("ObjectMotion(bounce_sequence deferred)");
                         duration = instant ? 0f : ballTime;
                         return true;
@@ -3341,8 +3347,24 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         for (int i = _motions.Count - 1; i >= 0; i--)
         {
             _motions[i].Tick(dt);
-            if (_motions[i].Finished)
-                _motions.RemoveAt(i);
+            if (!_motions[i].Finished)
+                continue;
+            var done = _motions[i];
+            // Removed BEFORE the bounce dispatch, which runs a sequence that may itself add
+            // motions: the new ones append past this index, and the landed body must not be
+            // ticked again by the sequence it triggers.
+            _motions.RemoveAt(i);
+            // BOUNCE_SEQUENCE: the piece has come back down, which for a bounce-terminated
+            // launch is the whole meaning of its flight ending (BL-240). The named sequence
+            // belongs to the same definition — `sparkoutN` deactivates the piece and pops its
+            // fireball, and that OBJECT_ACTIVE_STATE is what stops the trail through BL-224's
+            // EndSustainedOn path, with no effects-side change here.
+            if (done is MotionRuntime { PendingBounce: { } bounce } landed)
+            {
+                CallSequence(landed.Owner.Def, landed.Owner.Anchor, bounce);
+                if (DebugMotions)
+                    GD.Print($"anim/debug: '{done.Target.Name}' landed — bounce sequence '{bounce}'");
+            }
         }
     }
 

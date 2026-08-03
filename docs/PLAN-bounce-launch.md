@@ -127,7 +127,7 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 1. ☑ Baseline probe: confirm the branch these events actually take
 2. ☑ Solve the flight time in `MotionRuntime`
-3. ☐ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
+3. ☑ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
 4. ☐ Keep the instance alive while a bounce is pending
 5. ☐ Engine suite: motion launched, time in band, `sparkoutN` fired
 6. ☐ Record the choice and close `BL-240`
@@ -273,7 +273,47 @@ full 8-chapter `--freecam` regression, zero errors, unchanged mesh/node counts.
 the midpoint would make individual pieces land early or sink. `_runTime` also drives the scale ramp
 — check the 45 SCALE events are unaffected.
 
-## A3 ☐ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
+## A3 ☑ Dispatch `BOUNCE_SEQUENCE` when the motion finishes
+
+**Landed (2026-08-03).** `MotionRuntime.PendingBounce` carries `bounce_sequence.default`, armed only
+inside the solved-flight block — so a body that owes a landing is exactly a body whose flight this
+code decided. `TickMotions` removes the finished body *first* (the sequence it triggers may add
+motions of its own) and then calls `CallSequence(Owner.Def, Owner.Anchor, bounce)`.
+
+**Scope call the item left implicit, settled by census.** 204 events carry a bounce *and* an
+authored `RUN_TIME`. Those do **not** arm: **102 of them name a live `water` branch** (`p1grndhit`,
+`p1hit`, `bounce_effects` and their wet twins), and choosing a branch needs the struck collider
+`BL-245` will cast for. Firing `default` at them would be wrong roughly half the time. They keep
+reporting as deferred; only the solved launches are handled.
+
+**The unhandled counter now means what it says.** `Count("ObjectMotion(bounce_sequence deferred)")`
+fires only when nothing armed. A bounce this event armed *is* acted on, and filing it as unhandled
+would report a working feature as a missing one — the same rule the retarget tallies already follow
+(`AnimRuntime.cs:518-520`).
+
+**Verified.** `--freecam --chapter=C1 --destroy=refuel --debug-anim`, five tank kills:
+
+- **10 landings** — `'part3' landed — bounce sequence 'sparkout3'` ×5 and `'part4' landed — bounce
+  sequence 'sparkout4'` ×5. (`part3` lands, incidentally re-confirming that A2's "part3 doesn't
+  move" reading was the 12-entry log cap and nothing else.)
+- **`anim: host 'part3' deactivated — emitter stopped` ×5, which is new** — pre-A3 only `part1` and
+  `part2` ever deactivated. That is `sparkout3` genuinely running: its `OBJECT_ACTIVE_STATE part3
+  INACTIVE` fired and stopped `trailpuffer3` through `BL-224`'s `EndSustainedOn`, with no
+  effects-side change, exactly as the item predicted.
+- The closing census is **6 ambient emitters, no `trailpuffer*` at all**.
+- `part4` shows no emitter stop, correctly — only `part1`/`part2`/`part3` carry a `trailpufferN`.
+
+`.\RunTests.ps1` **PASS**: 352 units, 17/17 engine suites (including `stop-sequence`, the
+dispatch-side suite), engine errors clean, **13/13 goldens hash-identical**.
+
+**⚠ This does not prove A4 unnecessary — and `refuel` cannot.** `refuel`'s sibling `seq0` runs
+`part1` for an authored 5.0 s, and the two landings fall at ~4.3 s and ~4.9 s, so the instance is
+still alive when they arrive, by a margin of tenths of a second. A def whose bounce launch outlives
+every sibling sequence would hit `CallSequence`'s silent no-instance return
+(`AnimRuntime.cs:3029-3030`) and dispatch nothing. A4's verify must pick such a def; `refuel` is
+structurally unable to show the gap.
+
+### Original approach (kept for reference)
 
 **Goal.** The piece landing runs its `sparkoutN`, which deactivates the node and pops the fireball —
 and stops the trail through the path that already exists.
