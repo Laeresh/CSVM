@@ -12022,3 +12022,30 @@ errors, node/mesh counts unchanged from `F16`'s own sweep.
 
 **Closes `BL-232`.** Deleted from `backlog.md`; no `docs/formats/` page (engine wiring, not a
 decode). `PLAN-deepening` Wave F is complete.
+
+**M3 Wave G G18+G19 (2026-08-03): design it twice, then decide — the answer is no.** The plan's one
+remaining gate ran as designed: two independent interface proposals for `AnimRuntime`'s three modes
+(ambient world / `ForEffects` / `ForCrashRig`), produced by parallel sub-agents under opposite
+design constraints and compared on depth, locality and seam placement. Proposal A (minimize: three
+narrow role interfaces) itself cut the world mode out — its census found the world runtime's
+production plumbing touches 4 members, all via delegates, so `IWorldAnimHooks` "names a boundary
+that function pointers already enforce"; its real payoff was two tiny factories (`IEffectsRuntime`
+8 members, `ICrashRig` 4) with labs deliberately kept on the concrete class. Proposal B (don't
+split by mode: an immutable `AnimRole` record + consumer facets) rejected mode interfaces outright
+— of ~65 public declarations, 20 are init-latched knobs (a constructor list in disguise, Godot
+forbidding real ctors), 11 consumer files import only the `cs_name` consts, and every proposed
+facet except an `IEffectChannel` failed its own usage evidence. **Both designs, from opposite
+constraints, declined the three-way split** — that convergence is the decision. The plan's own
+trap was checked first: post-D/E the surface is still ~65 declarations (D/E moved implementation
+into `MotionSet`/`EmitterDirector` but kept forwarding members), so the "union too narrow now"
+closure was NOT available; the no is argued on the mode axis, not the width axis. One shallow spot
+surfaced and is recorded, not fixed (G18 lands no code): `WorldEffectsFactory.cs:391` sets
+`ShowPlacedTemplates`/`PooledTemplates` after `ForEffects` returns, sealing leak of two flags.
+
+**Recorded** as the mandated `⚠` block in `docs/architecture.md`'s `src/Mech3/AnimRuntime.cs`
+entry, so no future review re-suggests the split. `G18` closes `❌` per Decision 4's own framing (a
+well-argued no is the deliverable), and `G19` closes `❌` with it — its Approach says the `❌` path
+needs no separate session and "the `⚠` line from G18 is the whole deliverable". **No code changed,
+so no goldens/tests were owed** (the plan's Verify for G18: "Not code"). Every item of
+`PLAN-deepening` has now landed; the plan is ready to archive to `docs/plans/` with a `COMPLETE`
+banner and a `plans.md` row.

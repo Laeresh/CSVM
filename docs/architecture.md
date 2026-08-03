@@ -564,6 +564,21 @@ an explosion ring off mid-expansion (D31). What shows INSIDE the root stays the 
 ⚠ `MaxRootLift`'s 16-match cap assumes WHOLE-WORLD node counts — a partial `--node=` build drops
   under the cap and anchors phantom defs, so it must set `SuppressRootLift` (measured on C1's
   `ap_radiotwr`: 95 lifted defs / 91 phantom instances vs 1 / 2 with the lift refused).
+⚠ **Do not re-propose splitting the modes into three interfaces** — decided **no** by
+  `PLAN-deepening` `G18` (design-it-twice, 2026-08-03; `G19` closed `❌` with it). The 65-public-
+  declaration surface survives D/E unshrunk, but a per-caller census showed the width is NOT mode
+  coupling: production callers already hold narrow slices (effects callers 11 members, crash 6,
+  the combat plumbing 4 — the last mostly through `DamageSink`/`EffectSink` delegates that narrow
+  harder than any interface), and the rest is one construction site's init-knob block
+  (`WorldSession.cs:201`) plus the labs/probes/suites, which observe the implementation on purpose
+  and would be blinded by any honest interface. Two independent designs under opposite constraints
+  (three minimal role interfaces vs. an immutable `AnimRole` record + consumer facets) BOTH
+  declined the three-way split on that usage evidence; every shipped bug in this family
+  (`BL-224`/`232`/`233`/`235`/`236`/`242`) was a selector/wiring error no mode interface catches.
+  Accepted shallow spot, on the record: `WorldEffectsFactory.cs:391` sets `ShowPlacedTemplates`/
+  `PooledTemplates` AFTER `ForEffects` returns — the factory's sealing leaks two flags, and it
+  works only because both happen to be read after `Bind`. If that ever bites, the fix is folding
+  the two flags into `ForEffects` (two lines), not the split.
 
 ## src/Mech3/Anim/
 `AnimRuntime`'s private nested types promoted to top-level `internal` types in their own

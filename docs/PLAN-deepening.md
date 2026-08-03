@@ -188,8 +188,10 @@ Statuses: ☐ open · ◐ in progress · ☑ done · ❌ closed/disproven. **Kee
 
 ### Wave G — three runtimes, three interfaces
 
-18. ☐ Design it twice, then decide — no code
-19. ☐ Execute the split, or record the "no"
+18. ❌ Design it twice, then decide — no code *(landed 2026-08-03: the answer is **no**; both
+    independent designs declined the split — see the `⚠` block in `docs/architecture.md`'s
+    `src/Mech3/AnimRuntime.cs` entry and the dated `docs/HISTORY.md` entry)*
+19. ❌ Closed with `G18` — the `❌` path needs no separate session; the `⚠` line is the deliverable
 
 ## Dependency and parallelism notes
 
