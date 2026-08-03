@@ -95,6 +95,11 @@ public partial class GameSession : Node3D
     // Process-scoped, owned by the Launcher; the --damage-test/--effects-test/--weapon-test/
     // --destroy= probe wrappers below delegate to it (see src/Testing/ProbeRunner.cs).
     private readonly Testing.ProbeRunner _probeRunner;
+    // Tap-vs-hold timing for the "." step key: a tap steps once (handled directly in
+    // _UnhandledInput), and holding past the grace period steps every rendered frame — polled
+    // here rather than through key-repeat events, since the grace period is measured on wall
+    // time regardless of the sim being halted.
+    private readonly HoldToRepeat _stepHold = new(initialDelay: 0.3f, repeatInterval: 0f);
 
     // Resolves each player's livery and spawn point against _spec (PLAN-planeviewer-split A3);
     // see src/Session/LiveryResolver.cs and src/Session/SpawnPicker.cs.
@@ -371,24 +376,31 @@ public partial class GameSession : Node3D
 
     public override void _UnhandledInput(InputEvent @event)
     {
-        // P halts the sim, . steps it one frame — in freecam, the static viewer and the
-        // launchscreen. Flight polls P itself (FlightController, so gamepad Start keeps working)
-        // and the animation lab owns its own transport, so neither is handled here.
+        // P halts the sim, . steps it one frame (hold past a grace period to keep stepping every
+        // rendered frame — see _stepHold and the poll in _Process) — in freecam, the static
+        // viewer and the launchscreen. Flight polls P itself (FlightController, so gamepad Start
+        // keeps working) and the animation lab owns its own transport, so neither is handled here.
         if (!_spec.AnimLab && @event is InputEventKey { Pressed: true, Echo: false } clockKey
             && _clock != null && HaltAllowed)
         {
             if (clockKey.Keycode == Key.P && !_spec.Fly)
             {
                 _clock.Halted = !_clock.Halted;
-                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame)" : "clock: running");
+                GD.Print(_clock.Halted ? "clock: halted (P resumes, . steps one frame, hold . to run)" : "clock: running");
                 return;
             }
             if (clockKey.Keycode == Key.Period)
             {
                 _clock.Halted = true;
                 _clock.StepOnce();
+                _stepHold.Press();
                 return;
             }
+        }
+        if (!_spec.AnimLab && @event is InputEventKey { Pressed: false } clockKeyUp
+            && clockKeyUp.Keycode == Key.Period)
+        {
+            _stepHold.Release();
         }
         // Esc (menu-or-quit routing) and the F11/F12 capture keys are the Launcher's: they are
         // meaningful at the launchscreen too, where no session node exists.
@@ -404,6 +416,10 @@ public partial class GameSession : Node3D
         // ourselves, in the tree order Godot's physics tick would have used.
         if (_clock is { } clock)
         {
+            if (_stepHold.Tick((float)delta))
+            {
+                clock.StepOnce();
+            }
             clock.BeginFrame(delta);
             if (clock.ParentDriven)
             {
