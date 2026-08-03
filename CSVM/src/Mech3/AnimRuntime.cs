@@ -936,7 +936,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         {
             var inst = _instances[i];
             inst.Advance(this, dt);
-            if (inst.Finished)
+            if (Retirable(inst))
             {
                 _instances.RemoveAt(i);
                 FinishInputGoverned(inst.Def, inst.Anchor);
@@ -989,7 +989,7 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         // Its t=0 events can finish the instance â€” or a t=0 STOP_ANIMATION can already have
         // removed it â€” so only notify a finish that actually removed something, keeping the
         // start/finish notifications balanced against the live count for the timeline.
-        if (inst.Finished && _instances.Remove(inst))
+        if (Retirable(inst) && _instances.Remove(inst))
         {
             FinishInputGoverned(def, anchor);
             OnInstanceFinished?.Invoke(def, anchor);
@@ -3032,6 +3032,27 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
         }
     }
 
+    /// <summary>Whether a finished instance may actually be retired. Ordinarily "finished" means
+    /// its runners have all ended — but a bounce-terminated launch is the last event of its
+    /// sequence, so the runner is done the frame the piece leaves the ground while the flight has
+    /// seconds to run, and the landing needs a live instance to dispatch its BOUNCE_SEQUENCE into
+    /// (BL-240). Measured before this existed: killing C1's seven <c>m_build</c> at once, one
+    /// instance in seven lost its <c>part4</c> bounce — and which one depends on the randomised
+    /// launch draw, so it is an intermittent miss, not a fixed one.
+    ///
+    /// <para>⚠ Deliberately narrow: a motion OWING A BOUNCE, not any live motion.
+    /// <see cref="SpinMotion.Finished"/> is <c>_runTime > 0f &amp;&amp; _t >= _runTime</c> and the
+    /// OBJECT_MOTION handler builds spins with <c>run_time ?? 0f</c>, so an unbounded steady spin
+    /// is never finished — 2,181 of them across 1,037 definition files. Pinning on those would make
+    /// every one of their instances immortal and re-open BL-236's emitter teardown install-wide.
+    /// A pending bounce self-expires; a spin does not.</para></summary>
+    private bool Retirable(AnimInstance inst) =>
+        inst.Finished && !HasPendingBounceFor(inst.Def, inst.Anchor);
+
+    private bool HasPendingBounceFor(AnimDefinition def, Node3D? anchor) =>
+        _motions.Any(m => m is MotionRuntime { PendingBounce: not null }
+                          && m.Owner.Def == def && m.Owner.Anchor == anchor);
+
     // Both sequence events act on the live instance of (def, anchor); on the instant/bootstrap
     // dispatch path no instance exists and both are no-ops.
     private AnimInstance? InstanceOf(AnimDefinition def, Node3D? anchor) =>
@@ -3361,9 +3382,19 @@ public sealed partial class AnimRuntime : Node, ISequenceHost
             // EndSustainedOn path, with no effects-side change here.
             if (done is MotionRuntime { PendingBounce: { } bounce } landed)
             {
-                CallSequence(landed.Owner.Def, landed.Owner.Anchor, bounce);
+                // A landing can outlive its own instance: a runner is done the frame its last
+                // event fires whatever duration that event returned (SequenceRunner), and the
+                // launch IS the last event on all 150 of these. Where no sibling sequence is
+                // still holding the instance open, CallSequence has nothing to dispatch into and
+                // returns silently — so the miss is counted here rather than vanishing.
+                bool live = InstanceOf(landed.Owner.Def, landed.Owner.Anchor) != null;
+                if (live)
+                    CallSequence(landed.Owner.Def, landed.Owner.Anchor, bounce);
+                else
+                    Count("ObjectMotion(bounce landed after its instance ended)");
                 if (DebugMotions)
-                    GD.Print($"anim/debug: '{done.Target.Name}' landed — bounce sequence '{bounce}'");
+                    GD.Print($"anim/debug: '{done.Target.Name}' landed — bounce sequence '{bounce}'"
+                             + (live ? "" : " — NO LIVE INSTANCE, dispatched nothing"));
             }
         }
     }

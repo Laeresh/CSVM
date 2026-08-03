@@ -11193,3 +11193,44 @@ so the instance is still alive when they arrive — by tenths of a second, struc
 design. A def whose bounce launch outlives every sibling sequence still hits `CallSequence`'s silent
 no-instance return and dispatches nothing. That is the next item, and its verification has to pick a
 different def.
+
+## 2026-08-03 — a landing holds its instance open, and a 1-in-7 intermittent lost bounce goes with it (`PLAN-bounce-launch` A4)
+
+**`AnimRuntime.Retirable(inst)` is `inst.Finished && !HasPendingBounceFor(inst.Def, inst.Anchor)`**,
+replacing the bare `inst.Finished` test at **both** retirement sites — the per-frame instance walk
+and the t=0 finish at instance start, the second of which the plan had not named but which a launch
+armed at t=0 in a single-event sequence reaches. `_motions` already carries `Owner`, so the
+predicate is a scan and needs no new bookkeeping.
+
+**⚠ Narrow on purpose.** The predicate is "a motion OWING A BOUNCE", never "any live motion".
+`SpinMotion.Finished` is `_runTime > 0f && _t >= _runTime` and the OBJECT_MOTION handler builds
+spins with `run_time ?? 0f`, so an unbounded steady spin is never finished — 2,181 of them across
+1,037 definition files. Pinning on those would have made every one of their instances immortal and
+re-opened `BL-236`'s emitter teardown install-wide. A pending bounce self-expires; a spin does not.
+
+**A static model said this item was unnecessary, and it was wrong.** Modelling each def's
+sibling-sequence timeline against its solved flight put zero of the 150 launches landing after their
+instance ended (tightest margin −1.19 s on `tbase*`). The model over-counted the hold in two ways —
+it included ON_CALL sequences that may never run, and treated a `Loop` as infinite even where a
+`StopSequence` halts it. A direct probe found the gap on the first sweep: killing C1's seven
+`m_build` at once gave **14 landings, 1 of them with no live instance to dispatch into**; after the
+fix, 14 and 0. `refuel` (10) and `pass_plane` (8) never missed, before or after — `refuel`
+structurally cannot, since its sibling `seq0` runs `part1` for 5.0 s against landings at ~4.3 s and
+~4.9 s.
+
+**One in seven, and which one is a coin toss.** Speed and elevation are drawn per instance from
+`translation_range`, so flight time varies and a longer draw outlives the sibling holding the
+instance open. This was never a reproducible failure — an intermittent, seed-dependent lost bounce,
+the kind that survives a casual look.
+
+**The miss is counted rather than silent.** `TickMotions` now tests `InstanceOf` before dispatching
+and files `ObjectMotion(bounce landed after its instance ended)` when there is nothing to dispatch
+into, with a `--debug-anim` line saying so. That counter is what made the 1-in-7 visible and is the
+control proving the fix can fail.
+
+**Verified.** Emitter census for the `BL-236` regression set — **C3 = 11, C4 = 15, C5 = 36 active
+puffers** — matches the post-`BL-234` counts recorded earlier in this file exactly, so nothing was
+pinned that should not have been. `.\RunTests.ps1` **PASS**: 352 units, 17/17 engine suites, engine
+errors clean, 13/13 goldens hash-identical. `SequenceRunner`'s comments on `Halt()` and
+`AnimInstance.Finished` now record that instance end is the exception to "resources outlive their
+sequence", and that `Finished` is no longer the retirement test on its own.

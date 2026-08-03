@@ -55,6 +55,10 @@ public sealed class AnimInstance
         Anchor = anchor;
     }
 
+    /// <summary>No runner is still executing. ⚠ NOT on its own the test for retiring an instance —
+    /// see <c>AnimRuntime.Retirable</c>, which additionally holds an instance open while one of its
+    /// motions still owes a BOUNCE_SEQUENCE, since such a launch is the last event of its sequence
+    /// and its runner ends the moment the piece leaves the ground.</summary>
     public bool Finished => Runners.Count == 0;
 
     public void Advance(ISequenceHost rt, float dt)
@@ -177,7 +181,9 @@ public sealed class SequenceRunner
     /// re-tests Done after every dispatch, so a self-halt exits before the next event, and
     /// <see cref="AnimInstance.Advance"/>'s sweep removes the runner. Resources the sequence
     /// already launched (motions, puffers) are untouched: their lifetimes are authored
-    /// independently and outlive the sequence that launched them.</summary>
+    /// independently and outlive the sequence that launched them. ⚠ One exception, at INSTANCE end
+    /// rather than here: a motion still owing a BOUNCE_SEQUENCE holds its instance open, because
+    /// the landing has to dispatch into one (<c>AnimRuntime.Retirable</c>, BL-240).</summary>
     public void Halt() => _done = true;
 
     public void Advance(ISequenceHost rt, AnimInstance inst, float dt)
